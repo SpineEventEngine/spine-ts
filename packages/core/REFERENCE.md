@@ -173,6 +173,13 @@ context, tenant context, storage records, or routing data. Existing envelope
 transport and storage continue to retain their supplied IDs without validating
 that those existing values have UUID format.
 
+`SignalEnvelopes.originFromCommand(command)` derives the immediate Origin from
+an existing Command envelope with a non-empty ID. It retains the packed Command ID and domain type
+URL, clones the actor context, and carries any preceding origin as `grandOrigin`.
+It does not create or post another Command. Normal application code uses
+`postAndSubscribe` through its client request rather than constructing Origins
+or envelopes itself.
+
 ## Registry
 
 `TypeRegistry` maintains registrations by full Protobuf name, type URL, and

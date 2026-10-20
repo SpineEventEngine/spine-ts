@@ -16,6 +16,7 @@ import { Time } from "@spine-event-engine/core/time";
 import type { TenantId } from "@spine-event-engine/proto";
 
 import { Delivery } from "../delivery/delivery.js";
+import { receptionObservation } from "../delivery/reception-observation.js";
 import type { InboxMessage, InboxWriteResult } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../repository/repository.js";
@@ -220,6 +221,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   }
 
   async #replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
+    receptionObservation.markManaged();
     LocalProjectionInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);

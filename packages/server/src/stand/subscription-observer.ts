@@ -53,6 +53,7 @@ import {
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 
 import { eventBusAccess, type EventBus, type EventSubscription } from "../bus/event-bus.js";
+import { EventOriginFilters } from "./event-origin-filter.js";
 import type { StandUpdate } from "./stand.js";
 
 /* eslint-disable @typescript-eslint/no-extraneous-class */
@@ -128,6 +129,10 @@ export class SubscriptionObservers {
     const typeUrl = subscription.topic?.target?.type;
     if (typeUrl === undefined || typeUrl.length === 0 || domainEventBus === undefined)
       return undefined;
+    const criterion = subscription.topic?.target?.criterion;
+    const matches = criterion?.case === "filters"
+      ? EventOriginFilters.compile(criterion.value)
+      : undefined;
     const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     return eventBusAccess.subscribe(domainEventBus, typeUrl, {
       onEvent(event) {
@@ -136,6 +141,7 @@ export class SubscriptionObservers {
           !SubscriptionObservers.#sameTenant(SubscriptionObservers.#eventTenant(event), tenantId)
         )
           return;
+        if (matches !== undefined && !matches(event)) return;
         onUpdate(SubscriptionObservers.#createEventUpdate(subscription, event));
       },
     });

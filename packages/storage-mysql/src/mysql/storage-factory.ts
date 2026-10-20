@@ -34,9 +34,9 @@ import {
 import { AgentExecutionRecords, AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 import {
   EntityCommitStorageFactories,
+  EntityCommitSnapshots,
   type EntityCommitStorage,
 } from "@spine-event-engine/storage/provider";
-import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/provider";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
 import {
   AgentExecutionStorageFactories,
@@ -44,7 +44,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
-import type { TenantId } from "@spine-event-engine/proto";
+import type { Event, TenantId } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -55,8 +55,7 @@ import { MysqlTableResolver } from "./table-resolver.js";
 import { MysqlEntityStorage } from "./entity-history.js";
 import { MysqlAgentHistory, AgentHistoryHash } from "./agent-history.js";
 import { MysqlAgentExecution } from "./agent-execution.js";
-import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "./entity-commit.js";
-import { MysqlDeliveryCleanupStorage } from "./delivery-cleanup.js";
+import { MysqlAgentTransaction } from "./agent-transaction.js";
 import { resolvedMysqlTableSpec, type MysqlTableSpec } from "./table-spec.js";
 import { MysqlStorageOperationError, mysqlError } from "./errors.js";
 
@@ -404,31 +403,8 @@ export class MysqlStorageFactory extends StorageFactory {
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
-    this.registerDeliveryCleanup();
     this.registerAgentHistory();
     this.registerAgentExecution();
-  }
-
-  /**
-   * Registers existing delivery cleanup over the selected tenant database.
-   */
-  private registerDeliveryCleanup(): void {
-    DeliveryCleanupStorageFactories.register(this, {
-      createDeliveryCleanupStorage: () =>
-        new MysqlDeliveryCleanupStorage(
-          (context, spec) => this.createMysqlRecordStorage(context, spec),
-          (context, tables, key, work) => {
-            const database = this.database(context);
-            return new MysqlEntityCommitCoordinator(this.connections(database)).commit(
-              tables,
-              key,
-              (connection) => work(connection),
-              { requireTransaction: true },
-            );
-          },
-          () => "spine-delivery-cleanup",
-        ),
-    });
   }
 
   /**
@@ -498,8 +474,7 @@ export class MysqlStorageFactory extends StorageFactory {
         entity: this.createEntityStorage(input.entity),
         events: this.createMysqlRecordStorage(context, eventStoreRecordSpec, undefined, database),
       },
-      new MysqlEntityCommitCoordinator(this.connections(database)),
-      database.databaseName,
+      new MysqlAgentTransaction(this.connections(database)),
     );
   }
 
@@ -624,9 +599,8 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
-   * Creates MySQL storage for Entity commits. MyISAM and Aria tables may retain
-   * partial writes when a commit fails; transactional table engines roll back
-   * the commit.
+   * Creates ordered independent Entity persistence. A later failed write may
+   * leave completed records on every supported table engine.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Entity state message type.
@@ -642,8 +616,6 @@ export class MysqlStorageFactory extends StorageFactory {
       input,
       () => this.createEntityStorage(input),
       () => this.createMysqlRecordStorage(input.context, eventStoreRecordSpec, undefined, database),
-      new MysqlEntityCommitCoordinator(this.connections(database)),
-      database.databaseName,
       () => this.#handles.delete(registration.handle),
     );
     registration.handle = handle;
@@ -1002,7 +974,7 @@ const MysqlConfigurations = Object.freeze({
 });
 
 /**
- * Commits one MySQL Entity mutation under native transaction or table coordination.
+ * Writes one MySQL Entity mutation in independent record order.
  *
  * @typeParam I Captured Entity identifier type.
  * @typeParam S Captured Entity state type.
@@ -1011,13 +983,11 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   #open = true;
 
   /**
-   * Creates a commit handle for one Entity scope and MySQL coordinator.
+   * Creates a commit handle for one Entity scope.
    *
    * @param entity Defines the captured Entity scope.
    * @param openStorage Opens the current and history families.
    * @param openEvents Opens delivery Event storage.
-   * @param coordinator Serializes the provider commit.
-   * @param databaseName Identifies the database in lock keys.
    * @param onClose Removes the handle from factory tracking.
    */
   constructor(
@@ -1027,13 +997,11 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       import("@spine-event-engine/proto").EventId,
       import("@spine-event-engine/proto").Event
     >,
-    private readonly coordinator: MysqlEntityCommitCoordinator,
-    private readonly databaseName: string,
     private readonly onClose: () => void,
   ) {}
 
   /**
-   * Commits current state and associated immutable records within provider coordination.
+   * Writes associated immutable records before current state.
    *
    * @typeParam Id Committed Entity identifier type.
    * @typeParam State Committed Entity state type.
@@ -1044,27 +1012,18 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
   ): Promise<void> {
     this.validate(input);
+    const prepared = EntityCommitSnapshots.capture(input);
     const storage = this.openStorage();
     const events = this.openEvents();
     try {
-      const families = storage.commitCapability();
-      await families.prepare();
+      await storage.prepare();
       await events.prepare();
-      const lockKey = mysqlEntityLockKey({
-        databaseName: this.databaseName,
-        entityKey: input.entity.id.key(input.entityId),
-        sourceTypeName: this.entity.sourceType.typeName,
-      });
-      await this.coordinator.commit(
-        [...families.tableNames(), events.tableName],
-        lockKey,
-        (connection, transactional) =>
-          families.withConnection(connection, () =>
-            events.withConnection(connection, () =>
-              this.apply(input, storage, families, events, transactional),
-            ),
-          ),
-      );
+      try {
+        await this.apply(prepared, storage, events);
+      } catch (error) {
+        if (!this.retryable(error)) throw error;
+        await this.apply(prepared, storage, events);
+      }
     } catch (error) {
       throw mysqlError(MysqlStorageOperationError, "MySQL Entity commit failed.", error);
     } finally {
@@ -1074,36 +1033,44 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   }
 
   /**
-   * Applies immutable rows before current state on one coordinated connection.
+   * Determines whether a MySQL deadlock occurred through safe provider error wrappers.
+   *
+   * @param error Supplies the operation failure.
+   * @returns Whether one captured-input retry is safe.
+   */
+  private retryable(error: unknown): boolean {
+    let current = error;
+    for (let depth = 0; depth < 4; depth += 1) {
+      if (typeof current !== "object" || current === null) return false;
+      const failure = current as { code?: unknown; errno?: unknown; cause?: unknown };
+      if (failure.code === "ER_LOCK_DEADLOCK" || failure.errno === 1213) return true;
+      current = failure.cause;
+    }
+    return false;
+  }
+
+  /**
+   * Applies immutable rows before current state, retaining a completed prefix.
    *
    * @typeParam Id Committed Entity identifier type.
    * @typeParam State Committed Entity state type.
    * @param input Supplies the affected records.
    * @param storage Provides current Entity storage.
-   * @param families Provides state and diagnostic history storage.
    * @param events Provides delivery Event storage.
-   * @param transactional Whether the connection supports rollback.
    * @returns Completion after associated records and current state are written.
    */
   private async apply<Id, State extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
     storage: MysqlEntityStorage<I, S>,
-    families: ReturnType<MysqlEntityStorage<I, S>["commitCapability"]>,
     events: MysqlRecordStorage<
       import("@spine-event-engine/proto").EventId,
       import("@spine-event-engine/proto").Event
     >,
-    transactional: boolean,
   ): Promise<void> {
-    const current = await families.readCurrentLocked(input.entityId as unknown as I);
-    if (!transactional) {
-      await families.preflightImmutable(input.states ?? [], input.diagnostics ?? []);
-      for (const event of input.events ?? []) await events.assertImmutable(event);
-    }
-    for (const state of input.states ?? []) await families.appendStateImmutable(state);
-    for (const diagnostic of input.diagnostics ?? [])
-      await families.appendDiagnosticImmutable(diagnostic);
+    for (const state of input.states ?? []) await storage.states.append(state);
+    for (const diagnostic of input.diagnostics ?? []) await storage.events.append(diagnostic);
     for (const event of input.events ?? []) await events.writeImmutable(event);
+    const current = await storage.current.read(input.entityId as unknown as I);
     if (!sameEntity(current, input.next)) await storage.current.write(input.next);
   }
 
@@ -1126,8 +1093,46 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       throw new MysqlStorageOperationError("Entity state history is disabled.");
     if (!this.entity.eventHistory && (input.diagnostics?.length ?? 0) > 0)
       throw new MysqlStorageOperationError("Entity event history is disabled.");
-    if ((input.events ?? []).some((event) => event.id === undefined))
-      throw new MysqlStorageOperationError("Entity commit requires delivery-event IDs.");
+    this.validateRows(input);
+    this.validateEventIds(input.diagnostics, "diagnostic");
+    this.validateEventIds(input.events, "delivery");
+  }
+
+  /**
+   * Rejects current and state-history rows for another Entity before I/O.
+   *
+   * @typeParam Id Committed Entity identifier type.
+   * @typeParam State Committed Entity state type.
+   * @param input Supplies the rows and requested Entity identifier.
+   */
+  private validateRows<Id, State extends Message>(
+    input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
+  ): void {
+    for (const record of [input.next, ...(input.states ?? [])]) {
+      const decoded =
+        record.entityId === undefined ? undefined : input.entity.id.unpack(record.entityId);
+      if (
+        decoded === undefined ||
+        input.entity.id.key(decoded) !== input.entity.id.key(input.entityId)
+      )
+        throw new MysqlStorageOperationError(
+          "Entity commit record does not identify the requested Entity.",
+        );
+    }
+  }
+
+  /**
+   * Rejects missing, blank, or repeated IDs in one Event family before I/O.
+   *
+   * @param events Supplies diagnostic or delivery Events.
+   * @param family Identifies the Event family in a safe failure message.
+   */
+  private validateEventIds(events: readonly Event[] | undefined, family: string): void {
+    const ids = events?.map((event) => event.id?.value) ?? [];
+    if (ids.some((id) => id === undefined || id.trim() === "") || new Set(ids).size !== ids.length)
+      throw new MysqlStorageOperationError(
+        `Entity commit requires non-blank unique ${family} event IDs.`,
+      );
   }
 
   /**
@@ -1152,7 +1157,9 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   ): boolean {
     return (
       input.context.multitenant === this.entity.context.multitenant &&
-      TenantBoundary.of(input.context).key === TenantBoundary.of(this.entity.context).key
+      TenantBoundary.of(input.context).key === TenantBoundary.of(this.entity.context).key &&
+      input.entity.context.multitenant === this.entity.context.multitenant &&
+      TenantBoundary.of(input.entity.context).key === TenantBoundary.of(this.entity.context).key
     );
   }
 }

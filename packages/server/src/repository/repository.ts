@@ -76,6 +76,7 @@ import {
 import {
   type StorageContext,
   type StorageFactory,
+  EventStore,
   type StorageMode,
   type NormalizedQueryPlan,
   type NormalizedQueryEntry,
@@ -123,8 +124,8 @@ import {
   AgentInvocationBoundsSchema,
   type AgentInvocationBounds,
   AgentInvocationStatus,
-  AgentOutgoingSignalSchema,
-  type AgentOutgoingSignal,
+  AgentOutgoingCommandSchema,
+  type AgentOutgoingCommand,
   AgentSignalKeySchema,
   type AgentSignalKey,
   AgentSavedDispatchTargetSchema as SavedTargetSchema,
@@ -172,9 +173,9 @@ import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-sch
 import {
   SavedDispatcherBindings,
   type SavedCommandBinding,
-  type SavedEventBinding,
 } from "../bus/saved-dispatcher-binding.js";
 import { Delivery } from "../delivery/delivery.js";
+import { receptionObservation } from "../delivery/reception-observation.js";
 import { commitFenced } from "./commit-fence.js";
 import { AgentHistoryReads, type AgentHistoryScope } from "../agent/agent-history.js";
 import { AgentReadRuntime } from "../agent/agent-read-runtime.js";
@@ -308,7 +309,7 @@ export interface AgentReadScope {
  * Missing records are represented by `undefined`, not a terminal phase.
  */
 export type AgentExecutionStatus =
-  "accepted" | "active" | "completed-pending-delivery" | "completed" | "terminated";
+  "accepted" | "active" | "completed-pending-commands" | "completed" | "terminated";
 
 /**
  * Indexed, newest-first reads of retained Agent history.
@@ -1303,8 +1304,8 @@ const RepositoryAgentReads = {
         return "accepted";
       case AgentInvocationStatus.AGENT_INVOCATION_ACTIVE:
         return "active";
-      case AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY:
-        return "completed-pending-delivery";
+      case AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS:
+        return "completed-pending-commands";
       case AgentInvocationStatus.AGENT_INVOCATION_COMPLETED:
         return "completed";
       case AgentInvocationStatus.AGENT_INVOCATION_TERMINATED:
@@ -2432,14 +2433,17 @@ interface RepositoryRuntime {
   readonly publisher: SignalPublisher;
   readonly registerEventSchema: (schema: MessageSchema) => void;
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
-  readonly prepareSavedEvent: (event: Event) => Promise<AgentSavedDispatchPlan>;
+  readonly publishAgentEvent: (event: Event) => Promise<void>;
   readonly prepareSavedCommand: (command: Command) => Promise<AgentSavedDispatchPlan>;
-  readonly publishSavedEvent: (event: Event, plan: AgentSavedDispatchPlan) => Promise<void>;
   readonly publishSavedCommand: (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>;
   readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
-  readonly recordAcceptedSaved: (signal: Command | Event) => void;
+  readonly recordAcceptedSaved: (signal: Command) => void;
   readonly wakeAcceptedAgent: (repository: RepositoryView, tenantId: TenantId | undefined) => void;
 }
+
+type AgentOutput =
+  | { readonly case: "event"; readonly value: Event }
+  | { readonly case: "command"; readonly value: Command };
 
 type RepositoryHandlersOption =
   EntityHandlersMetadata | readonly EntityHandlersMetadata[] | undefined;
@@ -4382,21 +4386,27 @@ class ProcessManagerExecutionSupport {
    *
    * @param loaded Process Manager and commit storage.
    * @param options Stand tenant selection.
-   * @param events Produced or diagnostic Events to retain when configured.
-   * @param emitted Domain Events emitted by an Agent, excluding the source Event.
+   * @param diagnostics Input and produced Events to retain when configured.
+   * @param producedEvents Delivery Events to save before current state.
    * @returns `true` after a successful commit or unchanged no-op.
    */
   async commit(
     loaded: LoadedRepositoryEntity,
     options: { readonly tenantId?: TenantId },
-    events: readonly Event[],
-    emitted: readonly Event[] = events,
+    diagnostics: readonly Event[],
+    producedEvents: readonly Event[],
   ): Promise<boolean> {
     const version = RepositoryEntities.repositoryVersion(loaded.entity);
     const priorNumber = loaded.current?.version?.number ?? 0;
     if (version.number === priorNumber) {
-      await this.#appendUnchangedDiagnostics(loaded, events);
-      await this.#appendAgentEvents(loaded, emitted);
+      await this.#appendUnchangedDiagnostics(loaded, diagnostics);
+      const store = new EventStore(this.#runtime.context, this.#runtime.storageFactory);
+      try {
+        await store.appendAll(producedEvents);
+      } finally {
+        store.close();
+      }
+      await this.#appendAgentEvents(loaded, producedEvents);
       return true;
     }
     const entityId = (loaded.entity as { readonly id: unknown }).id;
@@ -4409,9 +4419,9 @@ class ProcessManagerExecutionSupport {
       RepositoryStand.standUpdateOptions(options.tenantId, version, lifecycle),
       this.#repository.metadata,
     );
-    await this.#storeProcessManagerRecord(loaded, entityId, events, deferred);
-    await this.#appendAgentEvents(loaded, emitted);
-    this.#notifyProcessManager(deferred, events);
+    await this.#storeProcessManagerRecord(loaded, entityId, diagnostics, producedEvents, deferred);
+    this.#notifyProcessManager(deferred, diagnostics);
+    await this.#appendAgentEvents(loaded, producedEvents);
     return true;
   }
 
@@ -4464,18 +4474,26 @@ class ProcessManagerExecutionSupport {
    *
    * @param loaded Process Manager and commit storage.
    * @param entityId Process Manager identifier.
-   * @param events Diagnostic Events to retain when configured.
+   * @param diagnostics Diagnostic Events to retain when configured.
+   * @param producedEvents Delivery Events to save before current state.
    * @param deferred Stand update to notify or cancel.
    * @returns Completion after durable persistence.
    */
   async #storeProcessManagerRecord(
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
-    events: readonly Event[],
+    diagnostics: readonly Event[],
+    producedEvents: readonly Event[],
     deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     try {
-      await this.#commitProcessManagerRecord(loaded, entityId, events, deferred);
+      await this.#commitProcessManagerRecord(
+        loaded,
+        entityId,
+        diagnostics,
+        producedEvents,
+        deferred,
+      );
       entityStateHistoryCaches.get(loaded.entity)?.clear();
     } catch (error) {
       deferred.cancel();
@@ -4488,14 +4506,16 @@ class ProcessManagerExecutionSupport {
    *
    * @param loaded Loaded Process Manager and commit storage.
    * @param entityId Process Manager identifier.
-   * @param events Diagnostic Events to retain when configured.
+   * @param diagnostics Diagnostic Events to retain when configured.
+   * @param producedEvents Delivery Events to save before current state.
    * @param deferred Stand update containing the prepared record.
    * @returns Completion after the storage commit.
    */
   #commitProcessManagerRecord(
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
-    events: readonly Event[],
+    diagnostics: readonly Event[],
+    producedEvents: readonly Event[],
     deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
   ): Promise<void> {
     const history = RepositoryStorage.historyConfiguration(this.#repository);
@@ -4507,8 +4527,9 @@ class ProcessManagerExecutionSupport {
       next: record,
       ...(history.stateHistory ? { states: [record] } : {}),
       ...(history.processManagerEventHistory
-        ? { diagnostics: events.map((event) => clone(EventSchema, event)) }
+        ? { diagnostics: diagnostics.map((event) => clone(EventSchema, event)) }
         : {}),
+      events: producedEvents.map((event) => clone(EventSchema, event)),
     });
   }
 
@@ -4637,7 +4658,9 @@ const AgentExecutionRunner = {
     error: unknown,
   ): Promise<void> {
     if (
-      session.record().status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY
+      session.record().status ===
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS ||
+      session.record().status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED
     )
       throw error;
     if (error instanceof AgentUncertainAttemptError) {
@@ -4681,9 +4704,9 @@ const AgentExecutionRunner = {
           : "MODEL_OUTCOME_UNKNOWN",
       );
     if (
-      session.record().status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY
+      session.record().status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS
     )
-      return this.deliver(runtime, session);
+      return this.deliverCommands(runtime, session);
     if (this.deadlineExpired(session.record()))
       return this.terminate(repository, runtime, tenantId, session, "DEADLINE_EXCEEDED");
     return this.execute(repository, runtime, tenantId, session);
@@ -4903,7 +4926,7 @@ const AgentExecutionRunner = {
         ? await this.start(repository, runtime, session, loaded, entityId, tenantId)
         : await this.selectMissingModels(repository, runtime, session, accepted, tenantId);
     if (session.signal.aborted) return;
-    const completed = await this.completeExecution(
+    const outputs = await this.completeExecution(
       repository,
       runtime,
       tenantId,
@@ -4914,8 +4937,7 @@ const AgentExecutionRunner = {
       entityId,
       record.started?.initialVersion ?? create(VersionSchema),
     );
-    if (completed.status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY)
-      await this.deliver(runtime, session);
+    await this.deliverInitial(runtime, session, outputs);
   },
 
   /**
@@ -4942,7 +4964,7 @@ const AgentExecutionRunner = {
     handlers: readonly RegisteredHandlerMetadata[],
     entityId: unknown,
     initialVersion: Version,
-  ): Promise<AgentExecutionRecord> {
+  ): Promise<readonly AgentOutput[]> {
     const outputs = await this.outputsOrRejection(
       repository,
       runtime,
@@ -4954,7 +4976,8 @@ const AgentExecutionRunner = {
       entityId,
       initialVersion,
     );
-    return this.complete(repository, runtime, tenantId, session, loaded, entityId, outputs);
+    await this.complete(repository, runtime, tenantId, session, loaded, entityId, outputs);
+    return outputs;
   },
 
   /**
@@ -4981,7 +5004,7 @@ const AgentExecutionRunner = {
     handlers: readonly RegisteredHandlerMetadata[],
     entityId: unknown,
     initialVersion: Version,
-  ): Promise<readonly AgentOutgoingSignal[]> {
+  ): Promise<readonly AgentOutput[]> {
     try {
       return await this.produceOutputs(
         repository,
@@ -5005,14 +5028,14 @@ const AgentExecutionRunner = {
   },
 
   /**
-   * Wraps the original rejection Event as one pending saved output.
+   * Wraps the original rejection Event for one normal EventBus handoff.
    *
    * @param runtime Bounded Context storage and publication services.
    * @param repository Registered Entity repository for this operation.
    * @param command Original typed Command envelope.
    * @param entityId Typed recipient Entity identifier.
    * @param error Failure raised while processing this accepted signal.
-   * @returns Prepared original rejection Event for durable delivery.
+   * @returns Prepared original rejection Event for one normal EventBus handoff.
    */
   rejectionOutput(
     runtime: RepositoryRuntime,
@@ -5020,13 +5043,11 @@ const AgentExecutionRunner = {
     command: Command,
     entityId: unknown,
     error: RejectionThrowable,
-  ): AgentOutgoingSignal {
-    return create(AgentOutgoingSignalSchema, {
-      signal: {
-        case: "event",
-        value: RepositorySignals.rejectionEvent(runtime, repository, command, entityId, error),
-      },
-    });
+  ): AgentOutput {
+    return {
+      case: "event",
+      value: RepositorySignals.rejectionEvent(runtime, repository, command, entityId, error),
+    };
   },
 
   /**
@@ -5053,7 +5074,7 @@ const AgentExecutionRunner = {
     handlers: readonly RegisteredHandlerMetadata[],
     entityId: unknown,
     initialVersion: Version,
-  ): Promise<readonly AgentOutgoingSignal[]> {
+  ): Promise<readonly AgentOutput[]> {
     const produced = await this.invoke(
       repository,
       runtime,
@@ -5085,7 +5106,7 @@ const AgentExecutionRunner = {
     session: AgentExecutionSession,
     loaded: LoadedRepositoryEntity,
     entityId: unknown,
-    outputs: readonly AgentOutgoingSignal[],
+    outputs: readonly AgentOutput[],
   ): Promise<AgentExecutionRecord> {
     await this.authorizePreferenceChanges(repository, runtime, tenantId, session);
     const version = RepositoryEntities.repositoryVersion(loaded.entity);
@@ -5325,21 +5346,26 @@ const AgentExecutionRunner = {
   completionFacts(
     record: AgentExecutionRecord,
     version: Version,
-    outputs: readonly AgentOutgoingSignal[],
+    outputs: readonly AgentOutput[],
     preferences: readonly ModelPreference[],
   ) {
     const initialVersion = record.started?.initialVersion;
     if (initialVersion === undefined)
       throw new Error("Agent completion requires its started Version.");
+    const commands = outputs
+      .filter(
+        (output): output is Extract<AgentOutput, { case: "command" }> => output.case === "command",
+      )
+      .map((output) => create(AgentOutgoingCommandSchema, { command: output.value }));
     record.status =
-      outputs.length === 0
+      commands.length === 0
         ? AgentInvocationStatus.AGENT_INVOCATION_COMPLETED
-        : AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY;
+        : AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;
     record.completion = create(AgentExecutionCompletionSchema, {
       initialVersion,
       resultingVersion: version,
       preferences: [...preferences],
-      outgoing: [...outputs],
+      commands,
     });
     return record;
   },
@@ -5350,11 +5376,10 @@ const AgentExecutionRunner = {
    * @param outputs Prepared outgoing domain signals.
    * @returns Committed domain Event rows for Agent history.
    */
-  emittedHistory(outputs: readonly AgentOutgoingSignal[]): readonly AgentHistoryEntry[] {
+  emittedHistory(outputs: readonly AgentOutput[]): readonly AgentHistoryEntry[] {
     return outputs.flatMap((output) => {
-      if (output.signal.case !== "event" || output.signal.value.context?.rejection !== undefined)
-        return [];
-      const event = output.signal.value;
+      if (output.case !== "event" || output.value.context?.rejection !== undefined) return [];
+      const event = output.value;
       const occurredAt = event.context?.timestamp;
       if (occurredAt === undefined)
         throw new Error("Agent emitted Event requires its original timestamp.");
@@ -5472,7 +5497,7 @@ const AgentExecutionRunner = {
     entityId: unknown,
     version: Version,
     produced: readonly unknown[],
-  ): readonly AgentOutgoingSignal[] {
+  ): readonly AgentOutput[] {
     const source = accepted.signal;
     if (source.case !== "command" && source.case !== "event")
       throw new Error("Agent output requires its accepted source signal.");
@@ -5503,7 +5528,7 @@ const AgentExecutionRunner = {
     entityId: unknown,
     version: Version,
     signal: unknown,
-  ): AgentOutgoingSignal {
+  ): AgentOutput {
     const typeName = EntityInvocation.messageTypeName(signal);
     const eventSchema = routing.producedEventSchemas.find((entry) => entry.typeName === typeName);
     if (eventSchema !== undefined)
@@ -5531,7 +5556,7 @@ const AgentExecutionRunner = {
    * @param version Entity version associated with the signal.
    * @param signal Original domain signal or execution cancellation signal.
    * @param schema Generated message descriptor for the signal.
-   * @returns Typed original Event envelope for durable delivery.
+   * @returns Typed original Event envelope for one normal EventBus handoff.
    */
   bindEventOutput(
     repository: RepositoryView,
@@ -5541,7 +5566,7 @@ const AgentExecutionRunner = {
     version: Version,
     signal: unknown,
     schema: MessageSchema,
-  ): AgentOutgoingSignal {
+  ): AgentOutput {
     if (source.case !== "command" && source.case !== "event") throw new Error("Missing source.");
     const metadata =
       source.case === "command"
@@ -5557,7 +5582,7 @@ const AgentExecutionRunner = {
         version,
       ),
     });
-    return create(AgentOutgoingSignalSchema, { signal: { case: "event", value: event } });
+    return { case: "event", value: event };
   },
 
   /**
@@ -5574,7 +5599,7 @@ const AgentExecutionRunner = {
     source: NonNullable<AgentExecutionRecord["accepted"]>["signal"],
     signal: unknown,
     schema: MessageSchema,
-  ): AgentOutgoingSignal {
+  ): AgentOutput {
     if (source.case !== "command" && source.case !== "event") throw new Error("Missing source.");
     const metadata =
       source.case === "command"
@@ -5585,64 +5610,103 @@ const AgentExecutionRunner = {
       message: AnyMessages.pack(schema, signal as never),
       context: metadata.context,
     });
-    return create(AgentOutgoingSignalSchema, { signal: { case: "command", value: command } });
+    return { case: "command", value: command };
   },
 
   /**
-   * Publishes saved envelopes through normal bus acceptance before marking original IDs.
+   * Dispatches every emitted Event to the normal EventBus and advances saved Commands.
    *
    * @param runtime Bound normal bus acceptance callbacks.
    * @param session Fenced record containing pending saved envelopes.
+   * @param outputs Locally produced outputs in original handler order.
    * @returns When the fenced repository operation completes.
    */
-  async deliver(runtime: RepositoryRuntime, session: AgentExecutionSession): Promise<void> {
-    const completed = session.record();
-    const key = completed.accepted?.key;
-    if (key === undefined) throw new Error("Agent output delivery requires its accepted key.");
-    for (const [index, output] of (completed.completion?.outgoing ?? []).entries()) {
-      if (session.signal.aborted) return;
-      if (output.delivered) continue;
-      const signal = output.signal;
-      if (signal.case !== "event" && signal.case !== "command")
-        throw new Error("Agent outgoing signal has no original envelope.");
-      const key = this.outputKey(output);
-      const plan =
-        output.plan ??
-        (await (signal.case === "event"
-          ? runtime.prepareSavedEvent(signal.value)
-          : runtime.prepareSavedCommand(signal.value)));
-      if (output.plan === undefined) {
-        await session.update((current) => {
-          const pending = current.completion?.outgoing[index];
-          if (pending?.plan !== undefined || pending?.signal.case !== signal.case)
-            throw new Error("Saved Agent output changed before plan installation.");
-          pending.plan = plan;
-          return current;
-        });
+  async deliverInitial(
+    runtime: RepositoryRuntime,
+    session: AgentExecutionSession,
+    outputs: readonly AgentOutput[],
+  ): Promise<void> {
+    let commandIndex = 0;
+    let failed = false;
+    let firstFailure: unknown;
+    for (const output of outputs) {
+      try {
+        if (output.case === "event") {
+          await runtime.publishAgentEvent(output.value);
+        } else {
+          await this.deliverCommand(runtime, session, commandIndex);
+        }
+      } catch (error) {
+        if (!failed) {
+          firstFailure = error;
+          failed = true;
+        }
       }
-      if (signal.case === "event") await runtime.publishSavedEvent(signal.value, plan);
-      else await runtime.publishSavedCommand(signal.value, plan);
-      await session.markDelivered([key]);
-      runtime.recordAcceptedSaved(signal.value);
+      if (output.case === "command") commandIndex += 1;
+    }
+    if (failed) throw firstFailure;
+  },
+
+  /**
+   * Retries pending saved Commands without rerunning the Agent handler.
+   *
+   * @param runtime Bound normal Command bus callbacks.
+   * @param session Fenced record containing saved Commands.
+   * @returns Completion after pending Command attempts.
+   */
+  async deliverCommands(runtime: RepositoryRuntime, session: AgentExecutionSession): Promise<void> {
+    for (const [index] of (session.record().completion?.commands ?? []).entries()) {
+      if (session.signal.aborted) return;
+      await this.deliverCommand(runtime, session, index);
     }
   },
 
   /**
-   * Returns the typed original ID of one completed outgoing signal.
+   * Sends one saved Command under the current claim and records its acknowledgement.
    *
-   * @param output Prepared outgoing domain signal.
-   * @returns Original durable key for the outgoing signal.
+   * @param runtime Bound normal Command bus callbacks.
+   * @param session Fenced record containing saved Commands.
+   * @param index Command position in the saved completion.
+   * @returns Completion after the Command is acknowledged or already delivered.
    */
-  outputKey(output: AgentOutgoingSignal): AgentSignalKey {
-    if (output.signal.case === "event" && output.signal.value.id !== undefined)
-      return create(AgentSignalKeySchema, {
-        id: { case: "event", value: output.signal.value.id },
+  async deliverCommand(
+    runtime: RepositoryRuntime,
+    session: AgentExecutionSession,
+    index: number,
+  ): Promise<void> {
+    const output = session.record().completion?.commands[index];
+    if (output === undefined || output.delivered) return;
+    const command = output.command;
+    if (command === undefined) throw new Error("Agent outgoing Command has no original envelope.");
+    const key = this.outputKey(output);
+    const plan = output.plan ?? (await runtime.prepareSavedCommand(command));
+    if (output.plan === undefined) {
+      await session.update((current) => {
+        const pending = current.completion?.commands[index];
+        if (
+          pending === undefined ||
+          pending.plan !== undefined ||
+          pending.command?.id?.uuid !== command.id?.uuid
+        )
+          throw new Error("Saved Agent Command changed before plan installation.");
+        pending.plan = plan;
+        return current;
       });
-    if (output.signal.case === "command" && output.signal.value.id !== undefined)
-      return create(AgentSignalKeySchema, {
-        id: { case: "command", value: output.signal.value.id },
-      });
-    throw new Error("Agent outgoing signal requires its original typed ID.");
+    }
+    await runtime.publishSavedCommand(command, plan);
+    await session.markDelivered([key]);
+    runtime.recordAcceptedSaved(command);
+  },
+
+  /**
+   * Returns the typed original ID of one completed outgoing Command.
+   *
+   * @param output Prepared outgoing Command.
+   * @returns Original durable Command ID.
+   */
+  outputKey(output: AgentOutgoingCommand): CommandId {
+    if (output.command?.id !== undefined) return output.command.id;
+    throw new Error("Agent outgoing Command requires its original typed ID.");
   },
 
   /**
@@ -6401,7 +6465,7 @@ class ProcessManagerCommandExecution {
       intake.route.entityId,
       RepositoryEntities.priorVersion(loaded.current),
     );
-    const committed = await this.#support.commit(loaded, tenantOptions, events);
+    const committed = await this.#support.commit(loaded, tenantOptions, events, events);
     if (!committed) return undefined;
     this.#publishChangedState(loaded, intake.route.entityId);
     this.#postEvents(events);
@@ -6656,7 +6720,7 @@ class ProcessManagerCommandExecution {
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
       // spine-log-boundary: server.repository_event_follow_up
-      void this.#runtime.publisher.publishEvent(event);
+      void this.#runtime.publisher.publishReactorEvent(event);
     }
   }
 }
@@ -6824,10 +6888,10 @@ class ProcessManagerEventExecution {
       RepositoryEntities.priorVersion(loaded.current),
     );
     const commands = this.#bindProducedCommands(produced.commands);
-    const diagnostics =
-      this.#repository.entityFamily === "agent"
-        ? events
-        : [DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId), ...events];
+    const diagnostics = [
+      DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
+      ...events,
+    ];
     const committed = await this.#support.commit(loaded, tenantOptions, diagnostics, events);
     if (!committed) return;
     this.#publishChangedState(loaded, entityId);
@@ -7120,7 +7184,7 @@ class ProcessManagerEventExecution {
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
       // spine-log-boundary: server.process_manager_event_follow_up
-      void this.#runtime.publisher.publishEvent(event);
+      void this.#runtime.publisher.publishReactorEvent(event);
     }
   }
 }
@@ -7594,7 +7658,24 @@ const EntityInvocation = {
       throw new TypeError(`Repository entity execution requires method "${methodName}".`);
     }
 
-    return Reflect.apply(method, entity, parameterCount === 2 ? [message, context] : [message]);
+    let result: unknown;
+    try {
+      result = Reflect.apply(method, entity, parameterCount === 2 ? [message, context] : [message]);
+    } catch (error) {
+      receptionObservation.recordHandlerFailure(error);
+      throw error;
+    }
+    if (
+      result !== null &&
+      (typeof result === "object" || typeof result === "function") &&
+      typeof (result as PromiseLike<unknown>).then === "function"
+    ) {
+      return Promise.resolve(result).catch((error: unknown) => {
+        receptionObservation.recordHandlerFailure(error);
+        throw error;
+      });
+    }
+    return result;
   },
 
   /**
@@ -12759,103 +12840,6 @@ const SavedRepositoryDispatch = {
   },
 
   /**
-   * Prepares the exact ordered Event recipients and selected generated handlers.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param routing Registered generated handler routing metadata.
-   * @param event Original typed Event envelope.
-   * @returns Validated frozen Event recipient target.
-   */
-  async prepareEvent(
-    repository: EventRoutingRepository,
-    routing: RepositoryRouting,
-    event: Event,
-  ): Promise<AgentSavedDispatchTarget> {
-    const route = await repository.routeEvent(event);
-    return create(SavedTargetSchema, {
-      kind: AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_EVENT,
-      receiverStateType: repository.stateSchema.typeName,
-      repositoryFamily: SavedRepositoryDispatch.family(repository),
-      signalType: route.messageFullTypeName,
-      bindingFingerprint: SavedRepositoryDispatch.fingerprint(
-        repository,
-        SavedRepositoryDispatch.eventHandlers(routing, event),
-      ),
-      recipients: route.entityIds.map((id) => InboxMessages.inboxTargetId(id, repository.idField)),
-    });
-  },
-
-  /**
-   * Restores the saved Event route and current generated handler metadata.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param routing Registered generated handler routing metadata.
-   * @param event Original typed Event envelope.
-   * @param target Frozen recipient binding.
-   * @returns When the fenced repository operation completes.
-   */
-  bindEvent(
-    repository: EventRoutingRepository,
-    routing: RepositoryRouting,
-    event: Event,
-    target: AgentSavedDispatchTarget,
-  ): Promise<() => Promise<void>> {
-    const { signalType } = SavedRepositoryDispatch.requireEventBinding(
-      repository,
-      routing,
-      event,
-      target,
-    );
-    const entityIds = target.recipients.map((id) =>
-      SavedRepositoryDispatch.recipient(repository, id),
-    );
-    const route: RepositoryEventRoute = {
-      entityIds,
-      messageFullTypeName: signalType,
-      invocation: "deferred",
-    };
-    return Promise.resolve(() =>
-      RepositoryDispatch.dispatchRepositoryEvent(repository, routing, event, route),
-    );
-  },
-
-  /**
-   * Checks saved Event metadata and active repository registration.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param routing Registered generated handler routing metadata.
-   * @param event Original typed Event envelope.
-   * @param target Frozen recipient binding.
-   * @returns Registered Event route for the frozen target.
-   */
-  requireEventBinding(
-    repository: EventRoutingRepository,
-    routing: RepositoryRouting,
-    event: Event,
-    target: AgentSavedDispatchTarget,
-  ): { runtime: RepositoryRuntime; signalType: string } {
-    const packed = EntityInvocation.requireSignalMessage(event.message, "event");
-    const schema = RepositoryRoutes.schemaForTypeUrl(routing.eventSchemas, packed.typeUrl, "event");
-    const fingerprint = SavedRepositoryDispatch.fingerprint(
-      repository,
-      SavedRepositoryDispatch.eventHandlers(routing, event),
-    );
-    const runtime = repositoryRuntimes.get(repository);
-    if (
-      !SavedRepositoryDispatch.matches(
-        repository,
-        target,
-        AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_EVENT,
-      ) ||
-      target.signalType !== schema.typeName ||
-      target.bindingFingerprint !== fingerprint ||
-      runtime === undefined
-    )
-      throw new Error("Saved Agent Event repository binding changed before delivery.");
-    return { runtime, signalType: schema.typeName };
-  },
-
-  /**
    * Creates one internal Command binding from the repository registration.
    *
    * @param repository Registered Entity repository for this operation.
@@ -12876,27 +12860,6 @@ const SavedRepositoryDispatch = {
         ),
       bind: (command, target) =>
         SavedRepositoryDispatch.bindCommand(repository, routing, command, target),
-    };
-  },
-
-  /**
-   * Creates one internal Event binding from the repository registration.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param routing Registered generated handler routing metadata.
-   * @returns Saved Event binding for this registration.
-   */
-  eventBinding(repository: EventRoutingRepository, routing: RepositoryRouting): SavedEventBinding {
-    return {
-      prepare: (event) => SavedRepositoryDispatch.prepareEvent(repository, routing, event),
-      matches: (target) =>
-        SavedRepositoryDispatch.matches(
-          repository,
-          target,
-          AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_EVENT,
-        ),
-      bind: (event, target) =>
-        SavedRepositoryDispatch.bindEvent(repository, routing, event, target),
     };
   },
 };
@@ -12980,10 +12943,7 @@ const RepositoryDispatch = {
       routing.domesticEventSchemas,
       routing.externalEventSchemas,
     );
-    return SavedDispatcherBindings.event(
-      originAware,
-      SavedRepositoryDispatch.eventBinding(repository, routing),
-    );
+    return originAware;
   },
 
   /**

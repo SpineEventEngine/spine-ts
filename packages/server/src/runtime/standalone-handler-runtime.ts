@@ -135,12 +135,7 @@ export class StandaloneHandlerRuntime {
         bindings.filter(({ handler }) => handler.input.origin === "external"),
       ),
     );
-    return SavedDispatcherBindings.event(originAware, {
-      prepare: (event) => Promise.resolve(this.#prepareEvent(event, bindings)),
-      matches: (target) => target.kind === AgentSavedTargetKind.AGENT_SAVED_STANDALONE_EVENT,
-      bind: (event, target) =>
-        Promise.resolve().then(() => this.#bindEvent(event, target, bindings)),
-    });
+    return originAware;
   }
 
   /**
@@ -263,19 +258,6 @@ export class StandaloneHandlerRuntime {
   }
 
   /**
-   * Freezes Event filter selection before saved output transport.
-   */
-  #prepareEvent(event: Event, bindings: readonly Binding[]): AgentSavedDispatchTarget {
-    if (event.message === undefined) throw new Error("Saved standalone Event needs a message.");
-    return this.#savedTarget(
-      AgentSavedTargetKind.AGENT_SAVED_STANDALONE_EVENT,
-      event.message.typeUrl,
-      bindings,
-      this.#selectedEventBindings(event, bindings),
-    );
-  }
-
-  /**
    * Checks a saved Command binding and returns only its original selected receptors.
    */
   #bindCommand(
@@ -290,32 +272,6 @@ export class StandaloneHandlerRuntime {
       AgentSavedTargetKind.AGENT_SAVED_STANDALONE_COMMAND,
     );
     return Promise.resolve(() => this.#dispatchCommand(command, selected));
-  }
-
-  /**
-   * Checks a saved Event binding without reevaluating its field filters.
-   */
-  #bindEvent(
-    event: Event,
-    target: AgentSavedDispatchTarget,
-    bindings: readonly Binding[],
-  ): Promise<() => Promise<void>> {
-    const selected = this.#savedBindings(
-      event.message?.typeUrl,
-      target,
-      bindings,
-      AgentSavedTargetKind.AGENT_SAVED_STANDALONE_EVENT,
-    );
-    const packed = event.message;
-    if (packed === undefined) throw new Error("Saved standalone Event needs a message.");
-    return Promise.resolve(async () => {
-      for (const binding of selected) {
-        const message = AnyMessages.unpack(packed, binding.handler.input.schema);
-        if (message === undefined) throw new Error("Saved standalone Event schema changed.");
-        const output = await binding.invoke(message, StandaloneHandlerRuntime.eventContext(event));
-        await this.#publish(binding, output, event);
-      }
-    });
   }
 
   /**

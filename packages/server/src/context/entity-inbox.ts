@@ -20,6 +20,7 @@ import type { TenantId } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { Delivery } from "../delivery/delivery.js";
+import { receptionObservation } from "../delivery/reception-observation.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -345,15 +346,24 @@ export class LocalEntityInbox implements EntityInbox {
     deliveryTenantId?: TenantId,
     expectedShard?: ShardIndex,
   ): Promise<void> {
-    let followUp: (() => Promise<void>) | undefined;
-    await InboxHandoff.drain(
-      this.#drainOptions(message, delivery, deliveryTenantId, expectedShard, (value) => {
-        followUp = value;
-      }),
-    );
-    if (followUp !== undefined) {
-      const nextFollowUp = followUp;
-      this.#chainFollowUp(message, deliveryTenantId, nextFollowUp);
+    const followUps: EntityInboxFollowUp[] = [];
+    try {
+      await InboxHandoff.drain(
+        this.#drainOptions(message, delivery, deliveryTenantId, expectedShard, (value) => {
+          if (value !== undefined) followUps.push(value);
+        }),
+      );
+    } finally {
+      if (followUps.length > 0)
+        this.#chainFollowUp(message, deliveryTenantId, async () => {
+          for (const followUp of followUps) {
+            try {
+              await followUp();
+            } catch {
+              // A failed initial publication must not suppress a later Command's one attempt.
+            }
+          }
+        });
     }
   }
 
@@ -496,6 +506,7 @@ export class LocalEntityInbox implements EntityInbox {
     runFollowUp = true,
     expectedShard = this.#expectedShard(message),
   ): Promise<(() => Promise<void>) | undefined> {
+    receptionObservation.markManaged();
     LocalEntityInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);

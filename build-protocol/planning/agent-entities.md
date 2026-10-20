@@ -13,8 +13,10 @@ Implemented in [PR #18](https://github.com/SpineEventEngine/spine-ts/pull/18).
 - MCP interactions and model outcomes are recorded. Conversation records,
   System Events, and emitted domain Events have mandatory repository-indexed
   history, newest first, with an explicit conversation ID.
-- Recorded execution results support recovery. Whether a result still applies
-  to application state remains an application decision.
+- Recorded model results and outgoing Command obligations support recovery.
+  Emitted domain Events enter immutable Agent history and are handed once to
+  the Bounded Context EventBus after completion, without Agent delivery replay.
+  Whether a result still applies to application state remains an application decision.
 - BlackBox supports Agent scenarios with scripted model outcomes.
 - Release Notes Studio demonstrates local Git comparison, MCP tools, ChatGPT
   sign-in, generation, Markdown editing, Preview, and export in MōBrowser.

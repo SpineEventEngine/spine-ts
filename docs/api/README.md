@@ -84,6 +84,11 @@ remote/shared Delivery directly. DRAINING stops accepting new unary calls and sh
 retains subscription relays through active work, and closes the child after the
 final updates. The application selects its Delivery service and shard strategy;
 managed mode does not choose them or check where they came from.
+Managed close drains Delivery, cancels subscription relays while child listeners
+remain reachable, and then completes child close. Failed cleanup remains
+observable and retryable. Private IPC acknowledgement and process reaping have
+separate bounded graces. Direct `DeliverySupervisor.close({ graceMs })` retains
+its active-work and release-cleanup bounds; these are Delivery policies.
 
 The reference includes entry points for `@spine-event-engine/client-web`,
 `@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and
@@ -133,9 +138,13 @@ recover a real disconnect, duplicate, or possible gap, not normal termination.
 
 `ClientRequest.post()` and `send()` cover commands and raw `QueryResponse`
 queries. Commands are never retried. `createSubscription()` returns an inactive
-handle; `activate()` begins remote work, and `cancel()` is terminal and makes
-at most one bounded remote cancellation attempt per accepted wire; reconnects
-can therefore clean multiple wires. Each remote cancellation is bounded to
+handle; `activate()` waits for a matching response-only successful ACK after
+attachment, including when no business update follows. An error, malformed
+response, or business update before that ACK fails activation. `connected`
+means attachment was acknowledged, not that every future update is delivered.
+`cancel()` immediately stops local delivery and coalesces concurrent remote
+cleanup. A failed remote Cancel remains retryable from the same handle; a
+successful Cancel is terminal and idempotent. Each remote attempt is bounded to
 1,000 ms. `updates` and `lifecycle` are separate bounded single-consumer
 streams, with no cross-stream order guarantee. Defaults are 64 update
 deliveries, 1,048,576 update bytes, 32 lifecycle notices, five retries after
@@ -291,7 +300,7 @@ tenant-safe replay in multitenant contexts, and resolves only after that
 received row is marked delivered. Process-manager event rows use
 `REACT_UPON_EVENT`, projection subscriber rows use `UPDATE_SUBSCRIBER`, both
 store the original `Event` envelope, and both replay only the routed row target
-before the transaction and `Stand` update. Before handler code runs, replay
+before the independent persistence steps and `Stand` update. Before handler code runs, replay
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
 Pending and delivered `InboxMessage` rows are stored directly. Shard ownership
@@ -299,9 +308,16 @@ is the only concurrent-delivery exclusion; there is no per-message claim or
 separate dedup record. Delivered rows are the deduplication fact. Handler
 effects and the delivered-row compare-and-set are not one transaction, so a
 lost acknowledgement can redeliver after restart and downstream handling must
-be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by
-default it marks a failed reception delivered and continues independent targets;
-an application can instead choose the immediate repeat action.
+be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by default
+it marks failed reception delivered and continues independent targets. A custom
+monitor may repeat failed processing; each failed repeat consults it again.
+Any custom reception action that returns normally completes delivery and the
+enclosing stage acknowledges the row. Monitor and selected action errors
+propagate. Managed repository infrastructure
+errors propagate without consulting the reception monitor, and their Inbox rows
+remain `TO_DELIVER`.
+Successful processing followed by failed acknowledgement gets finite
+acknowledgement-only retries; exhaustion leaves the row pending.
 Normal local and remote delivery reads every status in a bounded page. It
 removes a pending duplicate when its signal ID and typed Inbox target match a
 delivered row in that page or one of the 1,000 most recent deliveries remembered
@@ -323,7 +339,7 @@ repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
 process-manager event routing reads the first event message field, state is
 loaded/created and stored through `Stand`, and returned domain commands/events
-are wrapped only after the current transaction and state write succeed.
+are wrapped only after the prepared Entity write sequence succeeds.
 `BoundedContext.catchUpReadSide(options?)` is a legacy-named, process-local
 whole-read-side reset/replay maintenance helper. It is not the framework's
 Projection catch-up boundary. It clears registered projection rows through
@@ -336,6 +352,13 @@ Projection repository, entity IDs, or a starting time. It does not return a
 catch-up operation ID or implement durable progress, overlap admission, live
 event coordination, delivery jobs, schedulers, inbox lifecycle, retries,
 restart, resumption, or transport topology.
+Committed Entity, reactor, Process Manager, and System Events receive one
+first-publication attempt. A failed recipient or System append is reported
+through existing diagnostics and does not schedule another publication. Inbox
+processing and acknowledgement recovery remain separate Delivery behavior.
+`BoundedContext.close()` drains accepted work and aggregates cleanup failures;
+a failed cleanup may be retried.
+
 Server exports also include the abstract `Entity`, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `Agent`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,
@@ -473,11 +496,11 @@ definition in the context's Stand registry. `Activate` changes that definition
 to active before attaching this process's delivery; missing or expired
 definitions, and a definition already active for this process, produce no
 updates. `Cancel` and stream finalization release local delivery and physically
-delete the shared definition. Pending definitions expire after 30 seconds;
-active definitions have no framework TTL.
+delete the shared definition. Pending definitions expire after 30 seconds.
 
-The context builder's built-in registry capacity is from 1 through 100 admitted
-definitions, or the builder may provide a custom registry. Separately,
+The built-in registry has no global quota for retained definitions, and active
+definitions have no framework TTL. Application or ingress admission must bound
+acceptable use. Separately,
 `SpineServices.subscriptionLimit` defaults to 100 per service instance and
 bounds concurrent unknown-ID cancellation work; it is not a registry or
 distributed quota. `SpineServices.queueLimit` defaults to 100 queued updates
@@ -627,20 +650,33 @@ session, then marks the Inbox row delivered in a separate operation. Another
 worker may take the shard between those operations. The same complete `WorkerId`
 can recover its unexpired session;
 a different worker is excluded until it expires, and a previous worker cannot
-release a newer session. `DeliveryMonitor` contains reception failures: by
-default it marks the row delivered and continues independent targets; an
-application may choose immediate repeat dispatch instead. There is no
-callback/failure budget or timer-driven renewal model.
+release a newer session. `DeliveryMonitor` marks failed reception delivered by
+default and continues independent targets; a custom monitor may choose an
+immediate repeat of failed processing. The supervisor
+rescans pending shards every 10 seconds by default, independently of its
+60-second stale-session threshold and the configurable Delivery server processing
+timeout, which is disabled by default. See [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
+for the separate responsibilities and limits. After a failed run,
+release-generated remote observations of that shard are held locally until the next periodic rescan. Explicit notifications remain
+admissible; newly enqueued remote work on the failed shard may wait for the
+rescan, while other shards continue. Other processes can each make a failed
+attempt before applying their local suppression. The interval is not a
+per-message delivery deadline.
 
-`DeliveryMonitor` contains endpoint failures. Its default reception action
-marks the row delivered; a custom monitor may repeat dispatch immediately.
-If that durable action fails, the row remains pending, later messages for that
-target stop, independent targets continue, and a later run can retry. Shard
-ownership protects only concurrent workers, not endpoint effects. Therefore a
+`DeliveryMonitor` handles endpoint failures. Its default reception action
+marks the row delivered; a custom monitor may repeat failed processing.
+Any selected reception action that completes normally leads to delivered
+acknowledgement; a rejected action leaves the row `TO_DELIVER` and propagates.
+Managed repository infrastructure failures propagate and leave the row pending.
+After successful processing, a failed acknowledgement is retried without
+deliberate handler rerun. Exhausted acknowledgement blocks later messages for
+that target in the current run; a later run can retry. Shard coordination
+protects concurrent workers, not
+endpoint effects. Therefore a
 lost acknowledgement can redeliver after a handler runs, and downstream effects
-must be idempotent. The delivery model has no attempt history, exhaustion,
-claims, quarantine, receipts, markers, timers, backoff, dead-letter storage,
-or scheduler persistence.
+must be idempotent. The delivery model has no persisted attempt history,
+exhaustion, claims, quarantine, receipts, markers, backoff, dead-letter storage,
+or scheduler state beyond the configured in-process recovery timer.
 The package does not expose a raw worker callback API; framework replay
 uses the framework's validated endpoints. Delivery operations check that the
 worker still holds the shard, rather than renewing it on a timer around callbacks.

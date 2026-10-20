@@ -15,16 +15,9 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath, URL } from "node:url";
-import { fromBinary } from "@bufbuild/protobuf";
-import { AnyMessages } from "@spine-event-engine/core";
-import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { createConnection } from "mysql2/promise";
 import { Pool } from "pg";
 import { describe, expect, it } from "vitest";
-// prettier-ignore
-import {
-  SupportDraftProjectionStateSchema as DraftStateSchema,
-} from "../../generated/spine/server/testing/support_recovery_states_pb.js";
 import { startToolEndpoint } from "./tool-endpoint.js";
 
 interface RecoveryMessage {
@@ -45,6 +38,8 @@ interface RecoveryMessage {
   inboxIdBytes?: string;
   inboxStatus?: number;
   recordStatus?: number;
+  handlerCalls?: number;
+  publicExecutionStatus?: string;
   acceptedActor?: string;
   acceptedTenant?: string;
   keyBytes?: string;
@@ -61,8 +56,7 @@ interface RecoveryMessage {
     settled: boolean;
     reservedBytes: string;
   }[];
-  outgoing?: {
-    kind: string;
+  pendingCommands?: {
     id?: string;
     delivered: boolean;
     targets?: { kind: number; fingerprint: string }[];
@@ -153,48 +147,6 @@ async function isolatedScope(provider: string, unique: string): Promise<Recovery
       close: () => Promise.resolve(),
     };
   throw new Error(`Unknown recovery provider: ${provider}.`);
-}
-
-async function persistedDraftProjection(
-  schema: string,
-  ticket: string,
-): Promise<{ reply: string; version: number } | undefined> {
-  const url = process.env.SPINE_TS_POSTGRESQL_URL;
-  if (!url || !/^agent_recovery_[a-f0-9]{16}$/.test(schema))
-    throw new Error("Projection proof requires an isolated PostgreSQL schema.");
-  const pool = new Pool({ connectionString: url });
-  try {
-    const tables = await pool.query<{ tablename: string }>(
-      "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname=$1 ORDER BY tablename",
-      [schema],
-    );
-    const table = tables.rows.find((row) => row.tablename.includes("supportdraftprojectionstate"));
-    if (!table) return undefined;
-    const rows = await pool.query<{ bytes: Buffer }>(
-      `SELECT "bytes" FROM "${schema}"."${table.tablename}"`,
-    );
-    const record = rows.rows[0]?.bytes
-      ? fromBinary(EntityRecordSchema, rows.rows[0].bytes)
-      : undefined;
-    const state = record?.state ? AnyMessages.unpack(record.state, DraftStateSchema) : undefined;
-    if (state?.id?.ticketNumber !== ticket) return undefined;
-    return { reply: state.proposedReply, version: record?.version?.number ?? 0 };
-  } finally {
-    await pool.end();
-  }
-}
-
-async function waitForDraftProjection(
-  schema: string,
-  ticket: string,
-): Promise<{ reply: string; version: number }> {
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    const projected = await persistedDraftProjection(schema, ticket);
-    if (projected) return projected;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error("First fan-out recipient did not persist the support draft.");
 }
 
 class RecoveryChild {
@@ -529,9 +481,9 @@ describe.each(providers)("$name Agent completion process recovery", (provider) =
 });
 
 describe.skipIf(process.env.SPINE_TS_POSTGRESQL_URL === undefined)(
-  "PostgreSQL Agent partial fan-out process recovery",
+  "PostgreSQL Agent EventBus handoff across process restart",
   () => {
-    it("retains the first recipient and resumes the second after SIGKILL", async () => {
+    it("does not track or replay a partly observed Event after SIGKILL", async () => {
       const unique = randomUUID().replaceAll("-", "").slice(0, 16);
       const context = `agent_fanout_${unique}`;
       const ticket = `FAN-${unique}`;
@@ -555,15 +507,10 @@ describe.skipIf(process.env.SPINE_TS_POSTGRESQL_URL === undefined)(
         expect(entered.reply).toBe(firstReceipt.reply);
         first.process.send({ kind: "probe-fanout" });
         const saved = await first.message("fanout-saved");
-        expect(saved.recordStatus).toBe(3);
+        expect(saved.recordStatus).toBe(4);
+        expect(saved.handlerCalls).toBe(1);
         expect(saved.keyBytes).toBeTruthy();
-        expect(saved.outgoing).toHaveLength(1);
-        const original = saved.outgoing?.[0];
-        expect(original?.kind).toBe("event");
-        expect(original?.id).toBeTruthy();
-        expect(original?.delivered).toBe(false);
-        expect(original?.targets).toHaveLength(2);
-        for (const target of original?.targets ?? []) expect(target.fingerprint).toBeTruthy();
+        expect(saved.pendingCommands).toEqual([]);
         expect((await first.kill()).signal).toBe("SIGKILL");
 
         second = new RecoveryChild(
@@ -576,21 +523,13 @@ describe.skipIf(process.env.SPINE_TS_POSTGRESQL_URL === undefined)(
           "",
           scope.environment,
         );
-        const delivered = await second.message("second-recipient-delivered", 65_000);
-        expect(delivered.reply).toBe(firstReceipt.reply);
         const recovered = await second.message("recovered", 65_000);
         expect(recovered.state).toBe("A reviewer can help.");
         expect(recovered.version).toBe(1);
-        expect(recovered.events).toEqual(["A reviewer can help."]);
+        expect(recovered.events).toEqual([]);
         expect(recovered.physicalRequests).toBe(0);
-        expect(recovered.outgoing?.[0]?.id).toBe(saved.outgoing?.[0]?.id);
-        expect(recovered.outgoing?.[0]?.targets).toEqual(saved.outgoing?.[0]?.targets);
-        const schema = scope.environment.SPINE_TS_POSTGRESQL_SCHEMA;
-        if (!schema) throw new Error("PostgreSQL schema was not supplied to the recovery test.");
-        expect(await waitForDraftProjection(schema, ticket)).toEqual({
-          reply: "A reviewer can help.",
-          version: 1,
-        });
+        expect(recovered.handlerCalls).toBe(0);
+        expect(recovered.publicExecutionStatus).toBe("completed");
         expect((await second.exit()).code).toBe(0);
       } finally {
         if (first.process.exitCode === null && first.process.signalCode === null)

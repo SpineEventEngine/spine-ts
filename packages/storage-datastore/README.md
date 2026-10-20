@@ -223,8 +223,9 @@ Provider filters and ordering are pushed down; public query offsets and mixed
 local/provider limits are reconciled locally within that finite bound.
 
 Ordinary `write()` and `writeAll()` calls are independent provider writes. Use
-compare-and-set for an atomic conditional record update, or an Entity commit
-for one atomic current-state/history/event mutation.
+compare-and-set for an atomic conditional record update. An Entity commit
+writes history, diagnostic Events, delivery Events, and current state in order;
+a later failure can leave the completed prefix.
 
 ## 🧪 Verify with a local emulator
 

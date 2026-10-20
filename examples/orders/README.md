@@ -27,6 +27,9 @@ SPINE_DATASTORE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run load
 
 The command generates and builds the required code, starts a loopback server,
 runs the scenario, prints one JSON result, and closes the server.
+This in-memory mode is a local teaching workload. A multi-process deployment
+should use shared Delivery, as shown in the
+[Distributed Message Board](../distributed-message-board/README.md).
 
 Choose `10`, `100`, or `1000` users by changing
 `SPINE_DATASTORE_ORDERS_LOAD_USERS`.
@@ -203,7 +206,10 @@ pnpm --config.verify-deps-before-run=false exec vitest run \
 
 ## ⚠️ What this example does not prove
 
-The command uses in-memory storage. It is a learning and load-checking example,
+This local teaching mode uses in-memory storage and local Delivery. For a
+multi-process application, use shared Delivery; see the
+[Distributed Message Board](../distributed-message-board/README.md) topology.
+It is a learning and load-checking example,
 not a production benchmark or a live Datastore test. Cloud credentials,
 indexes, quotas, and deployment belong to the application using the Datastore
 adapter.

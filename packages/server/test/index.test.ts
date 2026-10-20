@@ -26,7 +26,6 @@ import {
   type CommandDispatcher,
   type DeliveryInbox,
   type DeliveryOperationOptions,
-  type DeliveryWorkSession,
   CommandRegistrationReadiness,
   type CommandRegistrationAssigneeMetadata,
   type CommandRegistrationReadinessLookup,
@@ -248,12 +247,7 @@ describe("@spine-event-engine/server", () => {
     expectTypeOf<Inbox>().not.toHaveProperty("claim");
     expectTypeOf<Inbox>().not.toHaveProperty("unclaim");
     expectTypeOf<DeliveryInbox["removeDelivered"]>().toEqualTypeOf<
-      | ((
-          message: InboxMessage,
-          session: DeliveryWorkSession,
-          options?: DeliveryOperationOptions,
-        ) => Promise<boolean>)
-      | undefined
+      ((message: InboxMessage, options?: DeliveryOperationOptions) => Promise<boolean>) | undefined
     >();
     expectTypeOf<ServerEnvironmentSettings["delivery"]>().toEqualTypeOf<
       { close(): unknown } | undefined

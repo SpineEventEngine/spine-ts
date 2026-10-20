@@ -28,15 +28,16 @@ export class MysqlStorageDataError extends Error {}
 export class MysqlStorageOperationError extends Error {}
 
 /**
- * Converts an unknown failure to one public provider error without exposing driver details.
+ * Converts an unknown failure to one provider error with a safe message and internal cause.
  *
+ * @typeParam E The provider error type being returned.
  * @param type Constructs the public error type.
  * @param message Describes the failed provider operation.
  * @param error Supplies the unknown underlying failure.
  * @returns The existing public provider error or a newly constructed public error.
  */
 export function mysqlError<E extends Error>(
-  type: new (message: string) => E,
+  type: new (message: string, options?: ErrorOptions) => E,
   message: string,
   error: unknown,
 ): E {
@@ -44,5 +45,5 @@ export function mysqlError<E extends Error>(
     error instanceof MysqlStorageDataError ||
     error instanceof MysqlStorageOperationError
     ? (error as E)
-    : new type(message);
+    : new type(message, { cause: error });
 }

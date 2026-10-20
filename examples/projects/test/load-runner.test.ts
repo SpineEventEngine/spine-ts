@@ -28,7 +28,11 @@ import {
   type QueryResponse,
   QueryResponseSchema,
 } from "@spine-event-engine/proto/client";
-import { SubscriptionSchema, SubscriptionUpdateSchema } from "@spine-event-engine/proto/client";
+import {
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  SubscriptionUpdateSchema,
+} from "@spine-event-engine/proto/client";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { QueryService } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
@@ -180,10 +184,20 @@ async function startProtocolOutcomeServer(outcome: ProtocolOutcome) {
           },
         });
         router.service(SubscriptionService, {
-          subscribe: () => Promise.resolve(create(SubscriptionSchema)),
-          async *activate() {
+          subscribe: (topic) =>
+            Promise.resolve(
+              create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "test-subscription" }),
+                topic,
+              }),
+            ),
+          async *activate(subscription) {
             await Promise.resolve();
             if (outcome === "ended-subscription") return;
+            yield create(SubscriptionUpdateSchema, {
+              subscription,
+              response: create(ResponseSchema, { status: okStatus() }),
+            });
             yield create(SubscriptionUpdateSchema);
           },
           cancel: () => Promise.resolve(create(ResponseSchema, { status: okStatus() })),

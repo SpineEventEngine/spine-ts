@@ -17,9 +17,17 @@ The gateway URL defaults to `http://127.0.0.1:8090` and accepts only an
 
 ## UI and recovery behavior
 
-The host creates one request for the public demo. Command transport failures and resolved `error` or
-`rejection` outcomes preserve the generated message ID and raw field values for
-one single-flight retry. Blank values are sent to the server for validation.
+The host creates one request scope for the public demo. The form uses
+`postAndSubscribe` for `PostMessage`, selecting `MessagePosted` and
+`MessageAlreadyPosted`. It reports admission separately from the observed
+outcome and keeps listening after a first-update timeout. It does not repost
+on timeout. Blank values still reach the server for validation.
+
+Each post receives its updates separately and is canceled separately. Component
+retirement aborts setup/posting and cancels the handle; stale generations cannot
+change the UI. After an outcome is handled, the form cancels that per-post
+subscription. The board-view subscription continues independently. Failed
+cleanup remains retryable through the client.
 
 Board state starts with an authoritative Query. A normal complete update is
 validated, identity-checked, board-checked, and applied locally in oldest-first
@@ -30,9 +38,9 @@ recovered state. Intermediate history is not reconstructed.
 
 The single status badge says `Updating live` only for the exact `connected`
 subscription lifecycle state; every other state, including an absent lifecycle,
-says `No live updates`. This status does not block posting. Commands and the
-post-success authoritative refresh remain usable after the subscription has
-exhausted its reconnect attempts. The message textarea posts on Command+Enter
+says `No live updates`. This status describes the board view. A post separately activates its outcome
+subscriptions before sending; failed activation prevents that Command from
+being sent. The message textarea posts on Command+Enter
 or Control+Enter, keeps plain Enter multiline, and ignores shortcuts during IME
 composition.
 

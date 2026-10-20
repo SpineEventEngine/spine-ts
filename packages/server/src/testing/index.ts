@@ -14,7 +14,11 @@
 
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
 import type { Agent } from "../entity/entity.js";
-import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
+import {
+  boundedContextAccess,
+  systemEventGroup,
+  type BoundedContext,
+} from "../context/bounded-context.js";
 import type { HistoryPage, HistoryRead } from "@spine-event-engine/ai";
 import { Validate } from "@spine-event-engine/core";
 import { EventIdSchema, type Command, type Event, type EventId } from "@spine-event-engine/proto";
@@ -209,6 +213,7 @@ export async function readSystemEvents(
       ...(tenantId === undefined ? {} : { tenantId }),
     },
     boundedContextAccess.storageFactory(context),
+    systemEventGroup,
   );
   try {
     const found = new Map((await store.read({ ids })).map((event) => [event.id?.value, event]));

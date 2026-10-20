@@ -14,13 +14,13 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { CommandId } from "@spine-event-engine/proto";
 import type { AgentHistoryEntry, ModelPreference } from "@spine-event-engine/proto/agent";
 import type {
   AgentAcceptedInvocation,
   AgentExecutionRecord,
   AgentExecutionScope,
   AgentInvocationKey,
-  AgentSignalKey,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 
 import type { EntityCommitInput } from "../internal/entity-commit.js";
@@ -274,19 +274,19 @@ export interface AgentExecutionStorage<I, S extends Message> {
   complete(input: AgentExecutionComplete<I, S>): Promise<void>;
 
   /**
-   * Marks output IDs accepted by normal delivery without rerunning handlers.
+   * Marks outgoing Command IDs accepted by normal delivery without rerunning handlers.
    *
    * @param key Exact source and Agent instance identity.
    * @param token Current exclusive token.
    * @param expectedRecordBytes Exact binary image before acknowledgement.
-   * @param signals Original IDs accepted by delivery.
-   * @returns Completion after original output IDs are marked delivered.
+   * @param signals Original Command IDs accepted by delivery.
+   * @returns Completion after original Commands are marked delivered.
    */
   markDelivered(
     key: AgentInvocationKey,
     token: string,
     expectedRecordBytes: Uint8Array,
-    signals: readonly AgentSignalKey[],
+    signals: readonly CommandId[],
   ): Promise<void>;
 
   /**

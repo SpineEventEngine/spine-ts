@@ -12,9 +12,10 @@
  * the License.
  */
 
-import { fromBinary, toBinary } from "@bufbuild/protobuf";
+import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core";
+import type { CommandId } from "@spine-event-engine/proto";
 import {
   AgentAcceptedInvocationSchema,
   AgentExecutionRecordSchema,
@@ -26,7 +27,6 @@ import {
   type AgentExecutionScope,
   type AgentInboxOrder,
   type AgentInvocationKey,
-  type AgentSignalKey,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 
 import { AgentExecutionRecords } from "./agent-execution-record-spec.js";
@@ -158,13 +158,16 @@ export const AgentExecutionValues = {
     left: AgentAcceptedInvocation | undefined,
     right: AgentAcceptedInvocation | undefined,
   ): boolean {
-    return (
-      left !== undefined &&
-      right !== undefined &&
-      this.sameBytes(
-        toBinary(AgentAcceptedInvocationSchema, left),
-        toBinary(AgentAcceptedInvocationSchema, right),
-      )
+    if (left === undefined || right === undefined) return false;
+    const original = clone(AgentAcceptedInvocationSchema, left);
+    const repeated = clone(AgentAcceptedInvocationSchema, right);
+    // A retry may arrive in a new Inbox row after receipt retention expires.
+    // Keep the first order while requiring every source and binding fact to match.
+    original.order = undefined;
+    repeated.order = undefined;
+    return this.sameBytes(
+      toBinary(AgentAcceptedInvocationSchema, original),
+      toBinary(AgentAcceptedInvocationSchema, repeated),
     );
   },
 
@@ -214,7 +217,7 @@ export const AgentExecutionValues = {
   isPending(record: AgentExecutionRecord, now: Timestamp): boolean {
     if (
       record.status === AgentInvocationStatus.AGENT_INVOCATION_ACCEPTED ||
-      record.status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY
+      record.status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS
     )
       return true;
     return (
@@ -279,18 +282,10 @@ export const AgentExecutionValues = {
    * Marks one original recorded outgoing ID delivered.
    *
    * @param record Completion carrying original outputs.
-   * @param signal Typed Event or Command ID.
+   * @param signal Typed outgoing Command ID.
    */
-  markSignal(record: AgentExecutionCompletion, signal: AgentSignalKey): void {
-    const outgoing = record.outgoing.find(
-      (item) =>
-        (signal.id.case === "event" &&
-          item.signal.case === "event" &&
-          item.signal.value.id?.value === signal.id.value.value) ||
-        (signal.id.case === "command" &&
-          item.signal.case === "command" &&
-          item.signal.value.id?.uuid === signal.id.value.uuid),
-    );
+  markSignal(record: AgentExecutionCompletion, signal: CommandId): void {
+    const outgoing = record.commands.find((item) => item.command?.id?.uuid === signal.uuid);
     if (outgoing === undefined) throw new Error("Agent outgoing signal ID was not recorded.");
     outgoing.delivered = true;
   },

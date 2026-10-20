@@ -976,8 +976,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   private async provider<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
-    } catch {
-      throw new Error("Datastore provider operation failed.");
+    } catch (error) {
+      throw new Error("Datastore provider operation failed.", { cause: error });
     }
   }
 
@@ -1485,8 +1485,7 @@ class DatastoreTransactionsHelper {
    * @returns New error without provider details.
    */
   redact(error: unknown): Error {
-      void error;
-      return new Error("Datastore transaction failed.");
+      return new Error("Datastore transaction failed.", { cause: error });
     }
 
   /**

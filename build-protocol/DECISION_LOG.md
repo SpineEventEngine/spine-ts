@@ -6390,3 +6390,112 @@ cancelled media-device selection. MōBrowser automatically grants website
 permissions to its application origin; the external deny callback does not
 change that vendor behavior. Do not claim a universal deny policy. No remote
 origin is added to the trusted-origin list.
+
+## D-0141: Independent SQL Operations And Direct Delivery Cleanup
+
+Date: 2026-10-13. Status: accepted human direction; implemented, reviewed and release-verified.
+
+The framework author supersedes the cross-record database transaction promises
+in D-0114, D-0123 and the historical atomic Entity-save briefs for this task.
+Ordinary primitive operations, batches, immutable append and Entity saving use
+independent storage operations. Do not restore all-or-nothing persistence with
+another coordinator or outbox. Each atomic conditional mutation still protects
+its condition; competing shard claims must have one winner. Immutable retries
+with identical values succeed and conflicting values are rejected.
+
+Entity/history/Event records may be partially written. State/Event visibility,
+write order, retry behavior and failure outcomes must be documented and tested.
+A saved Event does not prove its publication or successful Entity save.
+
+Cleanup checks eligibility and deletes records by ID. Cancellation prevents
+subsequent work; completed deletions remain completed. Remove exact-snapshot,
+post-delete lease/deadline checks, rollback and cross-record cleanup machinery.
+
+Infrastructure processing failures remain visible and pending or explicitly
+terminal; they must not be silently marked successful. Successful processing
+followed by acknowledgement failure is a distinct case. Failed Event publication
+is reported after one attempt and does not rerun a successful Command. A saved
+Event does not authorize automatic republication;
+no publication repair API, historical replay, or new durable persistence
+contract is authorized.
+
+The default recovery scan becomes ten seconds, independently of stale-session
+and server-processing timers. Shared Delivery is recommended for multiprocess
+applications, with the explicit local-example exceptions in the task ledger.
+The supplied in-memory Delivery server remains non-durable; SQL business-state
+storage does not persist its Inbox.
+
+## D-0142: Managed Process Close Ordering
+
+Date: 2026-10-14. Status: accepted cleanup ordering; deadline policy withdrawn by the framework author.
+
+Managed shutdown drains admitted Delivery and preserves final subscription
+updates. The Coordinator cancels child subscriptions while their listeners
+remain reachable, then releases final child close. A failed relay cleanup is
+observable and retryable. Existing IPC acknowledgement and process reaping
+graces handle missing process responses independently of application work.
+There is no total managed shutdown deadline or child watchdog.
+
+## D-0143: Observable Backend Subscription Stream Failure
+
+Date: 2026-10-14. Status: accepted bounded lifecycle correction; implemented, reviewed and release-verified.
+
+A ready logical subscription cannot remain silently open after a required backend child stream unexpectedly fails or ends. Fixed-backend gateways have no later discovery event that necessarily recreates that child. Propagate the first unexpected current-child rejection or EOF through the existing logical activation result, even after readiness has completed. Fence subsequent updates and starts for that activation and dispose its children through existing bounded cleanup. Intentional cancellation, member replacement/removal, and stale generations do not become terminal failures.
+
+Keep readiness distinct from activation lifetime with private state. Preserve original internal causes and safe public errors. Cleanup cannot await its own child promise, hide a retained failure behind an abort race, or overlap duplicate disposal. Failed cleanup remains observable and retryable. Apply the shared-kernel correction to BrowserServer and managed NodeCoordinator, including nested relays and generic activation without ACK callbacks.
+
+Use the high-level Client's existing bounded Cancel, delay, Subscribe, and readiness sequence. Do not add a server retry scheduler, new public API or wire contract, persistence, automatic Event replay, or a new retry budget. Entity resynchronization and Event gap notices retain their existing meaning; healthy sibling streams can be interrupted while the logical subscription recovers. Already delivered updates are not rolled back.
+
+The demonstrated fixed-backend child failure and a separate client-facing transport cut are distinct regressions. Both require evidence, as do cancellation races, late-joining children, cleanup failure, stale generations, and managed relays. The existing client classifier retries Errors except ClientProtocolError; this correction does not claim status-code-specific permanent-error filtering.
+
+## D-0144: Match Spine JVM Reception Monitoring
+
+Date: 2026-10-16. Status: accepted framework-author correction.
+
+The `DeliveryMonitor` default marks a failed receptor reception delivered. A
+custom monitor may select immediate repeat; each failed repeat consults the
+monitor again. Monitor and selected action errors propagate. Normal completion
+of a custom action completes delivery, with at most one durable acknowledgement
+for that message. A rejected selected action propagates its original error and
+leaves the Inbox row `TO_DELIVER`. These rules supersede D-0084's historical `KEEP_PENDING`
+default and the later `leavePending()` policy. No pending outcome or public
+acknowledgement inspection is added.
+
+Managed repository replay distinguishes an actual Aggregate, Process Manager,
+or Projection handler throw from repository and storage infrastructure errors.
+The monitor receives only the former; infrastructure errors propagate while
+their Inbox rows remain `TO_DELIVER`. Direct public `onMessage` callbacks remain endpoint
+receptions. A successful handler's failed acknowledgement receives at most
+three acknowledgement-only attempts; exhaustion leaves the row pending and
+does not re-enter the reception monitor. No persisted attempt state or new
+serialized status is introduced.
+
+Managed delivery reserves the exact persisted Inbox row for its selected route
+until that message and any immediate monitor-selected repeats settle. Settlement
+releases the reservation before the shard run ends, so retiring a route waits
+only for its admitted work. If monitor or action processing fails, shard release
+is still attempted and the original failure propagates even when release fails.
+
+## D-0145: Entity Event Responsibility Ends At Event Bus Handoff
+
+Date: 2026-10-19. Status: accepted framework-author correction.
+
+Every Entity, including an Agent, hands emitted Events to the Event Bus of its
+Bounded Context. It does not track those Events after handoff. Remove Agent-side
+Event recipient plans, delivered flags, pending publication records and recovery
+that republishes saved Events. Do not move that responsibility into a substitute
+Entity coordinator, outbox or publication-repair API.
+
+Immutable emitted Event history may support reads and diagnostics; it must not
+serve as a publication queue. Recovery must not rerun successful Entity work or
+publish its saved Events, including after a failed publication acknowledgement.
+The normal Event Bus handoff and error-handling conventions apply, without
+Agent-specific publication monitoring. A crash between saving Entity completion
+and handing off its Events does not gain an automatic publication guarantee.
+Normal Event Bus acceptance and recipient Inbox processing remain their
+respective responsibilities.
+
+This correction supersedes the Agent design's durable Event-output delivery
+promise. It does not authorize restoring cross-record transactions for ordinary
+storage operations or changing Command delivery contracts. No production
+application requires legacy schemas or data migration.

@@ -40,6 +40,39 @@ test("runs the public demo command, query, and subscription through Envoy", asyn
   }
 });
 
+for (const protocol of ["grpc-web", "connect"]) {
+  test(`confirms a public helper post through ${protocol}`, async ({ page }) => {
+    test.skip(process.env.E1_AUTHENTICATED === "true", "public gateway scenario");
+    await page.goto(
+      `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&protocol=${protocol}`,
+    );
+    const failures = captureBrowserFailures(page);
+    try {
+      await expect(page.evaluate(() => window.postAndConfirm())).resolves.toEqual({
+        kind: "confirmed",
+        acknowledgement: "ok",
+      });
+    } catch (error) {
+      throw new Error(`${String(error)} browser=${JSON.stringify(failures)}`);
+    }
+  });
+
+  test(`confirms an authenticated helper post through ${protocol}`, async ({ page }) => {
+    test.skip(process.env.E1_AUTHENTICATED !== "true", "authenticated gateway scenario");
+    const baseUrl = encodeURIComponent(process.env.E1_ENVOY_BASE_URL);
+    await page.goto(`/?baseUrl=${baseUrl}&protocol=${protocol}&authenticated=true`);
+    const failures = captureBrowserFailures(page);
+    try {
+      await expect(page.evaluate(() => window.postAndConfirm())).resolves.toEqual({
+        kind: "confirmed",
+        acknowledgement: "ok",
+      });
+    } catch (error) {
+      throw new Error(`${String(error)} browser=${JSON.stringify(failures)}`);
+    }
+  });
+}
+
 test("keeps a passive public viewer alive for three sequential writer updates", async ({
   browser,
 }, testInfo) => {

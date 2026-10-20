@@ -13,6 +13,7 @@
  */
 
 import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { randomUUID } from "node:crypto";
 import {
   AnySchema,
   StringValueSchema,
@@ -28,6 +29,13 @@ import {
 } from "@spine-event-engine/proto";
 import { AnyMessages, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskListSchema } from "../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
+import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -66,7 +74,15 @@ live("MySQL-family record layout", () => {
   beforeAll(async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+    stringifiers.setTypeRegistry(
+      new TypeRegistry([
+        StringValueSchema,
+        TaskIdSchema,
+        TaskListIdSchema,
+        TaskSchema,
+        TaskCreatedSchema,
+      ]),
+    );
     factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url })
       .setStringifierRegistry(stringifiers)
@@ -74,6 +90,72 @@ live("MySQL-family record layout", () => {
   });
   afterAll(() => {
     factory.close();
+  });
+
+  it("keeps an immutable EventStore prefix and admits identical Events on retry", async () => {
+    if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
+    const context = { name: `t0134_event_retry_${randomUUID()}`, multitenant: false } as const;
+    const first = new EventStore(context, factory);
+    const second = new EventStore(context, factory);
+    const makeEvent = (id: string, task: string) => {
+      const taskId = create(TaskIdSchema, { value: task });
+      return create(EventSchema, {
+        id: create(EventIdSchema, { value: id }),
+        context: { producerId: AnyMessages.pack(TaskIdSchema, taskId) },
+        message: AnyMessages.pack(
+          TaskCreatedSchema,
+          create(TaskCreatedSchema, {
+            id: taskId,
+            taskListId: create(TaskListIdSchema, { value: "list-1" }),
+            title: "Created",
+          }),
+        ),
+      });
+    };
+    const seed = randomUUID();
+    const firstEvent = makeEvent(`${seed}-first`, "task-1");
+    const secondEvent = makeEvent(`${seed}-second`, "task-2");
+    if (firstEvent.id === undefined || secondEvent.id === undefined)
+      throw new Error("Expected Event IDs.");
+    const records = [firstEvent, secondEvent];
+    const query = { ids: [firstEvent.id, secondEvent.id] };
+    try {
+      await first.append(firstEvent);
+      if (process.env.SPINE_TS_TRACE_MARKERS === "1") {
+        const marker = createPool(url);
+        try {
+          await marker.query("SELECT 'spine_trace_begin_immutable_append' AS marker");
+        } finally {
+          await marker.end();
+        }
+      }
+      await expect(second.appendAll(records)).resolves.toBeUndefined();
+      await expect(
+        first.read(query).then((events) => events.map((event) => toBinary(EventSchema, event))),
+      ).resolves.toEqual(records.map((event) => toBinary(EventSchema, event)));
+      const identical = await Promise.allSettled([
+        first.append(secondEvent),
+        second.append(secondEvent),
+      ]);
+      expect(identical.every(({ status }) => status === "fulfilled")).toBe(true);
+      await expect(second.append(makeEvent(`${seed}-second`, "other-task"))).rejects.toThrow(
+        /unique event IDs/,
+      );
+      await expect(
+        first.read(query).then((events) => events.map((event) => toBinary(EventSchema, event))),
+      ).resolves.toEqual(records.map((event) => toBinary(EventSchema, event)));
+      if (process.env.SPINE_TS_TRACE_MARKERS === "1") {
+        const marker = createPool(url);
+        try {
+          await marker.query("SELECT 'spine_trace_end_immutable_append' AS marker");
+        } finally {
+          await marker.end();
+        }
+      }
+    } finally {
+      first.close();
+      second.close();
+    }
   });
 
   it("preserves microsecond timestamp ordering and a page boundary in live MySQL", async () => {
@@ -319,10 +401,10 @@ live("MySQL-family record layout", () => {
     }
   });
 
-  it("rolls back or retains the exact immutable Entity prefix at each injected boundary", async () => {
+  it("retains the exact immutable Entity prefix at each injected boundary", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = {
-      name: `t0134_commit_${String(Date.now())}`,
+      name: `t0134_commit_${randomUUID()}`,
       multitenant: false,
     } as const;
     const input = entityInput(context);
@@ -332,7 +414,6 @@ live("MySQL-family record layout", () => {
     const pool = createPool(url);
     const admin = adminUrl === undefined ? undefined : createPool(adminUrl);
     const engine = process.env.SPINE_TS_MYSQL_ENGINE?.toLowerCase() ?? "innodb";
-    const transactional = engine === "innodb";
     try {
       // Materialize the actual current/state-history/diagnostic-history/EventStore families.
       await commits.commit(mutation(context, input, "seed"));
@@ -343,7 +424,12 @@ live("MySQL-family record layout", () => {
       ];
       expect(actualTables).toHaveLength(4);
       for (const tableName of actualTables)
-        await pool.query(`ALTER TABLE \`${tableName}\` ENGINE=${engine.toUpperCase()}`);
+        await pool.query(
+          engine === "innodb"
+            ? `ALTER TABLE \`${tableName}\` ENGINE=INNODB`
+            : `ALTER TABLE \`${tableName}\` MODIFY \`ID\` VARCHAR(512) ` +
+                `CHARACTER SET latin1 COLLATE latin1_bin NOT NULL, ENGINE=${engine.toUpperCase()}`,
+        );
       const [engines] = await pool.query<
         (RowDataPacket & { table_name: string; engine: string })[]
       >(
@@ -355,7 +441,7 @@ live("MySQL-family record layout", () => {
       expect(engines).toHaveLength(actualTables.length);
       expect(engines.every((table) => table.engine.toLowerCase() === engine)).toBe(true);
 
-      const run = String(Date.now());
+      const run = randomUUID().replaceAll("-", "");
       for (const [index, tableName] of actualTables.entries()) {
         const id = `boundary-${run}-${String(index)}`;
         const trigger = `t0134_fail_${run}_${String(index)}`;
@@ -370,14 +456,12 @@ live("MySQL-family record layout", () => {
         } finally {
           await admin.query(`DROP TRIGGER IF EXISTS \`${trigger}\``);
         }
-        const expected = transactional
-          ? { states: 0, entityEvents: 0, deliveryEvents: 0 }
-          : ([
-              { states: 1, entityEvents: 1, deliveryEvents: 1 },
-              { states: 0, entityEvents: 0, deliveryEvents: 0 },
-              { states: 1, entityEvents: 0, deliveryEvents: 0 },
-              { states: 1, entityEvents: 1, deliveryEvents: 0 },
-            ][index] ?? { states: 0, entityEvents: 0, deliveryEvents: 0 });
+        const expected = [
+          { states: 1, entityEvents: 1, deliveryEvents: 1 },
+          { states: 0, entityEvents: 0, deliveryEvents: 0 },
+          { states: 1, entityEvents: 0, deliveryEvents: 0 },
+          { states: 1, entityEvents: 1, deliveryEvents: 0 },
+        ][index] ?? { states: 0, entityEvents: 0, deliveryEvents: 0 };
         await expect(mysqlCurrentRecord(pool, input, id)).resolves.toBeUndefined();
         const history = await mysqlHistoryCounts(pool, input, id);
         expect(history.states, `table ${String(index)} state prefix`).toBe(expected.states);
@@ -416,7 +500,7 @@ live("MySQL-family record layout", () => {
       await expect(
         commits.commit({
           ...mutation(context, input, "wrong-source"),
-          entity: { ...input, sourceType: TimestampSchema },
+          entity: { ...input, sourceType: TaskListSchema },
         }),
       ).rejects.toThrow(/source type is incompatible/i);
       await expect(
@@ -429,7 +513,7 @@ live("MySQL-family record layout", () => {
           ...mutation(context, input, "missing-event-id"),
           events: [create(EventSchema)],
         }),
-      ).rejects.toThrow(/requires delivery-event IDs/i);
+      ).rejects.toThrow(/requires non-blank unique delivery event IDs/i);
     } finally {
       commits.close();
     }
@@ -454,14 +538,16 @@ live("MySQL-family record layout", () => {
     }
   });
 
-  it("serializes nontransactional commits with and without optional immutable families", async () => {
+  it("persists MyISAM commits with and without optional immutable families", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = {
       name: `t0134_nontransactional_${String(Date.now())}`,
       multitenant: false,
     } as const;
     const input = entityInput(context);
+    const currentOnlyInput = entityInput(context, false, false);
     const commits = EntityCommitStorageFactories.create(factory, input);
+    const currentOnlyCommits = EntityCommitStorageFactories.create(factory, currentOnlyInput);
     const eventStore = new EventStore(context, factory);
     const eventRecords = factory.createRecordStorage(context, eventStoreRecordSpec);
     const pool = createPool(url);
@@ -479,12 +565,57 @@ live("MySQL-family record layout", () => {
         commits.commit(mutation(context, input, "with-history")),
       ).resolves.toBeUndefined();
       await expect(
-        commits.commit(mutation(context, input, "current-only")),
+        currentOnlyCommits.commit({
+          context,
+          entity: currentOnlyInput,
+          entityId: "current-only",
+          next: current("current-only"),
+        }),
       ).resolves.toBeUndefined();
+      for (const id of ["with-history", "current-only"]) {
+        const persisted = await mysqlCurrentRecord(pool, input, id);
+        expect(
+          persisted === undefined ? undefined : toBinary(EntityRecordSchema, persisted),
+        ).toEqual(toBinary(EntityRecordSchema, current(id)));
+        expect(await mysqlHistoryCounts(pool, input, id)).toEqual(
+          id === "with-history" ? { states: 1, events: 1 } : { states: 0, events: 0 },
+        );
+        const delivery = await eventStore.read({
+          ids: [create(EventIdSchema, { value: `${id}-delivery` })],
+        });
+        expect(delivery.map((event) => Buffer.from(toBinary(EventSchema, event)))).toEqual(
+          id === "with-history"
+            ? mutation(context, input, id).events.map((event) =>
+                Buffer.from(toBinary(EventSchema, event)),
+              )
+            : [],
+        );
+      }
+      const historic = mutation(context, input, "with-history");
+      const historicState = historic.states[0];
+      const historicDiagnostic = historic.diagnostics[0];
+      if (historicState === undefined || historicDiagnostic === undefined)
+        throw new Error("Expected enabled Entity history records.");
+      const [, stateTable, diagnosticTable] = mysqlEntityTables(input);
+      if (stateTable === undefined || diagnosticTable === undefined)
+        throw new Error("Expected enabled Entity history tables.");
+      const [states] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
+        `SELECT bytes FROM \`${stateTable}\``,
+      );
+      const [diagnostics] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
+        `SELECT bytes FROM \`${diagnosticTable}\``,
+      );
+      expect(states.map((row) => Buffer.from(row.bytes))).toContainEqual(
+        Buffer.from(toBinary(EntityRecordSchema, historicState)),
+      );
+      expect(diagnostics.map((row) => Buffer.from(row.bytes))).toContainEqual(
+        Buffer.from(toBinary(EventSchema, historicDiagnostic)),
+      );
     } finally {
       for (const table of tables) await pool.query(`ALTER TABLE \`${table}\` ENGINE=InnoDB`);
       eventRecords.close();
       eventStore.close();
+      currentOnlyCommits.close();
       commits.close();
       await pool.end();
     }
@@ -493,7 +624,7 @@ live("MySQL-family record layout", () => {
   it("atomically compares records from two handles on the configured engine", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = {
-      name: `t0134_cas_${String(Date.now())}`,
+      name: `t0134_cas_${randomUUID().replaceAll("-", "")}`,
       multitenant: false,
     } as const;
     const spec = new RecordSpec<string, StringValue>({
@@ -508,7 +639,7 @@ live("MySQL-family record layout", () => {
         ),
       ],
     });
-    const group = new StorageGroup(`t0134_cas_${String(Date.now())}`);
+    const group = new StorageGroup(context.name);
     const first = factory.createRecordStorage(context, spec, group);
     const second = factory.createRecordStorage(context, spec, group);
     const pool = createPool(url);
@@ -516,8 +647,18 @@ live("MySQL-family record layout", () => {
     try {
       const initial = create(StringValueSchema, { value: "present:initial" });
       await first.write(initial);
-      const table = mysqlRecordTableName(spec);
+      const table = mysqlRecordTableName(spec, group);
+      if (engine === "MYISAM")
+        await pool.query(
+          `ALTER TABLE \`${table}\` MODIFY COLUMN \`ID\` ` +
+            "VARCHAR(512) CHARACTER SET latin1 COLLATE latin1_bin NOT NULL",
+        );
       await pool.query(`ALTER TABLE \`${table}\` ENGINE=${engine}`);
+      const encoded = Buffer.from(toBinary(StringValueSchema, initial));
+      await pool.execute(`UPDATE \`${table}\` SET bytes=? WHERE ID=?`, [
+        Buffer.concat([encoded, encoded]),
+        "present",
+      ]);
       const present = await Promise.all([
         first.compareAndSet(
           "present",
@@ -531,6 +672,10 @@ live("MySQL-family record layout", () => {
         ),
       ]);
       expect(present.filter(Boolean)).toHaveLength(1);
+      const presentWinner = present[0] ? "present:first" : "present:second";
+      await expect(first.read("present")).resolves.toEqual(
+        create(StringValueSchema, { value: presentWinner }),
+      );
       const absent = await Promise.all([
         first.compareAndSet(
           "absent",
@@ -544,6 +689,10 @@ live("MySQL-family record layout", () => {
         ),
       ]);
       expect(absent.filter(Boolean)).toHaveLength(1);
+      const absentWinner = absent[0] ? "absent:first" : "absent:second";
+      await expect(second.read("absent")).resolves.toEqual(
+        create(StringValueSchema, { value: absentWinner }),
+      );
     } finally {
       first.close();
       second.close();
@@ -551,7 +700,73 @@ live("MySQL-family record layout", () => {
     }
   });
 
-  it("serializes InnoDB Entity commits from separate handles", async () => {
+  it("retains an Event batch prefix after a later SQL constraint failure", async () => {
+    if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
+    const spec = new RecordSpec<string, Event>({
+      recordType: EventSchema,
+      idKind: "string",
+      extractId: (event) => event.id?.value ?? "",
+    });
+    const context = {
+      name: `partial_events_${randomUUID().replaceAll("-", "")}`,
+      multitenant: false,
+    } as const;
+    const group = new StorageGroup(context.name);
+    const records = factory.createRecordStorage(context, spec, group);
+    const pool = createPool(url);
+    const event = (id: string, member = id) =>
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: id }),
+        message: AnyMessages.pack(
+          ProjectCreatedSchema,
+          create(ProjectCreatedSchema, { memberId: [member] }),
+        ),
+      });
+    try {
+      await records.write(event("seed"));
+      const table = mysqlRecordTableName(spec, group);
+      const engine = process.env.SPINE_TS_MYSQL_ENGINE?.toUpperCase() ?? "INNODB";
+      if (engine === "MYISAM")
+        await pool.query(
+          `ALTER TABLE \`${table}\` MODIFY COLUMN \`ID\` ` +
+            "VARCHAR(512) CHARACTER SET latin1 COLLATE latin1_bin NOT NULL",
+        );
+      await pool.query(`ALTER TABLE \`${table}\` ENGINE=${engine}`);
+      const check = `reject_${randomUUID().replaceAll("-", "")}`;
+      await pool.query(
+        `ALTER TABLE \`${table}\` ADD CONSTRAINT \`${check}\` CHECK (ID <> 'second')`,
+      );
+      await expect(records.writeAll([event("first"), event("second")])).rejects.toThrow();
+      const first = await records.read("first");
+      expect(first === undefined ? undefined : toBinary(EventSchema, first)).toEqual(
+        toBinary(EventSchema, event("first")),
+      );
+      await expect(records.read("second")).resolves.toBeUndefined();
+      const immutable = records as unknown as { writeImmutable(record: Event): Promise<void> };
+      await expect(immutable.writeImmutable(event("first"))).resolves.toBeUndefined();
+      await expect(immutable.writeImmutable(event("first", "conflict"))).rejects.toThrow(
+        /collides/i,
+      );
+      const retained = await records.read("first");
+      expect(retained === undefined ? undefined : toBinary(EventSchema, retained)).toEqual(
+        toBinary(EventSchema, event("first")),
+      );
+      const contenders = [event("race", "left"), event("race", "right")];
+      const results = await Promise.allSettled(
+        contenders.map((candidate) => immutable.writeImmutable(candidate)),
+      );
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      const winner = await records.read("race");
+      expect(contenders.map((candidate) => toBinary(EventSchema, candidate))).toContainEqual(
+        winner === undefined ? undefined : toBinary(EventSchema, winner),
+      );
+    } finally {
+      records.close();
+      await pool.end();
+    }
+  });
+
+  it("persists the completed InnoDB Entity commits from separate handles", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const context = {
       name: `t0134_concurrent_${String(Date.now())}`,
@@ -560,17 +775,62 @@ live("MySQL-family record layout", () => {
     const input = entityInput(context);
     const first = EntityCommitStorageFactories.create(factory, input);
     const second = EntityCommitStorageFactories.create(factory, input);
+    const eventStore = new EventStore(context, factory);
     const pool = createPool(url);
     try {
       const left = mutation(context, input, "same");
       const right = {
         ...mutation(context, input, "same"),
-        next: { ...current("same"), state: packed("different") },
+        next: {
+          ...current("same"),
+          state: create(AnySchema, {
+            typeUrl: `type.spine.io/${TaskSchema.typeName}`,
+            value: toBinary(
+              TaskSchema,
+              create(TaskSchema, {
+                id: create(TaskIdSchema, { value: "same" }),
+                title: "Different",
+                taskListId: create(TaskListIdSchema, { value: "list-1" }),
+              }),
+            ),
+          }),
+        },
       };
       const outcomes = await Promise.all([first.commit(left), second.commit(right)]);
       expect(outcomes).toEqual([undefined, undefined]);
-      await expect(mysqlCurrentRecord(pool, input, "same")).resolves.toBeDefined();
+      const persisted = await mysqlCurrentRecord(pool, input, "same");
+      const allowed = [left.next, right.next].map((record) => toBinary(EntityRecordSchema, record));
+      expect(allowed).toContainEqual(
+        persisted === undefined ? undefined : toBinary(EntityRecordSchema, persisted),
+      );
+      expect(await mysqlHistoryCounts(pool, input, "same")).toEqual({ states: 1, events: 1 });
+      const [, stateTable, diagnosticTable] = mysqlEntityTables(input);
+      if (stateTable === undefined || diagnosticTable === undefined)
+        throw new Error("Expected enabled Entity history tables.");
+      const [states] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
+        `SELECT bytes FROM \`${stateTable}\``,
+      );
+      const [diagnostics] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
+        `SELECT bytes FROM \`${diagnosticTable}\``,
+      );
+      const expectedState = left.states[0];
+      const expectedDiagnostic = left.diagnostics[0];
+      if (expectedState === undefined || expectedDiagnostic === undefined)
+        throw new Error("Expected Entity history records.");
+      expect(states.map((row) => Buffer.from(row.bytes))).toContainEqual(
+        Buffer.from(toBinary(EntityRecordSchema, expectedState)),
+      );
+      expect(diagnostics.map((row) => Buffer.from(row.bytes))).toContainEqual(
+        Buffer.from(toBinary(EventSchema, expectedDiagnostic)),
+      );
+      const delivered = await eventStore.read({
+        ids: [create(EventIdSchema, { value: "same-delivery" })],
+      });
+      expect(delivered.map((event) => Buffer.from(toBinary(EventSchema, event)))).toEqual(
+        left.events.map((event) => Buffer.from(toBinary(EventSchema, event))),
+      );
     } finally {
+      eventStore.close();
       first.close();
       second.close();
       await pool.end();
@@ -654,12 +914,12 @@ function tenant(value: string) {
 
 function entityInput(context: StorageContext, stateHistory = true, eventHistory = true) {
   const recordSpec = new RecordSpec<string, EntityRecord>({
-    sourceType: StringValueSchema,
+    sourceType: TaskSchema,
     recordType: EntityRecordSchema,
     idKind: "string",
     extractId: (record) => {
       if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-      return fromBinary(StringValueSchema, record.entityId.value).value;
+      return fromBinary(TaskIdSchema, record.entityId.value).value;
     },
   });
   return {
@@ -669,14 +929,14 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
       key: (id: string) => id,
       pack: (id: string) => packed(id),
       unpack: (id: { typeUrl: string; value: Uint8Array }) =>
-        id.typeUrl === "type.spine.io/google.protobuf.StringValue"
-          ? fromBinary(StringValueSchema, id.value).value
+        id.typeUrl === `type.spine.io/${TaskIdSchema.typeName}`
+          ? fromBinary(TaskIdSchema, id.value).value
           : undefined,
     },
     columns: [],
     recordSpec,
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
+    sourceType: TaskSchema,
+    stateSchema: TaskSchema,
     stateHistory,
     eventHistory,
   };
@@ -684,14 +944,24 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
 
 function packed(value: string) {
   return create(AnySchema, {
-    typeUrl: "type.spine.io/google.protobuf.StringValue",
-    value: toBinary(StringValueSchema, create(StringValueSchema, { value })),
+    typeUrl: `type.spine.io/${TaskIdSchema.typeName}`,
+    value: toBinary(TaskIdSchema, create(TaskIdSchema, { value })),
   });
 }
 function current(id: string) {
   return create(EntityRecordSchema, {
     entityId: packed(id),
-    state: packed("next"),
+    state: create(AnySchema, {
+      typeUrl: `type.spine.io/${TaskSchema.typeName}`,
+      value: toBinary(
+        TaskSchema,
+        create(TaskSchema, {
+          id: create(TaskIdSchema, { value: id }),
+          title: "Next",
+          taskListId: create(TaskListIdSchema, { value: "list-1" }),
+        }),
+      ),
+    }),
     lifecycleFlags: { archived: false, deleted: false },
     version: create(VersionSchema, { number: 1 }),
   });
@@ -704,6 +974,7 @@ function mutation(context: StorageContext, input: ReturnType<typeof entityInput>
       version: create(VersionSchema, { number: 1 }),
       timestamp: create(TimestampSchema, { seconds: 1n }),
     },
+    message: taskCreated(id),
   });
   return {
     context,
@@ -720,6 +991,25 @@ function mutation(context: StorageContext, input: ReturnType<typeof entityInput>
       }),
     ],
     diagnostics: [diagnostic],
-    events: [create(EventSchema, { id: create(EventIdSchema, { value: `${id}-delivery` }) })],
+    events: [
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: `${id}-delivery` }),
+        message: taskCreated(id),
+      }),
+    ],
   };
+}
+
+function taskCreated(id: string) {
+  return create(AnySchema, {
+    typeUrl: `type.spine.io/${TaskCreatedSchema.typeName}`,
+    value: toBinary(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: "Created",
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+      }),
+    ),
+  });
 }

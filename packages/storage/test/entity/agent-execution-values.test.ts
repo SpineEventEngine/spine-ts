@@ -12,27 +12,40 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import {
-  CommandIdSchema,
-  CommandSchema,
-  EventIdSchema,
-  EventSchema,
-} from "@spine-event-engine/proto";
+import { CommandIdSchema, CommandSchema } from "@spine-event-engine/proto";
 import { Time } from "@spine-event-engine/core";
 import {
   AgentExecutionCompletionSchema,
   AgentExecutionHeadSchema,
   AgentExecutionRecordSchema,
   AgentInvocationStatus,
-  AgentOutgoingSignalSchema,
-  AgentSignalKeySchema,
+  AgentOutgoingCommandSchema,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
 
 import { AgentExecutionValues } from "../../src/entity/agent-execution-values.js";
 import { accepted } from "./agent-execution-fixtures.js";
+// prettier-ignore
+import {
+  DraftSupportReplySchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
+// prettier-ignore
+import {
+  SupportReplyAgentIdSchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+
+function savedCommand(id: string) {
+  const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-1" });
+  return create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: id }),
+    message: {
+      typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
+      value: toBinary(DraftSupportReplySchema, create(DraftSupportReplySchema, { agent })),
+    },
+  });
+}
 
 describe("Agent execution value boundaries", () => {
   it("requires the configured state and the complete original source identity", () => {
@@ -68,12 +81,34 @@ describe("Agent execution value boundaries", () => {
     expect(record.claimToken).toBe("");
   });
 
+  it("accepts a retried source after Inbox order changes but rejects changed source and bindings", () => {
+    const first = accepted("same-source", "T-original");
+    const retry = accepted("same-source", "T-original");
+    if (retry.order === undefined || retry.signal.case !== "command")
+      throw new Error("Fixture lacks Inbox order or original Command.");
+    retry.order.inboxVersion += 1n;
+    expect(AgentExecutionValues.sameAccepted(first, retry)).toBe(true);
+    const changedBinding = accepted("same-source", "T-original");
+    const handler = changedBinding.handlers[0];
+    if (handler === undefined) throw new Error("Fixture lacks selected handler.");
+    handler.methodName = "different-handler";
+    expect(AgentExecutionValues.sameAccepted(first, changedBinding)).toBe(false);
+    const changedPayload = accepted("same-source", "T-original");
+    if (changedPayload.signal.case !== "command") throw new Error("Fixture lacks Command.");
+    const message = changedPayload.signal.value.message;
+    if (message === undefined) throw new Error("Fixture lacks Command payload.");
+    message.value = new Uint8Array([1, 2, 3]);
+    expect(AgentExecutionValues.sameAccepted(first, changedPayload)).toBe(false);
+    const changedScope = accepted("same-source", "different-ticket");
+    expect(AgentExecutionValues.sameAccepted(first, changedScope)).toBe(false);
+  });
+
   it("claims accepted, pending-delivery and expired active work at the full Timestamp edge", () => {
     const now = create(TimestampSchema, { seconds: 10n, nanos: 5 });
     const record = create(AgentExecutionRecordSchema, { accepted: accepted("source-id") });
     record.status = AgentInvocationStatus.AGENT_INVOCATION_ACCEPTED;
     expect(AgentExecutionValues.isPending(record, now)).toBe(true);
-    record.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY;
+    record.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;
     expect(AgentExecutionValues.isPending(record, now)).toBe(true);
     record.status = AgentInvocationStatus.AGENT_INVOCATION_ACTIVE;
     record.claimExpiresAt = create(TimestampSchema, { seconds: 10n, nanos: 6 });
@@ -86,7 +121,7 @@ describe("Agent execution value boundaries", () => {
     expect(AgentExecutionValues.compareText("a", "a")).toBe(0);
   });
 
-  it("releases the claim and marks only the recorded typed output", () => {
+  it("releases the claim and marks only the recorded Command", () => {
     const source = accepted("source-id");
     const scope = source.key?.scope;
     const order = source.order;
@@ -102,26 +137,15 @@ describe("Agent execution value boundaries", () => {
     expect(head.claimToken).toBe("");
     expect(head.lastResolved).toEqual(order);
     const completion = create(AgentExecutionCompletionSchema, {
-      outgoing: [
-        create(AgentOutgoingSignalSchema, {
-          signal: {
-            case: "event",
-            value: create(EventSchema, { id: create(EventIdSchema, { value: "event-id" }) }),
-          },
-        }),
-      ],
+      commands: [create(AgentOutgoingCommandSchema, { command: savedCommand("command-id") })],
     });
-    const event = create(AgentSignalKeySchema, {
-      id: { case: "event", value: create(EventIdSchema, { value: "event-id" }) },
-    });
-    const command = create(AgentSignalKeySchema, {
-      id: { case: "command", value: create(CommandIdSchema, { uuid: "event-id" }) },
-    });
+    const unknown = create(CommandIdSchema, { uuid: "unknown-id" });
+    const command = create(CommandIdSchema, { uuid: "command-id" });
     expect(() => {
-      AgentExecutionValues.markSignal(completion, command);
+      AgentExecutionValues.markSignal(completion, unknown);
     }).toThrow(/not recorded/i);
-    AgentExecutionValues.markSignal(completion, event);
-    expect(completion.outgoing[0]?.delivered).toBe(true);
+    AgentExecutionValues.markSignal(completion, command);
+    expect(completion.commands[0]?.delivered).toBe(true);
   });
 
   it("offers earlier Inbox work without changing eligibility and promotes a successor", () => {
@@ -213,30 +237,15 @@ describe("Agent execution decoded record validation", () => {
     expect(AgentExecutionValues.isPending(record, now)).toBe(false);
   });
 
-  it("marks only the saved Command when an Event has equal ID text", () => {
+  it("marks only the matching saved Command when two Commands have distinct IDs", () => {
     const record = create(AgentExecutionCompletionSchema, {
-      outgoing: [
-        create(AgentOutgoingSignalSchema, {
-          signal: {
-            case: "event",
-            value: create(EventSchema, { id: create(EventIdSchema, { value: "same-id" }) }),
-          },
-        }),
-        create(AgentOutgoingSignalSchema, {
-          signal: {
-            case: "command",
-            value: create(CommandSchema, { id: create(CommandIdSchema, { uuid: "same-id" }) }),
-          },
-        }),
+      commands: [
+        create(AgentOutgoingCommandSchema, { command: savedCommand("first-id") }),
+        create(AgentOutgoingCommandSchema, { command: savedCommand("second-id") }),
       ],
     });
-    AgentExecutionValues.markSignal(
-      record,
-      create(AgentSignalKeySchema, {
-        id: { case: "command", value: create(CommandIdSchema, { uuid: "same-id" }) },
-      }),
-    );
-    expect(record.outgoing.map((item) => item.delivered)).toEqual([false, true]);
+    AgentExecutionValues.markSignal(record, create(CommandIdSchema, { uuid: "second-id" }));
+    expect(record.commands.map((item) => item.delivered)).toEqual([false, true]);
   });
 
   it("keeps the earlier pending signal when later work arrives", () => {

@@ -100,15 +100,55 @@ export class DeliveryServer {
    * Configured listener host, resolved and validated during construction.
    */
   readonly host: string;
+
+  /**
+   * Configured listening port, updated after an ephemeral bind.
+   */
   #port: number;
+
+  /**
+   * Validated listener and retention configuration.
+   */
   readonly #configuration: DeliveryConfiguration;
+
+  /**
+   * Structured diagnostic logger, when configured.
+   */
   readonly #logger: ILogLayer | undefined;
+
+  /**
+   * Active HTTP/2 listener.
+   */
   #server: http2.Http2Server | undefined;
+
+  /**
+   * Shared listener-start attempt.
+   */
   #start: Promise<this> | undefined;
+
+  /**
+   * Shared listener-close attempt.
+   */
   #close: Promise<void> | undefined;
+
+  /**
+   * Whether the listener has started.
+   */
   #started = false;
+
+  /**
+   * Whether the health endpoint should report serving.
+   */
   #serving = true;
+
+  /**
+   * Shared service handlers and shutdown gates.
+   */
   #assembly: ReturnType<typeof DeliveryAssembly.create> | undefined;
+
+  /**
+   * Sessions tracked for bounded listener closure.
+   */
   readonly #sessions = new Set<http2.ServerHttp2Session>();
 
   /**

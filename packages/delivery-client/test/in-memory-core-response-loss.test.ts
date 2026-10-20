@@ -29,7 +29,9 @@ describe("in-memory delivery core response loss", () => {
   it("removes a retained duplicate through shared delivery policy and the remote adapter", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
     );
     const inbox = new RemoteInbox(client);
     const retained = {
@@ -68,7 +70,9 @@ describe("in-memory delivery core response loss", () => {
   it("delivers after cleaning an expired retained identity through the remote adapter", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
     );
     const inbox = new RemoteInbox(client);
     const expired = {
@@ -103,7 +107,9 @@ describe("in-memory delivery core response loss", () => {
   it("continues a productive full remote page after cleanup removes its final cursor", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
     );
     const inbox = new RemoteInbox(client);
     const first = {
@@ -152,7 +158,9 @@ describe("in-memory delivery core response loss", () => {
   it("keeps a surviving cursor through a fully removed remote page", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
     );
     const inbox = new RemoteInbox(client);
     const first = {
@@ -205,7 +213,9 @@ describe("in-memory delivery core response loss", () => {
   it("starts at the beginning again when the first full page is wholly removed", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
     );
     const inbox = new RemoteInbox(client);
     for (const index of [1, 2]) {
@@ -251,7 +261,9 @@ describe("in-memory delivery core response loss", () => {
   it("continues after removing a duplicate at the end of a full remote page", async () => {
     const core = InMemoryDelivery.create();
     const client = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
     );
     const inbox = new RemoteInbox(client);
     const first = {
@@ -301,7 +313,9 @@ describe("in-memory delivery core response loss", () => {
   it("recognizes a delivered acknowledgement committed before a lost response", async () => {
     const core = InMemoryDelivery.create();
     const normal = DeliveryClient.usingTransport(
-      createRouterTransport((router) => router.service(InboxService, core.inbox)),
+      createRouterTransport((router) => {
+        router.service(InboxService, core.inbox);
+      }),
     );
     const pending = domainMessage("lost-delivered");
     await normal.writeOne(pending);
@@ -342,7 +356,9 @@ describe("in-memory delivery core response loss", () => {
 
   it("makes a committed removal observable after its response is lost", async () => {
     const core = InMemoryDelivery.create();
-    const initial = createRouterTransport((router) => router.service(InboxService, core.inbox));
+    const initial = createRouterTransport((router) => {
+      router.service(InboxService, core.inbox);
+    });
     const message = domainMessage("remove");
     await DeliveryClient.usingTransport(initial).writeOne(message);
     const transport = createRouterTransport((router) => {

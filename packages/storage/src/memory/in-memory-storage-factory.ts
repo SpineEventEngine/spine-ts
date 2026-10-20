@@ -38,8 +38,6 @@ import {
   EntityCommitStorageFactories,
   type EntityCommitStorage,
 } from "../internal/entity-commit.js";
-import { DeliveryCleanupStorageFactories } from "../internal/delivery-cleanup.js";
-import { MemoryDeliveryCleanupStorage } from "./memory-delivery-cleanup.js";
 import { AgentHistoryStorageFactories } from "../internal/agent-history.js";
 import type { AgentHistoryStorage, AgentHistoryStorageInput } from "../entity/agent-history.js";
 import { MemoryAgentHistory } from "./in-memory-agent-history.js";
@@ -78,12 +76,6 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     });
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
-    });
-    DeliveryCleanupStorageFactories.register(this, {
-      createDeliveryCleanupStorage: () =>
-        new MemoryDeliveryCleanupStorage((context, spec, group) =>
-          this.tenantRecords(context, spec, group),
-        ),
     });
   }
 
@@ -142,7 +134,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
   }
 
   /**
-   * Creates the provider-only atomic Entity commit seam used by repositories.
+   * Creates the provider-only ordered Entity commit seam used by repositories.
    *
    * @typeParam I Typed Entity identifier.
    * @typeParam S Entity state message.
@@ -155,7 +147,6 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     return new MemoryEntityCommitStorage(
       this.#entities,
-      this,
       (context, spec, group) => this.tenantRecords(context, spec, group),
       input as unknown as EntityStorageInput<unknown, Message>,
     );

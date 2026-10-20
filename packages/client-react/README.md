@@ -126,6 +126,59 @@ function TaskUpdates() {
 void TaskUpdates;
 ```
 
+## Receive every Event update
+
+The hook's observation contains the latest delivery. When every update matters,
+pass `onDelivery`: React may combine several state changes into one render,
+but this callback receives each delivery consumed by the hook.
+
+<!-- docs-snippet-path: examples/message-board/web/src/docs/client-react-subscription.ts -->
+
+```ts
+import { createElement, useState } from "react";
+import { useEventSubscription, useSpineClient } from "@spine-event-engine/client-react";
+import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
+import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
+
+function BoardActivity() {
+  const request = useSpineClient();
+  const [deliveries, setDeliveries] = useState(0);
+  const observation = useEventSubscription(
+    () =>
+      request.createSubscription([MessagePostedSchema, MessageAlreadyPostedSchema], {
+        kind: "event",
+      }),
+    [request],
+    (delivery) => {
+      console.info("Received delivery:", delivery);
+      setDeliveries((count) => count + 1);
+    },
+    (notice) => {
+      if (notice.state === "failed" || notice.state === "notificationFailed") {
+        console.error(notice.error);
+      }
+    },
+    { activationTimeoutMs: 3_000 },
+  );
+  return createElement("output", undefined, `${deliveries} deliveries; ${observation.status}`);
+}
+
+void BoardActivity;
+```
+
+The hook activates after commit, keeps receiving updates, and cancels when the
+component retires. Waiting does not block rendering. The three-second activation
+limit is this example's choice; the framework has no default activation or
+first-update timeout. For Event subscriptions, first-update options go in the
+factory's `createSubscription` call. Entity hooks accept them in their final
+options object together with `activationTimeoutMs`.
+
+Post Commands from user actions. The [Message Board form](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/message-board/web/src/post-form.tsx)
+calls `postAndSubscribe` in its submit handler, receives updates asynchronously with error handling, and cancels when its outcome is handled
+or the component retires. Its continuing board-view subscription is independent.
+Do not post from `useRequest` or another effect: React can restart effects.
+Do not give the same subscription stream to both a hook and a separate consumer.
+
 ## ⚠️ What stays in application code
 
 This adapter is not a cache, router, state manager, or authentication system.

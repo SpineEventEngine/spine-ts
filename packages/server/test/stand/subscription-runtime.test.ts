@@ -13,14 +13,30 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { SubscriptionIdSchema } from "@spine-event-engine/proto/client";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { EventContextSchema, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import {
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  TargetSchema,
+  TopicIdSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
+import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
+import { eventBusAccess, EventBus } from "../../src/bus/event-bus.js";
+import { Stand } from "../../src/stand/stand.js";
 import {
   SubscriptionRuntime,
   subscriptionRuntimeAccess,
 } from "../../src/stand/subscription-runtime.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
+import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 describe("SubscriptionRuntime", () => {
   it("validates and clears package-private logger metadata", async () => {
@@ -111,6 +127,64 @@ describe("SubscriptionRuntime", () => {
     second.unsubscribe();
     second.unsubscribe();
     await runtime.close();
+  });
+
+  it("keeps a newly activating consumer when an older snapshot observed it pending", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "SubscriptionRace", multitenant: false },
+      storageFactory,
+    });
+    const bus = new EventBus(
+      new EventStore({ name: "SubscriptionRace", multitenant: false }, storageFactory),
+    );
+    eventBusAccess.registerSchemas(bus, [TaskCreatedSchema]);
+    const registry = new GatedSnapshotRegistry();
+    const id = create(SubscriptionIdSchema, { value: "race-event" });
+    await registry.create(
+      create(SubscriptionSchema, {
+        id,
+        topic: create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "race-topic" }),
+          target: create(TargetSchema, {
+            type: TypeUrls.derive(TaskCreatedSchema),
+            criterion: { case: "includeAll", value: true },
+          }),
+        }),
+      }),
+    );
+    const runtime = new SubscriptionRuntime(stand, stand, bus, bus, registry);
+    const delivered = vi.fn();
+    try {
+      const stale = runtime.reconcile();
+      await registry.snapshotCaptured;
+      await registry.activate(id);
+      const consuming = runtime.consume(id.value, delivered);
+      registry.releaseSnapshot();
+      await stale;
+      const handle = await consuming;
+      await bus.post(
+        create(EventSchema, {
+          id: create(EventIdSchema, { value: "race-delivery" }),
+          context: create(EventContextSchema),
+          message: AnyMessages.pack(
+            TaskCreatedSchema,
+            create(TaskCreatedSchema, {
+              id: create(TaskIdSchema, { value: "race-task" }),
+              title: "Race task",
+              taskListId: create(TaskListIdSchema, { value: "race-list" }),
+            }),
+          ),
+        }),
+      );
+      expect(delivered).toHaveBeenCalledTimes(1);
+      handle.unsubscribe();
+    } finally {
+      registry.releaseSnapshot();
+      await runtime.close();
+      await bus.close();
+      await stand.close();
+    }
   });
 
   it("coalesces timer reconciliation while the current registry cycle is pending", async () => {
@@ -256,6 +330,30 @@ class GatedCleanupRegistry extends InMemorySubscriptionRegistry {
       this.#reject = reject;
     });
     return await super.cleanup();
+  }
+}
+
+class GatedSnapshotRegistry extends InMemorySubscriptionRegistry {
+  #first = true;
+  #release: (() => void) | undefined;
+  #captured: (() => void) | undefined;
+  readonly snapshotCaptured = new Promise<void>((resolve) => {
+    this.#captured = resolve;
+  });
+
+  releaseSnapshot(): void {
+    this.#release?.();
+  }
+
+  override async snapshot() {
+    const entries = await super.snapshot();
+    if (!this.#first) return entries;
+    this.#first = false;
+    this.#captured?.();
+    await new Promise<void>((resolve) => {
+      this.#release = resolve;
+    });
+    return entries;
   }
 }
 

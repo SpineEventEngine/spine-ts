@@ -37,7 +37,6 @@ import {
   type AgentExecutionStorageInput,
 } from "@spine-event-engine/storage/provider";
 import {
-  DeliveryCleanupStorageFactories,
   EntityCommitStorageFactories,
   AgentHistoryStorageFactories,
   AgentExecutionStorageFactories,
@@ -50,7 +49,6 @@ import { PostgresEntityStorage } from "./entity-history.js";
 import { PostgresAgentHistory, AgentHistoryHash } from "./agent-history.js";
 import { PostgresAgentExecution } from "./agent-execution.js";
 import { PostgresEntityCommitStorage } from "./entity-commit.js";
-import { PostgresDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import { PostgresTableResolver } from "./table-resolver.js";
 import { PostgresTableSpecs } from "./table-spec.js";
 import type { PostgresDdlType } from "./data-type.js";
@@ -334,9 +332,6 @@ export class PostgresStorageFactory extends StorageFactory {
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
-    DeliveryCleanupStorageFactories.register(this, {
-      createDeliveryCleanupStorage: () => this.createDeliveryCleanupStorage(),
-    });
     AgentHistoryStorageFactories.register(this, {
       createAgentHistoryStorage: (input) => {
         if (!this.isOpen()) throw new Error("StorageFactory is closed.");
@@ -506,41 +501,21 @@ export class PostgresStorageFactory extends StorageFactory {
   }
 
   /**
-   * Creates the transaction coordinator for Entity current state and history.
+   * Creates independent ordered Entity persistence for current state and history.
    *
    * @typeParam I The Entity identifier type.
    * @typeParam S The Entity state message type.
    * @param input Supplies the Entity storage configuration.
-   * @returns A factory-managed commit coordinator.
+   * @returns A factory-managed Entity commit handle.
    */
   private createEntityCommitStorage<I, S extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityStorageInput<I, S>,
   ): PostgresEntityCommitStorage<I, S> {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     const registration = {} as { handle: PostgresEntityCommitStorage<I, S> };
-    const database = this.database(input.context);
     const handle = new PostgresEntityCommitStorage(
       input,
       (spec, group) => this.createPostgresRecordStorage(input.context, spec, group),
-      this.connections(database),
-      () => this.#handles.delete(registration.handle),
-    );
-    registration.handle = handle;
-    this.#handles.add(handle);
-    return handle;
-  }
-
-  /**
-   * Creates the provider's delivered-Inbox cleanup coordinator.
-   *
-   * @returns A factory-managed cleanup coordinator.
-   */
-  private createDeliveryCleanupStorage(): PostgresDeliveryCleanupStorage {
-    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
-    const registration = {} as { handle: PostgresDeliveryCleanupStorage };
-    const handle = new PostgresDeliveryCleanupStorage(
-      (context, spec) => this.createPostgresRecordStorage(context, spec),
-      (context) => this.connections(this.database(context)),
       () => this.#handles.delete(registration.handle),
     );
     registration.handle = handle;

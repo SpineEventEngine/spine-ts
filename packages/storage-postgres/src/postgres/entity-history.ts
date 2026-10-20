@@ -35,12 +35,7 @@ import type {
   RecordStorage,
 } from "@spine-event-engine/storage";
 
-import {
-  PostgresClientDisposal,
-  PostgresStorageDataError,
-  PostgresStorageErrors,
-  PostgresStorageOperationError,
-} from "./errors.js";
+import { PostgresStorageDataError, PostgresStorageErrors } from "./errors.js";
 import { PostgresRecordStorage, type PostgresRecordExecutor } from "./record-storage.js";
 import type { PostgresParameter } from "./parameter.js";
 
@@ -200,15 +195,9 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    */
   append(record: EntityRecord): Promise<void> {
     if (!this.#open) return Promise.reject(new Error("Entity state history is closed."));
-    return this.#executor
-      .transaction(async (client) => {
-        await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
-        await client.query("SELECT pg_advisory_xact_lock($1)", [this.entityKey(record.entityId)]);
-        await this.#executor.appendImmutable(client, record);
-      })
-      .catch((error: unknown) => {
-        throw PostgresStorageErrors.operation(error);
-      });
+    return this.records.writeImmutable(record).catch((error: unknown) => {
+      throw PostgresStorageErrors.operation(error);
+    });
   }
 
   /**
@@ -228,7 +217,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     HistoryValues.assertDepth(depth);
     await this.#executor.prepare();
     return this.#executor
-      .transaction((client) =>
+      .using((client) =>
         this.#executor.query(
           client,
           this.backwardSql(startingFromVersion),
@@ -251,7 +240,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     this.assertOpen();
     await this.#executor.prepare();
     const records = await this.#executor
-      .transaction((client) =>
+      .using((client) =>
         this.#executor.query(client, this.stateAtSql(), [
           this.entityValue(entityId),
           HistoryValues.nanos(time),
@@ -284,26 +273,11 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     HistoryValues.assertKeep(keepMostRecent);
     await this.#executor
       .using(async (client) => {
-        const [family, entity] = this.trimLocks(entityId);
-        const acquired: [bigint, boolean][] = [];
-        let operationFailure: unknown;
-        try {
-          await client.query("SELECT pg_advisory_lock_shared($1)", [family]);
-          acquired.push([family, true]);
-          await client.query("SELECT pg_advisory_lock($1)", [entity]);
-          acquired.push([entity, false]);
-          let cursor = await this.trimBoundary(client, entityId, keepMostRecent);
-          let includeCursor = true;
-          while (cursor !== undefined && this.#open) {
-            cursor = await this.trimPage(client, entityId, cursor, includeCursor);
-            includeCursor = false;
-            // The next page starts only while this history remains open.
-          }
-        } catch (error) {
-          operationFailure = error;
-          throw error;
-        } finally {
-          await PostgresSessionLocks.cleanup(client, acquired.reverse(), operationFailure);
+        let cursor = await this.trimBoundary(client, entityId, keepMostRecent);
+        let includeCursor = true;
+        while (cursor !== undefined && this.#open) {
+          cursor = await this.trimPage(client, entityId, cursor, includeCursor);
+          includeCursor = false;
         }
       })
       .catch((error: unknown) => {
@@ -319,29 +293,18 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    */
   async truncate(olderThan: Timestamp): Promise<void> {
     this.assertOpen();
-    await this.#executor.using(async (client) => {
-      const key = this.#executor.lock("history-family", this.#executor.table());
-      await client.query("SELECT pg_advisory_lock($1)", [key]);
-      let operationFailure: unknown;
-      try {
+    await this.#executor
+      .using(async (client) => {
         const cutoff = HistoryValues.nanos(olderThan);
         const highWater = await this.highWater(client, cutoff);
         if (highWater !== undefined)
           while (this.#open && (await this.truncatePage(client, cutoff, highWater))) {
-            // The next page starts only while this history remains open.
+            // Each completed page remains deleted if a later page fails.
           }
-      } catch (error) {
-        operationFailure = error;
-      }
-      const cleanup = await PostgresSessionLocks.unlock(client, key, false).catch(
-        (error: unknown) => error,
-      );
-      if (cleanup instanceof Error) PostgresClientDisposal.mark(operationFailure ?? cleanup);
-      if (operationFailure instanceof Error) throw operationFailure;
-      if (operationFailure !== undefined)
-        throw new PostgresStorageOperationError("PostgreSQL state history operation failed.");
-      if (cleanup instanceof Error) throw cleanup;
-    });
+      })
+      .catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
   }
 
   /**
@@ -410,59 +373,6 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   }
 
   /**
-   * Calculates the lock key shared by this history family.
-   *
-   * @returns PostgreSQL advisory-lock key.
-   */
-  private familyKey(): bigint {
-    return this.#executor.lock("history-family", this.#executor.table());
-  }
-
-  /**
-   * Calculates the family and Entity lock keys used while trimming.
-   *
-   * @param id Entity identifier.
-   * @returns Family lock followed by Entity lock.
-   */
-  private trimLocks(id: I): readonly [bigint, bigint] {
-    return [
-      this.familyKey(),
-      this.#executor.lock(
-        "entity-mutation",
-        this.input.sourceType.typeName,
-        this.entityIdentity(id),
-      ),
-    ];
-  }
-
-  /**
-   * Calculates the mutation lock for a stored Entity record.
-   *
-   * @param entityId Packed Entity identifier from the record.
-   * @returns PostgreSQL advisory-lock key.
-   */
-  private entityKey(entityId: EntityRecord["entityId"]): bigint {
-    if (entityId === undefined) throw new Error("State history requires EntityRecord.entityId.");
-    const id = this.input.id.unpack(entityId);
-    if (id === undefined) throw new Error("State history EntityRecord ID does not match storage.");
-    return this.#executor.lock(
-      "entity-mutation",
-      this.input.sourceType.typeName,
-      this.entityIdentity(id),
-    );
-  }
-
-  /**
-   * Returns the stable string identity used in Entity mutation locks.
-   *
-   * @param id Entity identifier.
-   * @returns Stable Entity identity string.
-   */
-  private entityIdentity(id: I): string {
-    return this.input.id.key(id);
-  }
-
-  /**
    * Rejects state-history work after this port has closed.
    */
   private assertOpen(): void {
@@ -472,7 +382,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   /**
    * Deletes one bounded page of old states for an Entity.
    *
-   * @param client PostgreSQL client holding the session locks.
+   * @param client Acquired PostgreSQL client.
    * @param id Entity identifier.
    * @param cursor Last retained or deleted history key.
    * @param includeCursor Whether the page includes the supplied cursor.
@@ -484,30 +394,23 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     cursor: HistoryKey,
     includeCursor: boolean,
   ): Promise<HistoryKey | undefined> {
-    await client.query("BEGIN");
-    try {
-      const rows = await client.query<HistoryRow>(this.trimSql(includeCursor), [
-        this.entityValue(id),
-        ...cursor,
-        128,
-      ]);
-      const keys = rows.rows.map(({ ID }) => ID);
-      await this.deleteKeys(client, keys);
-      await client.query("COMMIT");
-      const last = rows.rows.at(-1);
-      return keys.length === 128 && last !== undefined
-        ? [last.version, last.created, last.ID]
-        : undefined;
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    }
+    const rows = await client.query<HistoryRow>(this.trimSql(includeCursor), [
+      this.entityValue(id),
+      ...cursor,
+      128,
+    ]);
+    const keys = rows.rows.map(({ ID }) => ID);
+    await this.deleteKeys(client, keys);
+    const last = rows.rows.at(-1);
+    return keys.length === 128 && last !== undefined
+      ? [last.version, last.created, last.ID]
+      : undefined;
   }
 
   /**
    * Deletes one bounded page below a timestamp and stable high-water key.
    *
-   * @param client PostgreSQL client holding the family lock.
+   * @param client Acquired PostgreSQL client.
    * @param olderThan Exclusive timestamp cutoff in nanoseconds.
    * @param highWater Last key admitted when truncation began.
    * @returns Whether another full page may remain.
@@ -517,22 +420,15 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     olderThan: bigint,
     highWater: HistoryKey,
   ): Promise<boolean> {
-    await client.query("BEGIN");
-    try {
-      const keys = await this.keys(client, this.truncateSql(), [olderThan, ...highWater, 128]);
-      await this.deleteKeys(client, keys);
-      await client.query("COMMIT");
-      return keys.length === 128;
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    }
+    const keys = await this.keys(client, this.truncateSql(), [olderThan, ...highWater, 128]);
+    await this.deleteKeys(client, keys);
+    return keys.length === 128;
   }
 
   /**
    * Reads record identifiers for one bounded deletion page.
    *
-   * @param client PostgreSQL transaction client.
+   * @param client Acquired PostgreSQL client.
    * @param sql Parameterized key query.
    * @param values PostgreSQL bind values.
    * @returns Stored record identifiers.
@@ -550,7 +446,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   /**
    * Deletes records identified by one bounded key page.
    *
-   * @param client PostgreSQL transaction client.
+   * @param client Acquired PostgreSQL client.
    * @param keys Stored record identifiers.
    * @returns Completion after the deletion query.
    */
@@ -582,7 +478,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   /**
    * Finds the first state-history key that trimming may delete.
    *
-   * @param client PostgreSQL client holding the session locks.
+   * @param client Acquired PostgreSQL client.
    * @param id Entity identifier.
    * @param keep Number of newest states to retain.
    * @returns First deletable key, or `undefined` when nothing must be removed.
@@ -619,7 +515,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
   /**
    * Captures the last state key eligible when truncation begins.
    *
-   * @param client PostgreSQL client holding the family lock.
+   * @param client Acquired PostgreSQL client.
    * @param olderThan Exclusive timestamp cutoff in nanoseconds.
    * @returns Stable high-water key, or `undefined` when nothing is eligible.
    */
@@ -671,14 +567,9 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
    */
   append(record: Event): Promise<void> {
     if (!this.#open) return Promise.reject(new Error("Entity event history is closed."));
-    return this.#executor
-      .transaction(async (client) => {
-        await client.query("SELECT pg_advisory_xact_lock_shared($1)", [this.familyKey()]);
-        await this.#executor.appendImmutable(client, record);
-      })
-      .catch((error: unknown) => {
-        throw PostgresStorageErrors.operation(error);
-      });
+    return this.records.writeImmutable(record).catch((error: unknown) => {
+      throw PostgresStorageErrors.operation(error);
+    });
   }
 
   /**
@@ -694,7 +585,7 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
     HistoryValues.assertDepth(depth);
     await this.#executor.prepare();
     return this.#executor
-      .transaction((client) =>
+      .using((client) =>
         this.#executor.query(
           client,
           this.backwardSql(version),
@@ -714,29 +605,18 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
    */
   async truncate(olderThan: Timestamp): Promise<void> {
     this.assertOpen();
-    await this.#executor.using(async (client) => {
-      const key = this.familyKey();
-      await client.query("SELECT pg_advisory_lock($1)", [key]);
-      let operationFailure: unknown;
-      try {
+    await this.#executor
+      .using(async (client) => {
         const cutoff = HistoryValues.nanos(olderThan);
         const highWater = await this.highWater(client, cutoff);
         if (highWater !== undefined)
           while (this.#open && (await this.deletePage(client, cutoff, highWater))) {
-            // The next page starts only while this history remains open.
+            // Each completed page remains deleted if a later page fails.
           }
-      } catch (error) {
-        operationFailure = error;
-      }
-      const cleanup = await PostgresSessionLocks.unlock(client, key, false).catch(
-        (error: unknown) => error,
-      );
-      if (cleanup instanceof Error) PostgresClientDisposal.mark(operationFailure ?? cleanup);
-      if (operationFailure instanceof Error) throw operationFailure;
-      if (operationFailure !== undefined)
-        throw new PostgresStorageOperationError("PostgreSQL event history operation failed.");
-      if (cleanup instanceof Error) throw cleanup;
-    });
+      })
+      .catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
   }
 
   /**
@@ -782,15 +662,6 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
   }
 
   /**
-   * Calculates the lock key shared by this history family.
-   *
-   * @returns PostgreSQL advisory-lock key.
-   */
-  private familyKey(): bigint {
-    return this.#executor.lock("history-family", this.#executor.table());
-  }
-
-  /**
    * Rejects event-history work after this port has closed.
    */
   private assertOpen(): void {
@@ -800,7 +671,7 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
   /**
    * Captures the last event key eligible when truncation begins.
    *
-   * @param client PostgreSQL client holding the family lock.
+   * @param client Acquired PostgreSQL client.
    * @param olderThan Exclusive timestamp cutoff in nanoseconds.
    * @returns Stable high-water key, or `undefined` when nothing is eligible.
    */
@@ -816,7 +687,7 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
   /**
    * Deletes one bounded page below a timestamp and stable high-water key.
    *
-   * @param client PostgreSQL client holding the family lock.
+   * @param client Acquired PostgreSQL client.
    * @param olderThan Exclusive timestamp cutoff in nanoseconds.
    * @param highWater Last key admitted when truncation began.
    * @returns Whether another full page may remain.
@@ -826,22 +697,15 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
     olderThan: bigint,
     highWater: HistoryKey,
   ): Promise<boolean> {
-    await client.query("BEGIN");
-    try {
-      const keys = await this.keys(client, [olderThan, ...highWater, 128]);
-      await this.deleteKeys(client, keys);
-      await client.query("COMMIT");
-      return keys.length === 128;
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    }
+    const keys = await this.keys(client, [olderThan, ...highWater, 128]);
+    await this.deleteKeys(client, keys);
+    return keys.length === 128;
   }
 
   /**
    * Reads event identifiers for one bounded deletion page.
    *
-   * @param client PostgreSQL transaction client.
+   * @param client Acquired PostgreSQL client.
    * @param values PostgreSQL bind values.
    * @returns Stored event identifiers.
    */
@@ -857,7 +721,7 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
   /**
    * Deletes events identified by one bounded key page.
    *
-   * @param client PostgreSQL transaction client.
+   * @param client Acquired PostgreSQL client.
    * @param keys Stored event identifiers.
    * @returns Completion after the deletion query.
    */
@@ -927,55 +791,6 @@ const HistoryValues = Object.freeze({
    */
   nanos(value: Timestamp): bigint {
     return value.seconds * 1_000_000_000n + BigInt(value.nanos || 0);
-  },
-});
-
-const PostgresSessionLocks = Object.freeze({
-  /**
-   * Clears all session locks and marks the client after a release failure.
-   *
-   * @param client PostgreSQL client holding the locks.
-   * @param locks Lock keys paired with their shared/exclusive mode.
-   * @param operationFailure Earlier operation failure, when present.
-   * @returns Completion after all releases are attempted.
-   */
-  async cleanup(
-    client: import("pg").PoolClient,
-    locks: readonly (readonly [bigint, boolean])[],
-    operationFailure: unknown,
-  ): Promise<void> {
-    for (const [key, shared] of locks) {
-      const cleanup = await this.unlock(client, key, shared).catch((error: unknown) => error);
-      if (cleanup instanceof Error) {
-        PostgresClientDisposal.mark(operationFailure ?? cleanup);
-        if (operationFailure === undefined) throw cleanup;
-      }
-    }
-  },
-
-  /**
-   * Clears one PostgreSQL advisory session lock.
-   *
-   * @param client PostgreSQL client holding the lock.
-   * @param key Advisory-lock key.
-   * @param shared Whether the held lock is shared.
-   * @returns Completion after PostgreSQL confirms the release.
-   */
-  async unlock(client: import("pg").PoolClient, key: bigint, shared: boolean): Promise<void> {
-    try {
-      const result = await client.query<{
-        readonly pg_advisory_unlock?: boolean;
-        readonly pg_advisory_unlock_shared?: boolean;
-      }>(shared ? "SELECT pg_advisory_unlock_shared($1)" : "SELECT pg_advisory_unlock($1)", [key]);
-      const unlocked = shared
-        ? result.rows[0]?.pg_advisory_unlock_shared
-        : result.rows[0]?.pg_advisory_unlock;
-      if (unlocked !== true)
-        throw new PostgresStorageOperationError("PostgreSQL history cleanup failed.");
-    } catch (error) {
-      if (error instanceof PostgresStorageOperationError) throw error;
-      throw new PostgresStorageOperationError("PostgreSQL history cleanup failed.");
-    }
   },
 });
 

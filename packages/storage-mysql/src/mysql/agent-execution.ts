@@ -15,7 +15,7 @@
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core";
-import type { Event, EventId } from "@spine-event-engine/proto";
+import type { CommandId, Event, EventId } from "@spine-event-engine/proto";
 import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import {
   AgentExecutionHeadSchema,
@@ -25,7 +25,6 @@ import {
   type AgentExecutionHead,
   type AgentExecutionRecord,
   type AgentInvocationKey,
-  type AgentSignalKey,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import {
@@ -45,7 +44,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 
 import { AgentHistoryHash } from "./agent-history.js";
-import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "./entity-commit.js";
+import { MysqlAgentTransaction } from "./agent-transaction.js";
 import { MysqlEntityStorage } from "./entity-history.js";
 import { MysqlRecordStorage } from "./record-storage.js";
 import { AgentExecutionIndexBytes } from "./table-spec.js";
@@ -93,15 +92,13 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * Binds tenant-scoped record families and the native transaction coordinator.
    *
    * @param coordinator Native transaction coordinator.
-   * @param databaseName Tenant database name.
    * @param input Requested fenced execution change.
    * @param rows Provider record handles bound to the tenant.
    */
   constructor(
     private readonly input: AgentExecutionStorageInput<I, S>,
     private readonly rows: ExecutionRows<I, S>,
-    private readonly coordinator: MysqlEntityCommitCoordinator,
-    private readonly databaseName: string,
+    private readonly coordinator: MysqlAgentTransaction,
   ) {}
 
   /**
@@ -379,7 +376,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
     key: AgentInvocationKey,
     token: string,
     expectedRecordBytes: Uint8Array,
-    signals: readonly AgentSignalKey[],
+    signals: readonly CommandId[],
   ): Promise<void> {
     await this.ready();
     await this.transaction(key, () => this.deliverLocked(key, token, expectedRecordBytes, signals));
@@ -398,7 +395,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
     key: AgentInvocationKey,
     token: string,
     expectedRecordBytes: Uint8Array,
-    signals: readonly AgentSignalKey[],
+    signals: readonly CommandId[],
   ): Promise<void> {
     const pair = await this.expected(
       {
@@ -414,7 +411,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
     AgentExecutionTransitions.assertDelivery(pair.record, signals);
     for (const signal of signals)
       AgentExecutionValues.markSignal(AgentExecutionValues.requiredCompletion(pair.record), signal);
-    if (pair.record.completion.outgoing.every((item) => item.delivered)) {
+    if (pair.record.completion.commands.every((item) => item.delivered)) {
       pair.record.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED;
       await this.advanceCandidate(pair.head, key, AgentExecutionValues.requiredOrder(pair.record));
     }
@@ -487,25 +484,16 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
       ...rows.entity.tableNames(),
       rows.events.tableName,
     ];
-    const lock = mysqlEntityLockKey({
-      databaseName: this.databaseName,
-      entityKey: AgentExecutionRecords.scope(AgentExecutionValues.requiredScope(key)),
-      sourceTypeName: this.input.stateType,
-    });
-    return this.coordinator.commit(
-      tables,
-      lock,
-      (connection) =>
-        rows.invocation.withConnection(connection, () =>
-          rows.head.withConnection(connection, () =>
-            rows.history.withConnection(connection, () =>
-              rows.entity.withConnection(connection, () =>
-                rows.events.withConnection(connection, work),
-              ),
+    return this.coordinator.commit(tables, (connection) =>
+      rows.invocation.withConnection(connection, () =>
+        rows.head.withConnection(connection, () =>
+          rows.history.withConnection(connection, () =>
+            rows.entity.withConnection(connection, () =>
+              rows.events.withConnection(connection, work),
             ),
           ),
         ),
-      { requireTransaction: true },
+      ),
     );
   }
 
@@ -770,7 +758,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
       prior.status !== AgentInvocationStatus.AGENT_INVOCATION_ACTIVE ||
       ![
         AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
-        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS,
       ].includes(input.next.status)
     )
       throw new Error("Agent completion requires active work and completed status.");

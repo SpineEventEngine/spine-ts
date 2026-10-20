@@ -165,6 +165,19 @@ const fakeSend = (child: ChildProcess): ReturnType<typeof vi.fn> => {
   return Reflect.get(child, "send") as ReturnType<typeof vi.fn>;
 };
 
+const acknowledgeFakeChildClose = (child: ChildProcess, incarnation: string, slot = 0): void => {
+  fakeSend(child).mockImplementation((message: { readonly type?: string }) => {
+    if (message.type === "close") {
+      child.emit("message", { type: "draining", slot: String(slot), incarnation });
+      child.emit("message", { type: "delivery-drained", slot: String(slot), incarnation });
+    } else if (message.type === "finish-close") {
+      child.emit("message", { type: "closed", slot: String(slot), incarnation });
+      child.emit("exit");
+    }
+    return true;
+  });
+};
+
 describe("ManagedServerApplication", () => {
   it("keeps private Coordinator membership facts absent for opaque managed handles", () => {
     const opaque = {
@@ -209,10 +222,7 @@ describe("ManagedServerApplication", () => {
         endpoint: "http://127.0.0.1:1",
       });
       await started;
-      (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-        child.emit("exit");
-        return true;
-      });
+      acknowledgeFakeChildClose(child, itemAt(spawned, 0, "the initial replica").incarnation);
       managedSignalListener("SIGINT", priorSignals)("SIGINT");
       await Promise.resolve();
       await expect(coordinator.close()).resolves.toBeUndefined();
@@ -256,10 +266,7 @@ describe("ManagedServerApplication", () => {
         endpoint: "http://127.0.0.1:1",
       });
       await started;
-      (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-        child.emit("exit");
-        return true;
-      });
+      acknowledgeFakeChildClose(child, itemAt(spawned, 0, "the initial replica").incarnation);
 
       expect(process.listeners("SIGINT")).toEqual([...priorSignals, unrelated]);
       await coordinator.close();
@@ -382,6 +389,7 @@ describe("ManagedServerApplication", () => {
   it("treats one asynchronous child error and its later exit as one failed incarnation", async () => {
     const clock = new FakeClock();
     const child = fakeChild(1);
+    let incarnation = "";
     const coordinator = new ManagedServerCoordinator(
       {
         processCount: 1,
@@ -389,17 +397,31 @@ describe("ManagedServerApplication", () => {
         createServer: () => Promise.reject(new Error("unused")),
         restart: { initialDelayMs: 2, maximumDelayMs: 2 },
       },
-      { clock, spawn: () => child },
+      {
+        clock,
+        spawn: (_url, _slot, value) => {
+          incarnation = value;
+          return child;
+        },
+      },
     );
     void coordinator.start();
     child.emit("error", new Error("fork channel failed"));
     child.emit("exit", 1);
     expect(clock.delays).toEqual([2, 1_000]);
     clock.advance(2);
-    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      child.emit("exit");
-      return true;
-    });
+    (child.send as ReturnType<typeof vi.fn>).mockImplementation(
+      (message: { readonly type?: string }) => {
+        if (message.type === "close") {
+          child.emit("message", { type: "draining", slot: "0", incarnation });
+          child.emit("message", { type: "delivery-drained", slot: "0", incarnation });
+        } else if (message.type === "finish-close") {
+          child.emit("message", { type: "closed", slot: "0", incarnation });
+          child.emit("exit");
+        }
+        return true;
+      },
+    );
     await coordinator.close();
   });
 
@@ -506,12 +528,95 @@ describe("ManagedServerApplication", () => {
     await Promise.resolve();
     clock.advance(1_000);
     await Promise.resolve();
-    await expect(first).rejects.toThrow("SIGKILL");
-    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      child.emit("exit");
+    const failure = await first.catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([
+      new Error("Managed child did not acknowledge Delivery drain."),
+      expect.any(AggregateError),
+    ]);
+    const termination = (failure as AggregateError).errors[1] as AggregateError;
+    expect(termination.errors[1]).toEqual(new Error("Managed child did not exit after SIGKILL."));
+    const incarnation = itemAt(spawned, 0, "the initial replica").incarnation;
+    (child.send as ReturnType<typeof vi.fn>).mockImplementation(
+      (message: { readonly type?: string }) => {
+        if (message.type === "close") {
+          child.emit("message", { type: "draining", slot: "0", incarnation });
+          child.emit("message", { type: "delivery-drained", slot: "0", incarnation });
+        } else if (message.type === "finish-close") {
+          child.emit("message", { type: "closed", slot: "0", incarnation });
+          child.emit("exit");
+        }
+        return true;
+      },
+    );
+    child.emit("exit");
+    await expect(coordinator.close()).rejects.toThrow(
+      "Managed child did not acknowledge Delivery drain.",
+    );
+  });
+
+  it("retains a child exit before Delivery drain across closes and cleans another child", async () => {
+    const children = [fakeChild(1), fakeChild(2)];
+    const incarnations: string[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 2,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock: new FakeClock(),
+        spawn: (_url, slot, incarnation) => {
+          incarnations[slot] = incarnation;
+          return itemAt(children, slot, "the managed child");
+        },
+      },
+    );
+    const started = coordinator.start();
+    for (const [slot, child] of children.entries()) {
+      child.emit("message", {
+        type: "ready",
+        slot: String(slot),
+        incarnation: itemAt(incarnations, slot, "the child incarnation"),
+        endpoint: `http://127.0.0.1:${String(slot + 1)}`,
+      });
+    }
+    await started;
+    const failedChild = itemAt(children, 0, "the failed child");
+    const otherChild = itemAt(children, 1, "the other child");
+    fakeSend(failedChild).mockImplementation((message: { readonly type?: string }) => {
+      if (message.type === "close") failedChild.emit("exit");
       return true;
     });
-    await expect(coordinator.close()).resolves.toBeUndefined();
+    fakeSend(otherChild).mockImplementation((message: { readonly type?: string }) => {
+      if (message.type === "close") {
+        otherChild.emit("message", {
+          type: "draining",
+          slot: "1",
+          incarnation: itemAt(incarnations, 1, "the second incarnation"),
+        });
+        otherChild.emit("message", {
+          type: "delivery-drained",
+          slot: "1",
+          incarnation: itemAt(incarnations, 1, "the second incarnation"),
+        });
+        otherChild.emit("exit");
+      }
+      return true;
+    });
+
+    const firstFailure = await coordinator.close().catch((error: unknown) => error);
+    expect(firstFailure).toBeInstanceOf(AggregateError);
+    expect((firstFailure as AggregateError).errors).toContainEqual(
+      new Error("Managed child exited before Delivery drained."),
+    );
+    expect(fakeSend(otherChild)).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "close" }),
+      expect.any(Function),
+    );
+    await expect(coordinator.close()).rejects.toThrow(
+      "Managed child exited before Delivery drained.",
+    );
   });
 
   it("reports Coordinator startup and managed-child rollback failures together", async () => {
@@ -552,10 +657,24 @@ describe("ManagedServerApplication", () => {
     expect(error).toBeInstanceOf(AggregateError);
     expect((error as AggregateError).errors).toEqual([
       new Error("Coordinator listener failed"),
-      new Error("Managed child did not exit after SIGKILL."),
+      new AggregateError(
+        [
+          new Error("Managed child did not acknowledge Delivery drain."),
+          new AggregateError(
+            [
+              new Error("Managed child did not acknowledge Delivery drain."),
+              new Error("Managed child did not exit after SIGKILL."),
+            ],
+            "Managed child shutdown failed.",
+          ),
+        ],
+        "Managed child quiescence failed during drain.",
+      ),
     ]);
     child.emit("exit");
-    await expect(coordinator.close()).resolves.toBeUndefined();
+    await expect(coordinator.close()).rejects.toThrow(
+      "Managed child did not acknowledge Delivery drain.",
+    );
   });
 
   it("rejects non-canonical, oversized, and stale READY endpoints without retaining them", async () => {
@@ -610,10 +729,7 @@ describe("ManagedServerApplication", () => {
     });
     await started;
     expect(managedServerCoordinatorAccess.readyMembers(coordinator)).toHaveLength(1);
-    (first.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      first.child.emit("exit");
-      return true;
-    });
+    acknowledgeFakeChildClose(first.child, first.incarnation, first.slot);
     await coordinator.close();
   });
 
@@ -621,6 +737,7 @@ describe("ManagedServerApplication", () => {
     const synchronize = vi.fn(() => Promise.resolve());
     const clock = new FakeClock();
     const child = fakeChild(1);
+    let incarnation = "";
     const coordinator = new ManagedServerCoordinator(
       {
         processCount: 1,
@@ -628,14 +745,17 @@ describe("ManagedServerApplication", () => {
         createServer: () => Promise.reject(new Error("unused")),
         synchronize,
       },
-      { clock, spawn: () => child },
+      {
+        clock,
+        spawn: (_url, _slot, value) => {
+          incarnation = value;
+          return child;
+        },
+      },
     );
     void coordinator.start();
     expect(synchronize).not.toHaveBeenCalled();
-    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      child.emit("exit");
-      return true;
-    });
+    acknowledgeFakeChildClose(child, incarnation);
     await coordinator.close();
   });
 
@@ -666,24 +786,11 @@ describe("ManagedServerApplication", () => {
       endpoint: "http://127.0.0.1:1",
     });
     await started;
-    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      child.emit("message", {
-        type: "draining",
-        slot: String(replica.slot),
-        incarnation: replica.incarnation,
-      });
-      return true;
-    });
+    acknowledgeFakeChildClose(child, replica.incarnation, replica.slot);
 
     const closing = coordinator.close();
 
     expect(managedServerCoordinatorAccess.readyMembers(coordinator)).toEqual([]);
-    child.emit("message", {
-      type: "closed",
-      slot: String(replica.slot),
-      incarnation: replica.incarnation,
-    });
-    child.emit("exit");
     await closing;
   });
 
@@ -708,6 +815,7 @@ describe("ManagedServerApplication", () => {
         openCoordinator: () =>
           Promise.resolve({
             beginDrain: () => Promise.resolve(),
+            closeSubscriptions: () => Promise.resolve(),
             close: () => Promise.resolve(),
           } as NodeCoordinator),
       },
@@ -742,10 +850,7 @@ describe("ManagedServerApplication", () => {
       endpoint: "http://127.0.0.1:2",
     });
     expect(coordinator.readyMembers()).toHaveLength(1);
-    (replacement.send as ReturnType<typeof vi.fn>).mockImplementation((message: unknown) => {
-      if ((message as { readonly type?: string }).type === "close") replacement.emit("exit");
-      return true;
-    });
+    acknowledgeFakeChildClose(replacement, incarnation);
     await handle.close();
   });
 
@@ -775,28 +880,19 @@ describe("ManagedServerApplication", () => {
       endpoint: "http://127.0.0.1:1",
     });
     const handle = await started;
-    (child.send as ReturnType<typeof vi.fn>).mockImplementationOnce(
-      (message: { readonly type?: string }) => {
-        if (message.type === "close") {
-          child.emit("message", { type: "draining", slot: "0", incarnation });
-          child.emit("message", { type: "close-failed", slot: "0", incarnation });
-        }
-        return true;
-      },
-    );
+    fakeSend(child).mockImplementation((message: { readonly type?: string }) => {
+      if (message.type === "close") {
+        child.emit("message", { type: "draining", slot: "0", incarnation });
+        child.emit("message", { type: "delivery-drained", slot: "0", incarnation });
+      } else if (message.type === "finish-close") {
+        child.emit("message", { type: "close-failed", slot: "0", incarnation });
+      }
+      return true;
+    });
 
     await expect(handle.close()).rejects.toThrow("Managed child server close failed.");
 
-    (child.send as ReturnType<typeof vi.fn>).mockImplementationOnce(
-      (message: { readonly type?: string }) => {
-        if (message.type === "close") {
-          child.emit("message", { type: "draining", slot: "0", incarnation });
-          child.emit("message", { type: "closed", slot: "0", incarnation });
-          child.emit("exit");
-        }
-        return true;
-      },
-    );
+    acknowledgeFakeChildClose(child, incarnation);
     await expect(handle.close()).resolves.toBeUndefined();
   });
 
@@ -830,6 +926,8 @@ describe("ManagedServerApplication", () => {
       (message: { readonly type?: string }) => {
         if (message.type === "close") {
           child.emit("message", { type: "draining", slot: "0", incarnation });
+          child.emit("message", { type: "delivery-drained", slot: "0", incarnation });
+        } else if (message.type === "finish-close") {
           child.emit("message", { type: "closed", slot: "0", incarnation });
         }
         return true;
@@ -843,13 +941,348 @@ describe("ManagedServerApplication", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(settled).toBe(false);
-    expect(clock.delays).toEqual([1_000]);
+    await vi.waitFor(() => {
+      expect(fakeSend(child)).toHaveBeenCalledWith({ type: "finish-close" }, expect.any(Function));
+    });
+    expect(clock.delays).toEqual([1_000, 1_000]);
 
     clock.advance(1_000);
     await closing;
     expect((child as ChildProcess & { readonly killCalls: readonly string[] }).killCalls).toEqual([
       "SIGTERM",
     ]);
+  });
+
+  it("waits for relay cancellation before releasing child close", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    const releaseRelay = Promise.withResolvers<undefined>();
+    const closeSubscriptions = vi.fn(() => releaseRelay.promise);
+    let incarnation = "";
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, _slot, value) => {
+          incarnation = value;
+          return child;
+        },
+        openCoordinator: () =>
+          Promise.resolve({
+            beginDrain: () => Promise.resolve(),
+            closeSubscriptions,
+            close: () => Promise.resolve(),
+          } as unknown as NodeCoordinator),
+      },
+    );
+    const starting = coordinator.start();
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await starting;
+    fakeSend(child).mockImplementation((message: { readonly type?: string }) => {
+      if (message.type === "close") {
+        child.emit("message", { type: "draining", slot: "0", incarnation });
+        child.emit("message", { type: "delivery-drained", slot: "0", incarnation });
+      } else if (message.type === "finish-close") {
+        child.emit("message", { type: "closed", slot: "0", incarnation });
+        child.emit("exit");
+      }
+      return true;
+    });
+    const closing = handle.close();
+    await vi.waitFor(() => {
+      expect(closeSubscriptions).toHaveBeenCalledOnce();
+    });
+    clock.advance(30_001);
+    expect(
+      fakeSend(child).mock.calls.map(([message]) => (message as { type: string }).type),
+    ).toEqual(["close"]);
+    releaseRelay.resolve(undefined);
+    await expect(closing).resolves.toBeUndefined();
+    expect(
+      fakeSend(child).mock.calls.map(([message]) => (message as { type: string }).type),
+    ).toEqual(["close", "finish-close"]);
+  });
+
+  it("retries relay cleanup without repeating the child drain", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    const relayCleanup = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("relay Cancel failed"))
+      .mockResolvedValueOnce(undefined);
+    let incarnation = "";
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, _slot, value) => {
+          incarnation = value;
+          return child;
+        },
+        openCoordinator: () =>
+          Promise.resolve({
+            beginDrain: () => Promise.resolve(),
+            closeSubscriptions: relayCleanup,
+            close: () => Promise.resolve(),
+          } as unknown as NodeCoordinator),
+      },
+    );
+    const starting = coordinator.start();
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await starting;
+    fakeSend(child).mockImplementation((message: { readonly type?: string }) => {
+      if (message.type === "close") {
+        child.emit("message", { type: "draining", slot: "0", incarnation });
+        child.emit("message", { type: "delivery-drained", slot: "0", incarnation });
+      } else if (message.type === "finish-close") {
+        child.emit("message", { type: "closed", slot: "0", incarnation });
+        child.emit("exit");
+      }
+      return true;
+    });
+
+    await expect(handle.close()).rejects.toThrow("relay Cancel failed");
+    expect(
+      fakeSend(child).mock.calls.map(([message]) => (message as { type: string }).type),
+    ).toEqual(["close", "finish-close"]);
+    clock.advance(100);
+    await expect(handle.close()).resolves.toBeUndefined();
+    expect(relayCleanup).toHaveBeenCalledTimes(2);
+    expect(
+      fakeSend(child).mock.calls.map(([message]) => (message as { type: string }).type),
+    ).toEqual(["close", "finish-close"]);
+  });
+
+  it("closes relays and the Coordinator after a child exits before Delivery drain", async () => {
+    const child = fakeChild(1);
+    const closeSubscriptions = vi.fn(() => Promise.resolve());
+    const closeCoordinator = vi.fn(() => Promise.resolve());
+    let incarnation = "";
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock: new FakeClock(),
+        spawn: (_url, _slot, value) => {
+          incarnation = value;
+          return child;
+        },
+        openCoordinator: () =>
+          Promise.resolve({
+            beginDrain: () => Promise.resolve(),
+            closeSubscriptions,
+            close: closeCoordinator,
+          } as unknown as NodeCoordinator),
+      },
+    );
+    const started = coordinator.start();
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await started;
+    fakeSend(child).mockImplementation((message: { readonly type?: string }) => {
+      if (message.type === "close") child.emit("exit");
+      return true;
+    });
+
+    await expect(handle.close()).rejects.toThrow("Managed child exited before Delivery drained.");
+    expect(closeSubscriptions).toHaveBeenCalledOnce();
+    expect(closeCoordinator).toHaveBeenCalledOnce();
+    expect(fakeSend(child)).toHaveBeenCalledWith({ type: "close" }, expect.any(Function));
+    await expect(handle.close()).rejects.toThrow("Managed child exited before Delivery drained.");
+    expect(closeSubscriptions).toHaveBeenCalledTimes(2);
+    expect(closeCoordinator).toHaveBeenCalledTimes(2);
+  });
+
+  it("finishes a drained child when Coordinator drain start fails", async () => {
+    const child = fakeChild(1);
+    const closeSubscriptions = vi.fn(() => Promise.resolve());
+    const closeCoordinator = vi.fn(() => Promise.resolve());
+    let incarnation = "";
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock: new FakeClock(),
+        spawn: (_url, _slot, value) => {
+          incarnation = value;
+          return child;
+        },
+        openCoordinator: () =>
+          Promise.resolve({
+            beginDrain: () => Promise.reject(new Error("Coordinator drain failed")),
+            closeSubscriptions,
+            close: closeCoordinator,
+          } as unknown as NodeCoordinator),
+      },
+    );
+    const started = coordinator.start();
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await started;
+    acknowledgeFakeChildClose(child, incarnation);
+
+    const closing = handle.close();
+    await vi.waitFor(() => {
+      expect(fakeSend(child)).toHaveBeenCalledWith({ type: "finish-close" }, expect.any(Function));
+    });
+    await expect(closing).rejects.toThrow("Coordinator drain failed");
+    expect(closeSubscriptions).toHaveBeenCalledOnce();
+    expect(closeCoordinator).toHaveBeenCalledOnce();
+  });
+
+  it("finishes a healthy child after another child fails its Delivery drain", async () => {
+    const children = [fakeChild(1), fakeChild(2)];
+    const incarnations: string[] = [];
+    const closeSubscriptions = vi.fn(() => Promise.resolve());
+    const closeCoordinator = vi.fn(() => Promise.resolve());
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 2,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock: new FakeClock(),
+        spawn: (_url, slot, incarnation) => {
+          incarnations[slot] = incarnation;
+          return itemAt(children, slot, "the managed child");
+        },
+        openCoordinator: () =>
+          Promise.resolve({
+            beginDrain: () => Promise.resolve(),
+            closeSubscriptions,
+            close: closeCoordinator,
+          } as unknown as NodeCoordinator),
+      },
+    );
+    const started = coordinator.start();
+    for (const [slot, child] of children.entries())
+      child.emit("message", {
+        type: "ready",
+        slot: String(slot),
+        incarnation: itemAt(incarnations, slot, "the child incarnation"),
+        endpoint: `http://127.0.0.1:${String(slot + 1)}`,
+      });
+    const handle = await started;
+    const failed = itemAt(children, 0, "the failed child");
+    const healthy = itemAt(children, 1, "the healthy child");
+    fakeSend(failed).mockImplementation((message: { readonly type?: string }) => {
+      if (message.type === "close") failed.emit("exit");
+      return true;
+    });
+    acknowledgeFakeChildClose(healthy, itemAt(incarnations, 1, "the healthy incarnation"), 1);
+
+    const closing = handle.close();
+    await vi.waitFor(() => {
+      expect(fakeSend(healthy)).toHaveBeenCalledWith(
+        { type: "finish-close" },
+        expect.any(Function),
+      );
+    });
+    await expect(closing).rejects.toThrow("Managed child exited before Delivery drained.");
+    expect(closeSubscriptions).toHaveBeenCalledOnce();
+    expect(closeCoordinator).toHaveBeenCalledOnce();
+  });
+
+  it("attempts every child and Coordinator cleanup after relay and IPC failures", async () => {
+    const children = [fakeChild(1), fakeChild(2)];
+    const incarnations: string[] = [];
+    const closeSubscriptions = vi.fn(() => Promise.reject(new Error("relay Cancel failed")));
+    const closeCoordinator = vi.fn(() => Promise.reject(new Error("Coordinator close failed")));
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 2,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock: new FakeClock(),
+        spawn: (_url, slot, incarnation) => {
+          incarnations[slot] = incarnation;
+          return itemAt(children, slot, "the managed child");
+        },
+        openCoordinator: () =>
+          Promise.resolve({
+            beginDrain: () => Promise.resolve(),
+            closeSubscriptions,
+            close: closeCoordinator,
+          } as unknown as NodeCoordinator),
+      },
+    );
+    const started = coordinator.start();
+    for (const [slot, child] of children.entries())
+      child.emit("message", {
+        type: "ready",
+        slot: String(slot),
+        incarnation: itemAt(incarnations, slot, "the child incarnation"),
+        endpoint: `http://127.0.0.1:${String(slot + 1)}`,
+      });
+    const handle = await started;
+    for (const [slot, child] of children.entries()) {
+      const incarnation = itemAt(incarnations, slot, "the child incarnation");
+      fakeSend(child).mockImplementation((message: { readonly type?: string }) => {
+        if (message.type === "close") {
+          child.emit("message", { type: "draining", slot: String(slot), incarnation });
+          child.emit("message", { type: "delivery-drained", slot: String(slot), incarnation });
+        } else if (message.type === "finish-close") {
+          if (slot === 0) {
+            child.emit("exit");
+            throw new Error("finish-close IPC failed");
+          }
+          child.emit("message", { type: "closed", slot: String(slot), incarnation });
+          child.emit("exit");
+        }
+        return true;
+      });
+    }
+
+    const failure = await handle.close().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual(
+      expect.arrayContaining([
+        new Error("relay Cancel failed"),
+        new Error("finish-close IPC failed"),
+        new Error("Coordinator close failed"),
+      ]),
+    );
+    expect(fakeSend(itemAt(children, 1, "the other child"))).toHaveBeenCalledWith(
+      { type: "finish-close" },
+      expect.any(Function),
+    );
+    expect(closeSubscriptions).toHaveBeenCalledOnce();
+    expect(closeCoordinator).toHaveBeenCalledOnce();
   });
 
   it("waits for the exact replacement subscription before activating Delivery", async () => {
@@ -873,6 +1306,7 @@ describe("ManagedServerApplication", () => {
         openCoordinator: () =>
           Promise.resolve({
             beginDrain: () => Promise.resolve(),
+            closeSubscriptions: () => Promise.resolve(),
             close: () => Promise.resolve(),
           } as NodeCoordinator),
       },
@@ -961,10 +1395,7 @@ describe("ManagedServerApplication", () => {
       incarnation,
       endpoint: "http://127.0.0.1:2",
     });
-    (replacement.send as ReturnType<typeof vi.fn>).mockImplementation((message: unknown) => {
-      if ((message as { readonly type?: string }).type === "close") replacement.emit("exit");
-      return true;
-    });
+    acknowledgeFakeChildClose(replacement, incarnation);
     await handle.close();
   });
   it("delays repeated failed replacements exponentially and caps the delay", async () => {
@@ -1016,10 +1447,6 @@ describe("ManagedServerApplication", () => {
     clock.advance(100);
     current.child.emit("exit");
     expect(clock.delays.at(-1)).toBe(2);
-    (current.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      current.child.emit("exit");
-      return true;
-    });
     await handle.close();
   });
 
@@ -1076,10 +1503,7 @@ describe("ManagedServerApplication", () => {
       endpoint: "http://127.0.0.1:2",
     });
     expect(handle.ready).toBe(true);
-    (replacement.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      replacement.child.emit("exit");
-      return true;
-    });
+    acknowledgeFakeChildClose(replacement.child, replacement.incarnation, replacement.slot);
     const firstClose = coordinator.close();
     const secondClose = coordinator.close();
     expect(secondClose).toBe(firstClose);
@@ -1129,10 +1553,7 @@ describe("ManagedServerApplication", () => {
     }
     await started;
     for (const current of spawned) {
-      (current.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-        current.child.emit("exit");
-        return true;
-      });
+      acknowledgeFakeChildClose(current.child, current.incarnation, current.slot);
     }
     await coordinator.close();
   });
@@ -1172,10 +1593,7 @@ describe("ManagedServerApplication", () => {
       endpoint: "http://127.0.0.1:2",
     });
     const handle = await started;
-    (replacement.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      replacement.child.emit("exit");
-      return true;
-    });
+    acknowledgeFakeChildClose(replacement.child, replacement.incarnation, replacement.slot);
     await handle.close();
   });
 
@@ -1216,10 +1634,7 @@ describe("ManagedServerApplication", () => {
       endpoint: "http://127.0.0.1:2",
     });
     const handle = await started;
-    (replacement.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      replacement.child.emit("exit");
-      return true;
-    });
+    acknowledgeFakeChildClose(replacement.child, replacement.incarnation, replacement.slot);
     await handle.close();
   });
   it("sends a child READY fact only after local assembly and synchronization", async () => {
@@ -1364,6 +1779,13 @@ describe("ManagedServerApplication", () => {
       onMessage({ type: "ignored" }, undefined);
       expect(close).not.toHaveBeenCalled();
       onMessage({ type: "close" }, undefined);
+      await vi.waitFor(() => {
+        expect(send).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "delivery-drained" }),
+          expect.any(Function),
+        );
+      });
+      onMessage({ type: "finish-close" }, undefined);
       await expect.poll(() => close).toHaveBeenCalledOnce();
       await expect.poll(() => disconnect).toHaveBeenCalledOnce();
     } finally {
@@ -1381,7 +1803,7 @@ describe("ManagedServerApplication", () => {
     }
   });
 
-  it("closes a child when its parent IPC disconnects", async () => {
+  it("closes a drained child when its parent IPC disconnects before final close", async () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
     const priorSend = Object.getOwnPropertyDescriptor(process, "send");
     const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
@@ -1410,6 +1832,14 @@ describe("ManagedServerApplication", () => {
       });
       managedMessageListener(priorMessages)({ type: "activate" }, undefined);
       await starting;
+      managedMessageListener(priorMessages)({ type: "close" }, undefined);
+      await vi.waitFor(() => {
+        expect(send).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "delivery-drained" }),
+          expect.any(Function),
+        );
+      });
+      expect(close).not.toHaveBeenCalled();
       const onDisconnect = managedDisconnectListener(priorDisconnects);
       onDisconnect();
       process.off("disconnect", onDisconnect);
@@ -1430,74 +1860,6 @@ describe("ManagedServerApplication", () => {
       else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
     }
   });
-
-  it.each(["message", "disconnect"] as const)(
-    "contains a failed child close triggered by private %s and permits explicit retry",
-    async (trigger) => {
-      const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
-      const priorSend = Object.getOwnPropertyDescriptor(process, "send");
-      const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
-      const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
-      const priorMessages = new Set(process.listeners("message"));
-      const priorDisconnects = new Set(process.listeners("disconnect"));
-      const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
-        callback(null);
-        return true;
-      });
-      const disconnect = vi.fn();
-      Object.defineProperty(process, "send", { configurable: true, value: send });
-      Object.defineProperty(process, "connected", { configurable: true, value: true });
-      Object.defineProperty(process, "disconnect", { configurable: true, value: disconnect });
-      process.env.SPINE_MANAGED_SERVER_CHILD = "true";
-      const close = vi
-        .fn<() => Promise<void>>()
-        .mockRejectedValueOnce(new Error("event close failed"))
-        .mockResolvedValueOnce(undefined);
-      const unhandled = vi.fn();
-      process.once("unhandledRejection", unhandled);
-      try {
-        const starting = ManagedServerApplication.run({
-          processCount: 1,
-          port: 50_051,
-          moduleUrl: import.meta.url,
-          createServer: () => Promise.resolve(localRunningServer(close)),
-        });
-        await vi.waitFor(() => {
-          expect(send).toHaveBeenCalled();
-        });
-        managedMessageListener(priorMessages)({ type: "activate" }, undefined);
-        const handle = await starting;
-        if (trigger === "message")
-          managedMessageListener(priorMessages)({ type: "close" }, undefined);
-        else {
-          const onDisconnect = managedDisconnectListener(priorDisconnects);
-          onDisconnect();
-          process.off("disconnect", onDisconnect);
-        }
-        await new Promise((resolve) => setImmediate(resolve));
-        expect(unhandled).not.toHaveBeenCalled();
-        await expect(handle.close()).resolves.toBeUndefined();
-        expect(close).toHaveBeenCalledTimes(2);
-        expect(disconnect).toHaveBeenCalledOnce();
-      } finally {
-        process.off("unhandledRejection", unhandled);
-        if (priorSend === undefined) delete (process as { send?: unknown }).send;
-        else Object.defineProperty(process, "send", priorSend);
-        if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
-        else Object.defineProperty(process, "connected", priorConnected);
-        if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
-        else Object.defineProperty(process, "disconnect", priorDisconnect);
-        for (const listener of process.listeners("message")) {
-          if (!priorMessages.has(listener)) process.off("message", listener);
-        }
-        for (const listener of process.listeners("disconnect")) {
-          if (!priorDisconnects.has(listener)) process.off("disconnect", listener);
-        }
-        if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
-        else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
-      }
-    },
-  );
 
   it("closes local assembly when a marked child has no parent IPC", async () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
@@ -1568,7 +1930,7 @@ describe("ManagedServerApplication", () => {
   it("starts one separate complete child for an explicit single-replica cohort", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 1,
-      port: 50_051,
+      port: 0,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -1629,6 +1991,7 @@ describe("ManagedServerApplication", () => {
       child.on("message", (message: { readonly type?: string }) => {
         if (message.type === "synchronizing") child.send({ type: "activate" });
         else if (message.type === "ready") resolve();
+        else if (message.type === "delivery-drained") child.send({ type: "finish-close" });
       });
     });
 
@@ -1649,7 +2012,7 @@ describe("ManagedServerApplication", () => {
     try {
       const managed = await ManagedServerApplication.run({
         processCount: 1,
-        port: 50_051,
+        port: 0,
         moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
         createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
       });
@@ -1663,7 +2026,7 @@ describe("ManagedServerApplication", () => {
   it("starts four distinct child processes for one managed cohort", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 4,
-      port: 50_051,
+      port: 0,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -1699,7 +2062,7 @@ describe("ManagedServerApplication", () => {
   it("reports each child's actual local listener only after that child is ready", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 1,
-      port: 50_051,
+      port: 0,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -1716,7 +2079,7 @@ describe("ManagedServerApplication", () => {
     const startedAt = Date.now();
     const managed = await ManagedServerApplication.run({
       processCount: 1,
-      port: 50_051,
+      port: 0,
       moduleUrl: new URL("./managed-server-application-gated-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -1733,7 +2096,7 @@ describe("ManagedServerApplication", () => {
   it("replaces only the unexpected child exit and retains its surviving sibling", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 2,
-      port: 50_051,
+      port: 0,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -1791,7 +2154,7 @@ describe("ManagedServerApplication", () => {
   it("does not restart a child that the managed cohort closes", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 1,
-      port: 50_051,
+      port: 0,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
       restart: { initialDelayMs: 1, maximumDelayMs: 1, healthyReadyMs: 1 },

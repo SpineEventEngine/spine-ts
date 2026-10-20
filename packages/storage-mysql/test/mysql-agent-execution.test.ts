@@ -19,6 +19,7 @@ import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { VersionSchema } from "@spine-event-engine/proto";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import {
+  AgentAcceptedInvocationSchema,
   AgentExecutionCompletionSchema,
   AgentExecutionHeadSchema,
   AgentExecutionRecordSchema,
@@ -89,11 +90,16 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
         executionHeadBytes: 65_535,
         historyRecordBytes: 65_535,
       });
-      await expect(storage.admit(original)).resolves.toMatchObject({ accepted: original });
-      await expect(storage.pending({ count: 1 })).resolves.toMatchObject({
-        hasMore: false,
-        records: [{ accepted: original }],
-      });
+      const reopenedAdmission = await storage.admit(original);
+      expect(toBinary(AgentAcceptedInvocationSchema, required(reopenedAdmission.accepted))).toEqual(
+        toBinary(AgentAcceptedInvocationSchema, original),
+      );
+      const pending = await storage.pending({ count: 1 });
+      expect(pending.hasMore).toBe(false);
+      expect(pending.records).toHaveLength(1);
+      expect(
+        toBinary(AgentAcceptedInvocationSchema, required(pending.records[0]?.accepted)),
+      ).toEqual(toBinary(AgentAcceptedInvocationSchema, original));
       const claim = await storage.claim(
         key,
         "mysql-token",
@@ -118,7 +124,9 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
       const concurrentKey = required(concurrent.key);
       const other = AgentExecutionStorageFactories.create(reopened, input);
       const admitted = await Promise.all([storage.admit(concurrent), other.admit(concurrent)]);
-      expect(admitted[0]).toEqual(admitted[1]);
+      expect(toBinary(AgentExecutionRecordSchema, admitted[0])).toEqual(
+        toBinary(AgentExecutionRecordSchema, admitted[1]),
+      );
       const expiry = create(TimestampSchema, { seconds: 4_000_000_000n });
       const claims = await Promise.all([
         storage.claim(concurrentKey, "mysql-first", expiry),
@@ -179,7 +187,9 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
           historyEntries: [oversized],
         }),
       ).rejects.toThrow(/history record exceeds MySQL BLOB capacity/i);
-      await expect(storage.read(staleKey)).resolves.toEqual(staleClaim);
+      expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(staleKey)))).toEqual(
+        toBinary(AgentExecutionRecordSchema, staleClaim),
+      );
       await expect(
         storage.complete({
           key: staleKey,
@@ -189,7 +199,9 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
           historyEntries: [entry],
         }),
       ).rejects.toThrow(/Version/i);
-      await expect(storage.read(staleKey)).resolves.toEqual(staleClaim);
+      expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(staleKey)))).toEqual(
+        toBinary(AgentExecutionRecordSchema, staleClaim),
+      );
       const history = AgentHistoryStorageFactories.create(reopened, {
         context: input.entity.context,
         stateType: input.stateType,
@@ -261,7 +273,9 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
       ).rejects.toThrow(/immutable/i);
       const current = reopened.createRecordStorage(input.entity.context, input.entity.recordSpec);
       await expect(current.read(collisionId)).resolves.toBeUndefined();
-      await expect(storage.read(collisionKey)).resolves.toEqual(collisionClaim);
+      expect(
+        toBinary(AgentExecutionRecordSchema, required(await storage.read(collisionKey))),
+      ).toEqual(toBinary(AgentExecutionRecordSchema, collisionClaim));
       current.close();
       retained.close();
       const [indexes] = await pool.query<IndexRow[]>(

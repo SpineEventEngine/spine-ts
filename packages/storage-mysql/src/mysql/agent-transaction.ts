@@ -12,51 +12,16 @@
  * the License.
  */
 
-import { createHash } from "node:crypto";
 import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 
 /**
- * Identifies one Entity commit in MySQL's server advisory-lock namespace.
+ * Coordinates native MySQL Agent execution transactions.
  */
-export interface MysqlEntityLockIdentity {
+export class MysqlAgentTransaction {
   // prettier-ignore
 
   /**
-   * Names the MySQL database containing the Entity families.
-   */
-  readonly databaseName: string;
-
-  /**
-   * Identifies the Entity.
-   */
-  readonly entityKey: string;
-
-  /**
-   * Names the Entity source type.
-   */
-  readonly sourceTypeName: string;
-}
-
-/**
- * Calculates MySQL's fixed-width advisory-lock key for one Entity identity.
- *
- * @param identity Identifies the Entity commit.
- * @returns Returns the advisory-lock key.
- */
-export function mysqlEntityLockKey(identity: MysqlEntityLockIdentity): string {
-  return createHash("sha256")
-    .update([identity.databaseName, identity.sourceTypeName, identity.entityKey].join("\u0000"))
-    .digest("hex");
-}
-
-/**
- * Coordinates one-connection Entity commits.
- */
-export class MysqlEntityCommitCoordinator {
-  // prettier-ignore
-
-  /**
-   * Creates an Entity commit coordinator.
+   * Creates an Agent execution transaction helper.
    *
    * @param connections Acquires and releases MySQL connections.
    */
@@ -68,33 +33,24 @@ export class MysqlEntityCommitCoordinator {
   ) {}
 
   /**
-   * Commits one Entity mutation with a transaction or advisory lock.
+   * Commits one fenced Agent mutation in a native transaction.
    *
    * @param tables Lists participating physical tables.
-   * @param key Identifies the advisory lock.
    * @param work Performs the connection-bound mutation.
-   * @param options Requires a transaction when the caller cannot use an advisory lock.
    * @typeParam T The mutation result type.
    * @returns Returns the work result.
    */
   async commit<T>(
     tables: readonly string[],
-    key: string,
-    work: (connection: PoolConnection, transactional: boolean) => Promise<T>,
-    options: { readonly requireTransaction?: boolean } = {},
+    work: (connection: PoolConnection) => Promise<T>,
   ): Promise<T> {
     const connection = await this.connections.acquire();
-    let locked = false;
     try {
       const transactional = await this.allTransactional(connection, tables);
-      if (!transactional && options.requireTransaction)
-        throw new Error("MySQL delivery cleanup requires transactional record tables.");
-      if (transactional) return await this.commitTransaction(connection, work);
-      await this.acquireLock(connection, key);
-      locked = true;
-      return await work(connection, false);
+      if (!transactional)
+        throw new Error("MySQL Agent execution requires transactional record tables.");
+      return await this.commitTransaction(connection, work);
     } finally {
-      if (locked) await connection.execute("SELECT RELEASE_LOCK(?)", [key]).catch(() => undefined);
       this.connections.release(connection);
     }
   }
@@ -129,17 +85,17 @@ export class MysqlEntityCommitCoordinator {
    */
   private async commitTransaction<T>(
     connection: PoolConnection,
-    work: (connection: PoolConnection, transactional: boolean) => Promise<T>,
+    work: (connection: PoolConnection) => Promise<T>,
   ): Promise<T> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         await connection.beginTransaction();
-        const result = await work(connection, true);
+        const result = await work(connection);
         await connection.commit();
         return result;
       } catch (error) {
         await connection.rollback().catch(() => undefined);
-        if (attempt === 0 && isDeadlock(error)) continue;
+        if (attempt === 0 && this.isDeadlock(error)) continue;
         throw error;
       }
     }
@@ -147,26 +103,16 @@ export class MysqlEntityCommitCoordinator {
   }
 
   /**
-   * Acquires the advisory lock for a non-transactional commit.
+   * Checks whether a failed transaction may be retried once after a deadlock.
    *
-   * @param connection Provides the lock connection.
-   * @param key Identifies the advisory lock.
-   * @returns Resolves after the lock is acquired.
+   * @param error Native MySQL failure.
+   * @returns Whether the error identifies an InnoDB deadlock.
    */
-  private async acquireLock(connection: PoolConnection, key: string): Promise<void> {
-    const [rows] = await connection.execute<(RowDataPacket & { acquired: number | string })[]>(
-      "SELECT GET_LOCK(?, ?) AS acquired",
-      [key, 30],
+  private isDeadlock(error: unknown): boolean {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      (error as { code?: unknown }).code === "ER_LOCK_DEADLOCK"
     );
-    if (rows[0]?.acquired !== 1 && rows[0]?.acquired !== "1")
-      throw new Error("Unable to acquire MySQL entity lock.");
   }
-}
-
-function isDeadlock(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { code?: unknown }).code === "ER_LOCK_DEADLOCK"
-  );
 }

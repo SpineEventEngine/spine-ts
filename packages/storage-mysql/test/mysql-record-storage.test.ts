@@ -33,6 +33,23 @@ import { resolvedMysqlTableSpec } from "../src/mysql/table-spec.js";
 import { MysqlStorageSchemaError } from "../src/mysql/errors.js";
 
 describe("MysqlRecordStorage", () => {
+  it("binds each legacy scalar-list member and makes an empty list match no rows", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const storage = schemaStorage(
+      readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+    );
+
+    await storage.queryEntries({ filters: [{ column: "value", value: ["one", "two", "one"] }] });
+    const listed = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(listed?.sql).toContain("(`value` <=> ? OR `value` <=> ? OR `value` <=> ?)");
+    expect(listed?.values?.slice(0, 3)).toEqual(["one", "two", "one"]);
+
+    calls.length = 0;
+    await storage.queryEntries({ filters: [{ column: "value", value: [] }] });
+    const empty = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(empty?.sql).toContain("WHERE 1=0");
+    expect(empty?.values).not.toContain([]);
+  });
   it("pushes an admitted normalized equality plan into bound SQL through production execution", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const storage = schemaStorage(
@@ -634,7 +651,6 @@ describe("MysqlRecordStorage", () => {
   });
 
   it("rejects a divergent immutable insert race without an overwrite", async () => {
-    let reads = 0;
     const calls: string[] = [];
     const connection = {
       query: (sql: string) =>
@@ -645,20 +661,17 @@ describe("MysqlRecordStorage", () => {
         calls.push(sql);
         if (sql.startsWith("SELECT bytes"))
           return Promise.resolve([
-            reads++ === 0
-              ? []
-              : [
-                  {
-                    bytes: toBinary(
-                      StringValueSchema,
-                      create(StringValueSchema, { value: "other" }),
-                    ),
-                  },
-                ],
+            [{ bytes: toBinary(StringValueSchema, create(StringValueSchema, { value: "other" })) }],
             [],
           ] as never);
-        if (sql.startsWith("INSERT IGNORE"))
-          return Promise.resolve([{ affectedRows: 0 }, []] as never);
+        if (sql.startsWith("INSERT INTO"))
+          return Promise.reject(
+            Object.assign(new Error("duplicate"), {
+              code: "ER_DUP_ENTRY",
+              errno: 1062,
+              sqlMessage: "Duplicate entry for key 'PRIMARY'",
+            }),
+          );
         return Promise.resolve([{ affectedRows: 1 }, []] as never);
       },
     };
@@ -681,7 +694,6 @@ describe("MysqlRecordStorage", () => {
   });
 
   it("accepts an identical immutable insert race without an overwrite", async () => {
-    let reads = 0;
     const record = create(StringValueSchema, { value: "one" });
     const connection = {
       query: (sql: string) =>
@@ -690,12 +702,15 @@ describe("MysqlRecordStorage", () => {
           : Promise.resolve([[], []] as never),
       execute: (sql: string) => {
         if (sql.startsWith("SELECT bytes"))
-          return Promise.resolve([
-            reads++ === 0 ? [] : [{ bytes: toBinary(StringValueSchema, record) }],
-            [],
-          ] as never);
-        if (sql.startsWith("INSERT IGNORE"))
-          return Promise.resolve([{ affectedRows: 0 }, []] as never);
+          return Promise.resolve([[{ bytes: toBinary(StringValueSchema, record) }], []] as never);
+        if (sql.startsWith("INSERT INTO"))
+          return Promise.reject(
+            Object.assign(new Error("duplicate"), {
+              code: "ER_DUP_ENTRY",
+              errno: 1062,
+              sqlMessage: "Duplicate entry for key 'PRIMARY'",
+            }),
+          );
         throw new Error(sql);
       },
     };
@@ -712,6 +727,77 @@ describe("MysqlRecordStorage", () => {
       () => undefined,
     );
     await expect(storage.writeImmutable(record)).resolves.toBeUndefined();
+  });
+
+  it("retries an immutable insert when the colliding row disappears", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls, { select: () => [] });
+    const originalExecute = connection.execute;
+    let inserts = 0;
+    connection.execute = (sql: string, values?: readonly unknown[]) => {
+      if (sql.startsWith("INSERT INTO") && ++inserts === 1)
+        return Promise.reject(
+          Object.assign(new Error("duplicate"), {
+            code: "ER_DUP_ENTRY",
+            errno: 1062,
+            sqlMessage: "Duplicate entry for key 'PRIMARY'",
+          }),
+        );
+      return originalExecute(sql, values);
+    };
+    const storage = stringStorage(connection);
+
+    await expect(
+      storage.writeImmutable(create(StringValueSchema, { value: "one" })),
+    ).resolves.toBeUndefined();
+    expect(inserts).toBe(2);
+  });
+
+  it("bounds immutable insert contention when every collision disappears", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls, { select: () => [] });
+    const originalExecute = connection.execute;
+    let inserts = 0;
+    connection.execute = (sql: string, values?: readonly unknown[]) => {
+      if (sql.startsWith("INSERT INTO")) {
+        inserts += 1;
+        return Promise.reject(
+          Object.assign(new Error("duplicate"), {
+            code: "ER_DUP_ENTRY",
+            errno: 1062,
+            sqlMessage: "Duplicate entry for key 'PRIMARY'",
+          }),
+        );
+      }
+      return originalExecute(sql, values);
+    };
+    const storage = stringStorage(connection);
+
+    await expect(
+      storage.writeImmutable(create(StringValueSchema, { value: "one" })),
+    ).rejects.toThrow(/contention exceeded/i);
+    expect(inserts).toBe(3);
+  });
+
+  it("preserves an unrelated uniqueness failure instead of treating it as an ID race", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls);
+    const originalExecute = connection.execute;
+    const duplicate = Object.assign(new Error("driver detail"), {
+      code: "ER_DUP_ENTRY",
+      errno: 1062,
+      sqlMessage: "Duplicate entry for key 'other_unique'",
+    });
+    connection.execute = (sql: string, values?: readonly unknown[]) =>
+      sql.startsWith("INSERT INTO") ? Promise.reject(duplicate) : originalExecute(sql, values);
+    const storage = stringStorage(connection);
+
+    await expect(
+      storage.writeImmutable(create(StringValueSchema, { value: "one" })),
+    ).rejects.toMatchObject({ cause: duplicate });
+    await expect(
+      storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" })),
+    ).rejects.toMatchObject({ cause: duplicate });
   });
 
   it("lazily creates one resolved family table before the first write", async () => {
@@ -966,8 +1052,8 @@ describe("MysqlRecordStorage", () => {
       create(StringValueSchema, { value: "two" }),
     ]);
 
-    expect(calls).toContain("BEGIN");
-    expect(calls).toContain("COMMIT");
+    expect(calls).not.toContain("BEGIN");
+    expect(calls).not.toContain("COMMIT");
     expect(calls.some((call) => call.startsWith("DELETE FROM"))).toBe(true);
     expect(calls.some((call) => call.startsWith("SELECT ID, bytes"))).toBe(true);
   });
@@ -1028,31 +1114,230 @@ describe("MysqlRecordStorage", () => {
     expect(insert?.values).toEqual(expect.arrayContaining([true, 1, 1n, raw, 7]));
   });
 
-  it("uses the bound connection for nested work and rolls back a stale compare-and-set", async () => {
+  it("keeps a completed batch prefix without beginning a transaction", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
-    const encoded = toBinary(StringValueSchema, create(StringValueSchema, { value: "actual" }));
-    const connection = readyConnection(calls, {
-      select: () => [{ bytes: encoded }],
-    });
-    let acquired = 0;
-    const storage = stringStorage(connection, () => acquired++);
+    const connection = readyConnection(calls);
+    const originalExecute = connection.execute;
+    connection.execute = (sql: string, values?: readonly unknown[]) => {
+      if (sql.startsWith("INSERT INTO") && values?.[0] === "second") {
+        calls.push({ sql, values });
+        return Promise.reject(new Error("later write failed"));
+      }
+      return originalExecute(sql, values);
+    };
+    const storage = stringStorage(connection);
 
-    await storage.withConnection(connection as never, () =>
-      storage.withConnection(connection as never, () =>
-        storage.write(create(StringValueSchema, { value: "one" })),
-      ),
-    );
+    await expect(
+      storage.writeAll([
+        create(StringValueSchema, { value: "first" }),
+        create(StringValueSchema, { value: "second" }),
+      ]),
+    ).rejects.toThrow(/record operation failed/i);
+    expect(calls.filter(({ sql }) => sql.startsWith("INSERT INTO"))).toHaveLength(2);
+    expect(calls.map(({ sql }) => sql)).not.toContain("BEGIN");
+    expect(calls.map(({ sql }) => sql)).not.toContain("ROLLBACK");
+  });
+
+  it("guards a semantically equivalent stored encoding with its exact raw bytes", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const raw = Uint8Array.of(10, 1, 97, 10, 1, 97);
+    const storage = stringStorage(readyConnection(calls, { select: () => [{ bytes: raw }] }));
+
     await expect(
       storage.compareAndSet(
-        "actual",
-        create(StringValueSchema, { value: "expected" }),
+        "slot",
+        create(StringValueSchema, { value: "a" }),
+        create(StringValueSchema, { value: "b" }),
+      ),
+    ).resolves.toBe(true);
+
+    const update = calls.find(({ sql }) => sql.startsWith("UPDATE"));
+    expect(update?.sql).toContain("WHERE ID=? AND bytes=?");
+    expect(update?.values).toContain(raw);
+    expect(calls.map(({ sql }) => sql)).not.toContain("BEGIN");
+    expect(calls.some(({ sql }) => sql.includes("GET_LOCK"))).toBe(false);
+  });
+
+  it("rereads after a guard miss and rejects a changed expected record", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    let reads = 0;
+    const connection = readyConnection(calls, {
+      select: () => [
+        {
+          bytes: toBinary(
+            StringValueSchema,
+            create(StringValueSchema, { value: reads++ === 0 ? "first" : "rival" }),
+          ),
+        },
+      ],
+    });
+    const originalExecute = connection.execute;
+    connection.execute = (sql: string, values?: readonly unknown[]) =>
+      sql.startsWith("UPDATE")
+        ? (calls.push({ sql, ...(values === undefined ? {} : { values }) }),
+          Promise.resolve([{ affectedRows: 0 }, []] as never))
+        : originalExecute(sql, values);
+    const storage = stringStorage(connection);
+
+    await expect(
+      storage.compareAndSet(
+        "slot",
+        create(StringValueSchema, { value: "first" }),
         create(StringValueSchema, { value: "next" }),
       ),
     ).resolves.toBe(false);
+    expect(reads).toBe(2);
+    expect(calls.filter(({ sql }) => sql.startsWith("UPDATE"))).toHaveLength(1);
+  });
 
-    expect(acquired).toBe(1);
-    expect(calls.map((call) => call.sql)).toContain("ROLLBACK");
-    expect(calls.map((call) => call.sql)).not.toContain("COMMIT");
+  it("bounds repeated guard misses and accepts a same-value no-op", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const current = create(StringValueSchema, { value: "first" });
+    const connection = readyConnection(calls, {
+      select: () => [{ bytes: toBinary(StringValueSchema, current) }],
+    });
+    const originalExecute = connection.execute;
+    connection.execute = (sql: string, values?: readonly unknown[]) =>
+      sql.startsWith("UPDATE")
+        ? (calls.push({ sql, ...(values === undefined ? {} : { values }) }),
+          Promise.resolve([{ affectedRows: 0 }, []] as never))
+        : originalExecute(sql, values);
+    const storage = stringStorage(connection);
+
+    await expect(storage.compareAndSet("slot", current, current)).resolves.toBe(true);
+    expect(calls.some(({ sql }) => sql.startsWith("UPDATE"))).toBe(false);
+    await expect(
+      storage.compareAndSet("slot", current, create(StringValueSchema, { value: "next" })),
+    ).rejects.toThrow(/contention exceeded/i);
+    expect(calls.filter(({ sql }) => sql.startsWith("UPDATE"))).toHaveLength(3);
+  });
+
+  it("treats an absent delete as a no-op and rereads a primary-key insert collision", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    let reads = 0;
+    const rival = create(StringValueSchema, { value: "rival" });
+    const connection = readyConnection(calls, {
+      select: () => (reads++ < 2 ? [] : [{ bytes: toBinary(StringValueSchema, rival) }]),
+    });
+    const originalExecute = connection.execute;
+    connection.execute = (sql: string, values?: readonly unknown[]) => {
+      if (sql.startsWith("INSERT INTO")) {
+        calls.push({ sql, ...(values === undefined ? {} : { values }) });
+        return Promise.reject(
+          Object.assign(new Error("duplicate"), {
+            code: "ER_DUP_ENTRY",
+            errno: 1062,
+            sqlMessage: "Duplicate entry for key 'PRIMARY'",
+          }),
+        );
+      }
+      return originalExecute(sql, values);
+    };
+    const storage = stringStorage(connection);
+
+    await expect(storage.compareAndSet("slot", undefined, undefined)).resolves.toBe(true);
+    await expect(
+      storage.compareAndSet("slot", undefined, create(StringValueSchema, { value: "next" })),
+    ).resolves.toBe(false);
+    expect(calls.filter(({ sql }) => sql.startsWith("INSERT INTO"))).toHaveLength(1);
+  });
+
+  it("rereads a conditional delete miss before reporting a changed expected record", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    let reads = 0;
+    const connection = readyConnection(calls, {
+      select: () => {
+        const value = reads++ === 0 ? "first" : "rival";
+        return [{ bytes: toBinary(StringValueSchema, create(StringValueSchema, { value })) }];
+      },
+    });
+    const originalExecute = connection.execute;
+    connection.execute = (sql: string, values?: readonly unknown[]) => {
+      if (sql.startsWith("DELETE")) {
+        calls.push({ sql, ...(values === undefined ? {} : { values }) });
+        return Promise.resolve([{ affectedRows: 0 }, []] as never);
+      }
+      return originalExecute(sql, values);
+    };
+    const storage = stringStorage(connection);
+
+    await expect(
+      storage.compareAndSet("slot", create(StringValueSchema, { value: "first" }), undefined),
+    ).resolves.toBe(false);
+    expect(reads).toBe(2);
+    expect(calls.filter(({ sql }) => sql.startsWith("DELETE"))).toHaveLength(1);
+  });
+
+  it("deletes a matching row through its raw-byte guard", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const current = create(StringValueSchema, { value: "first" });
+    const storage = stringStorage(
+      readyConnection(calls, { select: () => [{ bytes: toBinary(StringValueSchema, current) }] }),
+    );
+
+    await expect(storage.compareAndSet("slot", current, undefined)).resolves.toBe(true);
+    expect(calls.find(({ sql }) => sql.startsWith("DELETE"))?.sql).toContain(
+      "WHERE ID=? AND bytes=?",
+    );
+  });
+
+  it("preserves a non-Error connection failure without retrying it", async () => {
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const storage = new MysqlRecordStorage(
+      { name: "records", multitenant: false },
+      spec,
+      new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
+      {
+        databaseName: "test",
+        // Drivers may reject with a non-Error value; exercise cause preservation.
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        acquire: () => Promise.reject("connection unavailable"),
+        release: () => undefined,
+      },
+      () => undefined,
+    );
+
+    await expect(
+      storage.compareAndSet("slot", undefined, create(StringValueSchema, { value: "next" })),
+    ).rejects.toMatchObject({ cause: "connection unavailable" });
+  });
+
+  it("rejects a non-object immutable insert failure without classifying it as a collision", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls);
+    const originalExecute = connection.execute;
+    connection.execute = (sql: string, values?: readonly unknown[]) =>
+      // Drivers may reject with a non-Error value; exercise collision classification.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      sql.startsWith("INSERT INTO") ? Promise.reject(null) : originalExecute(sql, values);
+    const storage = stringStorage(connection);
+
+    await expect(
+      storage.writeImmutable(create(StringValueSchema, { value: "one" })),
+    ).rejects.toMatchObject({ cause: null });
+  });
+
+  it("retries a deadlock with a fresh conditional attempt", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls);
+    const originalExecute = connection.execute;
+    let reads = 0;
+    connection.execute = (sql: string, values?: readonly unknown[]) => {
+      if (sql.startsWith("SELECT bytes") && reads++ === 0)
+        return Promise.reject(Object.assign(new Error("deadlock"), { code: "ER_LOCK_DEADLOCK" }));
+      return originalExecute(sql, values);
+    };
+    const storage = stringStorage(connection);
+
+    await expect(
+      storage.compareAndSet("slot", undefined, create(StringValueSchema, { value: "next" })),
+    ).resolves.toBe(true);
+    expect(reads).toBe(2);
+    expect(calls.some(({ sql }) => sql === "BEGIN" || sql === "ROLLBACK")).toBe(false);
   });
 
   it("pushes ID filtering, descending ID order, and offset-only windows into SQL", async () => {
@@ -1138,50 +1423,18 @@ describe("MysqlRecordStorage", () => {
     expect(calls.at(-1)).toContain("ID > ?");
   });
 
-  it("locks the existing row before compare-and-set", async () => {
-    const calls: string[] = [];
-    let acquired: number | string = "1";
-    const connection = {
-      query: (sql: string) =>
-        Promise.resolve(
-          sql.includes("information_schema.columns")
-            ? ([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never)
-            : sql.includes("information_schema.tables")
-              ? ([[{ engine: "MyISAM" }], []] as never)
-              : ([[], []] as never),
-        ),
-      execute: (sql: string) => {
-        calls.push(sql);
-        if (sql.startsWith("SELECT GET_LOCK"))
-          return Promise.resolve([[{ acquired }], []] as never);
-        return Promise.resolve(
-          sql.startsWith("SELECT") ? ([[], []] as never) : ([{ affectedRows: 1 }, []] as never),
-        );
-      },
-      beginTransaction: () => Promise.resolve(),
-      commit: () => Promise.resolve(),
-      rollback: () => Promise.resolve(),
-    };
-    const spec = new RecordSpec({
-      recordType: StringValueSchema,
-      idKind: "string",
-      extractId: (record) => record.value,
-    });
-    const storage = new MysqlRecordStorage(
-      { name: "records", multitenant: false },
-      spec,
-      new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      lifecycle(connection),
-      () => undefined,
-    );
-    await storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" }));
-    expect(calls.find((sql) => sql.startsWith("SELECT bytes"))).toContain("FOR UPDATE");
-    expect(calls).toContain("SELECT GET_LOCK(?, ?) AS acquired");
-    expect(calls).toContain("SELECT RELEASE_LOCK(?)");
-    acquired = 0;
+  it("uses a conditional insert without session locks", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const connection = readyConnection(calls);
+    const storage = stringStorage(connection);
+
     await expect(
-      storage.compareAndSet("two", undefined, create(StringValueSchema, { value: "two" })),
-    ).rejects.toThrow(/acquire/i);
+      storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" })),
+    ).resolves.toBe(true);
+    expect(calls.some(({ sql }) => sql.startsWith("INSERT INTO"))).toBe(true);
+    expect(calls.some(({ sql }) => sql.includes("GET_LOCK") || sql.includes("FOR UPDATE"))).toBe(
+      false,
+    );
   });
 });
 

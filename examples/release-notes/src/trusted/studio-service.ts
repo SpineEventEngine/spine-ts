@@ -1531,7 +1531,7 @@ export class ReleaseStudio {
 
   /**
    * Checks whether account, model, and new-generation changes must remain locked.
-   * Unknown and completed-pending-delivery phases remain locked.
+   * Unknown and completed-pending-commands phases remain locked.
    *
    * @returns Whether any accepted or uncertain generation is nonterminal.
    */

@@ -42,6 +42,7 @@ import {
   EventStore,
   InMemoryStorageFactory,
   RecordColumn,
+  StorageGroup,
   type StorageContext,
   type StorageFactory,
   type StorageMode,
@@ -51,6 +52,12 @@ import {
   AgentHistoryStorageFactories,
   TenantBoundary,
 } from "@spine-event-engine/storage/provider";
+
+/**
+ * Storage family shared by paired System Event publication and trusted reads.
+ * @internal
+ */
+export const systemEventGroup: StorageGroup = new StorageGroup("spine_system_events");
 
 import { CommandBus, commandBusAccess } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
@@ -233,9 +240,9 @@ interface RepositoryRegistration {
   readonly ai?: AiRegistry;
 
   /**
-   * Validates and freezes normal Event recipients before saved output transport.
+   * Hands a completed Agent Event once to the normal Event publisher.
    */
-  readonly prepareSavedEvent: (event: Event) => Promise<AgentSavedDispatchPlan>;
+  readonly publishAgentEvent: (event: Event) => Promise<void>;
 
   /**
    * Validates and freezes the normal Command recipient before transport.
@@ -243,24 +250,19 @@ interface RepositoryRegistration {
   readonly prepareSavedCommand: (command: Command) => Promise<AgentSavedDispatchPlan>;
 
   /**
-   * Accepts the original Event and every frozen recipient through the normal bus.
-   */
-  readonly publishSavedEvent: (event: Event, plan: AgentSavedDispatchPlan) => Promise<void>;
-
-  /**
    * Accepts the original Command and frozen recipient through the normal bus.
    */
   readonly publishSavedCommand: (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>;
 
   /**
-   * Persists the original mandatory Agent System Event in the paired System Context's EventStore.
+   * Hands an Agent System Event to the paired context publisher with contained dispatch failures.
    */
   readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
 
   /**
-   * Notifies package testing after a saved original output is acknowledged.
+   * Notifies package testing after a saved outgoing Command is acknowledged.
    */
-  readonly recordAcceptedSaved: (signal: Command | Event) => void;
+  readonly recordAcceptedSaved: (signal: Command) => void;
 
   /**
    * Wakes indexed Agent work discovery after an accepted Inbox handoff.
@@ -1150,13 +1152,14 @@ export class BoundedContext {
       registerSystemEventSchema: (schema) => {
         eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
       },
-      prepareSavedEvent: (event) => eventBusAccess.prepareSaved(this.#eventBus, event),
+      publishAgentEvent: (event) =>
+        event.context?.rejection === undefined
+          ? this.#publisher.publishEvent(event)
+          : this.#publisher.publishRejectionEvent(event),
       prepareSavedCommand: (command) => commandBusAccess.prepareSaved(this.#commandBus, command),
-      publishSavedEvent: (event, plan) =>
-        eventBusAccess.postSavedFollowUp(this.#eventBus, event, plan),
       publishSavedCommand: (command, plan) =>
         commandBusAccess.postSavedFollowUp(this.#commandBus, command, plan),
-      publishAgentSystemEvent: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
+      publishAgentSystemEvent: (event) => this.#publisher.publishSystemEvent(event),
       recordAcceptedSaved: (signal) => {
         this.#publisher.recordAcceptedSaved(signal);
       },
@@ -1320,7 +1323,7 @@ export class BoundedContext {
    * - single-tenant contexts reject `tenantId`;
    * - multitenant contexts require the exact non-blank `tenantId`;
    * - process-local sequential execution on the same EventBus runtime queue as
-   *   live event intake and stored redispatch.
+   *   live event intake.
    *
    * Unsupported boundary:
    * - Delivery jobs, schedulers, inbox lifecycle, retries, and transport
@@ -1371,14 +1374,8 @@ export class BoundedContext {
   }
 
   /**
-   * Closes this context's buses, Stand, and repository storage and runtime bindings.
-   *
-   * Close is idempotent and returns the same close outcome on repeated calls.
-   * The context attempts every close hook; when any hook fails, the
-   * returned promise rejects with an `AggregateError` after the remaining hooks
-   * have also been attempted.
-   *
-   * @returns A promise that settles after all resources close.
+   * Closes this context's buses, Stand, repository storage, and runtime bindings.
+   * @returns Completion or an aggregate of close failures.
    */
   close(): Promise<void> {
     this.#beginClose();
@@ -1387,7 +1384,7 @@ export class BoundedContext {
   }
 
   /**
-   * Stops admission to this context's signal and bus work.
+   * Stops external admission while accepted follow-ups drain.
    */
   #beginClose(): void {
     closingContexts.add(this);
@@ -1404,9 +1401,10 @@ export class BoundedContext {
    * @returns Completion after the context's accepted work settles.
    */
   async #drainWork(): Promise<void> {
+    this.#beginClose();
     const errors: unknown[] = [];
-    await ContextParts.closeContextPart(() => ContextParts.closeIntegration(this), errors);
-    await ContextParts.closeContextPart(
+    await this.#closePart(() => ContextParts.closeIntegration(this), errors);
+    await this.#closePart(
       () =>
         ContextParts.drainContextWork(
           this.#commandBus,
@@ -1427,29 +1425,15 @@ export class BoundedContext {
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
-    await ContextParts.closeContextPart(() => this.#agentScheduler?.close(), errors);
-
-    await ContextParts.closeContextPart(() => this.#drainWork(), errors);
-    this.#publisher.finishClose();
-    await ContextParts.closeContextPart(
-      () => commandBusAccess.finishClose(this.#commandBus),
-      errors,
-    );
-    await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
-    this.#subscriptionRuntime.beginClose();
-    await ContextParts.closeContextPart(() => eventBusAccess.drain(this.#systemEventBus), errors);
-    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.drainClose(), errors);
-    await ContextParts.closeContextPart(
-      () => eventBusAccess.finishClose(this.#systemEventBus),
-      errors,
-    );
-    await ContextParts.closeContextPart(() => this.#stand.close(), errors);
-    await ContextParts.closeContextPart(() => this.#systemStand.close(), errors);
-    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.finishClose(), errors);
-    await ContextParts.closeContextPart(() => {
+    await this.#closePart(() => this.#agentScheduler?.close(), errors);
+    await this.#closePart(() => this.#drainWork(), errors);
+    await this.#closeBuses(errors);
+    await this.#closePart(() => this.#stand.close(), errors);
+    await this.#closePart(() => this.#systemStand.close(), errors);
+    await this.#closePart(() => this.#subscriptionRuntime.finishClose(), errors);
+    await this.#closePart(() => {
       ContextParts.requireTenantIndex(this).close();
     }, errors);
-
     await this.#closeRepositories(errors);
     if (errors.length > 0) {
       this.#closed = undefined;
@@ -1459,17 +1443,42 @@ export class BoundedContext {
   }
 
   /**
+   * Closes bus intake and subscription drains before the Stands.
+   *
+   * @param errors Collects independent close failures.
+   * @returns Completion after bounded bus close attempts.
+   */
+  async #closeBuses(errors: unknown[]): Promise<void> {
+    this.#publisher.finishClose();
+    await this.#closePart(() => commandBusAccess.finishClose(this.#commandBus), errors);
+    await this.#closePart(() => eventBusAccess.finishClose(this.#eventBus), errors);
+    this.#subscriptionRuntime.beginClose();
+    await this.#closePart(() => eventBusAccess.drain(this.#systemEventBus), errors);
+    await this.#closePart(() => this.#subscriptionRuntime.drainClose(), errors);
+    await this.#closePart(() => eventBusAccess.finishClose(this.#systemEventBus), errors);
+  }
+
+  /**
    * Clears repository runtime registration after Stand closure.
    *
    * @param errors Failures collected during context closure.
    */
   async #closeRepositories(errors: unknown[]): Promise<void> {
     for (const repository of this.#repositoryViews) {
-      await ContextParts.closeContextPart(() => {
+      await this.#closePart(() => {
         repositoryAccess.clearRuntime(repository);
         registeredRepositories.delete(repository);
       }, errors);
     }
+  }
+
+  /**
+   * Calls a close action and collects its failure before later cleanup.
+   * @param work Close action.
+   * @param errors Collects close failures.
+   */
+  async #closePart(work: () => unknown, errors: unknown[]): Promise<void> {
+    await ContextParts.closeContextPart(work, errors);
   }
 }
 
@@ -2188,23 +2197,12 @@ export class BoundedContextBuilder {
    * Rejects Agent outcomes whose raw matching dispatcher cannot bind a saved plan.
    */
   #checkAgentOutputBindings(agents: readonly RepositoryView[]): void {
-    const rawEvents = new Set(
-      [...this.#eventDispatchers].flatMap((dispatcher) =>
-        dispatcher.messageSchemas().map((schema) => TypeUrls.derive(schema)),
-      ),
-    );
     const rawCommands = new Set(
       [...this.#commandDispatchers].flatMap((dispatcher) =>
         dispatcher.messageSchemas().map((schema) => TypeUrls.derive(schema)),
       ),
     );
     for (const repository of agents) {
-      if (
-        repositoryAccess
-          .producedEventSchemas(repository)
-          .some((schema) => rawEvents.has(TypeUrls.derive(schema)))
-      )
-        throw new TypeError("Agent Event output requires a durable dispatcher binding.");
       if (
         repositoryAccess
           .producedCommandSchemas(repository)
@@ -2270,7 +2268,7 @@ export class BoundedContextBuilder {
   ): ContextSystemBuses {
     const systemSpec = ContextParts.createSystemSpec(this.#specSnapshot, this.#persistSystemEvents);
     const systemEventStore = systemSpec.storesEvents
-      ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory)
+      ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory, systemEventGroup)
       : undefined;
     if (systemEventStore !== undefined) resources.systemEventStore = systemEventStore;
     const systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
@@ -2758,11 +2756,7 @@ const ContextParts = Object.freeze({
     ai?: AiRegistry,
   ): BoundedContext {
     return constructBoundedContext({
-      snapshot: {
-        name: specSnapshot.name,
-        tenantMode: ContextParts.toTenantMode(specSnapshot.multitenant),
-        spec: specSnapshot,
-      },
+      snapshot: ContextParts.snapshotFor(specSnapshot),
       commandBus: buses.commandBus,
       eventBus: buses.eventBus,
       systemEventBus: buses.systemEventBus,
@@ -2777,6 +2771,20 @@ const ContextParts = Object.freeze({
       ...(ai === undefined ? {} : { ai }),
       token: frameworkConstructionToken,
     });
+  },
+
+  /**
+   * Captures public context identity from the build specification.
+   *
+   * @param specSnapshot Prepared context specification.
+   * @returns Immutable context metadata input.
+   */
+  snapshotFor(specSnapshot: ContextSpecSnapshot): BoundedContextSnapshot {
+    return {
+      name: specSnapshot.name,
+      tenantMode: ContextParts.toTenantMode(specSnapshot.multitenant),
+      spec: specSnapshot,
+    };
   },
 
   /**
@@ -3986,9 +3994,8 @@ const ContextParts = Object.freeze({
       publisher: registration.publisher,
       registerEventSchema: registration.registerEventSchema,
       registerSystemEventSchema: registration.registerSystemEventSchema,
-      prepareSavedEvent: registration.prepareSavedEvent,
+      publishAgentEvent: registration.publishAgentEvent,
       prepareSavedCommand: registration.prepareSavedCommand,
-      publishSavedEvent: registration.publishSavedEvent,
       publishSavedCommand: registration.publishSavedCommand,
       publishAgentSystemEvent: registration.publishAgentSystemEvent,
       recordAcceptedSaved: registration.recordAcceptedSaved,

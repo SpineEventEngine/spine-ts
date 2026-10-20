@@ -13,6 +13,11 @@
  */
 
 import { expect, test } from "@playwright/test";
+import { fromBinary } from "@bufbuild/protobuf";
+import { TypeUrls } from "@spine-event-engine/core";
+import { SubscriptionSchema } from "@spine-event-engine/proto/client";
+import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
+import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
 
 test("posts and reads a real MessageBoard Projection through the local gateway", async ({
   page,
@@ -42,6 +47,8 @@ test("posts and reads a real MessageBoard Projection through the local gateway",
   await expect(posted.getByText(message)).toBeVisible();
   await expect(posted.getByText("just now")).toBeVisible();
   await expect(messages.getByRole("listitem").last()).toContainText(message);
+  await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Post message" })).toBeEnabled();
 });
 
 test("keeps live updates connected beyond the former local timeout", async ({ page }, testInfo) => {
@@ -86,7 +93,21 @@ test("keeps two stock browser tabs live through alternating posts after the form
 
   const sender = await page.context().newPage();
   const failures: string[] = [];
-  const cancellationResponses: string[] = [];
+  const cancellationTargets: { readonly id: string; readonly type: string }[] = [];
+  const postedType = TypeUrls.derive(MessagePostedSchema);
+  const rejectedType = TypeUrls.derive(MessageAlreadyPostedSchema);
+  const expectPostCancellation = async (prior: ReadonlySet<string>): Promise<void> => {
+    await expect
+      .poll(() => {
+        const recent = cancellationTargets.filter((target) => !prior.has(target.id));
+        return [postedType, rejectedType].map(
+          (type) =>
+            new Set(recent.filter((target) => target.type === type).map((target) => target.id))
+              .size,
+        );
+      })
+      .toEqual([1, 1]);
+  };
   for (const browserPage of [page, sender]) {
     browserPage.on("console", (message) => {
       if (message.type() === "error") failures.push(`console: ${message.text()}`);
@@ -97,7 +118,22 @@ test("keeps two stock browser tabs live through alternating posts after the form
       if (response.status() >= 500)
         failures.push(`${String(response.status())}: ${response.url()}`);
       if (response.url().endsWith("/spine.client.SubscriptionService/Cancel")) {
-        cancellationResponses.push(`${String(response.status())}: ${response.url()}`);
+        const body = response.request().postDataBuffer();
+        const contentType = response.request().headers()["content-type"] ?? "";
+        if (body === null) {
+          failures.push("Cancel request had no body");
+          return;
+        }
+        try {
+          const bytes = contentType.includes("grpc-web") ? body.subarray(5) : body;
+          const subscription = fromBinary(SubscriptionSchema, bytes);
+          cancellationTargets.push({
+            id: subscription.id?.value ?? "",
+            type: subscription.topic?.target?.type ?? "",
+          });
+        } catch {
+          failures.push("Cancel request could not be decoded");
+        }
       }
     });
   }
@@ -106,9 +142,10 @@ test("keeps two stock browser tabs live through alternating posts after the form
     await sender.goto("/");
     await expect(page.getByRole("status")).toHaveText("Updating live");
     await expect(sender.getByRole("status")).toHaveText("Updating live");
-    cancellationResponses.length = 0;
+    cancellationTargets.length = 0;
 
     for (let sequence = 1; sequence <= 8; sequence += 1) {
+      const prior = new Set(cancellationTargets.map((target) => target.id));
       const writer = sequence % 2 === 0 ? sender : page;
       const message = `alternating live message ${String(sequence)} ${String(Date.now())}`;
       await writer.getByRole("textbox", { name: "Username" }).fill(`writer-${String(sequence)}`);
@@ -120,9 +157,11 @@ test("keeps two stock browser tabs live through alternating posts after the form
       await expect(sender.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible({
         timeout: 15_000,
       });
+      await expectPostCancellation(prior);
     }
 
     await page.waitForTimeout(stabilityObservationMilliseconds);
+    const prior = new Set(cancellationTargets.map((target) => target.id));
     const message = `after former timeout ${String(Date.now())}`;
     await sender.getByRole("textbox", { name: "Username" }).fill("post-timeout-writer");
     await sender.getByRole("textbox", { name: "Message" }).fill(message);
@@ -133,9 +172,16 @@ test("keeps two stock browser tabs live through alternating posts after the form
     await expect(sender.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible({
       timeout: 15_000,
     });
+    await expectPostCancellation(prior);
     await expect(page.getByRole("status")).toHaveText("Updating live");
     await expect(sender.getByRole("status")).toHaveText("Updating live");
-    expect(cancellationResponses).toEqual([]);
+    expect(new Set(cancellationTargets.map((target) => target.id)).size).toBe(18);
+    expect(
+      cancellationTargets.every(
+        (target) =>
+          target.id.length > 0 && (target.type === postedType || target.type === rejectedType),
+      ),
+    ).toBe(true);
     expect(failures).toEqual([]);
   } finally {
     await sender.close();

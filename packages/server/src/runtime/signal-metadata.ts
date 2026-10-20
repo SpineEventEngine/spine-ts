@@ -23,7 +23,7 @@ import {
   type Any,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Time, type TimeProvider } from "@spine-event-engine/core";
+import { AnyMessages, SignalEnvelopes, Time, type TimeProvider } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -217,18 +217,8 @@ export class SignalMetadata {
    * @returns Origin that preserves actor and grand-origin context.
    */
   originFromCommand(command: Command): Origin {
-    return create(OriginSchema, {
-      message: this.#messageId(
-        AnyMessages.pack(CommandIdSchema, this.#commandId(command)),
-        command.message?.typeUrl,
-      ),
-      ...(command.context?.actorContext === undefined
-        ? {}
-        : { actorContext: clone(ActorContextSchema, command.context.actorContext) }),
-      ...(command.context?.origin === undefined
-        ? {}
-        : { grandOrigin: clone(OriginSchema, command.context.origin) }),
-    });
+    this.#commandId(command);
+    return SignalEnvelopes.originFromCommand(command);
   }
 
   /**

@@ -48,15 +48,6 @@
     "rule": "standalone-function",
     "file": "packages/storage-postgres/src/postgres/record-storage.ts",
     "kind": "function-declaration",
-    "identity": "retryable()#1",
-    "name": "retryable",
-    "disposition": "necessity",
-    "reason": "TypeScript PostgreSQL transaction boundary: retryable remains standalone because compare-and-set retries share the exact SQLSTATE admission rule."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/storage-postgres/src/postgres/record-storage.ts",
-    "kind": "function-declaration",
     "identity": "operationError()#1",
     "name": "operationError",
     "disposition": "necessity",

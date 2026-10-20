@@ -14,7 +14,8 @@
 
 import { execFileSync } from "node:child_process";
 import { createRouterTransport } from "@connectrpc/connect";
-import { create } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -22,8 +23,13 @@ import { join, resolve } from "node:path";
 import { expect, it, vi } from "vitest";
 import { ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
-import { Client } from "@spine-event-engine/client-node";
+import {
+  Client,
+  type CreateSubscriptionOptions,
+  type Subscription,
+} from "@spine-event-engine/client-node";
 import { AnyMessages } from "@spine-event-engine/core";
+import type { Topic } from "@spine-event-engine/proto/client";
 import { BoundedContext } from "@spine-event-engine/server";
 
 import {
@@ -44,6 +50,11 @@ import { PlanModelSelection } from "../src/trusted/plan-model-selection.js";
 import { StudioAccountGate } from "../src/trusted/studio-account-gate.js";
 import { StudioWindowClose } from "../src/trusted/studio-window-close.js";
 
+type SubscriptionForwarder = (
+  topicOrSchemas: Topic | readonly GenMessage<Message>[],
+  options: CreateSubscriptionOptions,
+) => Promise<Subscription>;
+
 const delayRejectionDelivery = () => {
   const client = Client.usingTransport(
     createRouterTransport((router) => {
@@ -51,14 +62,14 @@ const delayRejectionDelivery = () => {
     }),
   );
   const prototype = Object.getPrototypeOf(client.asGuest()) as {
-    createSubscription: ReturnType<typeof client.asGuest>["createSubscription"];
+    createSubscription: SubscriptionForwarder;
   };
   const original = prototype.createSubscription;
   const release = Promise.withResolvers<undefined>();
   const seen: { draft: string; generation: string }[] = [];
   let created = 0;
   prototype.createSubscription = async function (this: unknown, ...args) {
-    const subscription = await Reflect.apply(original, this, args);
+    const subscription = await original.apply(this, args);
     if (++created === 2) {
       const updates = subscription.updates;
       Object.defineProperty(subscription, "updates", {
@@ -523,14 +534,14 @@ it("binds an accepted generation to its model and committed Git evidence through
     ).asGuest();
     const prototype = Object.getPrototypeOf(guest) as {
       post: (...args: unknown[]) => Promise<{ kind: string }>;
-      createSubscription: typeof guest.createSubscription;
+      createSubscription: SubscriptionForwarder;
     };
     const originalPost = prototype.post;
     const originalCreateSubscription = prototype.createSubscription;
     const deliveryHeld = Promise.withResolvers<undefined>();
     const releaseDelivery = Promise.withResolvers<undefined>();
     prototype.createSubscription = async function (this: unknown, ...args) {
-      const subscription = await Reflect.apply(originalCreateSubscription, this, args);
+      const subscription = await originalCreateSubscription.apply(this, args);
       const updates = subscription.updates;
       Object.defineProperty(subscription, "updates", {
         get: () => ({
@@ -565,7 +576,7 @@ it("binds an accepted generation to its model and committed Git evidence through
     }
     let cancelledExportSubscription = 0;
     prototype.createSubscription = async function (this: unknown, ...args) {
-      const subscription = await Reflect.apply(originalCreateSubscription, this, args);
+      const subscription = await originalCreateSubscription.apply(this, args);
       const cancel = subscription.cancel.bind(subscription);
       subscription.cancel = () => {
         cancelledExportSubscription++;
@@ -734,7 +745,7 @@ it.each(["second creation", "second activation"])(
     );
     const guest = dummyClient.asGuest();
     const prototype = Object.getPrototypeOf(guest) as {
-      createSubscription: typeof guest.createSubscription;
+      createSubscription: SubscriptionForwarder;
     };
     const original = prototype.createSubscription;
     const cancellations: (() => number)[] = [];
@@ -747,7 +758,7 @@ it.each(["second creation", "second activation"])(
     prototype.createSubscription = async function (this: unknown, ...args) {
       created++;
       if (created === 2 && failure === "second creation") throw new Error("Fixture create failed.");
-      const subscription = await Reflect.apply(original, this, args);
+      const subscription = await original.apply(this, args);
       const cancel = subscription.cancel.bind(subscription);
       let calls = 0;
       subscription.cancel = () => {
@@ -792,7 +803,7 @@ it("closes client and Bounded Context after subscription cancellation reports a 
   );
   const guest = dummyClient.asGuest();
   const prototype = Object.getPrototypeOf(guest) as {
-    createSubscription: typeof guest.createSubscription;
+    createSubscription: SubscriptionForwarder;
   };
   const original = prototype.createSubscription;
   const closedClient = vi.spyOn(
@@ -802,7 +813,7 @@ it("closes client and Bounded Context after subscription cancellation reports a 
   const closedContext = vi.spyOn(BoundedContext.prototype, "close");
   let created = 0;
   prototype.createSubscription = async function (this: unknown, ...args) {
-    const subscription = await Reflect.apply(original, this, args);
+    const subscription = await original.apply(this, args);
     if (++created === 1) {
       const cancel = subscription.cancel.bind(subscription);
       subscription.cancel = async () => {

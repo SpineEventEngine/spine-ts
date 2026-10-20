@@ -28,6 +28,13 @@ another terminal:
 pnpm --filter @spine-event-engine/example-todo smoke
 ```
 
+The [smoke client](scripts/smoke.mjs) uses `postAndSubscribe` to observe
+Command outcomes. It receives both `TaskCreated` and `TaskAssigned` for a task
+created with an assignee, selects alternative assignment Events and rejections,
+and checks a real rejection. It still reads the TaskList Projection to verify
+that the business state has caught up. Each subscription continues until the
+client explicitly cancels it.
+
 ```mermaid
 flowchart LR
   Client[Smoke client] --> App[One To-Do process]
@@ -56,8 +63,8 @@ pnpm --filter @spine-event-engine/example-todo start:postgresql
 ```
 
 With either server running, `pnpm --filter @spine-event-engine/example-todo smoke`
-posts a real To-Do command and reads the resulting task-list query through the
-selected backend. These are opt-in live checks: they use the database URL you
+runs the same Command/outcome scenarios and reads the resulting TaskList
+through the selected backend. These are opt-in live checks: they use the database URL you
 supply and do not create or start database containers.
 
 `TODO_STORAGE=memory` is explicit but optional because it is the default. The
@@ -66,6 +73,11 @@ it demonstrates shared replicas and Delivery rather than these local durable
 single-process choices.
 
 ### Multi-process app
+
+Shared Delivery is recommended when running multiple application processes.
+The single-process example above, including its SQL storage modes, uses local
+Delivery and needs no shared server. Database-only multi-process Delivery has
+local notifications; missed work may wait for periodic recovery.
 
 From the repository root, start the complete local demonstration with:
 
@@ -101,7 +113,12 @@ For example, `TODO_PROCESS_COUNT=3 TODO_DELIVERY_SHARD_COUNT=2` starts three
 complete app replicas with two Delivery shards. The launcher waits for the
 Coordinator's ready message and owns shutdown: normal exit, `Ctrl-C`, `SIGTERM`,
 and partial startup all stop only the processes and emulator container it made.
-The Datastore emulator holds data only while its container runs.
+The Datastore emulator holds data only while its container runs. The simple
+Delivery server also keeps its Inbox only in memory: restarting it can lose
+accepted pending Commands even if application business state survives in a
+separate store. Shared Delivery coordinates processes; it does not make that
+Inbox durable. See the separate [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers);
+the default 10-second scan is not a delivery or worker-takeover deadline.
 It observes the emulator's ready log, the Delivery server's exact
 `Delivery server listening at …` message, and the Coordinator ready message;
 if Delivery or the Coordinator exits before its message, the launcher reports

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
@@ -23,77 +23,60 @@ import {
   InternetDomainSchema,
   OriginSchema,
   TenantIdSchema,
+  type Event,
+  type EventId,
   type TenantId,
 } from "@spine-event-engine/proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskCreatedSchema,
+  TaskRenamedSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 
 import {
   EventStore,
   InMemoryStorageBackend,
   InMemoryStorageFactory,
+  RecordStorage,
+  StorageGroup,
   type RecordSpec,
-  type RecordStorage,
   type StorageContext,
-  type StorageGroup,
 } from "../../src/index.js";
-import { eventStoreAccess } from "../../src/internal/event-store.js";
+import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
 
 describe("EventStore", () => {
-  it("retries only a byte-identical saved Event while public append still rejects duplicates", async () => {
+  it("keeps a grouped Event family separate across reads and strict admission", async () => {
     const factory = new InMemoryStorageFactory();
-    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const original = createEvent("saved-1", "type.spine.io/tasks.TaskCreated", 1n);
-    await expect(eventStoreAccess.appendOrVerifyOriginal(store, original)).resolves.toEqual(
-      original,
-    );
-    await expect(eventStoreAccess.appendOrVerifyOriginal(store, original)).resolves.toEqual(
-      original,
-    );
-    await expect(store.append(original)).rejects.toThrow(/unique event IDs/);
-    const changed = createEvent("saved-1", "type.spine.io/tasks.TaskCreated", 2n);
-    await expect(eventStoreAccess.appendOrVerifyOriginal(store, changed)).rejects.toThrow(
-      /conflicts/,
-    );
-    await expect(store.read()).resolves.toEqual([original]);
-  });
+    const context = { name: "Tasks", multitenant: false } as const;
+    const domain = new EventStore(context, factory);
+    const system = new EventStore(context, factory, new StorageGroup("spine_system_events"));
+    const event = createEvent("shared-event-id", "created", 1n);
 
-  it("converges concurrent saved retries and isolates complete tenant scopes", async () => {
-    const backend = new InMemoryStorageBackend();
-    const context = { name: "Tasks", multitenant: true } as const;
-    const first = new EventStore(context, new InMemoryStorageFactory(backend));
-    const second = new EventStore(context, new InMemoryStorageFactory(backend));
-    const a = createEvent("shared-saved", "type.spine.io/tasks.TaskCreated", 1n, "tenant-a");
-    const b = createEvent("shared-saved", "type.spine.io/tasks.TaskCreated", 2n, "tenant-b");
-    await expect(
-      Promise.all([
-        eventStoreAccess.appendOrVerifyOriginal(first, a),
-        eventStoreAccess.appendOrVerifyOriginal(second, a),
-        eventStoreAccess.appendOrVerifyOriginal(second, b),
-      ]),
-    ).resolves.toHaveLength(3);
-    await expect(
-      readTenantEvents(new InMemoryStorageFactory(backend), tenant("tenant-a")),
-    ).resolves.toEqual([a]);
-    await expect(
-      readTenantEvents(new InMemoryStorageFactory(backend), tenant("tenant-b")),
-    ).resolves.toEqual([b]);
-  });
+    await domain.append(event);
+    await system.append(event);
+    expect(await domain.read()).toEqual([event]);
+    expect(await system.read()).toEqual([event]);
+    await expect(domain.accept(event)).rejects.toThrow();
+    await expect(system.accept(event)).rejects.toThrow();
 
-  it("preserves a caller result through the provider-only Event Store lock", async () => {
-    const factory = new InMemoryStorageFactory();
-    await expect(
-      eventStoreAccess.withLock(factory, { name: "Tasks", multitenant: false }, () =>
-        Promise.resolve("sentinel"),
-      ),
-    ).resolves.toBe("sentinel");
+    const groupedOnly = createEvent("grouped-only", "renamed", 2n);
+    await system.append(groupedOnly);
+    const groupedId = groupedOnly.id;
+    if (groupedId === undefined) throw new Error("Expected a generated Event ID.");
+    expect(await domain.read({ ids: [groupedId] })).toEqual([]);
+    expect(await system.read({ ids: [groupedId] })).toEqual([groupedOnly]);
   });
 
   it("persists generated Spine events through record storage", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
-    const earlier = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);
-    const later = createEvent("event-2", "type.spine.io/tasks.TaskRenamed", 2n);
+    const earlier = createEvent("event-1", "created", 1n);
+    const later = createEvent("event-2", "renamed", 2n);
 
     await store.appendAll([later, earlier]);
 
@@ -110,8 +93,8 @@ describe("EventStore", () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
 
-    await store.append(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n, "tenant-a"));
-    await store.append(createEvent("event-b", "type.spine.io/tasks.TaskCreated", 1n, "tenant-b"));
+    await store.append(createEvent("event-a", "created", 1n, "tenant-a"));
+    await store.append(createEvent("event-b", "created", 1n, "tenant-b"));
 
     await expect(readTenantEvents(factory, tenant("tenant-a"))).resolves.toMatchObject([
       { id: { value: "event-a" } },
@@ -124,7 +107,7 @@ describe("EventStore", () => {
   it("uses event envelope tenant for single-event append and accept", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
-    const event = createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n, "tenant-a");
+    const event = createEvent("event-a", "created", 1n, "tenant-a");
 
     await expect(store.accept(event)).resolves.toBeUndefined();
     await expect(store.append(event)).resolves.toBeUndefined();
@@ -136,7 +119,7 @@ describe("EventStore", () => {
 
     await expect(
       store.append(
-        createEvent("event-domain", "type.spine.io/tasks.TaskDomain", 2n, {
+        createEvent("event-domain", "created", 2n, {
           kind: "domain",
           value: "example.com",
         }),
@@ -148,7 +131,7 @@ describe("EventStore", () => {
 
     await expect(
       store.append(
-        createEvent("event-email", "type.spine.io/tasks.TaskEmail", 3n, {
+        createEvent("event-email", "created", 3n, {
           kind: "email",
           value: "owner@example.com",
         }),
@@ -162,7 +145,7 @@ describe("EventStore", () => {
   it("uses a past-message actor tenant and rejects accepting an existing ID", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
-    const event = createEvent("event-past", "type.spine.io/tasks.TaskCreated", 1n);
+    const event = createEvent("event-past", "created", 1n);
     if (event.context === undefined) throw new Error("Expected an event context.");
     event.context.origin = {
       case: "pastMessage",
@@ -193,9 +176,9 @@ describe("EventStore", () => {
       new InMemoryStorageFactory(),
     );
 
-    await expect(
-      store.append(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n)),
-    ).rejects.toThrow(/append requires an event tenant ID/);
+    await expect(store.append(createEvent("event-a", "created", 1n))).rejects.toThrow(
+      /append requires an event tenant ID/,
+    );
   });
 
   it("rejects a batch that crosses tenant boundaries", async () => {
@@ -206,8 +189,8 @@ describe("EventStore", () => {
 
     await expect(
       store.appendAll([
-        createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n, "tenant-a"),
-        createEvent("event-b", "type.spine.io/tasks.TaskCreated", 1n, "tenant-b"),
+        createEvent("event-a", "created", 1n, "tenant-a"),
+        createEvent("event-b", "created", 1n, "tenant-b"),
       ]),
     ).rejects.toThrow(/cannot contain events from different tenants/);
   });
@@ -217,8 +200,6 @@ describe("EventStore", () => {
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(store.appendAll([])).resolves.toBeUndefined();
-    const rollback = await store.appendAllWithRollback([]);
-    await expect(rollback.rollback()).resolves.toBeUndefined();
     expect(store.isOpen()).toBe(true);
 
     store.close();
@@ -234,7 +215,7 @@ describe("EventStore", () => {
     await expect(
       store.appendAll([
         create(EventSchema, {
-          message: create(AnySchema, { typeUrl: "type.spine.io/tasks.TaskCreated" }),
+          message: create(AnySchema, { typeUrl: "type.spine.io/spine.examples.todo.TaskCreated" }),
         }),
         create(EventSchema, {
           message: create(AnySchema, { typeUrl: "type.spine.io/tasks.TaskClosed" }),
@@ -252,7 +233,7 @@ describe("EventStore", () => {
       store.append(
         create(EventSchema, {
           id: create(EventIdSchema),
-          message: create(AnySchema, { typeUrl: "type.spine.io/tasks.TaskCreated" }),
+          message: create(AnySchema, { typeUrl: "type.spine.io/spine.examples.todo.TaskCreated" }),
         }),
       ),
     ).rejects.toThrow(/non-empty event\.id\.value/);
@@ -263,9 +244,9 @@ describe("EventStore", () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
-    await expect(
-      store.append(createEvent("   ", "type.spine.io/tasks.TaskCreated", 1n)),
-    ).rejects.toThrow(/non-empty event\.id\.value/);
+    await expect(store.append(createEvent("   ", "created", 1n))).rejects.toThrow(
+      /non-empty event\.id\.value/,
+    );
     await expect(store.read()).resolves.toEqual([]);
   });
 
@@ -275,12 +256,180 @@ describe("EventStore", () => {
     const first = new EventStore(context, factory);
     const second = new EventStore(context, factory);
 
-    await first.append(createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n));
+    await first.append(createEvent("event-1", "created", 1n));
 
-    await expect(
-      second.append(createEvent("event-1", "type.spine.io/tasks.TaskRenamed", 2n)),
-    ).rejects.toThrow(/unique event IDs/);
+    await expect(second.append(createEvent("event-1", "renamed", 2n))).rejects.toThrow(
+      /unique event IDs/,
+    );
     await expect(first.read()).resolves.toHaveLength(1);
+  });
+
+  it("accepts an identical immutable append from another store without rewriting it", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const second = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const event = createEvent("same-event", "created", 1n);
+
+    await first.append(event);
+    await expect(second.append(event)).resolves.toBeUndefined();
+    await expect(first.read()).resolves.toEqual([event]);
+  });
+
+  it("accepts concurrent identical immutable appends as one stored Event", async () => {
+    const backend = new InMemoryStorageBackend();
+    const first = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(backend),
+    );
+    const second = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(backend),
+    );
+    const event = createEvent("same-concurrent", "created", 1n);
+
+    await expect(Promise.all([first.append(event), second.append(event)])).resolves.toEqual([
+      undefined,
+      undefined,
+    ]);
+    await expect(first.read()).resolves.toEqual([event]);
+  });
+
+  it("retries an ordered batch after a failure before its later insert", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const records = [createEvent("first", "created", 1n), createEvent("second", "renamed", 2n)];
+    const original = Object.getOwnPropertyDescriptor(RecordStorage.prototype, "compareAndSet")
+      ?.value as InMemoryRecordStorage<EventId, Event>["compareAndSet"];
+    let failed = false;
+    const write = vi
+      .spyOn(InMemoryRecordStorage.prototype, "compareAndSet")
+      .mockImplementation(function (
+        this: InMemoryRecordStorage<EventId, Event>,
+        id,
+        expected,
+        next,
+      ) {
+        if ((id as EventId).value === "second" && !failed) {
+          failed = true;
+          return Promise.reject(new Error("failure before later insert"));
+        }
+        return original.call(this, id, expected, next);
+      });
+    try {
+      await expect(store.appendAll(records)).rejects.toThrow("failure before later insert");
+      await expect(store.read()).resolves.toEqual([records[0]]);
+      await expect(store.appendAll(records)).resolves.toBeUndefined();
+      await expect(store.read()).resolves.toEqual(records);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("retries the same batch after an ambiguous later insert without changing Event IDs", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const records = [createEvent("first", "created", 1n), createEvent("second", "renamed", 2n)];
+    const original = Object.getOwnPropertyDescriptor(RecordStorage.prototype, "compareAndSet")
+      ?.value as InMemoryRecordStorage<EventId, Event>["compareAndSet"];
+    let failed = false;
+    const write = vi
+      .spyOn(InMemoryRecordStorage.prototype, "compareAndSet")
+      .mockImplementation(async function (
+        this: InMemoryRecordStorage<EventId, Event>,
+        id,
+        expected,
+        next,
+      ) {
+        const inserted = await original.call(this, id, expected, next);
+        if ((id as EventId).value === "second" && !failed) {
+          failed = true;
+          throw new Error("response lost after insert");
+        }
+        return inserted;
+      });
+    try {
+      await expect(store.appendAll(records)).rejects.toThrow("response lost after insert");
+      await expect(store.appendAll(records)).resolves.toBeUndefined();
+      await expect(store.read()).resolves.toEqual(records);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("allows only one strict admission after competing callbacks pass the absence precheck", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const second = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const event = createEvent("contended", "created", 1n);
+    let admitted = 0;
+    let release: (() => void) | undefined;
+    let bothEntered: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      bothEntered = resolve;
+    });
+    const callback = async () => {
+      admitted += 1;
+      if (admitted === 2) bothEntered?.();
+      await gate;
+    };
+    const results = [
+      first.acceptThenAppend(event, callback),
+      second.acceptThenAppend(event, callback),
+    ];
+    await entered;
+    release?.();
+
+    const settled = await Promise.allSettled(results);
+    expect(admitted).toBe(2);
+    expect(settled.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(settled.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    await expect(first.read()).resolves.toEqual([event]);
+    await expect(first.acceptThenAppend(event, vi.fn())).rejects.toThrow(/unique event IDs/);
+  });
+
+  it("retries a vanished ID collision once and fails when no immutable row can be confirmed", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const original = Object.getOwnPropertyDescriptor(RecordStorage.prototype, "compareAndSet")
+      ?.value as InMemoryRecordStorage<EventId, Event>["compareAndSet"];
+    let attempts = 0;
+    const write = vi
+      .spyOn(InMemoryRecordStorage.prototype, "compareAndSet")
+      .mockImplementation(function (
+        this: InMemoryRecordStorage<EventId, Event>,
+        id,
+        expected,
+        next,
+      ) {
+        attempts += 1;
+        return attempts === 1 ? Promise.resolve(false) : original.call(this, id, expected, next);
+      });
+    try {
+      await expect(store.append(createEvent("vanished", "created", 1n))).resolves.toBeUndefined();
+      expect(attempts).toBe(2);
+    } finally {
+      write.mockRestore();
+    }
+
+    const lost = vi
+      .spyOn(InMemoryRecordStorage.prototype, "compareAndSet")
+      .mockResolvedValue(false);
+    try {
+      await expect(store.append(createEvent("never-present", "created", 1n))).rejects.toThrow(
+        /could not confirm its ID/,
+      );
+    } finally {
+      lost.mockRestore();
+    }
   });
 
   it("atomically rejects concurrent duplicate IDs across factories sharing a backend", async () => {
@@ -295,8 +444,8 @@ describe("EventStore", () => {
     );
 
     const results = await Promise.allSettled([
-      first.append(createEvent("shared-event", "type.spine.io/tasks.TaskCreated", 1n)),
-      second.append(createEvent("shared-event", "type.spine.io/tasks.TaskRenamed", 2n)),
+      first.append(createEvent("shared-event", "created", 1n)),
+      second.append(createEvent("shared-event", "renamed", 2n)),
     ]);
 
     expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
@@ -310,27 +459,34 @@ describe("EventStore", () => {
 
     await expect(
       store.appendAll([
-        createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
-        createEvent("event-1", "type.spine.io/tasks.TaskRenamed", 2n),
+        createEvent("event-1", "created", 1n),
+        createEvent("event-1", "renamed", 2n),
       ]),
     ).rejects.toThrow(/unique event IDs/);
     await expect(store.read()).resolves.toEqual([]);
   });
 
-  it("rolls back an inserted batch prefix when a later ID already exists", async () => {
+  it("retains an inserted batch prefix when a later ID already exists", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    await store.append(createEvent("event-existing", "type.spine.io/tasks.TaskCreated", 1n));
+    await store.append(createEvent("event-existing", "created", 1n));
 
     await expect(
       store.appendAll([
-        createEvent("event-prefix", "type.spine.io/tasks.TaskRenamed", 2n),
-        createEvent("event-existing", "type.spine.io/tasks.TaskClosed", 3n),
+        createEvent("event-prefix", "renamed", 2n),
+        createEvent("event-existing", "renamed", 3n),
       ]),
     ).rejects.toThrow(/unique event IDs/);
 
     await expect(store.read()).resolves.toMatchObject([
-      { id: { value: "event-existing" }, message: { typeUrl: "type.spine.io/tasks.TaskCreated" } },
+      {
+        id: { value: "event-existing" },
+        message: { typeUrl: "type.spine.io/spine.examples.todo.TaskCreated" },
+      },
+      {
+        id: { value: "event-prefix" },
+        message: { typeUrl: "type.spine.io/spine.examples.todo.TaskRenamed" },
+      },
     ]);
   });
 
@@ -340,66 +496,15 @@ describe("EventStore", () => {
       new NonAtomicEventStorageFactory(),
     );
 
-    await expect(
-      store.append(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n)),
-    ).rejects.toThrow(/requires atomic record compare-and-set/);
-  });
-
-  it.each(["reject", "throw"] as const)(
-    "reports append rollback failure when conditional removal must %s",
-    async (failure) => {
-      const store = new EventStore(
-        { name: "Tasks", multitenant: false },
-        new RollbackFailingEventStorageFactory(failure),
-      );
-      await store.append(createEvent("event-existing", "type.spine.io/tasks.TaskCreated", 1n));
-
-      await expect(
-        store.appendAll([
-          createEvent("event-prefix", "type.spine.io/tasks.TaskRenamed", 2n),
-          createEvent("event-existing", "type.spine.io/tasks.TaskClosed", 3n),
-        ]),
-      ).rejects.toThrow(/append rollback failed/);
-    },
-  );
-
-  it("rolls back appended events using cloned event IDs", async () => {
-    const factory = new InMemoryStorageFactory();
-    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const first = createEvent("event-delete-1", "type.spine.io/tasks.TaskCreated", 1n);
-
-    const rollback = await store.appendAllWithRollback([
-      first,
-      createEvent("event-delete-2", "type.spine.io/tasks.TaskRenamed", 2n),
-    ]);
-    first.id = create(EventIdSchema, { value: "event-mutated" });
-
-    await rollback.rollback();
-
-    await expect(store.read()).resolves.toEqual([]);
-    await store.append(createEvent("event-delete-1", "type.spine.io/tasks.TaskCreated", 3n));
-    await expect(rollback.rollback()).rejects.toThrow(
-      "Event rollback token has already been used.",
+    await expect(store.append(createEvent("event-a", "created", 1n))).rejects.toThrow(
+      /requires atomic record compare-and-set/,
     );
-    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-delete-1" } }]);
-  });
-
-  it("rejects rollback after close", async () => {
-    const factory = new InMemoryStorageFactory();
-    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const rollback = await store.appendAllWithRollback([
-      createEvent("event-after-close", "type.spine.io/tasks.TaskCreated", 1n),
-    ]);
-
-    store.close();
-
-    await expect(rollback.rollback()).rejects.toThrow(/closed/);
   });
 
   it("snapshots events before queued append work runs", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
-    const event = createEvent("event-before-mutation", "type.spine.io/tasks.TaskCreated", 1n);
+    const event = createEvent("event-before-mutation", "created", 1n);
 
     const append = store.append(event);
     event.id = create(EventIdSchema, { value: "event-after-mutation" });
@@ -417,12 +522,27 @@ type TenantInput =
       readonly value: string;
     };
 
-function createEvent(id: string, typeUrl: string, seconds: bigint, tenantId?: TenantInput) {
+function createEvent(
+  id: string,
+  kind: "created" | "renamed",
+  seconds: bigint,
+  tenantId?: TenantInput,
+) {
+  const taskId = create(TaskIdSchema, { value: "task-1" });
+  const payload =
+    kind === "created"
+      ? create(TaskCreatedSchema, {
+          id: taskId,
+          title: "Task",
+          taskListId: create(TaskListIdSchema, { value: "list-1" }),
+        })
+      : create(TaskRenamedSchema, { id: taskId, title: "Renamed" });
+  const schema = kind === "created" ? TaskCreatedSchema : TaskRenamedSchema;
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     message: create(AnySchema, {
-      typeUrl,
-      value: new Uint8Array([1, 2, 3]),
+      typeUrl: `type.spine.io/${schema.typeName}`,
+      value: toBinary(schema, payload as never),
     }),
     context: createEventContext(seconds, tenantId),
   });
@@ -478,29 +598,6 @@ class NonAtomicEventStorageFactory extends InMemoryStorageFactory {
   ): RecordStorage<I, R> {
     const storage = super.onCreateRecordStorage(context, recordSpec, group);
     Object.defineProperty(storage, "atomicCompareAndSet", { value: false });
-    return storage;
-  }
-}
-
-class RollbackFailingEventStorageFactory extends InMemoryStorageFactory {
-  constructor(private readonly failure: "reject" | "throw") {
-    super();
-  }
-
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-    group?: StorageGroup,
-  ): RecordStorage<I, R> {
-    const storage = super.onCreateRecordStorage(context, recordSpec, group);
-    const compareAndSet = storage.compareAndSet.bind(storage);
-    storage.compareAndSet = async (id, expected, next) => {
-      if (next === undefined && expected !== undefined) {
-        if (this.failure === "throw") throw new Error("Rollback transport failed.");
-        return false;
-      }
-      return compareAndSet(id, expected, next);
-    };
     return storage;
   }
 }

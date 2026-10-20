@@ -32,7 +32,6 @@ import { ColumnTypes, RecordColumn, RecordSpec, StorageFactory } from "@spine-ev
 import {
   AgentExecutionStorageFactories,
   AgentHistoryStorageFactories,
-  DeliveryCleanupStorageFactories,
   EntityCommitStorageFactories,
 } from "@spine-event-engine/storage/provider";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
@@ -252,9 +251,6 @@ class RecoveryCutStorageFactory extends StorageFactory {
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => EntityCommitStorageFactories.create(native, input),
     });
-    DeliveryCleanupStorageFactories.register(this, {
-      createDeliveryCleanupStorage: () => DeliveryCleanupStorageFactories.create(native),
-    });
     AgentExecutionStorageFactories.register(this, {
       createAgentExecutionStorage: (input) => this.executionHandle(input),
     });
@@ -392,6 +388,7 @@ class RecoveryCutStorageFactory extends StorageFactory {
       const page = await handle.pending({ count: 10 });
       return {
         recordStatus: key?.status,
+        handlerCalls: SupportRecoveryAgent.draftCalls,
         acceptedActor: key?.accepted?.actor?.actor?.value,
         acceptedTenant: key?.accepted?.actor?.tenantId?.kind.value,
         keyBytes: this.lastAcceptedKey
@@ -411,9 +408,8 @@ class RecoveryCutStorageFactory extends StorageFactory {
         attemptResponses: key?.journal
           .filter((entry) => entry.evidence.case === "attempt")
           .map((entry) => entry.evidence.value.response.case),
-        outgoing: key?.completion?.outgoing.map((entry) => ({
-          kind: entry.signal.case,
-          id: entry.signal.value?.id?.value,
+        pendingCommands: key?.completion?.commands.map((entry) => ({
+          id: entry.command?.id?.uuid,
           delivered: entry.delivered,
           targets: entry.plan?.targets.map((target) => ({
             kind: target.kind,
@@ -911,18 +907,27 @@ async function run() {
       .filter(Boolean);
     const version = (await built.stand().readVersioned(stateSchema, id, stateScope))?.version
       ?.number;
-    const events = await box.eventually(
-      () =>
-        box
-          .assertEvents()
-          .map(
-            (event) =>
-              event.message && AnyMessages.unpack(event.message, SupportReplyDraftedSchema),
-          )
-          .filter(Boolean),
-      (items) => items.length === 1,
-      { timeoutMs: ["complete", "fanout", "tool-read"].includes(cutName) ? 60_000 : 10_000 },
-    );
+    const events =
+      cutName === "fanout"
+        ? box
+            .assertEvents()
+            .map(
+              (event) =>
+                event.message && AnyMessages.unpack(event.message, SupportReplyDraftedSchema),
+            )
+            .filter(Boolean)
+        : await box.eventually(
+            () =>
+              box
+                .assertEvents()
+                .map(
+                  (event) =>
+                    event.message && AnyMessages.unpack(event.message, SupportReplyDraftedSchema),
+                )
+                .filter(Boolean),
+            (items) => items.length === 1,
+            { timeoutMs: ["complete", "tool-read"].includes(cutName) ? 60_000 : 10_000 },
+          );
     await send({
       kind: "recovered",
       ...(tenantResponse ? await storage.probeExecution() : {}),
@@ -932,6 +937,18 @@ async function run() {
       operations,
       historyCount: history.items.length,
       physicalRequests: backend.requests().length,
+      handlerCalls: SupportRecoveryAgent.draftCalls,
+      publicExecutionStatus:
+        cutName === "fanout" && expectedKey
+          ? await built
+              .getRepository(SupportRecoveryAgent)
+              .agentExecution(
+                id,
+                fromBinary(AgentInvocationKeySchema, Buffer.from(expectedKey, "base64"))
+                  .sourceSignal.id.value,
+                {},
+              )
+          : undefined,
       ...(["fanout", "tool-read"].includes(cutName) ? await storage.probeExecution() : {}),
     });
   } finally {

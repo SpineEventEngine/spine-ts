@@ -231,10 +231,10 @@ enum AgentInvocationStatus {
   // An exclusive token may update the current invocation.
   AGENT_INVOCATION_ACTIVE = 2;
 
-  // Handler work committed while output delivery remains pending.
-  AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY = 3;
+  // Handler work committed while outgoing Commands remain pending.
+  AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS = 3;
 
-  // Handler work and all outgoing delivery were accepted.
+  // Handler work completed with no remaining Command obligations.
   AGENT_INVOCATION_COMPLETED = 4;
 
   // Execution ended with retained failure or uncertain effect evidence.
@@ -675,22 +675,16 @@ message AgentExecutionJournalEntry {
   }
 }
 
-// Closed saved-output dispatcher roles, independent of registration position.
+// Closed saved-Command dispatcher roles, independent of registration position.
 enum AgentSavedTargetKind {
   // No saved dispatcher is selected.
   AGENT_SAVED_TARGET_UNSPECIFIED = 0;
 
-  // A generated repository accepts this Event.
-  AGENT_SAVED_REPOSITORY_EVENT = 1;
-
   // A generated repository accepts this Command.
-  AGENT_SAVED_REPOSITORY_COMMAND = 2;
-
-  // A generated standalone handler accepts this Event.
-  AGENT_SAVED_STANDALONE_EVENT = 3;
+  AGENT_SAVED_REPOSITORY_COMMAND = 1;
 
   // A generated standalone handler accepts this Command.
-  AGENT_SAVED_STANDALONE_COMMAND = 4;
+  AGENT_SAVED_STANDALONE_COMMAND = 2;
 }
 
 // Generated repository family used when rebinding an accepted recipient.
@@ -738,27 +732,22 @@ message AgentSavedDispatchPlan {
   repeated AgentSavedDispatchTarget targets = 1 [(validate) = true];
 }
 
-// Original outgoing envelope retained until normal delivery accepts its ID.
-message AgentOutgoingSignal {
-  // Original envelope and ID for normal delivery.
-  oneof signal {
-    option (choice).required = true;
+// Original outgoing Command retained until normal delivery accepts its ID.
+message AgentOutgoingCommand {
+  // Native Command emitted by a selected command reaction.
+  spine.core.Command command = 1 [
+    (required) = true,
+    (validate) = true
+  ];
 
-    // Native Event emitted by the completed Agent transition.
-    spine.core.Event event = 1 [(validate) = true];
+  // Normal delivery accepted this Command's original message ID.
+  bool delivered = 2;
 
-    // Native Command emitted by a selected command reaction.
-    spine.core.Command command = 2 [(validate) = true];
-  }
-
-  // Normal delivery accepted this envelope's original message ID.
-  bool delivered = 3;
-
-  // Frozen target plan persisted before any transport side effect.
-  AgentSavedDispatchPlan plan = 4 [(validate) = true];
+  // Frozen Command target plan persisted before any transport side effect.
+  AgentSavedDispatchPlan plan = 3 [(validate) = true];
 }
 
-// Terminal transition result and pending delivery obligations.
+// Terminal transition result and pending Command obligations.
 message AgentExecutionCompletion {
   // Version read before execution of the selected handlers.
   spine.core.Version initial_version = 1 [
@@ -775,8 +764,8 @@ message AgentExecutionCompletion {
   // Current per-model preferences made visible with completion.
   repeated spine.ts.agent.ModelPreference preferences = 3 [(validate) = true];
 
-  // Original outgoing signals and delivery state.
-  repeated AgentOutgoingSignal outgoing = 4 [(validate) = true];
+  // Original outgoing Commands and delivery state.
+  repeated AgentOutgoingCommand commands = 4 [(validate) = true];
 }
 
 // Complete provider record for one accepted Agent signal.
@@ -787,7 +776,7 @@ message AgentExecutionRecord {
     (validate) = true
   ];
 
-  // Current execution and delivery phase.
+  // Current execution and pending-Command phase.
   AgentInvocationStatus status = 2 [(required) = true];
 
   // Exact exclusive claim token; absent before claim or after release.
@@ -805,7 +794,7 @@ message AgentExecutionRecord {
   // Preference changes waiting for atomic transition completion.
   repeated spine.ts.agent.ModelPreference staged_preferences = 7 [(validate) = true];
 
-  // Committed transition result and remaining delivery obligations.
+  // Committed transition result and remaining Command obligations.
   AgentExecutionCompletion completion = 8 [(validate) = true];
 
   // Safe diagnostic for a terminal invocation failure.

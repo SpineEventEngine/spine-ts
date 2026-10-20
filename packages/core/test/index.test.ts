@@ -29,6 +29,7 @@ import {
   EventIdSchema,
   EventSchema,
   FieldPathSchema,
+  OriginSchema,
   type ProtoModule,
   TemplateStringSchema,
   TenantIdSchema,
@@ -1208,6 +1209,61 @@ describe("@spine-event-engine/core envelope packing", () => {
     context.actorContext.actor.value = "mutated-user";
 
     expect(first.context?.actorContext?.actor?.value).toBe("user-1");
+  });
+
+  it("preserves the full Command actor context and previous origin for Event matching", () => {
+    const prior = SignalEnvelopes.command({
+      context: commandContext(),
+      schema: TestCreateProjectSchema,
+      message: create(TestCreateProjectSchema, { memberId: ["prior-project"] }),
+    });
+    const grandOrigin = SignalEnvelopes.originFromCommand(prior);
+    const actorContext = create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "author" }),
+      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+      timestamp: { seconds: 1_700_000_000n, nanos: 123_456_789 },
+      zoneId: { value: "Europe/Lisbon" },
+    });
+    const command = SignalEnvelopes.command({
+      context: create(CommandContextSchema, { actorContext, origin: grandOrigin }),
+      schema: TestCreateProjectSchema,
+      message: create(TestCreateProjectSchema, { memberId: ["next-project"] }),
+    });
+    const origin = SignalEnvelopes.originFromCommand(command);
+
+    expect(origin.message?.typeUrl).toBe(TypeUrls.derive(TestCreateProjectSchema));
+    expect(AnyMessages.unpack(origin.message?.id ?? create(AnySchema), CommandIdSchema)).toEqual(
+      command.id,
+    );
+    expect(origin.actorContext).toEqual(actorContext);
+    expect(origin.grandOrigin).toEqual(grandOrigin);
+    if (actorContext.actor === undefined || grandOrigin.actorContext?.actor === undefined)
+      throw new Error("Expected actor contexts in both Command origins.");
+    actorContext.actor.value = "mutated";
+    grandOrigin.actorContext.actor.value = "mutated";
+    expect(origin.actorContext?.actor?.value).toBe("author");
+    expect(origin.grandOrigin?.actorContext?.actor?.value).toBe("user-1");
+  });
+
+  it("rejects a Command without a usable ID before creating an Event origin", () => {
+    const message = AnyMessages.pack(
+      TestCreateProjectSchema,
+      create(TestCreateProjectSchema, { memberId: ["project"] }),
+    );
+    expect(() => SignalEnvelopes.originFromCommand(create(CommandSchema, { message }))).toThrow(
+      "non-empty Command ID",
+    );
+    expect(() =>
+      SignalEnvelopes.originFromCommand(
+        create(CommandSchema, { id: create(CommandIdSchema, { uuid: "  " }), message }),
+      ),
+    ).toThrow("non-empty Command ID");
+    const minimal = SignalEnvelopes.originFromCommand(
+      create(CommandSchema, { id: create(CommandIdSchema, { uuid: "valid-id" }), message }),
+    );
+    expect(minimal.actorContext).toBeUndefined();
+    expect(minimal.grandOrigin).toBeUndefined();
+    expect(fromBinary(OriginSchema, toBinary(OriginSchema, minimal))).toEqual(minimal);
   });
 
   it("creates distinct fresh event IDs and clones contexts", () => {

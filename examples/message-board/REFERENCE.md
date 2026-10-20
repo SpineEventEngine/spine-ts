@@ -48,11 +48,19 @@ heard while disconnected is missed: reconnect first queries current board
 state, then resumes live updates.
 
 The web UI exposes one lifecycle badge: exact `connected` is `Updating live`;
-all other lifecycle states are `No live updates`. The status does not govern
-command availability because a post and post-success Query refresh do not rely
-on a live subscription. The message textarea posts on Command+Enter or
+all other lifecycle states are `No live updates`. The status describes the board-view subscription, independently of each post.
+The form activates separate outcome subscriptions before sending a Command;
+failed activation prevents posting. The message textarea posts on Command+Enter or
 Control+Enter, preserves plain Enter for multiline text, and ignores shortcuts
 while IME composition is active.
+
+`PostForm` uses `postAndSubscribe` with `MessagePosted` and
+`MessageAlreadyPosted`. Its posting acknowledgement is separate from those
+outcomes. A first-update timeout displays a waiting notice without resending or
+closing observation; late confirmation remains valid. The application cancels
+this per-post subscription after handling the outcome or retiring the form.
+The board-view Entity subscription keeps delivering updates and has no
+first-update warning for an idle board.
 
 ## Verification and interoperability
 

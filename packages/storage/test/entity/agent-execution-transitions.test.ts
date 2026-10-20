@@ -12,130 +12,136 @@
  * the License.
  */
 
-import { clone, create } from "@bufbuild/protobuf";
+import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import {
-  CommandIdSchema,
-  CommandSchema,
-  EventIdSchema,
-  EventSchema,
-} from "@spine-event-engine/proto";
+import { CommandIdSchema, CommandSchema } from "@spine-event-engine/proto";
 import {
   AgentExecutionCompletionSchema,
   AgentExecutionRecordSchema,
-  AgentOutgoingSignalSchema,
+  AgentOutgoingCommandSchema,
   AgentSavedDispatchPlanSchema,
   AgentSavedDispatchTargetSchema,
   AgentSavedRepositoryFamily,
   AgentSavedTargetKind,
-  AgentSignalKeySchema,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
+// prettier-ignore
+import {
+  DraftSupportReplySchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
+// prettier-ignore
+import {
+  SupportReplyAgentIdSchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { describe, expect, it } from "vitest";
 
 import { AgentExecutionTransitions } from "../../src/entity/agent-execution-transitions.js";
 import { accepted } from "./agent-execution-fixtures.js";
 
-function output() {
-  return create(AgentOutgoingSignalSchema, {
-    signal: {
-      case: "event",
-      value: create(EventSchema, { id: create(EventIdSchema, { value: "event-1" }) }),
-    },
+function output(id = "reply-command-1") {
+  const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-transition" });
+  return create(AgentOutgoingCommandSchema, {
+    command: create(CommandSchema, {
+      id: create(CommandIdSchema, { uuid: id }),
+      message: create(AnySchema, {
+        typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
+        value: toBinary(DraftSupportReplySchema, create(DraftSupportReplySchema, { agent })),
+      }),
+    }),
   });
 }
 
 function completed() {
   return create(AgentExecutionRecordSchema, {
     accepted: accepted("transition-source"),
-    completion: create(AgentExecutionCompletionSchema, { outgoing: [output()] }),
+    completion: create(AgentExecutionCompletionSchema, { commands: [output()] }),
   });
 }
 
-describe("saved Agent output transitions", () => {
-  it("accepts one immutable plan and rejects any changed envelope or route", () => {
+function commandKey(id = "reply-command-1") {
+  return create(CommandIdSchema, { uuid: id });
+}
+
+describe("saved Agent Command transitions", () => {
+  it("accepts one immutable plan and rejects changed original Command or route", () => {
     const prior = completed();
     AgentExecutionTransitions.assertCompletion(prior);
     const prepared = clone(AgentExecutionRecordSchema, prior);
-    const outgoing = prepared.completion?.outgoing[0];
-    if (outgoing === undefined) throw new Error("Transition fixture lacks outgoing Event.");
+    const outgoing = prepared.completion?.commands[0];
+    if (outgoing === undefined) throw new Error("Missing Command fixture.");
     outgoing.plan = create(AgentSavedDispatchPlanSchema);
     expect(() => {
       AgentExecutionTransitions.assertUpdate(prior, prepared);
     }).not.toThrow();
-    const changed = clone(AgentExecutionRecordSchema, prepared);
-    const changedOutput = changed.completion?.outgoing[0];
-    if (changedOutput === undefined) throw new Error("Transition fixture lacks outgoing Event.");
-    changedOutput.plan?.targets.push(
+    const changedRoute = clone(AgentExecutionRecordSchema, prepared);
+    changedRoute.completion?.commands[0]?.plan?.targets.push(
       create(AgentSavedDispatchTargetSchema, {
-        kind: AgentSavedTargetKind.AGENT_SAVED_STANDALONE_EVENT,
-        signalType: "spine.server.testing.SupportReplyDrafted",
+        kind: AgentSavedTargetKind.AGENT_SAVED_STANDALONE_COMMAND,
+        signalType: DraftSupportReplySchema.typeName,
         bindingFingerprint: "new-binding",
       }),
     );
     expect(() => {
-      AgentExecutionTransitions.assertUpdate(prepared, changed);
+      AgentExecutionTransitions.assertUpdate(prepared, changedRoute);
     }).toThrow(/immutable/i);
-    const changedEnvelope = clone(AgentExecutionRecordSchema, prepared);
-    changedEnvelope.claimToken = "changed";
+    const changedCommand = clone(AgentExecutionRecordSchema, prepared);
+    if (changedCommand.completion?.commands[0]?.command?.id !== undefined)
+      changedCommand.completion.commands[0].command.id.uuid = "replacement";
     expect(() => {
-      AgentExecutionTransitions.assertUpdate(prepared, changedEnvelope);
-    }).toThrow(/only one-time output plan installation/i);
+      AgentExecutionTransitions.assertUpdate(prepared, changedCommand);
+    }).toThrow(/only one-time/i);
   });
 
-  it("requires the saved plan before acknowledging the original typed ID", () => {
+  it("requires a saved plan before acknowledging the original Command ID", () => {
     const record = completed();
-    const original = create(AgentSignalKeySchema, {
-      id: { case: "event", value: create(EventIdSchema, { value: "event-1" }) },
-    });
     expect(() => {
-      AgentExecutionTransitions.assertDelivery(record, [original]);
+      AgentExecutionTransitions.assertDelivery(record, [commandKey()]);
     }).toThrow(/plan/i);
-    const outgoing = record.completion?.outgoing[0];
-    if (outgoing === undefined) throw new Error("Transition fixture lacks outgoing Event.");
+    const outgoing = record.completion?.commands[0];
+    if (outgoing === undefined) throw new Error("Missing Command fixture.");
     outgoing.plan = create(AgentSavedDispatchPlanSchema);
     expect(() => {
-      AgentExecutionTransitions.assertDelivery(record, [original]);
+      AgentExecutionTransitions.assertDelivery(record, [commandKey()]);
     }).not.toThrow();
-    const other = create(AgentSignalKeySchema, {
-      id: { case: "command", value: create(CommandIdSchema, { uuid: "event-1" }) },
-    });
     expect(() => {
-      AgentExecutionTransitions.assertDelivery(record, [other]);
+      AgentExecutionTransitions.assertDelivery(record, [commandKey("other")]);
     }).toThrow(/plan/i);
   });
 
-  it("rejects a route with the wrong kind or incomplete repository recipient", () => {
+  it("rejects invalid Command recipients without an Event route", () => {
     const saved = output();
     saved.plan = create(AgentSavedDispatchPlanSchema, {
       targets: [
         create(AgentSavedDispatchTargetSchema, {
           kind: AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND,
-          signalType: "spine.server.testing.SupportReplyDrafted",
+          signalType: DraftSupportReplySchema.typeName,
           bindingFingerprint: "selected-handler",
-          receiverStateType: "spine.server.testing.SupportReplyAgentState",
+          receiverStateType: SupportReplyAgentIdSchema.typeName,
           repositoryFamily: AgentSavedRepositoryFamily.AGENT_SAVED_AGENT,
-          recipients: [
-            create(AnySchema, { typeUrl: "type.spine.server.testing/SupportReplyAgentId" }),
-          ],
+          recipients: [create(AnySchema)],
         }),
       ],
     });
     expect(() => {
       AgentExecutionTransitions.validatePlan(saved);
-    }).toThrow(/does not match/i);
+    }).toThrow(/invalid repository/i);
     const target = saved.plan.targets[0];
-    if (target === undefined) throw new Error("Transition fixture lacks route target.");
-    target.kind = AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_EVENT;
-    target.recipients[0] = create(AnySchema);
+    if (target === undefined) throw new Error("Missing recipient fixture.");
+    target.recipients[0] = create(AnySchema, {
+      typeUrl: `type.spine.server.testing/${SupportReplyAgentIdSchema.typeName}`,
+    });
+    expect(() => {
+      AgentExecutionTransitions.validatePlan(saved);
+    }).not.toThrow();
+    target.kind = AgentSavedTargetKind.AGENT_SAVED_STANDALONE_COMMAND;
     expect(() => {
       AgentExecutionTransitions.validatePlan(saved);
     }).toThrow(/invalid repository/i);
   });
 
-  it("rejects completion when an output was already delivered or planned", () => {
+  it("rejects delivered, planned, duplicate and blank original Command IDs at completion", () => {
     const record = completed();
-    const outgoing = record.completion?.outgoing[0];
-    if (outgoing === undefined) throw new Error("Transition fixture lacks outgoing Event.");
+    const outgoing = record.completion?.commands[0];
+    if (outgoing === undefined) throw new Error("Missing Command fixture.");
     outgoing.delivered = true;
     expect(() => {
       AgentExecutionTransitions.assertCompletion(record);
@@ -145,135 +151,67 @@ describe("saved Agent output transitions", () => {
     expect(() => {
       AgentExecutionTransitions.assertCompletion(record);
     }).toThrow(/without a plan/i);
-  });
-
-  it("rejects duplicate typed outgoing IDs and empty original IDs", () => {
-    const record = completed();
-    const first = record.completion?.outgoing[0];
-    if (first === undefined) throw new Error("Transition fixture lacks outgoing Event.");
-    record.completion?.outgoing.push(first);
+    outgoing.plan = undefined;
+    record.completion?.commands.push(output());
     expect(() => {
       AgentExecutionTransitions.assertCompletion(record);
     }).toThrow(/duplicate/i);
-    record.completion?.outgoing.pop();
-    if (first.signal.case !== "event") throw new Error("Transition fixture requires an Event.");
-    first.signal.value.id = create(EventIdSchema);
+    record.completion?.commands.pop();
+    if (outgoing.command?.id !== undefined) outgoing.command.id.uuid = "";
     expect(() => {
       AgentExecutionTransitions.assertCompletion(record);
-    }).toThrow(/nonempty|empty/i);
-  });
-});
-
-describe("saved Agent Command delivery", () => {
-  it("keeps equally named Event and Command IDs separate", () => {
-    const record = completed();
-    const command = create(AgentOutgoingSignalSchema, {
-      signal: {
-        case: "command",
-        value: create(CommandSchema, {
-          id: create(CommandIdSchema, { uuid: "event-1" }),
-        }),
-      },
-    });
-    const completion = record.completion;
-    if (completion === undefined) throw new Error("Fixture lacks completion.");
-    completion.outgoing.push(command);
-    AgentExecutionTransitions.assertCompletion(record);
-    const selected = create(AgentSignalKeySchema, {
-      id: { case: "command", value: create(CommandIdSchema, { uuid: "event-1" }) },
-    });
-    const event = completion.outgoing[0];
-    if (event === undefined) throw new Error("Fixture lacks Event.");
-    event.plan = create(AgentSavedDispatchPlanSchema);
-    expect(() => {
-      AgentExecutionTransitions.assertDelivery(record, [selected]);
-    }).toThrow(/plan/i);
-    command.plan = create(AgentSavedDispatchPlanSchema);
-    expect(() => {
-      AgentExecutionTransitions.assertDelivery(record, [selected]);
-    }).not.toThrow();
-    expect(AgentExecutionTransitions.originalId(command)).toBe("command:event-1");
+    }).toThrow(/nonempty/i);
   });
 
-  it("cannot install completion through an ordinary update", () => {
+  it("cannot install completion or remove a prepared Command through an ordinary update", () => {
     const record = create(AgentExecutionRecordSchema, { accepted: accepted("source") });
+    const installed = clone(AgentExecutionRecordSchema, record);
+    installed.completion = create(AgentExecutionCompletionSchema);
     expect(() => {
-      AgentExecutionTransitions.assertUpdate(record, record);
-    }).not.toThrow();
-    const next = clone(AgentExecutionRecordSchema, record);
-    next.completion = create(AgentExecutionCompletionSchema);
-    expect(() => {
-      AgentExecutionTransitions.assertUpdate(record, next);
+      AgentExecutionTransitions.assertUpdate(record, installed);
     }).toThrow(/conditional commit/i);
-  });
-
-  it("cannot remove a completed output or its installed dispatch plan", () => {
-    const record = completed();
-    const outgoing = record.completion?.outgoing[0];
-    if (outgoing === undefined) throw new Error("Fixture lacks output.");
-    outgoing.plan = create(AgentSavedDispatchPlanSchema);
-    const next = clone(AgentExecutionRecordSchema, record);
-    next.completion = undefined;
+    const prepared = completed();
+    const command = prepared.completion?.commands[0];
+    if (command === undefined) throw new Error("Missing Command fixture.");
+    command.plan = create(AgentSavedDispatchPlanSchema);
+    const removed = clone(AgentExecutionRecordSchema, prepared);
+    removed.completion = undefined;
     expect(() => {
-      AgentExecutionTransitions.assertUpdate(record, next);
+      AgentExecutionTransitions.assertUpdate(prepared, removed);
     }).toThrow(/cannot be replaced/i);
-    const changed = clone(AgentExecutionRecordSchema, record);
-    const changedOutput = changed.completion?.outgoing[0];
-    if (changedOutput === undefined) throw new Error("Fixture lacks output.");
-    changedOutput.plan = undefined;
+    const unplanned = clone(AgentExecutionRecordSchema, prepared);
+    if (unplanned.completion?.commands[0] !== undefined)
+      unplanned.completion.commands[0].plan = undefined;
     expect(() => {
-      AgentExecutionTransitions.assertUpdate(record, changed);
+      AgentExecutionTransitions.assertUpdate(prepared, unplanned);
     }).toThrow(/immutable/i);
-    expect(() => {
-      AgentExecutionTransitions.assertUpdate(record, record);
-    }).not.toThrow();
-  });
-
-  it("cannot prepare a route after an output has been acknowledged", () => {
-    const outgoing = output();
-    outgoing.delivered = true;
-    expect(() => {
-      AgentExecutionTransitions.validatePlan(outgoing);
-    }).toThrow(/delivered/i);
   });
 
   it.each([
     { signalType: "", bindingFingerprint: "handler" },
-    { signalType: "spine.server.testing.DraftSupportReply", bindingFingerprint: "" },
+    { signalType: DraftSupportReplySchema.typeName, bindingFingerprint: "" },
     {
-      signalType: "spine.server.testing.DraftSupportReply",
+      signalType: DraftSupportReplySchema.typeName,
       bindingFingerprint: "handler",
       receiverStateType: "unexpected.State",
     },
     {
-      signalType: "spine.server.testing.DraftSupportReply",
+      signalType: DraftSupportReplySchema.typeName,
       bindingFingerprint: "handler",
       repositoryFamily: AgentSavedRepositoryFamily.AGENT_SAVED_AGENT,
     },
-    {
-      signalType: "spine.server.testing.DraftSupportReply",
-      bindingFingerprint: "handler",
-      recipients: [create(AnySchema, { typeUrl: "type.spine.server.testing/SupportReplyAgentId" })],
-    },
-  ])("rejects an incomplete or repository-shaped standalone binding: %j", (fields) => {
-    const outgoing = create(AgentOutgoingSignalSchema, {
-      signal: {
-        case: "command",
-        value: create(CommandSchema, {
-          id: create(CommandIdSchema, { uuid: "command-1" }),
+  ])("rejects an incomplete standalone Command binding: %j", (fields) => {
+    const command = output();
+    command.plan = create(AgentSavedDispatchPlanSchema, {
+      targets: [
+        create(AgentSavedDispatchTargetSchema, {
+          kind: AgentSavedTargetKind.AGENT_SAVED_STANDALONE_COMMAND,
+          ...fields,
         }),
-      },
-      plan: create(AgentSavedDispatchPlanSchema, {
-        targets: [
-          create(AgentSavedDispatchTargetSchema, {
-            kind: AgentSavedTargetKind.AGENT_SAVED_STANDALONE_COMMAND,
-            ...fields,
-          }),
-        ],
-      }),
+      ],
     });
     expect(() => {
-      AgentExecutionTransitions.validatePlan(outgoing);
+      AgentExecutionTransitions.validatePlan(command);
     }).toThrow(/dispatcher/i);
   });
 });

@@ -15,6 +15,7 @@
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core";
+import type { CommandId } from "@spine-event-engine/proto";
 import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import {
   AgentExecutionHeadSchema,
@@ -24,7 +25,6 @@ import {
   type AgentExecutionHead,
   type AgentExecutionRecord,
   type AgentInvocationKey,
-  type AgentSignalKey,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
@@ -367,7 +367,9 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     const prepared =
       input.entityCommit === undefined
         ? undefined
-        : await AgentExecutionValues.require(coordinator).prepareConditional(input.entityCommit);
+        : await AgentExecutionValues.require(coordinator).prepareAgentConditional(
+            input.entityCommit,
+          );
     try {
       await rows.head.transaction((client) => this.completeLocked(client, rows, input, prepared));
     } finally {
@@ -390,7 +392,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     rows: ExecutionRows,
     input: AgentExecutionComplete<I, S>,
     prepared:
-      Awaited<ReturnType<PostgresEntityCommitStorage<I, S>["prepareConditional"]>> | undefined,
+      Awaited<ReturnType<PostgresEntityCommitStorage<I, S>["prepareAgentConditional"]>> | undefined,
   ): Promise<void> {
     await this.lockHead(client, rows, input.key);
     const pair = await this.expected(client, rows, input);
@@ -437,7 +439,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
       prior.status !== AgentInvocationStatus.AGENT_INVOCATION_ACTIVE ||
       ![
         AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
-        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS,
       ].includes(input.next.status)
     )
       throw new Error("Agent completion requires active work and completed status.");
@@ -465,7 +467,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     key: AgentInvocationKey,
     token: string,
     expectedRecordBytes: Uint8Array,
-    signals: readonly AgentSignalKey[],
+    signals: readonly CommandId[],
   ): Promise<void> {
     this.requireOpen();
     const rows = await this.ready();
@@ -492,7 +494,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     key: AgentInvocationKey,
     token: string,
     expectedRecordBytes: Uint8Array,
-    signals: readonly AgentSignalKey[],
+    signals: readonly CommandId[],
   ): Promise<void> {
     const pair = await this.expected(
       client,
@@ -505,7 +507,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     AgentExecutionTransitions.assertDelivery(pair.record, signals);
     for (const signal of signals)
       AgentExecutionValues.markSignal(AgentExecutionValues.requiredCompletion(pair.record), signal);
-    if (pair.record.completion.outgoing.every((item) => item.delivered)) {
+    if (pair.record.completion.commands.every((item) => item.delivered)) {
       pair.record.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED;
       await this.advanceCandidate(
         client,
@@ -838,7 +840,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     input: AgentExecutionComplete<I, S>,
     expectedVersion: number,
     prepared:
-      Awaited<ReturnType<PostgresEntityCommitStorage<I, S>["prepareConditional"]>> | undefined,
+      Awaited<ReturnType<PostgresEntityCommitStorage<I, S>["prepareAgentConditional"]>> | undefined,
   ): Promise<void> {
     if (prepared !== undefined) {
       await prepared.apply(client, expectedVersion);

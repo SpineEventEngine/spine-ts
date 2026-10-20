@@ -15,6 +15,7 @@
 import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core";
+import type { CommandId } from "@spine-event-engine/proto";
 import { ModelPreferenceSchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import {
   AgentExecutionHeadSchema,
@@ -347,7 +348,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
     if (!(commits instanceof MemoryEntityCommitStorage))
       throw new Error("Memory Agent execution requires its memory Entity commit coordinator.");
     try {
-      await commits.commitConditional(
+      await commits.commitAgentConditional(
         this.input.entity,
         entityId,
         expectedVersion,
@@ -371,7 +372,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
       throw new TypeError("Agent completion requires initial and resulting Entity Versions.");
     if (
       input.next.status !== AgentInvocationStatus.AGENT_INVOCATION_COMPLETED &&
-      input.next.status !== AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY
+      input.next.status !== AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS
     )
       throw new TypeError("Agent completion requires a completed execution status.");
     const initial = result.initialVersion.number;
@@ -442,7 +443,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
     key: AgentInvocationKey,
     token: string,
     expectedRecordBytes: Uint8Array,
-    signals: readonly AgentSignalKey[],
+    signals: readonly CommandId[],
   ): Promise<void> {
     this.requireOpen();
     const scope = this.scope(key);
@@ -461,7 +462,7 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
       AgentExecutionTransitions.assertDelivery(record, signals);
       for (const signal of signals)
         AgentExecutionValues.markSignal(AgentExecutionValues.requiredCompletion(record), signal);
-      if (record.completion.outgoing.every((item) => item.delivered)) {
+      if (record.completion.commands.every((item) => item.delivered)) {
         record.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED;
         this.release(scope, key);
       }

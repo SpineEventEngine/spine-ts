@@ -13,7 +13,7 @@ export async function runBrowserAcceptance({
   spawnChild = spawn,
   requestedPlaywrightArguments = process.argv.slice(2),
 } = {}) {
-  const topology = await start();
+  const topology = await start({ authenticated: process.env.E1_AUTHENTICATED === "true" });
   const lifecycleSettlements = [];
   let primaryFailure;
   try {
@@ -23,6 +23,7 @@ export async function runBrowserAcceptance({
     const environment = {
       ...process.env,
       E1_ENVOY_BASE_URL: topology.baseUrl,
+      E1_AUTHENTICATED: String(topology.authenticated === true),
       E1_VITE_TLS_KEY: topology.tls.key,
       E1_VITE_TLS_CERT: topology.tls.cert,
     };
@@ -77,14 +78,15 @@ export async function runBrowserAcceptance({
         .forwardedContexts()
         .some(
           (context) =>
+            context.method === "Post" &&
             context.actor === "ada" &&
             context.tenant === false &&
             context.timestamp === true &&
-            context.zone === false &&
+            context.zone === true &&
             context.language === false,
         )
     )
-      throw new Error("gateway did not forward a resolver-owned Ada context");
+      throw new Error("gateway did not preserve the validated Ada Command context");
     if (passiveViewerSnapshots.length > 0)
       process.stdout.write(`TOPOLOGY_SNAPSHOTS ${JSON.stringify(passiveViewerSnapshots)}\n`);
   } catch (error) {

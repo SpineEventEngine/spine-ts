@@ -9,7 +9,29 @@ Start with the [React adapter overview](README.md) for a first integration.
 
 `useRequest(factory, dependencies)` starts an asynchronous operation after commit and returns `idle`, `loading`, `success`, or `error`. Its factory receives an `AbortSignal`; forward it to the cancellable work. Cancellation is cooperative: ignored signals can leave external work running, but a retired generation never publishes its late result.
 
-`useEntityQuery(query, dependencies)` is `useRequest` for public `request.send(query, { signal })`. `useEntitySubscription(topic, authoritativeQuery, dependencies, onDelivery?, onLifecycle?)` creates and activates an Entity subscription after commit. Its optional trailing callbacks receive every respective delivery or lifecycle notice synchronously before React publishes the coalesced observation field. Callback identities are excluded from subscription identity: replacing a committed callback does not recreate the subscription. Each callback remains bound to the active committed subscription generation and handle; retired handles and uncommitted renders cannot invoke it. If either callback throws, the hook publishes that error as its observation error and cancels the subscription once. `useEventSubscription(createSubscription, dependencies)` observes an application-created event subscription. `useSubscriptionDelivery` and `useSubscriptionLifecycle` select the latest independently delivered fields.
+`useEntityQuery(query, dependencies)` is `useRequest` for public `request.send(query, { signal })`. `useEntitySubscription(topic, authoritativeQuery, dependencies, onDelivery?, onLifecycle?, options?)` creates and activates an Entity subscription after commit. Its optional trailing callbacks receive every respective delivery or lifecycle notice synchronously before React publishes the coalesced observation field. Callback identities are excluded from subscription identity: replacing a committed callback does not recreate the subscription. Each callback remains bound to the active committed subscription generation and handle; retired handles and uncommitted renders cannot invoke it. If either callback throws, the hook publishes that error as its observation error and cancels the subscription once. `useEventSubscription(createSubscription, dependencies, onDelivery?, onLifecycle?, options?)` observes an application-created Event subscription, including a group of Event and rejection types. It uses the same per-delivery and per-lifecycle callback rules as the Entity hook. Use `onDelivery` when each update matters: several deliveries can be combined into one React render, so the latest observation is not an update queue. `useSubscriptionDelivery` and `useSubscriptionLifecycle` select the latest independently delivered fields.
+
+Do not use `useRequest` to post Commands automatically from an effect: React
+can restart effects, causing another Command to be sent. Call `postAndSubscribe`
+from the user action, consume its returned updates in one asynchronous task,
+handle errors, and cancel on component retirement. Do not give that same stream
+to a subscription hook as well. The Message Board posting form demonstrates
+this pattern while its board-view Entity subscription remains active.
+
+Both subscription hooks accept a final options object with optional
+`activationTimeoutMs`. The Entity hook also accepts `firstUpdateTimeoutMs` and
+`onFirstUpdateTimeout`; an Event factory supplies these to `createSubscription`.
+Neither timeout has a default. The first-update callback is a one-time delay
+notification, not a request to terminate the stream. It receives the handle for
+explicit cancellation, and late updates remain deliverable. A successful
+Entity resynchronization counts as a delivery even if its authoritative result
+is empty. See the browser reference for callback error and timing semantics.
+
+Changing either timeout value recreates the corresponding subscription. For
+the Entity hook, adding or removing the first-update callback also recreates
+it; replacing an existing callback uses its latest committed version without
+restarting. Event factories follow their supplied dependency list: include
+values that change the subscription they create.
 
 ## Subscription lifecycle
 

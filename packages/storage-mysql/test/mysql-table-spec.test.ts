@@ -35,7 +35,7 @@ describe("MysqlTableResolver", () => {
     expect(grouped.tableName).not.toBe(ungrouped.tableName);
   });
 
-  it("uses JVM defaults and gives exact source registrations precedence over record registrations", () => {
+  it("separates grouped records from ungrouped names and permits explicit grouped names", () => {
     const resolver = new MysqlTableResolver();
     resolver.setRecordName("example.Record", "all_records");
     resolver.setGroupName("example.Source", "example.Record", "source_records");
@@ -46,10 +46,21 @@ describe("MysqlTableResolver", () => {
     ).toBe("source_records");
     expect(
       resolver.resolve("example.Other", "history", undefined, "example.Record").tableName,
-    ).toBe("all_records");
+    ).toBe("history_Record");
     expect(
       resolver.resolve("example.Source", "history", "explicit", "example.Record").tableName,
     ).toBe("explicit");
+  });
+
+  it("does not alias grouped Events through an ungrouped Event table override", () => {
+    const resolver = new MysqlTableResolver();
+    resolver.setRecordName("example.Event", "domain_events");
+
+    expect(resolver.resolve("example.Event", undefined).tableName).toBe("domain_events");
+    expect(
+      resolver.resolve("example.Event", "spine_system_events", undefined, "example.Event")
+        .tableName,
+    ).toBe("spine_system_events_Event");
   });
 
   it("uses the grouped record simple name in the default table name", () => {

@@ -35,6 +35,12 @@ const expectedInfrastructureFiles = [
   "packages/storage-mysql/test/mysql-agent-history.test.ts",
   "packages/storage-mysql/test/mysql-agent-execution.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
+  "packages/server/test/delivery/inbox-provider-faults.integration.test.ts",
+  "packages/server/test/delivery/sql-recovery-clock.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-process-faults.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-shared-takeover.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts",
   "packages/server-blackbox-tests/test/agent-recovery/response-saved.test.ts",
 ];
 
@@ -74,6 +80,7 @@ describe("stable CI test inventory", () => {
       /^node scripts\/mysql\.mjs && SPINE_TS_INBOX_PROVIDER=mysql pnpm /u,
     );
     expect(mysql.scripts["test:mysql"]).toContain("inbox-provider-cleanup.test.ts");
+    expect(mysql.scripts["test:mysql"]).toContain("inbox-provider-faults.integration.test.ts");
     expect(mysql.scripts["test:mysql"]).toContain("mysql-agent-history.test.ts");
 
     const postgres = JSON.parse(readFileSync(join(root, "packages/storage-postgres/package.json")));
@@ -82,6 +89,9 @@ describe("stable CI test inventory", () => {
     );
     expect(postgres.scripts["test:postgresql"]).toContain("vitest.infrastructure.config.ts");
     expect(postgres.scripts["test:postgresql"]).toContain("postgresql-integration.test.ts");
+    expect(postgres.scripts["test:postgresql"]).toContain(
+      "inbox-provider-faults.integration.test.ts",
+    );
     expect(postgres.scripts["test:postgresql"]).toContain("postgres-agent-history.test.ts");
     expect(postgres.scripts["test:postgresql:16"]).toMatch(
       /^SPINE_TS_POSTGRESQL_EXPECTED_MAJOR=16 pnpm test:postgresql$/u,

@@ -501,7 +501,7 @@ describe("UnaryGateway", () => {
     }
   });
 
-  it("replaces matching command context with a fresh complete trusted context and forwards once", async () => {
+  it("verifies Command identity and forwards its original context once", async () => {
     const command = create(CommandSchema, {
       id: { uuid: "command-1" },
       context: create(CommandContextSchema, { actorContext: requestedContext, targetVersion: 7 }),
@@ -531,7 +531,7 @@ describe("UnaryGateway", () => {
         actorContext: {
           actor: create(UserIdSchema, { value: "actor-1" }),
           tenantId: { kind: { case: "value", value: "tenant-1" } },
-          timestamp: { seconds: 2n },
+          timestamp: { seconds: 1n },
           zoneId: { value: "Europe/Lisbon" },
           language: 1,
         },
@@ -610,7 +610,7 @@ describe("UnaryGateway", () => {
     expect(forwarded[0]).toMatchObject({ service: "spine.client.CommandService", method: "Post" });
   });
 
-  it("isolates mutable collaborator views, preserves unknown fields, and uses the resolver timestamp", async () => {
+  it("isolates mutable collaborator views and preserves the Command creation context", async () => {
     const command = create(CommandSchema, {
       id: { uuid: "original" },
       context: create(CommandContextSchema, { actorContext: requestedContext }),
@@ -649,7 +649,7 @@ describe("UnaryGateway", () => {
     const forwardedCommand = fromBinary(CommandSchema, firstForward.value);
     expect(forwardedCommand.id).toMatchObject({ uuid: "original" });
     expect(forwardedCommand.context).toMatchObject({
-      actorContext: { timestamp: { seconds: 2n } },
+      actorContext: { timestamp: { seconds: 1n } },
     });
     expect(Array.from(firstForward.value).slice(-3)).toEqual(Array.from(unknownField));
   });

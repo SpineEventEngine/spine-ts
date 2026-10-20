@@ -290,6 +290,15 @@ function trackedTestOrFixtureFiles(root) {
     (/(?:^|\/)(?:test|tests|test-fixtures|fixtures)(?:\/|$)/u.test(path) ||
       /\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u.test(path));
   try {
+    const gitRoot = realpathSync(
+      execFileSync("git", ["rev-parse", "--show-toplevel"], {
+        cwd: root,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString("utf8")
+        .trim(),
+    );
+    if (gitRoot !== realpathSync(root)) return discoveredTestOrFixtureFiles(root, isTestOrFixture);
     return execFileSync("git", ["ls-files", "-z", "--", "packages"], {
       cwd: root,
       stdio: ["ignore", "pipe", "ignore"],

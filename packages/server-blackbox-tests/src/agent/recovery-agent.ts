@@ -60,6 +60,11 @@ export class SupportRecoveryAgent extends Agent<
   SupportReplyAgentId,
   typeof SupportRecoveryStateSchema
 > {
+  /**
+   * Handler invocations within this process, used by crash-recovery assertions.
+   */
+  static draftCalls = 0;
+
   // prettier-ignore
 
   /**
@@ -69,6 +74,7 @@ export class SupportRecoveryAgent extends Agent<
    * @returns Reply proposed for human review.
    */
   @Assign async draft(command: DraftRecoverySupportReply): Promise<SupportReplyDrafted> {
+    SupportRecoveryAgent.draftCalls += 1;
     const conversation = create(ConversationIdSchema, {
       value: `support-recovery-${this.id.ticketNumber}`,
     });

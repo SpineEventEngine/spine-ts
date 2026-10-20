@@ -14,7 +14,6 @@
 
 import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import type {
@@ -22,7 +21,8 @@ import type {
   NormalizedQueryPlan,
   NormalizedQueryPredicate,
   RecordEntry,
-  RecordQuery,
+  RecordFilter,
+  RecordOrder,
   RecordSpec,
   StorageQueryCapabilities,
   StorageContext,
@@ -30,6 +30,7 @@ import type {
 import {
   ColumnMappings,
   defaultQueryCandidateLimit,
+  RecordQuery,
   RecordStorage,
 } from "@spine-event-engine/storage";
 
@@ -107,7 +108,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
-   * Prepares the table before a coordinator transaction begins.
+   * Prepares and inspects the table before record operations.
    *
    * @returns Resolves after table creation and inspection complete.
    */
@@ -322,9 +323,16 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     const id = this.recordSpec.idValueIn(record);
     this.idKey(id);
     await this.using(async (connection) => {
-      if (!(await this.immutableAbsent(connection, id, record))) return;
-      if ((await this.insertImmutableOn(connection, record)).affectedRows === 1) return;
-      await this.immutableAbsent(connection, id, record);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await this.insertImmutableOn(connection, record);
+          return;
+        } catch (error) {
+          if (!this.primaryCollision(error)) throw error;
+          if (!(await this.immutableAbsent(connection, id, record))) return;
+        }
+      }
+      throw new MysqlStorageOperationError("MySQL immutable record contention exceeded.");
     });
   }
 
@@ -473,105 +481,66 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await this.compareAndSetOnce(id, expected, next);
+        const result = await this.using((connection) =>
+          this.compareAndSetOnce(connection, id, expected, next),
+        );
+        if (result !== undefined) return result;
       } catch (error) {
-        if (attempt === 0 && mysqlDeadlock(error)) continue;
+        if (attempt < 2 && mysqlDeadlock(error instanceof Error ? error.cause : error)) continue;
         throw mysqlError(MysqlStorageOperationError, "MySQL record operation failed.", error);
       }
     }
-    throw new MysqlStorageOperationError("MySQL record operation failed.");
+    throw new MysqlStorageOperationError("MySQL record compare-and-set contention exceeded.");
   }
 
   /**
-   * Performs one compare-and-set attempt on a single connection.
+   * Performs one compare-and-set attempt using a conditional statement.
    *
+   * @param connection Provides the operation connection.
    * @param id Identifies the record slot.
    * @param expected Provides the expected materialized record.
    * @param next Provides the replacement materialized record.
-   * @returns Resolves whether the replacement was applied.
+   * @returns Whether the replacement was applied, or undefined after a guard miss.
    */
   private async compareAndSetOnce(
+    connection: import("mysql2/promise").PoolConnection,
     id: I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-  ): Promise<boolean> {
-    const connection = await this.lifecycle.acquire();
-    let locked = false;
-    try {
-      await this.ready(connection);
-      const transactional = await this.isTransactional(connection);
-      if (transactional) await connection.beginTransaction();
-      else {
-        await this.acquireCasLock(connection, id);
-        locked = true;
+  ): Promise<boolean | undefined> {
+    const raw = await this.rawOn(connection, id);
+    const current = raw === undefined ? undefined : this.decode(raw);
+    if (!same(this.recordSpec.recordType, current, expected?.record)) return false;
+    if (next === undefined) {
+      if (raw === undefined) return true;
+      const [deleted] = await connection.execute<ResultSetHeader>(
+        `DELETE FROM \`${this.table.tableName}\` WHERE ID=? AND bytes=?`,
+        [this.idKey(id), raw] as never,
+      );
+      return deleted.affectedRows === 1 ? true : undefined;
+    }
+    if (same(this.recordSpec.recordType, current, next.record)) return true;
+    if (raw === undefined) {
+      try {
+        await connection.execute(this.insertSql(), this.recordValues(next.record, id) as never);
+        return true;
+      } catch (error) {
+        if (this.primaryCollision(error)) return undefined;
+        throw error;
       }
-      return await this.applyCompareAndSet(connection, transactional, id, expected, next);
-    } catch (error) {
-      await connection.rollback().catch(() => undefined);
-      throw error;
-    } finally {
-      if (locked)
-        await connection
-          .execute("SELECT RELEASE_LOCK(?)", [this.casLockKey(id)])
-          .catch(() => undefined);
-      this.lifecycle.release(connection);
     }
+    const [result] = await connection.execute<ResultSetHeader>(this.casUpdateSql(), [
+      ...this.recordValues(next.record, id).slice(1),
+      this.idKey(id),
+      raw,
+    ] as never);
+    return result.affectedRows === 1 ? true : undefined;
   }
 
   /**
-   * Acquires the advisory lock for a non-transactional record slot.
-   *
-   * @param connection Provides the lock connection.
-   * @param id Identifies the record slot.
-   * @returns Resolves after the lock is acquired.
-   */
-  private async acquireCasLock(
-    connection: import("mysql2/promise").PoolConnection,
-    id: I,
-  ): Promise<void> {
-    const [rows] = await connection.execute<(RowDataPacket & { acquired: number | string })[]>(
-      "SELECT GET_LOCK(?, ?) AS acquired",
-      [this.casLockKey(id), 30],
-    );
-    if (rows[0]?.acquired !== 1 && rows[0]?.acquired !== "1")
-      throw new MysqlStorageOperationError("Unable to acquire MySQL record lock.");
-  }
-
-  /**
-   * Applies a compare-and-set while the record slot is protected.
-   *
-   * @param connection Provides the protected connection.
-   * @param transactional Tells whether the connection has an active transaction.
-   * @param id Identifies the record slot.
-   * @param expected Provides the expected materialized record.
-   * @param next Provides the replacement materialized record.
-   * @returns Resolves whether the replacement was applied.
-   */
-  private async applyCompareAndSet(
-    connection: import("mysql2/promise").PoolConnection,
-    transactional: boolean,
-    id: I,
-    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-  ): Promise<boolean> {
-    const current = await this.readOn(connection, id, true);
-    if (!same(this.recordSpec.recordType, current, expected?.record)) {
-      if (transactional) await connection.rollback();
-      return false;
-    }
-    if (next === undefined)
-      await connection.execute(`DELETE FROM \`${this.table.tableName}\` WHERE ID=?`, [
-        this.idKey(id),
-      ] as never);
-    else await this.writeOn(connection, next.record);
-    if (transactional) await connection.commit();
-    return true;
-  }
-
-  /**
-   * Writes materialized records in one transaction.
+   * Writes materialized records independently in source order.
    *
    * @param records Provides the materialized records.
    * @returns Resolves after the records are written.
@@ -579,18 +548,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   protected async writeAllRecords(
     records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
   ): Promise<void> {
-    const connection = await this.lifecycle.acquire();
-    try {
-      await this.ready(connection);
-      await connection.beginTransaction();
-      for (const record of records) await this.writeOn(connection, record.record);
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback().catch(() => undefined);
-      throw mysqlError(MysqlStorageOperationError, "MySQL record operation failed.", error);
-    } finally {
-      this.lifecycle.release(connection);
-    }
+    for (const record of records) await this.writeRecord(record);
   }
 
   /**
@@ -604,7 +562,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
-   * Executes work with the coordinator-bound connection or a temporary connection.
+   * Executes one record operation with an acquired connection.
    *
    * @param work Performs the database operation.
    * @typeParam T The database operation result type.
@@ -764,16 +722,16 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    *
    * @param connection Provides the connection used for reading.
    * @param id Identifies the record.
-   * @param lock Requests a row or gap lock when supported.
+   * @param locked Whether to lock the selected row in the Agent transaction.
    * @returns Resolves to the stored record when present.
    */
   private async readOn(
     connection: import("mysql2/promise").PoolConnection,
     id: I,
-    lock = false,
+    locked = false,
   ): Promise<R | undefined> {
     const [rows] = await connection.execute<PayloadRow[]>(
-      `SELECT bytes FROM \`${this.table.tableName}\` WHERE ID=?${lock ? " FOR UPDATE" : ""}`,
+      `SELECT bytes FROM \`${this.table.tableName}\` WHERE ID=?${locked ? " FOR UPDATE" : ""}`,
       [this.idKey(id)] as never,
     );
     if (rows[0] === undefined) return undefined;
@@ -785,35 +743,94 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
-   * Determines whether the physical table supports transactions.
-   *
-   * @param connection Provides the connection used for metadata inspection.
-   * @returns Resolves whether the table uses InnoDB.
+   * Reads exact stored bytes for a conditional mutation.
+   * @param connection Provides the operation connection.
+   * @param id Identifies the row.
+   * @returns Stored bytes, if present.
    */
-  private async isTransactional(
+  private async rawOn(
     connection: import("mysql2/promise").PoolConnection,
-  ): Promise<boolean> {
-    const [rows] = await connection.query<EngineRow[]>(
-      "SELECT engine AS engine FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?",
-      [this.table.tableName],
+    id: I,
+  ): Promise<Uint8Array | undefined> {
+    const [rows] = await connection.execute<PayloadRow[]>(
+      `SELECT bytes FROM \`${this.table.tableName}\` WHERE ID=?`,
+      [this.idKey(id)] as never,
     );
-    return rows[0]?.engine?.toLowerCase() === "innodb";
+    return rows[0]?.bytes;
   }
 
   /**
-   * Calculates the fixed-width advisory-lock key for one record slot.
-   *
-   * @param id Identifies the record slot.
-   * @returns The advisory-lock key.
+   * Decodes a raw record at the provider data-error boundary.
+   * @param raw Supplies exact stored bytes.
+   * @returns Decoded Protobuf record.
    */
-  private casLockKey(id: I): string {
-    return createHash("sha256")
-      .update(this.lifecycle.databaseName)
-      .update("\u0000")
-      .update(this.table.tableName)
-      .update("\u0000")
-      .update(String(this.idKey(id)))
-      .digest("hex");
+  private decode(raw: Uint8Array): R {
+    try {
+      return fromBinary(this.recordSpec.recordType, raw);
+    } catch (error) {
+      throw mysqlError(MysqlStorageDataError, "Stored MySQL record data is invalid.", error);
+    }
+  }
+
+  /**
+   * Builds values for a selected storage slot and its materialized columns.
+   * @param record Supplies the next record.
+   * @param id Identifies the actual storage slot.
+   * @returns Bound ID, bytes, and materialized columns.
+   */
+  private recordValues(record: R, id: I): unknown[] {
+    const materialized = this.recordSpec.materialize(record);
+    return [
+      this.idKey(id),
+      toBinary(this.recordSpec.recordType, record),
+      ...this.recordSpec.columns.map((column) =>
+        ColumnMappings.value(
+          this.#columnMapping,
+          column.type,
+          materialized.columns.get(column.name),
+        ),
+      ),
+    ];
+  }
+
+  /**
+   * Builds the plain insert used by a first writer.
+   * @returns Bound insert SQL.
+   */
+  private insertSql(): string {
+    const names = ["ID", "bytes", ...this.recordSpec.columns.map((column) => column.name)];
+    return (
+      `INSERT INTO \`${this.table.tableName}\` (${names.map((name) => `\`${name}\``).join(", ")}) ` +
+      `VALUES (${names.map(() => "?").join(", ")})`
+    );
+  }
+
+  /**
+   * Builds a guarded update of bytes and all materialized columns.
+   * @returns Bound conditional-update SQL.
+   */
+  private casUpdateSql(): string {
+    const names = ["bytes", ...this.recordSpec.columns.map((column) => column.name)];
+    return (
+      `UPDATE \`${this.table.tableName}\` SET ${names.map((name) => `\`${name}\`=?`).join(", ")} ` +
+      "WHERE ID=? AND bytes=?"
+    );
+  }
+
+  /**
+   * Checks whether a uniqueness failure names the primary key.
+   * @param error Supplies the driver failure.
+   * @returns Whether the failed insert collided with the record ID.
+   */
+  private primaryCollision(error: unknown): boolean {
+    if (typeof error !== "object" || error === null) return false;
+    const failure = error as { code?: unknown; errno?: unknown; sqlMessage?: unknown };
+    return (
+      failure.code === "ER_DUP_ENTRY" &&
+      failure.errno === 1062 &&
+      typeof failure.sqlMessage === "string" &&
+      /for key ['`](?:[^'`.]+\.)?PRIMARY['`]/i.test(failure.sqlMessage)
+    );
   }
 
   /**
@@ -874,7 +891,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
-   * Tries to insert one immutable record without replacing an existing row.
+   * Stores one immutable record without replacing an existing row.
    *
    * @param connection Provides the connection used for writing.
    * @param record Provides the immutable record.
@@ -901,7 +918,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     const fields = names.map((name) => `\`${name}\``).join(", ");
     const placeholders = names.map(() => "?").join(", ");
     const [result] = await connection.execute<ResultSetHeader>(
-      `INSERT IGNORE INTO \`${this.table.tableName}\` (${fields}) VALUES (${placeholders})`,
+      `INSERT INTO \`${this.table.tableName}\` (${fields}) VALUES (${placeholders})`,
       values as never,
     );
     return result;
@@ -915,59 +932,10 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    */
   private querySql(query: RecordQuery<I>): { sql: string; values: unknown[] } {
     const values: unknown[] = [];
-    const clauses: string[] = [];
-    if (query.ids !== undefined) {
-      clauses.push(`ID IN (${query.ids.map(() => "?").join(", ")})`);
-      values.push(...query.ids.map((id) => this.idKey(id)));
-    }
-    for (const filter of query.filters ?? []) {
-      const name = filter.column === "id" ? "ID" : filter.column;
-      this.assertColumn(name);
-      clauses.push(`\`${name}\` <=> ?`);
-      values.push(this.queryValue(name, filter.value));
-    }
+    const clauses = this.recordClauses(query, values);
     const order = query.sort ?? [];
     for (const item of order) this.assertColumn(item.field === "id" ? "ID" : item.field);
-    if (query.after !== undefined) {
-      const terms: string[] = [];
-      for (let index = 0; index < order.length; index += 1) {
-        const item = order[index];
-        if (item === undefined) continue;
-        const field = item.field === "id" ? "ID" : item.field;
-        const prefix = order
-          .slice(0, index)
-          .map((previous) => `\`${previous.field === "id" ? "ID" : previous.field}\` <=> ?`);
-        for (const previous of order.slice(0, index))
-          values.push(
-            this.queryValue(
-              previous.field === "id" ? "ID" : previous.field,
-              previous.field === "id"
-                ? query.after.id
-                : query.after.values[order.indexOf(previous)]?.value,
-            ),
-          );
-        const previous = prefix.length === 0 ? "" : `${prefix.join(" AND ")} AND `;
-        const operator = item.direction === "desc" ? "<" : ">";
-        terms.push(`${previous}\`${field}\` ${operator} ?`);
-        values.push(
-          this.queryValue(
-            field,
-            field === "ID" ? query.after.id : query.after.values[index]?.value,
-          ),
-        );
-      }
-      const prefixes = order.map((item) => `\`${item.field === "id" ? "ID" : item.field}\` <=> ?`);
-      for (let index = 0; index < order.length; index += 1)
-        values.push(
-          this.queryValue(
-            order[index]?.field === "id" ? "ID" : (order[index]?.field ?? "ID"),
-            order[index]?.field === "id" ? query.after.id : query.after.values[index]?.value,
-          ),
-        );
-      terms.push(`${prefixes.length === 0 ? "" : `${prefixes.join(" AND ")} AND `}ID > ?`);
-      values.push(this.idKey(query.after.id));
-      clauses.push(`(${terms.join(" OR ")})`);
-    }
+    if (query.after !== undefined) clauses.push(this.recordContinuation(query, order, values));
     const orders = [
       ...order.map(
         (item) =>
@@ -991,6 +959,79 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       values.push(query.offset);
     }
     return { sql, values };
+  }
+
+  /**
+   * Builds legacy ID and scalar-column clauses while retaining bind order.
+   *
+   * @param query The legacy record query.
+   * @param values Receives the bound values.
+   * @returns SQL clauses for IDs and column filters.
+   */
+  private recordClauses(query: RecordQuery<I>, values: unknown[]): string[] {
+    const clauses: string[] = [];
+    if (query.ids !== undefined) {
+      clauses.push(`ID IN (${query.ids.map(() => "?").join(", ")})`);
+      values.push(...query.ids.map((id) => this.idKey(id)));
+    }
+    for (const filter of query.filters ?? []) clauses.push(this.recordFilter(filter, values));
+    return clauses;
+  }
+
+  /**
+   * Builds one legacy scalar-column filter with individually bound choices.
+   *
+   * @param filter The scalar filter.
+   * @param values Receives the bound choices.
+   * @returns A false predicate, equality, or disjunction.
+   */
+  private recordFilter(filter: RecordFilter, values: unknown[]): string {
+    const name = filter.column === "id" ? "ID" : filter.column;
+    this.assertColumn(name);
+    const accepted = RecordQuery.acceptedValues(filter);
+    values.push(...accepted.map((value) => this.queryValue(name, value)));
+    if (accepted.length === 0) return "1=0";
+    if (accepted.length === 1) return `\`${name}\` <=> ?`;
+    return `(${accepted.map(() => `\`${name}\` <=> ?`).join(" OR ")})`;
+  }
+
+  /**
+   * Builds the legacy lexicographic continuation without changing its bind order.
+   *
+   * @param query The query with a continuation cursor.
+   * @param order The validated sort fields.
+   * @param values Receives the bound cursor values.
+   * @returns The continuation SQL predicate.
+   */
+  private recordContinuation(
+    query: RecordQuery<I>,
+    order: readonly RecordOrder[],
+    values: unknown[],
+  ): string {
+    const after = query.after;
+    if (after === undefined) return "1=0";
+    const terms = order.map((item, index) => {
+      const prefix = order.slice(0, index).map((previous, position) => {
+        const field = previous.field === "id" ? "ID" : previous.field;
+        values.push(
+          this.queryValue(field, field === "ID" ? after.id : after.values[position]?.value),
+        );
+        return `\`${field}\` <=> ?`;
+      });
+      const field = item.field === "id" ? "ID" : item.field;
+      values.push(this.queryValue(field, field === "ID" ? after.id : after.values[index]?.value));
+      const prior = prefix.length === 0 ? "" : `${prefix.join(" AND ")} AND `;
+      const comparison = item.direction === "desc" ? "<" : ">";
+      return `${prior}\`${field}\` ${comparison} ?`;
+    });
+    const prefixes = order.map((item, index) => {
+      const field = item.field === "id" ? "ID" : item.field;
+      values.push(this.queryValue(field, field === "ID" ? after.id : after.values[index]?.value));
+      return `\`${field}\` <=> ?`;
+    });
+    terms.push(`${prefixes.length === 0 ? "" : `${prefixes.join(" AND ")} AND `}ID > ?`);
+    values.push(this.idKey(after.id));
+    return `(${terms.join(" OR ")})`;
   }
 
   /**

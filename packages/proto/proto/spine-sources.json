@@ -436,7 +436,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/server/agent/execution_record.proto",
-      "sha256": "059ddc8d09b006f3854f7ed877bcab26141ab1228d3de0ad8871c8c243b4543b"
+      "sha256": "98f6b2eef372433da63cdd343aa6bf7163171857396d816a1ffae248d10b85b0"
     },
     {
       "localPath": "packages/proto/proto/spine/server/agent/history_record.proto",

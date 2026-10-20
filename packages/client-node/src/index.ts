@@ -13,11 +13,18 @@
  */
 
 import { ClientProtocolError as WebClientProtocolError } from "@spine-event-engine/client-web";
+import { SubscriptionActivationTimeoutError as WebActivationTimeoutError } from "@spine-event-engine/client-web";
 
 /**
  * The same protocol-error constructor exported by `@spine-event-engine/client-web`.
  */
 const ClientProtocolError: typeof WebClientProtocolError = WebClientProtocolError;
+
+/**
+ * The same activation-timeout constructor exported by `@spine-event-engine/client-web`.
+ */
+const SubscriptionActivationTimeoutError: typeof WebActivationTimeoutError =
+  WebActivationTimeoutError;
 
 export {
   EntityColumn,
@@ -40,6 +47,7 @@ export {
 } from "./query/entity-query.js";
 export { Client } from "./client/node-client.js";
 export { ClientProtocolError };
+export { SubscriptionActivationTimeoutError };
 
 /**
  * Shared browser-safe client returned by each Node factory.
@@ -58,9 +66,28 @@ export type ClientOperationOptions =
 export type ClientOptions = import("@spine-event-engine/client-web").ClientOptions;
 
 /**
- * Shared outcome of a posted command.
+ * Shared admission acknowledgement for a posted Command.
  */
-export type ClientOutcome = import("@spine-event-engine/client-web").ClientOutcome;
+export type CommandAcknowledgement =
+  import("@spine-event-engine/client-web").CommandAcknowledgement;
+
+/**
+ * Shared result of Command posting with continuing selected Event updates.
+ */
+export type PostAndSubscribeResult =
+  import("@spine-event-engine/client-web").PostAndSubscribeResult;
+
+/**
+ * Shared Event/rejection selection and timing options.
+ */
+export type PostAndSubscribeOptions =
+  import("@spine-event-engine/client-web").PostAndSubscribeOptions;
+
+/**
+ * Shared initial activation options.
+ */
+export type SubscriptionActivationOptions =
+  import("@spine-event-engine/client-web").SubscriptionActivationOptions;
 
 /**
  * Shared actor-bound request scope returned by the kernel.
@@ -92,3 +119,15 @@ export type SubscriptionLifecycle = import("@spine-event-engine/client-web").Sub
  */
 export type CreateSubscriptionOptions =
   import("@spine-event-engine/client-web").CreateSubscriptionOptions;
+
+/**
+ * Shared Event subscription options, including optional first-update notification.
+ */
+export type EventSubscriptionOptions =
+  import("@spine-event-engine/client-web").EventSubscriptionOptions;
+
+/**
+ * Shared Entity subscription options and authoritative recovery query.
+ */
+export type EntitySubscriptionOptions =
+  import("@spine-event-engine/client-web").EntitySubscriptionOptions;

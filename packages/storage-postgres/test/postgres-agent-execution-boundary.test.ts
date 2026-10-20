@@ -14,15 +14,20 @@
 
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
+import {
+  CommandIdSchema,
+  CommandSchema,
+  EventIdSchema,
+  EventSchema,
+  VersionSchema,
+} from "@spine-event-engine/proto";
 import { AiModelKind, ModelPreferenceSchema } from "@spine-event-engine/proto/agent";
 import {
   AgentExecutionCompletionSchema,
   AgentExecutionHeadSchema,
   AgentExecutionRecordSchema,
-  AgentOutgoingSignalSchema,
+  AgentOutgoingCommandSchema,
   AgentSavedDispatchPlanSchema,
-  AgentSignalKeySchema,
   AgentInvocationCountersSchema,
   AgentInvocationStatus,
   type AgentExecutionHead,
@@ -41,12 +46,17 @@ import { PostgresAgentExecution } from "../src/postgres/agent-execution.js";
 import { AgentHistoryHash } from "../src/postgres/agent-history.js";
 // prettier-ignore
 import {
+  SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 // prettier-ignore
 import {
   SupportReplyDraftedSchema,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
+// prettier-ignore
+import {
+  DraftSupportReplySchema,
+} from "../../server/test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Required Agent execution test value is missing.");
@@ -180,10 +190,10 @@ describe("PostgreSQL Agent execution provider boundary", () => {
     const applyConditional = vi.fn(() => Promise.resolve());
     const closePrepared = vi.fn();
     const closeCoordinator = vi.fn();
-    const prepareConditional = vi.fn(() =>
+    const prepareAgentConditional = vi.fn(() =>
       Promise.resolve({ apply: applyConditional, close: closePrepared }),
     );
-    const commits = vi.fn(() => ({ prepareConditional, close: closeCoordinator }));
+    const commits = vi.fn(() => ({ prepareAgentConditional, close: closeCoordinator }));
     const storage = new PostgresAgentExecution(
       { entity, stateType: required(key.scope).stateType },
       { historyExecutor: () => invocation, close } as never,
@@ -481,7 +491,7 @@ describe("PostgreSQL Agent execution provider boundary", () => {
         next: finished,
         entityCommit,
       });
-      expect(prepareConditional).toHaveBeenCalledWith(entityCommit);
+      expect(prepareAgentConditional).toHaveBeenCalledWith(entityCommit);
       expect(applyConditional).toHaveBeenCalledWith(client, 0);
       expect(invocationWrite).toHaveBeenCalledWith(client, finished);
       expect(closePrepared).toHaveBeenCalledTimes(2);
@@ -551,25 +561,32 @@ describe("PostgreSQL Agent execution provider boundary", () => {
       expect(invocationWrite).toHaveBeenCalledWith(client, laterNext);
       const deliverSource = accepted("postgres-delivery-source", "T-delivery");
       const deliverKey = required(deliverSource.key);
-      const firstEvent = create(EventSchema, {
-        id: create(EventIdSchema, { value: "postgres-output-one" }),
-        message: event.message,
-      });
-      const secondEvent = create(EventSchema, {
-        id: create(EventIdSchema, { value: "postgres-output-two" }),
-        message: event.message,
-      });
+      const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-delivery" });
+      const commandPayload = toBinary(
+        DraftSupportReplySchema,
+        create(DraftSupportReplySchema, { agent: agentId }),
+      );
+      const outputCommand = (id: string) =>
+        create(CommandSchema, {
+          id: create(CommandIdSchema, { uuid: id }),
+          message: create(AnySchema, {
+            typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
+            value: commandPayload,
+          }),
+        });
+      const firstCommand = outputCommand("postgres-output-one");
+      const secondCommand = outputCommand("postgres-output-two");
       const delivered = create(AgentExecutionRecordSchema, {
         accepted: deliverSource,
-        status: AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
+        status: AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS,
         claimToken: "delivery-token",
         claimExpiresAt: expiry,
         completion: create(AgentExecutionCompletionSchema, {
           initialVersion: create(VersionSchema, { number: 0 }),
           resultingVersion: create(VersionSchema, { number: 0 }),
-          outgoing: [firstEvent, secondEvent].map((signal) =>
-            create(AgentOutgoingSignalSchema, {
-              signal: { case: "event", value: signal },
+          commands: [firstCommand, secondCommand].map((command) =>
+            create(AgentOutgoingCommandSchema, {
+              command,
               plan: create(AgentSavedDispatchPlanSchema),
             }),
           ),
@@ -591,26 +608,21 @@ describe("PostgreSQL Agent execution provider boundary", () => {
       });
       headRow.read.mockImplementation(() => Promise.resolve(deliverHead));
       query.mockImplementation(() => Promise.resolve([]));
-      const firstSignal = create(AgentSignalKeySchema, {
-        id: { case: "event", value: required(firstEvent.id) },
-      });
-      const secondSignal = create(AgentSignalKeySchema, {
-        id: { case: "event", value: required(secondEvent.id) },
-      });
+      const firstSignal = required(firstCommand.id);
+      const secondSignal = required(secondCommand.id);
       const beforeDeliveryBytes = toBinary(AgentExecutionRecordSchema, persistedDelivery);
       await storage.markDelivered(deliverKey, "delivery-token", beforeDeliveryBytes, [firstSignal]);
       expect(persistedDelivery.status).toBe(
-        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS,
       );
-      expect(persistedDelivery.completion?.outgoing.map((item) => item.delivered)).toEqual([
+      expect(persistedDelivery.completion?.commands.map((item) => item.delivered)).toEqual([
         true,
         false,
       ]);
-      expect(
-        persistedDelivery.completion?.outgoing.map((item) =>
-          item.signal.case === "event" ? item.signal.value.id?.value : undefined,
-        ),
-      ).toEqual([required(firstEvent.id).value, required(secondEvent.id).value]);
+      expect(persistedDelivery.completion?.commands.map((item) => item.command?.id?.uuid)).toEqual([
+        required(firstCommand.id).uuid,
+        required(secondCommand.id).uuid,
+      ]);
       const firstStoredBytes = toBinary(AgentExecutionRecordSchema, persistedDelivery);
       await expect(
         storage.markDelivered(deliverKey, "delivery-token", beforeDeliveryBytes, [secondSignal]),
@@ -618,11 +630,11 @@ describe("PostgreSQL Agent execution provider boundary", () => {
       expect(toBinary(AgentExecutionRecordSchema, persistedDelivery)).toEqual(firstStoredBytes);
       await storage.markDelivered(deliverKey, "delivery-token", firstStoredBytes, [secondSignal]);
       expect(persistedDelivery.status).toBe(AgentInvocationStatus.AGENT_INVOCATION_COMPLETED);
-      expect(persistedDelivery.completion?.outgoing.map((item) => item.delivered)).toEqual([
+      expect(persistedDelivery.completion?.commands.map((item) => item.delivered)).toEqual([
         true,
         true,
       ]);
-      expect(delivered.completion?.outgoing.map((item) => item.delivered)).toEqual([false, false]);
+      expect(delivered.completion?.commands.map((item) => item.delivered)).toEqual([false, false]);
     } finally {
       storage.close();
     }

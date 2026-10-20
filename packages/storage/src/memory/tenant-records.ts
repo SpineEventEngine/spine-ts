@@ -14,12 +14,8 @@
 
 import type { Message } from "@bufbuild/protobuf";
 
-import type {
-  RecordContinuation,
-  RecordFilter,
-  RecordOrder,
-  RecordQuery,
-} from "../record/record-query.js";
+import type { RecordContinuation, RecordFilter, RecordOrder } from "../record/record-query.js";
+import { RecordQuery } from "../record/record-query.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordEntry } from "../record/record-storage.js";
 import { CanonicalUtf8 } from "./canonical-utf8.js";
@@ -319,9 +315,7 @@ const TenantRecordQuery = {
   ): readonly PreparedFilter[] | undefined {
     return filters?.map((filter) => ({
       column: filter.column,
-      keys: (Array.isArray(filter.value) ? filter.value : [filter.value]).map((value) =>
-        StoredValues.key(value),
-      ),
+      keys: RecordQuery.acceptedValues(filter).map((value) => StoredValues.key(value)),
     }));
   },
 
@@ -592,7 +586,7 @@ const TenantRecordQuery = {
     if (filters === undefined || filters.length === 0) return true;
     return filters.every((filter) => {
       const actual = TenantRecordQuery.resolveValue(entry, filter.column);
-      const expected = Array.isArray(filter.value) ? filter.value : [filter.value];
+      const expected = RecordQuery.acceptedValues(filter);
       return expected.some((value) => StoredValues.key(actual) === StoredValues.key(value));
     });
   },

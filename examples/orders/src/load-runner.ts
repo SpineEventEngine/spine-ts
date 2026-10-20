@@ -149,10 +149,19 @@ interface UserResult {
   readonly subscriptionDeliveryMs: number;
 }
 
+/**
+ * Runs datastore order users in bounded waves over shared HTTP/2 sessions.
+ */
 class DatastoreOrdersLoadRun {
   private readonly timeoutMs: number;
+
   private readonly sessions: Http2SessionManager[];
 
+  /**
+   * Creates shared sessions and resolves the per-user visibility limit.
+   *
+   * @param options Server, user count, and optional visibility deadline.
+   */
   constructor(private readonly options: DatastoreOrdersLoadOptions) {
     this.timeoutMs = options.visibilityTimeoutMs ?? 5_000;
     this.sessions = Array.from(
@@ -161,6 +170,11 @@ class DatastoreOrdersLoadRun {
     );
   }
 
+  /**
+   * Executes all user waves and releases their HTTP/2 sessions.
+   *
+   * @returns Aggregate load results and classified failures.
+   */
   async execute(): Promise<DatastoreOrdersLoadResult> {
     const startedAt = performance.now();
     try {
@@ -171,6 +185,11 @@ class DatastoreOrdersLoadRun {
     }
   }
 
+  /**
+   * Collects users in bounded waves so individual failures remain observable.
+   *
+   * @returns Fulfilled or rejected results in submission order.
+   */
   private async settleUsers(): Promise<PromiseSettledResult<UserResult>[]> {
     const settled: PromiseSettledResult<UserResult>[] = [];
     for (let firstUser = 0; firstUser < this.options.users; firstUser += maximumConcurrentUsers) {
@@ -183,6 +202,12 @@ class DatastoreOrdersLoadRun {
     return settled;
   }
 
+  /**
+   * Gets a shared session for one independent user.
+   *
+   * @param index Zero-based user position in this run.
+   * @returns The user flow and its measured latencies.
+   */
   private runUser(index: number): Promise<UserResult> {
     const session = this.sessions[index % this.sessions.length];
     if (session === undefined) throw new Error("Load runner did not allocate an HTTP/2 session.");
@@ -194,6 +219,13 @@ class DatastoreOrdersLoadRun {
     ).execute();
   }
 
+  /**
+   * Calculates throughput and latency summaries from settled users.
+   *
+   * @param settled User outcomes from every wave.
+   * @param elapsedMs Total wall time spent running the waves.
+   * @returns Counts, latency percentiles, and failure classifications.
+   */
   private summarize(
     settled: readonly PromiseSettledResult<UserResult>[],
     elapsedMs: number,
@@ -221,6 +253,12 @@ class DatastoreOrdersLoadRun {
     };
   }
 
+  /**
+   * Groups rejected user flows by their reported error message.
+   *
+   * @param settled User outcomes from every wave.
+   * @returns Failure counts keyed by message.
+   */
   private classifyFailures(
     settled: readonly PromiseSettledResult<UserResult>[],
   ): Record<string, number> {
@@ -240,14 +278,30 @@ interface SubscriptionRead {
   readonly firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>;
 }
 
+/**
+ * Executes one correlated order command, query, and subscription flow.
+ */
 class DatastoreOrdersUserRun {
   private readonly id: string;
+
   private readonly actorContext;
+
   private readonly commands;
+
   private readonly queries;
+
   private readonly subscriptions;
+
   private readonly controller = new AbortController();
 
+  /**
+   * Creates transport clients and a distinct actor and order ID.
+   *
+   * @param baseUrl URL of the command, query, and subscription services.
+   * @param index Zero-based user position in the load run.
+   * @param timeoutMs Maximum wait for each visibility operation.
+   * @param session Shared HTTP/2 session used by this user.
+   */
   constructor(
     baseUrl: string,
     private readonly index: number,
@@ -264,6 +318,11 @@ class DatastoreOrdersUserRun {
     });
   }
 
+  /**
+   * Records one accepted command, visible query, and correlated update.
+   *
+   * @returns Latencies for the three observed milestones.
+   */
   async execute(): Promise<UserResult> {
     let read: SubscriptionRead | undefined;
     try {
@@ -278,6 +337,11 @@ class DatastoreOrdersUserRun {
     }
   }
 
+  /**
+   * Validates the response-only activation ACK before reading business updates.
+   *
+   * @returns Live iterator and its first pending business update.
+   */
   private async startSubscription(): Promise<SubscriptionRead> {
     const subscription = await this.withTimeout(
       this.subscriptions.subscribe(this.topic(), {
@@ -290,11 +354,31 @@ class DatastoreOrdersUserRun {
     const iterator = this.subscriptions
       .activate(subscription, { signal: this.controller.signal })
       [Symbol.asyncIterator]();
+    const acknowledgement = await this.withTimeout(
+      iterator.next(),
+      "subscription activation ACK",
+      this.timeoutMs,
+      this.controller,
+    );
+    if (
+      acknowledgement.done ||
+      acknowledgement.value.response?.status?.status.case !== "ok" ||
+      acknowledgement.value.subscription?.id?.value !== subscription.id?.value ||
+      acknowledgement.value.subscription?.topic?.id?.value !== subscription.topic?.id?.value ||
+      acknowledgement.value.update.case !== undefined
+    )
+      throw new Error("Order subscription did not return a matching activation ACK.");
     const firstUpdate = iterator.next();
     void this.ignoreCancellation(firstUpdate);
     return { iterator, firstUpdate };
   }
 
+  /**
+   * Posts this user’s CreateOrder command and requires an OK acknowledgement.
+   *
+   * @param submittedAt Monotonic timestamp taken immediately before posting.
+   * @returns Elapsed milliseconds to acknowledgement.
+   */
   private async postCommand(submittedAt: number): Promise<number> {
     const acknowledgement = await this.withTimeout(
       this.commands.post(this.command(), { signal: this.controller.signal }),
@@ -309,6 +393,11 @@ class DatastoreOrdersUserRun {
     return performance.now() - submittedAt;
   }
 
+  /**
+   * Builds the generated CreateOrder envelope for this user.
+   *
+   * @returns A command with a distinct ID and actor context.
+   */
   private command() {
     return create(CommandSchema, {
       id: metadata.commandId(),
@@ -320,6 +409,12 @@ class DatastoreOrdersUserRun {
     });
   }
 
+  /**
+   * Waits for the exact order projection until it is visible or the deadline passes.
+   *
+   * @param startedAt Monotonic timestamp taken before command posting.
+   * @returns Elapsed milliseconds to query visibility.
+   */
   private async waitForVisibility(startedAt: number): Promise<number> {
     const deadline = performance.now() + this.timeoutMs;
     while (performance.now() < deadline) {
@@ -330,6 +425,11 @@ class DatastoreOrdersUserRun {
     throw new Error(`OrderSummary ${this.id} was not visible within ${String(this.timeoutMs)}ms.`);
   }
 
+  /**
+   * Reads the projection for this user under the visibility limit.
+   *
+   * @returns The query response to inspect for the order ID.
+   */
   private async readQuery() {
     return await this.withTimeout(
       this.queries.read(this.query(), { signal: this.controller.signal }),
@@ -339,6 +439,11 @@ class DatastoreOrdersUserRun {
     );
   }
 
+  /**
+   * Builds a fresh query for this user’s exact order target.
+   *
+   * @returns A generated query with a distinct query ID.
+   */
   private query() {
     return create(QuerySchema, {
       id: create(QueryIdSchema, { value: `load-query-${this.id}-${randomUUID()}` }),
@@ -347,6 +452,12 @@ class DatastoreOrdersUserRun {
     });
   }
 
+  /**
+   * Checks whether a successful query contains this user’s order.
+   *
+   * @param response Query response to inspect.
+   * @returns True only for the correlated OrderSummary.
+   */
   private isVisible(response: QueryResponse): boolean {
     return (
       response.response?.status?.status.case === "ok" &&
@@ -358,6 +469,12 @@ class DatastoreOrdersUserRun {
     );
   }
 
+  /**
+   * Validates the first business update after activation and records its latency.
+   *
+   * @param firstUpdate Pending first update after the activation ACK.
+   * @returns Elapsed milliseconds to the correlated update.
+   */
   private async readSubscription(
     firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>,
   ): Promise<number> {
@@ -374,6 +491,12 @@ class DatastoreOrdersUserRun {
     return performance.now() - startedAt;
   }
 
+  /**
+   * Matches a state update to this user’s OrderSummary ID.
+   *
+   * @param update Subscription update to inspect.
+   * @returns True when a matching state is present.
+   */
   private isCorrelated(update: SubscriptionUpdate): boolean {
     return (
       update.update.case === "entityUpdates" &&
@@ -385,6 +508,11 @@ class DatastoreOrdersUserRun {
     );
   }
 
+  /**
+   * Builds the topic for this user’s order projection.
+   *
+   * @returns A generated topic with the exact target and actor context.
+   */
   private topic() {
     return create(TopicSchema, {
       id: create(TopicIdSchema, { value: `load-topic-${this.id}` }),
@@ -393,6 +521,11 @@ class DatastoreOrdersUserRun {
     });
   }
 
+  /**
+   * Builds an ID-filtered OrderSummary subscription target.
+   *
+   * @returns A generated target limited to this user’s order.
+   */
   private target() {
     return create(TargetSchema, {
       type: TypeUrls.derive(OrderSummarySchema),
@@ -409,6 +542,12 @@ class DatastoreOrdersUserRun {
     });
   }
 
+  /**
+   * Observes the pending read when cancellation rejects it during cleanup.
+   *
+   * @param promise Pending subscription read to observe.
+   * @returns After the read settles or its cancellation is observed.
+   */
   private async ignoreCancellation(promise: Promise<unknown>): Promise<void> {
     try {
       await promise;
@@ -417,6 +556,16 @@ class DatastoreOrdersUserRun {
     }
   }
 
+  /**
+   * Wraps one operation and optionally aborts its controller on expiry.
+   *
+   * @typeParam T Result produced by the bounded operation.
+   * @param promise Operation to await.
+   * @param label Name used in a timeout error.
+   * @param timeoutMs Maximum wait in milliseconds.
+   * @param controller Optional controller to abort on expiry.
+   * @returns The original operation result before the deadline.
+   */
   private async withTimeout<T>(
     promise: Promise<T>,
     label: string,
@@ -439,6 +588,12 @@ class DatastoreOrdersUserRun {
     }
   }
 
+  /**
+   * Cancels the stream and bounds iterator cleanup after the user flow.
+   *
+   * @param iterator Active update iterator, if activation succeeded.
+   * @returns After bounded cleanup has been attempted.
+   */
   private async cleanup(iterator?: AsyncIterator<SubscriptionUpdate>): Promise<void> {
     this.controller.abort();
     try {

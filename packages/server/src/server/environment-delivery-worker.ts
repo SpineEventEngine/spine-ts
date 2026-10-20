@@ -34,6 +34,7 @@ import {
   type OnDeliveryMessage,
 } from "../delivery/delivery.js";
 import type { DeliveryOperationOptions } from "../delivery/delivery-ports.js";
+import { receptionObservation } from "../delivery/reception-observation.js";
 import {
   DeliverySupervisor,
   deliverySupervisorAccess,
@@ -163,16 +164,23 @@ export interface EnvironmentGenerationWorker extends DeliveryRunWorker {
  */
 export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   readonly #workers = new Map<string, DeliveryRunWorker>();
+
   readonly #supervisor: RuntimeDeliverySupervisor;
+
   readonly #stoppedWorkers = new Set<string>();
+
   readonly #stoppedSupervisors = new Set<string>();
+
   readonly #stoppedOwners = new Set<string>();
+
   readonly #createWorker: (
     runtime: EnvironmentDeliveryRuntime,
     ports?: EnvironmentDeliveryPorts,
     nodeId?: string,
   ) => DeliveryRunWorker;
+
   readonly #nodeId: string | undefined;
+
   readonly #ports: EnvironmentDeliveryPorts | undefined;
 
   /**
@@ -358,6 +366,12 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     );
   }
 
+  /**
+   * Finds the configured worker for an owner key.
+   *
+   * @param key The worker or group key.
+   * @returns The result of this delivery operation.
+   */
   #requiredWorker(key: string): DeliveryRunWorker {
     const worker = this.#workers.get(key);
     if (worker === undefined) {
@@ -366,6 +380,13 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     return worker;
   }
 
+  /**
+   * Stops one configured owner worker and collects failures.
+   *
+   * @param key The worker or group key.
+   * @param worker The runtime delivery worker.
+   * @param failures The failures to propagate.
+   */
   #stopOwner(key: string, worker: DeliveryRunWorker, failures: unknown[]): void {
     if (!this.#stoppedWorkers.has(key)) {
       try {
@@ -393,16 +414,33 @@ interface EnvironmentDeliveryWorkerOptions {
   readonly ports?: EnvironmentDeliveryPorts;
   readonly nodeId?: string;
 }
+
+/**
+ * Coordinates supervisor groups for one environment generation.
+ */
 class RuntimeDeliverySupervisor {
   readonly #groups = new Map<string, RuntimeDeliverySupervisorGroup>();
+
   readonly #ports: EnvironmentDeliveryPorts | undefined;
+
   readonly #nodeId: string | undefined;
 
+  /**
+   * Creates the delivery component with its configured dependencies.
+   *
+   * @param ports The optional delivery ports.
+   * @param nodeId The worker node identity.
+   */
   constructor(ports?: EnvironmentDeliveryPorts, nodeId?: string) {
     this.#ports = ports;
     this.#nodeId = nodeId;
   }
 
+  /**
+   * Adds the configured delivery runtime or shards.
+   *
+   * @param runtime The configured context delivery runtime.
+   */
   add(runtime: EnvironmentDeliveryRuntime): void {
     const grouped = new Map<number, ShardIndex[]>();
     for (const shard of EnvironmentDeliveryValues.uniqueShards(runtime.scopes)) {
@@ -429,10 +467,20 @@ class RuntimeDeliverySupervisor {
     }
   }
 
+  /**
+   * Removes an owner route from this runtime.
+   *
+   * @param ownerKey The configured owner key.
+   */
   remove(ownerKey: string): void {
     for (const group of this.#groups.values()) group.remove(ownerKey);
   }
 
+  /**
+   * Starts the configured delivery worker or supervisor.
+   *
+   * @returns The result of this delivery operation.
+   */
   async start(): Promise<void> {
     if (!managedDeliveryActivated) {
       waitingManagedSupervisors.add(() => {
@@ -444,20 +492,43 @@ class RuntimeDeliverySupervisor {
     await Promise.all(Array.from(this.#groups.values(), (group) => group.start()));
   }
 
+  /**
+   * Notifies the selected delivery scope or shard.
+   *
+   * @param ownerKey The configured owner key.
+   * @param shard The shard to process.
+   */
   notify(ownerKey: string, shard: ShardIndex): void {
     this.#groups.get(this.#groupKey(ownerKey, shard.ofTotal))?.notify(shard);
   }
 
+  /**
+   * Marks the selected owners as unavailable for new route admission.
+   *
+   * @param ownerKeys The owner keys in this generation.
+   */
   fenceOwners(ownerKeys: readonly string[]): void {
     for (const group of this.#groups.values()) group.fenceOwners(ownerKeys);
   }
 
+  /**
+   * Waits for admitted work for the selected owners to settle.
+   *
+   * @param ownerKeys The owner keys in this generation.
+   * @returns The result of this delivery operation.
+   */
   async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
     await Promise.all(
       Array.from(this.#groups.values(), (group) => group.awaitOwnersSettled(ownerKeys)),
     );
   }
 
+  /**
+   * Closes the selected owners after admitted work settles.
+   *
+   * @param ownerKeys The owner keys in this generation.
+   * @returns The result of this delivery operation.
+   */
   async retireOwners(ownerKeys: readonly string[]): Promise<void> {
     for (const [key, group] of this.#groups) {
       await group.retireOwners(ownerKeys);
@@ -465,6 +536,9 @@ class RuntimeDeliverySupervisor {
     }
   }
 
+  /**
+   * Stops admission and starts delivery shutdown.
+   */
   stop(): void {
     const failures: unknown[] = [];
     for (const group of this.#groups.values()) {
@@ -480,6 +554,11 @@ class RuntimeDeliverySupervisor {
     );
   }
 
+  /**
+   * Waits for the active delivery work to settle.
+   *
+   * @returns The result of this delivery operation.
+   */
   async awaitSettled(): Promise<void> {
     const settled = await Promise.allSettled(
       Array.from(this.#groups.values(), (group) => group.awaitSettled()),
@@ -490,6 +569,11 @@ class RuntimeDeliverySupervisor {
     );
   }
 
+  /**
+   * Closes this delivery worker after settling its work.
+   *
+   * @returns The result of this delivery operation.
+   */
   async retire(): Promise<void> {
     const settled = await Promise.allSettled(
       Array.from(this.#groups.values(), (group) =>
@@ -502,6 +586,13 @@ class RuntimeDeliverySupervisor {
     );
   }
 
+  /**
+   * Builds a stable supervisor-group key for one owner and shard total.
+   *
+   * @param ownerKey The configured owner key.
+   * @param shardCount The shard total for this supervisor group.
+   * @returns The result of this delivery operation.
+   */
   #groupKey(ownerKey: string, shardCount: number): string {
     return this.#ports?.source === undefined
       ? `${ownerKey}/${String(shardCount)}`
@@ -509,18 +600,35 @@ class RuntimeDeliverySupervisor {
   }
 }
 
+/**
+ * Keeps admitted routes stable while one shard supervisor drains.
+ */
 class RuntimeDeliverySupervisorGroup {
   readonly #source: DeliverySource;
+
   readonly #supervisor: DeliverySupervisor;
+
   readonly #routes = new Map<string, RuntimeDeliveryRoute[]>();
+
   readonly #retiringOwners = new Set<string>();
+
   readonly #active = new Map<string, Set<Promise<void>>>();
+
   readonly #reserved: Map<string, Map<string, RuntimeDeliveryReservation>>;
+
   readonly shardCount: number;
+
   #start: Promise<void> | undefined;
+
   #stopped = false;
+
   #close: Promise<void> | undefined;
 
+  /**
+   * Creates the delivery component with its configured dependencies.
+   *
+   * @param options The delivery or cancellation options.
+   */
   constructor(options: {
     readonly delivery: ReturnType<DeliveryBuilder["build"]>;
     readonly shards: readonly ShardIndex[];
@@ -544,6 +652,9 @@ class RuntimeDeliverySupervisorGroup {
       onMessage: (message) => this.#route(message),
     });
     deliverySupervisorAccess.installAdmission(this.#supervisor, (message) => this.#accept(message));
+    deliverySupervisorAccess.installMessageSettled(this.#supervisor, (message) => {
+      this.#settleReservation(message);
+    });
     deliverySupervisorAccess.installFinalization(this.#supervisor, (shard) => {
       this.#releaseUndeliveredReservations(shard);
     });
@@ -552,6 +663,13 @@ class RuntimeDeliverySupervisorGroup {
     }
   }
 
+  /**
+   * Adds the configured delivery runtime or shards.
+   *
+   * @param ownerKey The configured owner key.
+   * @param runtime The configured context delivery runtime.
+   * @param shards The shards assigned to this runtime.
+   */
   add(ownerKey: string, runtime: EnvironmentDeliveryRuntime, shards: readonly ShardIndex[]): void {
     if (this.#source instanceof LocalDeliverySource) this.#source.add(shards);
     for (const scope of runtime.scopes) {
@@ -571,14 +689,30 @@ class RuntimeDeliverySupervisorGroup {
     }
   }
 
+  /**
+   * Checks whether this supervisor group has configured routes.
+   *
+   * @returns The result of this delivery operation.
+   */
   get empty(): boolean {
     return this.#routes.size === 0;
   }
 
+  /**
+   * Marks the selected owners as unavailable for new route admission.
+   *
+   * @param ownerKeys The owner keys in this generation.
+   */
   fenceOwners(ownerKeys: readonly string[]): void {
     for (const ownerKey of ownerKeys) this.#retiringOwners.add(ownerKey);
   }
 
+  /**
+   * Waits for admitted work for the selected owners to settle.
+   *
+   * @param ownerKeys The owner keys in this generation.
+   * @returns The result of this delivery operation.
+   */
   async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
     await Promise.all(
       Array.from(this.#reserved.values(), async (reservations) =>
@@ -597,6 +731,12 @@ class RuntimeDeliverySupervisorGroup {
     );
   }
 
+  /**
+   * Closes the selected owners after admitted work settles.
+   *
+   * @param ownerKeys The owner keys in this generation.
+   * @returns The result of this delivery operation.
+   */
   async retireOwners(ownerKeys: readonly string[]): Promise<void> {
     this.fenceOwners(ownerKeys);
     await this.awaitOwnersSettled(ownerKeys);
@@ -604,6 +744,11 @@ class RuntimeDeliverySupervisorGroup {
     if (this.empty) await this.retire();
   }
 
+  /**
+   * Removes an owner route from this runtime.
+   *
+   * @param ownerKey The configured owner key.
+   */
   remove(ownerKey: string): void {
     for (const [key, routes] of this.#routes) {
       const retained = routes.filter((route) => route.ownerKey !== ownerKey);
@@ -612,6 +757,11 @@ class RuntimeDeliverySupervisorGroup {
     }
   }
 
+  /**
+   * Starts the configured delivery worker or supervisor.
+   *
+   * @returns The result of this delivery operation.
+   */
   start(): Promise<void> {
     if (this.#stopped) {
       return Promise.reject(new Error("Environment delivery supervisor is stopped."));
@@ -624,6 +774,11 @@ class RuntimeDeliverySupervisorGroup {
     return this.#start;
   }
 
+  /**
+   * Notifies the selected delivery scope or shard.
+   *
+   * @param shard The shard to process.
+   */
   notify(shard: ShardIndex): void {
     if (this.#stopped) return;
     // spine-log-boundary: server.delivery_notify_start
@@ -634,6 +789,9 @@ class RuntimeDeliverySupervisorGroup {
       .catch(() => undefined);
   }
 
+  /**
+   * Stops admission and starts delivery shutdown.
+   */
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
@@ -642,23 +800,41 @@ class RuntimeDeliverySupervisorGroup {
     void this.#close.catch(() => undefined);
   }
 
+  /**
+   * Waits for the active delivery work to settle.
+   *
+   * @returns The result of this delivery operation.
+   */
   async awaitSettled(): Promise<void> {
     await this.#start;
     await this.#close;
   }
 
+  /**
+   * Closes this delivery worker after settling its work.
+   *
+   * @returns The result of this delivery operation.
+   */
   async retire(): Promise<void> {
     this.stop();
     await this.awaitSettled();
   }
 
+  /**
+   * Accepts an Inbox message and reserves its exact route.
+   *
+   * @param message The persisted Inbox message.
+   * @returns The result of this delivery operation.
+   */
   #accept(message: DeliveryEndpointMessage): boolean {
     const route = this.#select(message);
     if (route !== undefined) {
       // `options.shards` initializes one private reservation map per supervised shard.
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const reservations = this.#reserved.get(message.shard.key())!;
-      reservations.set(RuntimeDeliverySupervisorGroup.messageKey(message), {
+      const key = RuntimeDeliverySupervisorGroup.messageKey(message);
+      if (reservations.has(key)) return false;
+      reservations.set(key, {
         route,
         settled: Promise.withResolvers<undefined>(),
       });
@@ -666,7 +842,14 @@ class RuntimeDeliverySupervisorGroup {
     return route !== undefined;
   }
 
+  /**
+   * Routes an admitted Inbox message to its reserved endpoint.
+   *
+   * @param message The persisted Inbox message.
+   * @returns The result of this delivery operation.
+   */
   #route(message: Parameters<OnDeliveryMessage>[0]): void | Promise<void> {
+    receptionObservation.markManaged();
     const key = RuntimeDeliverySupervisorGroup.messageKey(message);
     // `Delivery` invokes the callback only after this group's admission reserved its route.
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -683,11 +866,30 @@ class RuntimeDeliverySupervisorGroup {
         if (active.size === 0) this.#active.delete(route.ownerKey);
       });
     active.add(replay);
-    reservations.delete(key);
-    reservation.settled.resolve(undefined);
     return replay;
   }
 
+  /**
+   * Resolves and removes one reservation after its complete processing action.
+   *
+   * @param message The settled Inbox message.
+   */
+  #settleReservation(message: DeliveryEndpointMessage): void {
+    // The constructor initializes a reservation map for every supervised shard.
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const reservations = this.#reserved.get(message.shard.key())!;
+    const key = RuntimeDeliverySupervisorGroup.messageKey(message);
+    const reservation = reservations.get(key);
+    if (reservation === undefined) return;
+    reservations.delete(key);
+    reservation.settled.resolve(undefined);
+  }
+
+  /**
+   * Clears route reservations when a shard run finishes.
+   *
+   * @param shard The shard to process.
+   */
   #releaseUndeliveredReservations(shard: ShardIndex): void {
     // `options.shards` initializes one private reservation map per supervised shard.
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -698,6 +900,12 @@ class RuntimeDeliverySupervisorGroup {
     reservations.clear();
   }
 
+  /**
+   * Finds the configured route for an Inbox message.
+   *
+   * @param message The persisted Inbox message.
+   * @returns The result of this delivery operation.
+   */
   #select(message: DeliveryEndpointMessage): RuntimeDeliveryRoute | undefined {
     const key = RuntimeDeliverySupervisorGroup.key(message);
     const routes = this.#routes.get(key);
@@ -705,6 +913,13 @@ class RuntimeDeliverySupervisorGroup {
     return route === undefined || this.#retiringOwners.has(route.ownerKey) ? undefined : route;
   }
 
+  /**
+   * Finds the matching route for an Inbox message.
+   *
+   * @param routes The candidate routes.
+   * @param message The persisted Inbox message.
+   * @returns The result of this delivery operation.
+   */
   static select(
     routes: readonly RuntimeDeliveryRoute[] | undefined,
     message: DeliveryEndpointMessage,
@@ -716,7 +931,7 @@ class RuntimeDeliverySupervisorGroup {
 
   /**
    *
-   * Derives a tenant boundary key from the delivery label's matching envelope.
+   * Finds the tenant boundary key from the delivery label's matching envelope.
    * `HANDLE_COMMAND` reads the Command actor tenant; Event labels read imported
    * or past-message Event origin tenants.
    *
@@ -747,6 +962,12 @@ class RuntimeDeliverySupervisorGroup {
     return undefined;
   }
 
+  /**
+   * Builds a route key for one configured endpoint.
+   *
+   * @param route The configured route.
+   * @returns The result of this delivery operation.
+   */
   static key(
     route: Pick<DeliveryEndpointMessage, "label" | "shard"> & {
       readonly inboxId?: { readonly targetTypeUrl: string };
@@ -759,8 +980,14 @@ class RuntimeDeliverySupervisorGroup {
     return JSON.stringify([route.label, targetTypeUrl, route.shard.index, route.shard.ofTotal]);
   }
 
+  /**
+   * Builds an exact route-reservation key for one Inbox message.
+   *
+   * @param message The persisted Inbox message.
+   * @returns The result of this delivery operation.
+   */
   static messageKey(message: DeliveryEndpointMessage): string {
-    return `${message.signalId}/${RuntimeDeliverySupervisorGroup.key(message)}`;
+    return `${message.id.shard.key()}/${message.id.value}`;
   }
 }
 
@@ -776,22 +1003,44 @@ interface RuntimeDeliveryReservation {
   readonly settled: PromiseWithResolvers<undefined>;
 }
 
+/**
+ * Supplies local shard recovery observations to the supervisor.
+ */
 class LocalDeliverySource {
   readonly #shards = new Map<string, ShardIndex>();
+
   #recoveryEnabled = false;
 
+  /**
+   * Creates the delivery component with its configured dependencies.
+   *
+   * @param shards The shards assigned to this runtime.
+   */
   constructor(shards: readonly ShardIndex[]) {
     this.add(shards);
   }
 
+  /**
+   * Adds the configured delivery runtime or shards.
+   *
+   * @param shards The shards assigned to this runtime.
+   */
   add(shards: readonly ShardIndex[]): void {
     for (const shard of shards) this.#shards.set(shard.key(), shard);
   }
 
+  /**
+   * Sets local shards as eligible for periodic recovery.
+   */
   enableRecovery(): void {
     this.#recoveryEnabled = true;
   }
 
+  /**
+   * Returns the locally recoverable shard snapshot.
+   *
+   * @returns The result of this delivery operation.
+   */
   shardSnapshot(): Promise<readonly DeliveryShardUpdate[]> {
     return Promise.resolve(
       this.#recoveryEnabled
@@ -804,20 +1053,38 @@ class LocalDeliverySource {
     );
   }
 
+  /**
+   * Observes shard changes until the operation is cancelled.
+   *
+   * @param options The delivery or cancellation options.
+   * @returns The result of this delivery operation.
+   */
   observeShardUpdates(options?: DeliveryOperationOptions): AsyncIterable<never> {
     return EnvironmentDeliveryValues.updatesUntilAborted(options?.signal);
   }
 
+  /**
+   * Returns expired local ownership records.
+   *
+   * @returns The result of this delivery operation.
+   */
   releaseExpired(): Promise<readonly unknown[]> {
     return Promise.resolve([]);
   }
 }
 
 /**
+ * Groups private delivery-runtime assembly and failure operations.
  *
- * @internal Groups private delivery-runtime assembly and failure operations.
+ * @internal
  */
 const EnvironmentDeliveryValues = Object.freeze({
+  /**
+   * Validates a delivery source before use.
+   *
+   * @param source The source to validate.
+   * @returns The validated delivery source.
+   */
   requireSource(source: unknown): DeliverySource {
     if (
       source === null ||
@@ -830,6 +1097,15 @@ const EnvironmentDeliveryValues = Object.freeze({
     }
     return source as DeliverySource;
   },
+
+  /**
+   * Creates the worker that drains one context runtime.
+   *
+   * @param runtime The context runtime to serve.
+   * @param ports Optional delivery ports.
+   * @param nodeId Optional node identity.
+   * @returns The configured worker.
+   */
   createWorker(
     runtime: EnvironmentDeliveryRuntime,
     ports?: EnvironmentDeliveryPorts,
@@ -848,6 +1124,16 @@ const EnvironmentDeliveryValues = Object.freeze({
     });
     return deliveryRunWorkers.worker(worker);
   },
+
+  /**
+   * Creates a supervisor group for shards with one total.
+   *
+   * @param runtime The context runtime to serve.
+   * @param shards The assigned shards.
+   * @param ports Optional delivery ports.
+   * @param nodeId Optional node identity.
+   * @returns The configured supervisor group.
+   */
   createSupervisorGroup(
     runtime: EnvironmentDeliveryRuntime,
     shards: readonly ShardIndex[],
@@ -871,8 +1157,20 @@ const EnvironmentDeliveryValues = Object.freeze({
       ...(runtime.logger === undefined ? {} : { logger: runtime.logger }),
     });
   },
+
+  /**
+   * Creates an update stream that finishes on cancellation.
+   *
+   * @param signal The optional cancellation signal.
+   * @returns The cancellation-aware stream.
+   */
   updatesUntilAborted(signal: AbortSignal | undefined): AsyncIterable<never> {
     return {
+      /**
+       * Returns the cancellation-aware update iterator.
+       *
+       * @returns The result of this delivery operation.
+       */
       [Symbol.asyncIterator](): AsyncIterator<never> {
         return {
           next: () =>
@@ -893,6 +1191,13 @@ const EnvironmentDeliveryValues = Object.freeze({
       },
     };
   },
+
+  /**
+   * Finds the sole owner shared by the supplied scopes.
+   *
+   * @param scopes The exact delivery scopes.
+   * @returns Their shared owner.
+   */
   soleOwner(scopes: readonly DeliveryRunScope[]): DeliveryRunOwner {
     const first = scopes[0]?.owner;
     if (first === undefined || scopes.some(({ owner }) => owner.key !== first.key)) {
@@ -900,6 +1205,13 @@ const EnvironmentDeliveryValues = Object.freeze({
     }
     return first;
   },
+
+  /**
+   * Collects distinct shards from the supplied scopes.
+   *
+   * @param scopes The exact delivery scopes.
+   * @returns Their distinct shards.
+   */
   uniqueShards(scopes: readonly DeliveryRunScope[]): readonly ShardIndex[] {
     const shards = new Map<string, ShardIndex>();
     for (const { ready } of scopes) {
@@ -907,6 +1219,13 @@ const EnvironmentDeliveryValues = Object.freeze({
     }
     return Object.freeze([...shards.values()]);
   },
+
+  /**
+   * Throws collected failures without losing their identity.
+   *
+   * @param failures The failures to propagate.
+   * @param message The aggregate message when several failures occurred.
+   */
   throwFailures(failures: readonly unknown[], message: string): void {
     if (failures.length === 1) {
       throw failures[0];
@@ -915,6 +1234,13 @@ const EnvironmentDeliveryValues = Object.freeze({
       throw new AggregateError(failures, message);
     }
   },
+
+  /**
+   * Awaits one asynchronous cleanup action.
+   *
+   * @param action The action to await.
+   * @returns Completion of that action.
+   */
   async attempt(action: () => Promise<void>): Promise<void> {
     await action();
   },

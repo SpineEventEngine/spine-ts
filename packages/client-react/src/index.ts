@@ -17,7 +17,10 @@ import type {
   Subscription,
   SubscriptionDelivery,
   SubscriptionLifecycle,
+  SubscriptionActivationOptions,
+  EntitySubscriptionOptions,
 } from "@spine-event-engine/client-web";
+import type { Topic } from "@spine-event-engine/proto/client";
 import {
   createContext,
   createElement,
@@ -29,10 +32,13 @@ import {
   useState,
   type ReactElement,
   type ReactNode,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 
 /**
  * A result observed after a request is started by an effect.
+ * @typeParam Result The successful request value.
  */
 export type RequestObservation<Result> =
   | Readonly<{
@@ -136,6 +142,11 @@ const subscriptionIdle = Object.freeze({
   lifecycle: undefined,
   error: undefined,
 });
+const subscriptionConnecting = Object.freeze({
+  ...subscriptionIdle,
+  status: "connecting" as const,
+});
+const subscriptionConnected = Object.freeze({ ...subscriptionIdle, status: "connected" as const });
 
 /**
  * Renders one application-owned client request scope for descendants.
@@ -161,6 +172,7 @@ export function useSpineClient(): ClientRequest {
  * Starts one asynchronous request after commit and observes only its live generation.
  * The factory must be stable for the supplied dependency list and forward the provided signal.
  * Cancellation is cooperative: a factory that ignores the signal may continue its underlying work.
+ * @typeParam Result The successful request value.
  * @param request Starts the asynchronous operation with an abort signal.
  * @param dependencies Identifies when React must start a new operation.
  * @returns Returns the latest request observation.
@@ -215,25 +227,47 @@ export function useEntityQuery(
  * @param dependencies Identifies when React must recreate the subscription.
  * @param onDelivery Optionally receives every delivery before React coalesces observation state.
  * @param onLifecycle Optionally receives every lifecycle notice before React coalesces observation state.
+ * @param options Optional activation and first-update timing and notification.
  * @returns Returns the latest subscription observation.
  */
 export function useEntitySubscription(
-  topic: Parameters<ClientRequest["createSubscription"]>[0],
-  authoritativeQuery: Extract<
-    Parameters<ClientRequest["createSubscription"]>[1],
-    { readonly kind: "entity" }
-  >["authoritativeQuery"],
+  topic: Topic,
+  authoritativeQuery: EntitySubscriptionOptions["authoritativeQuery"],
   dependencies: readonly unknown[],
   onDelivery?: OnSubscriptionDelivery,
   onLifecycle?: OnSubscriptionLifecycle,
+  options: EntityObservationOptions = {},
 ): SubscriptionObservation {
   const request = useSpineClient();
+  const reactive = [
+    request,
+    ...dependencies,
+    options.activationTimeoutMs,
+    options.firstUpdateTimeoutMs,
+    options.onFirstUpdateTimeout !== undefined,
+  ];
+  const timeoutCallback = SubscriptionObservers.useEntityTimeoutNotice(options, reactive);
   return SubscriptionObservers.use(
-    () => request.createSubscription(topic, { kind: "entity", authoritativeQuery }),
-    [request, ...dependencies],
+    SubscriptionObservers.entityFactory(
+      request,
+      topic,
+      authoritativeQuery,
+      options,
+      timeoutCallback,
+    ),
+    reactive,
     onDelivery,
     onLifecycle,
+    options.activationTimeoutMs === undefined
+      ? {}
+      : { activationTimeoutMs: options.activationTimeoutMs },
   );
+}
+
+interface EntityObservationOptions {
+  readonly activationTimeoutMs?: number;
+  readonly firstUpdateTimeoutMs?: number;
+  readonly onFirstUpdateTimeout?: (subscription: Subscription) => void | Promise<void>;
 }
 
 /**
@@ -241,13 +275,25 @@ export function useEntitySubscription(
  * Event gaps are published as lifecycle notices; they are not inferred as history.
  * @param createSubscription Creates the event subscription.
  * @param dependencies Identifies when React must recreate the subscription.
+ * @param onDelivery Optionally receives every delivery before React coalesces observation state.
+ * @param onLifecycle Optionally receives every lifecycle notice before React coalesces observation state.
+ * @param options Optional initial activation deadline.
  * @returns Returns the latest subscription observation.
  */
 export function useEventSubscription(
   createSubscription: () => Promise<Subscription>,
   dependencies: readonly unknown[],
+  onDelivery?: OnSubscriptionDelivery,
+  onLifecycle?: OnSubscriptionLifecycle,
+  options: Pick<SubscriptionActivationOptions, "activationTimeoutMs"> = {},
 ): SubscriptionObservation {
-  return SubscriptionObservers.use(createSubscription, dependencies);
+  return SubscriptionObservers.use(
+    createSubscription,
+    [...dependencies, options.activationTimeoutMs],
+    onDelivery,
+    onLifecycle,
+    options,
+  );
 }
 
 /**
@@ -273,20 +319,97 @@ export function useSubscriptionDelivery(
 }
 
 const SubscriptionObservers = Object.freeze({
+  /**
+   * Captures one committed Entity subscription factory.
+   * @param request The public client.
+   * @param topic The Entity topic.
+   * @param authoritativeQuery Creates the recovery query.
+   * @param options Configures first-update timing.
+   * @param timeoutCallback Reads the current committed callback.
+   * @returns A factory for the current render.
+   */
+  entityFactory(
+    request: ClientRequest,
+    topic: Topic,
+    authoritativeQuery: EntitySubscriptionOptions["authoritativeQuery"],
+    options: EntityObservationOptions,
+    timeoutCallback: () => EntityObservationOptions["onFirstUpdateTimeout"],
+  ): () => Promise<Subscription> {
+    return () => {
+      const onFirstUpdateTimeout = timeoutCallback();
+      return request.createSubscription(topic, {
+        kind: "entity",
+        authoritativeQuery,
+        ...(options.firstUpdateTimeoutMs === undefined
+          ? {}
+          : { firstUpdateTimeoutMs: options.firstUpdateTimeoutMs }),
+        ...(onFirstUpdateTimeout === undefined ? {} : { onFirstUpdateTimeout }),
+      });
+    };
+  },
+
+  /**
+   * Wraps committed callbacks without recreating a stream when their identities change.
+   *
+   * @param onDelivery The current delivery callback.
+   * @param onLifecycle The current lifecycle callback.
+   * @returns Stable callback wrappers for this render.
+   */
+  useNoticeCallbacks(onDelivery?: OnSubscriptionDelivery, onLifecycle?: OnSubscriptionLifecycle) {
+    const delivery = useEffectEvent((notice: SubscriptionDelivery) => onDelivery?.(notice));
+    const lifecycle = useEffectEvent((notice: SubscriptionLifecycle) => onLifecycle?.(notice));
+    return { delivery, lifecycle };
+  },
+
+  /**
+   * Binds first-update notices to the committed Entity subscription generation.
+   * @param options The current timeout callback option.
+   * @param dependencies Values that recreate the Entity subscription.
+   * @returns A callback factory for the current generation.
+   */
+  useEntityTimeoutNotice(
+    options: Readonly<{
+      onFirstUpdateTimeout?: (subscription: Subscription) => void | Promise<void>;
+    }>,
+    dependencies: readonly unknown[],
+  ): () => ((subscription: Subscription) => void | Promise<void>) | undefined {
+    const generation = useRef(0);
+    const notifyTimeout = useEffectEvent((subscription: Subscription) =>
+      options.onFirstUpdateTimeout?.(subscription),
+    );
+    useLayoutEffect(() => {
+      const current = ++generation.current;
+      return () => {
+        if (generation.current === current) generation.current++;
+      };
+    }, dependencies);
+    return () => {
+      if (options.onFirstUpdateTimeout === undefined) return undefined;
+      const current = generation.current;
+      return (subscription: Subscription) =>
+        current === generation.current ? notifyTimeout(subscription) : undefined;
+    };
+  },
+
+  /**
+   * Creates one committed-generation subscription observer.
+   * @param createSubscription Creates the public subscription handle.
+   * @param dependencies Values that recreate the observation.
+   * @param onDelivery Receives each consumed delivery.
+   * @param onLifecycle Receives each lifecycle notice.
+   * @param options The optional activation deadline.
+   * @returns The latest observation state.
+   */
   use(
     createSubscription: () => Promise<Subscription>,
     dependencies: readonly unknown[],
     onDelivery?: OnSubscriptionDelivery,
     onLifecycle?: OnSubscriptionLifecycle,
+    options: Pick<SubscriptionActivationOptions, "activationTimeoutMs"> = {},
   ): SubscriptionObservation {
     const [state, setState] = useState<SubscriptionObservation>(subscriptionIdle);
     const generation = useRef(0);
-    const notifyDelivery = useEffectEvent((delivery: SubscriptionDelivery) => {
-      onDelivery?.(delivery);
-    });
-    const notifyLifecycle = useEffectEvent((lifecycle: SubscriptionLifecycle) => {
-      onLifecycle?.(lifecycle);
-    });
+    const callbacks = this.useNoticeCallbacks(onDelivery, onLifecycle);
     useLayoutEffect(() => {
       const current = ++generation.current;
       return () => {
@@ -295,76 +418,29 @@ const SubscriptionObservers = Object.freeze({
     }, dependencies);
     useEffect(() => {
       const current = generation.current;
-      let live = true;
-      let handle: Subscription | undefined;
-      let cancelled: Promise<void> | undefined;
-      const isLive = () => live && generation.current === current;
-      const cancel = () => {
-        if (handle === undefined) return Promise.resolve();
-        cancelled ??= Promise.resolve()
-          .then(() => handle?.cancel())
-          .catch(() => undefined);
-        return cancelled;
-      };
-      const publish = (next: SubscriptionObservation) => {
-        setState(next);
-      };
-
-      publish({
-        status: "connecting",
-        delivery: undefined,
-        lifecycle: undefined,
-        error: undefined,
-      });
-      void Promise.resolve()
-        .then(() => (isLive() ? createSubscription() : undefined))
-        .then(async (created) => {
-          if (created === undefined) return;
-          handle = created;
-          if (!isLive()) {
-            await cancel();
-            return;
-          }
-          await handle.activate();
-          if (!isLive()) {
-            await cancel();
-            return;
-          }
-          publish({
-            status: "connected",
-            delivery: undefined,
-            lifecycle: undefined,
-            error: undefined,
-          });
-          void SubscriptionObservers.observeDeliveries(
-            handle,
-            () => isLive() && handle === created,
-            setState,
-            cancel,
-            notifyDelivery,
-          );
-          void SubscriptionObservers.observeLifecycle(
-            handle,
-            () => isLive() && handle === created,
-            setState,
-            cancel,
-            notifyLifecycle,
-          );
-        })
-        .catch((error: unknown) => {
-          if (isLive()) {
-            setState({ status: "error", delivery: undefined, lifecycle: undefined, error });
-            void cancel();
-          }
-        });
+      const session = new ObservationSession(
+        () => generation.current === current,
+        setState,
+        callbacks.delivery,
+        callbacks.lifecycle,
+      );
+      void Promise.resolve().then(() => session.start(createSubscription, options));
       return () => {
-        live = false;
-        void cancel();
+        session.stop();
       };
     }, dependencies);
     return state;
   },
 
+  /**
+   * Publishes every delivery from the active subscription.
+   * @param subscription The public handle.
+   * @param live Checks whether this generation remains committed.
+   * @param onSetState Updates React observation state.
+   * @param cancel Cancels the handle after a stream failure.
+   * @param onDelivery Receives each delivery before state coalescing.
+   * @returns Completion after the update stream ends.
+   */
   async observeDeliveries(
     subscription: Subscription,
     live: () => boolean,
@@ -391,6 +467,15 @@ const SubscriptionObservers = Object.freeze({
     }
   },
 
+  /**
+   * Publishes every lifecycle notice from the active subscription.
+   * @param subscription The public handle.
+   * @param live Checks whether this generation remains committed.
+   * @param onSetState Updates React observation state.
+   * @param cancel Cancels the handle after a stream failure.
+   * @param onLifecycle Receives each lifecycle notice before state coalescing.
+   * @returns Completion after the lifecycle stream ends.
+   */
   async observeLifecycle(
     subscription: Subscription,
     live: () => boolean,
@@ -417,3 +502,125 @@ const SubscriptionObservers = Object.freeze({
     }
   },
 });
+
+/**
+ * Coordinates one committed React subscription generation and its cleanup.
+ */
+class ObservationSession {
+  #active = true;
+
+  #handle: Subscription | undefined;
+
+  #cancelled: Promise<void> | undefined;
+
+  /**
+   * Creates one observation session for a committed React generation.
+   * @param isGenerationCurrent Checks the current React generation.
+   * @param setState Publishes the latest observation.
+   * @param onDelivery Receives each Event or Entity delivery.
+   * @param onLifecycle Receives each lifecycle notice.
+   */
+  constructor(
+    private readonly isGenerationCurrent: () => boolean,
+    private readonly setState: Dispatch<SetStateAction<SubscriptionObservation>>,
+    private readonly onDelivery: OnSubscriptionDelivery,
+    private readonly onLifecycle: OnSubscriptionLifecycle,
+  ) {}
+
+  /**
+   * Checks whether this subscription still belongs to the committed render.
+   * @returns Whether updates may be published.
+   */
+  get live(): boolean {
+    return this.#active && this.isGenerationCurrent();
+  }
+
+  /**
+   * Checks whether this observation was retired before async work finished.
+   *
+   * @returns Whether the observation has been retired.
+   */
+  private hasRetired(): boolean {
+    return !this.#active || !this.isGenerationCurrent();
+  }
+
+  /**
+   * Creates and activates a subscription before consuming both streams.
+   * @param createSubscription The public factory for this render.
+   * @param options The activation deadline.
+   * @returns Completion after observation starts or activation fails.
+   */
+  async start(
+    createSubscription: () => Promise<Subscription>,
+    options: Pick<SubscriptionActivationOptions, "activationTimeoutMs">,
+  ): Promise<void> {
+    this.setState(subscriptionConnecting);
+    try {
+      if (this.hasRetired()) return;
+      const created = await createSubscription();
+      this.#handle = created;
+      if (this.hasRetired()) {
+        await this.cancel();
+        return;
+      }
+      await created.activate(options);
+      if (this.hasRetired()) {
+        await this.cancel();
+        return;
+      }
+      this.setState(subscriptionConnected);
+      this.observe(created);
+    } catch (error) {
+      if (this.live) {
+        this.setState({ status: "error", delivery: undefined, lifecycle: undefined, error });
+        void this.cancel();
+      }
+    }
+  }
+
+  /**
+   * Starts both independently consumed delivery and lifecycle streams.
+   * @param created The active subscription handle.
+   */
+  private observe(created: Subscription): void {
+    const live = () => this.live && this.#handle === created;
+    const cancel = () => this.cancel();
+    void SubscriptionObservers.observeDeliveries(
+      created,
+      live,
+      this.setState,
+      cancel,
+      this.onDelivery,
+    );
+    void SubscriptionObservers.observeLifecycle(
+      created,
+      live,
+      this.setState,
+      cancel,
+      this.onLifecycle,
+    );
+  }
+
+  /**
+   * Stops this render and requests cancellation of its subscription.
+   */
+  stop(): void {
+    this.#active = false;
+    void this.cancel();
+  }
+
+  /**
+   * Cancels the current handle at most once.
+   * @returns Completion after cancellation settles.
+   */
+  cancel(): Promise<void> {
+    if (this.#handle === undefined) return Promise.resolve();
+    this.#cancelled ??= Promise.resolve()
+      .then(() => this.#handle?.cancel())
+      .then(
+        () => undefined,
+        () => undefined,
+      );
+    return this.#cancelled;
+  }
+}

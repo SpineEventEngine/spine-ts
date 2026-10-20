@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { Datastore } from "@google-cloud/datastore";
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
+import { CommandIdSchema, CommandSchema, VersionSchema } from "@spine-event-engine/proto";
 import { Time } from "@spine-event-engine/core";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
@@ -28,13 +28,12 @@ import {
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 // prettier-ignore
 import {
-  SupportReplyDraftedSchema,
-} from "../../server/test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
+  DraftSupportReplySchema,
+} from "../../server/test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 import {
   AgentExecutionCompletionSchema,
-  AgentOutgoingSignalSchema,
+  AgentOutgoingCommandSchema,
   AgentSavedDispatchPlanSchema,
-  AgentSignalKeySchema,
   AgentExecutionRecordSchema,
   AgentInvocationStatus,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
@@ -57,7 +56,7 @@ function required<T>(value: T | undefined): T {
 }
 
 describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
-  it("retains a prepared empty output plan and fences its original Event", async () => {
+  it("retains a prepared empty Command plan and fences its original Command", async () => {
     const client = new Datastore({ projectId: `spine-agent-plan-${randomUUID()}` });
     const input = {
       entity: providerEntityInput(),
@@ -66,7 +65,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
     const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
     const handle = AgentExecutionStorageFactories.create(factory, input);
     const source = accepted(randomUUID(), `T-${randomUUID()}`);
-    const eventId = create(EventIdSchema, { value: randomUUID() });
+    const commandId = create(CommandIdSchema, { uuid: randomUUID() });
     try {
       await handle.admit(source);
       const claim = required(
@@ -78,22 +77,22 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
       );
       const recipient = required(source.recipientId);
       const agent = required(input.entity.id.unpack(recipient));
-      const event = create(EventSchema, {
-        id: eventId,
+      const command = create(CommandSchema, {
+        id: commandId,
         message: create(AnySchema, {
-          typeUrl: `type.spine.server.testing/${SupportReplyDraftedSchema.typeName}`,
+          typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
           value: toBinary(
-            SupportReplyDraftedSchema,
-            create(SupportReplyDraftedSchema, { agent, reply: "Please review." }),
+            DraftSupportReplySchema,
+            create(DraftSupportReplySchema, { agent, question: "Please review." }),
           ),
         }),
       });
       const completed = clone(AgentExecutionRecordSchema, claim.record);
-      completed.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY;
+      completed.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;
       completed.completion = create(AgentExecutionCompletionSchema, {
         initialVersion: create(VersionSchema, { number: 0 }),
         resultingVersion: create(VersionSchema, { number: 0 }),
-        outgoing: [create(AgentOutgoingSignalSchema, { signal: { case: "event", value: event } })],
+        commands: [create(AgentOutgoingCommandSchema, { command })],
       });
       await handle.complete({
         key: required(source.key),
@@ -101,7 +100,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
         expectedRecordBytes: toBinary(AgentExecutionRecordSchema, claim.record),
         next: completed,
       });
-      const signal = create(AgentSignalKeySchema, { id: { case: "event", value: eventId } });
+      const signal = commandId;
       await expect(
         handle.markDelivered(
           required(source.key),
@@ -111,7 +110,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
         ),
       ).rejects.toThrow(/plan/i);
       const prepared = clone(AgentExecutionRecordSchema, completed);
-      required(required(prepared.completion).outgoing[0]).plan = create(
+      required(required(prepared.completion).commands[0]).plan = create(
         AgentSavedDispatchPlanSchema,
       );
       await handle.update({
@@ -126,7 +125,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
       const recovery = AgentExecutionStorageFactories.create(reopened, input);
       try {
         expect(
-          required(await recovery.read(required(source.key))).completion?.outgoing[0]?.plan
+          required(await recovery.read(required(source.key))).completion?.commands[0]?.plan
             ?.targets,
         ).toEqual([]);
         await recovery.markDelivered(

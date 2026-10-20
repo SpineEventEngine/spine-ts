@@ -415,7 +415,7 @@ Aggregate's later acceptance and edit Events belong to the Aggregate, not
 to the Agent's `domainEventHistory`.
 
 The repository also exposes `agentExecution(id, sourceSignalId, scope)`.
-`accepted`, `active`, and `completed-pending-delivery` are not completion.
+`accepted`, `active`, and `completed-pending-commands` are not completion.
 `completed` and `terminated` are terminal; a missing record means unknown.
 The desktop uses these distinctions when deciding whether another generation
 can begin.

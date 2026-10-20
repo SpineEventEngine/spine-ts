@@ -12,21 +12,24 @@
  * the License.
  */
 
-import type { Message } from "@bufbuild/protobuf";
-import type { Event } from "@spine-event-engine/proto";
+import { clone, type Message } from "@bufbuild/protobuf";
+import { EventSchema, type Event } from "@spine-event-engine/proto";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 import type { EntityRecord } from "../entity/entity-record.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { EntityStorageInput } from "./entity-history.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
+import { TenantBoundary } from "./tenancy.js";
 
 /**
- * Describes one coordinated provider mutation for an Entity commit.
+ * Describes one prepared provider mutation for an Entity commit.
  *
  * This provider-only contract combines current state, retained histories, and
- * framework delivery events. Memory and transactional database providers apply
- * the changes atomically. MyISAM and Aria tables can retain partial writes.
- * This contract is not an application-level transaction API.
+ * framework delivery events. Providers write histories, diagnostic events,
+ * delivery events, then current state independently. A failed commit can leave
+ * a completed prefix on every provider. Single-record conditional operations
+ * remain atomic per storage slot; this port does not coordinate multiple records.
  *
  * @typeParam I Entity identifier type.
  * @typeParam S Entity state message type.
@@ -71,10 +74,62 @@ export interface EntityCommitInput<I, S extends Message> {
 }
 
 /**
- * A provider handle for coordinated changes to one bounded Entity scope.
+ * Captures prepared Entity records before provider I/O or a bounded retry.
  *
- * Memory and transactional database providers apply each commit atomically.
- * MyISAM and Aria tables can retain partial writes if a commit fails.
+ * Every retry reuses the same Entity ID, versions, and Event IDs; providers
+ * never invoke the application handler to prepare a second mutation.
+ */
+export const EntityCommitSnapshots: Readonly<{
+  /**
+   * Captures one prepared mutation before provider I/O.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state message type.
+   * @param input Supplies the prepared mutation.
+   * @returns An independent mutation snapshot.
+   */
+  capture<I, S extends Message>(input: EntityCommitInput<I, S>): EntityCommitInput<I, S>;
+}> = Object.freeze({
+  // prettier-ignore
+
+  /**
+   * Copies one mutation and its tenant boundary before the first await.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param input Supplies the prepared mutation.
+   * @returns Independent records for every provider attempt.
+   */
+  capture<I, S extends Message>(input: EntityCommitInput<I, S>): EntityCommitInput<I, S> {
+    const boundary = TenantBoundary.of(input.context);
+    const context: StorageContext = boundary.tenantId === undefined
+      ? { name: input.context.name, multitenant: false }
+      : { name: input.context.name, multitenant: true, tenantId: boundary.tenantId };
+    return {
+      ...input,
+      context,
+      entity: { ...input.entity, context },
+      entityId: input.entity.id.clone(input.entityId),
+      next: clone(EntityRecordSchema, input.next),
+      ...(input.states === undefined
+        ? {}
+        : { states: input.states.map((record) => clone(EntityRecordSchema, record)) }),
+      ...(input.diagnostics === undefined
+        ? {}
+        : { diagnostics: input.diagnostics.map((event) => clone(EventSchema, event)) }),
+      ...(input.events === undefined
+        ? {}
+        : { events: input.events.map((event) => clone(EventSchema, event)) }),
+    };
+  },
+});
+
+/**
+ * A provider handle for one bounded Entity scope.
+ *
+ * A commit may retain a completed prefix when a later record fails. Replaying
+ * the same captured input reuses versions and Event IDs. An Event's presence
+ * alone does not establish that current state was saved.
  */
 export interface EntityCommitStorage {
   // prettier-ignore
@@ -102,7 +157,7 @@ export interface EntityCommitStorageFactory {
   // prettier-ignore
 
   /**
-   * Creates a handle that coordinates Entity persistence changes for one provider.
+   * Creates a handle that persists one Entity's prepared records.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Entity state message type.
@@ -144,7 +199,7 @@ interface EntityCommitFactoryAccess {
 }
 
 /**
- * Provides the typed internal lookup for provider-managed atomic commit handles.
+ * Provides the typed internal lookup for provider-managed Entity commit handles.
  *
  * Provider adapters register their creator while constructing their factory;
  * the end-user storage root deliberately exposes no commit-construction method.
@@ -169,7 +224,7 @@ export const EntityCommitStorageFactories: EntityCommitFactoryAccess = Object.fr
   ): EntityCommitStorage {
     const creator = creators.get(factory);
     if (creator === undefined)
-      throw new Error("StorageFactory does not provide the required atomic Entity commit storage.");
+      throw new Error("StorageFactory does not provide the required Entity commit storage.");
     return creator.createEntityCommitStorage(input);
   },
 });

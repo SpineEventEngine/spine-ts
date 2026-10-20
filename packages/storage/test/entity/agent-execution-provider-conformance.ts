@@ -15,15 +15,15 @@
 import { randomUUID } from "node:crypto";
 import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
+import { CommandIdSchema, CommandSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
+  AgentAcceptedInvocationSchema,
   AgentExecutionCompletionSchema,
   AgentExecutionRecordSchema,
   AgentInvocationCountersSchema,
   AgentInvocationStatus,
-  AgentOutgoingSignalSchema,
+  AgentOutgoingCommandSchema,
   AgentSavedDispatchPlanSchema,
-  AgentSignalKeySchema,
   type AgentExecutionRecord,
   type AgentInvocationKey,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
@@ -32,8 +32,8 @@ import { expect } from "vitest";
 
 // prettier-ignore
 import {
-  SupportReplyDraftedSchema,
-} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
+  DraftSupportReplySchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 // prettier-ignore
 import {
   SupportReplyAgentIdSchema,
@@ -47,7 +47,7 @@ function required<T>(value: T | undefined): T {
 }
 
 /**
- * Exercises fenced renewal, history, completion and saved-output delivery on one provider.
+ * Exercises fenced renewal, history, completion and saved-Command delivery on one provider.
  * @param storage Tenant-scoped Agent execution handle.
  * @returns Completion after persisted lifecycle assertions.
  * @typeParam I Typed Agent identifier.
@@ -85,7 +85,9 @@ async function claimed<I, S extends Message>(
   ).toBe(false);
   const retained = required(await storage.read(key));
   expect(retained.claimExpiresAt?.seconds).toBe(4_000_000_001n);
-  expect(claim.record.accepted).toEqual(source);
+  expect(toBinary(AgentAcceptedInvocationSchema, required(claim.record.accepted))).toEqual(
+    toBinary(AgentAcceptedInvocationSchema, source),
+  );
   return retained;
 }
 
@@ -112,7 +114,9 @@ async function journaled<I, S extends Message>(
       next,
     }),
   ).rejects.toThrow(/changed|expected|stale|image/i);
-  expect(await storage.read(key)).toEqual(prior);
+  expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(key)))).toEqual(
+    toBinary(AgentExecutionRecordSchema, prior),
+  );
   await storage.update({
     key,
     token: "conformance-token",
@@ -122,7 +126,9 @@ async function journaled<I, S extends Message>(
       conversation(randomUUID(), randomUUID(), create(TimestampSchema, { seconds: 101n })),
     ],
   });
-  expect(await storage.read(key)).toEqual(next);
+  expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(key)))).toEqual(
+    toBinary(AgentExecutionRecordSchema, next),
+  );
   await expect(
     storage.update({
       key,
@@ -131,7 +137,9 @@ async function journaled<I, S extends Message>(
       next: prior,
     }),
   ).rejects.toThrow(/changed|expected|stale|image|current/i);
-  expect(await storage.read(key)).toEqual(next);
+  expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(key)))).toEqual(
+    toBinary(AgentExecutionRecordSchema, next),
+  );
   return next;
 }
 
@@ -140,29 +148,25 @@ async function completedOutput<I, S extends Message>(
   key: AgentInvocationKey,
   prior: AgentExecutionRecord,
 ): Promise<AgentExecutionRecord> {
-  const id = create(EventIdSchema, { value: randomUUID() });
+  const id = create(CommandIdSchema, { uuid: randomUUID() });
   const agent = create(SupportReplyAgentIdSchema, { ticketNumber: required(key.scope).agentKey });
-  const reply = create(SupportReplyDraftedSchema, { agent, reply: "Please review." });
-  const event = create(EventSchema, {
+  const draft = create(DraftSupportReplySchema, { agent, question: "Please review." });
+  const command = create(CommandSchema, {
     id,
     message: create(AnySchema, {
-      typeUrl: `type.spine.server.testing/${SupportReplyDraftedSchema.typeName}`,
-      value: toBinary(SupportReplyDraftedSchema, reply),
+      typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
+      value: toBinary(DraftSupportReplySchema, draft),
     }),
   });
   const next = clone(AgentExecutionRecordSchema, prior);
-  next.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY;
+  next.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;
   next.completion = create(AgentExecutionCompletionSchema, {
     initialVersion: create(VersionSchema, { number: 0 }),
     resultingVersion: create(VersionSchema, { number: 0 }),
-    outgoing: [create(AgentOutgoingSignalSchema, { signal: { case: "event", value: event } })],
+    commands: [create(AgentOutgoingCommandSchema, { command })],
   });
   const duplicated = clone(AgentExecutionRecordSchema, next);
-  duplicated.completion?.outgoing.push(
-    create(AgentOutgoingSignalSchema, {
-      signal: { case: "event", value: event },
-    }),
-  );
+  duplicated.completion?.commands.push(create(AgentOutgoingCommandSchema, { command }));
   await expect(
     storage.complete({
       key,
@@ -171,14 +175,18 @@ async function completedOutput<I, S extends Message>(
       next: duplicated,
     }),
   ).rejects.toThrow(/duplicate/i);
-  expect(await storage.read(key)).toEqual(prior);
+  expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(key)))).toEqual(
+    toBinary(AgentExecutionRecordSchema, prior),
+  );
   await storage.complete({
     key,
     token: "conformance-token",
     expectedRecordBytes: toBinary(AgentExecutionRecordSchema, prior),
     next,
   });
-  expect(await storage.read(key)).toEqual(next);
+  expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(key)))).toEqual(
+    toBinary(AgentExecutionRecordSchema, next),
+  );
   await expect(
     storage.complete({
       key,
@@ -187,7 +195,9 @@ async function completedOutput<I, S extends Message>(
       next,
     }),
   ).rejects.toThrow(/changed|expected|stale|image|current/i);
-  expect(await storage.read(key)).toEqual(next);
+  expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(key)))).toEqual(
+    toBinary(AgentExecutionRecordSchema, next),
+  );
   return next;
 }
 
@@ -197,7 +207,7 @@ async function delivered<I, S extends Message>(
   prior: AgentExecutionRecord,
 ): Promise<void> {
   const prepared = clone(AgentExecutionRecordSchema, prior);
-  const outgoing = required(prepared.completion?.outgoing[0]);
+  const outgoing = required(prepared.completion?.commands[0]);
   outgoing.plan = create(AgentSavedDispatchPlanSchema);
   await storage.update({
     key,
@@ -205,13 +215,15 @@ async function delivered<I, S extends Message>(
     expectedRecordBytes: toBinary(AgentExecutionRecordSchema, prior),
     next: prepared,
   });
-  expect(await storage.read(key)).toEqual(prepared);
+  expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(key)))).toEqual(
+    toBinary(AgentExecutionRecordSchema, prepared),
+  );
   const changedPlan = clone(AgentExecutionRecordSchema, prepared);
-  required(required(changedPlan.completion).outgoing[0]).plan = create(
+  required(required(changedPlan.completion).commands[0]).plan = create(
     AgentSavedDispatchPlanSchema,
     { targets: [] },
   );
-  required(required(changedPlan.completion).outgoing[0]).delivered = true;
+  required(required(changedPlan.completion).commands[0]).delivered = true;
   await expect(
     storage.update({
       key,
@@ -220,15 +232,16 @@ async function delivered<I, S extends Message>(
       next: changedPlan,
     }),
   ).rejects.toThrow(/immutable|one-time|delivered/i);
-  expect(await storage.read(key)).toEqual(prepared);
-  const event = outgoing.signal.case === "event" ? outgoing.signal.value : undefined;
-  const signal = create(AgentSignalKeySchema, {
-    id: { case: "event", value: required(event?.id) },
-  });
+  expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(key)))).toEqual(
+    toBinary(AgentExecutionRecordSchema, prepared),
+  );
+  const signal = required(outgoing.command?.id);
   await expect(
     storage.markDelivered(key, "conformance-token", new Uint8Array(), [signal]),
   ).rejects.toThrow(/changed|expected|stale|image|current/i);
-  expect(await storage.read(key)).toEqual(prepared);
+  expect(toBinary(AgentExecutionRecordSchema, required(await storage.read(key)))).toEqual(
+    toBinary(AgentExecutionRecordSchema, prepared),
+  );
   await storage.markDelivered(
     key,
     "conformance-token",

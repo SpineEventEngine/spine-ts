@@ -33,6 +33,8 @@ import {
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { PostMessageSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
+import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
+import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
 import {
   BoardMessageViewSchema,
   BoardIdSchema,
@@ -44,6 +46,7 @@ const parameters = new URLSearchParams(location.search);
 const baseUrl = parameters.get("baseUrl");
 if (baseUrl === null) throw new Error("baseUrl is required");
 const protocol = parameters.get("protocol") ?? "grpc-web";
+const authenticated = parameters.get("authenticated") === "true";
 if (protocol !== "connect" && protocol !== "grpc-web")
   throw new Error("protocol must be connect or grpc-web");
 const actor = parameters.get("actor") ?? "ada";
@@ -56,7 +59,12 @@ const createBrowserTransport =
 const wireSubscriptions = createClient(SubscriptionService, createBrowserTransport({ baseUrl }));
 const client = (
   protocol === "connect" ? Client.forConnect.bind(Client) : Client.forGrpcWeb.bind(Client)
-)(baseUrl, { ...(tenant === null ? {} : { tenant }) });
+)(baseUrl, {
+  ...(tenant === null ? {} : { tenant }),
+  ...(authenticated
+    ? { onRequestMetadata: () => ({ authorization: "Bearer interop-session" }) }
+    : {}),
+});
 const request = client.onBehalfOf(actor);
 const query = create(QuerySchema, {
   target: create(TargetSchema, {
@@ -125,20 +133,49 @@ const startActiveSubscription = async () => {
   throw new Error("active subscription did not receive an update");
 };
 
-const post = () =>
-  request.post(
-    PostMessageSchema,
-    create(PostMessageSchema, {
-      id: create(MessageIdSchema, {
-        value: `browser-interop-${messageIdPrefix}-${String(++sequence)}`,
-      }),
-      board: create(BoardIdSchema, { value: board }),
-      author: create(BoardUserIdSchema, { value: "ada" }),
-      username: "Ada",
-      text: "browser",
-      postedAt: create(TimestampSchema, { seconds: BigInt(sequence) }),
+const nextPost = () =>
+  create(PostMessageSchema, {
+    id: create(MessageIdSchema, {
+      value: `browser-interop-${messageIdPrefix}-${String(++sequence)}`,
     }),
-  );
+    board: create(BoardIdSchema, { value: board }),
+    author: create(BoardUserIdSchema, { value: "ada" }),
+    username: "Ada",
+    text: "browser",
+    postedAt: create(TimestampSchema, { seconds: BigInt(sequence) }),
+  });
+
+const post = () => request.post(PostMessageSchema, nextPost());
+
+const postAndConfirm = async () => {
+  const command = nextPost();
+  const result = await request.postAndSubscribe(PostMessageSchema, command, {
+    events: [MessagePostedSchema],
+    rejections: [MessageAlreadyPostedSchema],
+    activationTimeoutMs: 5_000,
+    firstUpdateTimeoutMs: 5_000,
+    onFirstUpdateTimeout: (subscription) => subscription.cancel(),
+  });
+  if (result.kind === "refused")
+    return { kind: "refused", acknowledgement: result.acknowledgement.kind };
+  try {
+    for await (const delivery of result.subscription.updates) {
+      if (delivery.kind !== "update" || delivery.update.update.case !== "eventUpdates") continue;
+      for (const event of delivery.update.update.value.event) {
+        const posted = event.message && AnyMessages.unpack(event.message, MessagePostedSchema);
+        if (posted?.id?.value === command.id?.value)
+          return { kind: "confirmed", acknowledgement: result.acknowledgement.kind };
+        const duplicate =
+          event.message && AnyMessages.unpack(event.message, MessageAlreadyPostedSchema);
+        if (duplicate?.id?.value === command.id?.value)
+          return { kind: "alreadyPosted", acknowledgement: result.acknowledgement.kind };
+      }
+    }
+    throw new Error("post confirmation stream ended");
+  } finally {
+    await result.subscription.cancel();
+  }
+};
 
 const subscribe = async () => {
   const subscription = await request.createSubscription(topic, {
@@ -196,6 +233,7 @@ Object.assign(window, {
   interopProtocol: protocol,
   interopClient: request,
   post,
+  postAndConfirm,
   read: () => request.send(query),
   resolveContext,
   createPublicSubscription,

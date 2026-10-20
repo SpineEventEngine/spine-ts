@@ -17,11 +17,13 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor, type Transport } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
-import { SignalEnvelopes, AnyMessages, Time } from "@spine-event-engine/core";
+import { SignalEnvelopes, AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
   CommandIdSchema,
+  FieldPathSchema,
+  OriginSchema,
   TenantIdSchema,
   UserIdSchema,
   ZoneIdSchema,
@@ -31,6 +33,12 @@ import {
   type ZoneId,
 } from "@spine-event-engine/proto";
 import {
+  CompositeFilter_CompositeOperator,
+  CompositeFilterSchema,
+  Filter_Operator,
+  FilterSchema,
+  TargetFiltersSchema,
+  TopicIdSchema,
   CommandService,
   QuerySchema,
   QueryResponseSchema,
@@ -47,17 +55,11 @@ import {
 } from "@spine-event-engine/proto/client";
 
 /**
- * A valid application-level command outcome.
+ * The server's admission acknowledgement for a posted Command.
+ * Acceptance does not establish successful handler processing.
  */
-export type ClientOutcome =
-  | Readonly<{
-      // prettier-ignore
-
-      /**
-       * Identifies a successful command.
-       */
-      readonly kind: "ok";
-    }>
+export type CommandAcknowledgement =
+  | AcceptedCommandAcknowledgement
   | Readonly<{
       // prettier-ignore
 
@@ -86,6 +88,85 @@ export type ClientOutcome =
     }>;
 
 /**
+ * Identifies a Command accepted for processing.
+ */
+interface AcceptedCommandAcknowledgement {
+  // prettier-ignore
+
+  /**
+   * Marks successful admission.
+   */
+  readonly kind: "ok";
+}
+
+/**
+ * Selects Event and rejection types before posting one Command.
+ */
+export interface PostAndSubscribeOptions extends ClientOperationOptions {
+  // prettier-ignore
+
+  /**
+   * Event schemas that may be produced by the Command.
+   */
+  readonly events?: readonly GenMessage<Message>[];
+
+  /**
+   * Rejection Event schemas that may be produced by the Command.
+   */
+  readonly rejections?: readonly GenMessage<Message>[];
+
+  /**
+   * Limits all initial subscriptions through their readiness acknowledgements.
+   */
+  readonly activationTimeoutMs?: number;
+
+  /**
+   * Notifies once if no selected Event arrives after posting starts.
+   */
+  readonly firstUpdateTimeoutMs?: number;
+
+  /**
+   * Notifies the application about the active logical subscription on first-update timeout.
+   *
+   * @param subscription The active handle, which may be cancelled explicitly.
+   * @returns Completion after the application observes the notice.
+   */
+  readonly onFirstUpdateTimeout?: (subscription: Subscription) => void | Promise<void>;
+}
+
+/**
+ * Reports Command admission separately from continuing Event observation.
+ */
+export type PostAndSubscribeResult =
+  | Readonly<{
+      /**
+       * Identifies a Command accepted for processing.
+       */
+      readonly kind: "accepted";
+
+      /**
+       * Carries the successful admission acknowledgement.
+       */
+      readonly acknowledgement: AcceptedCommandAcknowledgement;
+
+      /**
+       * Carries continuing selected Event deliveries for explicit cancellation.
+       */
+      readonly subscription: Subscription;
+    }>
+  | Readonly<{
+      /**
+       * Identifies a Command refused before handler processing.
+       */
+      readonly kind: "refused";
+
+      /**
+       * Carries the error or rejection returned on admission.
+       */
+      readonly acknowledgement: Exclude<CommandAcknowledgement, AcceptedCommandAcknowledgement>;
+    }>;
+
+/**
  * Options shared by client operations.
  */
 export interface ClientOperationOptions {
@@ -95,6 +176,18 @@ export interface ClientOperationOptions {
    * Cancels the operation when aborted.
    */
   readonly signal?: AbortSignal;
+}
+
+/**
+ * Options for the first remote activation attempt.
+ */
+export interface SubscriptionActivationOptions extends ClientOperationOptions {
+  // prettier-ignore
+
+  /**
+   * Limits Subscribe, readiness acknowledgment, and setup retries in milliseconds.
+   */
+  readonly activationTimeoutMs?: number;
 }
 
 /**
@@ -120,6 +213,7 @@ export interface ClientOptions {
 
   /**
    * Updates application credentials before one reconnect attempt.
+   *
    * @param signal Cancels the refresh when the reconnect attempt ends.
    * @returns Completes after the application refresh ends.
    */
@@ -178,6 +272,7 @@ export interface SubscriptionRetryPolicy {
 
   /**
    * Calculates the delay before a retry.
+   *
    * @param attempt Identifies the retry attempt starting at one.
    * @returns Returns the delay in milliseconds.
    */
@@ -192,12 +287,14 @@ export interface SubscriptionScheduler {
 
   /**
    * Returns the current scheduler time in milliseconds.
+   *
    * @returns Returns the current time.
    */
   now(): number;
 
   /**
    * Waits for a retry delay unless cancelled.
+   *
    * @param delayMs Supplies the delay in milliseconds.
    * @param signal Cancels the wait.
    * @returns Completes when the delay ends or rejects on cancellation.
@@ -215,6 +312,19 @@ export interface EventSubscriptionOptions extends ClientOperationOptions {
    * Identifies this as an event subscription.
    */
   readonly kind: "event";
+
+  /**
+   * Notifies if no matching update arrives within this many milliseconds after activation.
+   */
+  readonly firstUpdateTimeoutMs?: number;
+
+  /**
+   * Notifies the application when the first update is late.
+   *
+   * @param subscription The active subscription, which may be cancelled explicitly.
+   * @returns Completion after observing the notice.
+   */
+  readonly onFirstUpdateTimeout?: (subscription: Subscription) => void | Promise<void>;
 }
 
 /**
@@ -229,7 +339,21 @@ export interface EntitySubscriptionOptions extends ClientOperationOptions {
   readonly kind: "entity";
 
   /**
+   * Notifies if no state delivery arrives within this many milliseconds after activation.
+   */
+  readonly firstUpdateTimeoutMs?: number;
+
+  /**
+   * Notifies the application when the first state delivery is late.
+   *
+   * @param subscription The active subscription, which may be cancelled explicitly.
+   * @returns Completion after observing the notice.
+   */
+  readonly onFirstUpdateTimeout?: (subscription: Subscription) => void | Promise<void>;
+
+  /**
    * Builds the query used after a possible update gap.
+   *
    * @returns Returns the authoritative entity query.
    */
   readonly authoritativeQuery: () => Query | { build(): Query };
@@ -275,7 +399,13 @@ export type SubscriptionDelivery =
  * A lifecycle state emitted independently for one logical subscription.
  */
 export type SubscriptionLifecycleState =
-  "connecting" | "connected" | "resynchronizing" | "gapPossible" | "failed" | "closed";
+  | "connecting"
+  | "connected"
+  | "resynchronizing"
+  | "gapPossible"
+  | "notificationFailed"
+  | "failed"
+  | "closed";
 
 /**
  * Describes one lifecycle transition for a logical subscription.
@@ -323,6 +453,28 @@ export type SubscriptionLifecycle =
     }>
 
   /**
+   * A first-update notification callback failed while updates remain active.
+   */
+  | Readonly<{
+      // prettier-ignore
+
+      /**
+       * Identifies a notification callback failure.
+       */
+      readonly state: "notificationFailed";
+
+      /**
+       * Identifies the current logical generation.
+       */
+      readonly generation: number;
+
+      /**
+       * Carries the callback failure.
+       */
+      readonly error: Error;
+    }>
+
+  /**
    * A terminal cancellation for a generation.
    */
   | Readonly<{
@@ -358,6 +510,7 @@ export type SubscriptionLifecycle =
 
 /**
  * Returns fresh application-provided request metadata synchronously for one outbound call.
+ *
  * @returns Returns headers for the outbound call.
  */
 export type OnRequestMetadata = () => HeadersInit;
@@ -414,14 +567,17 @@ export interface Subscription {
 
   /**
    * Starts the remote subscription and makes its updates available for iteration.
+   *
    * @param options Supplies cancellation options for activation.
-   * @returns Completes after remote activation ends.
+   * @returns Completes after a validated activation ACK while the update stream stays live.
    */
-  activate(options?: ClientOperationOptions): Promise<void>;
+  activate(options?: SubscriptionActivationOptions): Promise<void>;
 
   /**
-   * Cancels local iteration and performs one bounded remote cancellation.
-   * @returns Completes after remote cancellation ends.
+   * Stops local iteration immediately and starts bounded remote cancellation.
+   * A failed remote attempt remains retryable through this handle.
+   *
+   * @returns Completes when the current remote cancellation attempt ends.
    */
   cancel(): Promise<void>;
 }
@@ -434,11 +590,25 @@ export class ClientProtocolError extends Error {
 
   /**
    * Creates an error for an invalid wire response.
+   *
    * @param message Explains the protocol violation.
    */
   constructor(message: string) {
     super(`Client protocol error: ${message}`);
     this.name = "ClientProtocolError";
+  }
+}
+
+/**
+ * Reports expiry of the configured initial subscription activation deadline.
+ */
+export class SubscriptionActivationTimeoutError extends Error {
+  /**
+   * Creates the recognizable activation timeout failure.
+   */
+  constructor() {
+    super("Subscription activation timed out.");
+    this.name = "SubscriptionActivationTimeoutError";
   }
 }
 
@@ -479,6 +649,7 @@ export class Client {
 
   /**
    * Creates a client from an injected transport.
+   *
    * @param source Supplies the transport.
    * @param options Supplies immutable client options.
    * @returns Returns the created client.
@@ -489,6 +660,7 @@ export class Client {
 
   /**
    * Creates a browser client that always uses the gRPC-Web protocol.
+   *
    * @param baseUrl Supplies the gateway base URL.
    * @param options Supplies browser client options.
    * @returns Returns the created client.
@@ -507,6 +679,7 @@ export class Client {
    *
    * The selected gateway must permit binary Connect, including packed `Any` command
    * and query values. Selection is explicit: this method never probes or falls back.
+   *
    * @param baseUrl Supplies the gateway base URL.
    * @param options Supplies browser client options.
    * @returns Returns the created client.
@@ -525,6 +698,7 @@ export class Client {
 
   /**
    * Creates an immutable request scope for the guest actor.
+   *
    * @returns Returns the guest request scope.
    */
   asGuest(): ClientRequest {
@@ -533,6 +707,7 @@ export class Client {
 
   /**
    * Creates an immutable request scope for one actor.
+   *
    * @param user Identifies the actor for requests in the scope.
    * @returns Returns the actor request scope.
    */
@@ -543,10 +718,20 @@ export class Client {
 
   /**
    * Closes the client by requesting open-work cancellation, awaiting subscription cleanup, and closing its transport.
+   *
    * @returns Completes after subscription cleanup and transport closure.
    */
   close(): Promise<void> {
     return this.#owner.close();
+  }
+
+  /**
+   * Returns current remote cancellation failures that explicit close can retry.
+   *
+   * @returns The current incomplete cleanup failures.
+   */
+  get cleanupFailures(): readonly Error[] {
+    return this.#owner.cleanupFailures;
   }
 }
 
@@ -557,21 +742,38 @@ export interface ClientRequest {
   // prettier-ignore
 
   /**
-   * Posts a command and returns its validated application-level outcome.
+   * Posts a Command and returns its validated admission acknowledgement.
+   *
    * @param schema Supplies the command message schema.
    * @param message Supplies the command message.
    * @param options Supplies cancellation options.
-   * @returns Returns the validated command outcome.
+   * @returns The validated admission acknowledgement.
    * @typeParam Schema The domain schema that determines the accepted message shape.
    */
   post<Schema extends GenMessage<Message>>(
     schema: Schema,
     message: MessageShape<Schema>,
     options?: ClientOperationOptions,
-  ): Promise<ClientOutcome>;
+  ): Promise<CommandAcknowledgement>;
+
+  /**
+   * Activates selected outcome streams, posts one Command, and returns its admission result.
+   *
+   * @param schema The domain Command schema.
+   * @param message The domain Command payload.
+   * @param options The Event/rejection selection and optional timing.
+   * @returns An accepted handle or a posting refusal without a handle.
+   * @typeParam Schema The generated Command message schema.
+   */
+  postAndSubscribe<Schema extends GenMessage<Message>>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+    options: PostAndSubscribeOptions,
+  ): Promise<PostAndSubscribeResult>;
 
   /**
    * Sends a query after applying this scope's immutable actor context.
+   *
    * @param query Supplies a query or its builder.
    * @param options Supplies cancellation options.
    * @returns Returns the query response.
@@ -580,11 +782,24 @@ export interface ClientRequest {
 
   /**
    * Creates an inactive topic subscription registered for client cleanup.
+   *
    * @param topic Supplies the subscription topic.
    * @param options Supplies the subscription kind and recovery options.
    * @returns Returns the inactive subscription.
    */
   createSubscription(topic: Topic, options: CreateSubscriptionOptions): Promise<Subscription>;
+
+  /**
+   * Creates one logical subscription for distinct Event schemas.
+   *
+   * @param schemas The generated Event or rejection Event schemas.
+   * @param options The Event subscription options.
+   * @returns An inactive logical subscription.
+   */
+  createSubscription(
+    schemas: readonly GenMessage<Message>[],
+    options: EventSubscriptionOptions,
+  ): Promise<Subscription>;
 }
 
 /**
@@ -637,20 +852,43 @@ class Request implements ClientRequest {
     schema: Schema,
     message: MessageShape<Schema>,
     options: ClientOperationOptions = {},
-  ): Promise<ClientOutcome> {
+  ): Promise<CommandAcknowledgement> {
     return this.#owner.run(options.signal, async (signal) => {
-      const command = SignalEnvelopes.command({
-        context: create(CommandContextSchema, { actorContext: this.#context() }),
-        schema,
-        message,
-        validate: false,
-      });
-      const ack = await createClient(CommandService, this.#owner.transport).post(command, {
-        signal,
-      });
-      BrowserClientValues.validateAckId(ack.messageId, command.id?.uuid ?? "");
-      return BrowserClientValues.outcome(ack.status?.status);
+      return this.#postCommand(this.#command(schema, message), signal);
     });
+  }
+
+  /**
+   * Builds a fresh internal Command envelope for posting and origin filtering.
+   *
+   * @param schema The generated Command schema.
+   * @param message The domain Command payload.
+   * @returns The exact envelope to post.
+   * @typeParam Schema The generated Command schema.
+   */
+  #command<Schema extends GenMessage<Message>>(schema: Schema, message: MessageShape<Schema>) {
+    return SignalEnvelopes.command({
+      context: create(CommandContextSchema, { actorContext: this.#context() }),
+      schema,
+      message,
+      validate: false,
+    });
+  }
+
+  /**
+   * Posts one prepared internal envelope and verifies its acknowledgement.
+   *
+   * @param command The exact internal Command envelope.
+   * @param signal Cancels the posting RPC.
+   * @returns The validated admission acknowledgement.
+   */
+  async #postCommand(
+    command: import("@spine-event-engine/proto").Command,
+    signal: AbortSignal,
+  ): Promise<CommandAcknowledgement> {
+    const ack = await createClient(CommandService, this.#owner.transport).post(command, { signal });
+    BrowserClientValues.validateAckId(ack.messageId, command.id?.uuid ?? "");
+    return BrowserClientValues.outcome(ack.status?.status);
   }
 
   /**
@@ -688,22 +926,131 @@ class Request implements ClientRequest {
    * @param options The subscription kind, recovery query, and optional cancellation signal.
    * @returns The inactive tracked subscription.
    */
+  async createSubscription(topic: Topic, options: CreateSubscriptionOptions): Promise<Subscription>;
+
+  /**
+   * Creates one inactive Event group from generated schemas.
+   *
+   * @param schemas The selected Event or rejection schemas.
+   * @param options Event subscription options.
+   * @returns The logical group handle.
+   */
   async createSubscription(
-    topic: Topic,
+    schemas: readonly GenMessage<Message>[],
+    options: EventSubscriptionOptions,
+  ): Promise<Subscription>;
+
+  /**
+   * Creates an inactive topic subscription or logical Event group.
+   *
+   * @param topicOrSchemas The topic or generated Event schemas.
+   * @param options Subscription kind, recovery, and cancellation options.
+   * @returns The inactive tracked subscription.
+   */
+  async createSubscription(
+    topicOrSchemas: Topic | readonly GenMessage<Message>[],
     options: CreateSubscriptionOptions,
   ): Promise<Subscription> {
     const validatedOptions = BrowserClientValues.validateSubscriptionOptions(options);
+    if (Array.isArray(topicOrSchemas)) {
+      if (validatedOptions.kind !== "event")
+        throw new TypeError("Grouped subscriptions require kind: 'event'.");
+      const topics = BrowserClientValues.eventTopics(topicOrSchemas, this.#context());
+      return this.#owner.run(validatedOptions.signal, (signal) =>
+        Promise.resolve(
+          new GroupSubscription(this.#owner, topics, signal, validatedOptions, this.#subscriptions),
+        ),
+      );
+    }
     return this.#owner.run(validatedOptions.signal, (signal) =>
       Promise.resolve(
         new TopicSubscription(
           this.#owner,
-          BrowserClientValues.cloneTopic(topic, this.#context()),
+          BrowserClientValues.cloneTopic(topicOrSchemas as Topic, this.#context()),
           signal,
           validatedOptions,
           this.#subscriptions,
         ),
       ),
     );
+  }
+
+  /**
+   * Activates Command-specific Event subscriptions before posting one Command.
+   *
+   * @param schema The generated Command schema.
+   * @param message The Command payload.
+   * @param options Selected Event and rejection schemas with optional timing.
+   * @returns Its admission acknowledgement and, on acceptance, continuing updates.
+   * @typeParam Schema The generated Command schema.
+   */
+  async postAndSubscribe<Schema extends GenMessage<Message>>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+    options: PostAndSubscribeOptions,
+  ): Promise<PostAndSubscribeResult> {
+    BrowserClientValues.optionalDuration(options.activationTimeoutMs, "activation timeout");
+    BrowserClientValues.validateSubscriptionOptions({ kind: "event", ...options });
+    const schemas = [...(options.events ?? []), ...(options.rejections ?? [])];
+    const selected = BrowserClientValues.uniqueSchemas(schemas);
+    return this.#owner.run(options.signal, (signal) =>
+      this.#postSelected(schema, message, selected, options, signal),
+    );
+  }
+
+  /**
+   * Activates selected Event streams and posts exactly one Command.
+   * @param schema The generated Command schema.
+   * @param message The Command payload.
+   * @param selected Distinct Event/rejection schemas.
+   * @param options Activation and observation options.
+   * @param signal The combined request signal.
+   * @returns Admission acknowledgement with an active handle on acceptance.
+   * @typeParam Schema The generated Command schema.
+   */
+  async #postSelected<Schema extends GenMessage<Message>>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+    selected: readonly GenMessage<Message>[],
+    options: PostAndSubscribeOptions,
+    signal: AbortSignal,
+  ): Promise<PostAndSubscribeResult> {
+    const command = this.#command(schema, message);
+    const origin = SignalEnvelopes.originFromCommand(command);
+    const topics = BrowserClientValues.eventTopics(selected, this.#context(), origin);
+    const group = this.#outcomeGroup(topics, signal, options);
+    try {
+      await group.activate({
+        ...(options.activationTimeoutMs === undefined
+          ? {}
+          : { activationTimeoutMs: options.activationTimeoutMs }),
+        signal,
+      });
+      group.startFirstUpdateTimer();
+      const acknowledgement = await this.#postCommand(command, signal);
+      if (acknowledgement.kind === "ok")
+        return { kind: "accepted", acknowledgement, subscription: group };
+      void group.cancel().catch(() => undefined);
+      return { kind: "refused", acknowledgement };
+    } catch (error) {
+      void group.cancel().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * Creates one logical subscription for the selected streams.
+   * @param topics The matching Event targets.
+   * @param signal The combined request signal.
+   * @param options Timing and notification options.
+   * @returns The new unactivated group.
+   */
+  #outcomeGroup(
+    topics: readonly Topic[],
+    signal: AbortSignal,
+    options: PostAndSubscribeOptions,
+  ): GroupSubscription {
+    return new GroupSubscription(this.#owner, topics, signal, options, this.#subscriptions, true);
   }
 
   /**
@@ -733,11 +1080,29 @@ class ClientOwner {
 
   readonly #controllers = new Set<AbortController>();
 
-  readonly #subscriptions = new Set<TopicSubscription>();
+  readonly #subscriptions = new Set<Subscription>();
+
+  readonly #cleanup = new Map<WireSubscription, Error>();
+
+  readonly #pendingSubscribes = new Map<Promise<void>, Error | undefined>();
 
   #closed = false;
 
   #close: Promise<void> | undefined;
+
+  /**
+   * Returns current incomplete remote cleanup failures.
+   *
+   * @returns Errors from incomplete cancellation attempts.
+   */
+  get cleanupFailures(): readonly Error[] {
+    return [
+      ...this.#cleanup.values(),
+      ...[...this.#pendingSubscribes.values()].filter(
+        (error): error is Error => error !== undefined,
+      ),
+    ];
+  }
 
   /**
    * Captures the transport and optional reconnect credential refresh callback.
@@ -830,8 +1195,51 @@ class ClientOwner {
    *
    * @returns Completion after cleanup settles.
    */
-  async close(): Promise<void> {
-    return (this.#close ??= this.closeOwned());
+  close(): Promise<void> {
+    if (this.#close !== undefined) return this.#close;
+    const attempt = this.closeOwned();
+    this.#close = attempt;
+    void attempt.catch(() => {
+      if (this.#close === attempt) this.#close = undefined;
+    });
+    return attempt;
+  }
+
+  /**
+   * Cancels one accepted wire and retains any failed attempt for explicit retry.
+   *
+   * @param subscription The accepted remote subscription.
+   * @returns Completion after remote cancellation.
+   */
+  async cancelWire(subscription: WireSubscription): Promise<void> {
+    try {
+      await ClientTerminalValues.cancelWire(this.transport, subscription);
+      this.#cleanup.delete(subscription);
+    } catch (error) {
+      this.#cleanup.set(subscription, error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
+  }
+
+  /**
+   * Cancels a Subscribe result accepted after its local deadline.
+   *
+   * @param pending The remote Subscribe request.
+   * @returns A function marking a late result for cancellation.
+   */
+  trackSubscribe(pending: Promise<WireSubscription>): () => void {
+    let late = false;
+    const settled = pending.then(
+      async (subscription) => {
+        if (late) await this.cancelWire(subscription).catch(() => undefined);
+      },
+      () => undefined,
+    );
+    this.#pendingSubscribes.set(settled, undefined);
+    void settled.finally(() => this.#pendingSubscribes.delete(settled));
+    return () => {
+      late = true;
+    };
   }
 
   /**
@@ -839,7 +1247,7 @@ class ClientOwner {
    *
    * @param subscription The accepted wire or logical subscription to clean up.
    */
-  add(subscription: TopicSubscription): void {
+  add(subscription: Subscription): void {
     this.assertOpen();
     this.#subscriptions.add(subscription);
   }
@@ -849,7 +1257,7 @@ class ClientOwner {
    *
    * @param subscription The accepted wire or logical subscription to clean up.
    */
-  remove(subscription: TopicSubscription): void {
+  remove(subscription: Subscription): void {
     this.#subscriptions.delete(subscription);
   }
 
@@ -869,13 +1277,16 @@ class ClientOwner {
     this.#closed = true;
     for (const controller of this.#controllers) controller.abort();
     const failures: unknown[] = [];
-    try {
-      const settled = await Promise.allSettled(
-        [...this.#subscriptions].map((subscription) => subscription.cancel()),
-      );
-      for (const result of settled)
-        if (result.status === "rejected") failures.push(result.reason as unknown);
-    } finally {
+    const settled = await Promise.allSettled([
+      ...[...this.#subscriptions].map((subscription) => subscription.cancel()),
+      ...[...this.#cleanup.keys()].map((wire) => this.cancelWire(wire)),
+    ]);
+    for (const result of settled)
+      if (result.status === "rejected") failures.push(result.reason as unknown);
+    const pendingFailure = await this.#awaitPendingSubscribes();
+    if (pendingFailure !== undefined) failures.push(pendingFailure);
+    if (this.#cleanup.size > 0 && failures.length === 0) failures.push(...this.#cleanup.values());
+    if (failures.length === 0 && this.#cleanup.size === 0 && this.#pendingSubscribes.size === 0) {
       try {
         this.#source.close?.();
       } catch (error) {
@@ -888,6 +1299,35 @@ class ClientOwner {
         failures,
         `Client close cleanup failed: ${failures.map((failure) => String(failure)).join("; ")}`,
       );
+  }
+
+  /**
+   * Waits a bounded period for late Subscribe responses before transport closure.
+   * @returns An error if a remote Subscribe remains unsettled.
+   */
+  async #awaitPendingSubscribes(): Promise<Error | undefined> {
+    const pending = [...this.#pendingSubscribes.keys()];
+    if (pending.length === 0) return undefined;
+    const wait = Promise.allSettled(pending);
+    const timeout = new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          new ClientProtocolError("subscription cleanup is waiting for a late Subscribe response."),
+        );
+      }, CLEANUP_TIMEOUT_MS);
+      void wait.finally(() => {
+        clearTimeout(timer);
+      });
+    });
+    try {
+      await Promise.race([wait, timeout]);
+      return undefined;
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      for (const entry of pending)
+        if (this.#pendingSubscribes.has(entry)) this.#pendingSubscribes.set(entry, failure);
+      return failure;
+    }
   }
 }
 
@@ -938,6 +1378,12 @@ class TopicSubscription implements Subscription {
   #retryStartedAt: number | undefined;
 
   #connectedAt: number | undefined;
+
+  #firstUpdateTimer: ReturnType<typeof setTimeout> | undefined;
+
+  #firstUpdateSeen = false;
+
+  #firstUpdateExpired = false;
 
   /**
    * Creates bounded update and lifecycle queues and registers the inactive stream.
@@ -991,15 +1437,56 @@ class TopicSubscription implements Subscription {
   }
 
   /**
+   * Starts the optional first-update notice once after setup or just before posting.
+   */
+  startFirstUpdateTimer(): void {
+    const delay = this.#options.firstUpdateTimeoutMs;
+    if (
+      delay === undefined ||
+      this.#firstUpdateSeen ||
+      this.#firstUpdateExpired ||
+      this.#firstUpdateTimer !== undefined ||
+      this.#cancelled
+    )
+      return;
+    this.#firstUpdateTimer = setTimeout(() => {
+      this.#firstUpdateTimer = undefined;
+      if (this.#cancelled || this.#firstUpdateSeen) return;
+      this.#firstUpdateExpired = true;
+      const callback = this.#options.onFirstUpdateTimeout;
+      if (callback === undefined) return;
+      void Promise.resolve()
+        .then(() => callback(this))
+        .catch((error: unknown) => {
+          if (this.#cancelled) return;
+          this.#lifecycle.pushNotice({
+            state: "notificationFailed",
+            generation: this.#generation,
+            error: error instanceof Error ? error : new Error(String(error)),
+          });
+        });
+    }, delay);
+  }
+
+  /**
+   * Clears a pending first-update notice on delivery or terminal closure.
+   */
+  #clearFirstUpdateTimer(): void {
+    if (this.#firstUpdateTimer !== undefined) clearTimeout(this.#firstUpdateTimer);
+    this.#firstUpdateTimer = undefined;
+  }
+
+  /**
    * Starts one remote activation and shares its result with concurrent callers.
    *
    * @param options The optional signal that cancels activation.
    * @returns Completion after remote activation.
    */
-  async activate(options: ClientOperationOptions = {}): Promise<void> {
+  async activate(options: SubscriptionActivationOptions = {}): Promise<void> {
+    BrowserClientValues.optionalDuration(options.activationTimeoutMs, "activation timeout");
     this.#owner.assertOpen();
     if (this.#cancelled) throw new ClientProtocolError("subscription is cancelled.");
-    await (this.#activation ??= this.#activateOwned(options.signal));
+    await (this.#activation ??= this.#activateOwned(options));
   }
 
   /**
@@ -1008,16 +1495,23 @@ class TopicSubscription implements Subscription {
    * @returns Completion after remote cleanup.
    */
   cancel(): Promise<void> {
-    return (this.#cancellation ??= this.#cancelOwned());
+    if (this.#cancellation !== undefined) return this.#cancellation;
+    const attempt = this.#cancelOwned();
+    this.#cancellation = attempt;
+    void attempt.catch(() => {
+      if (this.#cancellation === attempt) this.#cancellation = undefined;
+    });
+    return attempt;
   }
 
   /**
    * Subscribes and starts streaming while fencing responses from cancelled generations.
    *
-   * @param signal The abort signal for this operation.
+   * @param options The initial activation signal and optional deadline.
    * @returns Completion when the wire stream activates or a failure propagates.
    */
-  async #activateOwned(signal: AbortSignal | undefined): Promise<void> {
+  async #activateOwned(options: SubscriptionActivationOptions): Promise<void> {
+    const signal = options.signal;
     if (signal?.aborted) throw signal.reason;
     if (this.#signal.aborted) throw this.#signal.reason;
     const generation = ++this.#generation;
@@ -1026,85 +1520,149 @@ class TopicSubscription implements Subscription {
     };
     signal?.addEventListener("abort", abort, { once: true });
     this.#signal.addEventListener("abort", abort, { once: true });
+    const timeout =
+      options.activationTimeoutMs === undefined
+        ? undefined
+        : setTimeout(() => {
+            this.#controller.abort(new SubscriptionActivationTimeoutError());
+          }, options.activationTimeoutMs);
     try {
       this.#pushLifecycle({ state: "connecting", generation, attempt: 0 });
-      const pendingSubscription = createClient(
-        SubscriptionService,
-        this.#owner.transport,
-      ).subscribe(this.#topic, { signal: this.#controller.signal });
-      const subscription = await ClientTerminalValues.raceTerminal(
-        pendingSubscription,
-        this.#controller.signal,
-        () => {
-          ClientTerminalValues.cancelLateSubscription(pendingSubscription, this.#owner.transport);
-        },
-      );
-      this.#wire = subscription;
-      BrowserClientValues.validateSubscription(subscription, this.#topic, true);
-      if (generation !== this.#generation) {
-        await this.#cancelWireOnce(subscription);
-        throw new ClientProtocolError("subscription is cancelled.");
-      }
-      const updates = createClient(SubscriptionService, this.#owner.transport).activate(
-        subscription,
-        {
-          signal: this.#controller.signal,
-        },
-      );
-      const iterator = updates[Symbol.asyncIterator]();
-      this.#streamIterator = iterator;
-      void this.consumeUpdates(iterator, subscription, generation).catch(() => undefined);
+      const { subscription, iterator } = await this.#subscribeWire(generation);
       if (this.#cancelled || generation !== this.#generation) {
         await this.#cancelWireOnce(subscription);
         throw new ClientProtocolError("subscription is cancelled.");
       }
       this.#pushLifecycle({ state: "connected", generation });
       this.#connectedAt = this.#runtime.scheduler.now();
+      this.startFirstUpdateTimer();
+      void this.consumeUpdates(iterator, subscription, generation).catch(() => undefined);
     } catch (error) {
-      if (this.#cancelled) throw error;
-      if (this.#retryable(error) && this.#canRetry()) {
-        await this.#recover(error, this.#wire);
-        return;
-      }
-      this.#failStreams(error, generation);
-      let cleanupFailure: unknown;
-      try {
-        if (this.#wire !== undefined) await this.#cancelWireOnce(this.#wire);
-      } catch (cleanupError) {
-        cleanupFailure = cleanupError;
-      } finally {
-        this.#cancelled = true;
-        this.#owner.remove(this);
-      }
-      if (cleanupFailure !== undefined)
-        throw new AggregateError(
-          [error, cleanupFailure],
-          "Subscription activation cleanup failed.",
-        );
-      throw error;
+      await this.#activationFailure(error, generation);
     } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
       signal?.removeEventListener("abort", abort);
       this.#signal.removeEventListener("abort", abort);
     }
   }
 
   /**
-   * Clears updates, closes lifecycle, aborts work, and cancels the accepted wire once.
+   * Opens one wire subscription and waits for its validated activation ACK.
+   *
+   * @param generation The connection generation.
+   * @returns The accepted subscription and activated update iterator.
+   */
+  async #subscribeWire(generation: number): Promise<{
+    readonly subscription: WireSubscription;
+    readonly iterator: AsyncIterator<SubscriptionUpdate>;
+  }> {
+    const pending = createClient(SubscriptionService, this.#owner.transport).subscribe(
+      this.#topic,
+      { signal: this.#controller.signal },
+    );
+    const cancelLate = this.#owner.trackSubscribe(pending);
+    const subscription = await ClientTerminalValues.raceTerminal(
+      pending,
+      this.#controller.signal,
+      cancelLate,
+    );
+    this.#wire = subscription;
+    BrowserClientValues.validateSubscription(subscription, this.#topic, true);
+    if (this.#cancelled || generation !== this.#generation) {
+      await this.#cancelWireOnce(subscription);
+      throw new ClientProtocolError("subscription is cancelled.");
+    }
+    const updates = createClient(SubscriptionService, this.#owner.transport).activate(
+      subscription,
+      { signal: this.#controller.signal },
+    );
+    const iterator = updates[Symbol.asyncIterator]();
+    this.#streamIterator = iterator;
+    await this.#awaitAck(iterator, subscription, generation);
+    return { subscription, iterator };
+  }
+
+  /**
+   * Retries a transient activation or closes the failed subscription.
+   *
+   * @param error The activation failure.
+   * @param generation The failing connection generation.
+   * @returns Completion after recovery or terminal cleanup.
+   */
+  async #activationFailure(error: unknown, generation: number): Promise<void> {
+    if (this.#cancelled) throw error;
+    if (this.#retryable(error) && this.#canRetry()) return this.#recover(error, this.#wire);
+    this.#failStreams(error, generation);
+    let pendingDeadlineCleanup = false;
+    try {
+      if (this.#wire !== undefined) {
+        const cleanup = this.#cancelWireOnce(this.#wire);
+        if (error instanceof SubscriptionActivationTimeoutError) {
+          pendingDeadlineCleanup = true;
+          void cleanup.then(
+            () => {
+              this.#owner.remove(this);
+            },
+            () => {
+              this.#owner.remove(this);
+            },
+          );
+        } else await cleanup;
+      }
+    } catch {
+      // The client retains failed wire cleanup for an explicit close retry.
+    } finally {
+      this.#cancelled = true;
+      if (!pendingDeadlineCleanup) this.#owner.remove(this);
+    }
+    throw error;
+  }
+
+  /**
+   * Waits for the response-only successful activation acknowledgement on one wire generation.
+   *
+   * @param iterator The newly opened subscription update stream.
+   * @param subscription The accepted subscription definition.
+   * @param generation The connection generation that opened this stream.
+   * @returns Completion after a matching successful acknowledgement.
+   */
+  async #awaitAck(
+    iterator: AsyncIterator<SubscriptionUpdate>,
+    subscription: WireSubscription,
+    generation: number,
+  ): Promise<void> {
+    const next = await ClientTerminalValues.raceTerminal(iterator.next(), this.#controller.signal);
+    if (next.done)
+      throw new SubscriptionStreamEndedError("subscription stream ended before activation ACK.");
+    if (this.#cancelled || generation !== this.#generation)
+      throw new ClientProtocolError("subscription is cancelled.");
+    const topic = subscription.topic;
+    if (topic === undefined)
+      throw new ClientProtocolError("accepted subscription topic is missing.");
+    BrowserClientValues.validateSubscription(next.value.subscription, topic, true);
+    if (next.value.subscription?.id?.value !== subscription.id?.value)
+      throw new ClientProtocolError(
+        "subscription ACK ID does not match the accepted subscription.",
+      );
+    if (next.value.update.case !== undefined || next.value.response?.status?.status.case !== "ok")
+      throw new ClientProtocolError("subscription activation ACK is missing or unsuccessful.");
+  }
+
+  /**
+   * Clears updates, closes lifecycle, aborts work, and attempts accepted-wire cleanup.
    *
    * @returns Completion after local and remote cancellation.
    */
   async #cancelOwned(): Promise<void> {
     this.#cancelled = true;
+    this.#clearFirstUpdateTimer();
     this.#generation++;
     this.#updates.discard();
     this.#finishLifecycle({ state: "closed", generation: this.#generation - 1 });
     this.#controller.abort();
     await this.#disposeLateIterator();
-    try {
-      if (this.#wire !== undefined) await this.#cancelWireOnce(this.#wire);
-    } finally {
-      this.#owner.remove(this);
-    }
+    if (this.#wire !== undefined) await this.#cancelWireOnce(this.#wire);
+    this.#owner.remove(this);
   }
 
   /**
@@ -1122,38 +1680,7 @@ class TopicSubscription implements Subscription {
   ): Promise<void> {
     let recovering = false;
     try {
-      for (;;) {
-        const next = await ClientTerminalValues.raceTerminal(
-          updates.next(),
-          this.#controller.signal,
-        );
-        if (next.done)
-          throw new SubscriptionStreamEndedError("subscription stream ended unexpectedly.");
-        if (this.#cancelled || generation !== this.#generation) return;
-        const update = next.value;
-        const topic = subscription.topic;
-        if (topic === undefined)
-          throw new ClientProtocolError("accepted subscription topic is missing.");
-        BrowserClientValues.validateSubscription(update.subscription, topic, true);
-        if (update.subscription?.id?.value !== subscription.id?.value)
-          throw new ClientProtocolError(
-            "subscription update ID does not match the accepted subscription.",
-          );
-        if (
-          update.response?.status?.status.case === "error" &&
-          update.response.status.status.value.type === "backend-unavailable" &&
-          update.update.case === undefined
-        ) {
-          this.#pushLifecycle({ state: "gapPossible", generation });
-          continue;
-        }
-        const delivery = BrowserClientValues.freezeDelivery({
-          kind: "update",
-          update: clone(SubscriptionUpdateSchema, update),
-        });
-        const bytes = toBinary(SubscriptionUpdateSchema, update).byteLength;
-        this.#pushUpdate(delivery, bytes);
-      }
+      await this.#consumeStreamLoop(updates, subscription, generation);
     } catch (error) {
       if (this.#cancelled) return;
       if (this.#retryable(error) && this.#canRetry()) {
@@ -1178,6 +1705,66 @@ class TopicSubscription implements Subscription {
   }
 
   /**
+   * Reads the active stream until cancellation or a terminal transport result.
+   *
+   * @param updates The active wire update iterator.
+   * @param subscription The accepted subscription.
+   * @param generation The connection generation used to fence late results.
+   * @returns Completion when the stream ends or is cancelled.
+   */
+  async #consumeStreamLoop(
+    updates: AsyncIterator<SubscriptionUpdate>,
+    subscription: WireSubscription,
+    generation: number,
+  ): Promise<void> {
+    for (;;) {
+      const next = await ClientTerminalValues.raceTerminal(updates.next(), this.#controller.signal);
+      if (next.done)
+        throw new SubscriptionStreamEndedError("subscription stream ended unexpectedly.");
+      if (this.#cancelled || generation !== this.#generation) return;
+      this.#acceptStreamUpdate(next.value, subscription, generation);
+    }
+  }
+
+  /**
+   * Validates and delivers one post-readiness stream update.
+   *
+   * @param update The received wire update.
+   * @param subscription The accepted subscription.
+   * @param generation The connection generation for lifecycle notices.
+   */
+  #acceptStreamUpdate(
+    update: SubscriptionUpdate,
+    subscription: WireSubscription,
+    generation: number,
+  ): void {
+    const topic = subscription.topic;
+    if (topic === undefined)
+      throw new ClientProtocolError("accepted subscription topic is missing.");
+    BrowserClientValues.validateSubscription(update.subscription, topic, true);
+    if (update.subscription?.id?.value !== subscription.id?.value)
+      throw new ClientProtocolError(
+        "subscription update ID does not match the accepted subscription.",
+      );
+    if (update.update.case === undefined && update.response?.status?.status.case === "ok")
+      throw new ClientProtocolError("subscription stream sent a duplicate activation ACK.");
+    if (
+      update.response?.status?.status.case === "error" &&
+      update.response.status.status.value.type === "backend-unavailable" &&
+      update.update.case === undefined
+    ) {
+      this.#pushLifecycle({ state: "gapPossible", generation });
+      return;
+    }
+    const delivery = BrowserClientValues.freezeDelivery({
+      kind: "update",
+      update: clone(SubscriptionUpdateSchema, update),
+    });
+    const bytes = toBinary(SubscriptionUpdateSchema, update).byteLength;
+    this.#pushUpdate(delivery, bytes);
+  }
+
+  /**
    * Accepts transport and unexpected stream-end errors for bounded recovery.
    *
    * @param error The failure to propagate or classify.
@@ -1186,7 +1773,9 @@ class TopicSubscription implements Subscription {
   #retryable(error: unknown): boolean {
     return (
       error instanceof SubscriptionStreamEndedError ||
-      (error instanceof Error && !(error instanceof ClientProtocolError))
+      (error instanceof Error &&
+        !(error instanceof ClientProtocolError) &&
+        !(error instanceof SubscriptionActivationTimeoutError))
     );
   }
 
@@ -1236,52 +1825,16 @@ class TopicSubscription implements Subscription {
         generation = ++this.#generation;
         await this.#disposeLateIterator();
         if (wire !== undefined) await this.#cancelWireOnce(wire);
-        const delay = this.#runtime.retryPolicy.delayMs(attempt);
-        if (!Number.isSafeInteger(delay) || delay <= 0)
-          throw new ClientProtocolError(
-            "subscription retry delay must be a positive safe integer.",
-          );
-        await ClientTerminalValues.raceTerminal(
-          this.#runtime.scheduler.wait(delay, this.#controller.signal),
-          this.#controller.signal,
-        );
-        if (this.#controller.signal.aborted) throw this.#controller.signal.reason;
-        if (this.#elapsed()) throw failure;
-        await ClientTerminalValues.raceTerminal(
-          this.#owner.onReauthenticateBeforeReconnect(
-            this.#controller.signal,
-            this.#remainingRetryMs(),
-          ),
-          this.#controller.signal,
-        );
-        if (this.#elapsed()) throw failure;
+        await this.#waitRetry(attempt, failure);
         this.#pushLifecycle({ state: "connecting", generation, attempt });
         try {
-          const pending = createClient(SubscriptionService, this.#owner.transport).subscribe(
-            this.#topic,
-            { signal: this.#controller.signal },
-          );
-          const subscription = await ClientTerminalValues.raceTerminal(
-            pending,
-            this.#controller.signal,
-            () => {
-              ClientTerminalValues.cancelLateSubscription(pending, this.#owner.transport);
-            },
-          );
-          this.#wire = subscription;
-          BrowserClientValues.validateSubscription(subscription, this.#topic, true);
-          const updates = createClient(SubscriptionService, this.#owner.transport).activate(
-            subscription,
-            { signal: this.#controller.signal },
-          );
-          const iterator = updates[Symbol.asyncIterator]();
-          this.#streamIterator = iterator;
+          const { subscription, iterator } = await this.#subscribeWire(generation);
           if (this.#options.kind === "entity") await this.#resynchronize(generation);
-          void this.consumeUpdates(iterator, subscription, generation).catch(() => undefined);
           if (this.#options.kind === "event")
             this.#pushLifecycle({ state: "gapPossible", generation });
           this.#pushLifecycle({ state: "connected", generation });
           this.#connectedAt = this.#runtime.scheduler.now();
+          void this.consumeUpdates(iterator, subscription, generation).catch(() => undefined);
           return;
         } catch (retryFailure) {
           failure = retryFailure;
@@ -1290,21 +1843,64 @@ class TopicSubscription implements Subscription {
       }
       throw failure;
     } catch (recoveryError) {
-      if (this.#cancelled) throw recoveryError;
-      const terminalError = recoveryError instanceof Error ? recoveryError : error;
-      await this.#disposeLateIterator();
-      this.#failStreams(terminalError, generation);
-      try {
-        await this.#cancelAfterFailure();
-      } catch {
-        // The terminal failure remains observable when cleanup fails.
-      } finally {
-        this.#updates.close();
-        this.#lifecycle.close();
-        this.#owner.remove(this);
-      }
-      throw terminalError;
+      await this.#recoveryFailure(error, recoveryError, generation);
     }
+  }
+
+  /**
+   * Waits for the retry delay and refreshes credentials within the same deadline.
+   *
+   * @param attempt The retry ordinal.
+   * @param failure The previous transient failure.
+   * @returns Completion when another wire attempt may begin.
+   */
+  async #waitRetry(attempt: number, failure: unknown): Promise<void> {
+    const delay = this.#runtime.retryPolicy.delayMs(attempt);
+    if (!Number.isSafeInteger(delay) || delay <= 0)
+      throw new ClientProtocolError("subscription retry delay must be a positive safe integer.");
+    await ClientTerminalValues.raceTerminal(
+      this.#runtime.scheduler.wait(delay, this.#controller.signal),
+      this.#controller.signal,
+    );
+    if (this.#controller.signal.aborted) throw this.#controller.signal.reason;
+    if (this.#elapsed()) throw failure;
+    await ClientTerminalValues.raceTerminal(
+      this.#owner.onReauthenticateBeforeReconnect(
+        this.#controller.signal,
+        this.#remainingRetryMs(),
+      ),
+      this.#controller.signal,
+    );
+    if (this.#elapsed()) throw failure;
+  }
+
+  /**
+   * Stops an exhausted recovery while containing cleanup failure.
+   *
+   * @param original The failure that started this retry episode.
+   * @param recoveryError The final retry failure.
+   * @param generation The final connection generation.
+   * @returns Rejection with the final terminal failure.
+   */
+  async #recoveryFailure(
+    original: unknown,
+    recoveryError: unknown,
+    generation: number,
+  ): Promise<never> {
+    if (this.#cancelled) throw recoveryError;
+    const terminalError = recoveryError instanceof Error ? recoveryError : original;
+    await this.#disposeLateIterator();
+    this.#failStreams(terminalError, generation);
+    try {
+      await this.#cancelAfterFailure();
+    } catch {
+      // The terminal failure remains observable when cleanup fails.
+    } finally {
+      this.#updates.close();
+      this.#lifecycle.close();
+      this.#owner.remove(this);
+    }
+    throw terminalError;
   }
 
   /**
@@ -1384,6 +1980,10 @@ class TopicSubscription implements Subscription {
   #pushUpdate(value: SubscriptionDelivery, bytes: number): void {
     const error = this.#updates.push(value, bytes);
     if (error !== undefined) throw error;
+    if (value.kind === "resynchronization" || BrowserClientValues.hasActualUpdate(value.update)) {
+      this.#firstUpdateSeen = true;
+      this.#clearFirstUpdateTimer();
+    }
   }
 
   /**
@@ -1403,6 +2003,7 @@ class TopicSubscription implements Subscription {
    * @param generation The connection generation used to fence late results.
    */
   #failStreams(error: unknown, generation: number): void {
+    this.#clearFirstUpdateTimer();
     const terminalError = error instanceof Error ? error : new Error(String(error));
     this.#updates.fail(terminalError);
     if (terminalError instanceof SubscriptionBufferOverflowError) {
@@ -1431,15 +2032,18 @@ class TopicSubscription implements Subscription {
   }
 
   /**
-   * Returns the remote cancellation promise for the current accepted wire.
+   * Returns an in-flight remote cancellation and clears failed attempts for a later retry.
    *
    * @param subscription The accepted wire or logical subscription to clean up.
    * @returns The shared remote cancellation promise for this wire.
    */
   #cancelWireOnce(subscription: WireSubscription): Promise<void> {
     if (this.#wireCleanup?.wire === subscription) return this.#wireCleanup.promise;
-    const promise = ClientTerminalValues.cancelWire(this.#owner.transport, subscription);
+    const promise = this.#owner.cancelWire(subscription);
     this.#wireCleanup = { wire: subscription, promise };
+    void promise.catch(() => {
+      if (this.#wireCleanup?.promise === promise) this.#wireCleanup = undefined;
+    });
     return promise;
   }
 
@@ -1467,6 +2071,305 @@ class TopicSubscription implements Subscription {
     } catch {
       // Local terminal state must not depend on a non-cooperative iterator.
     }
+  }
+}
+
+/**
+ * Combines several Event topics into one bounded logical subscription.
+ */
+class GroupSubscription implements Subscription {
+  readonly #members: readonly TopicSubscription[];
+
+  readonly #updates: BoundedChannel<SubscriptionDelivery>;
+
+  readonly #lifecycle: BoundedChannel<SubscriptionLifecycle>;
+
+  readonly #controller = new AbortController();
+
+  readonly #options: Pick<
+    EventSubscriptionOptions,
+    "firstUpdateTimeoutMs" | "onFirstUpdateTimeout"
+  >;
+
+  readonly #owner: ClientOwner;
+
+  readonly #deferFirstUpdate: boolean;
+
+  #activation: Promise<void> | undefined;
+
+  #cancellation: Promise<void> | undefined;
+
+  #firstTimer: ReturnType<typeof setTimeout> | undefined;
+
+  #firstSeen = false;
+
+  #firstExpired = false;
+
+  #closed = false;
+
+  #failed = false;
+
+  /**
+   * Registers an inactive group and creates one local member per Event topic.
+   *
+   * @param owner The client lifecycle coordinator.
+   * @param topics Distinct Event topics.
+   * @param signal The request cancellation signal.
+   * @param options Optional first-update notification.
+   * @param runtime Validated queue and retry settings.
+   * @param deferFirstUpdate Whether posting starts the first-update timer.
+   */
+  constructor(
+    owner: ClientOwner,
+    topics: readonly Topic[],
+    signal: AbortSignal,
+    options: Pick<EventSubscriptionOptions, "firstUpdateTimeoutMs" | "onFirstUpdateTimeout">,
+    runtime: RequiredSubscriptionRuntimeOptions,
+    deferFirstUpdate = false,
+  ) {
+    this.#owner = owner;
+    this.#options = options;
+    this.#deferFirstUpdate = deferFirstUpdate;
+    this.#updates = new BrowserClientValues.BoundedChannel(
+      "subscription update",
+      runtime.updateCapacity,
+      runtime.updateByteCapacity,
+    );
+    this.#lifecycle = new BrowserClientValues.BoundedChannel(
+      "subscription lifecycle",
+      runtime.lifecycleCapacity,
+    );
+    this.#members = topics.map(
+      (topic) => new TopicSubscription(owner, topic, signal, { kind: "event" }, runtime),
+    );
+    owner.add(this);
+  }
+
+  /**
+   * Exposes one bounded stream of selected Event deliveries.
+   *
+   * @returns Deliveries from every selected Event member.
+   */
+  get updates(): AsyncIterable<SubscriptionDelivery> {
+    return this.#updates;
+  }
+
+  /**
+   * Exposes one independent logical lifecycle stream.
+   *
+   * @returns Lifecycle notices for the logical group.
+   */
+  get lifecycle(): AsyncIterable<SubscriptionLifecycle> {
+    return this.#lifecycle;
+  }
+
+  /**
+   * Activates all members under the first caller's shared deadline.
+   *
+   * @param options The first activation caller's cancellation and deadline.
+   * @returns Completion when every member has acknowledged readiness.
+   */
+  activate(options: SubscriptionActivationOptions = {}): Promise<void> {
+    BrowserClientValues.optionalDuration(options.activationTimeoutMs, "activation timeout");
+    this.#owner.assertOpen();
+    if (this.#closed) return Promise.reject(new ClientProtocolError("subscription is cancelled."));
+    return (this.#activation ??= this.#activateOwned(options));
+  }
+
+  /**
+   * Starts the first-update timer immediately before a helper posts its Command.
+   */
+  startFirstUpdateTimer(): void {
+    const delay = this.#options.firstUpdateTimeoutMs;
+    if (
+      delay === undefined ||
+      this.#closed ||
+      this.#firstSeen ||
+      this.#firstExpired ||
+      this.#firstTimer !== undefined
+    )
+      return;
+    this.#firstTimer = setTimeout(() => {
+      this.#firstTimer = undefined;
+      if (this.#closed || this.#firstSeen) return;
+      this.#firstExpired = true;
+      const callback = this.#options.onFirstUpdateTimeout;
+      if (callback === undefined) return;
+      void Promise.resolve()
+        .then(() => callback(this))
+        .catch((error: unknown) => {
+          if (!this.#closed)
+            this.#lifecycle.pushNotice({
+              state: "notificationFailed",
+              generation: 1,
+              error: error instanceof Error ? error : new Error(String(error)),
+            });
+        });
+    }, delay);
+  }
+
+  /**
+   * Stops local delivery immediately and retries failed remote cancellation on later calls.
+   *
+   * @returns Completion after this cancellation attempt.
+   */
+  cancel(): Promise<void> {
+    if (this.#cancellation !== undefined) return this.#cancellation;
+    const attempt = this.#cancelOwned();
+    this.#cancellation = attempt;
+    void attempt.catch(() => {
+      if (this.#cancellation === attempt) this.#cancellation = undefined;
+    });
+    return attempt;
+  }
+
+  /**
+   * Starts one activation attempt and stops promptly at its deadline.
+   *
+   * @param options The first caller's activation options.
+   * @returns Completion after all member readiness acknowledgements.
+   */
+  async #activateOwned(options: SubscriptionActivationOptions): Promise<void> {
+    if (options.signal?.aborted) throw options.signal.reason;
+    const abort = () => {
+      this.#controller.abort(options.signal?.reason);
+    };
+    options.signal?.addEventListener("abort", abort, { once: true });
+    const timeout =
+      options.activationTimeoutMs === undefined
+        ? undefined
+        : setTimeout(() => {
+            this.#controller.abort(new SubscriptionActivationTimeoutError());
+          }, options.activationTimeoutMs);
+    try {
+      this.#pushLifecycle({ state: "connecting", generation: 1, attempt: 0 });
+      const pending = Promise.all(
+        this.#members.map((member) => member.activate({ signal: this.#controller.signal })),
+      );
+      await ClientTerminalValues.raceTerminal(pending, this.#controller.signal);
+      if (this.#closed) throw new ClientProtocolError("subscription is cancelled.");
+      this.#pushLifecycle({ state: "connected", generation: 1 });
+      if (!this.#deferFirstUpdate) this.startFirstUpdateTimer();
+      for (const member of this.#members) {
+        void this.#readUpdates(member);
+        void this.#readLifecycle(member);
+      }
+    } catch (error) {
+      this.#fail(error);
+      throw error;
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", abort);
+    }
+  }
+
+  /**
+   * Reads one member's deliveries into the bounded logical output.
+   *
+   * @param member The activated Event member.
+   * @returns Completion when that member ends.
+   */
+  async #readUpdates(member: TopicSubscription): Promise<void> {
+    try {
+      for await (const delivery of member.updates) {
+        if (this.#closed) return;
+        const bytes =
+          delivery.kind === "update"
+            ? toBinary(SubscriptionUpdateSchema, delivery.update).byteLength
+            : toBinary(QueryResponseSchema, delivery.response).byteLength;
+        const error = this.#updates.push(delivery, bytes);
+        if (error !== undefined) throw error;
+        if (
+          delivery.kind === "resynchronization" ||
+          BrowserClientValues.hasActualUpdate(delivery.update)
+        ) {
+          this.#firstSeen = true;
+          this.#clearTimer();
+        }
+      }
+      if (!this.#closed) throw new SubscriptionStreamEndedError("group member ended unexpectedly.");
+    } catch (error) {
+      this.#fail(error);
+    }
+  }
+
+  /**
+   * Reads nonterminal member notices and detects terminal member failure.
+   *
+   * @param member The activated Event member.
+   * @returns Completion when that member ends.
+   */
+  async #readLifecycle(member: TopicSubscription): Promise<void> {
+    try {
+      for await (const notice of member.lifecycle) {
+        if (this.#closed) return;
+        if (notice.state === "failed") {
+          this.#fail(notice.error);
+          return;
+        }
+        if (notice.state === "closed") {
+          this.#fail(new SubscriptionStreamEndedError("group member closed unexpectedly."));
+          return;
+        }
+        if (notice.state !== "connecting" && notice.state !== "connected")
+          this.#pushLifecycle(notice);
+      }
+    } catch (error) {
+      this.#fail(error);
+    }
+  }
+
+  /**
+   * Records the first terminal error and closes the logical subscription.
+   *
+   * @param error The member or queue failure.
+   */
+  #fail(error: unknown): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#failed = true;
+    this.#clearTimer();
+    const failure = error instanceof Error ? error : new Error(String(error));
+    this.#updates.fail(failure);
+    this.#lifecycle.finish({ state: "failed", generation: 1, error: failure });
+    void this.cancel().catch(() => undefined);
+  }
+
+  /**
+   * Closes local streams and attempts cancellation of every member.
+   *
+   * @returns Completion after all remote cancellation attempts.
+   */
+  async #cancelOwned(): Promise<void> {
+    this.#closed = true;
+    this.#clearTimer();
+    this.#controller.abort();
+    this.#updates.discard();
+    if (!this.#failed) this.#lifecycle.finish({ state: "closed", generation: 1 });
+    const results = await Promise.allSettled(this.#members.map((member) => member.cancel()));
+    const failures = results
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => result.reason as unknown);
+    if (failures.length > 0) throw new AggregateError(failures, "Group cancellation failed.");
+    this.#owner.remove(this);
+  }
+
+  /**
+   * Clears any pending first-update notice.
+   */
+  #clearTimer(): void {
+    if (this.#firstTimer !== undefined) clearTimeout(this.#firstTimer);
+    this.#firstTimer = undefined;
+  }
+
+  /**
+   * Admits a lifecycle notice or fails the group on bounded overflow.
+   *
+   * @param value The logical lifecycle notice.
+   */
+  #pushLifecycle(value: SubscriptionLifecycle): void {
+    const error = this.#lifecycle.push(value);
+    if (error !== undefined) throw error;
   }
 }
 
@@ -1577,6 +2480,90 @@ interface RequiredSubscriptionRuntimeOptions {
  * Builds browser-client request, subscription, and immutable wire values.
  */
 const BrowserClientValues = Object.freeze({
+  /**
+   * Validates an optional finite duration before a subscription starts remote work.
+   *
+   * @param value The configured duration.
+   * @param name The option label.
+   */
+  optionalDuration(value: number | undefined, name: string): void {
+    if (
+      value !== undefined &&
+      (!Number.isSafeInteger(value) || value <= 0 || value > 2_147_483_647)
+    )
+      throw new TypeError(`Client subscription ${name} must be 1..2147483647 milliseconds.`);
+  },
+
+  /**
+   * Returns distinct Event schemas by their canonical Spine type URL.
+   *
+   * @param schemas The selected generated Event and rejection schemas.
+   * @returns Distinct schemas in application order.
+   */
+  uniqueSchemas(schemas: readonly GenMessage<Message>[]): readonly GenMessage<Message>[] {
+    const unique = new Map<string, GenMessage<Message>>();
+    for (const schema of schemas) unique.set(TypeUrls.derive(schema), schema);
+    if (unique.size === 0)
+      throw new TypeError("At least one Event or rejection schema is required.");
+    return [...unique.values()];
+  },
+
+  /**
+   * Creates Event topics with optional immediate Command-origin filters.
+   *
+   * @param schemas The selected generated Event schemas.
+   * @param context The actor context for this request.
+   * @param origin The exact posted Command origin when filtering outcomes.
+   * @returns One topic per distinct schema.
+   */
+  eventTopics(
+    schemas: readonly GenMessage<Message>[],
+    context: ActorContext,
+    origin?: import("@spine-event-engine/proto").Origin,
+  ): readonly Topic[] {
+    return BrowserClientValues.uniqueSchemas(schemas).map((schema) =>
+      create(TopicSchema, {
+        id: create(TopicIdSchema, { value: crypto.randomUUID() }),
+        context: clone(ActorContextSchema, context),
+        target: this.eventTarget(schema, origin),
+      }),
+    );
+  },
+
+  /**
+   * Creates one selected Event target with an optional exact Command Origin.
+   * @param schema The domain Event schema.
+   * @param origin The Command Origin when matching immediate outcomes.
+   * @returns The Event target.
+   */
+  eventTarget(schema: GenMessage<Message>, origin?: import("@spine-event-engine/proto").Origin) {
+    return create(TargetSchema, {
+      type: TypeUrls.derive(schema),
+      criterion:
+        origin === undefined
+          ? { case: "includeAll", value: true }
+          : {
+              case: "filters",
+              value: create(TargetFiltersSchema, {
+                filter: [
+                  create(CompositeFilterSchema, {
+                    operator: CompositeFilter_CompositeOperator.ALL,
+                    filter: [
+                      create(FilterSchema, {
+                        fieldPath: create(FieldPathSchema, {
+                          fieldName: ["context", "past_message"],
+                        }),
+                        operator: Filter_Operator.EQUAL,
+                        value: AnyMessages.pack(OriginSchema, origin),
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            },
+    });
+  },
+
   /**
    * Applies validated queue limits, retry policy, and scheduler defaults.
    *
@@ -1716,6 +2703,15 @@ const BrowserClientValues = Object.freeze({
       (options.kind !== "event" && options.kind !== "entity")
     )
       throw new TypeError("Subscription kind must be 'event' or 'entity'.");
+    const delay = "firstUpdateTimeoutMs" in options ? options.firstUpdateTimeoutMs : undefined;
+    if (delay !== undefined && typeof delay !== "number")
+      throw new TypeError("Subscription first update timeout must be a number.");
+    BrowserClientValues.optionalDuration(delay, "first update timeout");
+    if (
+      delay !== undefined &&
+      (!("onFirstUpdateTimeout" in options) || typeof options.onFirstUpdateTimeout !== "function")
+    )
+      throw new TypeError("Subscription first update timeout requires onFirstUpdateTimeout.");
     if (options.kind === "event") {
       if ("authoritativeQuery" in options)
         throw new TypeError("Event subscriptions must not provide an authoritative query.");
@@ -1724,6 +2720,27 @@ const BrowserClientValues = Object.freeze({
     if (!("authoritativeQuery" in options) || typeof options.authoritativeQuery !== "function")
       throw new TypeError("Entity subscriptions require an authoritative query.");
     return options as EntitySubscriptionOptions;
+  },
+
+  /**
+   * Checks for actual Event or Entity updates, excluding empty wire notices.
+   *
+   * @param update The validated wire delivery.
+   * @returns Whether an application update arrived.
+   */
+  hasActualUpdate(update: SubscriptionUpdate): boolean {
+    switch (update.update.case) {
+      case "eventUpdates":
+        return update.update.value.event.some(
+          (event) => event.message !== undefined && event.message.typeUrl.length > 0,
+        );
+      case "entityUpdates":
+        return update.update.value.update.some(
+          (entity) => entity.id !== undefined && entity.kind.case !== undefined,
+        );
+      default:
+        return false;
+    }
   },
 
   /**
@@ -1743,6 +2760,8 @@ const BrowserClientValues = Object.freeze({
     #bytes = 0;
 
     #consumer = false;
+
+    #noticeUsed = false;
 
     #closed = false;
 
@@ -1787,6 +2806,22 @@ const BrowserClientValues = Object.freeze({
       this.#values.push({ value, bytes });
       this.#bytes += bytes;
       return undefined;
+    }
+
+    /**
+     * Adds one extra lifecycle notice for a callback failure without stopping updates.
+     *
+     * @param value The callback failure notice.
+     */
+    pushNotice(value: Value): void {
+      if (this.#closed || this.#error !== undefined || this.#noticeUsed) return;
+      this.#noticeUsed = true;
+      if (this.#pending !== undefined) {
+        this.#pending.resolve({ done: false, value });
+        this.#pending = undefined;
+      } else {
+        this.#values.push({ value, bytes: 0 });
+      }
     }
 
     /**
@@ -2076,12 +3111,12 @@ const BrowserClientValues = Object.freeze({
   },
 
   /**
-   * Maps a wire command status to a validated application outcome.
+   * Maps a wire command status to a validated admission acknowledgement.
    *
    * @param status The wire command status to interpret.
-   * @returns The mapped application command outcome.
+   * @returns The mapped admission acknowledgement.
    */
-  outcome(status: Status["status"] | undefined): ClientOutcome {
+  outcome(status: Status["status"] | undefined): CommandAcknowledgement {
     if (status?.case === "ok") return Object.freeze({ kind: "ok" as const });
     if (status?.case === "error")
       return Object.freeze({
@@ -2136,6 +3171,13 @@ interface BoundedChannel<Value> extends AsyncIterable<Value> {
    * @returns A protocol error when admission fails, otherwise undefined.
    */
   push(value: Value, bytes?: number): ClientProtocolError | undefined;
+
+  /**
+   * Adds one extra lifecycle notice without failing update delivery.
+   *
+   * @param value The notification failure notice.
+   */
+  pushNotice(value: Value): void;
 
   /**
    * Closes iteration after already admitted values have been consumed.

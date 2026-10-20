@@ -30,5 +30,11 @@ export const infrastructureTestFiles = Object.freeze([
   "packages/storage-mysql/test/mysql-agent-history.test.ts",
   "packages/storage-mysql/test/mysql-agent-execution.test.ts",
   "packages/server/test/delivery/inbox-provider-cleanup.test.ts",
+  "packages/server/test/delivery/inbox-provider-faults.integration.test.ts",
+  "packages/server/test/delivery/sql-recovery-clock.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-process-matrix.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-process-faults.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-shared-takeover.integration.test.ts",
+  "packages/server-blackbox-tests/test/project-subscription-transports.integration.test.ts",
   "packages/server-blackbox-tests/test/agent-recovery/response-saved.test.ts",
 ]);

@@ -21,25 +21,25 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
+import { CommandIdSchema, CommandSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
   AgentExecutionRecordSchema,
   AgentExecutionCompletionSchema,
   AgentInvocationCountersSchema,
   AgentInvocationStatus,
   AgentInvocationKeySchema,
-  AgentOutgoingSignalSchema,
+  AgentOutgoingCommandSchema,
   AgentSavedDispatchPlanSchema,
   AgentSavedDispatchTargetSchema,
   AgentSavedTargetKind,
-  AgentSignalKeySchema,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
 
 // prettier-ignore
+// prettier-ignore
 import {
-  SupportReplyDraftedSchema,
-} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
+  DraftSupportReplySchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
@@ -332,6 +332,16 @@ describe("in-memory Agent execution", () => {
       next,
     });
     await expect(
+      handle.renew(
+        required(first.key),
+        "complete-token",
+        create(TimestampSchema, { seconds: 4_000_000_001n }),
+      ),
+    ).resolves.toBe(false);
+    expect((await handle.read(required(first.key)))?.status).toBe(
+      AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
+    );
+    await expect(
       handle.claim(
         required(second.key),
         "next-token",
@@ -480,7 +490,7 @@ describe("in-memory Agent execution", () => {
     handle.close();
   });
 
-  it("retains pending output until its original Event ID is acknowledged", async () => {
+  it("retains a pending Command until its original ID is acknowledged", async () => {
     const factory = new InMemoryStorageFactory();
     const handle = AgentExecutionStorageFactories.create(factory, {
       entity: entityInput(),
@@ -496,23 +506,20 @@ describe("in-memory Agent execution", () => {
       ),
     ).record;
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-execution" });
-    const eventId = create(EventIdSchema, { value: "reply-drafted" });
-    const event = create(EventSchema, {
-      id: eventId,
+    const commandId = create(CommandIdSchema, { uuid: "reply-draft-command" });
+    const command = create(CommandSchema, {
+      id: commandId,
       message: create(AnySchema, {
-        typeUrl: `type.spine.server.testing/${SupportReplyDraftedSchema.typeName}`,
-        value: toBinary(
-          SupportReplyDraftedSchema,
-          create(SupportReplyDraftedSchema, { agent: id, reply: "Please review." }),
-        ),
+        typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
+        value: toBinary(DraftSupportReplySchema, create(DraftSupportReplySchema, { agent: id })),
       }),
     });
     const next = clone(AgentExecutionRecordSchema, claimed);
-    next.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY;
+    next.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;
     next.completion = create(AgentExecutionCompletionSchema, {
       initialVersion: create(VersionSchema, { number: 0 }),
       resultingVersion: create(VersionSchema, { number: 0 }),
-      outgoing: [create(AgentOutgoingSignalSchema, { signal: { case: "event", value: event } })],
+      commands: [create(AgentOutgoingCommandSchema, { command })],
     });
     await handle.complete({
       key: required(source.key),
@@ -525,7 +532,7 @@ describe("in-memory Agent execution", () => {
       hasMore: false,
     });
     const persisted = required(await handle.read(required(source.key)));
-    const signal = create(AgentSignalKeySchema, { id: { case: "event", value: eventId } });
+    const signal = commandId;
     await expect(
       handle.markDelivered(
         required(source.key),
@@ -535,7 +542,7 @@ describe("in-memory Agent execution", () => {
       ),
     ).rejects.toThrow(/plan/i);
     const prepared = clone(AgentExecutionRecordSchema, persisted);
-    required(required(prepared.completion).outgoing[0]).plan = create(AgentSavedDispatchPlanSchema);
+    required(required(prepared.completion).commands[0]).plan = create(AgentSavedDispatchPlanSchema);
     await handle.update({
       key: required(source.key),
       token: "delivery-token",
@@ -547,14 +554,14 @@ describe("in-memory Agent execution", () => {
       stateType: "spine.server.testing.SupportReplyAgentState",
     });
     expect(
-      (await reopened.read(required(source.key)))?.completion?.outgoing[0]?.plan?.targets,
+      (await reopened.read(required(source.key)))?.completion?.commands[0]?.plan?.targets,
     ).toEqual([]);
     reopened.close();
     const replanned = clone(AgentExecutionRecordSchema, prepared);
-    required(required(required(replanned.completion).outgoing[0]).plan).targets.push(
+    required(required(required(replanned.completion).commands[0]).plan).targets.push(
       create(AgentSavedDispatchTargetSchema, {
-        kind: AgentSavedTargetKind.AGENT_SAVED_STANDALONE_EVENT,
-        signalType: SupportReplyDraftedSchema.typeName,
+        kind: AgentSavedTargetKind.AGENT_SAVED_STANDALONE_COMMAND,
+        signalType: DraftSupportReplySchema.typeName,
         bindingFingerprint: "different-handler",
       }),
     );
@@ -567,10 +574,9 @@ describe("in-memory Agent execution", () => {
       }),
     ).rejects.toThrow(/immutable/i);
     const changed = clone(AgentExecutionRecordSchema, prepared);
-    required(required(changed.completion).outgoing[0]).signal = {
-      case: "event",
-      value: create(EventSchema, { id: eventId }),
-    };
+    required(required(changed.completion).commands[0]).command = create(CommandSchema, {
+      id: create(CommandIdSchema, { uuid: "different-command" }),
+    });
     await expect(
       handle.update({
         key: required(source.key),
@@ -611,20 +617,20 @@ describe("in-memory Agent execution", () => {
         await handle.claim(key, "first-token", create(TimestampSchema, { seconds: 110n })),
       );
       const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-execution" });
-      const drafted = create(SupportReplyDraftedSchema, { agent, reply: "Please review." });
-      const event = create(EventSchema, {
-        id: create(EventIdSchema, { value: "reclaimed-event" }),
+      const draft = create(DraftSupportReplySchema, { agent });
+      const command = create(CommandSchema, {
+        id: create(CommandIdSchema, { uuid: "reclaimed-command" }),
         message: create(AnySchema, {
-          typeUrl: `type.spine.server.testing/${SupportReplyDraftedSchema.typeName}`,
-          value: toBinary(SupportReplyDraftedSchema, drafted),
+          typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
+          value: toBinary(DraftSupportReplySchema, draft),
         }),
       });
       const completed = clone(AgentExecutionRecordSchema, first.record);
-      completed.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY;
+      completed.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;
       completed.completion = create(AgentExecutionCompletionSchema, {
         initialVersion: create(VersionSchema, { number: 0 }),
         resultingVersion: create(VersionSchema, { number: 0 }),
-        outgoing: [create(AgentOutgoingSignalSchema, { signal: { case: "event", value: event } })],
+        commands: [create(AgentOutgoingCommandSchema, { command })],
       });
       await handle.complete({
         key,
@@ -651,7 +657,7 @@ describe("in-memory Agent execution", () => {
         }),
       ).rejects.toThrow(/active/i);
       expect(await handle.read(key)).toEqual(reclaimed.record);
-      expect((await handle.read(key))?.completion?.outgoing).toHaveLength(1);
+      expect((await handle.read(key))?.completion?.commands).toHaveLength(1);
     } finally {
       handle.close();
       Time.setProvider(previous);

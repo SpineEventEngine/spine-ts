@@ -24,13 +24,11 @@ import {
   InboxMessageIdSchema,
   InboxMessageSchema,
   InboxMessageStatus,
-  WorkerIdSchema,
 } from "@spine-event-engine/proto/delivery";
 
 import { InboxRecords, inboxRecordSpec } from "../../src/delivery/inbox-records.js";
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
-import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { createMessage } from "./inbox-message-fixture.js";
 import { tenant } from "../tenant-fixture.js";
 
@@ -278,24 +276,15 @@ describe("direct InboxMessage storage", () => {
       storageFactory: factory,
     });
     const duplicate = createMessage("message-2", "signal-1", 2n);
-    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
-    const session = await registry.pickUp(
-      duplicate.shard,
-      create(WorkerIdSchema, {
-        nodeId: { value: "node" },
-        value: "worker",
-      }),
-    );
-    if (session === undefined) throw new Error("Expected a shard session.");
     await storage.write(duplicate);
 
     const controller = new AbortController();
     controller.abort();
-    await expect(
-      storage.removeDuplicate(duplicate, session, { signal: controller.signal }),
-    ).resolves.toBe(false);
+    await expect(storage.removeDuplicate(duplicate, { signal: controller.signal })).resolves.toBe(
+      false,
+    );
     await expect(storage.readMessage(duplicate.id)).resolves.toEqual(duplicate);
-    await expect(storage.removeDuplicate(duplicate, session)).resolves.toBe(true);
+    await expect(storage.removeDuplicate(duplicate)).resolves.toBe(true);
     await expect(storage.readMessage(duplicate.id)).resolves.toBeUndefined();
   });
 

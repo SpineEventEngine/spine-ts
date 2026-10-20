@@ -27,7 +27,9 @@ import {
   AgentHistoryEntrySchema,
   type AgentHistoryCursor,
   AgentInvocationTerminatedSchema,
+  AgentModelSelectionChangedSchema,
   AiContentDigestSchema,
+  AiModelKind,
   AiOperationIdSchema,
   ConversationIdSchema,
   ConversationRecordIdSchema,
@@ -42,6 +44,7 @@ import {
   CommandSchema,
   EventContextSchema,
   EventSchema,
+  type Event,
   MessageIdSchema,
   TenantIdSchema,
   UserIdSchema,
@@ -61,7 +64,7 @@ import type {
   AgentHistoryStorageInput,
   AgentPendingPage,
 } from "@spine-event-engine/storage/provider";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import { Repository } from "../../src/repository/repository.js";
@@ -136,6 +139,7 @@ class ChangingSupportAgent extends Agent<SupportReplyAgentId, typeof SupportRepl
 
 class EmittingSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
   static calls = 0;
+  static preference: ModelRef | undefined;
 
   onDraft(event: SupportReplyDrafted): void {
     void event;
@@ -143,6 +147,8 @@ class EmittingSupportAgent extends Agent<SupportReplyAgentId, typeof SupportRepl
 
   draft(command: DraftSupportReply): SupportReplyDrafted {
     EmittingSupportAgent.calls += 1;
+    if (EmittingSupportAgent.preference !== undefined)
+      this.ai.select(AiModelKind.GENERATION, EmittingSupportAgent.preference);
     return create(SupportReplyDraftedSchema, {
       agent: this.id,
       reply: `Answer: ${command.question}`,
@@ -155,14 +161,29 @@ class CommandingSupportAgent extends Agent<
   typeof SupportReplyAgentStateSchema
 > {
   static calls = 0;
+  static reviewCalls = 0;
 
-  onTicketUpdated(event: SupportTicketUpdated): ReviewSupportReply {
+  onTicketUpdated(
+    event: SupportTicketUpdated,
+  ):
+    | [ReviewSupportReply, SupportReplyDrafted]
+    | [ReviewSupportReply, ReviewSupportReply, SupportReplyDrafted] {
     CommandingSupportAgent.calls += 1;
-    return create(ReviewSupportReplySchema, { agent: event.agent });
+    if (event.question === "Two reviews")
+      return [
+        create(ReviewSupportReplySchema, { agent: event.agent }),
+        create(ReviewSupportReplySchema, { agent: event.agent }),
+        create(SupportReplyDraftedSchema, { agent: event.agent, reply: "Ready for review" }),
+      ];
+    return [
+      create(ReviewSupportReplySchema, { agent: event.agent }),
+      create(SupportReplyDraftedSchema, { agent: event.agent, reply: "Ready for review" }),
+    ];
   }
 
   review(command: ReviewSupportReply): void {
     void command;
+    CommandingSupportAgent.reviewCalls += 1;
   }
 }
 
@@ -217,6 +238,7 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
   failAdmission = false;
   failUpdateOnce = false;
   failMarkDeliveryOnce = false;
+  failMarkDeliveryErrors: Error[] = [];
   suppressSchedulerDiscovery = false;
   admittedKeys: AgentInvocationKey[] = [];
   pendingPage?: () => Promise<AgentPendingPage>;
@@ -248,6 +270,8 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
     };
     const markDelivered = storage.markDelivered.bind(storage);
     storage.markDelivered = async (...args) => {
+      const failure = this.failMarkDeliveryErrors.shift();
+      if (failure !== undefined) throw failure;
       if (this.failMarkDeliveryOnce) {
         this.failMarkDeliveryOnce = false;
         throw new Error("Agent delivery acknowledgement unavailable.");
@@ -1575,7 +1599,7 @@ describe("Agent registration readiness", () => {
     await context.close();
   });
 
-  it("rejects raw dispatchers matching declared Agent outputs before intake", async () => {
+  it("allows ordinary Event dispatchers and still requires saved Command bindings", async () => {
     const eventAgent = new Repository({
       entityType: EmittingSupportAgent,
       schema: SupportReplyAgentStateSchema,
@@ -1597,17 +1621,16 @@ describe("Agent registration readiness", () => {
       ),
       events: [SupportReplyDraftedSchema],
     });
-    expect(() =>
-      BoundedContext.singleTenant("RawAgentEvent")
-        .withAi(ai())
-        .persistSystemEvents()
-        .add(eventAgent)
-        .addEventDispatcher({
-          messageSchemas: () => [SupportReplyDraftedSchema],
-          dispatch: () => Promise.resolve(),
-        })
-        .build(),
-    ).toThrow(/durable.*dispatcher/i);
+    const eventContext = BoundedContext.singleTenant("RawAgentEvent")
+      .withAi(ai())
+      .persistSystemEvents()
+      .add(eventAgent)
+      .addEventDispatcher({
+        messageSchemas: () => [SupportReplyDraftedSchema],
+        dispatch: () => Promise.resolve(),
+      })
+      .build();
+    await eventContext.close();
 
     const commandAgent = new Repository({
       entityType: CommandingSupportAgent,
@@ -1624,7 +1647,10 @@ describe("Agent registration readiness", () => {
             methodName: "onTicketUpdated",
             parameterCount: 1,
             origin: "domestic",
-            outcomes: { returned: [ReviewSupportReplySchema], thrown: [] },
+            outcomes: {
+              returned: [SupportReplyDraftedSchema, ReviewSupportReplySchema],
+              thrown: [],
+            },
           },
         ],
       ),
@@ -1855,6 +1881,13 @@ describe("Agent registration readiness", () => {
       .withStorageFactory(factory)
       .add(configured)
       .build();
+    const emitted: Event[] = [];
+    const observation = observeProducedSignals(context, {
+      onEvent: (event) => {
+        if (event.message?.typeUrl === TypeUrls.derive(SupportReplyDraftedSchema))
+          emitted.push(event);
+      },
+    });
     try {
       const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-96" });
       const command = SignalEnvelopes.command({
@@ -1882,40 +1915,47 @@ describe("Agent registration readiness", () => {
       const completed = await factory.readAccepted?.(key);
       expect(EmittingSupportAgent.calls).toBe(1);
       expect(completed?.status).toBe(4);
-      expect(completed?.completion?.outgoing).toMatchObject([
-        {
-          delivered: true,
-          signal: {
-            case: "event",
-            value: { message: { typeUrl: TypeUrls.derive(SupportReplyDraftedSchema) } },
-          },
-        },
-      ]);
+      expect(completed?.completion?.commands).toEqual([]);
+      await vi.waitFor(() => {
+        expect(emitted).toHaveLength(1);
+      });
       await repositoryAccess.runAcceptedAgent(configured, undefined, key);
       expect(EmittingSupportAgent.calls).toBe(1);
+      expect(emitted).toHaveLength(1);
     } finally {
+      observation.close();
       await context.close();
     }
   });
 
-  it("retries a saved Event after acknowledgement failure without rerunning its handler", async () => {
+  it("hands a domain Event once when a completed model-preference System Event recipient fails", async () => {
     EmittingSupportAgent.calls = 0;
+    const ref = ModelRef.of("preference-recipient-failure", "v1");
+    const registry = ai(ref);
+    registry.register(
+      createBackendRegistration({
+        ref,
+        kind: "generation",
+        supports: () => true,
+        resolveIdentity: () => ({
+          provider: "fixture",
+          account: "support",
+          endpoint: "memory",
+          model: "preference-recipient-failure",
+        }),
+        authorizeUse: () => true,
+        connect: (_scope, identity) => ({ model: {}, identity }),
+        execute: () => Promise.reject(new Error("No model request expected.")),
+      }),
+    );
     const factory = new RecordingExecutionFactory();
-    factory.failMarkDeliveryOnce = true;
-    let seconds = 1_782_979_201n;
-    const previousTime = Time.setProvider({
-      currentTime: () => create(TimestampSchema, { seconds }),
-    });
     const configured = new Repository({
       entityType: EmittingSupportAgent,
       schema: SupportReplyAgentStateSchema,
       handlers: HandlerMetadataValues.defineArity(
         EmittingSupportAgent,
         SupportReplyAgentStateSchema,
-        (builder) => [
-          builder.assign(DraftSupportReplySchema, "draft"),
-          builder.react(SupportReplyDraftedSchema, "onDraft"),
-        ],
+        (builder) => [builder.assign(DraftSupportReplySchema, "draft")],
         [
           {
             kind: "command-assignment",
@@ -1924,38 +1964,44 @@ describe("Agent registration readiness", () => {
             origin: "domestic",
             outcomes: { returned: [SupportReplyDraftedSchema], thrown: [] },
           },
-          {
-            kind: "event-reaction",
-            methodName: "onDraft",
-            parameterCount: 1,
-            origin: "domestic",
-            outcomes: { returned: [], thrown: [] },
-          },
         ],
       ),
       events: [SupportReplyDraftedSchema],
       agentCodeRevision: "support-agent-v1",
-      ai: { models: [] },
+      ai: { models: [proposal] },
     });
-    const context = BoundedContext.singleTenant("RecoveringSupport")
-      .withAi(ai())
+    let preferenceRecipients = 0;
+    let domainRecipients = 0;
+    const context = BoundedContext.singleTenant("PreferenceRecipientFailure")
+      .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)
       .add(configured)
+      .addEventDispatcher({
+        messageSchemas: () => [AgentModelSelectionChangedSchema],
+        dispatch: () => {
+          preferenceRecipients += 1;
+          return Promise.reject(new Error("Preference recipient unavailable."));
+        },
+      })
+      .addEventDispatcher({
+        messageSchemas: () => [SupportReplyDraftedSchema],
+        dispatch: () => {
+          domainRecipients += 1;
+          return Promise.resolve();
+        },
+      })
       .build();
+    EmittingSupportAgent.preference = ref;
     try {
-      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-97" });
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-preference-failure" });
       const command = SignalEnvelopes.command({
         schema: DraftSupportReplySchema,
         message: create(DraftSupportReplySchema, { agent: id, question: "Status?" }),
-        context: create(CommandContextSchema, {
-          actorContext: create(ActorContextSchema, {
-            actor: create(UserIdSchema, { value: "support-user" }),
-          }),
-        }),
+        context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
       });
       await repositoryAccess.entityInboxTarget(configured)?.replay({
-        ...createMessage("agent-recovery", command.id?.uuid ?? "", 4n),
+        ...createMessage("agent-preference-failure", command.id?.uuid ?? "", 3n),
         inboxId: {
           targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
@@ -1964,48 +2010,102 @@ describe("Agent registration readiness", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
-      seconds += 1n;
       const key = (await factory.pendingPage?.())?.records[0]?.accepted?.key;
       if (key === undefined) throw new Error("Expected accepted Agent invocation.");
-      await expect(repositoryAccess.runAcceptedAgent(configured, undefined, key)).rejects.toThrow(
-        /acknowledgement unavailable/,
-      );
-      const waiting = await factory.readAccepted?.(key);
-      expect(waiting?.status).toBe(3);
-      const originalId = waiting?.completion?.outgoing[0]?.signal;
-      seconds += 31n;
-      factory.failMarkDeliveryOnce = true;
-      await expect(repositoryAccess.runAcceptedAgent(configured, undefined, key)).rejects.toThrow(
-        /acknowledgement unavailable/,
-      );
-      expect((await factory.readAccepted?.(key))?.status).toBe(
-        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
-      );
-      if (command.id === undefined) throw new Error("Expected original Command ID.");
-      expect(await configured.agentExecution(id, command.id, {})).toBe(
-        "completed-pending-delivery",
-      );
-      seconds += 31n;
       await repositoryAccess.runAcceptedAgent(configured, undefined, key);
-      const completed = await factory.readAccepted?.(key);
-      expect(completed?.status).toBe(4);
-      expect(completed?.completion?.outgoing[0]?.signal).toEqual(originalId);
-      expect(completed?.completion?.outgoing[0]?.delivered).toBe(true);
-      expect(EmittingSupportAgent.calls).toBe(1);
-      const recipientKey = factory.admittedKeys.find(
-        (accepted) => accepted.sourceSignal?.id.case === "event",
+      expect((await factory.readAccepted?.(key))?.status).toBe(
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
       );
-      const recipient =
-        recipientKey === undefined ? undefined : await factory.readAccepted?.(recipientKey);
-      expect(recipient?.accepted?.signal.case).toBe("event");
+      expect(preferenceRecipients).toBe(1);
+      expect(domainRecipients).toBe(1);
+      expect(EmittingSupportAgent.calls).toBe(1);
+      await repositoryAccess.runAcceptedAgent(configured, undefined, key);
+      expect(preferenceRecipients).toBe(1);
+      expect(domainRecipients).toBe(1);
+      expect(EmittingSupportAgent.calls).toBe(1);
+    } finally {
+      EmittingSupportAgent.preference = undefined;
+      await context.close();
+    }
+  });
+
+  it("does not republish a committed Event after EventBus dispatch fails and the Agent resumes", async () => {
+    EmittingSupportAgent.calls = 0;
+    const factory = new RecordingExecutionFactory();
+    let dispatches = 0;
+    const configured = new Repository({
+      entityType: EmittingSupportAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers: HandlerMetadataValues.defineArity(
+        EmittingSupportAgent,
+        SupportReplyAgentStateSchema,
+        (builder) => [builder.assign(DraftSupportReplySchema, "draft")],
+        [
+          {
+            kind: "command-assignment",
+            methodName: "draft",
+            parameterCount: 1,
+            origin: "domestic",
+            outcomes: { returned: [SupportReplyDraftedSchema], thrown: [] },
+          },
+        ],
+      ),
+      events: [SupportReplyDraftedSchema],
+      agentCodeRevision: "support-agent-v1",
+      ai: { models: [] },
+    });
+    const context = BoundedContext.singleTenant("FailedEventHandoff")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .addEventDispatcher({
+        messageSchemas: () => [SupportReplyDraftedSchema],
+        dispatch: () => {
+          dispatches += 1;
+          return Promise.reject(new Error("recipient unavailable"));
+        },
+      })
+      .build();
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-event-failure" });
+      const command = SignalEnvelopes.command({
+        schema: DraftSupportReplySchema,
+        message: create(DraftSupportReplySchema, { agent: id, question: "Status?" }),
+        context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
+      });
+      await repositoryAccess.entityInboxTarget(configured)?.replay({
+        ...createMessage("failed-event-handoff", command.id?.uuid ?? "", 4n),
+        inboxId: {
+          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+        },
+        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      });
+      const key = (await factory.pendingPage?.())?.records[0]?.accepted?.key;
+      if (key === undefined) throw new Error("Expected accepted Agent invocation.");
+      await expect(
+        repositoryAccess.runAcceptedAgent(configured, undefined, key),
+      ).resolves.toBeUndefined();
+      await vi.waitFor(() => {
+        expect(dispatches).toBe(1);
+      });
+      const completed = await factory.readAccepted?.(key);
+      expect(completed?.status).toBe(AgentInvocationStatus.AGENT_INVOCATION_COMPLETED);
+      expect(completed?.completion?.commands).toEqual([]);
+      await repositoryAccess.runAcceptedAgent(configured, undefined, key);
+      expect(dispatches).toBe(1);
+      expect(EmittingSupportAgent.calls).toBe(1);
     } finally {
       await context.close();
-      Time.setProvider(previousTime);
     }
   });
 
   it("retries a saved Command through its original Entity Inbox route", async () => {
     CommandingSupportAgent.calls = 0;
+    CommandingSupportAgent.reviewCalls = 0;
     const factory = new RecordingExecutionFactory();
     factory.failMarkDeliveryOnce = true;
     let seconds = 1_782_979_201n;
@@ -2028,7 +2128,10 @@ describe("Agent registration readiness", () => {
             methodName: "onTicketUpdated",
             parameterCount: 1,
             origin: "domestic",
-            outcomes: { returned: [ReviewSupportReplySchema], thrown: [] },
+            outcomes: {
+              returned: [SupportReplyDraftedSchema, ReviewSupportReplySchema],
+              thrown: [],
+            },
           },
           {
             kind: "command-assignment",
@@ -2041,6 +2144,7 @@ describe("Agent registration readiness", () => {
       ),
       agentCodeRevision: "support-command-agent-v1",
       ai: { models: [] },
+      events: [SupportReplyDraftedSchema],
     });
     const context = BoundedContext.singleTenant("CommandingSupport")
       .withAi(ai())
@@ -2048,6 +2152,13 @@ describe("Agent registration readiness", () => {
       .withStorageFactory(factory)
       .add(configured)
       .build();
+    const emitted: Event[] = [];
+    const observation = observeProducedSignals(context, {
+      onEvent: (candidate) => {
+        if (candidate.message?.typeUrl === TypeUrls.derive(SupportReplyDraftedSchema))
+          emitted.push(candidate);
+      },
+    });
     try {
       const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-command" });
       const event = SignalEnvelopes.event({
@@ -2074,19 +2185,159 @@ describe("Agent registration readiness", () => {
       await expect(repositoryAccess.runAcceptedAgent(configured, undefined, key)).rejects.toThrow(
         /acknowledgement unavailable/,
       );
+      await vi.waitFor(() => {
+        expect(emitted).toHaveLength(1);
+      });
       const waiting = await factory.readAccepted?.(key);
-      expect(waiting?.completion?.outgoing[0]?.signal.case).toBe("command");
-      const original = waiting?.completion?.outgoing[0]?.signal;
+      expect(waiting?.completion?.commands[0]?.command?.id).toBeDefined();
+      if (event.id === undefined) throw new Error("Expected source Event ID.");
+      expect(await configured.agentExecution(id, event.id, {})).toBe("completed-pending-commands");
+      const original = waiting?.completion?.commands[0]?.command;
       seconds += 31n;
       await repositoryAccess.runAcceptedAgent(configured, undefined, key);
       const completed = await factory.readAccepted?.(key);
-      expect(completed?.completion?.outgoing[0]?.signal).toEqual(original);
-      expect(completed?.completion?.outgoing[0]?.delivered).toBe(true);
+      expect(completed?.completion?.commands[0]?.command).toEqual(original);
+      expect(completed?.completion?.commands[0]?.delivered).toBe(true);
       expect(CommandingSupportAgent.calls).toBe(1);
-      expect(
-        factory.admittedKeys.filter((candidate) => candidate.sourceSignal?.id.case === "command"),
-      ).toHaveLength(1);
+      expect(emitted).toHaveLength(1);
+      const acceptedCommandIds = factory.admittedKeys.flatMap((candidate) =>
+        candidate.sourceSignal?.id.case === "command" ? [candidate.sourceSignal.id.value.uuid] : [],
+      );
+      expect(acceptedCommandIds).toEqual([original?.id?.uuid, original?.id?.uuid]);
+      const downstream = factory.admittedKeys.find(
+        (candidate) => candidate.sourceSignal?.id.case === "command",
+      );
+      if (downstream === undefined) throw new Error("Expected saved Command admission.");
+      await repositoryAccess.runAcceptedAgent(configured, undefined, downstream);
+      await repositoryAccess.runAcceptedAgent(configured, undefined, downstream);
+      expect(CommandingSupportAgent.reviewCalls).toBe(1);
     } finally {
+      observation.close();
+      await context.close();
+      Time.setProvider(previousTime);
+    }
+  });
+
+  it("hands a later Event after a failed Command acknowledgement and retries both original Commands", async () => {
+    CommandingSupportAgent.calls = 0;
+    CommandingSupportAgent.reviewCalls = 0;
+    const factory = new RecordingExecutionFactory();
+    const first = new Error("first Command acknowledgement failed");
+    factory.failMarkDeliveryErrors = [first];
+    let seconds = 1_782_979_201n;
+    const previousTime = Time.setProvider({
+      currentTime: () => create(TimestampSchema, { seconds }),
+    });
+    const configured = new Repository({
+      entityType: CommandingSupportAgent,
+      schema: SupportReplyAgentStateSchema,
+      handlers: HandlerMetadataValues.defineArity(
+        CommandingSupportAgent,
+        SupportReplyAgentStateSchema,
+        (builder) => [
+          builder.command(SupportTicketUpdatedSchema, "onTicketUpdated"),
+          builder.assign(ReviewSupportReplySchema, "review"),
+        ],
+        [
+          {
+            kind: "command-reaction",
+            methodName: "onTicketUpdated",
+            parameterCount: 1,
+            origin: "domestic",
+            outcomes: {
+              returned: [SupportReplyDraftedSchema, ReviewSupportReplySchema],
+              thrown: [],
+            },
+          },
+          {
+            kind: "command-assignment",
+            methodName: "review",
+            parameterCount: 1,
+            origin: "domestic",
+            outcomes: { returned: [], thrown: [] },
+          },
+        ],
+      ),
+      agentCodeRevision: "support-command-agent-v1",
+      ai: { models: [] },
+      events: [SupportReplyDraftedSchema],
+    });
+    const context = BoundedContext.singleTenant("MultipleCommandFailures")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const emitted: Event[] = [];
+    const observation = observeProducedSignals(context, {
+      onEvent: (candidate) => {
+        if (candidate.message?.typeUrl === TypeUrls.derive(SupportReplyDraftedSchema))
+          emitted.push(candidate);
+      },
+    });
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-two-reviews" });
+      const event = SignalEnvelopes.event({
+        schema: SupportTicketUpdatedSchema,
+        message: create(SupportTicketUpdatedSchema, { agent: id, question: "Two reviews" }),
+        context: create(EventContextSchema, {
+          producerId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          version: create(VersionSchema, { number: 1 }),
+        }),
+      });
+      await repositoryAccess.entityInboxTarget(configured)?.replay({
+        ...createMessage("agent-two-command-failures", event.id?.value ?? "", 5n),
+        inboxId: {
+          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
+        },
+        signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+        label: "REACT_UPON_EVENT",
+        status: "TO_DELIVER",
+      });
+      const key = factory.admittedKeys[0];
+      if (key === undefined) throw new Error("Expected accepted source Event.");
+      await expect(repositoryAccess.runAcceptedAgent(configured, undefined, key)).rejects.toBe(
+        first,
+      );
+      const waiting = await factory.readAccepted?.(key);
+      expect(waiting?.completion?.commands).toHaveLength(2);
+      const originals =
+        waiting?.completion?.commands.map((output) => output.command?.id?.uuid) ?? [];
+      expect(originals).toHaveLength(2);
+      expect(originals.every((id) => id !== undefined)).toBe(true);
+      expect(new Set(originals).size).toBe(2);
+      expect(waiting?.completion?.commands[0]?.plan).toBeDefined();
+      expect(waiting?.completion?.commands[1]?.plan).toBeUndefined();
+      expect(factory.admittedKeys).toHaveLength(2);
+      expect(factory.failMarkDeliveryErrors).toEqual([]);
+      await vi.waitFor(() => {
+        expect(emitted).toHaveLength(1);
+      });
+      expect(waiting?.completion?.commands.every((output) => !output.delivered)).toBe(true);
+      const acceptedCommandIds = () =>
+        factory.admittedKeys.flatMap((candidate) =>
+          candidate.sourceSignal?.id.case === "command"
+            ? [candidate.sourceSignal.id.value.uuid]
+            : [],
+        );
+      expect(acceptedCommandIds()).toEqual([originals[0]]);
+
+      seconds += 31n;
+      await repositoryAccess.runAcceptedAgent(configured, undefined, key);
+      const completed = await factory.readAccepted?.(key);
+      expect(acceptedCommandIds()).toEqual([originals[0], ...originals]);
+      expect(completed?.completion?.commands.every((output) => output.delivered)).toBe(true);
+      expect(CommandingSupportAgent.calls).toBe(1);
+      expect(emitted).toHaveLength(1);
+      const downstream = factory.admittedKeys.filter(
+        (candidate) => candidate.sourceSignal?.id.case === "command",
+      );
+      for (const candidate of downstream)
+        await repositoryAccess.runAcceptedAgent(configured, undefined, candidate);
+      expect(CommandingSupportAgent.reviewCalls).toBe(2);
+    } finally {
+      observation.close();
       await context.close();
       Time.setProvider(previousTime);
     }

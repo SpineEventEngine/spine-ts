@@ -12,12 +12,7 @@
  * the License.
  */
 
-export {
-  EventStore,
-  type EventRollback,
-  type EventStoreContext,
-  type OnEventAccepted,
-} from "./event/event-store.js";
+export { EventStore, type EventStoreContext, type OnEventAccepted } from "./event/event-store.js";
 export type {
   EntityEventStorage,
   EntityStateHistoryStorage,

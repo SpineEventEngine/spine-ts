@@ -1020,19 +1020,33 @@ class RunningHttp2Server implements RunningServer {
   async #closeOnce(): Promise<void> {
     await this.#closeListenerAndNetwork();
     const { detachErrors, detachRejected } = await this.#detachDelivery();
-    await this.#drainContexts();
+    const errors: unknown[] = [];
+    try {
+      await this.#drainContexts();
+    } catch (error) {
+      errors.push(error);
+    }
     try {
       await this.#closeGroup.close();
       this.#routes.release();
     } catch (error) {
-      if (!detachRejected) throw error;
-      CloseErrors.collect(error, detachErrors);
+      errors.push(error);
+    }
+    if (detachRejected) {
+      if (errors.length === 0) ServerValues.throwRunningDetachErrors(detachErrors);
+      const combined = [...detachErrors];
+      for (const error of errors) CloseErrors.collect(error, combined);
       throw new AggregateError(
-        detachErrors,
-        "Server close failed while detaching delivery and closing owned contexts/resources.",
+        combined,
+        "Server close failed while draining contexts and resources.",
       );
     }
-    if (detachRejected) ServerValues.throwRunningDetachErrors(detachErrors);
+    if (errors.length > 1)
+      throw new AggregateError(
+        errors,
+        "Server close failed while draining contexts and resources.",
+      );
+    if (errors.length === 1) throw errors[0];
     spineServicesAccess.clearLogger(this.#services);
   }
 

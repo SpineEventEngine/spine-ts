@@ -15,7 +15,7 @@
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core";
-import { type Event, type EventId } from "@spine-event-engine/proto";
+import { type CommandId, type Event, type EventId } from "@spine-event-engine/proto";
 import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import {
   AgentExecutionHeadSchema,
@@ -25,7 +25,6 @@ import {
   type AgentExecutionHead,
   type AgentExecutionRecord,
   type AgentInvocationKey,
-  type AgentSignalKey,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
@@ -437,7 +436,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
     key: AgentInvocationKey,
     token: string,
     expectedRecordBytes: Uint8Array,
-    signals: readonly AgentSignalKey[],
+    signals: readonly CommandId[],
   ): Promise<void> {
     await this.ready();
     await this.transaction(async (tx) => {
@@ -449,7 +448,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
       const completion = AgentExecutionValues.requiredCompletion(pair.record);
       AgentExecutionTransitions.assertDelivery(pair.record, signals);
       for (const signal of signals) AgentExecutionValues.markSignal(completion, signal);
-      if (completion.outgoing.every((item) => item.delivered)) {
+      if (completion.commands.every((item) => item.delivered)) {
         pair.record.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED;
         await this.advance(tx, pair.head, key, AgentExecutionValues.requiredOrder(pair.record));
       }
@@ -923,7 +922,7 @@ export class DatastoreAgentExecution<I, S extends Message> implements AgentExecu
       prior.status !== AgentInvocationStatus.AGENT_INVOCATION_ACTIVE ||
       ![
         AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
-        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS,
       ].includes(input.next.status)
     )
       throw new Error("Agent completion requires active work and completed status.");

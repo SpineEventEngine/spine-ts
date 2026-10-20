@@ -91,7 +91,7 @@ if (isManagedChild) {
 
 const managed = await ManagedServerApplication.run({
   processCount: 2,
-  port: 50_053,
+  port: 0,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
     const server = Server.atPort(port, { host });
@@ -117,7 +117,7 @@ if (!isManagedChild) {
   const close = () => {
     closing ??= managed.close().then(
       () => process.send?.({ type: "drained" }),
-      () => process.send?.({ type: "drain-error" }),
+      (error) => process.send?.({ type: "drain-error", error: String(error) }),
     );
     return closing;
   };

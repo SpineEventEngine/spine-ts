@@ -481,7 +481,7 @@ describe("StandaloneHandlerRuntime", () => {
     expect(receiver.calls).toEqual(["selected"]);
   });
 
-  it("saves standalone filter selection and rejects changed receiver metadata", async () => {
+  it("routes standalone Events through the current filter selection", async () => {
     const receiver = new FilteredSubscriber();
     const group: GeneratedStandaloneHandlerGroup = {
       receiverKind: "standalone",
@@ -512,18 +512,14 @@ describe("StandaloneHandlerRuntime", () => {
     ]);
     const dispatcher = runtime.eventDispatcher();
     if (dispatcher === undefined) throw new Error("Expected standalone Event dispatcher.");
-    const binding = SavedDispatcherBindings.forEvent(dispatcher);
-    if (binding === undefined) throw new Error("Expected saved standalone binding.");
     const event = create(EventSchema, {
-      id: { value: "saved-event" },
+      id: { value: "live-event" },
       message: AnyMessages.pack(
         ReviewTaskAssignedSchema,
         create(ReviewTaskAssignedSchema, { name: "selected" }),
       ),
     });
-    const target = await binding.prepare(event);
-    const deliver = await binding.bind(event, target);
-    await deliver();
+    await dispatcher.dispatch(event);
     expect(receiver.calls).toEqual(["selected"]);
 
     const changed = new StandaloneHandlerRuntime([
@@ -544,9 +540,8 @@ describe("StandaloneHandlerRuntime", () => {
       },
     ]).eventDispatcher();
     if (changed === undefined) throw new Error("Expected changed Event dispatcher.");
-    await expect(SavedDispatcherBindings.forEvent(changed)?.bind(event, target)).rejects.toThrow(
-      "Saved standalone dispatcher binding changed before delivery.",
-    );
+    await changed.dispatch(event);
+    expect(receiver.calls).toEqual(["selected", "fallback"]);
   });
 
   it("rebinds a saved standalone Command to its generated assignee", async () => {

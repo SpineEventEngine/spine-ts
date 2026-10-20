@@ -14,15 +14,20 @@
 
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
+import {
+  CommandIdSchema,
+  CommandSchema,
+  EventIdSchema,
+  EventSchema,
+  VersionSchema,
+} from "@spine-event-engine/proto";
 import { AiModelKind, ModelPreferenceSchema } from "@spine-event-engine/proto/agent";
 import {
   AgentExecutionCompletionSchema,
   AgentExecutionHeadSchema,
   AgentExecutionRecordSchema,
-  AgentOutgoingSignalSchema,
+  AgentOutgoingCommandSchema,
   AgentSavedDispatchPlanSchema,
-  AgentSignalKeySchema,
   AgentInvocationCountersSchema,
   AgentInvocationStatus,
   type AgentExecutionHead,
@@ -41,6 +46,7 @@ import { MysqlAgentExecution } from "../src/mysql/agent-execution.js";
 import { AgentHistoryHash } from "../src/mysql/agent-history.js";
 // prettier-ignore
 import {
+  SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 // prettier-ignore
@@ -177,13 +183,7 @@ describe("MySQL Agent execution provider boundary", () => {
       events: { ...row, tableName: "agent_events", writeImmutable: writeEvent },
     };
     const commit = vi.fn(
-      <T>(
-        _tables: readonly string[],
-        _lock: string,
-        work: (connection: object) => Promise<T>,
-        _options: object,
-      ) => {
-        void _options;
+      <T>(_tables: readonly string[], work: (connection: object) => Promise<T>) => {
         return work({});
       },
     );
@@ -191,7 +191,6 @@ describe("MySQL Agent execution provider boundary", () => {
       { entity, stateType: required(key.scope).stateType },
       rows as never,
       { commit } as never,
-      "test_database",
     );
     try {
       const page = await storage.pending({
@@ -226,9 +225,7 @@ describe("MySQL Agent execution provider boundary", () => {
       expect(headWrites.at(-1)?.pending).toEqual(additional.key);
       expect(commit).toHaveBeenCalledWith(
         expect.arrayContaining(["agent_invocations", "agent_heads", "agent_current"]),
-        expect.any(String),
         expect.any(Function),
-        { requireTransaction: true },
       );
       rows.invocation.readLocked.mockImplementation(() =>
         Promise.resolve(clone(AgentExecutionRecordSchema, admitted)),
@@ -515,9 +512,7 @@ describe("MySQL Agent execution provider boundary", () => {
       expect(invocationWrite).toHaveBeenCalledWith(finished);
       expect(commit).toHaveBeenLastCalledWith(
         expect.arrayContaining(["agent_invocations", "agent_current", "agent_events"]),
-        expect.any(String),
         expect.any(Function),
-        { requireTransaction: true },
       );
       rows.head.readLocked.mockImplementation(() =>
         Promise.resolve(
@@ -534,7 +529,6 @@ describe("MySQL Agent execution provider boundary", () => {
         { entity: providerEntityInput(), stateType: required(entityKey.scope).stateType },
         rows as never,
         { commit } as never,
-        "test_database",
       );
       try {
         const beforeDisabled = invocationWrite.mock.calls.length;
@@ -599,25 +593,32 @@ describe("MySQL Agent execution provider boundary", () => {
       expect(writeImmutable).toHaveBeenCalledTimes(writesBeforeCapacity);
       const deliverSource = accepted("mysql-delivery-source", "T-delivery");
       const deliverKey = required(deliverSource.key);
-      const firstEvent = create(EventSchema, {
-        id: create(EventIdSchema, { value: "mysql-output-one" }),
-        message: event.message,
-      });
-      const secondEvent = create(EventSchema, {
-        id: create(EventIdSchema, { value: "mysql-output-two" }),
-        message: event.message,
-      });
+      const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-delivery" });
+      const payload = toBinary(
+        DraftSupportReplySchema,
+        create(DraftSupportReplySchema, { agent: agentId }),
+      );
+      const outputCommand = (id: string) =>
+        create(CommandSchema, {
+          id: create(CommandIdSchema, { uuid: id }),
+          message: create(AnySchema, {
+            typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
+            value: payload,
+          }),
+        });
+      const firstCommand = outputCommand("mysql-output-one");
+      const secondCommand = outputCommand("mysql-output-two");
       const delivered = create(AgentExecutionRecordSchema, {
         accepted: deliverSource,
-        status: AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
+        status: AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS,
         claimToken: "delivery-token",
         claimExpiresAt: expiry,
         completion: create(AgentExecutionCompletionSchema, {
           initialVersion: create(VersionSchema, { number: 0 }),
           resultingVersion: create(VersionSchema, { number: 0 }),
-          outgoing: [firstEvent, secondEvent].map((signal) =>
-            create(AgentOutgoingSignalSchema, {
-              signal: { case: "event", value: signal },
+          commands: [firstCommand, secondCommand].map((command) =>
+            create(AgentOutgoingCommandSchema, {
+              command,
               plan: create(AgentSavedDispatchPlanSchema),
             }),
           ),
@@ -639,26 +640,21 @@ describe("MySQL Agent execution provider boundary", () => {
       });
       rows.head.readLocked.mockImplementation(() => Promise.resolve(deliverHead));
       rows.invocation.historyPage.mockImplementation(() => Promise.resolve([]));
-      const firstSignal = create(AgentSignalKeySchema, {
-        id: { case: "event", value: required(firstEvent.id) },
-      });
-      const secondSignal = create(AgentSignalKeySchema, {
-        id: { case: "event", value: required(secondEvent.id) },
-      });
+      const firstSignal = required(firstCommand.id);
+      const secondSignal = required(secondCommand.id);
       const beforeDeliveryBytes = toBinary(AgentExecutionRecordSchema, persistedDelivery);
       await storage.markDelivered(deliverKey, "delivery-token", beforeDeliveryBytes, [firstSignal]);
       expect(persistedDelivery.status).toBe(
-        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_DELIVERY,
+        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS,
       );
-      expect(persistedDelivery.completion?.outgoing.map((item) => item.delivered)).toEqual([
+      expect(persistedDelivery.completion?.commands.map((item) => item.delivered)).toEqual([
         true,
         false,
       ]);
-      expect(
-        persistedDelivery.completion?.outgoing.map((item) =>
-          item.signal.case === "event" ? item.signal.value.id?.value : undefined,
-        ),
-      ).toEqual([required(firstEvent.id).value, required(secondEvent.id).value]);
+      expect(persistedDelivery.completion?.commands.map((item) => item.command?.id?.uuid)).toEqual([
+        required(firstCommand.id).uuid,
+        required(secondCommand.id).uuid,
+      ]);
       const firstStoredBytes = toBinary(AgentExecutionRecordSchema, persistedDelivery);
       await expect(
         storage.markDelivered(deliverKey, "delivery-token", beforeDeliveryBytes, [secondSignal]),
@@ -666,11 +662,11 @@ describe("MySQL Agent execution provider boundary", () => {
       expect(toBinary(AgentExecutionRecordSchema, persistedDelivery)).toEqual(firstStoredBytes);
       await storage.markDelivered(deliverKey, "delivery-token", firstStoredBytes, [secondSignal]);
       expect(persistedDelivery.status).toBe(AgentInvocationStatus.AGENT_INVOCATION_COMPLETED);
-      expect(persistedDelivery.completion?.outgoing.map((item) => item.delivered)).toEqual([
+      expect(persistedDelivery.completion?.commands.map((item) => item.delivered)).toEqual([
         true,
         true,
       ]);
-      expect(delivered.completion?.outgoing.map((item) => item.delivered)).toEqual([false, false]);
+      expect(delivered.completion?.commands.map((item) => item.delivered)).toEqual([false, false]);
     } finally {
       storage.close();
     }

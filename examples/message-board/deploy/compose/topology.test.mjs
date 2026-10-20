@@ -22,10 +22,22 @@ test("declares a combined topology with framework-owned public bindings and one 
   assert.match(document, /^ {2}web:/mu);
   assert.match(document, /^ {2}delivery:/mu);
   assert.match(document, /^ {2}datastore:/mu);
+  const services = parseDocument(document).toJS().services;
+  const tag = "${MESSAGE_BOARD_IMAGE_TAG:-local}";
+  assert.equal(services.delivery.image, `spine-ts/simple-delivery-server:${tag}`);
+  assert.equal(services.combined.image, `spine-ts/message-board:${tag}`);
+  assert.equal(services.web.image, `spine-ts/message-board-web:${tag}`);
+  assert.deepEqual(services.envoy.ports, ["127.0.0.1:${MESSAGE_BOARD_PUBLIC_PORT:-18080}:8080"]);
+  assert.equal(
+    services.combined.environment.BROWSER_ORIGIN,
+    "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
+  );
   assert.doesNotMatch(document, /SUBSCRIPTION_REGISTRY_NAMESPACE/u);
-  assert.match(document, /spine-ts\/simple-delivery-server:local/u);
+  assert.match(document, /spine-ts\/simple-delivery-server:\$\{MESSAGE_BOARD_IMAGE_TAG:-local\}/u);
   assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
   assert.doesNotMatch(document, /replicas:/u);
+  assert.match(document, /MESSAGE_BOARD_IMAGE_TAG/u);
+  assert.match(document, /MESSAGE_BOARD_PUBLIC_PORT/u);
 });
 
 test("declares one local-fixture gateway and one managed complete-replica node", () => {
@@ -38,6 +50,21 @@ test("declares one local-fixture gateway and one managed complete-replica node",
   assert.match(document, /^ {2}envoy:/mu);
   assert.match(document, /^ {2}web:/mu);
   assert.match(document, /^ {2}delivery:/mu);
+  const services = parseDocument(document).toJS().services;
+  const tag = "${MESSAGE_BOARD_IMAGE_TAG:-local}";
+  assert.equal(services.delivery.image, `spine-ts/simple-delivery-server:${tag}`);
+  assert.equal(services["application-node"].image, `spine-ts/message-board:${tag}`);
+  assert.equal(services.gateway.image, `spine-ts/standalone-gateway:${tag}`);
+  assert.equal(services.web.image, `spine-ts/message-board-web:${tag}`);
+  assert.deepEqual(services.envoy.ports, ["127.0.0.1:${MESSAGE_BOARD_PUBLIC_PORT:-18080}:8080"]);
+  assert.equal(
+    services.gateway.environment.BROWSER_ORIGIN,
+    "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
+  );
+  assert.equal(
+    services.web.environment.MESSAGE_BOARD_GATEWAY_URL,
+    "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
+  );
   assert.match(document, /BACKEND_URLS: http:\/\/application-node:8080/mu);
   assert.match(document, /PROCESS_COUNT: "2"/u);
   assert.match(document, /DELIVERY_SHARD_COUNT: "2"/u);
@@ -55,7 +82,19 @@ test("declares one local-fixture gateway and one managed complete-replica node",
     /gateway:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
   );
   assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
-  assert.equal((document.match(/spine-ts\/simple-delivery-server:local/gu) ?? []).length, 1);
+  assert.equal(
+    (
+      document.match(/spine-ts\/simple-delivery-server:\$\{MESSAGE_BOARD_IMAGE_TAG:-local\}/gu) ??
+      []
+    ).length,
+    1,
+  );
+  assert.match(document, /MESSAGE_BOARD_IMAGE_TAG/u);
+  assert.match(document, /MESSAGE_BOARD_PUBLIC_PORT/u);
+  assert.match(
+    document,
+    /MESSAGE_BOARD_GATEWAY_URL: "http:\/\/localhost:\$\{MESSAGE_BOARD_PUBLIC_PORT:-18080\}"/u,
+  );
 });
 
 for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
@@ -64,6 +103,12 @@ for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
     const httpConnectionManager = httpConnectionManagers(configuration).at(0);
     assert.notEqual(httpConnectionManager, undefined, "missing HTTP connection manager");
     assert.equal(httpConnectionManager.stream_idle_timeout, "0s");
+    assert.deepEqual(
+      httpConnectionManager.route_config.virtual_hosts[0].typed_per_filter_config[
+        "envoy.filters.http.cors"
+      ].allow_origin_string_match,
+      [{ safe_regex: { regex: "^http://localhost:[0-9]+$" } }],
+    );
     assert.deepEqual(routes(httpConnectionManager), [
       ...browserRoutes,
       ["/spine.", 404],

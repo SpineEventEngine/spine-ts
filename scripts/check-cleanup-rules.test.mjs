@@ -1071,6 +1071,45 @@ describe("check-cleanup-rules", () => {
     );
   });
 
+  it("reads changed-line patches only for audited sources while retaining source enforcement", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "evidence/untracked-directory"), { recursive: true });
+    writeFileSync(join(repoRoot, "evidence/large.md"), "baseline\n");
+    run("git", ["add", "evidence/large.md"], repoRoot);
+    run("git", ["commit", "--quiet", "-m", "record evidence"], repoRoot);
+    writeFileSync(join(repoRoot, "evidence/large.md"), "changed evidence\n".repeat(1_000));
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      [
+        "export function tooLong(): void {",
+        ...Array.from({ length: 36 }, (_, i) => `  void ${i};`),
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const patchCommands = [];
+    const git = (root, args) => {
+      if (args[0] === "diff" && args.includes("--unified=0")) {
+        patchCommands.push(args);
+        const separator = args.indexOf("--");
+        if (separator < 0 || args.slice(separator + 1).some((path) => path.includes("evidence")))
+          return { status: 1, stdout: "", stderr: "irrelevant patch requested", signal: null };
+      }
+      const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+      if (args.join(" ") === "ls-files --others --exclude-standard") {
+        return { ...result, stdout: `${result.stdout}evidence/untracked-directory\n` };
+      }
+      return result;
+    };
+
+    expect(checkCleanupRules(repoRoot, git)).toContainEqual(
+      expect.objectContaining({
+        title: "modified production/example callables exceed 35 physical lines",
+      }),
+    );
+    expect(patchCommands.length).toBeGreaterThan(0);
+  });
+
   it("rejects embedded descriptor payload contracts in package test fixtures", () => {
     const repoRoot = createFixture();
     mkdirSync(join(repoRoot, "packages/demo/test-fixtures"), { recursive: true });

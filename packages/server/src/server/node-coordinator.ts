@@ -16,7 +16,7 @@ import * as http2 from "node:http2";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 
-import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { clone, create, equals, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import {
@@ -51,6 +51,7 @@ import {
   type SubscriptionUpdate,
   SubscriptionUpdateSchema,
   type Topic,
+  TopicSchema,
 } from "@spine-event-engine/proto/client";
 
 const defaultHost = "127.0.0.1";
@@ -214,22 +215,29 @@ export class NodeCoordinator {
   // prettier-ignore
 
   readonly #members: ReadyMemberSource;
+
   readonly #unaryKernel: BackendMembershipKernel<
     ReadyCoordinatorMember,
     CoordinatorRequest,
     Uint8Array,
     Uint8Array
   >;
+
   readonly #subscriptionKernel: BackendMembershipKernel<
     ReadyCoordinatorMember,
     CoordinatorRequest,
     Uint8Array,
     Uint8Array
   >;
+
   readonly #server: http2.Http2Server;
+
   readonly #sessions: Set<http2.ServerHttp2Session>;
+
   readonly #stopMembers: readonly (() => void)[];
+
   readonly #cancellations = new Map<string, Promise<void>>();
+
   readonly #pendingActivations = new Map<string, PendingActivation>();
 
   /**
@@ -252,9 +260,23 @@ export class NodeCoordinator {
    */
 
   readonly baseUrl: string;
+
   #close: Promise<void> | undefined;
+
+  #networkClose: Promise<void> | undefined;
+
+  #draining = false;
+
   #membershipReconciliation = Promise.resolve();
 
+  /**
+   * Creates the native node coordinator around its HTTP/2 listener and member source.
+   *
+   * @param options The coordinator configuration.
+   * @param server The HTTP/2 server.
+   * @param address The listening address.
+   * @param sessions Tracked HTTP/2 sessions.
+   */
   private constructor(
     options: NodeCoordinatorOptions,
     server: http2.Http2Server,
@@ -292,14 +314,7 @@ export class NodeCoordinator {
    * @returns The running private Coordinator.
    */
   static async open(options: NodeCoordinatorOptions): Promise<NodeCoordinator> {
-    const host = NodeCoordinatorValues.host(options.host ?? defaultHost);
-    const port = NodeCoordinatorValues.port(options.port ?? defaultPort);
-    const readMaxBytes = NodeCoordinatorValues.messageLimit(
-      options.readMaxBytes ?? defaultMessageMaxBytes,
-    );
-    const writeMaxBytes = NodeCoordinatorValues.messageLimit(
-      options.writeMaxBytes ?? defaultMessageMaxBytes,
-    );
+    const { host, port, readMaxBytes, writeMaxBytes } = this.#listenerOptions(options);
     // eslint-disable-next-line prefer-const -- routes capture the Coordinator before the listener exists.
     let coordinator: NodeCoordinator;
     const sessions = new Set<http2.ServerHttp2Session>();
@@ -326,14 +341,48 @@ export class NodeCoordinator {
         writeMaxBytes,
       }),
     );
-    server.on("session", (session) => {
-      sessions.add(session);
-      session.once("close", () => sessions.delete(session));
-    });
+    this.#trackSessions(server, sessions);
     const address = await NodeCoordinatorValues.listen(server, host, port);
     coordinator = new NodeCoordinator(options, server, address, sessions);
     await coordinator.#reconcile();
     return coordinator;
+  }
+
+  /**
+   * Validates private listener and message limits before opening the server.
+   *
+   * @param options The private Coordinator configuration.
+   * @returns Validated listener and message limits.
+   */
+  static #listenerOptions(options: NodeCoordinatorOptions): {
+    host: string;
+    port: number;
+    readMaxBytes: number;
+    writeMaxBytes: number;
+  } {
+    return {
+      host: NodeCoordinatorValues.host(options.host ?? defaultHost),
+      port: NodeCoordinatorValues.port(options.port ?? defaultPort),
+      readMaxBytes: NodeCoordinatorValues.messageLimit(
+        options.readMaxBytes ?? defaultMessageMaxBytes,
+      ),
+      writeMaxBytes: NodeCoordinatorValues.messageLimit(
+        options.writeMaxBytes ?? defaultMessageMaxBytes,
+      ),
+    };
+  }
+
+  /**
+   * Tracks HTTP/2 sessions for normal listener cleanup.
+   *
+   * @param server The private Coordinator listener.
+   * @param sessions Receives active HTTP/2 sessions.
+   */
+  static #trackSessions(server: http2.Http2Server, sessions: Set<http2.ServerHttp2Session>): void {
+    server.on("session", (session) => {
+      sessions.add(session);
+      session.once("close", () => sessions.delete(session));
+    });
   }
 
   /**
@@ -355,7 +404,18 @@ export class NodeCoordinator {
    * @returns Completion after the unary member snapshot becomes empty.
    */
   beginDrain(): Promise<void> {
+    this.#draining = true;
     return this.#unaryKernel.reconcile([]);
+  }
+
+  /**
+   * Cancels backend relays while managed child listeners can still accept Cancel.
+   *
+   * @returns Completion after private child subscriptions are removed.
+   */
+  async closeSubscriptions(): Promise<void> {
+    await this.#membershipReconciliation;
+    await this.#subscriptionKernel.close();
   }
 
   async #post(command: Command, context: HandlerContext): Promise<Ack> {
@@ -381,6 +441,7 @@ export class NodeCoordinator {
   }
 
   async #subscribe(topic: Topic, context: HandlerContext): Promise<Subscription> {
+    if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: `s-${randomUUID()}` }),
       topic,
@@ -393,14 +454,28 @@ export class NodeCoordinator {
     } catch (error) {
       throw this.#availabilityError(error);
     }
+    if (this.#isDraining()) {
+      await this.#cancelDefinition(toBinary(SubscriptionSchema, subscription), context.signal);
+      throw new ConnectError("Managed application is closing.", Code.Unavailable);
+    }
     this.#schedulePendingActivation(subscription);
     return subscription;
+  }
+
+  /**
+   * Reads current admission state after an asynchronous backend Subscribe.
+   *
+   * @returns Whether the Coordinator is draining.
+   */
+  #isDraining(): boolean {
+    return this.#draining;
   }
 
   async *#activate(
     subscription: Subscription,
     context: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
+    if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const definition = toBinary(SubscriptionSchema, subscription);
     this.#clearPendingActivation(subscription);
     const overflow = new AbortController();
@@ -410,19 +485,7 @@ export class NodeCoordinator {
     context.signal.addEventListener("abort", abort, { once: true });
     if (context.signal.aborted) abort();
     const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit, abort);
-    const activation = this.#subscriptionKernel
-      .activate(
-        definition,
-        async (childUpdate) => {
-          const update = fromBinary(SubscriptionUpdateSchema, childUpdate);
-          update.subscription = clone(SubscriptionSchema, subscription);
-          await updates.push(update);
-        },
-        overflow.signal,
-      )
-      .finally(() => {
-        updates.close();
-      });
+    const activation = this.#activateChild(definition, subscription, updates, overflow.signal);
     let failure: Error | undefined;
     try {
       for await (const update of updates) yield update;
@@ -434,6 +497,36 @@ export class NodeCoordinator {
       updates.close();
       await this.#finishActivation(definition, activation, failure);
     }
+  }
+
+  /**
+   * Relays accepted child updates through the bounded logical stream.
+   *
+   * @param definition The validated child subscription bytes.
+   * @param subscription The logical subscription exposed to callers.
+   * @param updates The bounded caller stream queue.
+   * @param signal Cancels the active child relay.
+   * @returns Completion after the backend activation ends.
+   */
+  #activateChild(
+    definition: Uint8Array,
+    subscription: Subscription,
+    updates: SubscriptionUpdateQueue,
+    signal: AbortSignal,
+  ): Promise<void> {
+    return this.#subscriptionKernel
+      .activate(
+        definition,
+        async (childUpdate) => {
+          const update = fromBinary(SubscriptionUpdateSchema, childUpdate);
+          update.subscription = clone(SubscriptionSchema, subscription);
+          await updates.push(update);
+        },
+        signal,
+      )
+      .finally(() => {
+        updates.close();
+      });
   }
 
   async #finishActivation(
@@ -467,6 +560,8 @@ export class NodeCoordinator {
   }
 
   async #forward(request: CoordinatorRequest): Promise<void> {
+    if (this.#draining)
+      throw new ConnectError("No ready application replica is available.", Code.Unavailable);
     try {
       await this.#unaryKernel.forward(request);
     } catch (error) {
@@ -552,7 +647,10 @@ export class NodeCoordinator {
     for (const pending of this.#pendingActivations.values()) clearTimeout(pending.timer);
     this.#pendingActivations.clear();
     await this.#membershipReconciliation;
-    const network = NodeCoordinatorValues.closeNetwork(this.#server, this.#sessions);
+    const network = (this.#networkClose ??= NodeCoordinatorValues.closeNetwork(
+      this.#server,
+      this.#sessions,
+    ));
     await Promise.all([network, this.#unaryKernel.close(), this.#subscriptionKernel.close()]);
   }
 }
@@ -583,10 +681,15 @@ interface PendingActivation {
  */
 export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate> {
   readonly #updates: SubscriptionUpdate[] = [];
+
   readonly #waiters: ((value: IteratorResult<SubscriptionUpdate>) => void)[] = [];
+
   readonly #delivered: (() => void)[] = [];
+
   readonly #limit: number;
+
   readonly #onOverflow: () => void;
+
   #closed = false;
 
   /**
@@ -654,6 +757,12 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
 }
 
 const NodeCoordinatorValues = Object.freeze({
+  /**
+   * Builds membership options for native unary forwarding.
+   *
+   * @param members The ready member source when available.
+   * @returns The configured membership kernel options.
+   */
   unaryKernelOptions(
     members?: ReadyMemberSource,
   ): BackendMembershipKernelOptions<
@@ -672,18 +781,67 @@ const NodeCoordinatorValues = Object.freeze({
       sameMember: (left: ReadyCoordinatorMember, right: ReadyCoordinatorMember) =>
         left.endpoint === right.endpoint,
       definitionKey: (definition) => fromBinary(SubscriptionSchema, definition).id?.value,
-      childDefinition: (definition, member) => {
-        const subscription = clone(SubscriptionSchema, fromBinary(SubscriptionSchema, definition));
-        const id = NodeCoordinatorValues.requiredValue(
-          subscription.id,
-          "Coordinator subscription definition is missing an ID.",
-        );
-        id.value = `${id.value}/${member.slot.toString()}-${member.incarnation}`;
-        return toBinary(SubscriptionSchema, subscription);
-      },
+      childDefinition: NodeCoordinatorValues.childDefinition,
       childSize: (child) => child.byteLength,
+      ...NodeCoordinatorValues.activationAckOptions(members),
     };
   },
+
+  /**
+   * Builds strict child ACK validation for the subscription membership kernel.
+   *
+   * @param members The subscription-ready member source when configured.
+   * @returns Child acknowledgement recognition and logical rewriting callbacks.
+   */
+  activationAckOptions(
+    members: ReadyMemberSource | undefined,
+  ): Pick<
+    BackendMembershipKernelOptions<
+      ReadyCoordinatorMember,
+      CoordinatorRequest,
+      Uint8Array,
+      Uint8Array
+    >,
+    "isActivationAck" | "logicalActivationAck"
+  > {
+    if (members === undefined) return {};
+    return {
+      isActivationAck: (bytes) => {
+        const update = fromBinary(SubscriptionUpdateSchema, bytes);
+        return update.response?.status?.status.case === "ok" && update.update.case === undefined;
+      },
+      logicalActivationAck: (definition, childAck) => {
+        const update = fromBinary(SubscriptionUpdateSchema, childAck);
+        update.subscription = fromBinary(SubscriptionSchema, definition);
+        return toBinary(SubscriptionUpdateSchema, update);
+      },
+    };
+  },
+
+  /**
+   * Builds the member-specific native subscription definition.
+   *
+   * @param definition The logical subscription bytes.
+   * @param member The selected backend member.
+   * @returns The child definition bytes.
+   */
+  childDefinition(definition: Uint8Array, member: ReadyCoordinatorMember): Uint8Array {
+    const subscription = clone(SubscriptionSchema, fromBinary(SubscriptionSchema, definition));
+    const id = NodeCoordinatorValues.requiredValue(
+      subscription.id,
+      "Coordinator subscription definition is missing an ID.",
+    );
+    id.value = `${id.value}/${member.slot.toString()}-${member.incarnation}`;
+    return toBinary(SubscriptionSchema, subscription);
+  },
+
+  /**
+   * Creates a native transport client for one member.
+   *
+   * @param member The discovered backend member.
+   * @param members The ready member source when available.
+   * @returns The member transport client.
+   */
   client(
     member: ReadyCoordinatorMember,
     members: ReadyMemberSource | undefined,
@@ -691,38 +849,7 @@ const NodeCoordinatorValues = Object.freeze({
     const manager = new Http2SessionManager(member.endpoint);
     const transport = createGrpcTransport({ baseUrl: member.endpoint, sessionManager: manager });
     return {
-      forward: async (request: CoordinatorRequest) => {
-        if (request.kind === "command") {
-          const response = await transport.unary(
-            CommandService.method.post,
-            request.context.signal,
-            request.context.timeoutMs(),
-            NodeCoordinatorValues.applicationHeaders(request.context.requestHeader),
-            request.command,
-          );
-          NodeCoordinatorValues.responseMetadata(
-            response.header,
-            response.trailer,
-            request.context,
-          );
-          request.response = response.message;
-        } else {
-          const response = await transport.unary(
-            QueryService.method.read,
-            request.context.signal,
-            request.context.timeoutMs(),
-            NodeCoordinatorValues.applicationHeaders(request.context.requestHeader),
-            request.query,
-          );
-          NodeCoordinatorValues.responseMetadata(
-            response.header,
-            response.trailer,
-            request.context,
-          );
-          request.response = response.message;
-        }
-        return new Uint8Array();
-      },
+      forward: (request) => NodeCoordinatorValues.forward(transport, request),
       close: () => {
         manager.abort();
         return Promise.resolve();
@@ -738,15 +865,8 @@ const NodeCoordinatorValues = Object.freeze({
         );
         return toBinary(SubscriptionSchema, created);
       },
-      activate: async (child, updates, signal) => {
-        const subscription = fromBinary(SubscriptionSchema, child);
-        members?.onChildSubscriptionActivated?.(member, subscription);
-        for await (const update of createClient(SubscriptionService, transport).activate(
-          subscription,
-          { signal },
-        ))
-          await updates(toBinary(SubscriptionUpdateSchema, update));
-      },
+      activate: (child, updates, signal) =>
+        NodeCoordinatorValues.activateChild(transport, member, members, child, updates, signal),
       dispose: async (child, signal) => {
         const subscription = fromBinary(SubscriptionSchema, child);
         members?.onChildSubscriptionCancelled?.(member, subscription);
@@ -754,12 +874,99 @@ const NodeCoordinatorValues = Object.freeze({
       },
     };
   },
+
+  /**
+   * Sends one native Command or Query to a ready member.
+   *
+   * @param transport The connected native transport.
+   * @param request The request to forward.
+   * @returns Empty routing bytes after the response is assigned.
+   */
+  async forward(
+    transport: ReturnType<typeof createGrpcTransport>,
+    request: CoordinatorRequest,
+  ): Promise<Uint8Array> {
+    if (request.kind === "command") {
+      const response = await transport.unary(
+        CommandService.method.post,
+        request.context.signal,
+        request.context.timeoutMs(),
+        NodeCoordinatorValues.applicationHeaders(request.context.requestHeader),
+        request.command,
+      );
+      NodeCoordinatorValues.responseMetadata(response.header, response.trailer, request.context);
+      request.response = response.message;
+    } else {
+      const response = await transport.unary(
+        QueryService.method.read,
+        request.context.signal,
+        request.context.timeoutMs(),
+        NodeCoordinatorValues.applicationHeaders(request.context.requestHeader),
+        request.query,
+      );
+      NodeCoordinatorValues.responseMetadata(response.header, response.trailer, request.context);
+      request.response = response.message;
+    }
+    return new Uint8Array();
+  },
+
+  /**
+   * Streams validated updates from one native child subscription.
+   *
+   * @param transport The connected native transport.
+   * @param member The backend member.
+   * @param members The ready member source when available.
+   * @param child The serialized child subscription.
+   * @param updates The logical update sink.
+   * @param signal Cancels child activation.
+   * @returns Completion after the child stream closes.
+   */
+  async activateChild(
+    transport: ReturnType<typeof createGrpcTransport>,
+    member: ReadyCoordinatorMember,
+    members: ReadyMemberSource | undefined,
+    child: Uint8Array,
+    updates: (update: Uint8Array) => Promise<void>,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const subscription = fromBinary(SubscriptionSchema, child);
+    members?.onChildSubscriptionActivated?.(member, subscription);
+    for await (const update of createClient(SubscriptionService, transport).activate(subscription, {
+      signal,
+    })) {
+      const topic = subscription.topic;
+      const updateTopic = update.subscription?.topic;
+      if (
+        update.subscription?.id?.value !== subscription.id?.value ||
+        topic === undefined ||
+        updateTopic === undefined ||
+        !equals(TopicSchema, updateTopic, topic)
+      )
+        throw new Error("Backend child update does not match its subscription.");
+      await updates(toBinary(SubscriptionUpdateSchema, update));
+    }
+  },
+
+  /**
+   * Copies backend response metadata into the public context.
+   *
+   * @param headers Headers received from the backend.
+   * @param trailers Trailers received from the backend.
+   * @param context The authenticated or RPC context.
+   */
   responseMetadata(headers: Headers, trailers: Headers, context: HandlerContext): void {
     for (const [name, value] of NodeCoordinatorValues.applicationHeaders(headers))
       context.responseHeader.append(name, value);
     for (const [name, value] of NodeCoordinatorValues.applicationHeaders(trailers))
       context.responseTrailer.append(name, value);
   },
+
+  /**
+   * Copies application headers for forwarding.
+   *
+   * @param headers Headers received from the backend.
+   * @returns Forwardable application headers.
+   */
   applicationHeaders(headers: Headers): Headers {
     const forwarded = new Headers(headers);
     for (const name of [...forwarded.keys()]) {
@@ -774,28 +981,72 @@ const NodeCoordinatorValues = Object.freeze({
     }
     return forwarded;
   },
+
+  /**
+   * Returns a required non-null value or throws.
+   *
+   * @typeParam Value The required input type.
+   * @param value The caller-supplied value.
+   * @param message Error text for a missing value.
+   * @returns The non-null value.
+   */
   requiredValue<Value>(value: Value | undefined, message: string): Value {
     if (value === undefined) throw new Error(message);
     return value;
   },
+
+  /**
+   * Converts an unknown error to a Connect error.
+   *
+   * @param error The original error.
+   * @returns The normalized Connect error.
+   */
   error(error: unknown): Error {
     return error instanceof Error
       ? error
       : new Error("Coordinator subscription operation failed.", { cause: error });
   },
+
+  /**
+   * Validates a configured host.
+   *
+   * @param value The caller-supplied value.
+   * @returns The validated host.
+   */
   host(value: string): string {
     const normalized = value.trim();
     if (normalized.length === 0) throw new Error("Server host must not be blank.");
     return normalized;
   },
+
+  /**
+   * Formats a host for a transport URL.
+   *
+   * @param host The configured host.
+   * @returns The URL-safe host.
+   */
   formatHostForUrl(host: string): string {
     return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
   },
+
+  /**
+   * Validates a configured network port.
+   *
+   * @param value The caller-supplied value.
+   * @returns The validated port.
+   */
   port(value: number): number {
     if (!Number.isSafeInteger(value) || value < 0 || value > 65_535)
       throw new Error("Managed server port must be a safe integer between 0 and 65535.");
     return value;
   },
+
+  /**
+   * Validates a message size limit.
+   *
+   * @param value The caller-supplied value.
+   * @returns The validated message limit.
+   */
   messageLimit(value: number): number {
     if (!Number.isSafeInteger(value) || value < 1 || value > 0xffff_ffff)
       throw new Error(
@@ -803,6 +1054,15 @@ const NodeCoordinatorValues = Object.freeze({
       );
     return value;
   },
+
+  /**
+   * Starts the coordinator HTTP/2 listener.
+   *
+   * @param server The HTTP/2 server.
+   * @param host The configured host.
+   * @param port The configured port.
+   * @returns Completion when the listener starts.
+   */
   listen(server: http2.Http2Server, host: string, port: number): Promise<AddressInfo> {
     return new Promise((resolve, reject) => {
       const onError = (error: Error) => {
@@ -818,6 +1078,13 @@ const NodeCoordinatorValues = Object.freeze({
       server.listen(port, host);
     });
   },
+
+  /**
+   * Closes the HTTP/2 server.
+   *
+   * @param server The HTTP/2 server.
+   * @returns Completion after server shutdown.
+   */
   closeServer(server: http2.Http2Server): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!server.listening) {
@@ -830,6 +1097,14 @@ const NodeCoordinatorValues = Object.freeze({
       });
     });
   },
+
+  /**
+   * Closes the HTTP/2 server and active sessions.
+   *
+   * @param server The HTTP/2 server.
+   * @param sessions Tracked HTTP/2 sessions.
+   * @returns Completion after network shutdown.
+   */
   async closeNetwork(
     server: http2.Http2Server,
     sessions: ReadonlySet<http2.ServerHttp2Session>,
@@ -838,6 +1113,13 @@ const NodeCoordinatorValues = Object.freeze({
     await Promise.all([...sessions].map((session) => NodeCoordinatorValues.closeSession(session)));
     await closed;
   },
+
+  /**
+   * Closes an HTTP/2 session.
+   *
+   * @param session The HTTP/2 session.
+   * @returns Completion after session shutdown.
+   */
   closeSession(session: http2.ServerHttp2Session): Promise<void> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {

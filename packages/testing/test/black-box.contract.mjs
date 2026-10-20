@@ -1,4 +1,4 @@
-/* global setTimeout */
+/* global AbortController, clearTimeout, setTimeout */
 
 import { Time } from "@spine-event-engine/core/time";
 import { BoundedContext } from "@spine-event-engine/server";
@@ -251,6 +251,310 @@ export function registerBlackBoxContract(test, testing) {
       await assertRejects(iterator.throw(new Error("stop events")), /stop events/);
       await blackBox.close();
       if (cancellations !== 1) throw new Error("thrown event stream was canceled more than once");
+    } finally {
+      await blackBox.close();
+    }
+  });
+
+  test("returns refused Command admission without a tracked observation stream", async () => {
+    const blackBox = await BlackBox.from(projectEventContext());
+    try {
+      const scope = blackBox.asGuest();
+      const result = await scope.postAndSubscribe(
+        CreateProjectSchema,
+        create(CreateProjectSchema, { id: "unhandled-project", name: "Unhandled" }),
+        { events: [ProjectObservedSchema] },
+      );
+      if (result.kind !== "refused" || result.acknowledgement.kind !== "error")
+        throw new Error("unhandled valid Command did not return refused admission");
+      if ("subscription" in result)
+        throw new Error("refused Command exposed an observation stream");
+      await scope.postEvent(
+        ProjectObservedSchema,
+        create(ProjectObservedSchema, { id: "still-open" }),
+      );
+    } finally {
+      await blackBox.close();
+    }
+  });
+
+  test("returns the tracked accepted stream after its late-update callback cancels", async () => {
+    const dispatchEntered = Promise.withResolvers();
+    const releaseDispatch = Promise.withResolvers();
+    const context = BoundedContext.singleTenant("DeferredProjectAdmission")
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateProjectSchema],
+        dispatch: async () => {
+          dispatchEntered.resolve();
+          await releaseDispatch.promise;
+        },
+      })
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectObservedSchema],
+        dispatch: () => Promise.resolve(),
+      })
+      .build();
+    const blackBox = await BlackBox.from(context);
+    try {
+      const canceled = Promise.withResolvers();
+      let callbackCancellations = 0;
+      const posting = blackBox
+        .asGuest()
+        .postAndSubscribe(
+          CreateProjectSchema,
+          create(CreateProjectSchema, { id: "accepted-without-observed-event", name: "Accepted" }),
+          {
+            events: [ProjectObservedSchema],
+            firstUpdateTimeoutMs: 10,
+            onFirstUpdateTimeout: async (subscription) => {
+              callbackCancellations += 1;
+              await subscription.cancel();
+              canceled.resolve(subscription);
+            },
+          },
+        );
+      let postSettled = false;
+      void posting.then(
+        () => {
+          postSettled = true;
+        },
+        () => {
+          postSettled = true;
+        },
+      );
+      await dispatchEntered.promise;
+      const deadline = setTimeout(
+        () => canceled.reject(new Error("accepted stream did not report its first-update delay")),
+        1_000,
+      );
+      let notified;
+      try {
+        notified = await canceled.promise;
+      } finally {
+        clearTimeout(deadline);
+      }
+      if (postSettled) throw new Error("Post settled before the first-update callback canceled");
+      releaseDispatch.resolve();
+      const result = await posting;
+      if (result.kind !== "accepted") throw new Error("valid Project Command was not accepted");
+      if (notified !== result.subscription)
+        throw new Error("accepted result and timeout callback returned different handles");
+      const cancel = result.subscription.cancel.bind(result.subscription);
+      let closeCancellations = 0;
+      result.subscription.cancel = async () => {
+        closeCancellations += 1;
+        await cancel();
+      };
+      await blackBox.close();
+      if (callbackCancellations !== 1 || closeCancellations !== 0)
+        throw new Error("BlackBox repeated an accepted stream's callback cancellation");
+    } finally {
+      releaseDispatch.resolve();
+      await blackBox.close();
+    }
+  });
+
+  for (const outcome of ["refused", "aborted"])
+    test(`releases a timeout-notified stream once when gated Command admission is ${outcome}`, async () => {
+      const dispatchEntered = Promise.withResolvers();
+      const releaseDispatch = Promise.withResolvers();
+      const context = BoundedContext.singleTenant(`DeferredProject-${outcome}`)
+        .addCommandDispatcher({
+          messageSchemas: () => [CreateProjectSchema],
+          dispatch: async () => {
+            dispatchEntered.resolve();
+            await releaseDispatch.promise;
+          },
+        })
+        .addEventDispatcher({
+          messageSchemas: () => [ProjectObservedSchema],
+          dispatch: () => Promise.resolve(),
+        })
+        .build();
+      const blackBox = await BlackBox.from(context);
+      try {
+        const abort = new AbortController();
+        const notified = Promise.withResolvers();
+        let cancellations = 0;
+        const posting = blackBox
+          .asGuest()
+          .postAndSubscribe(
+            CreateProjectSchema,
+            create(CreateProjectSchema, { id: `project-${outcome}`, name: "Valid" }),
+            {
+              events: [ProjectObservedSchema],
+              firstUpdateTimeoutMs: 10,
+              signal: abort.signal,
+              onFirstUpdateTimeout: (subscription) => {
+                const cancel = subscription.cancel.bind(subscription);
+                subscription.cancel = async () => {
+                  cancellations += 1;
+                  await cancel();
+                };
+                notified.resolve(subscription);
+              },
+            },
+          );
+        let postSettled = false;
+        void posting.then(
+          () => {
+            postSettled = true;
+          },
+          () => {
+            postSettled = true;
+          },
+        );
+        await dispatchEntered.promise;
+        const deadline = setTimeout(
+          () => notified.reject(new Error("gated stream did not report its first-update delay")),
+          1_000,
+        );
+        try {
+          await notified.promise;
+        } finally {
+          clearTimeout(deadline);
+        }
+        if (postSettled) throw new Error("Command Post settled before timeout notification");
+        if (outcome === "refused") {
+          releaseDispatch.reject(new Error("private dispatcher refusal"));
+          const result = await posting;
+          if (result.kind !== "refused" || result.acknowledgement.kind !== "error")
+            throw new Error("dispatcher refusal lost the Command error acknowledgement");
+          if (
+            result.acknowledgement.error.type !== "COMMAND_POST_ERROR" ||
+            result.acknowledgement.error.message !== "Command post failed."
+          ) {
+            throw new Error("dispatcher refusal did not retain its sanitized public error");
+          }
+          if ("subscription" in result) throw new Error("refusal returned a canceled stream");
+        } else {
+          const reason = new Error("caller stopped Command posting");
+          abort.abort(reason);
+          releaseDispatch.resolve();
+          try {
+            await posting;
+            throw new Error("caller abort did not reject Command posting");
+          } catch (error) {
+            if (
+              error.name !== "ConnectError" ||
+              error.message !== "[canceled] caller stopped Command posting" ||
+              error.cause !== reason
+            ) {
+              throw error;
+            }
+          }
+        }
+        if (cancellations !== 1) throw new Error("gated stream was not canceled once");
+        await blackBox.close();
+        if (cancellations !== 1) throw new Error("BlackBox repeated gated stream cleanup");
+      } finally {
+        releaseDispatch.resolve();
+        await blackBox.close();
+      }
+    });
+
+  test("keeps a schema-list Event group active across types and cancels it on BlackBox close", async () => {
+    const blackBox = await BlackBox.from(projectEventContext());
+    try {
+      const scope = blackBox.asGuest();
+      const firstDelay = Promise.withResolvers();
+      let notices = 0;
+      const group = await scope.createSubscription([ProjectObservedSchema, ProjectCreatedSchema], {
+        kind: "event",
+        firstUpdateTimeoutMs: 10,
+        onFirstUpdateTimeout: (subscription) => {
+          notices += 1;
+          firstDelay.resolve(subscription);
+        },
+      });
+      await group.activate();
+      const deadline = setTimeout(
+        () => firstDelay.reject(new Error("group did not report its first-update delay")),
+        1_000,
+      );
+      try {
+        if ((await firstDelay.promise) !== group)
+          throw new Error("first-update delay did not notify the public group");
+      } finally {
+        clearTimeout(deadline);
+      }
+      const iterator = group.updates[Symbol.asyncIterator]();
+      const firstPending = iterator.next();
+      await scope.postEvent(
+        ProjectObservedSchema,
+        create(ProjectObservedSchema, { id: "observed" }),
+      );
+      const first = await firstPending;
+      if (
+        first.done ||
+        first.value.kind !== "update" ||
+        first.value.update.update.case !== "eventUpdates" ||
+        AnyMessages.unpack(first.value.update.update.value.event[0]?.message, ProjectObservedSchema)
+          ?.id !== "observed"
+      ) {
+        throw new Error("schema-list group missed its first Event type");
+      }
+      const secondPending = iterator.next();
+      await scope.postEvent(
+        ProjectCreatedSchema,
+        create(ProjectCreatedSchema, { id: "created", name: "Second", priority: 1 }),
+      );
+      const second = await secondPending;
+      if (
+        second.done ||
+        second.value.kind !== "update" ||
+        second.value.update.update.case !== "eventUpdates" ||
+        AnyMessages.unpack(second.value.update.update.value.event[0]?.message, ProjectCreatedSchema)
+          ?.id !== "created"
+      ) {
+        throw new Error("schema-list group did not continue for its second Event type");
+      }
+      if (notices !== 1) throw new Error("late Event deliveries repeated the first-update notice");
+      const cancel = group.cancel.bind(group);
+      let cancellations = 0;
+      group.cancel = async () => {
+        cancellations += 1;
+        await cancel();
+      };
+      await blackBox.close();
+      if (cancellations !== 1) throw new Error("BlackBox did not cancel the active Event group");
+      if (!(await iterator.next()).done) throw new Error("closed Event group did not end updates");
+    } finally {
+      await blackBox.close();
+    }
+  });
+
+  test("cancels a late Event group through the timeout callback without repeat cleanup", async () => {
+    const blackBox = await BlackBox.from(projectEventContext());
+    try {
+      const canceled = Promise.withResolvers();
+      const group = await blackBox.asGuest().createSubscription([ProjectObservedSchema], {
+        kind: "event",
+        firstUpdateTimeoutMs: 10,
+        onFirstUpdateTimeout: async (subscription) => {
+          await subscription.cancel();
+          canceled.resolve(subscription);
+        },
+      });
+      const cancel = group.cancel.bind(group);
+      let cancellations = 0;
+      group.cancel = async () => {
+        cancellations += 1;
+        await cancel();
+      };
+      await group.activate();
+      const deadline = setTimeout(
+        () => canceled.reject(new Error("timeout callback did not cancel the Event group")),
+        1_000,
+      );
+      try {
+        if ((await canceled.promise) !== group)
+          throw new Error("timeout callback canceled a different subscription handle");
+      } finally {
+        clearTimeout(deadline);
+      }
+      await blackBox.close();
+      if (cancellations !== 1) throw new Error("BlackBox repeated callback cancellation");
     } finally {
       await blackBox.close();
     }
@@ -661,7 +965,7 @@ function projectAggregateHandlers() {
 function projectEventContext() {
   return BoundedContext.singleTenant("Events")
     .addEventDispatcher({
-      messageSchemas: () => [ProjectObservedSchema],
+      messageSchemas: () => [ProjectObservedSchema, ProjectCreatedSchema],
       dispatch: () => Promise.resolve(),
     })
     .build();

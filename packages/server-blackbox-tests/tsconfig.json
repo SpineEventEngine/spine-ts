@@ -2,12 +2,18 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
-    "lib": ["ES2024", "DOM", "decorators"],
-    "types": ["node"],
     "rootDir": ".",
     "outDir": "dist",
+    "lib": ["ES2024", "DOM", "decorators"],
+    "types": ["node"],
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts", "generated/**/*.ts"],
-  "references": [{ "path": "../ai-vercel-ax" }]
+  "include": ["src/**/*.ts", "generated/**/*.ts", "test-fixtures/**/*.ts"],
+  "references": [
+    { "path": "../ai-vercel-ax" },
+    { "path": "../core" },
+    { "path": "../proto" },
+    { "path": "../server" },
+    { "path": "../storage" }
+  ]
 }

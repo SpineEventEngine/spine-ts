@@ -464,6 +464,22 @@
       "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
+      "id": "deployment.membership_readiness_rejection_observer",
+      "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
+      "operation": "deployment.membership.readiness",
+      "disposition": "no-log",
+      "test": "packages/deployment/test/membership-kernel.test.ts",
+      "rationale": "The companion catch observes a rejection; activation awaits the original readiness gate and reports its failure."
+    },
+    {
+      "id": "deployment.membership_lifetime_rejection_observer",
+      "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
+      "operation": "deployment.membership.lifetime",
+      "disposition": "no-log",
+      "test": "packages/deployment/test/membership-kernel.test.ts",
+      "rationale": "The companion catch observes a rejection; activation awaits the original lifetime gate and reports its failure."
+    },
+    {
       "id": "auth.subscription_expiry_cleanup",
       "source": "../../packages/auth/src/subscriptions/index.ts",
       "operation": "auth.subscription.expiry",
@@ -513,6 +529,14 @@
       "test": "packages/auth/test/subscriptions/index.test.ts"
     },
     {
+      "id": "auth.subscription_cancel_finally_observer",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.cancel",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts",
+      "rationale": "The catch observes the rejected finally child; the original cancellation promise is returned to callers unchanged."
+    },
+    {
       "id": "server.managed_replica_subscription_ipc",
       "source": "../../packages/server/src/server/managed-server-application.ts",
       "operation": "managed_replica.subscription_ipc",
@@ -532,6 +556,30 @@
       "operation": "managed_replica.closed_ipc",
       "disposition": "no-log",
       "test": "packages/server/test/server/managed-server-application.test.ts"
+    },
+    {
+      "id": "server.managed_replica_delivery_drained_ipc",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.delivery_drained_ipc",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/managed-server-application.test.ts",
+      "rationale": "A disappeared parent cannot receive the phase frame; process disconnection still settles close."
+    },
+    {
+      "id": "server.managed_replica_close_finally_observer",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.close_finally",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/managed-server-application.test.ts",
+      "rationale": "The catch observes rejection of the derived finally promise; callers receive the original close rejection."
+    },
+    {
+      "id": "server.managed_deferred_rejection_observer",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.deferred",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/managed-server-application.test.ts",
+      "rationale": "The catch observes a shared deferred gate while its original promise remains available to phase waiters."
     },
     {
       "id": "server.managed_replica_close_failed_ipc",

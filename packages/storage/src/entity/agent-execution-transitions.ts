@@ -13,15 +13,15 @@
  */
 
 import { clone, toBinary } from "@bufbuild/protobuf";
+import type { CommandId } from "@spine-event-engine/proto";
 import {
   AgentExecutionRecordSchema,
   AgentSavedDispatchPlanSchema as SavedDispatchPlanSchema,
   AgentSavedTargetKind,
   AgentSavedRepositoryFamily,
   type AgentExecutionRecord,
-  type AgentOutgoingSignal,
+  type AgentOutgoingCommand,
   type AgentSavedDispatchTarget,
-  type AgentSignalKey,
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 
 /**
@@ -35,8 +35,8 @@ export const AgentExecutionTransitions = {
    */
   assertCompletion(record: AgentExecutionRecord): void {
     const originalIds = new Set<string>();
-    for (const output of record.completion?.outgoing ?? []) {
-      if (output.signal.case === undefined || output.delivered || output.plan !== undefined)
+    for (const output of record.completion?.commands ?? []) {
+      if (output.command === undefined || output.delivered || output.plan !== undefined)
         throw new Error("Agent completion requires an undelivered original output without a plan.");
       const original = this.originalId(output);
       if (originalIds.has(original))
@@ -48,21 +48,13 @@ export const AgentExecutionTransitions = {
   /**
    * Reads the complete typed ID of one original outgoing envelope.
    *
-   * @param output Original Event or Command envelope.
+   * @param output Original outgoing Command envelope.
    * @returns Kind and nonempty source ID.
    */
-  originalId(output: AgentOutgoingSignal): string {
-    const kind = output.signal.case;
-    const id =
-      kind === "event"
-        ? output.signal.value.id?.value
-        : kind === "command"
-          ? output.signal.value.id?.uuid
-          : undefined;
+  originalId(output: AgentOutgoingCommand): string {
+    const id = output.command?.id?.uuid;
     if (!id?.trim()) throw new Error("Agent outgoing original ID must be nonempty.");
-    if (kind !== "event" && kind !== "command")
-      throw new Error("Agent outgoing signal must have a typed kind.");
-    return `${kind}:${id}`;
+    return `command:${id}`;
   },
 
   /**
@@ -79,16 +71,16 @@ export const AgentExecutionTransitions = {
         );
       return;
     }
-    if (next.completion?.outgoing.length !== prior.completion.outgoing.length)
+    if (next.completion?.commands.length !== prior.completion.commands.length)
       throw new Error("Agent saved outputs cannot be replaced.");
     const masked = clone(AgentExecutionRecordSchema, next);
     const priorCompletion = prior.completion;
     const maskedCompletion = masked.completion;
     if (maskedCompletion === undefined) throw new Error("Agent completion is missing.");
-    for (let i = 0; i < prior.completion.outgoing.length; i += 1) {
-      const old = priorCompletion.outgoing[i];
-      const current = next.completion.outgoing[i];
-      const maskedOutput = maskedCompletion.outgoing[i];
+    for (let i = 0; i < prior.completion.commands.length; i += 1) {
+      const old = priorCompletion.commands[i];
+      const current = next.completion.commands[i];
+      const maskedOutput = maskedCompletion.commands[i];
       if (old === undefined || current === undefined || maskedOutput === undefined)
         throw new Error("Agent saved output is missing.");
       if (old.plan !== undefined && !this.samePlan(old, current))
@@ -104,11 +96,11 @@ export const AgentExecutionTransitions = {
    * Validates a persisted plan before acknowledging each selected original ID.
    *
    * @param record Persisted Agent execution record.
-   * @param signals Original outgoing signal identities.
+   * @param signals Original outgoing Command identities.
    */
-  assertDelivery(record: AgentExecutionRecord, signals: readonly AgentSignalKey[]): void {
+  assertDelivery(record: AgentExecutionRecord, signals: readonly CommandId[]): void {
     for (const signal of signals) {
-      const output = record.completion?.outgoing.find((item) => this.matches(item, signal));
+      const output = record.completion?.commands.find((item) => this.matches(item, signal));
       if (output?.plan === undefined)
         throw new Error("Agent output cannot be acknowledged before its saved plan exists.");
     }
@@ -119,7 +111,7 @@ export const AgentExecutionTransitions = {
    *
    * @param output Saved outgoing signal.
    */
-  validatePlan(output: AgentOutgoingSignal): void {
+  validatePlan(output: AgentOutgoingCommand): void {
     if (output.delivered) throw new Error("Agent delivered output cannot install a route plan.");
     for (const target of output.plan?.targets ?? []) this.validateTarget(output, target);
   },
@@ -130,19 +122,13 @@ export const AgentExecutionTransitions = {
    * @param output Saved outgoing signal.
    * @param target Prepared delivery target.
    */
-  validateTarget(output: AgentOutgoingSignal, target: AgentSavedDispatchTarget): void {
-    const event = output.signal.case === "event";
-    const repository =
-      target.kind === AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_EVENT ||
-      target.kind === AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND;
+  validateTarget(output: AgentOutgoingCommand, target: AgentSavedDispatchTarget): void {
+    const repository = target.kind === AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND;
     if (
       !target.signalType.trim() ||
       !target.bindingFingerprint.trim() ||
-      (event
-        ? target.kind !== AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_EVENT &&
-          target.kind !== AgentSavedTargetKind.AGENT_SAVED_STANDALONE_EVENT
-        : target.kind !== AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND &&
-          target.kind !== AgentSavedTargetKind.AGENT_SAVED_STANDALONE_COMMAND)
+      (target.kind !== AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND &&
+        target.kind !== AgentSavedTargetKind.AGENT_SAVED_STANDALONE_COMMAND)
     )
       throw new Error("Agent saved dispatcher does not match the original output.");
     if (
@@ -164,7 +150,7 @@ export const AgentExecutionTransitions = {
    * @param right Second value in the comparison.
    * @returns Whether both saved dispatch plans have identical bytes.
    */
-  samePlan(left: AgentOutgoingSignal, right: AgentOutgoingSignal): boolean {
+  samePlan(left: AgentOutgoingCommand, right: AgentOutgoingCommand): boolean {
     if (left.plan === undefined || right.plan === undefined) return left.plan === right.plan;
     const a = toBinary(SavedDispatchPlanSchema, left.plan);
     const b = toBinary(SavedDispatchPlanSchema, right.plan);
@@ -185,20 +171,13 @@ export const AgentExecutionTransitions = {
   },
 
   /**
-   * Matches a selected typed original Event or Command ID.
+   * Matches a selected typed original Command ID.
    *
-   * @param output Saved outgoing signal.
-   * @param signal Original signal identity.
-   * @returns Whether the saved output has the original signal identity.
+   * @param output Saved outgoing Command.
+   * @param signal Original Command identity.
+   * @returns Whether the saved output has the original Command identity.
    */
-  matches(output: AgentOutgoingSignal, signal: AgentSignalKey): boolean {
-    return (
-      (signal.id.case === "event" &&
-        output.signal.case === "event" &&
-        output.signal.value.id?.value === signal.id.value.value) ||
-      (signal.id.case === "command" &&
-        output.signal.case === "command" &&
-        output.signal.value.id?.uuid === signal.id.value.uuid)
-    );
+  matches(output: AgentOutgoingCommand, signal: CommandId): boolean {
+    return output.command?.id?.uuid === signal.uuid;
   },
 };

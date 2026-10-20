@@ -17,6 +17,14 @@ import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobu
 import type { Transport } from "@connectrpc/connect";
 import { type InboxMessage, ShardIndex } from "@spine-event-engine/server";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
+import { CommandIdSchema } from "@spine-event-engine/proto";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { CreateTaskSchema } from "../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
   LiquorPickUpOutcomeSchema,
   OptionalInboxMessageSchema,
@@ -251,17 +259,27 @@ export function message(kind: "command" | "event", id = "message-1", payloadByte
 }
 
 export function domainMessage(id = "message-1"): InboxMessage {
+  const taskId = create(TaskIdSchema, { value: "task-1" });
+  const commandId = create(CommandIdSchema, { uuid: id });
+  const command = create(CommandSchema, {
+    id: commandId,
+    message: AnyMessages.pack(
+      CreateTaskSchema,
+      create(CreateTaskSchema, {
+        id: taskId,
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+        title: "Task 1",
+      }),
+    ),
+  });
   return Object.freeze({
     id: { value: id, shard: ShardIndex.single() },
     inboxId: {
-      targetId: stringTarget("type.spine.io/test.EntityId:"),
-      targetTypeUrl: "type.spine.io/test.Entity",
+      targetId: AnyMessages.pack(TaskIdSchema, taskId),
+      targetTypeUrl: TypeUrls.derive(TaskSchema),
     },
-    signalId: "signal-1",
-    signal: create(AnySchema, {
-      typeUrl: "type.spine.io/spine.core.Command",
-      value: new Uint8Array(),
-    }),
+    signalId: commandId.uuid,
+    signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
     label: "HANDLE_COMMAND" as const,
     status: "TO_DELIVER" as const,
     shard: ShardIndex.single(),

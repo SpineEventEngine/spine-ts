@@ -220,7 +220,7 @@ describe("LocalProjectionInbox", () => {
         (error: unknown) => error,
       );
 
-    expect(result).toBeUndefined();
+    expect(result).toBe(drainFailure);
     expect(notifications).toBe(1);
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
@@ -470,15 +470,15 @@ describe("LocalProjectionInbox", () => {
     await pause(150);
     releaseReplay();
 
-    await expect(firstResult).resolves.toBeUndefined();
-    await expect(duplicateResult).resolves.toBeUndefined();
-    await expect(firstDelivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual(
-      [],
-    );
+    await expect(firstResult).resolves.toBe(failure);
+    await expect(duplicateResult).resolves.toBe(failure);
+    await expect(
+      firstDelivery.inbox.read(shard, { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "event-failing-duplicate", status: "TO_DELIVER" }]);
     await expect(firstDelivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
-  it("persists a valid non-projection label without readiness", async () => {
+  it("retains a valid non-projection label as pending without readiness", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -506,10 +506,10 @@ describe("LocalProjectionInbox", () => {
           shard: ShardIndex.single(),
         }),
       ),
-    ).resolves.toMatchObject({ label: "HANDLE_COMMAND" });
+    ).rejects.toThrow('no handler for inbox label "HANDLE_COMMAND"');
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "event-2", status: "TO_DELIVER" }]);
     expect(ready).toEqual([]);
   });
 
@@ -571,10 +571,10 @@ describe("LocalProjectionInbox", () => {
         status: "TO_DELIVER",
         shard: ShardIndex.single(),
       }),
-    ).resolves.toMatchObject({ label: "UPDATE_SUBSCRIBER" });
+    ).rejects.toThrow("no projection subscriber target");
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "event-missing", status: "TO_DELIVER" }]);
     expect(ready).toEqual([]);
   });
 
@@ -605,8 +605,10 @@ describe("LocalProjectionInbox", () => {
         status: "TO_DELIVER",
         shard,
       }),
-    ).resolves.toMatchObject({ label: "UPDATE_SUBSCRIBER" });
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    ).rejects.toBe(replayFailure);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "event-shard-mismatch", status: "TO_DELIVER" },
+    ]);
     expect(ready).toEqual([]);
   });
 
@@ -620,7 +622,6 @@ describe("LocalProjectionInbox", () => {
     const unrelatedProjectionTypeUrl = "type.example.dev/Tasks.OtherProjection";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
-    const unrelatedSeen: InboxMessage[] = [];
 
     inbox.register({
       targetTypeUrl,
@@ -629,14 +630,6 @@ describe("LocalProjectionInbox", () => {
         return Promise.resolve();
       },
     });
-    inbox.register({
-      targetTypeUrl: unrelatedProjectionTypeUrl,
-      replay(message) {
-        unrelatedSeen.push(message);
-        return Promise.reject(new Error("unrelated projection should not replay"));
-      },
-    });
-
     await delivery.inbox.receive({
       inboxId: {
         targetId: Identifiers.pack("string", "pm-0"),
@@ -674,7 +667,10 @@ describe("LocalProjectionInbox", () => {
     });
 
     expect(seen).toHaveLength(1);
-    expect(unrelatedSeen).toHaveLength(1);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-0" },
+      { signalId: "event-0" },
+    ]);
     expect(seen[0]).toMatchObject({
       signalId: "event-1",
       label: "UPDATE_SUBSCRIBER",
