@@ -14,7 +14,7 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { Datastore } from "@google-cloud/datastore";
+import { and, Datastore, PropertyFilter } from "@google-cloud/datastore";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   RecordStorage,
@@ -26,6 +26,11 @@ import {
 import {
   type TenantCatalog,
   type TenantCatalogProvider,
+  StoragePreparations,
+  TenantBoundary,
+  type AgentHistoryStorageInput,
+  type EntityStoragePreparationInput,
+  type StoragePreparationMode,
 } from "@spine-event-engine/storage/provider";
 import {
   AgentExecutionRecords,
@@ -53,6 +58,7 @@ import {
   type OpenEntityRecords,
 } from "./entity-history.js";
 import { DatastoreRecordStorage } from "./record-storage.js";
+import { DatastoreIdColumn } from "./id-column.js";
 import { DatastoreAgentHistory, AgentHistoryHash } from "./agent-history.js";
 import { DatastoreAgentExecution } from "./agent-execution.js";
 import type { DatastoreExecutionRows } from "./agent-execution.js";
@@ -65,6 +71,57 @@ import {
 import { DatastoreTenantCatalog } from "./tenant-catalog.js";
 
 const maxClientSideScan = 1_000;
+
+interface NativePreparation {
+  signature: string;
+  pending: Promise<void> | undefined;
+  ready: boolean;
+  declared: boolean;
+}
+
+/**
+ * Checks one custom record declaration without constructing storage.
+ * @typeParam R Stored record message type.
+ */
+export interface PrepareDatastoreRecordStorage<R extends Message = Message> {
+  /**
+   * Checks the selected record family.
+   * @typeParam I Record identifier type.
+   * @param context Complete storage context.
+   * @param spec Declarative record family.
+   * @param client Caller-supplied Datastore client.
+   * @param mode Creation or read-only checking.
+   * @returns Completion after custom preparation.
+   */
+  // eslint-disable-next-line @typescript-eslint/prefer-function-type -- Documented generic call signature.
+  <I>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    client: Datastore,
+    mode: StoragePreparationMode,
+  ): Promise<void>;
+}
+
+/**
+ * Checks one coherent custom Entity declaration without constructing storage.
+ * @typeParam S Entity state message type.
+ */
+export interface PrepareDatastoreEntityStorage<S extends Message = Message> {
+  /**
+   * Checks the selected coherent Entity provider.
+   * @typeParam I Entity identifier type.
+   * @param input Declarative Entity family.
+   * @param client Caller-supplied Datastore client.
+   * @param mode Creation or read-only checking.
+   * @returns Completion after custom preparation.
+   */
+  // eslint-disable-next-line @typescript-eslint/prefer-function-type -- Documented generic call signature.
+  <I>(
+    input: EntityStoragePreparationInput<I, S>,
+    client: Datastore,
+    mode: StoragePreparationMode,
+  ): Promise<void>;
+}
 
 /**
  * Describes the physical Datastore kind used for a record family.
@@ -246,11 +303,13 @@ export interface DatastoreStorageFactoryBuilder {
    * @typeParam R Stored record message type.
    * @param recordType The record type served by the provider.
    * @param creator The custom record-storage provider.
+   * @param prepare Optional declarative preparation for the selected custom provider.
    * @returns This builder.
    */
   useRecordStorage<R extends Message>(
     recordType: GenMessage<R>,
     creator: CreateRecordStorage<R>,
+    prepare?: PrepareDatastoreRecordStorage<R>,
   ): this;
 
   /**
@@ -261,12 +320,14 @@ export interface DatastoreStorageFactoryBuilder {
    * @param sourceType The Entity state type that owns the records.
    * @param recordType The record type served by the provider.
    * @param creator The custom record-storage provider.
+   * @param prepare Optional declarative preparation for the selected custom provider.
    * @returns This builder.
    */
   useRecordStorage<S extends Message, R extends Message>(
     sourceType: GenMessage<S>,
     recordType: GenMessage<R>,
     creator: CreateRecordStorage<R>,
+    prepare?: PrepareDatastoreRecordStorage<R>,
   ): this;
 
   /**
@@ -275,11 +336,13 @@ export interface DatastoreStorageFactoryBuilder {
    * @typeParam S Entity state message type.
    * @param sourceType The Entity state type served by the provider.
    * @param creator The custom Entity persistence provider.
+   * @param prepare Optional declarative preparation for the coherent custom provider.
    * @returns This builder.
    */
   useEntityStorage<S extends Message>(
     sourceType: GenMessage<S>,
     creator: CreateEntityStorage<S>,
+    prepare?: PrepareDatastoreEntityStorage<S>,
   ): this;
 
   /**
@@ -314,6 +377,11 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   readonly #recordCreators: ReadonlyMap<string, CreateRecordStorage>;
 
   /**
+   * Declarative custom record preparation callbacks by family.
+   */
+  readonly #recordPreparers: ReadonlyMap<string, PrepareDatastoreRecordStorage>;
+
+  /**
    * Physical layouts indexed by source and record type.
    */
   readonly #layouts: ReadonlyMap<string, RecordLayout>;
@@ -322,6 +390,26 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    * Custom Entity creators indexed by state type.
    */
   readonly #entityCreators: ReadonlyMap<string, CreateEntityStorage>;
+
+  /**
+   * Declarative custom coherent Entity preparation callbacks by source type.
+   */
+  readonly #entityPreparers: ReadonlyMap<string, PrepareDatastoreEntityStorage>;
+
+  /**
+   * Native physical definitions and successful or pending metadata checks.
+   */
+  readonly #prepared = new Map<string, NativePreparation>();
+
+  /**
+   * Complete admitted preparation and connection-check operations.
+   */
+  readonly #work = new Set<Promise<void>>();
+
+  /**
+   * Remembered shared metadata check outcome while successful or in progress.
+   */
+  #connection: Promise<void> | undefined;
 
   /**
    * Reversible tenant namespace assignment.
@@ -345,12 +433,23 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    */
   static newBuilder(): DatastoreStorageFactoryBuilder {
     return new Builder(
-      (client, recordCreators, layouts, entityCreators, namespaceConverter, stringifiers) =>
+      (
+        client,
+        recordCreators,
+        recordPreparers,
+        layouts,
+        entityCreators,
+        entityPreparers,
+        namespaceConverter,
+        stringifiers,
+      ) =>
         new DatastoreStorageFactory(
           client,
           recordCreators,
+          recordPreparers,
           layouts,
           entityCreators,
+          entityPreparers,
           namespaceConverter,
           stringifiers,
         ),
@@ -362,8 +461,10 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    *
    * @param client The caller-owned Datastore client.
    * @param recordCreators Custom record-storage providers by record family.
+   * @param recordPreparers Declarative preparation callbacks by record family.
    * @param layouts Physical record layouts by record family.
    * @param entityCreators Custom Entity persistence providers by Entity type.
+   * @param entityPreparers Declarative preparation callbacks by Entity type.
    * @param namespaceConverter Converts complete tenants to native namespaces.
    * @param stringifiers Converts message-valued IDs and columns.
    * @internal
@@ -371,24 +472,357 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   private constructor(
     client: Datastore,
     recordCreators: ReadonlyMap<string, CreateRecordStorage>,
+    recordPreparers: ReadonlyMap<string, PrepareDatastoreRecordStorage>,
     layouts: ReadonlyMap<string, RecordLayout>,
     entityCreators: ReadonlyMap<string, CreateEntityStorage>,
+    entityPreparers: ReadonlyMap<string, PrepareDatastoreEntityStorage>,
     namespaceConverter: NamespaceConverter,
     stringifiers: StringifierRegistry,
   ) {
     super();
     this.#client = client;
     this.#recordCreators = recordCreators;
+    this.#recordPreparers = recordPreparers;
     this.#layouts = layouts;
     this.#entityCreators = entityCreators;
+    this.#entityPreparers = entityPreparers;
     this.#namespaceConverter = new NamespaceAssignments(namespaceConverter);
     this.#stringifiers = new StringifierRegistry(stringifiers);
     this.#catalog = new DatastoreTenantCatalog(client, this.#namespaceConverter);
+    StoragePreparations.register(this, {
+      prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
+      prepareEntity: (input, mode) => this.prepareEntity(input, mode),
+      prepareAgentHistory: (input) => this.prepareAgentHistory(input),
+    });
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
     this.registerAgentHistory();
     this.registerAgentExecution();
+  }
+
+  /**
+   * Checks the shared namespace metadata with a bounded read-only query.
+   * @returns Completion after the metadata read; failures can be retried.
+   */
+  override checkConnection(): Promise<void> {
+    if (!this.isOpen()) return Promise.reject(new Error("StorageFactory is closed."));
+    if (this.#connection !== undefined) return this.#connection;
+    const pending = this.admit(() => this.probe(this.#client.namespace ?? ""));
+    this.#connection = pending;
+    void pending.catch(() => {
+      if (this.#connection === pending) this.#connection = undefined;
+    });
+    return pending;
+  }
+
+  /**
+   * Performs one exact-key metadata read for a native namespace.
+   * @param namespace Native namespace to inspect.
+   * @returns Completion after the metadata query.
+   */
+  private async probe(namespace: string): Promise<void> {
+    const key = this.#client.key({ namespace: "", path: ["__namespace__", namespace || 1] });
+    const query = this.#client
+      .createQuery("", "__namespace__")
+      .select("__key__")
+      .filter(
+        and([new PropertyFilter("__key__", ">=", key), new PropertyFilter("__key__", "<=", key)]),
+      );
+    await this.#client.runQuery(query);
+  }
+
+  /**
+   * Admits asynchronous physical preparation before invoking callbacks.
+   * @param operation Work to perform within the factory lifetime.
+   * @returns Completion or rejection from the admitted work.
+   */
+  private admit(operation: () => Promise<void>): Promise<void> {
+    if (!this.isOpen()) return Promise.reject(new Error("StorageFactory is closed."));
+    const pending = Promise.resolve().then(operation);
+    this.#work.add(pending);
+    void pending.finally(() => this.#work.delete(pending)).catch(() => undefined);
+    return pending;
+  }
+
+  /**
+   * Prepares a declared record family without opening a storage handle.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record type.
+   * @param context Captured tenant context.
+   * @param spec The physical record declaration.
+   * @param group Optional history family.
+   * @param mode Creation or read-only checking.
+   * @returns Completion after native or custom preparation.
+   */
+  private prepareRecord<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group: StorageGroup | undefined,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admit(() => this.prepareRecordAdmitted(context, spec, group, mode, true));
+  }
+
+  /**
+   * Prepares a family within an existing factory admission.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record type.
+   * @param context Captured tenant context.
+   * @param spec The physical record declaration.
+   * @param group Optional history family.
+   * @param mode Creation or read-only checking.
+   * @param allowCustom Whether ordinary custom creators are selected.
+   * @returns Completion after compatible preparation.
+   */
+  private prepareRecordAdmitted<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group: StorageGroup | undefined,
+    mode: StoragePreparationMode,
+    allowCustom: boolean,
+  ): Promise<void> {
+    const resolved = this.resolve(spec, group, allowCustom);
+    if (resolved.creator !== undefined) {
+      const prepare = resolved.prepare;
+      if (prepare === undefined)
+        return Promise.reject(new Error("Custom Datastore record preparation is required."));
+      return prepare(context, spec, this.#client, mode);
+    }
+    return this.prepareNative(context, spec, group, resolved.layout?.kind);
+  }
+
+  /**
+   * Prepares current Entity and enabled history declarations without storage handles.
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param input The declarative Entity family.
+   * @param mode Creation or read-only checking.
+   * @returns Completion after all requested families are checked.
+   */
+  private prepareEntity<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admit(async () => {
+      const custom = this.#entityCreators.get(input.sourceType.typeName);
+      if (custom !== undefined) {
+        const prepare = this.#entityPreparers.get(input.sourceType.typeName);
+        if (prepare === undefined)
+          throw new Error("Custom Datastore Entity preparation is required.");
+        await prepare(input, this.#client, mode);
+        return;
+      }
+      if (this.columnSignature(input.columns) !== this.columnSignature(input.recordSpec.columns))
+        throw new Error("Datastore Entity query columns differ from current records.");
+      await this.prepareRecordAdmitted(input.context, input.recordSpec, undefined, mode, false);
+      if (input.stateHistory) {
+        const history = stateHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, history.spec, history.group, mode, false);
+      }
+      if (input.eventHistory) {
+        const history = eventHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, history.spec, history.group, mode, false);
+      }
+    });
+  }
+
+  /**
+   * Prepares the surviving Agent audit family.
+   * @typeParam I Agent identifier type.
+   * @param input Agent state and complete tenant context.
+   * @returns Completion after audit record compatibility is checked.
+   */
+  private prepareAgentHistory<I>(input: AgentHistoryStorageInput<I>): Promise<void> {
+    return this.admit(() => {
+      TenantBoundary.of(input.context);
+      if (!input.stateType.trim()) throw new TypeError("Agent state type is required.");
+      const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
+      return this.prepareNative(
+        input.context,
+        spec,
+        AgentHistoryRecords.group,
+        "spine_agent_history",
+      );
+    });
+  }
+
+  /**
+   * Checks one native physical definition and its namespace read access.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record type.
+   * @param context Complete tenant context.
+   * @param spec The declared record family.
+   * @param group Optional physical group.
+   * @param explicitKind Configured or fixed native kind.
+   * @returns Completion after a compatible namespace read.
+   */
+  private prepareNative<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+    explicitKind?: string,
+  ): Promise<void> {
+    const { namespace, kind, signature } = this.nativeDefinition(
+      context,
+      spec,
+      group,
+      explicitKind,
+    );
+    const family = JSON.stringify([namespace, kind]);
+    const prior = this.#prepared.get(family);
+    if (prior !== undefined && prior.signature !== signature)
+      throw new Error(`Datastore kind "${kind}" has an incompatible record definition.`);
+    if (prior?.ready) return Promise.resolve();
+    if (prior?.pending !== undefined) return prior.pending;
+    const entry = prior ?? {
+      signature,
+      ready: false,
+      declared: false,
+      pending: undefined as Promise<void> | undefined,
+    };
+    if (prior === undefined) this.#prepared.set(family, entry);
+    return this.probePrepared(namespace, family, entry);
+  }
+
+  /**
+   * Checks one retained definition and records only successful readiness.
+   * @param namespace Native namespace to inspect.
+   * @param family Canonical physical family key.
+   * @param entry Existing compatible physical declaration.
+   * @returns Completion after the read-only metadata check.
+   */
+  private probePrepared(
+    namespace: string,
+    family: string,
+    entry: NativePreparation,
+  ): Promise<void> {
+    const pending = this.probe(namespace).then(
+      () => {
+        entry.ready = true;
+        entry.pending = undefined;
+      },
+      (error: unknown) => {
+        entry.pending = undefined;
+        if (!entry.declared && this.#prepared.get(family) === entry) this.#prepared.delete(family);
+        throw error;
+      },
+    );
+    entry.pending = pending;
+    return pending;
+  }
+
+  /**
+   * Records a successful native handle's pure layout for later compatibility checks.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record type.
+   * @param context Complete tenant context.
+   * @param spec The declared record family.
+   * @param group Optional physical group.
+   * @param explicitKind Configured or fixed native kind.
+   * @param mapping Actual native mapping from an opened handle.
+   */
+  private declareNative<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+    explicitKind?: string,
+    mapping?: { readonly namespace: string | undefined; readonly kind: string },
+  ): void {
+    const { namespace, kind, signature } = this.nativeDefinition(
+      context,
+      spec,
+      group,
+      explicitKind,
+      mapping,
+    );
+    const family = JSON.stringify([namespace, kind]);
+    const prior = this.#prepared.get(family);
+    if (prior !== undefined && prior.signature !== signature)
+      throw new Error(`Datastore kind "${kind}" has an incompatible record definition.`);
+    if (prior === undefined)
+      this.#prepared.set(family, { signature, ready: false, declared: true, pending: undefined });
+    else prior.declared = true;
+  }
+
+  /**
+   * Resolves the pure native namespace, kind, and record layout declaration.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record type.
+   * @param context Complete tenant context.
+   * @param spec The declared record family.
+   * @param group Optional physical group.
+   * @param explicitKind Configured or fixed native kind.
+   * @param mapping Actual native mapping from an opened handle.
+   * @returns Canonical physical identity and signature.
+   */
+  private nativeDefinition<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+    explicitKind?: string,
+    mapping?: { readonly namespace: string | undefined; readonly kind: string },
+  ): { namespace: string; kind: string; signature: string } {
+    const namespace =
+      mapping === undefined ? this.nativeNamespace(context) : (mapping.namespace ?? "");
+    const kind =
+      mapping?.kind ??
+      explicitKind ??
+      (group === undefined
+        ? spec.sourceType.typeName
+        : `${group.name}_${spec.recordType.typeName.split(".").at(-1) ?? ""}`);
+    if (!kind.trim() || Buffer.byteLength(kind, "utf8") > 1_500)
+      throw new Error("Datastore record kind must be non-blank and at most 1,500 bytes.");
+    new DatastoreIdColumn(spec.idType, this.#stringifiers);
+    if (typeof spec.idType !== "string") this.#stringifiers.forMessage(spec.idType);
+    for (const column of spec.columns)
+      if (column.type.kind === "message")
+        this.#stringifiers.forMessage(column.type.message as GenMessage<Message>);
+    const signature = JSON.stringify([
+      spec.sourceType.typeName,
+      spec.recordType.typeName,
+      typeof spec.idType === "string" ? spec.idType : spec.idType.typeName,
+      this.columnSignature(spec.columns),
+    ]);
+    return { namespace, kind, signature };
+  }
+
+  /**
+   * Converts one complete tenant boundary to its native namespace.
+   * @param context Complete tenant context.
+   * @returns Its native Datastore namespace.
+   */
+  private nativeNamespace(context: StorageContext): string {
+    const boundary = TenantBoundary.of(context);
+    return boundary.single
+      ? (this.#client.namespace ?? "")
+      : this.#namespaceConverter.toNamespace(
+          boundary.tenantId as NonNullable<typeof boundary.tenantId>,
+        );
+  }
+
+  /**
+   * Captures physical column declarations without evaluating record callbacks.
+   * @typeParam R Stored record type.
+   * @param columns Declared query columns.
+   * @returns Stable physical column signature.
+   */
+  private columnSignature<R extends Message>(
+    columns: readonly { name: string; type: RecordSpec<unknown, R>["columns"][number]["type"] }[],
+  ): string {
+    return JSON.stringify(
+      columns
+        .map(({ name, type }) => [
+          name,
+          type.kind,
+          type.kind === "scalar"
+            ? `${String(type.scalar)}:${String(type.longAsString)}`
+            : type.kind === "enum"
+              ? type.enum.typeName
+              : type.message.typeName,
+        ])
+        .sort(([first], [second]) => String(first).localeCompare(String(second))),
+    );
   }
 
   /**
@@ -398,18 +832,10 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     AgentHistoryStorageFactories.register(this, {
       createAgentHistoryStorage: (input) => {
         if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+        const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
         return new DatastoreAgentHistory(
           input,
-          new DatastoreRecordStorage(
-            input.context,
-            AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
-            this.#client,
-            maxClientSideScan,
-            AgentHistoryRecords.group,
-            "spine_agent_history",
-            this.#namespaceConverter,
-            this.#stringifiers,
-          ),
+          this.openNative(input.context, spec, AgentHistoryRecords.group, "spine_agent_history"),
         );
       },
     });
@@ -535,16 +961,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     fixedKind?: string,
   ): DatastoreRecordStorage<I, R> {
     const kind = fixedKind ?? this.resolve(spec, group, false).layout?.kind;
-    return new DatastoreRecordStorage(
-      context,
-      spec,
-      this.#client,
-      maxClientSideScan,
-      group,
-      kind,
-      this.#namespaceConverter,
-      this.#stringifiers,
-    );
+    return this.openNative(context, spec, group, kind);
   }
 
   /**
@@ -688,16 +1105,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     const creator = resolved.creator;
     if (creator !== undefined)
       return creator(context, recordSpec, this.#client, maxClientSideScan) as RecordStorage<I, R>;
-    return new DatastoreRecordStorage(
-      context,
-      recordSpec,
-      this.#client,
-      maxClientSideScan,
-      group,
-      resolved.layout?.kind,
-      this.#namespaceConverter,
-      this.#stringifiers,
-    );
+    return this.openNative(context, recordSpec, group, resolved.layout?.kind);
   }
 
   /**
@@ -716,16 +1124,37 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     group?: StorageGroup,
   ): RecordStorage<I, R> {
     const resolved = this.resolve(recordSpec, group, false);
-    return new DatastoreRecordStorage(
+    return this.openNative(context, recordSpec, group, resolved.layout?.kind);
+  }
+
+  /**
+   * Opens one native record handle and retains its pure physical definition.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record type.
+   * @param context Complete tenant context.
+   * @param spec The declared record family.
+   * @param group Optional physical group.
+   * @param kind Configured or fixed native kind.
+   * @returns The native record handle.
+   */
+  private openNative<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+    kind?: string,
+  ): DatastoreRecordStorage<I, R> {
+    const storage = new DatastoreRecordStorage(
       context,
-      recordSpec,
+      spec,
       this.#client,
       maxClientSideScan,
       group,
-      resolved.layout?.kind,
+      kind,
       this.#namespaceConverter,
       this.#stringifiers,
     );
+    this.declareNative(context, spec, group, kind, storage.nativeMapping());
+    return storage;
   }
 
   /**
@@ -744,6 +1173,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     includeCreator: boolean,
   ): {
     readonly creator: CreateRecordStorage | undefined;
+    readonly prepare: PrepareDatastoreRecordStorage | undefined;
     readonly layout: RecordLayout | undefined;
   } {
     const source = recordSpec.sourceType.typeName;
@@ -753,10 +1183,14 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       group === undefined ? source : record,
       group === undefined ? source : record,
     );
+    const selected = includeCreator
+      ? this.#recordCreators.has(exact)
+        ? exact
+        : fallback
+      : undefined;
     return {
-      creator: includeCreator
-        ? (this.#recordCreators.get(exact) ?? this.#recordCreators.get(fallback))
-        : undefined,
+      creator: selected === undefined ? undefined : this.#recordCreators.get(selected),
+      prepare: selected === undefined ? undefined : this.#recordPreparers.get(selected),
       layout: this.#layouts.get(exact) ?? this.#layouts.get(fallback),
     };
   }
@@ -793,6 +1227,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    */
   private async drain(): Promise<void> {
     const errors: unknown[] = [];
+    await Promise.allSettled([...this.#work]);
     const roots = [...this.#commits, ...this.#bundles];
     const pending = roots.map((handle) => {
       try {
@@ -830,6 +1265,11 @@ class Builder implements DatastoreStorageFactoryBuilder {
   #recordCreators = new Map<string, CreateRecordStorage>();
 
   /**
+   * Optional preparation callbacks paired with custom record creators.
+   */
+  #recordPreparers = new Map<string, PrepareDatastoreRecordStorage>();
+
+  /**
    * Physical kind layouts indexed by family.
    */
   #layouts = new Map<string, RecordLayout>();
@@ -838,6 +1278,11 @@ class Builder implements DatastoreStorageFactoryBuilder {
    * Custom Entity creators indexed by state type.
    */
   #entityCreators = new Map<string, CreateEntityStorage>();
+
+  /**
+   * Optional preparation callbacks paired with custom Entity creators.
+   */
+  #entityPreparers = new Map<string, PrepareDatastoreEntityStorage>();
 
   /**
    * Converter for multitenant Datastore namespaces.
@@ -858,8 +1303,10 @@ class Builder implements DatastoreStorageFactoryBuilder {
     private readonly create: (
       client: Datastore,
       recordCreators: ReadonlyMap<string, CreateRecordStorage>,
+      recordPreparers: ReadonlyMap<string, PrepareDatastoreRecordStorage>,
       layouts: ReadonlyMap<string, RecordLayout>,
       entityCreators: ReadonlyMap<string, CreateEntityStorage>,
+      entityPreparers: ReadonlyMap<string, PrepareDatastoreEntityStorage>,
       namespaceConverter: NamespaceConverter,
       stringifiers: StringifierRegistry,
     ) => DatastoreStorageFactory,
@@ -928,21 +1375,24 @@ class Builder implements DatastoreStorageFactoryBuilder {
    * @param first Record type, or source type when three arguments are supplied.
    * @param second Creator, or record type when three arguments are supplied.
    * @param third Creator for a source-specific registration.
+   * @param fourth Declarative preparation for a source-specific registration.
    * @returns This builder.
    */
   useRecordStorage<R extends Message>(
     first: GenMessage<Message> | GenMessage<R>,
     second: GenMessage<R> | CreateRecordStorage<R>,
-    third?: CreateRecordStorage<R>,
+    third?: CreateRecordStorage<R> | PrepareDatastoreRecordStorage<R>,
+    fourth?: PrepareDatastoreRecordStorage<R>,
   ): this {
-    const [source, record, creator] =
-      third === undefined
-        ? [undefined, first, second as CreateRecordStorage<R>]
-        : [first, second as GenMessage<R>, third];
-    this.#recordCreators.set(
-      key(source?.typeName ?? record.typeName, record.typeName),
-      creator as unknown as CreateRecordStorage,
-    );
+    const sourceSpecific = typeof second !== "function";
+    const source = sourceSpecific ? first : undefined;
+    const record = sourceSpecific ? second : first;
+    const creator = sourceSpecific ? (third as CreateRecordStorage<R>) : second;
+    const prepare = sourceSpecific ? fourth : third;
+    const family = key(source?.typeName ?? record.typeName, record.typeName);
+    this.#recordCreators.set(family, creator as unknown as CreateRecordStorage);
+    if (prepare === undefined) this.#recordPreparers.delete(family);
+    else this.#recordPreparers.set(family, prepare as PrepareDatastoreRecordStorage);
     return this;
   }
 
@@ -952,13 +1402,17 @@ class Builder implements DatastoreStorageFactoryBuilder {
    * @typeParam S Entity state message type.
    * @param sourceType Selects the Entity state type.
    * @param creator Builds its storage handle.
+   * @param prepare Optional declarative preparation for the coherent provider.
    * @returns This builder.
    */
   useEntityStorage<S extends Message>(
     sourceType: GenMessage<S>,
     creator: CreateEntityStorage<S>,
+    prepare?: PrepareDatastoreEntityStorage<S>,
   ): this {
     this.#entityCreators.set(sourceType.typeName, creator as unknown as CreateEntityStorage);
+    if (prepare === undefined) this.#entityPreparers.delete(sourceType.typeName);
+    else this.#entityPreparers.set(sourceType.typeName, prepare as PrepareDatastoreEntityStorage);
     return this;
   }
 
@@ -974,8 +1428,10 @@ class Builder implements DatastoreStorageFactoryBuilder {
     return this.create(
       this.#client,
       new Map(this.#recordCreators),
+      new Map(this.#recordPreparers),
       new Map(this.#layouts),
       new Map(this.#entityCreators),
+      new Map(this.#entityPreparers),
       this.#namespaceConverter,
       this.#stringifiers,
     );

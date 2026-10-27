@@ -781,3 +781,24 @@ coordinated tenant binding and temporary cleanup are implemented. Source audit's
 resolver race was reproduced (three calls) and fixed (one) before review. No
 unresolved accepted findings; commit/push authored paths and preserve metadata.
 Next is Datastore native/custom preparation under the same D0150 contract.
+
+M4d2 checkpoint8ba27669e pushed immediately to official origin/environment-lifecycle.
+M4e Datastore preparation begins from that commit. Existing implementer
+storage_retention uses explicit immutable gpt-6-sol/medium, no children; runtime
+introspection unavailable. Estimate1-2hours for native definition/read metadata
+checks, optional custom-provider callbacks, shared readiness/shutdown, fresh
+focused coverage/emulator verification, narrow docs and review. Accepted D0150
+and external datastore-preparation-brief.md/datastore-connection-probe.md govern;
+no new architecture pass. Native guarantee excludes write/index certification,
+uses real namespace metadata without fake records or arbitrary limits, and keeps
+caller-supplied client lifetime. No provisioning, migration or recovery prep.
+
+M4e Datastore preparation is accepted after four-concern review and targeted
+correction confirmation. Native metadata checks and model preparation are
+read-only; custom callbacks preserve registration selection and application
+readiness responsibilities. Failed probes retain live physical declarations;
+normal handles reuse actual codec mappings. Final 164 local and 19 emulator
+tests pass, along with build/tooling/static/docs checks. Review and external
+evidence record the exact scope and remaining global verification. No root
+contract change during correction. Commit/push this checkpoint; next is M5a
+public live TenantIndex and honest native catalog semantics.

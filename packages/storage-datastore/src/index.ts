@@ -20,6 +20,8 @@ export {
   DatastoreStorageFactory,
   type CreateEntityStorage,
   type CreateRecordStorage,
+  type PrepareDatastoreEntityStorage,
+  type PrepareDatastoreRecordStorage,
   type DatastoreEntityStorageHandle,
   type DatastoreStorageFactoryBuilder,
   type RecordLayout,

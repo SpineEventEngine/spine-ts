@@ -83,6 +83,13 @@ through the normal storage API. When application values contain `Any`, configure
 a `StringifierRegistry` with that application's `TypeRegistry` before building;
 the layout section below explains why that mapping must remain reversible.
 
+`build()` is synchronous and does not contact Datastore. `await factory.checkConnection()`
+performs a read-only, keys-only query for the exact shared `__namespace__` metadata
+key. It remembers success and permits retry after failure; the supplied client stays
+open after factory closure. The diagnostic requires `datastore.namespaces.get` and
+`datastore.namespaces.list` permissions. It checks metadata read access, not Entity
+read/write permissions or deployed composite indexes. An unused namespace is valid.
+
 ## Build it in this workspace
 
 Contributors changing this repository can run the workspace-wide build from its

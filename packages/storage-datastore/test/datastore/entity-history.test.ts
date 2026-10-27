@@ -483,7 +483,7 @@ describe("Datastore generated Entity records", () => {
       .setClient(backend.client() as never)
       .organizeRecords(TaskSchema, EntityRecordSchema, { kind: "CurrentTasks" })
       .build();
-    await store.createEntityStorage(input()).current.write(record("one", 1));
+    await store.createEntityStorage(input(false)).current.write(record("one", 1));
     expect(
       [...backend.entities.keys()].map(
         (key) => (JSON.parse(key) as [unknown, [string, string]])[1][0],

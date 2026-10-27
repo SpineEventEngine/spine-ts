@@ -6,11 +6,20 @@ This reference is for coding agents configuring the Google Cloud Datastore adapt
 
 Import `DatastoreStorageFactory`, `DatastoreStorageFactoryBuilder`,
 `RecordLayout`, `CreateRecordStorage`, `CreateEntityStorage`,
+`PrepareDatastoreRecordStorage`, `PrepareDatastoreEntityStorage`,
 `NamespaceConverter`, `DefaultNamespaceConverter`, `DatastoreIdColumn`,
 `DatastoreColumnMapping`, and `DatastoreQueryLimitError` from
 `@spine-event-engine/storage-datastore`.
 Create a factory with `DatastoreStorageFactory.newBuilder().setClient(client)`.
 The adapter never closes that client.
+
+`build()` is offline. `checkConnection()` runs one read-only exact-key,
+keys-only query against shared `__namespace__` metadata and remembers a
+successful result. It retries failures and drains admitted checks on close.
+An empty result is valid for an unused namespace. The diagnostic needs
+`datastore.namespaces.get` and `datastore.namespaces.list`; it does not prove
+ordinary Entity read/write permissions, deployed composite indexes, or every
+query shape. The caller-supplied client remains open.
 
 The builder is mutable until `build()` and the built factory receives a
 snapshot. The last registration for the same identity wins. Record resolution
@@ -38,6 +47,20 @@ a provider string or infer shared filter/sort-name validation.
 its commit capability. Custom providers receive the storage context, record or
 Entity contract, and caller-supplied client, but not the built-in converter or
 stringifier registry; they must provide equivalent tenant, ID, and column mapping.
+For model preparation, the existing `StoragePreparations` provider port checks
+declarative current, enabled history, and surviving Agent audit families without
+opening storage handles or writing records. Native `create` and `check` establish
+the same narrow kind, namespace, ID, and column compatibility plus metadata-read
+facts; missing kinds are valid. Applications must deploy the required indexes,
+including the three Agent audit indexes. A selected custom creator requires an
+optional trailing preparation callback on `useRecordStorage(...)` or
+`useEntityStorage(...)`; preparation rejects before invoking a creator when that
+callback is absent. Custom callbacks receive the declarative input, caller client,
+and `create` or read-only `check` mode, and must establish matching guarantees.
+The callback and creator must share application-managed readiness: after a
+successful `check`, later ordinary use must not auto-create the checked
+structures. A `create` callback verifies its result. Each callback cleans up
+resources it partially acquires if preparation fails.
 The built-in Entity provider writes its record families independently; custom
 record creators do not join a combined Entity transaction.
 Custom Entity bundles return a `Promise<void>` from `close()` and provide synchronous

@@ -574,6 +574,8 @@ const expectedDatastoreStorageExports = [
   "DatastoreStorageFactoryBuilder",
   "DefaultNamespaceConverter",
   "NamespaceConverter",
+  "PrepareDatastoreEntityStorage",
+  "PrepareDatastoreRecordStorage",
   "RecordLayout",
 ];
 const expectedMysqlStorageExports = [

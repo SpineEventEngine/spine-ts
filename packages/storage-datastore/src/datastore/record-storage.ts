@@ -322,6 +322,14 @@ class FlatEntityCodec<I, R extends Message> {
   }
 
   /**
+   * Returns the native mapping selected for this codec.
+   * @returns The exact namespace and kind used by provider operations.
+   */
+  mapping(): { readonly namespace: string | undefined; readonly kind: string } {
+    return { namespace: this.#namespace, kind: this.#kind };
+  }
+
+  /**
    * Converts a declared record column value to its provider representation.
    *
    * @param column Declared record column name.
@@ -477,6 +485,15 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
         : new NamespaceAssignments(namespaceConverter),
       stringifiers,
     );
+  }
+
+  /**
+   * Returns the physical mapping captured when this handle opened.
+   * @returns The exact namespace and kind used for its records.
+   * @internal
+   */
+  nativeMapping(): { readonly namespace: string | undefined; readonly kind: string } {
+    return this.#codec.mapping();
   }
 
   /**

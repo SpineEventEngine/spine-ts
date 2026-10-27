@@ -29,7 +29,7 @@ import {
   StorageGroup,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
+import { StoragePreparations, type EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
 import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
@@ -41,6 +41,20 @@ const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
 const projectId = process.env.DATASTORE_PROJECT_ID ?? "spine-t0135-emulator";
 
 describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
+  it("checks shared metadata and prepares a missing native kind without writing records", async () => {
+    const client = datastore();
+    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const spec = stringSpec();
+    await factory.checkConnection();
+    await StoragePreparations.for(factory).prepareRecord(
+      { name: unique("preparation"), multitenant: false },
+      spec,
+      new StorageGroup(unique("missing-kind")),
+      "check",
+    );
+    await factory.close();
+  });
+
   it("preserves microsecond timestamp ordering and a page boundary in live Datastore", async () => {
     const first = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_000_000 });
     const middle = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_001_000 });

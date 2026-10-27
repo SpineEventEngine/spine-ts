@@ -13,7 +13,8 @@ provider commit-storage retention and awaitable shutdown are reviewed and pushed
 Shared preparation contracts and the memory implementation are complete, as is
 PostgreSQL offline assembly, tenant resolution and physical structure preparation.
 MySQL/MariaDB offline connection lifecycle and physical structure preparation are
-reviewed and complete. Datastore preparation is next; remaining milestones follow
+reviewed and complete. Datastore native/custom preparation is also reviewed and
+complete. Public TenantIndex and admission are next; remaining milestones follow
 MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.

@@ -620,3 +620,62 @@ and2live tests, build/tooling/static/docs checks pass. No algorithm or root API
 change, so no repeated specialist wave. All four concerns accepted; no unresolved
 P0-P2. Commit/push checkpoint; full-task release/security and later milestones
 remain pending.
+
+## M4e Datastore preparation review
+
+Baseline 8ba27669e. Authored Datastore source/tests/docs and API inventory are
+frozen. Final build, 161 local tests with fresh LCOV, 19 task-emulator tests,
+tooling, API/audience/snippet docs checks, formatting, TSDoc, cleanup, focused
+ESLint and diff checks pass. Changed executable factory lines: 114/117; exact
+evidence and three uncovered lines are recorded outside version control in
+datastore-preparation-evidence.md. Global release coverage remains pending.
+
+Four concerns use the existing explicitly dispatched immutable profiles:
+provider_reliability, provider_style and repository_api_review: gpt-6-sol/medium;
+provider_documentation: gpt-6-luna/medium. Runtime introspection is unavailable.
+The parent confirms the configured role/profile for acceptance. Reviewer scope
+is defined in external datastore-preparation-review-context.md, including the
+full TASK human ledger and D0150. No reviewer edits, tests/builds or children.
+Three technical concerns run first, documentation as capacity frees. Collect
+one complete wave before one accepted correction batch. Estimate 0.3–0.6 hours
+for review, bounded corrections, confirmation and checkpoint push.
+
+M4e complete review wave collected. API lane is clean. Accept reliability P1:
+failed native metadata preparation deletes the physical signature still used by
+a live ordinary handle. Preserve the declaration while clearing failed pending
+readiness; retry must remain possible. Accept style P2: native handle construction
+and its declaration independently invoke the application namespace converter;
+derive one mapping and reuse it. Accept the adjacent P3 selection simplification:
+return the matching custom preparation callback from the existing exact/fallback
+resolver, avoiding a second copy of the same policy. Accept documentation
+omission: callbacks and creators share readiness after check, and callbacks clean
+up partial acquisition on failure. All explicit immutable profiles match their
+assignments; runtime introspection unavailable.
+
+One correction batch returns to the same Sol/medium implementer. Estimate
+0.2–0.4 hours including regressions, affected build/unit/live/static/docs checks
+and targeted reliability/style confirmation. No new public contract, generic
+layout manifest, migration or architecture pass. API/docs lanes need not reopen
+for implementation-preserving internal reuse and deterministic prose correction;
+expand only if the actual correction changes their contracts.
+
+M4e correction is frozen. Both runtime findings reproduced before correction.
+A declaration flag preserves live ordinary mappings across failed probes,
+including opening a handle during pending preparation; retry still succeeds.
+Actual codec mapping is reused internally for declaration, with one converter
+invocation. Creator and preparer selection share the same resolver. REFERENCE
+now states shared readiness and partial-acquisition cleanup. No root public
+contract changes. Fresh build, 164 scoped unit tests, 19 emulator tests, all
+static/tooling/docs checks pass. Changed executable coverage is factory 114/117
+and record mapping 2/2; remaining defensive/live-only gaps are documented.
+Targeted confirmation uses the same explicit immutable Sol/medium reliability
+and style reviewers. No unrelated lanes reopen.
+
+M4e accepted. Targeted reliability confirms declaration retention, pending-handle
+ordering, retry and actual codec mapping. Targeted style confirms mapping reuse
+and paired creator/preparer resolution. Parent inspected deterministic callback
+documentation correction and unchanged root contracts; API/docs dispositions
+remain accepted. No unresolved P0–P2 findings. Parent fresh diff-to-LCOV inspection
+confirms factory 114/117 and internal mapping 2/2 changed executable lines.
+Full-task release/security checks remain pending. Commit/push authored paths,
+leaving generation-only metadata unstaged.
