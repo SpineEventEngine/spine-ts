@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import {
   AnySchema,
   Int32ValueSchema,
@@ -26,6 +26,7 @@ import {
 import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   type ExpiredSession,
   type ShardInfo,
@@ -151,16 +152,17 @@ const DeliveryTargetIds = Object.freeze({
    * @param value The serialized target identifier to validate.
    */
   validate(typeUrl: string, value: Uint8Array): void {
+    const target = create(AnySchema, { typeUrl, value });
     switch (typeUrl) {
       case "type.googleapis.com/google.protobuf.StringValue":
-        if (!DeliveryValues.hasText(fromBinary(StringValueSchema, value).value))
+        if (!DeliveryValues.hasText(AnyPacker.unpack(target, StringValueSchema).value))
           throw new TypeError("String target ID is blank.");
         break;
       case "type.googleapis.com/google.protobuf.Int32Value":
-        fromBinary(Int32ValueSchema, value);
+        AnyPacker.unpack(target, Int32ValueSchema);
         break;
       case "type.googleapis.com/google.protobuf.Int64Value":
-        fromBinary(Int64ValueSchema, value);
+        AnyPacker.unpack(target, Int64ValueSchema);
         break;
     }
   },
@@ -544,9 +546,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
   payload(signal: InboxMessage["signal"]): WireInboxMessage["payload"] {
     if (signal === undefined) return { case: undefined };
     if (signal.typeUrl === "type.spine.io/spine.core.Command")
-      return { case: "command", value: fromBinary(CommandSchema, signal.value) };
+      return { case: "command", value: AnyPacker.unpack(signal, CommandSchema) };
     if (signal.typeUrl === "type.spine.io/spine.core.Event")
-      return { case: "event", value: fromBinary(EventSchema, signal.value) };
+      return { case: "event", value: AnyPacker.unpack(signal, EventSchema) };
     throw new TypeError("Delivery inbox message payload is invalid.");
   },
 
@@ -593,15 +595,12 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
   decodePayload(message: WireInboxMessage): NonNullable<InboxMessage["signal"]> {
     const wire = message.payload;
     if (wire.case !== "command" && wire.case !== "event") throw DeliveryRequestCodec.protocol();
-    const schema = wire.case === "command" ? CommandSchema : EventSchema;
-    const encoded = toBinary(schema, wire.value, { writeUnknownFields: false });
-    if (encoded.byteLength > MAX_INBOX_PAYLOAD_BYTES) throw DeliveryRequestCodec.protocol();
-    return DeliveryValues.freeze(
-      create(AnySchema, {
-        typeUrl: `type.spine.io/${schema.typeName}`,
-        value: new Uint8Array(encoded),
-      }),
-    );
+    const packed =
+      wire.case === "command"
+        ? AnyPacker.pack(CommandSchema, wire.value)
+        : AnyPacker.pack(EventSchema, wire.value);
+    if (packed.value.byteLength > MAX_INBOX_PAYLOAD_BYTES) throw DeliveryRequestCodec.protocol();
+    return DeliveryValues.freeze(packed);
   },
 
   /**

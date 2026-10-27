@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import { create, fromBinary, fromJson, toBinary, toJson } from "@bufbuild/protobuf";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { assertAiOutcomeContext } from "../src/spi/adapter.js";
 import {
   AnthropicAssistantContentSchema,
@@ -326,7 +326,7 @@ describe("public SDK-free facade inventory", () => {
         create(GenerationResponseSchema, {
           outcome: AiOutcome.ADMITTED,
           toolCalls: [proposal],
-          admittedOutput: AnyMessages.pack(
+          admittedOutput: AnyPacker.pack(
             ProposedSupportReplySchema,
             create(ProposedSupportReplySchema, { replyText: "Hello" }),
           ),
@@ -337,7 +337,7 @@ describe("public SDK-free facade inventory", () => {
       assertAiOutcomeContext(
         create(GenerationResponseSchema, {
           outcome: AiOutcome.INVALID_OUTPUT,
-          admittedOutput: AnyMessages.pack(
+          admittedOutput: AnyPacker.pack(
             ProposedSupportReplySchema,
             create(ProposedSupportReplySchema, { replyText: "Hello" }),
           ),

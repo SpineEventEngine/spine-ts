@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { AiRegistry, ModelRef } from "@spine-event-engine/ai";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { ActorContextSchema } from "@spine-event-engine/proto";
 import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import { QueryIdSchema } from "@spine-event-engine/proto/client";
@@ -105,7 +105,7 @@ describe("warehouse support draft through BlackBox", () => {
             .flatMap((event) =>
               event.message === undefined
                 ? []
-                : [AnyMessages.unpack(event.message, SupportReplySuggestedSchema)],
+                : [AnyPacker.tryUnpack(event.message, SupportReplySuggestedSchema)],
             )
             .filter((event) => event !== undefined),
         (events) => events.length === 1,
@@ -117,7 +117,7 @@ describe("warehouse support draft through BlackBox", () => {
         async () =>
           (await scope.send(reviewQuery())).message
             .flatMap(({ state }) =>
-              state === undefined ? [] : [AnyMessages.unpack(state, SupportReviewStateSchema)],
+              state === undefined ? [] : [AnyPacker.tryUnpack(state, SupportReviewStateSchema)],
             )
             .filter((row) => row !== undefined),
         (rows) => rows.length === 1 && rows[0]?.hasDraft === true,
@@ -148,7 +148,7 @@ describe("warehouse support draft through BlackBox", () => {
             .flatMap((event) =>
               event.message === undefined
                 ? []
-                : [AnyMessages.unpack(event.message, SupportReplyFailedSchema)],
+                : [AnyPacker.tryUnpack(event.message, SupportReplyFailedSchema)],
             )
             .filter((event) => event !== undefined),
         (events) => events.length === 1,
@@ -159,7 +159,7 @@ describe("warehouse support draft through BlackBox", () => {
         async () =>
           (await scope.send(reviewQuery())).message
             .flatMap(({ state }) =>
-              state === undefined ? [] : [AnyMessages.unpack(state, SupportReviewStateSchema)],
+              state === undefined ? [] : [AnyPacker.tryUnpack(state, SupportReviewStateSchema)],
             )
             .filter((row) => row !== undefined),
         (rows) => rows.length === 1,
@@ -196,7 +196,7 @@ describe("warehouse support draft through BlackBox", () => {
             .filter(
               (event) =>
                 event.message !== undefined &&
-                AnyMessages.unpack(event.message, SupportReplySuggestedSchema) !== undefined,
+                AnyPacker.tryUnpack(event.message, SupportReplySuggestedSchema) !== undefined,
             ),
         (events) => events.length === 1,
       );
@@ -221,7 +221,7 @@ describe("warehouse support draft through BlackBox", () => {
             .filter(
               (event) =>
                 event.message !== undefined &&
-                AnyMessages.unpack(event.message, SupportReplyFailedSchema) !== undefined,
+                AnyPacker.tryUnpack(event.message, SupportReplyFailedSchema) !== undefined,
             ),
         (events) => events.length === 1,
       );
@@ -229,7 +229,7 @@ describe("warehouse support draft through BlackBox", () => {
         async () =>
           (await scope.send(reviewQuery())).message
             .flatMap(({ state }) =>
-              state === undefined ? [] : [AnyMessages.unpack(state, SupportReviewStateSchema)],
+              state === undefined ? [] : [AnyPacker.tryUnpack(state, SupportReviewStateSchema)],
             )
             .filter((row) => row !== undefined),
         (rows) => rows.length === 1 && rows[0]?.latestRequestFailed === true,
@@ -268,7 +268,7 @@ describe("warehouse support draft through BlackBox", () => {
             .flatMap((event) =>
               event.message === undefined
                 ? []
-                : [AnyMessages.unpack(event.message, SupportReplySuggestedSchema)],
+                : [AnyPacker.tryUnpack(event.message, SupportReplySuggestedSchema)],
             )
             .filter((event) => event !== undefined),
         (events) => events.length === 1,

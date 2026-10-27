@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -139,10 +139,10 @@ export async function lifecycleFixture(
     create(EventSchema, {
       id: create(EventIdSchema, { value: id }),
       context: create(EventContextSchema, {
-        producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: id })),
+        producerId: AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: id })),
         version: create(VersionSchema, { number: 1 }),
       }),
-      message: AnyMessages.pack(ServerStartedSchema, create(ServerStartedSchema, { id, name: id })),
+      message: AnyPacker.pack(ServerStartedSchema, create(ServerStartedSchema, { id, name: id })),
     });
   const context = await createContext("Lifecycle");
 

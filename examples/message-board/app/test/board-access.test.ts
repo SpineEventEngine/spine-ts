@@ -33,7 +33,7 @@ import { PostMessageSchema } from "@spine-event-engine/example-message-board-mod
 import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
 import { UserIdSchema as BoardUserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, type MessageSchema } from "@spine-event-engine/core";
 import {
   AckSchema,
   ActorContextSchema,
@@ -203,7 +203,7 @@ describe("MessageBoard gateway policy", () => {
           context: create(CommandContextSchema, {
             actorContext: context(),
           }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             PostMessageSchema,
             create(PostMessageSchema, {
               id: create(MessageIdSchema, { value: "native" }),
@@ -576,12 +576,12 @@ describe("MessageBoard gateway policy", () => {
     });
     const unrelated = create(FilterSchema, {
       fieldPath: { fieldName: ["author"] },
-      value: AnyMessages.pack(BoardIdSchema, create(BoardIdSchema, { value: "board-a" })),
+      value: AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: "board-a" })),
       operator: Filter_Operator.EQUAL,
     });
     const nonEquality = create(FilterSchema, {
       fieldPath: { fieldName: ["board"] },
-      value: AnyMessages.pack(BoardIdSchema, create(BoardIdSchema, { value: "board-a" })),
+      value: AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: "board-a" })),
       operator: Filter_Operator.GREATER_THAN,
     });
 
@@ -701,7 +701,7 @@ function outcomeRequest(
 ): IncomingRequest {
   const origin = create(OriginSchema, {
     message: create(CoreMessageIdSchema, {
-      id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-1" })),
+      id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-1" })),
       typeUrl: changes.commandType ?? TypeUrls.derive(PostMessageSchema),
     }),
     actorContext: create(ActorContextSchema, {
@@ -728,7 +728,7 @@ function outcomeRequest(
               create(FilterSchema, {
                 fieldPath: { fieldName: changes.fieldPath ?? ["context", "past_message"] },
                 operator: Filter_Operator.EQUAL,
-                value: AnyMessages.pack(OriginSchema, origin),
+                value: AnyPacker.pack(OriginSchema, origin),
               }),
             ],
           }),
@@ -762,7 +762,7 @@ function boardRequest(
             filter: [board, ...additionalRooms].map((candidate) =>
               create(FilterSchema, {
                 fieldPath: { fieldName: ["board"] },
-                value: AnyMessages.pack(BoardIdSchema, create(BoardIdSchema, { value: candidate })),
+                value: AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: candidate })),
                 operator: Filter_Operator.EQUAL,
               }),
             ),
@@ -820,7 +820,7 @@ function boardComposite(operator: CompositeFilter_CompositeOperator, boards: rea
     filter: boards.map((board) =>
       create(FilterSchema, {
         fieldPath: { fieldName: ["board"] },
-        value: AnyMessages.pack(BoardIdSchema, create(BoardIdSchema, { value: board })),
+        value: AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: board })),
         operator: Filter_Operator.EQUAL,
       }),
     ),

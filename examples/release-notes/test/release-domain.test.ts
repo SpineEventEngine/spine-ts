@@ -15,7 +15,7 @@
 import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { AiRegistry, ModelRef } from "@spine-event-engine/ai";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { ActorContextSchema, EventIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
@@ -149,7 +149,7 @@ describe("release notes through BlackBox", () => {
             .filter(
               (event) =>
                 event.message &&
-                AnyMessages.unpack(event.message, ReleaseGenerationCancelIgnoredSchema),
+                AnyPacker.tryUnpack(event.message, ReleaseGenerationCancelIgnoredSchema),
             ),
         (events) => events.length === 1,
       );
@@ -180,7 +180,7 @@ describe("release notes through BlackBox", () => {
           .assertEvents()
           .filter(
             (event) =>
-              event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema),
+              event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema),
           ),
       ).toHaveLength(0);
     } finally {
@@ -248,7 +248,7 @@ describe("release notes through BlackBox", () => {
             .filter(
               (event) =>
                 event.message &&
-                AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema),
+                AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema),
             ),
         (events) => events.length === 1,
       );
@@ -277,7 +277,7 @@ describe("release notes through BlackBox", () => {
             .filter(
               (event) =>
                 event.message &&
-                AnyMessages.unpack(event.message, ReleaseGenerationAlreadyRequestedSchema),
+                AnyPacker.tryUnpack(event.message, ReleaseGenerationAlreadyRequestedSchema),
             ),
         (events) => events.length === 1,
       );
@@ -290,7 +290,7 @@ describe("release notes through BlackBox", () => {
           .assertEvents()
           .filter(
             (event) =>
-              event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema),
+              event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema),
           ),
       ).toHaveLength(1);
     } finally {
@@ -316,7 +316,7 @@ describe("release notes through BlackBox", () => {
         () =>
           box.assertEvents().flatMap((event) => {
             const value =
-              event.message && AnyMessages.unpack(event.message, ReleaseDraftOpenedSchema);
+              event.message && AnyPacker.tryUnpack(event.message, ReleaseDraftOpenedSchema);
             return value ? [value] : [];
           }),
         (events) => events.length === 1,
@@ -329,7 +329,7 @@ describe("release notes through BlackBox", () => {
       const view = await box.eventually(
         async () =>
           (await box.asGuest().send(query)).message.flatMap(({ state }) => {
-            const value = state && AnyMessages.unpack(state, ReleaseDraftViewSchema);
+            const value = state && AnyPacker.tryUnpack(state, ReleaseDraftViewSchema);
             return value ? [value] : [];
           }),
         (rows) => rows.length === 1,

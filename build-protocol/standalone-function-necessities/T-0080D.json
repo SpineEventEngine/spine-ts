@@ -93,15 +93,6 @@
     "rule": "standalone-function",
     "file": "packages/core/src/index.ts",
     "kind": "function-declaration",
-    "identity": "restoreAnyTypeUrls()#1",
-    "name": "restoreAnyTypeUrls",
-    "disposition": "necessity",
-    "reason": "TypeScript Proto JSON boundary: restoreAnyTypeUrls recursively restores canonical packed type URLs after registry-aware parsing."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/core/src/index.ts",
-    "kind": "function-declaration",
     "identity": "packIdentifier()#1",
     "name": "packIdentifier",
     "disposition": "necessity",

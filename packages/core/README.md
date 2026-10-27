@@ -21,13 +21,13 @@ Then validate and pack one generated message before adding routing or server ass
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { AnyMessages, Validate } from "@spine-event-engine/core";
+import { AnyPacker, Validate } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 
 const userId = create(UserIdSchema, { value: "ava" });
 Validate.check(UserIdSchema, userId);
-const packed = AnyMessages.pack(UserIdSchema, userId);
-console.log(AnyMessages.unpack(packed, UserIdSchema)?.value);
+const packed = AnyPacker.pack(UserIdSchema, userId);
+console.log(AnyPacker.tryUnpack(packed, UserIdSchema)?.value);
 ```
 
 ## Message-interface tokens
@@ -106,22 +106,23 @@ of an exception.
 
 ## 📦 Pack and unpack a message
 
-`AnyMessages.pack()` derives the type URL from the schema's Protobuf file and
-validates the message by default. `unpack()` returns `undefined` when the URL
-or payload does not match the requested schema.
+`AnyPacker.pack()` derives the type URL from the schema's Protobuf file and
+preserves unknown fields. It does not validate domain constraints; call
+`Validate.check()` at an input boundary when needed. `unpack()` requires the
+exact derived type URL and throws on a mismatch or malformed bytes;
+`tryUnpack()` returns `undefined` in those cases.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 
 const userId = create(UserIdSchema, { value: "ava" });
-const packed = AnyMessages.pack(UserIdSchema, userId);
-const unpacked = AnyMessages.unpack(packed, UserIdSchema);
+const packed = AnyPacker.pack(UserIdSchema, userId);
+const unpacked = AnyPacker.tryUnpack(packed, UserIdSchema);
 ```
 
-Only pass `{ validate: false }` for data a trusted caller has already
-validated.
+`AnyPacker.pack(existingAny)` returns the same envelope unchanged.
 
 ## 🗂️ Build a schema registry
 

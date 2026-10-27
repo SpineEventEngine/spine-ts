@@ -13,7 +13,7 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
-import { AnyMessages, Time } from "@spine-event-engine/core";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import {
   AiAttemptIdSchema,
   AiOperationIdSchema,
@@ -620,7 +620,7 @@ describe("Agent MCP protocol budget", () => {
     const written = historyWrites[0];
     if (written?.item.case !== "conversationRecord" || written.item.value.content === undefined)
       throw new Error("Expected a saved tool request conversation row.");
-    expect(AnyMessages.unpack(written.item.value.content, ToolRequestSchema)?.call?.value).toBe(
+    expect(AnyPacker.tryUnpack(written.item.value.content, ToolRequestSchema)?.call?.value).toBe(
       first.callId,
     );
     await budget.markToolDispatched(first.callId);

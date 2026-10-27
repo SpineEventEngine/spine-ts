@@ -12,10 +12,10 @@
  * the License.
  */
 
-import { create, fromBinary } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { Any } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   BoundedContextOnlineSchema,
   ChannelIdSchema,
@@ -54,17 +54,66 @@ const wantedType = typeUrl(ExternalEventsWantedSchema);
  * @internal
  */
 export class IntegrationBroker {
+  // prettier-ignore
+
+  /**
+   * Context assembly inputs.
+   */
   readonly #input: IntegrationBrokerInput;
+
+  /**
+   * Accepted external Event types by origin.
+   */
   readonly #wantedByOrigin = new Map<string, ReadonlySet<string>>();
+
+  /**
+   * Registered publishers by target type.
+   */
   readonly #publishers = new Map<string, DomesticPublisher>();
+
+  /**
+   * Active transport resources.
+   */
   readonly #resources: Closeable[] = [];
+
+  /**
+   * Resources whose close must be retried.
+   */
   readonly #retainedCloseables: Closeable[] = [];
+
+  /**
+   * Schemas accepted from external contexts.
+   */
   readonly #externalSchemas: readonly MessageSchema[];
+
+  /**
+   * Imported Event callbacks still in flight.
+   */
   readonly #acceptedCallbacks = new Set<Promise<void>>();
+
+  /**
+   * Serialized lifecycle transition.
+   */
   #transition = Promise.resolve();
+
+  /**
+   * Pending open transition.
+   */
   #open: Promise<void> | undefined;
+
+  /**
+   * Pending close transition.
+   */
   #close: Promise<void> | undefined;
+
+  /**
+   * Whether admission has ended.
+   */
   #closed = false;
+
+  /**
+   * Whether the empty wanted frame has been published.
+   */
   #emptyWantedPublished = false;
 
   /**
@@ -221,7 +270,7 @@ export class IntegrationBroker {
             (typeUrl === TypeUrls.derive(StringValueSchema) ? StringValueSchema : undefined));
       if (schema === undefined || original.message === undefined)
         throw new Error("External event message type is not accepted.");
-      fromBinary(schema, original.message.value);
+      AnyPacker.unpack(original.message, schema);
       imported = toExternalEvent(original);
     } catch {
       emitServerError(
@@ -440,12 +489,48 @@ export interface IntegrationBrokerInput {
   readonly postImported: (event: Event) => Promise<void>;
 }
 
+/**
+
+ * Connects domestic Events to an external publisher.
+
+ */
 class DomesticPublisher implements Closeable {
+  // prettier-ignore
+
+  /**
+   * External Event type accepted by this publisher.
+   */
   readonly targetType: string;
+
+  /**
+   * Domestic Event bus.
+   */
   readonly #eventBus: EventBus;
+
+  /**
+   * Registered Event dispatcher.
+   */
   readonly #dispatcher: EventDispatcher;
+
+  /**
+   * External transport publisher.
+   */
   readonly #publisher: Publisher;
+
+  /**
+   * Whether the dispatcher has been removed.
+   */
   #detached = false;
+
+  /**
+   * Connects a publisher to a domestic dispatcher.
+   *
+   * @param eventBus Domestic Event bus.
+   * @param publisher External transport publisher.
+   * @param targetType Accepted external Event type.
+   * @param origin Source context name.
+   * @param schema Generated Event schema.
+   */
   private constructor(
     eventBus: EventBus,
     publisher: Publisher,
@@ -464,6 +549,17 @@ class DomesticPublisher implements Closeable {
       },
     };
   }
+
+  /**
+   * Creates and registers a publisher for the Event type.
+   *
+   * @param eventBus Domestic Event bus.
+   * @param factory External transport factory.
+   * @param targetType Accepted external Event type.
+   * @param origin Source context name.
+   * @param schema Generated Event schema.
+   * @returns Registered publisher.
+   */
   static async create(
     eventBus: EventBus,
     factory: TransportFactory,
@@ -476,14 +572,32 @@ class DomesticPublisher implements Closeable {
     eventBus.register(domestic.#dispatcher);
     return domestic;
   }
+
+  /**
+   * Closes the publisher and removes its dispatcher.
+   *
+   * @returns Completion after transport close.
+   */
   async close(): Promise<void> {
     await this.#publisher.close();
     this.#detach();
   }
+
+  /**
+   * Removes the dispatcher and closes a partially acquired publisher.
+   *
+   * @returns Completion after rollback.
+   */
   async rollback(): Promise<void> {
     this.#detach();
     await this.#publisher.close();
   }
+
+  /**
+
+   * Removes the registered dispatcher once.
+
+   */
   #detach(): void {
     if (this.#detached) return;
     this.#detached = true;
@@ -492,13 +606,34 @@ class DomesticPublisher implements Closeable {
 }
 
 interface Closeable {
+  /**
+   * Closes a retained integration resource.
+   *
+   * @returns Completion after close.
+   */
   close(): Promise<void>;
 }
+
+/**
+ * Holds a subscriber and its consumer handle for joint close.
+ */
 class SubscriberResource implements Closeable {
+  /**
+   * Creates a subscriber resource with its consumer handle.
+   *
+   * @param subscriber External transport subscriber.
+   * @param handle Registered consumer handle.
+   */
   constructor(
     readonly subscriber: Subscriber,
     readonly handle: ConsumerHandle,
   ) {}
+
+  /**
+   * Closes both subscriber resources and reports their failures.
+   *
+   * @returns Completion after both close attempts.
+   */
   async close(): Promise<void> {
     const errors: unknown[] = [];
     await collect(() => this.handle.close(), errors);
@@ -530,16 +665,16 @@ function typeUrl(schema: MessageSchema): string {
 function unpackOnline(message: ExternalMessage): BoundedContextOnline {
   const originalMessage = controlPayload(BoundedContextOnlineSchema, message);
   try {
-    return fromBinary(BoundedContextOnlineSchema, originalMessage.value);
+    return AnyPacker.unpack(originalMessage, BoundedContextOnlineSchema);
   } catch {
     throw new Error("Malformed integration control message.");
   }
 }
 function unpackWanted(message: ExternalMessage): ExternalEventsWanted {
   try {
-    return fromBinary(
+    return AnyPacker.unpack(
+      controlPayload(ExternalEventsWantedSchema, message),
       ExternalEventsWantedSchema,
-      controlPayload(ExternalEventsWantedSchema, message).value,
     );
   } catch {
     throw new Error("Malformed integration control message.");
@@ -560,7 +695,7 @@ function isControlIdentity(identity: Any | undefined): boolean {
   if (identity?.typeUrl !== typeUrl(StringValueSchema)) return false;
   try {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
-      fromBinary(StringValueSchema, identity.value).value,
+      AnyPacker.unpack(identity, StringValueSchema).value,
     );
   } catch {
     return false;

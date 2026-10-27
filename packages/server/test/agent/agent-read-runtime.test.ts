@@ -13,7 +13,7 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
-import { AnyMessages, Time } from "@spine-event-engine/core";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import {
   AgentHistoryCursorSchema,
   AgentHistoryEntrySchema,
@@ -83,7 +83,7 @@ describe("Agent saved history reads", () => {
     if (evidence?.case !== "read" || evidence.value.request === undefined)
       throw new Error("Expected saved history request.");
     expect(
-      AnyMessages.unpack(evidence.value.request, AgentHistoryReadRequestSchema)?.maxBytes,
+      AnyPacker.tryUnpack(evidence.value.request, AgentHistoryReadRequestSchema)?.maxBytes,
     ).toBeUndefined();
     expect(
       await new AgentReadRuntime(session, 0).history(
@@ -209,13 +209,13 @@ describe("Agent saved history reads", () => {
         else {
           const saved =
             evidence.value.result &&
-            AnyMessages.unpack(evidence.value.result, AgentProjectionReadResultSchema);
+            AnyPacker.tryUnpack(evidence.value.result, AgentProjectionReadResultSchema);
           if (saved === undefined) throw new Error("Expected a saved projection result.");
-          saved.states[0] = AnyMessages.pack(
+          saved.states[0] = AnyPacker.pack(
             ProjectOverviewStateSchema,
             create(ProjectOverviewStateSchema),
           );
-          evidence.value.result = AnyMessages.pack(AgentProjectionReadResultSchema, saved);
+          evidence.value.result = AnyPacker.pack(AgentProjectionReadResultSchema, saved);
         }
         return record;
       });
@@ -340,7 +340,7 @@ describe("Agent saved history reads", () => {
             case: "domainEvent",
             value: create(EventSchema, {
               id: { value: "saved-read-event" },
-              message: AnyMessages.pack(
+              message: AnyPacker.pack(
                 ReviewStartedSchema,
                 create(ReviewStartedSchema, { id: "A" }),
               ),

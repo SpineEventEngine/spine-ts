@@ -13,7 +13,7 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
-import { ValidationException, Validate, AnyMessages } from "@spine-event-engine/core";
+import { ValidationException, Validate, AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, type Command } from "@spine-event-engine/proto";
 import {
   AgentSavedDispatchPlanSchema as SavedPlanSchema,
@@ -331,7 +331,7 @@ export class CommandBus {
       throw new Error(`No command dispatcher registered for "${typeUrl}".`);
     }
 
-    const message = AnyMessages.unpack(packed, registration.schema);
+    const message = AnyPacker.tryUnpack(packed, registration.schema);
 
     if (message === undefined) {
       throw CommandValidationError.invalidPayload();

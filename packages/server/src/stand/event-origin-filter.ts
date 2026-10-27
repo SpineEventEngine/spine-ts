@@ -12,10 +12,10 @@
  * the License.
  */
 
-import { equals, fromBinary } from "@bufbuild/protobuf";
+import { equals } from "@bufbuild/protobuf";
 import { reflect, type ReflectMessage } from "@bufbuild/protobuf/reflect";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { OriginSchema, type Event, type Origin } from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
@@ -103,7 +103,7 @@ export class EventOriginFilters {
       throw this.#invalid("Event origin filter must pack spine.core.Origin.");
     let expected: Origin;
     try {
-      expected = fromBinary(OriginSchema, filter.value.value);
+      expected = AnyPacker.unpack(filter.value, OriginSchema);
     } catch {
       throw this.#invalid("Event origin filter contains malformed Origin bytes.");
     }

@@ -28,7 +28,7 @@ import {
   type CreateSubscriptionOptions,
   type Subscription,
 } from "@spine-event-engine/client-node";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { Topic } from "@spine-event-engine/proto/client";
 import { BoundedContext } from "@spine-event-engine/server";
 
@@ -84,7 +84,7 @@ const delayRejectionDelivery = () => {
               for (const event of events) {
                 const rejected =
                   event.message &&
-                  AnyMessages.unpack(event.message, ReleaseGenerationInputsConflictSchema);
+                  AnyPacker.tryUnpack(event.message, ReleaseGenerationInputsConflictSchema);
                 if (rejected?.id?.value && rejected.generation?.value)
                   seen.push({ draft: rejected.id.value, generation: rejected.generation.value });
               }

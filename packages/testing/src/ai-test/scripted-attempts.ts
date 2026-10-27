@@ -14,7 +14,7 @@
 
 import { clone, create, toBinary, toJsonString, type MessageShape } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, type MessageSchema } from "@spine-event-engine/core";
 import type {
   AiAnswer,
   AiDecisionResult,
@@ -677,7 +677,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
     assertAiOutcomeContext(response);
     if (response.outcome !== AiOutcome.ADMITTED) return this.replayFailure(response, saved.failure);
     if (!response.admittedOutput) throw new Error("Saved scripted output is missing.");
-    const value = AnyMessages.unpack(response.admittedOutput, request.definition.output);
+    const value = AnyPacker.tryUnpack(response.admittedOutput, request.definition.output);
     if (!value) throw new Error("Saved scripted response has a changed output type.");
     return { ok: true, value };
   },
@@ -717,7 +717,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
    */
   prepare(request: AiBackendExecution, record: RequestRecord): AiAttemptRequest {
     const definition = request.definition;
-    const input = AnyMessages.pack(definition.input, request.input);
+    const input = AnyPacker.pack(definition.input, request.input);
     if (definition.kind === "decision") {
       const questions = Object.entries(definition.questions).map(([id, question]) =>
         this.question(id, question),
@@ -937,7 +937,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
       rawOutput: script.text,
       outcome: admitted.ok ? AiOutcome.ADMITTED : AiOutcome.INVALID_OUTPUT,
       ...(admitted.ok
-        ? { admittedOutput: AnyMessages.pack(request.definition.output, admitted.value) }
+        ? { admittedOutput: AnyPacker.pack(request.definition.output, admitted.value) }
         : {}),
       ...(failure
         ? { diagnosticId: create(AiDiagnosticIdSchema, { value: failure.diagnosticId }) }
@@ -966,7 +966,7 @@ export const ScriptedAttempts: ScriptedAttemptOps = Object.freeze({
       answers: Object.entries(script.result.answers).map(([id, answer]) => this.answer(id, answer)),
       outcome: admitted.ok ? AiOutcome.ADMITTED : AiOutcome.INVALID_OUTPUT,
       ...(admitted.ok
-        ? { admittedOutput: AnyMessages.pack(request.definition.output, admitted.value) }
+        ? { admittedOutput: AnyPacker.pack(request.definition.output, admitted.value) }
         : {}),
       ...(failure
         ? { diagnosticId: create(AiDiagnosticIdSchema, { value: failure.diagnosticId }) }

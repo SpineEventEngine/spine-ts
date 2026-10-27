@@ -17,7 +17,7 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor, type Transport } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
-import { SignalEnvelopes, AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
+import { SignalEnvelopes, AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -2554,7 +2554,7 @@ const BrowserClientValues = Object.freeze({
                           fieldName: ["context", "past_message"],
                         }),
                         operator: Filter_Operator.EQUAL,
-                        value: AnyMessages.pack(OriginSchema, origin),
+                        value: AnyPacker.pack(OriginSchema, origin),
                       }),
                     ],
                   }),
@@ -3139,7 +3139,7 @@ const BrowserClientValues = Object.freeze({
    */
   validateAckId(packed: Any | undefined, id: string): void {
     const commandId =
-      packed === undefined ? undefined : AnyMessages.unpack(packed, CommandIdSchema);
+      packed === undefined ? undefined : AnyPacker.tryUnpack(packed, CommandIdSchema);
     if (commandId?.uuid !== id)
       throw new ClientProtocolError(
         "acknowledgement command ID does not match the posted command.",

@@ -15,7 +15,7 @@
 import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { AiRegistry, ModelRef } from "@spine-event-engine/ai";
-import { AnyMessages, SignalEnvelopes, TypeUrls, Validate } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes, TypeUrls, Validate } from "@spine-event-engine/core";
 import { EventContextSchema, UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
 import { TargetSchema, TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { SignalMetadata } from "@spine-event-engine/server";
@@ -158,7 +158,7 @@ test("authoritative Markdown preserves arbitrary exact bytes and export snapshot
       () =>
         box.assertEvents().flatMap((event) => {
           const value =
-            event.message && AnyMessages.unpack(event.message, ReleaseNotesExportPreparedSchema);
+            event.message && AnyPacker.tryUnpack(event.message, ReleaseNotesExportPreparedSchema);
           return value ? [value] : [];
         }),
       (events) => events.length === 1,
@@ -200,7 +200,7 @@ test("authoritative Markdown preserves arbitrary exact bytes and export snapshot
     expect(
       exportDelivery.value.update.update.value.event.flatMap((event) => {
         const rejected =
-          event.message && AnyMessages.unpack(event.message, ReleaseExportUnavailableSchema);
+          event.message && AnyPacker.tryUnpack(event.message, ReleaseExportUnavailableSchema);
         return rejected ? [rejected.id] : [];
       }),
     ).toEqual([id]);
@@ -210,7 +210,7 @@ test("authoritative Markdown preserves arbitrary exact bytes and export snapshot
         .assertEvents()
         .filter(
           (event) =>
-            event.message && AnyMessages.unpack(event.message, ReleaseNotesExportPreparedSchema),
+            event.message && AnyPacker.tryUnpack(event.message, ReleaseNotesExportPreparedSchema),
         ),
     ).toHaveLength(1);
     const afterExport = await context.stand().readVersioned(ReleaseDraftStateSchema, id);
@@ -360,7 +360,7 @@ test("audience changes preserve edited notes while comparison changes invalidate
       expect(
         delivery.value.update.update.value.event.flatMap((event) => {
           const rejected =
-            event.message && AnyMessages.unpack(event.message, ReleaseInputsConflictSchema);
+            event.message && AnyPacker.tryUnpack(event.message, ReleaseInputsConflictSchema);
           return rejected ? [rejected.id] : [];
         }),
       ).toEqual([id]);
@@ -418,13 +418,13 @@ test("canceling the matching generation preserves Markdown and discards a late p
           .assertEvents()
           .filter(
             (event) =>
-              event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema),
+              event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema),
           ),
       (events) => events.length === 1,
     );
     const requestedEvent = box.assertEvents().flatMap((event) => {
       const value =
-        event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema);
+        event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema);
       return value ? [value] : [];
     })[0];
     expect(requestedEvent?.currentMarkdownText).toBe("");
@@ -444,7 +444,7 @@ test("canceling the matching generation preserves Markdown and discards a late p
       SignalEnvelopes.event({
         context: create(EventContextSchema, {
           timestamp: at,
-          producerId: AnyMessages.pack(ReleaseDraftIdSchema, id),
+          producerId: AnyPacker.pack(ReleaseDraftIdSchema, id),
           version: create(VersionSchema, { number: 2, timestamp: at }),
         }),
         schema: ReleaseNotesProposedSchema,
@@ -470,7 +470,7 @@ test("canceling the matching generation preserves Markdown and discards a late p
           .assertEvents()
           .filter(
             (event) =>
-              event.message && AnyMessages.unpack(event.message, ReleaseProposalDiscardedSchema),
+              event.message && AnyPacker.tryUnpack(event.message, ReleaseProposalDiscardedSchema),
           ),
       (events) => events.length === 1,
     );
@@ -544,7 +544,7 @@ test("generation sees readable edited Markdown and invalid UTF-8 cannot replace 
       () =>
         box.assertEvents().flatMap((event) => {
           const value =
-            event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema);
+            event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema);
           return value ? [value] : [];
         }),
       (events) => events.length === 1,
@@ -557,7 +557,7 @@ test("generation sees readable edited Markdown and invalid UTF-8 cannot replace 
       box
         .assertEvents()
         .filter(
-          (event) => event.message && AnyMessages.unpack(event.message, ReleaseNotesEditedSchema),
+          (event) => event.message && AnyPacker.tryUnpack(event.message, ReleaseNotesEditedSchema),
         ),
     ).toHaveLength(1);
   } finally {

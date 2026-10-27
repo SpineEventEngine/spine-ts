@@ -14,10 +14,10 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { AnyMessages, RejectionThrowable, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, RejectionThrowable, TypeUrls } from "@spine-event-engine/core";
 import { CommandSchema, EventSchema, type Event } from "@spine-event-engine/proto";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   AbstractAssignee,
@@ -35,11 +35,14 @@ import {
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import {
   AssignReviewTaskSchema,
+  SubmitReviewDecisionSchema,
+  type SubmitReviewDecision,
   type AssignReviewTask,
 } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import {
   ReviewStartedSchema,
   ReviewTaskAssignedSchema,
+  ReviewFollowUpScheduledSchema,
   type ReviewStarted,
   type ReviewTaskAssigned,
 } from "../../test-fixtures/generated/handler-registry/events_pb.js";
@@ -161,6 +164,21 @@ class InvalidPackedLaterReactor extends AbstractEventReactor {
   }
 }
 
+class InvalidRequiredLaterReactor extends AbstractEventReactor {
+  react(): readonly Message[] {
+    return [
+      create(ReviewTaskAssignedSchema, { id: "first", name: "First" }),
+      create(ReviewFollowUpScheduledSchema, { id: "second" }),
+    ];
+  }
+}
+
+class InvalidRequiredCommander extends AbstractCommander {
+  substitute(): SubmitReviewDecision {
+    return create(SubmitReviewDecisionSchema, { id: "decision" });
+  }
+}
+
 class RejectionCommander extends AbstractCommander {
   calls = 0;
   react(): AssignReviewTask {
@@ -226,7 +244,7 @@ describe("StandaloneHandlerRuntime", () => {
       await dispatcher.dispatch(
         create(EventSchema, {
           id: { value: name },
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             ReviewTaskAssignedSchema,
             create(ReviewTaskAssignedSchema, { id: name, name }),
           ),
@@ -236,7 +254,7 @@ describe("StandaloneHandlerRuntime", () => {
     expect(
       published.map((event) => {
         if (event.message === undefined) throw new Error("Expected Event message.");
-        return AnyMessages.unpack(event.message, ReviewTaskAssignedSchema)?.id;
+        return AnyPacker.tryUnpack(event.message, ReviewTaskAssignedSchema)?.id;
       }),
     ).toEqual(["first", "first", "second"]);
   });
@@ -273,7 +291,7 @@ describe("StandaloneHandlerRuntime", () => {
       dispatcher.dispatch(
         create(EventSchema, {
           id: { value: "invalid-later" },
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             ReviewTaskAssignedSchema,
             create(ReviewTaskAssignedSchema, { id: "source" }),
           ),
@@ -315,13 +333,87 @@ describe("StandaloneHandlerRuntime", () => {
       dispatcher.dispatch(
         create(EventSchema, {
           id: { value: "invalid-payload" },
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             ReviewTaskAssignedSchema,
             create(ReviewTaskAssignedSchema, { id: "source" }),
           ),
         }),
       ),
     ).rejects.toThrow("invalid declared payload");
+    expect(published).toEqual([]);
+  });
+
+  it("rejects a later constrained Event before publishing the first result", async () => {
+    const published: Event[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: InvalidRequiredLaterReactor,
+      handlers: [
+        {
+          kind: "event-reaction",
+          methodName: "react",
+          input: { schema: ReviewTaskAssignedSchema, origin: "domestic" },
+          outcomes: {
+            returned: [ReviewTaskAssignedSchema, ReviewFollowUpScheduledSchema],
+            thrown: [],
+          },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new InvalidRequiredLaterReactor(),
+        publisher: {
+          publishEvent: (event: Event) => {
+            published.push(event);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).eventDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Event dispatcher.");
+    await expect(
+      dispatcher.dispatch(
+        create(EventSchema, {
+          id: { value: "source" },
+          message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(published).toEqual([]);
+  });
+
+  it("rejects a constrained Command result before publication", async () => {
+    const published: unknown[] = [];
+    const group: GeneratedStandaloneHandlerGroup = {
+      receiverKind: "standalone",
+      receiverType: InvalidRequiredCommander,
+      handlers: [
+        {
+          kind: "command-substitution",
+          methodName: "substitute",
+          input: { schema: AssignReviewTaskSchema, origin: "domestic" },
+          outcomes: { returned: [SubmitReviewDecisionSchema], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    };
+    const dispatcher = new StandaloneHandlerRuntime([
+      {
+        group,
+        instance: new InvalidRequiredCommander(),
+        publisher: {
+          publishCommand: (command: unknown) => {
+            published.push(command);
+            return Promise.resolve();
+          },
+        } as never,
+      },
+    ]).commandDispatcher();
+    if (dispatcher === undefined) throw new Error("Expected Command dispatcher.");
+    await expect(dispatcher.dispatch(reviewAssignmentCommand("source"))).rejects.toThrow();
     expect(published).toEqual([]);
   });
   it("routes same-schema domestic and external handlers only on their matching origin", async () => {
@@ -352,7 +444,7 @@ describe("StandaloneHandlerRuntime", () => {
       await handler.dispatch(
         create(EventSchema, {
           id: { value: "domestic" },
-          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+          message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
         }),
       );
     }
@@ -361,7 +453,7 @@ describe("StandaloneHandlerRuntime", () => {
         create(EventSchema, {
           id: { value: "external" },
           context: { external: true },
-          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+          message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
         }),
       );
     }
@@ -424,7 +516,7 @@ describe("StandaloneHandlerRuntime", () => {
     await dispatcher.dispatch(
       create(EventSchema, {
         id: { value: "rejection" },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewRejectedSchema,
           create(ReviewRejectedSchema, { id: "rejected" }),
         ),
@@ -471,7 +563,7 @@ describe("StandaloneHandlerRuntime", () => {
     await dispatcher.dispatch(
       create(EventSchema, {
         id: { value: "event-1" },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewTaskAssignedSchema,
           create(ReviewTaskAssignedSchema, { name: "selected" }),
         ),
@@ -514,7 +606,7 @@ describe("StandaloneHandlerRuntime", () => {
     if (dispatcher === undefined) throw new Error("Expected standalone Event dispatcher.");
     const event = create(EventSchema, {
       id: { value: "live-event" },
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         ReviewTaskAssignedSchema,
         create(ReviewTaskAssignedSchema, { name: "selected" }),
       ),
@@ -613,7 +705,7 @@ describe("StandaloneHandlerRuntime", () => {
       create(EventSchema, {
         id: { value: "external-event" },
         context: { external: true },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewTaskAssignedSchema,
           create(ReviewTaskAssignedSchema, { name: "external" }),
         ),
@@ -679,7 +771,7 @@ describe("StandaloneHandlerRuntime", () => {
       dispatcher.dispatch(
         create(EventSchema, {
           id: { value: "undeclared-output" },
-          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+          message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
         }),
       ),
     ).rejects.toThrow('Standalone handler "react" returned an undeclared signal.');
@@ -697,10 +789,30 @@ describe("StandaloneHandlerRuntime", () => {
     expect(published).toHaveLength(1);
     const [event] = published;
     if (event?.message === undefined) throw new Error("Expected a published rejection Event.");
-    expect(AnyMessages.unpack(event.message, ReviewRejectedSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(event.message, ReviewRejectedSchema)).toEqual(
       create(ReviewRejectedSchema, { id: "rejected" }),
     );
     expect(event.context?.rejection?.command?.id?.uuid).toBe("declared-rejection");
+  });
+
+  it("validates a declared rejection once before publishing it", async () => {
+    const published: Event[] = [];
+    const messageThrown = vi
+      .spyOn(RejectionThrowable.prototype, "messageThrown")
+      .mockReturnValue(create(ReviewRejectedSchema));
+    try {
+      const dispatcher = rejectingAssigneeDispatcher([ReviewRejectedSchema], (event) => {
+        published.push(event);
+        return Promise.resolve();
+      });
+      await expect(
+        dispatcher.dispatch(reviewAssignmentCommand("invalid-rejection")),
+      ).rejects.toThrow();
+      expect(messageThrown).toHaveBeenCalledTimes(1);
+      expect(published).toEqual([]);
+    } finally {
+      messageThrown.mockRestore();
+    }
   });
 
   it("rejects an undeclared rejection thrown by a standalone command assignee", async () => {
@@ -808,7 +920,7 @@ describe("StandaloneHandlerRuntime", () => {
       dispatcher.dispatch(
         create(CommandSchema, {
           id: { uuid: "empty-output" },
-          message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
+          message: AnyPacker.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
         }),
       ),
     ).rejects.toThrow('Standalone command-substitution "substitute" must return a signal.');
@@ -854,14 +966,14 @@ describe("StandaloneHandlerRuntime", () => {
       throw new Error("Expected standalone dispatchers.");
     const event = create(EventSchema, {
       id: { value: "context" },
-      message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+      message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
     });
 
     await dispatcher.dispatch(event);
     await commandDispatcher.dispatch(
       create(CommandSchema, {
         id: { uuid: "context-command" },
-        message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
+        message: AnyPacker.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
       }),
     );
 
@@ -875,12 +987,12 @@ describe("StandaloneHandlerRuntime", () => {
     const contextualEvent = create(EventSchema, {
       id: { value: "contextual-event" },
       context: { external: false },
-      message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+      message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
     });
     const contextualCommand = create(CommandSchema, {
       id: { uuid: "contextual-command" },
       context: {},
-      message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
+      message: AnyPacker.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
     });
     await dispatcher.dispatch(contextualEvent);
     await commandDispatcher.dispatch(contextualCommand);
@@ -915,7 +1027,7 @@ describe("StandaloneHandlerRuntime", () => {
       dispatcher.dispatch(
         create(EventSchema, {
           id: { value: "empty-reactor" },
-          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+          message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
         }),
       ),
     ).resolves.toBeUndefined();
@@ -945,7 +1057,7 @@ describe("StandaloneHandlerRuntime", () => {
         dispatcher.dispatch(
           create(EventSchema, {
             id: { value: "subscriber-result" },
-            message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+            message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
           }),
         ),
       ).rejects.toThrow('Standalone subscriber "subscribe" must not return signals.');
@@ -974,7 +1086,7 @@ describe("StandaloneHandlerRuntime", () => {
       dispatcher.dispatch(
         create(EventSchema, {
           id: { value: "null-reactor" },
-          message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+          message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
         }),
       ),
     ).rejects.toThrow(/undeclared signal/);
@@ -1012,7 +1124,7 @@ describe("StandaloneHandlerRuntime", () => {
     await dispatcher.dispatch(
       create(EventSchema, {
         id: { value: "source-event" },
-        message: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+        message: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
       }),
     );
 
@@ -1051,24 +1163,24 @@ function rejectingAssigneeDispatcher(
 function reviewAssignmentCommand(uuid: string) {
   return create(CommandSchema, {
     id: { uuid },
-    message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
+    message: AnyPacker.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema)),
   });
 }
 
 function stateChanged(schema: GenMessage<Message>, state: Message) {
   return create(EventSchema, {
     id: { value: "state-change" },
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       EntityLog.EntityStateChangedSchema,
       create(EntityLog.EntityStateChangedSchema, {
         entity: {
-          id: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+          id: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
           typeUrl: schema.typeName,
         },
-        newState: AnyMessages.pack(schema, state as never),
+        newState: AnyPacker.pack(schema, state as never),
         signalId: [
           {
-            id: AnyMessages.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
+            id: AnyPacker.pack(ReviewTaskAssignedSchema, create(ReviewTaskAssignedSchema)),
             typeUrl: ReviewTaskAssignedSchema.typeName,
           },
         ],

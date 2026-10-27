@@ -14,7 +14,7 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Time } from "@spine-event-engine/core";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 // prettier-ignore
 import {
@@ -61,7 +61,7 @@ function recoveryAccepted() {
   const result = accepted("recovery-source", "shared-ticket");
   required(required(result.key).scope).stateType = SupportReplyReviewAgentStateSchema.typeName;
   if (result.signal.case !== "command") throw new Error("Expected fixture Command.");
-  result.signal.value.message = AnyMessages.pack(
+  result.signal.value.message = AnyPacker.pack(
     ReviewSupportReplySchema,
     create(ReviewSupportReplySchema, {
       agent: create(SupportReplyAgentIdSchema, { ticketNumber: "shared-ticket" }),

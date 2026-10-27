@@ -14,8 +14,8 @@
 
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { Any } from "@bufbuild/protobuf/wkt";
-import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
+import { clone, create, toBinary } from "@bufbuild/protobuf";
+import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   BoundedContextOnlineSchema,
   EventIdSchema,
@@ -99,8 +99,8 @@ export function unpackExternalEvent(message: ExternalMessage): Event {
     throw new Error("External message does not contain an Event.");
   let event: Event;
   try {
-    event = fromBinary(EventSchema, message.originalMessage.value);
-    const id = fromBinary(EventIdSchema, message.id.value);
+    event = AnyPacker.unpack(message.originalMessage, EventSchema);
+    const id = AnyPacker.unpack(message.id, EventIdSchema);
     if (!event.id?.value || id.value !== event.id.value)
       throw new Error("External Event wrapper identity does not match Event.id.");
   } catch (error) {

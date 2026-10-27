@@ -27,7 +27,7 @@ import {
   ResolveContextResponseSchema,
 } from "@spine-event-engine/proto/auth";
 import { QuerySchema } from "@spine-event-engine/proto/client";
-import { TypeRegistry, type TypeRegistryLookup, AnyMessages } from "@spine-event-engine/core";
+import { TypeRegistry, type TypeRegistryLookup, AnyPacker } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -235,7 +235,7 @@ describe("UnaryGateway", () => {
     const gateway = new UnaryGateway(options);
     const command = create(CommandSchema, {
       context: create(CommandContextSchema, { actorContext: requestedContext }),
-      message: AnyMessages.pack(TenantIdSchema, tenant("fixed")),
+      message: AnyPacker.pack(TenantIdSchema, tenant("fixed")),
     });
     const pending = gateway.handle(
       request("spine.client.CommandService", "Post", toBinary(CommandSchema, command)),
@@ -270,7 +270,7 @@ describe("UnaryGateway", () => {
     let contextMessage: unknown;
     const command = create(CommandSchema, {
       context: create(CommandContextSchema, { actorContext: requestedContext }),
-      message: AnyMessages.pack(TenantIdSchema, tenant("application")),
+      message: AnyPacker.pack(TenantIdSchema, tenant("application")),
     });
     const original = toBinary(CommandSchema, command);
     const { forwarded, gateway } = setup({
@@ -302,7 +302,7 @@ describe("UnaryGateway", () => {
       context: create(CommandContextSchema, { actorContext: requestedContext }),
     });
     const registry = new TypeRegistry([TenantIdSchema]);
-    const knownTypeUrl = AnyMessages.pack(TenantIdSchema, tenant("known")).typeUrl;
+    const knownTypeUrl = AnyPacker.pack(TenantIdSchema, tenant("known")).typeUrl;
     for (const entry of [
       { value: toBinary(CommandSchema, base), typeUrl: "" },
       {

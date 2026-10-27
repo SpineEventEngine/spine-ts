@@ -17,7 +17,7 @@ import process from "node:process";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import {
-  AnyMessages,
+  AnyPacker,
   Identifiers,
   StringifierRegistry,
   TypeRegistry,
@@ -66,7 +66,7 @@ try {
   const taskListId = create(TaskListIdSchema, { value: input.taskListId });
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: input.signalId }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(TaskIdSchema, { value: input.taskId }),
@@ -81,7 +81,7 @@ try {
       targetTypeUrl: TypeUrls.derive(TaskListSchema),
     },
     signalId: input.signalId,
-    signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+    signal: AnyPacker.pack(EventSchema, event),
     label: "UPDATE_SUBSCRIBER",
     status: "TO_DELIVER",
     shard: ShardIndex.single(),

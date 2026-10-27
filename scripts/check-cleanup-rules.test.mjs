@@ -1413,9 +1413,9 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { AnyMessages } from "@spine-event-engine/core";',
+        'import { AnyPacker } from "@spine-event-engine/core";',
         'import { EventIdSchema } from "@spine-event-engine/proto";',
-        "const observed = AnyMessages.unpack(source, EventIdSchema);",
+        "const observed = AnyPacker.tryUnpack(source, EventIdSchema);",
         "void observed;",
         "",
       ].join("\n"),
@@ -1428,10 +1428,10 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       path,
       [
-        'import { AnyMessages } from "@spine-event-engine/core";',
+        'import { AnyPacker } from "@spine-event-engine/core";',
         'import { EventIdSchema } from "@spine-event-engine/proto";',
         'import { create } from "@bufbuild/protobuf";',
-        "const observed = AnyMessages.unpack(source, EventIdSchema);",
+        "const observed = AnyPacker.tryUnpack(source, EventIdSchema);",
         'const invented = create(EventIdSchema, { value: "new" });',
         "void observed; void invented;",
         "",
@@ -1441,9 +1441,9 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       path,
       [
-        'import { AnyMessages } from "@spine-event-engine/core";',
+        'import { AnyPacker } from "@spine-event-engine/core";',
         'import { EventIdSchema, EventIdSchema as EID } from "@spine-event-engine/proto";',
-        "const observed = AnyMessages.unpack(source, EID);",
+        "const observed = AnyPacker.tryUnpack(source, EID);",
         "void observed;",
         "",
       ].join("\n"),
@@ -1452,9 +1452,9 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       path,
       [
-        'import { AnyMessages } from "@spine-event-engine/core";',
+        'import { AnyPacker } from "@spine-event-engine/core";',
         'import { EventIdSchema } from "@spine-event-engine/proto";',
-        "for (const AnyMessages of helpers) { AnyMessages.unpack(source, EventIdSchema); }",
+        "for (const AnyPacker of helpers) { AnyPacker.tryUnpack(source, EventIdSchema); }",
         "",
       ].join("\n"),
     );
@@ -1462,9 +1462,9 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       path,
       [
-        'import { AnyMessages } from "@spine-event-engine/core";',
+        'import { AnyPacker } from "@spine-event-engine/core";',
         'import { EventIdSchema } from "@spine-event-engine/proto";',
-        "for (let AnyMessages = helper; ready; AnyMessages = next) { AnyMessages.unpack(source, EventIdSchema); }",
+        "for (let AnyPacker = helper; ready; AnyPacker = next) { AnyPacker.tryUnpack(source, EventIdSchema); }",
         "",
       ].join("\n"),
     );
@@ -1473,8 +1473,8 @@ describe("check-cleanup-rules", () => {
       path,
       [
         'import { EventIdSchema } from "@spine-event-engine/proto";',
-        'const AnyMessages = { unpack: () => "fake" };',
-        "const observed = AnyMessages.unpack(source, EventIdSchema);",
+        'const AnyPacker = { tryUnpack: () => "fake" };',
+        "const observed = AnyPacker.tryUnpack(source, EventIdSchema);",
         "void observed;",
         "",
       ].join("\n"),
@@ -1483,9 +1483,9 @@ describe("check-cleanup-rules", () => {
     writeFileSync(
       path,
       [
-        'import { AnyMessages } from "@spine-event-engine/core";',
+        'import { AnyPacker } from "@spine-event-engine/core";',
         'import { EventIdSchema } from "@spine-event-engine/proto";',
-        "const observed = (AnyMessages) => AnyMessages.unpack(source, EventIdSchema);",
+        "const observed = (AnyPacker) => AnyPacker.tryUnpack(source, EventIdSchema);",
         "void observed;",
         "",
       ].join("\n"),

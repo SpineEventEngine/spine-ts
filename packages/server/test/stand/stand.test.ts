@@ -15,7 +15,7 @@
 import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { EventSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
@@ -1536,9 +1536,7 @@ function createState(id: string, name: string): ProjectOverviewState {
 function createSubscriptionEvent(id: string) {
   return create(EventSchema, {
     id: { value: id },
-    message: AnyMessages.pack(ProjectOverviewStateSchema, createState(id, "Event payload"), {
-      validate: false,
-    }),
+    message: AnyPacker.pack(ProjectOverviewStateSchema, createState(id, "Event payload")),
   });
 }
 
@@ -1550,20 +1548,20 @@ async function postStateChange(
   await eventBus.post(
     create(EventSchema, {
       id: { value: `state-change-${String((state as { id?: unknown }).id)}` },
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         EntityLog.EntityStateChangedSchema,
         create(EntityLog.EntityStateChangedSchema, {
           entity: {
-            id: AnyMessages.pack(
+            id: AnyPacker.pack(
               StringValueSchema,
               create(StringValueSchema, { value: String((state as { id?: unknown }).id) }),
             ),
             typeUrl: TypeUrls.derive(schema),
           },
-          newState: AnyMessages.pack(schema, state, { validate: false }),
+          newState: AnyPacker.pack(schema, state),
           signalId: [
             {
-              id: AnyMessages.pack(
+              id: AnyPacker.pack(
                 StringValueSchema,
                 create(StringValueSchema, { value: "test-signal" }),
               ),

@@ -16,7 +16,7 @@ import { clone, create, equals, isMessage } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type AiScope } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
-import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AgentAiResultAdmittedSchema,
   AgentAiOperationFailedSchema,
@@ -235,7 +235,7 @@ describe("Agent repository source integration", () => {
             if (!isMessage(execution.input, SupportTicketFactsSchema))
               throw new TypeError("Expected support ticket facts for drafting.");
             const prepared = create(GenerationRequestSchema, {
-              input: AnyMessages.pack(SupportTicketFactsSchema, execution.input),
+              input: AnyPacker.pack(SupportTicketFactsSchema, execution.input),
               instructions: "Draft a support reply for review.",
               outputSchemaJson: "{}",
               promptJson: "{}",
@@ -267,7 +267,7 @@ describe("Agent repository source integration", () => {
               response: create(GenerationResponseSchema, {
                 outcome: AiOutcome.ADMITTED,
                 rawOutput: JSON.stringify({ replyText: value.replyText }),
-                admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, value),
+                admittedOutput: AnyPacker.pack(ProposedSupportReplySchema, value),
               }),
             });
             return { ok: true, value };
@@ -305,10 +305,10 @@ describe("Agent repository source integration", () => {
       await repositoryAccess.entityInboxTarget(repository)?.replay({
         ...createMessage("source-failed-model", failed.id?.uuid ?? "", 1n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, failed, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, failed),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -335,10 +335,10 @@ describe("Agent repository source integration", () => {
       await repositoryAccess.entityInboxTarget(repository)?.replay({
         ...createMessage("source-model", command.id?.uuid ?? "", 2n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -400,10 +400,10 @@ describe("Agent repository source integration", () => {
         await repositoryAccess.entityInboxTarget(repository)?.replay({
           ...createMessage(suffix, next.id?.uuid ?? "", version),
           inboxId: {
-            targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+            targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
             targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
           },
-          signal: AnyMessages.pack(CommandSchema, next, { validate: false }),
+          signal: AnyPacker.pack(CommandSchema, next),
           label: "HANDLE_COMMAND",
           status: "TO_DELIVER",
         });
@@ -450,7 +450,7 @@ describe("Agent repository source integration", () => {
       expect(terminated).toHaveLength(1);
       const terminatedMessage = terminated[0]?.message;
       if (terminatedMessage === undefined) throw new Error("Expected termination payload.");
-      expect(AnyMessages.unpack(terminatedMessage, AgentInvocationTerminatedSchema)?.reason).toBe(
+      expect(AnyPacker.tryUnpack(terminatedMessage, AgentInvocationTerminatedSchema)?.reason).toBe(
         "REVISION_CHANGED",
       );
       await runNext("Continue after revision failure", "source-after-outdated", 7n);
@@ -504,7 +504,7 @@ describe("Agent repository source integration", () => {
     const resolved = vi.fn((kind: "generation" | "decision", scope: AiScope, source: Any) => {
       expect(kind).toBe("generation");
       expect(scope.source.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
-      expect(AnyMessages.unpack(source, DraftSupportReplySchema)?.question).toBe("Resume saved");
+      expect(AnyPacker.tryUnpack(source, DraftSupportReplySchema)?.question).toBe("Resume saved");
       return ref;
     });
     const authorized = vi.fn(() => true);
@@ -556,7 +556,7 @@ describe("Agent repository source integration", () => {
           const attempt = await execution.control.beginAttempt({
             kind: "generation",
             content: create(GenerationRequestSchema, {
-              input: AnyMessages.pack(SupportTicketFactsSchema, execution.input),
+              input: AnyPacker.pack(SupportTicketFactsSchema, execution.input),
               instructions: "Draft a support reply for review.",
               outputSchemaJson: "{}",
               promptJson: "{}",
@@ -572,7 +572,7 @@ describe("Agent repository source integration", () => {
             response: create(GenerationResponseSchema, {
               outcome: AiOutcome.ADMITTED,
               rawOutput: JSON.stringify({ replyText: value.replyText }),
-              admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, value),
+              admittedOutput: AnyPacker.pack(ProposedSupportReplySchema, value),
             }),
           });
           return { ok: true, value };
@@ -589,10 +589,10 @@ describe("Agent repository source integration", () => {
       await repositoryAccess.entityInboxTarget(repository)?.replay({
         ...createMessage("late-source", command.id?.uuid ?? "", 1n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });

@@ -20,7 +20,7 @@ import {
   createBackendRegistration,
   type AiMcpProtocolControl,
 } from "@spine-event-engine/ai/spi/adapter";
-import { AnyMessages, EntityQuery, Time } from "@spine-event-engine/core";
+import { AnyPacker, EntityQuery, Time } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { QuerySchema } from "@spine-event-engine/proto/client";
 import {
@@ -445,7 +445,7 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
       if (execution.definition.kind !== "generation")
         throw new Error("The fixture only supports generation.");
       const prepared = create(GenerationRequestSchema, {
-        input: AnyMessages.pack(execution.definition.input, execution.input),
+        input: AnyPacker.pack(execution.definition.input, execution.input),
         instructions: execution.definition.instructions,
         outputSchemaJson: "{}",
         promptJson: JSON.stringify({ tools: execution.advertisedTools }),
@@ -484,7 +484,7 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
         response: create(GenerationResponseSchema, {
           rawOutput: '{"reply":"Ticket found; we can help."}',
           outcome: AiOutcome.ADMITTED,
-          admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, output),
+          admittedOutput: AnyPacker.pack(ProposedSupportReplySchema, output),
         }),
       });
       return { ok: true as const, value: output };
@@ -683,11 +683,11 @@ describe("Agent scripted execution through BlackBox", () => {
       const result = read.evidence.value.result;
       if (request === undefined || result === undefined)
         throw new Error("Expected typed saved Projection request and result.");
-      expect(AnyMessages.unpack(request, QuerySchema)?.target?.type).toBeDefined();
-      const states = AnyMessages.unpack(result, AgentProjectionReadResultSchema)?.states;
+      expect(AnyPacker.tryUnpack(request, QuerySchema)?.target?.type).toBeDefined();
+      const states = AnyPacker.tryUnpack(result, AgentProjectionReadResultSchema)?.states;
       expect(states).toHaveLength(1);
       if (states?.[0] === undefined) throw new Error("Expected the saved Project overview.");
-      expect(AnyMessages.unpack(states[0], ProjectOverviewSchema)?.name).toBe("Support project");
+      expect(AnyPacker.tryUnpack(states[0], ProjectOverviewSchema)?.name).toBe("Support project");
       backend.assertSatisfied();
     } finally {
       await blackBox.close();
@@ -721,7 +721,7 @@ describe("Agent scripted execution through BlackBox", () => {
         (produced) => produced.length === 1,
       );
       if (events[0]?.message === undefined) throw new Error("Expected final Agent output.");
-      expect(AnyMessages.unpack(events[0].message, SupportReplyProposedSchema)?.reply).toBe(
+      expect(AnyPacker.tryUnpack(events[0].message, SupportReplyProposedSchema)?.reply).toBe(
         "Second draft",
       );
       expect(DraftingAgent.calls).toBe(1);
@@ -833,7 +833,7 @@ describe("Agent scripted execution through BlackBox", () => {
       );
       const message = produced[0]?.message;
       if (message === undefined) throw new Error("Expected a saved Agent Event.");
-      expect(AnyMessages.unpack(message, SupportReplyProposedSchema)?.reply).toBe(
+      expect(AnyPacker.tryUnpack(message, SupportReplyProposedSchema)?.reply).toBe(
         "Ticket found; we can help.",
       );
       expect(DraftingAgent.calls).toBe(1);
@@ -862,10 +862,10 @@ describe("Agent scripted execution through BlackBox", () => {
         "type.spine.io/spine.ts.agent.ToolResponse",
       );
       const request = contents
-        .map((content) => AnyMessages.unpack(content, ToolRequestSchema))
+        .map((content) => AnyPacker.tryUnpack(content, ToolRequestSchema))
         .find((message) => message !== undefined);
       const response = contents
-        .map((content) => AnyMessages.unpack(content, ToolResponseSchema))
+        .map((content) => AnyPacker.tryUnpack(content, ToolResponseSchema))
         .find((message) => message !== undefined);
       expect(request?.call?.value).toBeDefined();
       expect(response?.call?.value).toBe(request?.call?.value);
@@ -954,7 +954,7 @@ describe("Agent scripted execution through BlackBox", () => {
         });
       const message = produced[0]?.message;
       if (message === undefined) throw new Error("Expected the proposed support reply Event.");
-      expect(AnyMessages.unpack(message, SupportReplyProposedSchema)?.reply).toBe(
+      expect(AnyPacker.tryUnpack(message, SupportReplyProposedSchema)?.reply).toBe(
         "Your order is on its way.",
       );
       expect(DraftingAgent.calls).toBe(1);
@@ -993,14 +993,14 @@ describe("Agent scripted execution through BlackBox", () => {
         exchanges[0].item.value.content !== undefined
       )
         expect(
-          AnyMessages.unpack(exchanges[0].item.value.content, GenerationRequestSchema),
+          AnyPacker.tryUnpack(exchanges[0].item.value.content, GenerationRequestSchema),
         ).toBeDefined();
       if (
         exchanges[1]?.item.case === "conversationRecord" &&
         exchanges[1].item.value.content !== undefined
       )
         expect(
-          AnyMessages.unpack(exchanges[1].item.value.content, GenerationResponseSchema),
+          AnyPacker.tryUnpack(exchanges[1].item.value.content, GenerationResponseSchema),
         ).toBeDefined();
       const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
       const retained = await blackBox.readAgentHistory(repository, agentId, { pageSize: 10 });
@@ -1077,7 +1077,7 @@ describe("Agent scripted execution through BlackBox", () => {
         });
       const message = events[0]?.message;
       if (message === undefined) throw new Error("Expected a support draft failure Event.");
-      expect(AnyMessages.unpack(message, SupportReplyDraftFailedSchema)?.reasonCode).toBe(
+      expect(AnyPacker.tryUnpack(message, SupportReplyDraftFailedSchema)?.reasonCode).toBe(
         "INVALID_OUTPUT",
       );
       expect(DraftingAgent.calls).toBe(1);
@@ -1188,7 +1188,7 @@ describe("Agent scripted execution through BlackBox", () => {
       const event = termination[0];
       if (event?.id === undefined || event.message === undefined)
         throw new Error("Expected a termination System Event.");
-      expect(AnyMessages.unpack(event.message, AgentInvocationTerminatedSchema)?.reason).toBe(
+      expect(AnyPacker.tryUnpack(event.message, AgentInvocationTerminatedSchema)?.reason).toBe(
         "DEADLINE_EXCEEDED",
       );
       const [copy] = await blackBox.readSystemEvents([event.id]);

@@ -16,13 +16,7 @@ import { clone, create, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createHash, randomUUID } from "node:crypto";
 import { AgentExecutionFault } from "./agent-execution-fault.js";
-import {
-  AnyMessages,
-  Time,
-  TypeUrls,
-  Validate,
-  type MessageSchema,
-} from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls, Validate, type MessageSchema } from "@spine-event-engine/core";
 import type {
   AgentAi,
   AiConnectionIdentity,
@@ -240,7 +234,7 @@ export class AgentAiRuntime implements AgentAi {
     const operationId = operation.operation;
     if (operationId === undefined) throw new Error("Agent named operation has no durable ID.");
     if (operation.result.case === "admittedOutput") {
-      const value = AnyMessages.unpack(operation.result.value, model.definition.output);
+      const value = AnyPacker.tryUnpack(operation.result.value, model.definition.output);
       if (value === undefined) throw new Error("Saved Agent AI output type changed.");
       return { ok: true, value, operationId };
     }
@@ -428,7 +422,7 @@ export class AgentAiRuntime implements AgentAi {
       conversation: clone(ConversationIdSchema, request.conversation),
       operation: create(AiOperationIdSchema, { value: randomUUID() }),
       limits: this.#limits(model),
-      input: AnyMessages.pack(model.definition.input, request.input),
+      input: AnyPacker.pack(model.definition.input, request.input),
       capability: create(AiCapabilityNameSchema, { value: model.definition.name }),
       capabilityRevision: create(AiCapabilityRevisionSchema, { value: model.definition.version }),
       ...(deadline === undefined ? {} : { deadline }),
@@ -732,7 +726,7 @@ export class AgentAiRuntime implements AgentAi {
       saved.result = outcome.ok
         ? {
             case: "admittedOutput",
-            value: AnyMessages.pack(model.definition.output, outcome.value),
+            value: AnyPacker.pack(model.definition.output, outcome.value),
           }
         : {
             case: "failure",
@@ -945,7 +939,7 @@ export class AgentAiRuntime implements AgentAi {
   ): boolean {
     const packed = saved.input;
     if (packed === undefined) return false;
-    const current = AnyMessages.pack(schema, input);
+    const current = AnyPacker.pack(schema, input);
     return (
       packed.typeUrl === current.typeUrl &&
       Buffer.compare(Buffer.from(packed.value), Buffer.from(current.value)) === 0
@@ -1118,8 +1112,8 @@ export class AgentAiRuntime implements AgentAi {
     const id = randomUUID();
     const requestContent =
       request.kind === "generation"
-        ? AnyMessages.pack(GenerationRequestSchema, request.content)
-        : AnyMessages.pack(DecisionRequestSchema, request.content);
+        ? AnyPacker.pack(GenerationRequestSchema, request.content)
+        : AnyPacker.pack(DecisionRequestSchema, request.content);
     const history = this.#conversationHistory(operation, id, requestContent);
     await this.#saveAttempt(operation, request, number, id, history);
     return {
@@ -1359,8 +1353,8 @@ export class AgentAiRuntime implements AgentAi {
     const response = completion.response;
     const content =
       response.$typeName === GenerationResponseSchema.typeName
-        ? AnyMessages.pack(GenerationResponseSchema, response)
-        : AnyMessages.pack(DecisionResponseSchema, response);
+        ? AnyPacker.pack(GenerationResponseSchema, response)
+        : AnyPacker.pack(DecisionResponseSchema, response);
     const responseDigest =
       response.$typeName === GenerationResponseSchema.typeName ? response.digest : undefined;
     const history = this.#conversationHistory(operation, completion.ticketId, content);
@@ -1700,15 +1694,9 @@ export class AgentAiRuntime implements AgentAi {
     const prepared = attempt.preparedRequest;
     if (prepared.case !== "generationRequest" && prepared.case !== "decisionRequest")
       throw new Error("Agent prepared request is absent from the attempt journal.");
-    const schema =
-      prepared.case === "generationRequest" ? GenerationRequestSchema : DecisionRequestSchema;
-    return create(AnySchema, {
-      typeUrl: TypeUrls.derive(schema),
-      value:
-        prepared.case === "generationRequest"
-          ? toBinary(GenerationRequestSchema, prepared.value)
-          : toBinary(DecisionRequestSchema, prepared.value),
-    });
+    return prepared.case === "generationRequest"
+      ? AnyPacker.pack(GenerationRequestSchema, prepared.value)
+      : AnyPacker.pack(DecisionRequestSchema, prepared.value);
   }
 
   /**
@@ -1720,8 +1708,8 @@ export class AgentAiRuntime implements AgentAi {
       value: new Uint8Array(credit),
     });
     return model.definition.kind === "generation"
-      ? AnyMessages.pack(GenerationResponseSchema, this.#creditedGeneration(credit, admitted))
-      : AnyMessages.pack(DecisionResponseSchema, this.#creditedDecision(credit, admitted));
+      ? AnyPacker.pack(GenerationResponseSchema, this.#creditedGeneration(credit, admitted))
+      : AnyPacker.pack(DecisionResponseSchema, this.#creditedDecision(credit, admitted));
   }
 
   /**

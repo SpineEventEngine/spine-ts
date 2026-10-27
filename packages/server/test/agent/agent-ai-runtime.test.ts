@@ -15,7 +15,7 @@
 import { clone, create, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry } from "@spine-event-engine/ai";
-import { AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
 import { ActorContextSchema, CommandIdSchema, MessageIdSchema } from "@spine-event-engine/proto";
 import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import {
@@ -115,11 +115,11 @@ describe("Agent named call sequencing", () => {
     };
     const session = new AgentExecutionSession(port, stored, "claim");
     const reference = create(MessageIdSchema, {
-      id: AnyMessages.pack(SupportReplyAgentIdSchema, ticket),
+      id: AnyPacker.pack(SupportReplyAgentIdSchema, ticket),
       typeUrl: TypeUrls.derive(SupportReplyAgentIdSchema),
     });
     const source = create(MessageIdSchema, {
-      id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "source-1" })),
+      id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "source-1" })),
       typeUrl: TypeUrls.derive(DraftSupportReplySchema),
     });
     expect(source.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));

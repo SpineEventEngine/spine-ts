@@ -12,7 +12,8 @@
  * the License.
  */
 
-import { fromBinary, type Message } from "@bufbuild/protobuf";
+import { type Message } from "@bufbuild/protobuf";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId } from "@spine-event-engine/proto";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
@@ -253,7 +254,7 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
     const record = records[0];
     if (record?.state === undefined) return undefined;
     try {
-      return fromBinary(this.input.stateSchema, record.state.value);
+      return AnyPacker.unpack(record.state, this.input.stateSchema);
     } catch (error) {
       throw new PostgresStorageDataError("Stored PostgreSQL state data is invalid.", {
         cause: error,

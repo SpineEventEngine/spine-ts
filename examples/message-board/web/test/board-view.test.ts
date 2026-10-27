@@ -14,7 +14,7 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   BoardIdSchema,
   BoardMessageViewSchema,
@@ -78,7 +78,7 @@ describe("BoardView", () => {
 
 function entity(board: string, id: string, seconds = 0n, nanos = 0) {
   return create(EntityStateWithVersionSchema, {
-    state: AnyMessages.pack(
+    state: AnyPacker.pack(
       BoardMessageViewSchema,
       create(BoardMessageViewSchema, {
         id: create(MessageIdSchema, { value: id }),

@@ -21,7 +21,7 @@ import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { Identifiers, TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { Identifiers, TypeUrls, AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -933,7 +933,7 @@ describe("BoundedContext assembly", () => {
         createCommandDispatcher([AssignReviewTaskSchema], (command) => {
           if (command.message === undefined)
             throw new Error("Expected a produced AssignReviewTask payload.");
-          const message = AnyMessages.unpack(command.message, AssignReviewTaskSchema);
+          const message = AnyPacker.tryUnpack(command.message, AssignReviewTaskSchema);
           if (message === undefined) throw new Error("Expected a produced AssignReviewTask.");
           names.push(message.name);
         }),
@@ -996,7 +996,7 @@ describe("BoundedContext assembly", () => {
           const message =
             command.message === undefined
               ? undefined
-              : AnyMessages.unpack(command.message, AssignReviewTaskSchema);
+              : AnyPacker.tryUnpack(command.message, AssignReviewTaskSchema);
           if (message?.id === "failing-produced-command")
             throw new Error("expected produced failure");
           delivered.push(message?.id ?? "missing");
@@ -1180,7 +1180,7 @@ describe("BoundedContext assembly", () => {
         targetId: aggregateId,
         signalId: "aggregate-row",
         label: "HANDLE_COMMAND",
-        signal: AnyMessages.pack(CommandSchema, aggregateCommand, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, aggregateCommand),
         shard: strategy.shardFor(Identifiers.pack("string", aggregateId), aggregateType),
       });
       const processManagerCommandRow = await persistDescriptorRow({
@@ -1190,7 +1190,7 @@ describe("BoundedContext assembly", () => {
         targetId: commandId,
         signalId: "pm-command-row",
         label: "HANDLE_COMMAND",
-        signal: AnyMessages.pack(CommandSchema, processManagerCommand, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, processManagerCommand),
         shard: strategy.shardFor(Identifiers.pack("string", commandId), processManagerType),
       });
       const processManagerEventRow = await persistDescriptorRow({
@@ -1200,7 +1200,7 @@ describe("BoundedContext assembly", () => {
         targetId: eventId,
         signalId: "pm-event-row",
         label: "REACT_UPON_EVENT",
-        signal: AnyMessages.pack(EventSchema, processManagerEvent, { validate: false }),
+        signal: AnyPacker.pack(EventSchema, processManagerEvent),
         shard: strategy.shardFor(Identifiers.pack("string", eventId), processManagerType),
       });
 
@@ -1258,12 +1258,9 @@ describe("BoundedContext assembly", () => {
         targetId: aggregateId,
         signalId: "forged-aggregate",
         label: "HANDLE_COMMAND",
-        signal: AnyMessages.pack(
+        signal: AnyPacker.pack(
           CommandSchema,
           createProjectionCommand("forged-aggregate", aggregateId),
-          {
-            validate: false,
-          },
         ),
         shard: new ShardIndex(0, 3),
       });
@@ -1274,10 +1271,9 @@ describe("BoundedContext assembly", () => {
         targetId: processManagerId,
         signalId: "forged-pm",
         label: "HANDLE_COMMAND",
-        signal: AnyMessages.pack(
+        signal: AnyPacker.pack(
           CommandSchema,
           createScheduleReviewTask("forged-pm", processManagerId),
-          { validate: false },
         ),
         shard: new ShardIndex(0, 3),
       });
@@ -1330,12 +1326,8 @@ describe("BoundedContext assembly", () => {
           const signalId = `${label}-${String(index)}`;
           const signal =
             label === "HANDLE_COMMAND"
-              ? AnyMessages.pack(CommandSchema, createScheduleReviewTask(signalId, targetId), {
-                  validate: false,
-                })
-              : AnyMessages.pack(EventSchema, createReviewTaskAssigned(signalId, targetId), {
-                  validate: false,
-                });
+              ? AnyPacker.pack(CommandSchema, createScheduleReviewTask(signalId, targetId))
+              : AnyPacker.pack(EventSchema, createReviewTaskAssigned(signalId, targetId));
           rows.push(
             await persistDescriptorRow({
               descriptor: firstDescriptor,
@@ -2611,23 +2603,23 @@ describe("BoundedContext assembly", () => {
         context,
         create(EventSchema, {
           id: { value: "terminal-system-event" },
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             EntityLog.EntityStateChangedSchema,
             create(EntityLog.EntityStateChangedSchema, {
               entity: {
-                id: AnyMessages.pack(
+                id: AnyPacker.pack(
                   StringValueSchema,
                   create(StringValueSchema, { value: "task-1" }),
                 ),
                 typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
               },
-              newState: AnyMessages.pack(
+              newState: AnyPacker.pack(
                 ProjectOverviewStateSchema,
                 create(ProjectOverviewStateSchema, { id: "task-1", name: "Closed", priority: 1 }),
               ),
               signalId: [
                 {
-                  id: AnyMessages.pack(
+                  id: AnyPacker.pack(
                     StringValueSchema,
                     create(StringValueSchema, { value: "terminal-command" }),
                   ),
@@ -2981,7 +2973,7 @@ function createProjectionCommand(id: string, targetId = "task-1") {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       AssignReviewTaskSchema,
       create(AssignReviewTaskSchema, { id: targetId, name: "Task" }),
     ),
@@ -3003,7 +2995,7 @@ function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: 
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       AssignReviewTaskSchema,
       create(AssignReviewTaskSchema, { id: targetId, name: "Task Ready" }),
     ),
@@ -3018,7 +3010,7 @@ function createScheduleReviewTask(id: string, targetId = "task-ready") {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ScheduleReviewTaskSchema,
       create(ScheduleReviewTaskSchema, { id: targetId, name: "Task Ready" }),
     ),
@@ -3037,10 +3029,10 @@ function createProjectionEvent(id: string, targetId = "task-1", tenantId?: Tenan
               value: create(ActorContextSchema, { tenantId }),
             },
           }),
-      producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
+      producerId: AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id: targetId, name: "Task" }),
     ),
@@ -3051,7 +3043,7 @@ function createReviewTaskAssigned(id: string, targetId = "task-1") {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id: targetId, name: "Task" }),
     ),
@@ -3159,17 +3151,17 @@ function standaloneReceiver(
 function createEntityStateChangedEvent(schema: GenMessage<Message>, state: Message): Event {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: "state-change" }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       EntityLog.EntityStateChangedSchema,
       create(EntityLog.EntityStateChangedSchema, {
         entity: {
-          id: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "1" })),
+          id: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "1" })),
           typeUrl: TypeUrls.derive(schema),
         },
-        newState: AnyMessages.pack(schema, state as never),
+        newState: AnyPacker.pack(schema, state as never),
         signalId: [
           {
-            id: AnyMessages.pack(
+            id: AnyPacker.pack(
               StringValueSchema,
               create(StringValueSchema, { value: "state-change" }),
             ),

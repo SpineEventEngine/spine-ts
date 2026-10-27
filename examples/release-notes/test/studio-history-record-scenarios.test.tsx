@@ -15,7 +15,7 @@
 // @vitest-environment jsdom
 import { create, createRegistry, toJson } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
 import {
   AiContentDigestSchema,
@@ -97,7 +97,7 @@ test("the prepared request shows actual instructions and typed release input whi
     title,
   });
   const request = create(GenerationRequestSchema, {
-    input: AnyMessages.pack(ReleaseGenerationRequestedSchema, input),
+    input: AnyPacker.pack(ReleaseGenerationRequestedSchema, input),
     instructions: "Write for release managers.",
     outputSchemaJson: '{"type":"object"}',
     promptJson: '{"messages":["hello"]}',

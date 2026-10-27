@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -147,7 +147,7 @@ describe("Agent history binding", () => {
       const timestamp = create(TimestampSchema, { seconds: 2n, nanos: index });
       const event = create(EventSchema, {
         id: create(EventIdSchema, { value: `event-${index.toString().padStart(3, "0")}` }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           SupportReplyDraftedSchema,
           create(SupportReplyDraftedSchema, {
             agent: id,
@@ -390,10 +390,10 @@ describe("Agent history binding", () => {
         conversation,
         operation: create(AiOperationIdSchema, { value: "draft-reply" }),
         occurredAt: time,
-        content: AnyMessages.pack(
+        content: AnyPacker.pack(
           GenerationRequestSchema,
           create(GenerationRequestSchema, {
-            input: AnyMessages.pack(
+            input: AnyPacker.pack(
               DraftSupportReplySchema,
               create(DraftSupportReplySchema, {
                 agent: id,
@@ -417,7 +417,7 @@ describe("Agent history binding", () => {
     }
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-1" }),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         SupportReplyDraftedSchema,
         create(SupportReplyDraftedSchema, {
           agent: id,
@@ -494,7 +494,7 @@ describe("Agent history binding", () => {
     });
     const auditMessage = create(CommandDispatchedToHandlerSchema, {
       receiver: create(MessageIdSchema, {
-        id: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+        id: AnyPacker.pack(SupportReplyAgentIdSchema, id),
         typeUrl: "type.spine.server.testing/spine.server.testing.SupportReplyAgentState",
       }),
       payload: command,
@@ -506,7 +506,7 @@ describe("Agent history binding", () => {
     const audit = create(EventSchema, {
       id: create(EventIdSchema, { value: "audit-1" }),
       context: create(EventContextSchema, { timestamp: time }),
-      message: AnyMessages.pack(CommandDispatchedToHandlerSchema, auditMessage),
+      message: AnyPacker.pack(CommandDispatchedToHandlerSchema, auditMessage),
     });
     await AgentHistoryReads.appendSystem(agent, audit);
     expect((await agent.readSystem({ pageSize: 1 })).items).toEqual([audit]);

@@ -168,3 +168,109 @@ repository storage; the underlying idle seam is tested directly. No coverage-onl
 fixture is added. All four concerns accepted; full release/security remain pending.
 Checkpoint includes only the five authored source/test files and current task
 records, excluding generated manifest stamps and external AnyPacker WIP.
+
+## AnyPacker review wave
+
+Baseline f8a663cbe. Scope: common JVM-like AnyPacker, per-occurrence JSON URL
+preservation, explicit semantic validation, adoption across callers and provider
+history, Any-valued services, generic domain-correct conformance, public docs
+and narrow checker updates. Final author preflight: 84 tests in five suites,
+generated build, cleanup, TSDoc, changed ESLint, formatting, docs and diff checks
+passed. Earlier broad runs and independent changed-core coverage are recorded
+in WORK_LOG.md and external evidence. No release-profile claim.
+
+| Existing role                    | Assignment                    | Explicit configured profile | Concern                                                                       |
+| -------------------------------- | ----------------------------- | --------------------------- | ----------------------------------------------------------------------------- |
+| performance_reliability_reviewer | any_reliability_review        | gpt-6-sol / medium          | Any round trips, validation, caller correctness and error behavior            |
+| typescript_api_docs_reviewer     | repository_api_review (reuse) | gpt-6-sol / medium          | Public packer and conformance contracts, declarations and narrow API claims   |
+| style_maintainability_reviewer   | any_style_review              | gpt-6-sol / medium          | Changed helpers/refactoring, fixture/domain style and quality-checker changes |
+| documentation_reviewer           | any_documentation_review      | gpt-6-luna / medium         | Supported behavior claims and examples; scheduled as capacity frees           |
+
+New dispatches explicitly set model and reasoning; reused API profile is immutable
+and originally explicit. Runtime introspection is unavailable. No child delegation
+or source edits by reviewers. Collect the whole concern-specific wave before
+sending one accepted correction batch. Estimate 0.3–0.6 hours including review,
+correction, targeted checks and checkpoint push. Full release/security remain
+final-task gates.
+
+Complete Any review wave collected. Configured profiles match recorded dispatches;
+no actual runtime metadata is exposed. Documentation's first source comparison
+used the primary checkout and was rejected; rerun with explicit assigned workdir
+confirmed the stale docs findings against the correct implementation. Accepted:
+
+- Reliability P1: standalone produced Command/Event/rejection payloads lost
+  validation before publication, including all-results validation before any
+  multi-output publication. Restore explicit semantic validation and regression
+  tests using actual constrained domain messages.
+- Reliability P2: subscription ID filters fail declared Any IDs; apply the same
+  envelope handling as query/field filters with a focused Any-ID subscription test.
+- API P2: optional unpack helpers must accept undefined and return it before
+  schema/registry lookup; strict helpers remain required and throwing.
+- Adoption P2: integration intake still decodes an Any payload directly. Preserve
+  exact accepted alias lookup while using the shared registry-aware packer.
+- Style P2: conformance query fixture can hide ignored filters because sorting
+  already selects the expected record. Make the predicate decisive.
+- Documentation P2: docs/api/README.md still lists removed symbols;
+  docs/architecture/README.md promises removed unknown-field/unpack semantics.
+  Correct current API inventory and behavior. Reviewer marked these High; the
+  orchestrator classifies them as P2 documentation defects, not runtime P1.
+
+One correction batch goes to existing implementer storage_retention, immutable
+explicit Sol/medium. Expected 0.3–0.6 hours for corrections, focused preflight and
+affected reliability/API confirmation. Deterministic docs and fixture assertion
+corrections do not reopen those lanes. No new full review wave for cosmetic work.
+
+Correction tests exposed a related Any-ID storage failure. Parent inspection
+confirmed entity-storage-descriptor.unpackMessageId still expected a nested Any,
+while the accepted packer returns an existing Any unchanged. This is part of
+adoption, not an unrelated provider limitation. Correct the shared ID codec and
+use a real storage-backed subscription regression; a mock-only test is not an
+acceptable substitute. Include this exact path in targeted reliability review.
+The first correction run otherwise passed 194 tests across six affected areas.
+
+Broker correction was narrowed after inspecting EventDispatcherRegistry: both
+dispatcher and schema-only registration derive complete keys from TypeUrls.derive.
+The presumed accepted alias case is not reachable in current EventBus. Use direct
+typed AnyPacker.unpack after its existing exact accepted-type lookup; do not
+allocate a temporary registry or introduce alias support. Core unpackUsing still
+tests genuine explicitly registered aliases. Real storage-backed Any-ID selection
+and exclusion now pass; Proto lint, source verification and generated-current
+checks passed. Docs must run after build-output cleaning completes.
+
+Correction freeze: 227 focused coverage tests across six suites and 48 broker
+tests after canonical lookup simplification passed. Generated and tooling
+typechecks, Proto lint/source/generated-current checks, docs, cleanup, TSDoc,
+changed ESLint/format/copyright and diff checks passed. Targeted confirmation
+reuses any_reliability_review and repository_api_review, both immutable explicit
+Sol/medium. Reliability checks explicit validation/atomic multi-output behavior,
+real Any-ID storage/subscription path and broker shared decode. API checks
+optional absence and narrow declarations/docs. Style and documentation fixes are
+deterministic; independent mechanical inspection covers their current evidence.
+No general review rerun or full release-profile invocation.
+
+Targeted API and reliability confirmation resolved all prior findings. No source
+edits or broad verification reruns by reviewers. The code's Any-ID path is covered
+by a real-storage behavior test; independent LCOV inspection noticed zero counters
+but the record contains both old/new function positions, so its initial gap claim
+is provisional. Rerun that one test after the final generated build to resolve
+mapping ambiguity rather than add coverage-only assertions.
+
+Fresh isolated Any-ID subscription run passed but confirmed descriptor extraction
+remains unhit. Parent source inspection found the scenario posts System Events
+without persisting Entity state, so its earlier retained-state claim was too
+broad. Add a focused Any-ID storage/descriptor round trip alongside existing ID
+codec tests, rename the subscription scenario accurately, and replace its new
+25 ms wait with the existing activation acknowledgement. This is a test/evidence
+correction in the same implementation context, estimated 0.1–0.2 hours; no
+production contract or specialist lane reopens.
+
+AnyPacker milestone accepted. Final evidence-only correction passed both named
+behavior tests and tooling/lint/format/diff checks. Fresh narrow LCOV confirms
+Entity ID extraction executes through real in-memory write/read and preserves
+the full packed identifier; unequal ID lookup stays absent. The subscription
+scenario now waits for an activation ACK and accurately describes System Event
+filtering. All four canonical review concerns have accepted dispositions, all
+confirmed findings are resolved, and no runtime change followed the targeted
+reviews. Full-task release/security gates remain pending. Commit authored code,
+Proto fixtures, tests, docs/checkers and task records; retain generation-only
+manifest churn outside this checkpoint until coordinated convergence.

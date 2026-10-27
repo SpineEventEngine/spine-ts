@@ -12,7 +12,8 @@
  * the License.
  */
 
-import { create, fromBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId } from "@spine-event-engine/proto";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
@@ -474,7 +475,7 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
     });
     return found?.state === undefined
       ? undefined
-      : fromBinary(this.input.stateSchema, found.state.value);
+      : AnyPacker.unpack(found.state, this.input.stateSchema);
   }
 
   /**

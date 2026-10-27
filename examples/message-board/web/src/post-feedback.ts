@@ -13,7 +13,7 @@
  */
 
 import type { CommandAcknowledgement } from "@spine-event-engine/client-web";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { ErrorSchema, ValidationErrorSchema } from "@spine-event-engine/proto";
 
 /**
@@ -57,10 +57,10 @@ export const PostFeedback: Readonly<{
     if (acknowledgement.kind !== "error" || acknowledgement.error.$typeName !== ErrorSchema.typeName)
       return general;
     const details = (
-      acknowledgement.error as { readonly details?: Parameters<typeof AnyMessages.unpack>[0] }
+      acknowledgement.error as { readonly details?: Parameters<typeof AnyPacker.unpack>[0] }
     ).details;
     const validation =
-      details === undefined ? undefined : AnyMessages.unpack(details, ValidationErrorSchema);
+      details === undefined ? undefined : AnyPacker.tryUnpack(details, ValidationErrorSchema);
     if (validation === undefined) return general;
     const fields: Partial<Record<"username" | "text", string>> = {};
     for (const violation of validation.constraintViolation) {

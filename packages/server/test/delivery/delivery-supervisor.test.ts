@@ -21,7 +21,7 @@ import {
   EventSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { AnyMessages, Identifiers, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers, TypeUrls } from "@spine-event-engine/core";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
@@ -1466,15 +1466,15 @@ class RealDeliveryFixture {
       shard,
       whenReceived: timestampFromDate(new Date("2026-07-23T12:00:00.000Z")),
       version,
-      signal: AnyMessages.pack(
+      signal: AnyPacker.pack(
         EventSchema,
         create(EventSchema, {
           id: create(EventIdSchema, { value: signalId }),
           context: create(EventContextSchema, {
-            producerId: AnyMessages.pack(TaskIdSchema, taskId),
+            producerId: AnyPacker.pack(TaskIdSchema, taskId),
             version: create(VersionSchema, { number: Number(version) }),
           }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             TaskCreatedSchema,
             create(TaskCreatedSchema, {
               id: taskId,

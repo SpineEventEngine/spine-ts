@@ -17,7 +17,7 @@ import { create } from "@bufbuild/protobuf";
 import { AiRegistry, Mcp, ModelRef } from "@spine-event-engine/ai";
 import { backendDefinition } from "@spine-event-engine/ai/spi/runtime";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandIdSchema,
@@ -154,13 +154,13 @@ describe("real MCP transport through Agent runtime", () => {
         }),
         tenant: { kind: "single-tenant" },
         agent: create(MessageIdSchema, {
-          id: AnyMessages.pack(
+          id: AnyPacker.pack(
             SupportReplyAgentIdSchema,
             create(SupportReplyAgentIdSchema, { ticketNumber: "T-1" }),
           ),
         }),
         source: create(MessageIdSchema, {
-          id: AnyMessages.pack(
+          id: AnyPacker.pack(
             CommandIdSchema,
             create(CommandIdSchema, { uuid: "fixture-command-1" }),
           ),

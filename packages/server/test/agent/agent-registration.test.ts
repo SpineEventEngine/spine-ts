@@ -16,7 +16,7 @@ import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type HistoryPage } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
-import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
 // prettier-ignore
 import {
@@ -620,7 +620,7 @@ describe("Agent registration readiness", () => {
       id: {
         key: (value: SupportReplyAgentId) =>
           Buffer.from(
-            toBinary(AnySchema, AnyMessages.pack(SupportReplyAgentIdSchema, value)),
+            toBinary(AnySchema, AnyPacker.pack(SupportReplyAgentIdSchema, value)),
           ).toString("base64"),
       },
     });
@@ -628,7 +628,7 @@ describe("Agent registration readiness", () => {
       const occurredAt = create(TimestampSchema, { seconds: 1n });
       const event = create(EventSchema, {
         id: create(EventIdSchema, { value: "tenant-event" }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           SupportReplyDraftedSchema,
           create(SupportReplyDraftedSchema, { agent: id, reply: "Ready for review" }),
         ),
@@ -648,10 +648,10 @@ describe("Agent registration readiness", () => {
         conversation,
         operation: create(AiOperationIdSchema, { value: "draft-support" }),
         occurredAt: recordAt,
-        content: AnyMessages.pack(
+        content: AnyPacker.pack(
           GenerationRequestSchema,
           create(GenerationRequestSchema, {
-            input: AnyMessages.pack(
+            input: AnyPacker.pack(
               DraftSupportReplySchema,
               create(DraftSupportReplySchema, { agent: id, question: "Delivery?" }),
             ),
@@ -754,7 +754,7 @@ describe("Agent registration readiness", () => {
       id: {
         key: (value: SupportReplyAgentId) =>
           Buffer.from(
-            toBinary(AnySchema, AnyMessages.pack(SupportReplyAgentIdSchema, value)),
+            toBinary(AnySchema, AnyPacker.pack(SupportReplyAgentIdSchema, value)),
           ).toString("base64"),
       },
     });
@@ -779,7 +779,7 @@ describe("Agent registration readiness", () => {
         const domain = create(EventSchema, {
           id: create(EventIdSchema, { value: domainId }),
           context: create(EventContextSchema, { timestamp: domainAt }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             SupportReplyDraftedSchema,
             create(SupportReplyDraftedSchema, { agent: id, reply: `Draft ${suffix}` }),
           ),
@@ -799,11 +799,11 @@ describe("Agent registration readiness", () => {
         const system = create(EventSchema, {
           id: create(EventIdSchema, { value: systemId }),
           context: create(EventContextSchema, { timestamp: systemAt }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             CommandDispatchedToHandlerSchema,
             create(CommandDispatchedToHandlerSchema, {
               receiver: create(MessageIdSchema, {
-                id: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+                id: AnyPacker.pack(SupportReplyAgentIdSchema, id),
                 typeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
               }),
               payload: command,
@@ -831,10 +831,10 @@ describe("Agent registration readiness", () => {
           conversation,
           operation: create(AiOperationIdSchema, { value: "draft-support" }),
           occurredAt: recordAt,
-          content: AnyMessages.pack(
+          content: AnyPacker.pack(
             GenerationRequestSchema,
             create(GenerationRequestSchema, {
-              input: AnyMessages.pack(
+              input: AnyPacker.pack(
                 DraftSupportReplySchema,
                 create(DraftSupportReplySchema, { agent: id, question: "Delivery?" }),
               ),
@@ -924,10 +924,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("public-agent-read", command.id.uuid, 1n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -1054,10 +1054,10 @@ describe("Agent registration readiness", () => {
         await repositoryAccess.entityInboxTarget(configured)?.replay({
           ...createMessage(suffix, command.id?.uuid ?? "", version),
           inboxId: {
-            targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+            targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
             targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
           },
-          signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+          signal: AnyPacker.pack(CommandSchema, command),
           label: "HANDLE_COMMAND",
           status: "TO_DELIVER",
         });
@@ -1135,10 +1135,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("late-handler-result", command.id?.uuid ?? "", 1n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -1276,10 +1276,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("selected", command.id?.uuid ?? "", 1n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -1383,10 +1383,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("interrupted", command.id?.uuid ?? "", 1n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -1470,10 +1470,10 @@ describe("Agent registration readiness", () => {
         await repositoryAccess.entityInboxTarget(configured)?.replay({
           ...createMessage(`budget-${String(index)}`, command.id?.uuid ?? "", BigInt(index + 1)),
           inboxId: {
-            targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+            targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
             targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
           },
-          signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+          signal: AnyPacker.pack(CommandSchema, command),
           label: "HANDLE_COMMAND",
           status: "TO_DELIVER",
         });
@@ -1488,7 +1488,10 @@ describe("Agent registration readiness", () => {
       const audit = await repositoryAccess.agentHistoryPage(configured, id, { pageSize: 20 });
       const terminated = audit.items.flatMap((entry) => {
         if (entry.item.case !== "systemEvent" || entry.item.value.message === undefined) return [];
-        const event = AnyMessages.unpack(entry.item.value.message, AgentInvocationTerminatedSchema);
+        const event = AnyPacker.tryUnpack(
+          entry.item.value.message,
+          AgentInvocationTerminatedSchema,
+        );
         return event === undefined ? [] : [event];
       });
       expect(terminated).toMatchObject([
@@ -1569,10 +1572,10 @@ describe("Agent registration readiness", () => {
             BigInt(index + 1),
           ),
           inboxId: {
-            targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+            targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
             targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
           },
-          signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+          signal: AnyPacker.pack(CommandSchema, command),
           label: "HANDLE_COMMAND",
           status: "TO_DELIVER",
         });
@@ -1657,10 +1660,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("transient", command.id?.uuid ?? "", 1n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -1720,10 +1723,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("agent-scheduled", command.id?.uuid ?? "", 1n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -1909,10 +1912,10 @@ describe("Agent registration readiness", () => {
       const inbox = {
         ...createMessage("agent-inbox", command.id.uuid, 4_294_967_296n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND" as const,
         status: "TO_DELIVER" as const,
       };
@@ -1971,10 +1974,10 @@ describe("Agent registration readiness", () => {
       const inbox = {
         ...createMessage("agent-noop", command.id?.uuid ?? "", 1n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND" as const,
         status: "TO_DELIVER" as const,
       };
@@ -2025,10 +2028,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("agent-change", command.id?.uuid ?? "", 2n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -2095,10 +2098,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("agent-event", command.id?.uuid ?? "", 3n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -2196,10 +2199,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("agent-preference-failure", command.id?.uuid ?? "", 3n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -2270,10 +2273,10 @@ describe("Agent registration readiness", () => {
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("failed-event-handoff", command.id?.uuid ?? "", 4n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       });
@@ -2358,17 +2361,17 @@ describe("Agent registration readiness", () => {
         schema: SupportTicketUpdatedSchema,
         message: create(SupportTicketUpdatedSchema, { agent: id, question: "Status?" }),
         context: create(EventContextSchema, {
-          producerId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          producerId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           version: create(VersionSchema, { number: 1 }),
         }),
       });
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("agent-command-output", event.id?.value ?? "", 5n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+        signal: AnyPacker.pack(EventSchema, event),
         label: "REACT_UPON_EVENT",
         status: "TO_DELIVER",
       });
@@ -2474,17 +2477,17 @@ describe("Agent registration readiness", () => {
         schema: SupportTicketUpdatedSchema,
         message: create(SupportTicketUpdatedSchema, { agent: id, question: "Two reviews" }),
         context: create(EventContextSchema, {
-          producerId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          producerId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           version: create(VersionSchema, { number: 1 }),
         }),
       });
       await repositoryAccess.entityInboxTarget(configured)?.replay({
         ...createMessage("agent-two-command-failures", event.id?.value ?? "", 5n),
         inboxId: {
-          targetId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
           targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
         },
-        signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+        signal: AnyPacker.pack(EventSchema, event),
         label: "REACT_UPON_EVENT",
         status: "TO_DELIVER",
       });

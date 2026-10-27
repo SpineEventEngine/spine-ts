@@ -367,7 +367,7 @@ not fields; incoming wire field masks are ignored.
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { Client } from "@spine-event-engine/client-node";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { QueryResponse } from "@spine-event-engine/proto/client";
 
 import { TaskListIdSchema } from "../../generated/spine/examples/todo/task_id_pb.js";
@@ -414,7 +414,7 @@ export const TaskListReader: Readonly<{
   states(response) {
     return response.message.flatMap((row) => {
       const state =
-        row.state === undefined ? undefined : AnyMessages.unpack(row.state, TaskListSchema);
+        row.state === undefined ? undefined : AnyPacker.tryUnpack(row.state, TaskListSchema);
       return state === undefined ? [] : [state];
     });
   },

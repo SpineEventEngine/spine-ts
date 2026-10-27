@@ -14,7 +14,7 @@
 
 import { clone, create, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Identifiers } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers, Validate } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -72,9 +72,10 @@ export const EntityRecords: EntityRecordConverter = Object.freeze({
       idField === undefined
         ? EntityIds.pack(schema, entityId)
         : EntityIds.packField(idField.descriptor, entityId);
+    Validate.check(schema, state);
     return create(EntityRecordSchema, {
       entityId: packedId,
-      state: AnyMessages.pack(schema, state),
+      state: AnyPacker.pack(schema, state),
       version:
         typeof version === "bigint"
           ? create(VersionSchema, { number: Number(version) })
@@ -94,7 +95,7 @@ export const EntityRecords: EntityRecordConverter = Object.freeze({
     const cached = stateCache.get(record)?.get(schema);
     if (cached !== undefined) return cached;
     const packedState = record.state;
-    const state = packedState === undefined ? undefined : AnyMessages.unpack(packedState, schema);
+    const state = packedState === undefined ? undefined : AnyPacker.tryUnpack(packedState, schema);
     if (state === undefined)
       throw new Error("EntityRecord state does not match the Entity state schema.");
     const version = BigInt(record.version?.number ?? 0);
@@ -319,7 +320,10 @@ function primitiveIdKind(type: ScalarType): "string" | "int32" | "int64" {
 
 function unpackMessageId(record: EntityRecord, schema: DescriptorMessageSchema): Message {
   if (record.entityId === undefined) throw new Error("EntityRecord has no packed entity ID.");
-  const id = AnyMessages.unpack(record.entityId, schema);
+  const id =
+    schema.typeName === AnySchema.typeName
+      ? record.entityId
+      : AnyPacker.tryUnpack(record.entityId, schema);
   if (id === undefined) throw new Error("EntityRecord ID does not match the Entity ID schema.");
   return id;
 }

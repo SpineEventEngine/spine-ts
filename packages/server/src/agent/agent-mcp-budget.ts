@@ -16,7 +16,7 @@ import { clone, create, toBinary } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { createHash, randomUUID } from "node:crypto";
 import { AgentExecutionFault } from "./agent-execution-fault.js";
-import { AnyMessages, Time } from "@spine-event-engine/core";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import type {
   AiMcpMessageRequest,
   AiMcpMessageTicket,
@@ -554,7 +554,7 @@ export class AgentMcpBudget {
    * Records the exact authorized ToolRequest in conversation history.
    */
   #requestHistory(request: ToolRequest): AgentHistoryEntry {
-    return this.#toolHistory(request.call, AnyMessages.pack(ToolRequestSchema, request));
+    return this.#toolHistory(request.call, AnyPacker.pack(ToolRequestSchema, request));
   }
 
   /**
@@ -590,10 +590,7 @@ export class AgentMcpBudget {
       text: ["x".repeat(credit)],
     });
     tool.response = response;
-    const history = this.#toolHistory(
-      response.call,
-      AnyMessages.pack(ToolResponseSchema, response),
-    );
+    const history = this.#toolHistory(response.call, AnyPacker.pack(ToolResponseSchema, response));
     this.#checkCapacity(projected, [history]);
   }
 

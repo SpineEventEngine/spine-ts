@@ -9,7 +9,8 @@ Branch: `environment-lifecycle`. Baseline: freshly fetched official
 Worktree: `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
 The accepted [proposal](PROPOSAL.md) includes the complete Agent recovery-removal
 task. Implementation is in progress; initial repository and EventStore retention
-checkpoints are pushed, and repository query/history retention is reviewed. Existing behavior descriptions in the proposal refer to the baseline; proposed APIs become supported only after implementation.
+checkpoints are pushed. Repository query/history retention and shared AnyPacker
+implementation are independently reviewed; provider lifecycle work follows. Existing behavior descriptions in the proposal refer to the baseline; proposed APIs become supported only after implementation.
 
 ## Human-Imposed Requirements Ledger
 

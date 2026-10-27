@@ -19,7 +19,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { toBinary } from "@bufbuild/protobuf";
-import { AnyMessages, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { EventSchema } from "@spine-event-engine/proto";
 import { InboxMessageSchema, ShardSessionRecordSchema } from "@spine-event-engine/proto/delivery";
 import type { StorageFactory } from "@spine-event-engine/storage";
@@ -217,7 +217,7 @@ describe("live SQL DeliverySupervisor recovery clock", () => {
           expect(write.pickup).toBe(phase === "before" ? "BLOCKED" : "NOT_ATTEMPTED");
           const pending = await inbox.readMessage({ value: write.id, shard });
           expect(pending?.status).toBe("TO_DELIVER");
-          const event = pending?.signal && AnyMessages.unpack(pending.signal, EventSchema);
+          const event = pending?.signal && AnyPacker.tryUnpack(pending.signal, EventSchema);
           if (event === undefined) throw new Error("Cross-process Inbox Event is missing.");
           expect(Buffer.from(toBinary(EventSchema, event)).toString("hex")).toBe(write.eventHex);
           expect(delivered).toEqual([first.signalId]);

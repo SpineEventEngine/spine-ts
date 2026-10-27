@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, type MessageSchema } from "@spine-event-engine/core";
 import { TypeUrls } from "@spine-event-engine/core";
 import {
   EventContextSchema,
@@ -137,7 +137,7 @@ function taskEvent(id: string, tenantId?: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: eventContext(tenantId),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id, name: id }),
     ),
@@ -147,7 +147,7 @@ function reviewStartedEvent(id: string, tenantId?: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: eventContext(tenantId),
-    message: AnyMessages.pack(ReviewStartedSchema, create(ReviewStartedSchema, { id })),
+    message: AnyPacker.pack(ReviewStartedSchema, create(ReviewStartedSchema, { id })),
   });
 }
 async function broker(behavior: string) {
@@ -555,7 +555,7 @@ describe("Wave 13 IntegrationBroker", () => {
             timestamp: create(TimestampSchema, { seconds: 1_725_000_001n }),
           }),
         }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewTaskAssignedSchema,
           create(ReviewTaskAssignedSchema, { id: "preserved", name: "preserved" }),
         ),

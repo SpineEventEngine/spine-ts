@@ -16,7 +16,7 @@ import { Time } from "@spine-event-engine/core/time";
 import { create, type MessageShape } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
-  AnyMessages,
+  AnyPacker,
   EntityColumn,
   EntityQuery,
   Identifiers,
@@ -158,6 +158,7 @@ const projectionColumns = EntityColumn.register(
   GeneratedEntityColumns.define(ProjectOverviewStateSchema, {
     name: { field: ProjectOverviewStateSchema.field.name, comparison: "ordering" },
     priority: { field: ProjectOverviewStateSchema.field.priority, comparison: "ordering" },
+    attachment: { field: ProjectOverviewStateSchema.field.attachment, comparison: "equality" },
   }),
 );
 const equivalentProjectionSchema = { ...ProjectOverviewStateSchema };
@@ -536,7 +537,7 @@ function queryCommand(id: string, name: string, tenant?: string, suffix?: string
             }),
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, { id, name }),
     ),
@@ -573,7 +574,7 @@ function reviewRejectionEvent(id: string) {
         command: queryCommand(id, "review"),
       }),
     }),
-    message: AnyMessages.pack(ReviewRejectedSchema, create(ReviewRejectedSchema, { id })),
+    message: AnyPacker.pack(ReviewRejectedSchema, create(ReviewRejectedSchema, { id })),
   });
 }
 
@@ -1181,7 +1182,7 @@ describe("Process Manager querying", () => {
         targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
       },
       signalId: pending.id?.uuid ?? "missing-command-id",
-      signal: AnyMessages.pack(CommandSchema, pending, { validate: false }),
+      signal: AnyPacker.pack(CommandSchema, pending),
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),

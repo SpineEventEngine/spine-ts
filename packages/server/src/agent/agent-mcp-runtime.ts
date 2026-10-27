@@ -14,7 +14,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
-import { AnyMessages, Time } from "@spine-event-engine/core";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import type { AiControl, AiJson, AiToolRef, McpServerDefinition } from "@spine-event-engine/ai";
 import {
   mcpDefinition,
@@ -611,7 +611,7 @@ export class AgentMcpRuntime {
           operation: this.host.operation.operation,
           toolCall: response.call,
           occurredAt,
-          content: AnyMessages.pack(ToolResponseSchema, response),
+          content: AnyPacker.pack(ToolResponseSchema, response),
         }),
       },
     });

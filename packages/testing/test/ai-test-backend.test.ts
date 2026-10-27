@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { AiModel, AiRegistry, ModelRef, type AiDecisionResult } from "@spine-event-engine/ai";
 import {
   backendDefinition,
@@ -219,7 +219,7 @@ describe("AiTestBackend", () => {
     const run = harness(backend, decision);
     const admitted = create(GenerationResponseSchema, {
       outcome: AiOutcome.ADMITTED,
-      admittedOutput: AnyMessages.pack(
+      admittedOutput: AnyPacker.pack(
         ProposedSupportReplySchema,
         create(ProposedSupportReplySchema, { reply: "Same output type" }),
       ),

@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { AckSchema } from "@spine-event-engine/proto";
 import { ResponseSchema, StatusSchema } from "@spine-event-engine/proto";
 import {
@@ -228,7 +228,7 @@ function queryResponse(outcome: ProtocolOutcome, query: Query): QueryResponse {
   const filters = query.target?.criterion;
   const packedId = filters?.case === "filters" ? filters.value.idFilter?.id[0] : undefined;
   const id =
-    packedId === undefined ? undefined : AnyMessages.unpack(packedId, StringValueSchema)?.value;
+    packedId === undefined ? undefined : AnyPacker.tryUnpack(packedId, StringValueSchema)?.value;
   const response =
     outcome === "missing-query-response"
       ? undefined
@@ -238,7 +238,7 @@ function queryResponse(outcome: ProtocolOutcome, query: Query): QueryResponse {
       ? [{}]
       : id === undefined
         ? []
-        : [{ state: AnyMessages.pack(ProjectSummarySchema, create(ProjectSummarySchema, { id })) }];
+        : [{ state: AnyPacker.pack(ProjectSummarySchema, create(ProjectSummarySchema, { id })) }];
 
   return create(QueryResponseSchema, {
     response,

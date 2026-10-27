@@ -14,8 +14,8 @@
 
 import { type StorageContext, type StorageFactory } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
-import { fromBinary } from "@bufbuild/protobuf";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { ILogLayer } from "loglayer";
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
@@ -942,12 +942,12 @@ class RuntimeDeliverySupervisorGroup {
     if (message.signal === undefined) return undefined;
     try {
       if (message.label === "HANDLE_COMMAND") {
-        const tenantId = fromBinary(CommandSchema, message.signal.value).context?.actorContext
+        const tenantId = AnyPacker.unpack(message.signal, CommandSchema).context?.actorContext
           ?.tenantId;
         return tenantId === undefined ? undefined : String(TenantBoundary.from(tenantId).key);
       }
 
-      const origin = fromBinary(EventSchema, message.signal.value).context?.origin;
+      const origin = AnyPacker.unpack(message.signal, EventSchema).context?.origin;
       if (origin?.case === "importContext") {
         const value = origin.value.tenantId;
         return value === undefined ? undefined : String(TenantBoundary.from(value).key);

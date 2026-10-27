@@ -17,7 +17,7 @@ import { Buffer } from "node:buffer";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -129,7 +129,7 @@ function event(externalOrigin: boolean) {
     $typeName: "spine.core.Event",
     id: create(EventIdSchema, { value }),
     context: create(EventContextSchema, { external: externalOrigin }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id: value, name: value }),
     ),

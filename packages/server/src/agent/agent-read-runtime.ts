@@ -14,7 +14,7 @@
 
 import { clone, create, equals, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import { QuerySchema, type Query } from "@spine-event-engine/proto/client";
 import {
   AgentExecutionJournalEntrySchema as JournalEntrySchema,
@@ -179,7 +179,7 @@ export class AgentReadRuntime {
   ): readonly MessageShape<Schema>[] {
     const scope = this.session.record().accepted?.key?.scope;
     const saved =
-      prior.request === undefined ? undefined : AnyMessages.unpack(prior.request, QuerySchema);
+      prior.request === undefined ? undefined : AnyPacker.tryUnpack(prior.request, QuerySchema);
     if (
       saved?.id === undefined ||
       scope === undefined ||
@@ -216,7 +216,7 @@ export class AgentReadRuntime {
     const result =
       prior.result === undefined
         ? undefined
-        : AnyMessages.unpack(prior.result, ProjectionResultSchema);
+        : AnyPacker.tryUnpack(prior.result, ProjectionResultSchema);
     if (result === undefined)
       throw new AgentExecutionFault(
         "REPLAY_DIVERGENCE",
@@ -224,7 +224,7 @@ export class AgentReadRuntime {
       );
     return Object.freeze(
       result.states.map((packed) => {
-        const state = AnyMessages.unpack(packed, schema);
+        const state = AnyPacker.tryUnpack(packed, schema);
         if (state === undefined)
           throw new AgentExecutionFault(
             "REPLAY_DIVERGENCE",
@@ -246,7 +246,7 @@ export class AgentReadRuntime {
     schema: Schema,
     states: readonly MessageShape<Schema>[],
   ): Promise<void> {
-    const request = AnyMessages.pack(QuerySchema, query);
+    const request = AnyPacker.pack(QuerySchema, query);
     const result = this.#queryResult(schema, states);
     await this.session.update((record) => {
       const scope = record.accepted?.key?.scope;
@@ -284,10 +284,10 @@ export class AgentReadRuntime {
     schema: Schema,
     states: readonly MessageShape<Schema>[],
   ): Any {
-    return AnyMessages.pack(
+    return AnyPacker.pack(
       ProjectionResultSchema,
       create(ProjectionResultSchema, {
-        states: states.map((state) => AnyMessages.pack(schema, state)),
+        states: states.map((state) => AnyPacker.pack(schema, state)),
       }),
     );
   }
@@ -354,7 +354,7 @@ export class AgentReadRuntime {
       system: AgentHistoryReadKind.AGENT_HISTORY_READ_SYSTEM,
       domain: AgentHistoryReadKind.AGENT_HISTORY_READ_DOMAIN,
     }[view.kind];
-    return AnyMessages.pack(
+    return AnyPacker.pack(
       ReadRequestSchema,
       create(ReadRequestSchema, {
         kind,
@@ -398,7 +398,7 @@ export class AgentReadRuntime {
         "Agent history read request or scope changed on recovery.",
       );
     const page =
-      prior.result === undefined ? undefined : AnyMessages.unpack(prior.result, ReadPageSchema);
+      prior.result === undefined ? undefined : AnyPacker.tryUnpack(prior.result, ReadPageSchema);
     if (page === undefined)
       throw new AgentExecutionFault(
         "REPLAY_DIVERGENCE",
@@ -453,7 +453,7 @@ export class AgentReadRuntime {
           readName: name,
           scope,
           request,
-          result: AnyMessages.pack(
+          result: AnyPacker.pack(
             ReadPageSchema,
             create(ReadPageSchema, {
               entries: [...page.entries],

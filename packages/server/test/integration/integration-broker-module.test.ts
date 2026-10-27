@@ -14,7 +14,7 @@
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
   BoundedContextOnlineSchema,
@@ -463,7 +463,7 @@ describe("IntegrationBroker module", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: "rolled-back" }),
         context: create(EventContextSchema),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewStartedSchema,
           create(ReviewStartedSchema, { id: "rolled-back" }),
         ),
@@ -522,7 +522,7 @@ describe("IntegrationBroker module", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: "new" }),
         context: create(EventContextSchema),
-        message: AnyMessages.pack(ReviewStartedSchema, create(ReviewStartedSchema, { id: "new" })),
+        message: AnyPacker.pack(ReviewStartedSchema, create(ReviewStartedSchema, { id: "new" })),
       }),
     );
     expect(factory.published).toHaveLength(before + 1);
@@ -602,7 +602,7 @@ describe("IntegrationBroker module", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: "ignored" }),
         context: create(EventContextSchema),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewStartedSchema,
           create(ReviewStartedSchema, { id: "ignored" }),
         ),
@@ -660,7 +660,7 @@ describe("IntegrationBroker module", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: "external" }),
         context: create(EventContextSchema, { external: true }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewTaskAssignedSchema,
           create(ReviewTaskAssignedSchema, { id: "external", name: "external" }),
         ),
@@ -1045,7 +1045,7 @@ function event(id: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id, name: id }),
     ),

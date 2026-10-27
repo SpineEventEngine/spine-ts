@@ -14,7 +14,7 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -493,7 +493,7 @@ function createAssignReviewTask(id: string) {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       AssignReviewTaskSchema,
       create(AssignReviewTaskSchema, { id: "task-1", name: "Task" }),
     ),
@@ -508,13 +508,12 @@ function createValidatedCommand(id: string, aggregateId: string, name: string) {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, {
         id: aggregateId,
         name,
       }),
-      { validate: false },
     ),
   });
 }

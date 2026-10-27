@@ -39,7 +39,7 @@ import {
   RejectionThrowable,
   Validate,
   TypeUrls,
-  AnyMessages,
+  AnyPacker,
   Identifiers,
   StringifierRegistry,
   Time,
@@ -3414,7 +3414,7 @@ class AggregateCommandExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, message as never),
+      message: RepositorySignals.packValidated(schema, message as never),
       context: metadata.context,
     });
   }
@@ -3731,7 +3731,7 @@ class AggregateEventExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packValidated(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
@@ -5607,7 +5607,7 @@ const AgentExecutionRunner = {
         : runtime.signalMetadata.eventFromEvent(source.value, { version: version.number });
     const event = create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packValidated(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         repository,
@@ -5640,7 +5640,7 @@ const AgentExecutionRunner = {
         : runtime.signalMetadata.commandFromEvent(source.value);
     const command = create(CommandSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packValidated(schema, signal as never),
       context: metadata.context,
     });
     return { case: "command", value: command };
@@ -6695,7 +6695,7 @@ class ProcessManagerCommandExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packValidated(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
@@ -6724,7 +6724,7 @@ class ProcessManagerCommandExecution {
         const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command);
         return create(CommandSchema, {
           id: metadata.id,
-          message: AnyMessages.pack(schema, signal as never),
+          message: RepositorySignals.packValidated(schema, signal as never),
           context: metadata.context,
         });
       }),
@@ -7158,7 +7158,7 @@ class ProcessManagerEventExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packValidated(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
@@ -7190,7 +7190,7 @@ class ProcessManagerEventExecution {
 
         return create(CommandSchema, {
           id: metadata.id,
-          message: AnyMessages.pack(schema, signal as never),
+          message: RepositorySignals.packValidated(schema, signal as never),
           context: metadata.context,
         });
       }),
@@ -7743,7 +7743,7 @@ const EntityInvocation = {
     schema: MessageSchema,
     signalKind: "command" | "event" | "state update",
   ): unknown {
-    const unpacked = AnyMessages.unpack(message, schema);
+    const unpacked = AnyPacker.tryUnpack(message, schema);
 
     if (unpacked === undefined) {
       throw new Error(`Repository ${signalKind} execution requires a readable message.`);
@@ -7996,6 +7996,18 @@ Object.freeze(RepositoryEntities);
  */
 const RepositorySignals = {
   /**
+   * Packs a repository-produced value after checking its domain constraints.
+   * @typeParam Schema Generated schema for the value.
+   * @param schema Generated schema for the value.
+   * @param message Repository-produced message to pack.
+   * @returns Validated packed message.
+   */
+  packValidated<Schema extends MessageSchema>(schema: Schema, message: MessageShape<Schema>): Any {
+    Validate.check(schema, message);
+    return AnyPacker.pack(schema, message);
+  },
+
+  /**
    * Validates that a rejection type was declared by the invoked handler.
    *
    * @param handler Handler declaration that raised the rejection.
@@ -8112,7 +8124,7 @@ const RepositorySignals = {
     const metadata = runtime.signalMetadata.eventFromCommand(command, {});
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
+      message: RepositorySignals.packValidated(rejection.schema, rejection.messageThrown()),
       context: create(EventContextSchema, {
         ...RepositorySignals.eventContextWithProducer(metadata.context, repository, entityId),
         rejection: create(RejectionEventContextSchema, {
@@ -8178,7 +8190,7 @@ interface EntityCommitChange {
  * Identifies the signal that caused a committed Entity transition.
  */
 interface EventOrigin {
-  readonly id: NonNullable<ReturnType<typeof AnyMessages.pack>>;
+  readonly id: NonNullable<ReturnType<typeof AnyPacker.pack>>;
   readonly typeUrl: string;
 }
 
@@ -8235,7 +8247,7 @@ class EntityStateChangePublishing {
           version,
         }),
       {
-        id: AnyMessages.pack(CommandIdSchema, command.id as never),
+        id: RepositorySignals.packValidated(CommandIdSchema, command.id as never),
         typeUrl: command.message?.typeUrl ?? "",
       },
       { repository, entityId, oldState, oldLifecycle, newState, lifecycle, version },
@@ -8273,7 +8285,7 @@ class EntityStateChangePublishing {
           version,
         }),
       {
-        id: AnyMessages.pack(EventIdSchema, source.id as never),
+        id: RepositorySignals.packValidated(EventIdSchema, source.id as never),
         typeUrl: source.message?.typeUrl ?? "",
       },
       { repository, entityId, oldState, oldLifecycle, newState, lifecycle, version },
@@ -8300,7 +8312,7 @@ class EntityStateChangePublishing {
       runtime.registerSystemEventSchema(draft.schema);
       const event = create(EventSchema, {
         id: metadata.id,
-        message: AnyMessages.pack(
+        message: RepositorySignals.packValidated(
           draft.schema,
           draft.messageAt(metadata.context.timestamp) as never,
         ),
@@ -8345,7 +8357,7 @@ class EntityStateChangePublishing {
     return {
       entity,
       signalId: [create(MessageIdSchema, { id: origin.id, typeUrl: origin.typeUrl })],
-      state: AnyMessages.pack(change.repository.stateSchema, change.newState),
+      state: RepositorySignals.packValidated(change.repository.stateSchema, change.newState),
       version: create(VersionSchema, { number: change.version }),
     };
   }
@@ -8394,7 +8406,10 @@ class EntityStateChangePublishing {
           ...(change.oldState === undefined
             ? {}
             : {
-                oldState: AnyMessages.pack(change.repository.stateSchema, change.oldState as never),
+                oldState: RepositorySignals.packValidated(
+                  change.repository.stateSchema,
+                  change.oldState as never,
+                ),
               }),
           newState: fields.state,
           signalId: fields.signalId,
@@ -8585,7 +8600,7 @@ class HandlerDispatchPublishing {
     });
     return create(EventSchema, {
       id: runtime.signalMetadata.eventId(),
-      message: AnyMessages.pack(
+      message: RepositorySignals.packValidated(
         EntityLog.CommandDispatchedToHandlerSchema,
         this.#message(repository, command, entityId, context.timestamp),
       ),
@@ -8669,7 +8684,7 @@ class HandlerDispatchPublishing {
     });
     return create(EventSchema, {
       id: runtime.signalMetadata.eventId(),
-      message: AnyMessages.pack(
+      message: RepositorySignals.packValidated(
         EntityLog.EventDispatchedToReactorSchema,
         this.#eventMessage(
           EntityLog.EventDispatchedToReactorSchema,
@@ -8717,7 +8732,7 @@ class HandlerDispatchPublishing {
       });
       const diagnostic = create(EventSchema, {
         id: runtime.signalMetadata.eventId(),
-        message: AnyMessages.pack(
+        message: RepositorySignals.packValidated(
           schema,
           this.#eventMessage(schema, repository, event, entityId, context.timestamp) as never,
         ),
@@ -10027,7 +10042,7 @@ const RepositoryRoutes = {
     context: Command["context"] | undefined,
     reads: RepositoryReadQueries<RepositoryEntityType>,
   ): Promise<Id> {
-    const unpacked = AnyMessages.unpack(message, schema);
+    const unpacked = AnyPacker.tryUnpack(message, schema);
     if (unpacked === undefined) {
       throw new Error("Repository command routing requires a readable Command message.");
     }
@@ -10269,14 +10284,14 @@ const RepositoryRoutes = {
     if (message?.typeUrl !== TypeUrls.derive(EntityLog.EntityStateChangedSchema)) {
       throw new Error(`${operation} requires an EntityStateChanged System event.`);
     }
-    const changed = AnyMessages.unpack(message, EntityLog.EntityStateChangedSchema);
+    const changed = AnyPacker.tryUnpack(message, EntityLog.EntityStateChangedSchema);
     const packedState = changed?.newState;
     if (packedState === undefined || packedState.typeUrl === "") {
       throw new Error(`${operation} requires EntityStateChanged.newState.`);
     }
     const schema = schemas.find((candidate) => TypeUrls.derive(candidate) === packedState.typeUrl);
     if (schema === undefined) return undefined;
-    const state = AnyMessages.unpack(packedState, schema);
+    const state = AnyPacker.tryUnpack(packedState, schema);
     if (state === undefined) throw new Error(`${operation} requires a readable Entity state.`);
     return Object.freeze({ schema, state });
   },
@@ -10332,7 +10347,7 @@ const RepositoryRoutes = {
     targetIdField: DescriptorFieldMetadata,
     reads: RepositoryReadQueries<RepositoryEntityType>,
   ): Promise<readonly Id[]> {
-    const unpacked = AnyMessages.unpack(message, schema);
+    const unpacked = AnyPacker.tryUnpack(message, schema);
     if (unpacked === undefined) {
       throw new Error("Repository event routing requires a readable Event message.");
     }
@@ -10402,7 +10417,7 @@ const RepositoryRoutes = {
     schema: MessageSchema,
     signalKind: "command" | "event",
   ): unknown {
-    const unpacked = AnyMessages.unpack(message, schema);
+    const unpacked = AnyPacker.tryUnpack(message, schema);
     const firstField = schema.fields[0];
 
     if (unpacked === undefined || firstField === undefined) {
@@ -12066,7 +12081,7 @@ const InboxMessages = {
     }
 
     const command =
-      message.signal === undefined ? undefined : AnyMessages.unpack(message.signal, CommandSchema);
+      message.signal === undefined ? undefined : AnyPacker.tryUnpack(message.signal, CommandSchema);
 
     if (command === undefined) {
       throw CommandValidationError.invalidPayload();
@@ -12131,7 +12146,7 @@ const InboxMessages = {
             typeUrl: message.signal.typeUrl,
             value: new Uint8Array(message.signal.value),
           });
-    const event = signal === undefined ? undefined : AnyMessages.unpack(signal, EventSchema);
+    const event = signal === undefined ? undefined : AnyPacker.tryUnpack(signal, EventSchema);
 
     if (event === undefined) {
       throw new Error(unreadableMessage);
@@ -12635,7 +12650,7 @@ const InboxReplay = {
       commandMessage.typeUrl,
       "command",
     );
-    const payload = AnyMessages.unpack(commandMessage, commandSchema);
+    const payload = AnyPacker.tryUnpack(commandMessage, commandSchema);
 
     if (payload === undefined) {
       throw CommandValidationError.invalidPayload();
@@ -12673,7 +12688,7 @@ const InboxReplay = {
       eventMessage.typeUrl,
       "event",
     );
-    const payload = AnyMessages.unpack(eventMessage, eventSchema);
+    const payload = AnyPacker.tryUnpack(eventMessage, eventSchema);
 
     if (payload === undefined) {
       throw new Error(invalidPayloadMessage);
@@ -12954,7 +12969,7 @@ const InboxHandoff = {
           targetTypeUrl: TypeUrls.derive(repository.stateSchema),
         },
         signalId: commandId.uuid,
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
         keepUntil,
@@ -12994,7 +13009,7 @@ const InboxHandoff = {
           targetTypeUrl: TypeUrls.derive(repository.stateSchema),
         },
         signalId: eventId.value,
-        signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+        signal: AnyPacker.pack(EventSchema, event),
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
         shard: ShardIndex.single(),
@@ -13091,7 +13106,7 @@ const InboxHandoff = {
         targetTypeUrl: TypeUrls.derive(repository.stateSchema),
       },
       signalId,
-      signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+      signal: AnyPacker.pack(EventSchema, event),
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
       keepUntil,

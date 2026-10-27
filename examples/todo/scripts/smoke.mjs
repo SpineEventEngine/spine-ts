@@ -9,7 +9,7 @@ import { pathToFileURL } from "node:url";
 
 import { create } from "@bufbuild/protobuf";
 import { Client } from "@spine-event-engine/client-node";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 
 import {
@@ -95,8 +95,8 @@ async function observeBothEvents(subscription, id) {
     if (next.done) throw new Error(`CreateTask Event stream ended: ${[...expected].join(", ")}.`);
     if (next.value.kind !== "update" || next.value.update.update.case !== "eventUpdates") continue;
     for (const event of next.value.update.update.value.event) {
-      const created = event.message && AnyMessages.unpack(event.message, TaskCreatedSchema);
-      const assigned = event.message && AnyMessages.unpack(event.message, TaskAssignedSchema);
+      const created = event.message && AnyPacker.tryUnpack(event.message, TaskCreatedSchema);
+      const assigned = event.message && AnyPacker.tryUnpack(event.message, TaskAssignedSchema);
       if (created?.id?.value === id) expected.delete(TaskCreatedSchema.typeName);
       if (assigned?.id?.value === id) expected.delete(TaskAssignedSchema.typeName);
     }
@@ -166,7 +166,7 @@ async function expectSelected(result, id, schema) {
       if (next.value.kind !== "update" || next.value.update.update.case !== "eventUpdates")
         continue;
       for (const event of next.value.update.update.value.event) {
-        const signal = event.message && AnyMessages.unpack(event.message, schema);
+        const signal = event.message && AnyPacker.tryUnpack(event.message, schema);
         if (signal?.id?.value === id) return;
       }
     }

@@ -16,7 +16,7 @@ import { create, toJsonString } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import { experimental_decide } from "ai";
 import type { Experimental_DecisionModelV4Question as ProviderQuestion } from "@ai-sdk/provider";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { AiAnswer, AiDecisionResult, AiFailure, AiQuestion } from "@spine-event-engine/ai";
 import type {
   AiBackendExecution,
@@ -103,7 +103,7 @@ const requestContent = (request: AiBackendExecution) => {
     questions,
   });
   return create(DecisionRequestSchema, {
-    input: AnyMessages.pack(request.definition.input, request.input),
+    input: AnyPacker.pack(request.definition.input, request.input),
     questions,
     digest: create(AiContentDigestSchema, {
       value: createHash("sha256").update(encoded).digest("hex"),
@@ -251,7 +251,7 @@ const decisionResponse = (
     answers: Object.entries(decision.answers).map(([id, answer]) => answerContent(answer, id)),
     outcome: admission.ok ? AiOutcome.ADMITTED : AiOutcome.INVALID_OUTPUT,
     ...(admission.ok
-      ? { admittedOutput: AnyMessages.pack(request.definition.output, admission.value) }
+      ? { admittedOutput: AnyPacker.pack(request.definition.output, admission.value) }
       : {}),
     ...(failure
       ? { diagnosticId: create(AiDiagnosticIdSchema, { value: failure.diagnosticId }) }
@@ -407,7 +407,7 @@ const replayDecision = (request: AiBackendExecution, replay: AiAttemptReplay): A
   if (response.outcome === AiOutcome.ADMITTED) {
     const output =
       response.admittedOutput &&
-      AnyMessages.unpack(response.admittedOutput, request.definition.output);
+      AnyPacker.tryUnpack(response.admittedOutput, request.definition.output);
     if (!output) throw new TypeError("Saved decision output missing");
     return { ok: true, value: output };
   }

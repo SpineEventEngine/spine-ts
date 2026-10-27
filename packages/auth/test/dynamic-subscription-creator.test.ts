@@ -15,7 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   EventIdSchema,
@@ -1142,9 +1142,9 @@ describe("DynamicSubscriptionCreator", () => {
               create(EventSchema, {
                 id: create(EventIdSchema, { value: "event-1" }),
                 context: create(EventContextSchema, {
-                  producerId: AnyMessages.pack(TaskIdSchema, taskId),
+                  producerId: AnyPacker.pack(TaskIdSchema, taskId),
                 }),
-                message: AnyMessages.pack(
+                message: AnyPacker.pack(
                   TaskCreatedSchema,
                   create(TaskCreatedSchema, {
                     id: taskId,

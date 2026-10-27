@@ -20,7 +20,7 @@ import {
   type Subscription,
   type SubscriptionDelivery,
 } from "@spine-event-engine/client-node";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import {
   BoardMessageSchema,
   BoardMessageViewSchema,
@@ -80,10 +80,10 @@ describe("MessageBoard Projection backend", () => {
       postedAt: create(TimestampSchema, { seconds: 1n }),
     });
     expect(
-      AnyMessages.unpackUsing(typeRegistry, AnyMessages.pack(BoardMessageSchema, message))
+      AnyPacker.tryUnpackUsing(typeRegistry, AnyPacker.pack(BoardMessageSchema, message))
         ?.$typeName,
     ).toBe(BoardMessageSchema.typeName);
-    expect(AnyMessages.unpackUsing(typeRegistry, AnyMessages.pack(UserIdSchema, user))).toEqual(
+    expect(AnyPacker.tryUnpackUsing(typeRegistry, AnyPacker.pack(UserIdSchema, user))).toEqual(
       user,
     );
     expect(typeRegistry.findByFullName(UserIdSchema.typeName)?.schema).toBe(UserIdSchema);
@@ -157,17 +157,11 @@ describe("MessageBoard Projection backend", () => {
       const event = (await waitForStoredEvents(eventStore, 1))[0];
       const producerId = event?.context?.producerId;
       if (producerId === undefined) throw new Error("Expected stored event producer ID.");
-      expect(AnyMessages.unpack(producerId, MessageIdSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(producerId, MessageIdSchema)).toEqual(
         create(MessageIdSchema, { value: "producer-id" }),
       );
     } finally {
-      await closeResources([
-        () => {
-          eventStore.close();
-        },
-        () => client.close(),
-        () => server.close(),
-      ]);
+      await closeResources([() => eventStore.close(), () => client.close(), () => server.close()]);
     }
   });
 
@@ -287,11 +281,11 @@ describe("MessageBoard Projection backend", () => {
       expect(normalEvents).toHaveLength(1);
       const message = normalEvents[0]?.message;
       if (message === undefined) throw new Error("Expected stored message.");
-      const winner = AnyMessages.unpack(message, MessagePostedSchema);
+      const winner = AnyPacker.tryUnpack(message, MessagePostedSchema);
       expect(winner?.text).toBe("first");
       const producerId = normalEvents[0]?.context?.producerId;
       if (producerId === undefined) throw new Error("Expected stored event producer ID.");
-      expect(AnyMessages.unpack(producerId, MessageIdSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(producerId, MessageIdSchema)).toEqual(
         create(MessageIdSchema, { value: "duplicate" }),
       );
       expect(
@@ -307,9 +301,7 @@ describe("MessageBoard Projection backend", () => {
       ).resolves.toMatchObject({ state: { board: { value: "board-a" }, text: "first" } });
     } finally {
       await closeResources([
-        () => {
-          eventStore.close();
-        },
+        () => eventStore.close(),
         () => subscription?.cancel(),
         () => client.close(),
         () => server.close(),
@@ -343,7 +335,7 @@ describe("MessageBoard Projection backend", () => {
       expect(normalEvents).toHaveLength(1);
       const message = normalEvents[0]?.message;
       if (message === undefined) throw new Error("Expected stored message.");
-      const winner = AnyMessages.unpack(message, MessagePostedSchema);
+      const winner = AnyPacker.tryUnpack(message, MessagePostedSchema);
       expect(["first", "second"]).toContain(winner?.text);
       expect(
         events.filter(
@@ -362,9 +354,7 @@ describe("MessageBoard Projection backend", () => {
       });
     } finally {
       await closeResources([
-        () => {
-          eventStore.close();
-        },
+        () => eventStore.close(),
         () => subscription?.cancel(),
         () => client.close(),
         () => server.close(),
@@ -408,7 +398,7 @@ describe("MessageBoard Projection backend", () => {
       if (validationError.details === undefined)
         throw new Error("Expected validation error details.");
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           validationError.details,
           ValidationErrorSchema,
         )?.constraintViolation.some((violation) => violation.fieldPath?.fieldName[0] === "id"),
@@ -461,7 +451,7 @@ function createBoardQuery(board: string): Query {
               filter: [
                 create(FilterSchema, {
                   fieldPath: { fieldName: ["board"] },
-                  value: AnyMessages.pack(BoardIdSchema, create(BoardIdSchema, { value: board })),
+                  value: AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: board })),
                   operator: Filter_Operator.EQUAL,
                 }),
               ],
@@ -489,8 +479,8 @@ async function readRows(
       entry.state === undefined
         ? []
         : [
-            AnyMessages.unpack(
-              entry.state as Parameters<typeof AnyMessages.unpack>[0],
+            AnyPacker.tryUnpack(
+              entry.state as Parameters<typeof AnyPacker.unpack>[0],
               BoardMessageViewSchema,
             ),
           ].filter((row): row is BoardMessageView => row !== undefined),
@@ -518,7 +508,8 @@ async function nextView(
       throw new Error("Expected Projection update.");
     const kind = update.update.update.value.update[0]?.kind;
     const value = kind?.case === "state" ? kind.value : undefined;
-    const row = value === undefined ? undefined : AnyMessages.unpack(value, BoardMessageViewSchema);
+    const row =
+      value === undefined ? undefined : AnyPacker.tryUnpack(value, BoardMessageViewSchema);
     if (row === undefined) throw new Error("Expected BoardMessageView.");
     return row;
   } finally {

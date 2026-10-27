@@ -26,6 +26,7 @@ import {
 } from "@bufbuild/protobuf";
 import type {
   DescField,
+  DescMessage,
   Message,
   MessageInitShape,
   MessageShape,
@@ -822,13 +823,13 @@ export interface DeriveTypeUrlOptions {
 }
 
 /**
- * Options for Spine-aware `google.protobuf.Any` payload packing.
+ * Options for semantic validation at a signal-envelope boundary.
  */
-export interface PackAnyOptions {
+export interface SignalValidationOptions {
   // prettier-ignore
 
   /**
-   * Validate the enclosed domain message before serialization.
+   * Validate the enclosed domain signal before serialization.
    *
    * Validation is enabled by default. Set this to `false` only for messages
    * already validated by a trusted caller.
@@ -843,7 +844,7 @@ export interface PackAnyOptions {
  */
 export interface PackCommandInput<
   Schema extends MessageSchema = MessageSchema,
-> extends PackAnyOptions {
+> extends SignalValidationOptions {
   // prettier-ignore
 
   /**
@@ -869,7 +870,7 @@ export interface PackCommandInput<
  */
 export interface PackEventInput<
   Schema extends MessageSchema = MessageSchema,
-> extends PackAnyOptions {
+> extends SignalValidationOptions {
   // prettier-ignore
 
   /**
@@ -949,57 +950,111 @@ export const TypeUrls = {
 Object.freeze(TypeUrls);
 
 /**
- * Packs and unpacks Spine messages in `google.protobuf.Any` envelopes.
+ * Packs and unpacks Protobuf messages in `google.protobuf.Any` envelopes.
  */
-export const AnyMessages = {
-  // prettier-ignore
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class -- Static overloads mirror the JVM utility API.
+export class AnyPacker {
+  /**
+   * Creates no public instances of this utility class.
+   */
+  private constructor() {
+    throw new Error("AnyPacker cannot be constructed.");
+  }
 
   /**
-   * Packs a message into `Any`, omitting unknown fields from binary output.
-   * @typeParam Schema Generated schema of the enclosed message.
-   * @param schema The message schema.
-   * @param message The message to pack.
-   * @param options The packing options.
-   * @returns The packed Any message.
+   * Returns an existing `Any` unchanged.
+   * @param packed Existing packed message.
+   * @returns The same message instance.
    */
-  pack<Schema extends MessageSchema>(
-    schema: Schema,
-    message: MessageShape<Schema>,
-    options: PackAnyOptions = {},
-  ): Any {
-    if (options.validate !== false) Validate.check(schema, message);
+  static pack(packed: Any): Any;
+
+  /**
+   * Packs a message, including its unknown binary fields.
+   * @typeParam Schema Generated schema of the enclosed message.
+   * @param schema Generated message schema.
+   * @param message Message to pack.
+   * @returns Packed Any message.
+   */
+  static pack<Schema extends MessageSchema>(schema: Schema, message: MessageShape<Schema>): Any;
+
+  /**
+   * Packs a typed message or returns an existing Any unchanged.
+   * @param schemaOrPacked Generated schema or existing Any message.
+   * @param message Message to pack when a schema is supplied.
+   * @returns Packed Any message.
+   */
+  static pack(schemaOrPacked: MessageSchema | Any, message?: Message): Any {
+    if ("$typeName" in schemaOrPacked) return schemaOrPacked;
+    if (message === undefined) throw new TypeError("AnyPacker.pack requires a message.");
+    const schema = schemaOrPacked;
+    if (schema.typeName === AnySchema.typeName && message.$typeName === AnySchema.typeName)
+      return message as Any;
     return create(AnySchema, {
       typeUrl: TypeUrls.derive(schema),
-      value: toBinary(schema, message, { writeUnknownFields: false }),
+      value: toBinary(schema, message),
     });
-  },
+  }
 
   /**
    * Unpacks an `Any` when its type URL exactly matches the requested schema.
    * @typeParam Schema Generated schema expected in the envelope.
    * @param packed The packed message.
    * @param schema The expected schema.
-   * @returns The unpacked message, when valid.
+   * @returns The decoded message.
    */
-  unpack<Schema extends MessageSchema>(
-    packed: Any,
+  static unpack<Schema extends MessageSchema>(packed: Any, schema: Schema): MessageShape<Schema> {
+    if (packed.typeUrl !== TypeUrls.derive(schema)) {
+      throw new TypeError(
+        `Expected Any type URL "${TypeUrls.derive(schema)}", got "${packed.typeUrl}".`,
+      );
+    }
+    return fromBinary(schema, packed.value);
+  }
+
+  /**
+   * Unpacks an `Any` when its exact type URL is registered.
+   * @param registry The schema registry.
+   * @param packed The packed message.
+   * @returns The decoded message.
+   */
+  static unpackUsing(registry: TypeRegistryLookup, packed: Any): Message {
+    const metadata = registry.findByTypeUrl(packed.typeUrl);
+    if (metadata === undefined)
+      throw new TypeError(`Unregistered Any type URL "${packed.typeUrl}".`);
+    return fromBinary(metadata.schema, packed.value);
+  }
+
+  /**
+   * Decodes a matching `Any`, returning `undefined` for mismatch or malformed bytes.
+   * @typeParam Schema Expected generated message schema.
+   * @param packed Packed message to decode, or absent message.
+   * @param schema Expected message schema.
+   * @returns Decoded message or `undefined`.
+   */
+  static tryUnpack<Schema extends MessageSchema>(
+    packed: Any | undefined,
     schema: Schema,
   ): MessageShape<Schema> | undefined {
+    if (packed === undefined) return undefined;
     if (packed.typeUrl !== TypeUrls.derive(schema)) return undefined;
     try {
       return fromBinary(schema, packed.value);
     } catch {
       return undefined;
     }
-  },
+  }
 
   /**
-   * Unpacks an `Any` when its exact type URL is registered.
-   * @param registry The schema registry.
-   * @param packed The packed message.
-   * @returns The unpacked message, when valid.
+   * Decodes an exactly registered `Any` when available and well formed.
+   * @param registry Generated schema registry.
+   * @param packed Packed message to decode, or absent message.
+   * @returns Decoded message or `undefined`.
    */
-  unpackUsing(registry: TypeRegistryLookup, packed: Any): Message | undefined {
+  static tryUnpackUsing(
+    registry: TypeRegistryLookup,
+    packed: Any | undefined,
+  ): Message | undefined {
+    if (packed === undefined) return undefined;
     const metadata = registry.findByTypeUrl(packed.typeUrl);
     if (metadata === undefined) return undefined;
     try {
@@ -1007,9 +1062,9 @@ export const AnyMessages = {
     } catch {
       return undefined;
     }
-  },
-} as const;
-Object.freeze(AnyMessages);
+  }
+}
+Object.freeze(AnyPacker);
 
 /**
  * Converts one value to and from its stable string representation.
@@ -1044,17 +1099,15 @@ function isProtobufRegistry(types: TypeRegistryLookup | Registry): types is Regi
  * @typeParam Schema Generated schema used for conversion.
  * @param schema Message schema used for Proto JSON.
  * @param registry Optional registry for expanding packed Any messages.
- * @param typeUrls Canonical URLs restored on parsed Any messages.
  * @returns Schema-bound stringifier.
  */
 function defaultMessageStringifier<Schema extends MessageSchema>(
   schema: Schema,
   registry: Registry | undefined,
-  typeUrls: ReadonlyMap<string, string>,
 ): Stringifier<MessageShape<Schema>> {
   return Object.freeze({
     /**
-     * Parses compact Proto JSON and restores canonical Any type URLs.
+     * Parses compact Proto JSON and restores each original Any type URL.
      *
      * @param value Compact Proto JSON text.
      * @returns Parsed generated message.
@@ -1064,7 +1117,7 @@ function defaultMessageStringifier<Schema extends MessageSchema>(
         registry === undefined
           ? fromJsonString(schema, value)
           : fromJsonString(schema, value, { registry });
-      restoreAnyTypeUrls(message, typeUrls);
+      AnyJsonUrls.restore(schema, message, JSON.parse(value), registry);
       return message;
     },
 
@@ -1082,22 +1135,126 @@ function defaultMessageStringifier<Schema extends MessageSchema>(
   });
 }
 
-function restoreAnyTypeUrls(value: unknown, typeUrls: ReadonlyMap<string, string>): void {
-  if (typeof value !== "object" || value === null || value instanceof Uint8Array) return;
-  if (Array.isArray(value)) {
-    for (const item of value) restoreAnyTypeUrls(item, typeUrls);
-    return;
-  }
-  const record = value as Record<string, unknown>;
-  if (record.$typeName === AnySchema.typeName) {
-    const typeUrl = record.typeUrl;
-    if (typeof typeUrl === "string") {
-      const canonical = typeUrls.get(typeUrl.slice(typeUrl.lastIndexOf("/") + 1));
-      if (canonical !== undefined) record.typeUrl = canonical;
+const AnyJsonUrls = Object.freeze({
+  /**
+   * WKT payloads represented under an Any JSON `value` key.
+   */
+  customJsonTypes: new Set([
+    "google.protobuf.Any",
+    "google.protobuf.Timestamp",
+    "google.protobuf.Duration",
+    "google.protobuf.FieldMask",
+    "google.protobuf.Struct",
+    "google.protobuf.Value",
+    "google.protobuf.ListValue",
+    "google.protobuf.DoubleValue",
+    "google.protobuf.FloatValue",
+    "google.protobuf.Int64Value",
+    "google.protobuf.UInt64Value",
+    "google.protobuf.Int32Value",
+    "google.protobuf.UInt32Value",
+    "google.protobuf.BoolValue",
+    "google.protobuf.StringValue",
+    "google.protobuf.BytesValue",
+  ]),
+
+  /**
+   * Restores original Any URLs by following real Protobuf message fields.
+   *
+   * @param schema Current message descriptor.
+   * @param message Decoded current message.
+   * @param json Corresponding Proto JSON value.
+   * @param registry Descriptor registry for packed messages.
+   * @returns Whether any URL in this message changed.
+   */
+  restore(schema: DescMessage, message: Message, json: unknown, registry?: Registry): boolean {
+    if (typeof json !== "object" || json === null || Array.isArray(json)) return false;
+    const source = json as Record<string, unknown>;
+    if (schema.typeName === AnySchema.typeName) return this.any(message as Any, source, registry);
+    if (
+      ["google.protobuf.Struct", "google.protobuf.Value", "google.protobuf.ListValue"].includes(
+        schema.typeName,
+      )
+    )
+      return false;
+    let changed = false;
+    for (const field of schema.fields) {
+      const value = source[field.jsonName] ?? source[field.name];
+      if (value === undefined) continue;
+      changed = this.field(field, message, value, registry) || changed;
     }
-  }
-  for (const item of Object.values(record)) restoreAnyTypeUrls(item, typeUrls);
-}
+    return changed;
+  },
+
+  /**
+   * Restores one Any and descends into its parsed packed payload.
+   * @param message Decoded Any message.
+   * @param source Its Proto JSON value.
+   * @param registry Descriptor registry for the payload.
+   * @returns Whether its URL or nested payload changed.
+   */
+  any(message: Any, source: Record<string, unknown>, registry?: Registry): boolean {
+    const typeUrl = source["@type"];
+    if (typeof typeUrl !== "string") return false;
+    const changedUrl = message.typeUrl !== typeUrl;
+    message.typeUrl = typeUrl;
+    const schema = registry?.getMessage(typeUrl.slice(typeUrl.lastIndexOf("/") + 1));
+    if (schema === undefined) return changedUrl;
+    const payload = fromBinary(schema, message.value);
+    const json = this.customJsonTypes.has(schema.typeName) ? source.value : source;
+    const changedPayload = this.restore(schema, payload, json, registry);
+    if (changedPayload) message.value = toBinary(schema, payload);
+    return changedUrl || changedPayload;
+  },
+
+  /**
+   * Restores nested message, list, map, or selected oneof field values.
+   * @param field Current message field descriptor.
+   * @param parent Decoded parent message.
+   * @param json Corresponding field JSON.
+   * @param registry Descriptor registry for packed messages.
+   * @returns Whether any nested URL changed.
+   */
+  field(field: DescField, parent: Message, json: unknown, registry?: Registry): boolean {
+    const value = this.selected(field, parent);
+    if (value === undefined) return false;
+    if (field.fieldKind === "message")
+      return this.restore(field.message, value as Message, json, registry);
+    if (field.fieldKind === "list" && field.listKind === "message" && Array.isArray(json))
+      return json
+        .map((item, index) => {
+          const nested = (value as Message[])[index];
+          return nested === undefined ? false : this.restore(field.message, nested, item, registry);
+        })
+        .some(Boolean);
+    if (
+      field.fieldKind === "map" &&
+      field.mapKind === "message" &&
+      typeof json === "object" &&
+      json !== null
+    )
+      return Object.entries(json)
+        .map(([key, item]) => {
+          const nested = (value as Record<string, Message>)[key];
+          return nested === undefined ? false : this.restore(field.message, nested, item, registry);
+        })
+        .some(Boolean);
+    return false;
+  },
+
+  /**
+   * Returns a field's decoded value, respecting oneof cases.
+   * @param field Field descriptor.
+   * @param parent Decoded parent message.
+   * @returns Selected value, if set.
+   */
+  selected(field: DescField, parent: Message): unknown {
+    const source = parent as Record<string, unknown>;
+    if (field.oneof === undefined) return source[field.localName];
+    const oneof = source[field.oneof.localName] as { case: string; value: unknown } | undefined;
+    return oneof?.case === field.localName ? oneof.value : undefined;
+  },
+});
 
 const FieldStringifiers = Object.freeze({
   /**
@@ -1493,11 +1650,7 @@ export const Stringifiers = {
         : isProtobufRegistry(types)
           ? types
           : createRegistry(...types.list().map((metadata) => metadata.descriptor));
-    const typeUrls =
-      types === undefined || isProtobufRegistry(types)
-        ? new Map<string, string>()
-        : new Map(types.list().map((metadata) => [metadata.schema.typeName, metadata.typeUrl]));
-    return defaultMessageStringifier(schema, registry, typeUrls);
+    return defaultMessageStringifier(schema, registry);
   },
 
   /**
@@ -1525,8 +1678,6 @@ export class StringifierRegistry {
 
   #types: Registry | undefined;
 
-  #typeUrls = new Map<string, string>();
-
   /**
    * Creates an empty registry or a snapshot of another registry.
    *
@@ -1538,7 +1689,6 @@ export class StringifierRegistry {
         this.#registered.set(typeName, stringifier);
       }
       this.#types = source.#types;
-      this.#typeUrls = new Map(source.#typeUrls);
     }
   }
 
@@ -1563,7 +1713,6 @@ export class StringifierRegistry {
   setTypeRegistry(types: TypeRegistryLookup): void {
     const metadata = types.list();
     this.#types = createRegistry(...metadata.map((item) => item.descriptor));
-    this.#typeUrls = new Map(metadata.map((item) => [item.schema.typeName, item.typeUrl]));
   }
 
   /**
@@ -1576,7 +1725,7 @@ export class StringifierRegistry {
     const registered = this.#registered.get(schema.typeName);
 
     return registered === undefined
-      ? defaultMessageStringifier(schema, this.#types, this.#typeUrls)
+      ? defaultMessageStringifier(schema, this.#types)
       : (registered as Stringifier<MessageShape<Schema>>);
   }
 
@@ -1753,25 +1902,21 @@ function packIdentifier(
   value: Message | string | number | bigint,
 ): Any {
   if (typeof type !== "string") {
-    return AnyMessages.pack(type, value as Message, { validate: false });
+    return AnyPacker.pack(type, value as Message);
   }
   switch (type) {
     case "string":
       if (typeof value !== "string") throw new TypeError("Identifier must be a string.");
-      return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }), {
-        validate: false,
-      });
+      return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value }));
     case "int32":
-      return AnyMessages.pack(
+      return AnyPacker.pack(
         Int32ValueSchema,
         create(Int32ValueSchema, { value: IdentifierValues.int32(value) }),
-        { validate: false },
       );
     case "int64":
-      return AnyMessages.pack(
+      return AnyPacker.pack(
         Int64ValueSchema,
         create(Int64ValueSchema, { value: IdentifierValues.int64(value) }),
-        { validate: false },
       );
   }
 }
@@ -1795,14 +1940,15 @@ function unpackIdentifier(
   type: MessageSchema | PrimitiveIdentifierType,
   value: Any,
 ): Message | string | number | bigint | undefined {
-  if (typeof type !== "string") return AnyMessages.unpack(value, type);
+  if (typeof type !== "string")
+    return type.typeName === AnySchema.typeName ? value : AnyPacker.tryUnpack(value, type);
   switch (type) {
     case "string":
-      return AnyMessages.unpack(value, StringValueSchema)?.value;
+      return AnyPacker.tryUnpack(value, StringValueSchema)?.value;
     case "int32":
-      return AnyMessages.unpack(value, Int32ValueSchema)?.value;
+      return AnyPacker.tryUnpack(value, Int32ValueSchema)?.value;
     case "int64":
-      return AnyMessages.unpack(value, Int64ValueSchema)?.value;
+      return AnyPacker.tryUnpack(value, Int64ValueSchema)?.value;
   }
 }
 
@@ -1825,6 +1971,24 @@ function freshSignalId(): string {
 }
 
 /**
+ * Keeps signal validation at the semantic envelope boundary.
+ */
+const SignalPacking = Object.freeze({
+  /**
+   * Validates and packs a domain signal.
+   * @typeParam Schema Generated signal schema.
+   * @param input Domain message and validation setting.
+   * @returns Packed signal message.
+   */
+  pack<Schema extends MessageSchema>(
+    input: PackCommandInput<Schema> | PackEventInput<Schema>,
+  ): Any {
+    if (input.validate !== false) Validate.check(input.schema, input.message);
+    return AnyPacker.pack(input.schema, input.message);
+  },
+});
+
+/**
  * Creates generated Spine command and event envelopes.
  */
 export const SignalEnvelopes = {
@@ -1839,7 +2003,7 @@ export const SignalEnvelopes = {
   command<Schema extends MessageSchema>(input: PackCommandInput<Schema>): Command {
     return create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: freshSignalId() }),
-      message: AnyMessages.pack(input.schema, input.message, input),
+      message: SignalPacking.pack(input),
       context: clone(CommandContextSchema, input.context),
     });
   },
@@ -1853,7 +2017,7 @@ export const SignalEnvelopes = {
   event<Schema extends MessageSchema>(input: PackEventInput<Schema>): Event {
     return create(EventSchema, {
       id: create(EventIdSchema, { value: freshSignalId() }),
-      message: AnyMessages.pack(input.schema, input.message, input),
+      message: SignalPacking.pack(input),
       context: clone(EventContextSchema, input.context),
     });
   },
@@ -1868,7 +2032,7 @@ export const SignalEnvelopes = {
       throw new TypeError("A Command origin requires a non-empty Command ID.");
     return create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: AnyMessages.pack(CommandIdSchema, command.id),
+        id: AnyPacker.pack(CommandIdSchema, command.id),
         typeUrl: command.message?.typeUrl ?? "",
       }),
       ...(command.context?.actorContext === undefined

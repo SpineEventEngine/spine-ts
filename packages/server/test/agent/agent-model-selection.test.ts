@@ -15,7 +15,7 @@
 import { clone, create } from "@bufbuild/protobuf";
 import { AiModel, AiRegistry, ModelRef, type AiScope } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
-import { AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -88,14 +88,14 @@ function supportScope() {
   const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-selection" });
   const command = create(CommandSchema, {
     id: { uuid: "selection-command" },
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       DraftSupportReplySchema,
       create(DraftSupportReplySchema, { agent: id, question: "Where is my order?" }),
     ),
   });
   return AgentModelSelection.scope(
     create(Records.AgentAcceptedInvocationSchema, {
-      recipientId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+      recipientId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
       actor: create(ActorContextSchema),
       signal: { case: "command", value: command },
     }),
@@ -277,7 +277,7 @@ describe("Agent model authorization scope", () => {
 
   it("bootstraps a no-default Agent from a detached accepted payload and snapshots the resolver ref", async () => {
     const { registry, preferred } = selectionRegistry(() => true, undefined, false);
-    const source = AnyMessages.pack(
+    const source = AnyPacker.pack(
       DraftSupportReplySchema,
       create(DraftSupportReplySchema, { question: "Choose account B" }),
     );
@@ -308,7 +308,7 @@ describe("Agent model authorization scope", () => {
     );
     expect(selected.model).toEqual(preferred);
     expect(received).not.toBe(source);
-    expect(AnyMessages.unpack(source, DraftSupportReplySchema)?.question).toBe("Choose account B");
+    expect(AnyPacker.tryUnpack(source, DraftSupportReplySchema)?.question).toBe("Choose account B");
   });
 
   it("keeps original accepted scope through resolver, selection and connection authorization", async () => {
@@ -373,7 +373,7 @@ describe("Agent model authorization scope", () => {
       new AbortController().signal,
       Time.currentTimeMillis() + 1000,
       "generation",
-      AnyMessages.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+      AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
     );
     expect(selected.model).toEqual(preferred);
     expect(facts(scope)).toEqual(acceptedFacts);
@@ -398,7 +398,7 @@ describe("Agent model authorization scope", () => {
         new AbortController().signal,
         Time.currentTimeMillis() + 1000,
         "generation",
-        AnyMessages.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
       ),
     ).rejects.toThrow("unauthorized");
     expect(authorizeSelection).toHaveBeenCalledOnce();
@@ -422,7 +422,7 @@ describe("Agent model authorization scope", () => {
         new AbortController().signal,
         Time.currentTimeMillis() + 1000,
         "generation",
-        AnyMessages.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
       ),
     ).rejects.toThrow();
     release?.(preferred);
@@ -445,7 +445,7 @@ describe("Agent model authorization scope", () => {
         controller.signal,
         Time.currentTimeMillis() + 1000,
         "generation",
-        AnyMessages.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
       ),
     ).rejects.toThrow("cancelled");
     expect(resolveModel).not.toHaveBeenCalled();
@@ -469,7 +469,7 @@ describe("Agent model authorization scope", () => {
       controller.signal,
       Time.currentTimeMillis() + 1000,
       "generation",
-      AnyMessages.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+      AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
     );
     expect(resolveModel).toHaveBeenCalledOnce();
     controller.abort();
@@ -490,7 +490,7 @@ describe("Agent model authorization scope", () => {
       new AbortController().signal,
       Time.currentTimeMillis() + 1000,
       "generation",
-      AnyMessages.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+      AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
     );
     expect(selected.model).toEqual(primary);
   });
@@ -513,7 +513,7 @@ describe("Agent model authorization scope", () => {
         new AbortController().signal,
         Time.currentTimeMillis() + 1000,
         "generation",
-        AnyMessages.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
       ),
     ).rejects.toThrow("allowed");
     expect(authorized).not.toHaveBeenCalled();
@@ -537,7 +537,7 @@ describe("Agent model authorization scope", () => {
         new AbortController().signal,
         Time.currentTimeMillis() + 1000,
         "generation",
-        AnyMessages.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
       ),
     ).rejects.toThrow("not registered");
     expect(authorized).not.toHaveBeenCalled();
@@ -572,7 +572,7 @@ describe("Agent model authorization scope", () => {
         control,
         deadline,
         "generation",
-        AnyMessages.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
       ),
     ).rejects.toThrow();
     expect(resolveIdentity).not.toHaveBeenCalled();
@@ -601,21 +601,21 @@ describe("Agent model authorization scope", () => {
   });
 
   it("identifies the actual handled Command and Event types", () => {
-    const recipientId = AnyMessages.pack(
+    const recipientId = AnyPacker.pack(
       ProjectIdSchema,
       create(ProjectIdSchema, { value: "project-1" }),
     );
     const actor = create(ActorContextSchema);
     const command = create(CommandSchema, {
       id: { uuid: "command-1" },
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         AssignReviewTaskSchema,
         create(AssignReviewTaskSchema, { id: "project-1" }),
       ),
     });
     const event = create(EventSchema, {
       id: { value: "event-1" },
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         ReviewTaskAssignedSchema,
         create(ReviewTaskAssignedSchema, { id: "project-1" }),
       ),

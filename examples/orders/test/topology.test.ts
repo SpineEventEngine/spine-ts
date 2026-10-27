@@ -16,7 +16,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
@@ -90,7 +90,7 @@ describe("datastore orders test app", () => {
         create(CommandSchema, {
           id: metadata.commandId(),
           context: metadata.commandContext({ actorContext }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             CreateOrderSchema,
             create(CreateOrderSchema, { id, skuId: "sku-1" }),
           ),
@@ -101,7 +101,7 @@ describe("datastore orders test app", () => {
         create(CommandSchema, {
           id: metadata.commandId(),
           context: metadata.commandContext({ actorContext }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             RegisterSkuSchema,
             create(RegisterSkuSchema, { id: "sku-1", displayName: "SKU one" }),
           ),
@@ -112,7 +112,8 @@ describe("datastore orders test app", () => {
       expect(
         response.message.some(
           (row) =>
-            row.state !== undefined && AnyMessages.unpack(row.state, OrderSummarySchema)?.id === id,
+            row.state !== undefined &&
+            AnyPacker.tryUnpack(row.state, OrderSummarySchema)?.id === id,
         ),
       ).toBe(true);
       const update = await nextUpdate;
@@ -124,7 +125,7 @@ describe("datastore orders test app", () => {
           update.value.update.value.update.some(
             (row) =>
               row.kind.case === "state" &&
-              AnyMessages.unpack(row.kind.value, OrderSummarySchema)?.id === id,
+              AnyPacker.tryUnpack(row.kind.value, OrderSummarySchema)?.id === id,
           ),
         ).toBe(true);
     } finally {
@@ -218,7 +219,7 @@ function target(id: string) {
       case: "filters",
       value: create(TargetFiltersSchema, {
         idFilter: {
-          id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
+          id: [AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
         },
       }),
     },

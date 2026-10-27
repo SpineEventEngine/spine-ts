@@ -454,7 +454,7 @@ describe("@spine-event-engine/server", () => {
     expect(metadata.idField.number).toBe(1);
     expect(metadata.firstFieldRoutingHint.strategy).toBe("first-field");
     expect(metadata.firstFieldRoutingHint.field.name).toBe("id");
-    expect(metadata.columns.map((field) => field.name)).toEqual(["name", "priority"]);
+    expect(metadata.columns.map((field) => field.name)).toEqual(["name", "priority", "attachment"]);
     expect(metadata.setOnceFields.map((field) => field.name)).toEqual(["id"]);
     expect(metadata).not.toHaveProperty("semanticTags");
   });

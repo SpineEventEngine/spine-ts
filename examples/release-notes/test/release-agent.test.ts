@@ -20,7 +20,7 @@ import { join, resolve } from "node:path";
 import { create } from "@bufbuild/protobuf";
 import { AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   AiOutcome,
   ConversationIdSchema,
@@ -347,7 +347,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
           const events = box.assertEvents();
           const requested = events.find(
             (event) =>
-              event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema),
+              event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema),
           );
           if (requested?.id) {
             lastPhase =
@@ -357,10 +357,10 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
             { kind: "staged"; staged: ReleaseNotesStaged } | { kind: "failed"; reason: string }
           >((event) => {
             const staged =
-              event.message && AnyMessages.unpack(event.message, ReleaseNotesStagedSchema);
+              event.message && AnyPacker.tryUnpack(event.message, ReleaseNotesStagedSchema);
             if (staged) return [{ kind: "staged" as const, staged }];
             const failed =
-              event.message && AnyMessages.unpack(event.message, ReleaseGenerationFailedSchema);
+              event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationFailedSchema);
             return failed ? [{ kind: "failed" as const, reason: failed.reason }] : [];
           });
         },
@@ -381,7 +381,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
       throw new Error(`Generation failed with safe reason ${result[0].reason}.`);
     if (result[0]?.kind !== "staged") throw new Error("Generation did not stage.");
     const proposal = box.assertEvents().flatMap((event) => {
-      const value = event.message && AnyMessages.unpack(event.message, ReleaseNotesProposedSchema);
+      const value = event.message && AnyPacker.tryUnpack(event.message, ReleaseNotesProposedSchema);
       return value ? [value] : [];
     });
     expect(proposal[0]?.document?.sections[0]?.entries[0]?.netEvidence[0]?.path).toBe("notes.txt");
@@ -394,7 +394,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
       .assertEvents()
       .find(
         (event) =>
-          event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema),
+          event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema),
       );
     if (!requested?.id) throw new Error("Accepted generation Event was not recorded.");
     const registeredAgent = context.getRepository(ReleaseNotesAgent);
@@ -407,7 +407,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
     expect(registeredHistory.items).toEqual(history.items);
     const outcomes = history.items.flatMap((entry) => {
       if (entry.item.case !== "conversationRecord" || !entry.item.value.content) return [];
-      const response = AnyMessages.unpack(entry.item.value.content, GenerationResponseSchema);
+      const response = AnyPacker.tryUnpack(entry.item.value.content, GenerationResponseSchema);
       return response ? [response.outcome] : [];
     });
     expect(outcomes).toEqual([
@@ -423,7 +423,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
         box.assertEvents().flatMap((event) => {
           const value =
             event.message &&
-            AnyMessages.unpack(event.message, ReleaseGenerationAlreadyRequestedSchema);
+            AnyPacker.tryUnpack(event.message, ReleaseGenerationAlreadyRequestedSchema);
           return value ? [value] : [];
         }),
       (events) => events.length === 1,
@@ -458,7 +458,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
       () =>
         box.assertEvents().flatMap((event) => {
           const value =
-            event.message && AnyMessages.unpack(event.message, ReleaseGenerationFailedSchema);
+            event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationFailedSchema);
           return value ? [value] : [];
         }),
       (events) => events.length === 1,

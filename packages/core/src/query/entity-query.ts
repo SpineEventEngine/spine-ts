@@ -13,6 +13,7 @@
  */
 
 import { Time } from "../time/index.js";
+import { AnyPacker } from "../index.js";
 import {
   clone,
   create,
@@ -27,7 +28,6 @@ import {
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import {
   BoolValueSchema,
-  AnySchema,
   BytesValueSchema,
   DoubleValueSchema,
   FloatValueSchema,
@@ -1414,7 +1414,7 @@ const EntityQueryWire = Object.freeze({
   },
 
   /**
-   * Serializes a message value into a wire Any without unknown fields.
+   * Serializes a message value into a wire Any, preserving unknown fields.
    *
    * @typeParam Schema Generated schema of the message value.
    * @param schema Schema used to serialize the value.
@@ -1422,9 +1422,6 @@ const EntityQueryWire = Object.freeze({
    * @returns Any message containing the type URL and binary value.
    */
   packMessage<Schema extends GenMessage<Message>>(schema: Schema, value: MessageShape<Schema>) {
-    return create(AnySchema, {
-      typeUrl: EntityQueryWire.typeUrl(schema),
-      value: toBinary(schema, value, { writeUnknownFields: false }),
-    });
+    return AnyPacker.pack(schema, value);
   },
 });

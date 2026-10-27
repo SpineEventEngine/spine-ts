@@ -18,7 +18,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { create } from "@bufbuild/protobuf";
 import { AiRegistry, Mcp, ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   AiOutcome,
   AiFailureCode,
@@ -569,7 +569,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
             const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
             return page.items.flatMap((entry) => {
               if (entry.item.case !== "systemEvent" || !entry.item.value.message) return [];
-              const event = AnyMessages.unpack(
+              const event = AnyPacker.tryUnpack(
                 entry.item.value.message,
                 AgentAiOperationFailedSchema,
               );
@@ -628,7 +628,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
       const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
       const responses = page.items.flatMap((entry) => {
         if (entry.item.case !== "conversationRecord" || !entry.item.value.content) return [];
-        const value = AnyMessages.unpack(entry.item.value.content, GenerationResponseSchema);
+        const value = AnyPacker.tryUnpack(entry.item.value.content, GenerationResponseSchema);
         return value ? [value] : [];
       });
       expect(responses.map((response) => response.outcome)).toEqual([
@@ -711,7 +711,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
       );
       const published = events[0]?.message;
       if (!published) throw new Error("Expected drafted reply event");
-      expect(AnyMessages.unpack(published, SupportReplyDraftedSchema)?.reply).toBe(
+      expect(AnyPacker.tryUnpack(published, SupportReplyDraftedSchema)?.reply).toBe(
         "Ticket found; we can help.",
       );
       expect(endpoint.providerBodies).toHaveLength(3);
@@ -726,7 +726,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
           : [],
       );
       const responses = content.flatMap((item) => {
-        const response = AnyMessages.unpack(item, GenerationResponseSchema);
+        const response = AnyPacker.tryUnpack(item, GenerationResponseSchema);
         return response ? [response] : [];
       });
       expect(responses.map((response) => response.outcome)).toEqual([
@@ -735,7 +735,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
         AiOutcome.TOOL_REQUESTED,
       ]);
       expect(
-        content.flatMap((item) => AnyMessages.unpack(item, ToolResponseSchema) ?? []),
+        content.flatMap((item) => AnyPacker.tryUnpack(item, ToolResponseSchema) ?? []),
       ).toMatchObject([{ outcome: AiOutcome.ADMITTED, text: ["Ticket found"] }]);
     } finally {
       await box.close();
@@ -766,14 +766,14 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
             if (entry.item.case !== "conversationRecord") return false;
             return (
               entry.item.value.content !== undefined &&
-              AnyMessages.unpack(entry.item.value.content, ToolResponseSchema) !== undefined
+              AnyPacker.tryUnpack(entry.item.value.content, ToolResponseSchema) !== undefined
             );
           }),
       );
       const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
       const toolResponses = page.items.flatMap((entry) => {
         if (entry.item.case !== "conversationRecord" || !entry.item.value.content) return [];
-        const response = AnyMessages.unpack(entry.item.value.content, ToolResponseSchema);
+        const response = AnyPacker.tryUnpack(entry.item.value.content, ToolResponseSchema);
         return response ? [response] : [];
       });
       expect(toolResponses).toHaveLength(1);
@@ -869,7 +869,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
       );
       const published = events[0]?.message;
       if (!published) throw new Error("Expected drafted reply event");
-      expect(AnyMessages.unpack(published, SupportReplyDraftedSchema)?.reply).toBe(
+      expect(AnyPacker.tryUnpack(published, SupportReplyDraftedSchema)?.reply).toBe(
         "Ticket found; we can help.",
       );
       expect(endpoint.providerBodies).toHaveLength(3);
@@ -884,14 +884,14 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
           : [],
       );
       const requests = content.flatMap((item) => {
-        const value = AnyMessages.unpack(item, GenerationRequestSchema);
+        const value = AnyPacker.tryUnpack(item, GenerationRequestSchema);
         return value ? [value] : [];
       });
       expect(requests).toHaveLength(3);
       expect(requests[0]?.corrects?.value).toBeTruthy();
       expect(requests[2]?.corrects).toBeUndefined();
       const responses = content.flatMap((item) => {
-        const value = AnyMessages.unpack(item, GenerationResponseSchema);
+        const value = AnyPacker.tryUnpack(item, GenerationResponseSchema);
         return value ? [value] : [];
       });
       expect(endpoint.methods.filter((method) => method === "tools/call")).toHaveLength(1);
@@ -901,10 +901,10 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
         AiOutcome.TOOL_REQUESTED,
       ]);
       expect(
-        content.flatMap((item) => AnyMessages.unpack(item, ToolRequestSchema) ?? []),
+        content.flatMap((item) => AnyPacker.tryUnpack(item, ToolRequestSchema) ?? []),
       ).toHaveLength(1);
       expect(
-        content.flatMap((item) => AnyMessages.unpack(item, ToolResponseSchema) ?? []),
+        content.flatMap((item) => AnyPacker.tryUnpack(item, ToolResponseSchema) ?? []),
       ).toMatchObject([{ outcome: AiOutcome.ADMITTED, text: ["Ticket found"] }]);
     } finally {
       await box.close();

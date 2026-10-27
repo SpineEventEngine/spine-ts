@@ -14,7 +14,7 @@
 
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandIdSchema,
@@ -46,7 +46,7 @@ import {
 
 const instant = create(TimestampSchema, { seconds: 1_800_000_000n, nanos: 123_000_000 });
 const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
-const recipient = AnyMessages.pack(SupportReplyAgentIdSchema, id);
+const recipient = AnyPacker.pack(SupportReplyAgentIdSchema, id);
 const actor = create(ActorContextSchema, {
   actor: create(UserIdSchema, { value: "support-user" }),
   tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-1" } }),
@@ -132,9 +132,9 @@ describe("Agent interaction event facts", () => {
     );
     expect(ref.agent?.typeUrl).toBe(TypeUrls.derive(SupportReplyAgentStateSchema));
     if (!ref.agent?.id || !ref.sourceSignal?.id) throw new Error("Expected typed references");
-    expect(AnyMessages.unpack(ref.agent.id, SupportReplyAgentIdSchema)).toEqual(id);
+    expect(AnyPacker.tryUnpack(ref.agent.id, SupportReplyAgentIdSchema)).toEqual(id);
     expect(ref.sourceSignal.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
-    expect(AnyMessages.unpack(ref.sourceSignal.id, CommandIdSchema)).toEqual(command.id);
+    expect(AnyPacker.tryUnpack(ref.sourceSignal.id, CommandIdSchema)).toEqual(command.id);
     expect(ref.operation?.value).toBe("operation-1");
     expect(ref.conversation?.value).toBe("conversation-1");
     expect(ref.model).toEqual(selected.model);
@@ -156,7 +156,7 @@ describe("Agent interaction event facts", () => {
       );
       expect(ref.sourceSignal?.typeUrl).toBe(TypeUrls.derive(schema));
       if (!ref.sourceSignal?.id) throw new Error("Expected typed source ID");
-      expect(AnyMessages.unpack(ref.sourceSignal.id, EventIdSchema)).toEqual(source.id);
+      expect(AnyPacker.tryUnpack(ref.sourceSignal.id, EventIdSchema)).toEqual(source.id);
     },
   );
 
@@ -189,7 +189,7 @@ describe("Agent interaction event facts", () => {
     );
     expect(event.id?.value).toMatch(/^[0-9a-f-]{36}$/i);
     if (!event.message) throw new Error("Expected typed System-event payload");
-    expect(AnyMessages.unpack(event.message, AgentModelSelectionChangedSchema)).toEqual(payload);
+    expect(AnyPacker.tryUnpack(event.message, AgentModelSelectionChangedSchema)).toEqual(payload);
     expect(event.context?.producerId).toEqual(recipient);
     expect(event.context?.timestamp).toEqual(instant);
     expect(event.context?.origin.case).toBe("pastMessage");
@@ -299,7 +299,7 @@ describe("Agent interaction event facts", () => {
   it("rejects a changed producer and missing accepted signal before event construction", () => {
     const accepted = acceptedFor({ kind: "command", value: command });
     const payload = create(AgentModelSelectionChangedSchema);
-    const otherAgent = AnyMessages.pack(
+    const otherAgent = AnyPacker.pack(
       SupportReplyAgentIdSchema,
       create(SupportReplyAgentIdSchema, { ticketNumber: "T-48" }),
     );

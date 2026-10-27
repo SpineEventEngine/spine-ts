@@ -216,8 +216,9 @@ rejected-command payload forms and throwable stack from
 best-effort: a publication failure is logged and does not change the client
 `Ack` or promise a retry.
 Core envelope construction exports include
-`AnyMessages.pack()`, `AnyMessages.unpack()`,
-`SignalEnvelopes.command()`, `SignalEnvelopes.event()`, `PackAnyOptions`, `PackCommandInput`, and
+`AnyPacker.pack()`, `AnyPacker.unpack()`, `AnyPacker.tryUnpack()`,
+`AnyPacker.unpackUsing()`, `AnyPacker.tryUnpackUsing()`,
+`SignalEnvelopes.command()`, `SignalEnvelopes.event()`, `SignalValidationOptions`, `PackCommandInput`, and
 `PackEventInput`.
 
 Server exports include `BoundedContext`, `BoundedContextBuilder`,

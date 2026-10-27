@@ -26,7 +26,7 @@ import {
 import { UserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
 import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { ClientRequest, Subscription } from "@spine-event-engine/client-web";
 import { Send } from "lucide-react";
 import {
@@ -324,7 +324,7 @@ class PostAttempt {
     const posted =
       event.message === undefined
         ? undefined
-        : AnyMessages.unpack(event.message, MessagePostedSchema);
+        : AnyPacker.tryUnpack(event.message, MessagePostedSchema);
     if (posted?.id?.value === this.command.id?.value) {
       this.state.pendingPost.current = undefined;
       this.state.setText("");
@@ -336,7 +336,7 @@ class PostAttempt {
     const duplicate =
       event.message === undefined
         ? undefined
-        : AnyMessages.unpack(event.message, MessageAlreadyPostedSchema);
+        : AnyPacker.tryUnpack(event.message, MessageAlreadyPostedSchema);
     if (duplicate?.id?.value !== this.command.id?.value) return false;
     this.state.pendingPost.current = undefined;
     this.state.setFeedback({ fields: {}, general: "This message was already posted." });

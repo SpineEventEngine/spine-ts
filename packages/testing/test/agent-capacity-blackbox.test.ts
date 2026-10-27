@@ -16,7 +16,7 @@ import { create, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { backendDefinition, createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
-import { AnyMessages, Time } from "@spine-event-engine/core";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import { AiModelKind, ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import {
   Agent,
@@ -115,7 +115,7 @@ class CapacityStorage extends InMemoryStorageFactory {
       const record = await admit(accepted);
       const key = accepted.key;
       const id = accepted.recipientId
-        ? AnyMessages.unpack(accepted.recipientId, SupportReplyAgentIdSchema)
+        ? AnyPacker.tryUnpack(accepted.recipientId, SupportReplyAgentIdSchema)
         : undefined;
       if (key) this.accepted.push(() => storage.read(key));
       if (key && id) this.reads.set(id.ticketNumber, () => storage.read(key));
@@ -516,7 +516,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
       expect(
         events.map((event) =>
           event.message
-            ? AnyMessages.unpack(event.message, SupportReplyProposedSchema)?.reply
+            ? AnyPacker.tryUnpack(event.message, SupportReplyProposedSchema)?.reply
             : undefined,
         ),
       ).toEqual(["Original reply", "Alternate reply"]);

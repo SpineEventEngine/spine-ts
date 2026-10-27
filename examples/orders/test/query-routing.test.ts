@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { BoundedContext, SignalMetadata } from "@spine-event-engine/server";
 import { InMemoryStorageBackend, InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -50,19 +50,19 @@ describe("Orders query routing example", () => {
     };
     try {
       await post(
-        AnyMessages.pack(
+        AnyPacker.pack(
           CreateOrderSchema,
           create(CreateOrderSchema, { id: "order-a", skuId: "sku-1" }),
         ),
       );
       await post(
-        AnyMessages.pack(
+        AnyPacker.pack(
           CreateOrderSchema,
           create(CreateOrderSchema, { id: "order-b", skuId: "sku-1" }),
         ),
       );
       await post(
-        AnyMessages.pack(
+        AnyPacker.pack(
           CreateOrderSchema,
           create(CreateOrderSchema, { id: "order-c", skuId: "sku-2" }),
         ),
@@ -71,7 +71,7 @@ describe("Orders query routing example", () => {
         expect(await context.stand().readAllVersioned(OrderCardSchema)).toHaveLength(3);
       });
       await post(
-        AnyMessages.pack(
+        AnyPacker.pack(
           RegisterSkuSchema,
           create(RegisterSkuSchema, {
             id: "sku-1",
@@ -92,7 +92,7 @@ describe("Orders query routing example", () => {
         (left, right) => left.state.id.localeCompare(right.state.id),
       );
       await post(
-        AnyMessages.pack(
+        AnyPacker.pack(
           RegisterSkuSchema,
           create(RegisterSkuSchema, {
             id: "sku-1",
@@ -101,7 +101,7 @@ describe("Orders query routing example", () => {
         ),
       );
       await post(
-        AnyMessages.pack(
+        AnyPacker.pack(
           RegisterSkuSchema,
           create(RegisterSkuSchema, {
             id: "sku-missing",

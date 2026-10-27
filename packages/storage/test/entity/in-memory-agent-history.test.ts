@@ -36,7 +36,7 @@ import {
   type AgentHistoryEntry,
 } from "@spine-event-engine/proto/agent";
 import { describe, expect, it } from "vitest";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   SupportTicketFactsSchema,
   SupportTicketNumberSchema,
@@ -67,7 +67,7 @@ const scope: AgentHistoryStorageInput<string> = {
 };
 
 function packed<T extends Message>(schema: GenMessage<T>, message: T) {
-  return AnyMessages.pack(schema, message);
+  return AnyPacker.pack(schema, message);
 }
 
 function occurredAt(seconds: bigint, nanos = 0): Timestamp {
@@ -196,15 +196,15 @@ describe("in-memory Agent history", () => {
         throw new Error("Expected retrieved request and response.");
       if (request.item.value.content === undefined || result.item.value.content === undefined)
         throw new Error("Expected packed request and response.");
-      const generation = AnyMessages.unpack(request.item.value.content, GenerationRequestSchema);
-      const response = AnyMessages.unpack(result.item.value.content, GenerationResponseSchema);
+      const generation = AnyPacker.tryUnpack(request.item.value.content, GenerationRequestSchema);
+      const response = AnyPacker.tryUnpack(result.item.value.content, GenerationResponseSchema);
       if (generation?.input === undefined || response?.admittedOutput === undefined)
         throw new Error("Expected admitted AI request and response payloads.");
-      expect(AnyMessages.unpack(generation.input, SupportTicketFactsSchema)?.customerQuestion).toBe(
-        "Delivery?",
-      );
       expect(
-        AnyMessages.unpack(response.admittedOutput, ProposedSupportReplySchema)?.replyText,
+        AnyPacker.tryUnpack(generation.input, SupportTicketFactsSchema)?.customerQuestion,
+      ).toBe("Delivery?");
+      expect(
+        AnyPacker.tryUnpack(response.admittedOutput, ProposedSupportReplySchema)?.replyText,
       ).toBe("Review this reply.");
     } finally {
       storage.close();

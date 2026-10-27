@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -132,14 +132,11 @@ async function measure(count: number, label: string): Promise<number> {
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: "queue-created" }),
     context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(
-        StringValueSchema,
-        create(StringValueSchema, { value: "source" }),
-      ),
+      producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "source" })),
       timestamp: create(TimestampSchema, { seconds: 1n }),
       version: create(VersionSchema, { number: 1 }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ProjectCreatedSchema,
       create(ProjectCreatedSchema, {
         id: "source",

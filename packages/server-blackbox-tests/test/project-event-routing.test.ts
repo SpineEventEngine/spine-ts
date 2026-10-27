@@ -15,12 +15,7 @@
 import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { Any } from "@bufbuild/protobuf/wkt";
-import {
-  AnyMessages,
-  RejectionThrowable,
-  SignalEnvelopes,
-  TypeUrls,
-} from "@spine-event-engine/core";
+import { AnyPacker, RejectionThrowable, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { CommandContextSchema, type CommandContext, type Event } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
@@ -294,7 +289,7 @@ function query<Id extends Message>(schema: GenMessage<Message>, idSchema: GenMes
       type: TypeUrls.derive(schema),
       criterion: {
         case: "filters",
-        value: create(TargetFiltersSchema, { idFilter: { id: [AnyMessages.pack(idSchema, id)] } }),
+        value: create(TargetFiltersSchema, { idFilter: { id: [AnyPacker.pack(idSchema, id)] } }),
       },
     }),
   });
@@ -310,7 +305,7 @@ function queryState<Schema extends GenMessage<Message>>(
   }
   const state = response.message[0]?.state;
   if (state === undefined) throw new Error("Query response state is missing.");
-  const unpacked = AnyMessages.unpack(state, schema);
+  const unpacked = AnyPacker.tryUnpack(state, schema);
   if (unpacked === undefined)
     throw new Error(`Query response does not contain ${schema.typeName}.`);
   return unpacked;
@@ -660,7 +655,7 @@ describe("project workflow Event routing", () => {
         (events) => events.length === 2,
       );
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(producedEvents[0], "ProjectCreated"),
           ProjectCreatedSchema,
         ),
@@ -669,7 +664,7 @@ describe("project workflow Event routing", () => {
         name: "roadmap",
       });
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(producedEvents[1], "ProjectScheduled"),
           ProjectScheduledSchema,
         ),
@@ -684,13 +679,13 @@ describe("project workflow Event routing", () => {
         (commands) => commands.length === 2,
       );
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(producedCommands[0], "scheduled ScheduleProject"),
           ScheduleProjectSchema,
         ),
       ).toEqual(create(ScheduleProjectSchema, { project, status: "scheduled" }));
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(producedCommands[1], "approved ScheduleProject"),
           ScheduleProjectSchema,
         ),
@@ -710,7 +705,7 @@ describe("project workflow Event routing", () => {
           return (
             candidate.every((response) => response.message.length === 1) &&
             state !== undefined &&
-            AnyMessages.unpack(state, ProjectStateSchema)?.status === "approved"
+            AnyPacker.tryUnpack(state, ProjectStateSchema)?.status === "approved"
           );
         },
       );
@@ -760,10 +755,10 @@ describe("project workflow Event routing", () => {
         (candidate) => candidate.length >= 3,
       );
       expect(
-        AnyMessages.unpack(producedMessage(events[0], "ProjectCreated"), ProjectCreatedSchema),
+        AnyPacker.tryUnpack(producedMessage(events[0], "ProjectCreated"), ProjectCreatedSchema),
       ).toMatchObject({ project, name: "reactor-output" });
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(events[1], "reacted ProjectScheduled"),
           ProjectScheduledSchema,
         ),
@@ -772,7 +767,7 @@ describe("project workflow Event routing", () => {
         events.filter(
           (event) =>
             event.message !== undefined &&
-            AnyMessages.unpack(event.message, ProjectScheduledSchema)?.status === "reacted",
+            AnyPacker.tryUnpack(event.message, ProjectScheduledSchema)?.status === "reacted",
         ),
       ).toHaveLength(1);
     } finally {
@@ -811,7 +806,7 @@ describe("project workflow Event routing", () => {
       expect(rejection.message, "ProjectSchedulingRejected payload is required.").toBeDefined();
       if (rejection.message === undefined)
         throw new Error("ProjectSchedulingRejected payload is required.");
-      expect(AnyMessages.unpack(rejection.message, ProjectSchedulingRejectedSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(rejection.message, ProjectSchedulingRejectedSchema)).toEqual(
         create(ProjectSchedulingRejectedSchema, { project }),
       );
       expect(blackBox.assertEvents()).toEqual(eventsBeforeRejection);

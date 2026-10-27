@@ -14,7 +14,7 @@
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandIdSchema,
@@ -44,7 +44,7 @@ describe("Event origin filters", () => {
   it("matches the complete immediately preceding Origin", () => {
     const expected = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-1" })),
+        id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-1" })),
         typeUrl: TypeUrls.derive(CreateProjectSchema),
       }),
       actorContext: create(ActorContextSchema, {
@@ -61,7 +61,7 @@ describe("Event origin filters", () => {
             create(FilterSchema, {
               fieldPath: { fieldName: ["context", "past_message"] },
               operator: Filter_Operator.EQUAL,
-              value: AnyMessages.pack(OriginSchema, expected),
+              value: AnyPacker.pack(OriginSchema, expected),
             }),
           ],
         }),
@@ -72,7 +72,7 @@ describe("Event origin filters", () => {
       matches(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "event-1" }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             ProjectCreatedSchema,
             create(ProjectCreatedSchema, {
               id: "project-1",
@@ -88,7 +88,7 @@ describe("Event origin filters", () => {
       matches(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "event-2" }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             ProjectCreatedSchema,
             create(ProjectCreatedSchema, {
               id: "project-1",
@@ -117,7 +117,7 @@ describe("Event origin filters", () => {
   it("rejects malformed and unsupported expected origins while leaving opaque Any bytes intact", () => {
     const origin = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-2" })),
+        id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-2" })),
         typeUrl: TypeUrls.derive(CreateProjectSchema),
       }),
     });
@@ -151,7 +151,7 @@ describe("Event origin filters", () => {
     const event = (actual: typeof origin) =>
       create(EventSchema, {
         id: create(EventIdSchema, { value: "event-3" }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectCreatedSchema,
           create(ProjectCreatedSchema, {
             id: "project-2",
@@ -168,7 +168,7 @@ describe("Event origin filters", () => {
   it("matches grandOrigin through nested ALL/EITHER and rejects unsupported filter shapes", () => {
     const prior = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
+        id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
         typeUrl: TypeUrls.derive(CreateProjectSchema),
       }),
       actorContext: create(ActorContextSchema, {
@@ -187,7 +187,7 @@ describe("Event origin filters", () => {
       actorContext: expected.actorContext,
       grandOrigin: create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "other-grand" })),
+          id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "other-grand" })),
           typeUrl: TypeUrls.derive(CreateProjectSchema),
         }),
         actorContext: prior.actorContext,
@@ -196,7 +196,7 @@ describe("Event origin filters", () => {
     const criterion = create(FilterSchema, {
       fieldPath: { fieldName: ["context", "past_message"] },
       operator: Filter_Operator.EQUAL,
-      value: AnyMessages.pack(OriginSchema, expected),
+      value: AnyPacker.pack(OriginSchema, expected),
     });
     const nested = create(TargetFiltersSchema, {
       filter: [
@@ -310,7 +310,7 @@ function singleOriginCriterion(filter: Filter) {
 function projectEventWithOrigin(origin: Origin) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: "grand-origin-event" }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ProjectCreatedSchema,
       create(ProjectCreatedSchema, {
         id: "project-grand",

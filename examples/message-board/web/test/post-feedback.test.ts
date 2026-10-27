@@ -20,7 +20,7 @@ import {
   TemplateStringSchema,
   ValidationErrorSchema,
 } from "@spine-event-engine/proto";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
 import { PostFeedback } from "../src/post-feedback.js";
@@ -43,7 +43,7 @@ describe("PostFeedback", () => {
       kind: "error" as const,
       error: create(ErrorSchema, {
         type: "COMMAND_VALIDATION_ERROR",
-        details: AnyMessages.pack(ValidationErrorSchema, details),
+        details: AnyPacker.pack(ValidationErrorSchema, details),
       }),
     };
 
@@ -80,7 +80,7 @@ describe("PostFeedback", () => {
       PostFeedback.from({
         kind: "error",
         error: create(ErrorSchema, {
-          details: AnyMessages.pack(ValidationErrorSchema, details),
+          details: AnyPacker.pack(ValidationErrorSchema, details),
         }),
       }),
     ).toEqual({ fields: { username: "Use Ada; ${unknown} is unavailable." } });
@@ -97,7 +97,7 @@ describe("PostFeedback", () => {
       PostFeedback.from({
         kind: "error",
         error: create(ErrorSchema, {
-          details: AnyMessages.pack(ErrorSchema, create(ErrorSchema)),
+          details: AnyPacker.pack(ErrorSchema, create(ErrorSchema)),
         }),
       }),
     ).toEqual(general);
@@ -126,7 +126,7 @@ describe("PostFeedback", () => {
       PostFeedback.from({
         kind: "error",
         error: create(ErrorSchema, {
-          details: AnyMessages.pack(ValidationErrorSchema, details),
+          details: AnyPacker.pack(ValidationErrorSchema, details),
         }),
       }),
     ).toEqual({

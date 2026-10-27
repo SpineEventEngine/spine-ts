@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { AiModel, AiRegistry } from "@spine-event-engine/ai";
-import { AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
 import { ActorContextSchema, CommandContextSchema } from "@spine-event-engine/proto";
 import { AgentHandlerKind } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
@@ -52,7 +52,7 @@ describe("Agent durable admission", () => {
       message: create(DraftSupportReplySchema, { agent: id, question: "Where is my order?" }),
       context: create(CommandContextSchema),
     });
-    const recipientId = AnyMessages.pack(SupportReplyAgentIdSchema, id);
+    const recipientId = AnyPacker.pack(SupportReplyAgentIdSchema, id);
     const actor = create(ActorContextSchema);
     const inbox = createMessage("inbox-1", command.id?.uuid ?? "", 4_294_967_296n);
     const handlers = new HandlerMetadataRegistry([
@@ -107,7 +107,7 @@ describe("Agent durable admission", () => {
       AgentAdmission.create({
         stateType: SupportReplyAgentStateSchema.typeName,
         agentKey: id.ticketNumber,
-        recipientId: AnyMessages.pack(SupportReplyAgentIdSchema, id),
+        recipientId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
         signal: { kind: "command", value: command },
         actor: create(ActorContextSchema),
         inbox: createMessage("inbox-2", command.id?.uuid ?? "", 1n),

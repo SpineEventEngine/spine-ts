@@ -12,7 +12,8 @@
  * the License.
  */
 
-import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Any } from "@bufbuild/protobuf/wkt";
@@ -999,12 +1000,12 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
    */
   private unpackState(record: EntityRecord): S {
     const state = record.state;
-    if (!state?.typeUrl.endsWith(`/${this.#stateSchema.typeName}`)) {
+    if (state === undefined) {
       throw new Error(
         "State-history record state does not match the configured Entity state schema.",
       );
     }
-    return Object.freeze(fromBinary(this.#stateSchema, state.value));
+    return Object.freeze(AnyPacker.unpack(state, this.#stateSchema));
   }
 
   /**

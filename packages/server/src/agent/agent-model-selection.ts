@@ -14,7 +14,7 @@
 
 import { clone, create } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Time, TypeUrls, Validate } from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls, Validate } from "@spine-event-engine/core";
 import type { MessageSchema } from "@spine-event-engine/core";
 import {
   ModelRef as ModelRefFactory,
@@ -293,10 +293,10 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       signal.case === "command"
         ? signal.value.id === undefined
           ? undefined
-          : AnyMessages.pack(CommandIdSchema, signal.value.id)
+          : AnyPacker.pack(CommandIdSchema, signal.value.id)
         : signal.value.id === undefined
           ? undefined
-          : AnyMessages.pack(EventIdSchema, signal.value.id);
+          : AnyPacker.pack(EventIdSchema, signal.value.id);
     if (sourceId === undefined) throw new Error("Agent selection requires the source ID.");
     const payloadType = signal.value.message?.typeUrl;
     if (payloadType === undefined || payloadType.trim().length === 0)

@@ -20,7 +20,7 @@ import { setTimeout } from "node:timers";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { create, equals, toBinary } from "@bufbuild/protobuf";
-import { AnyMessages, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
   ActorContextSchema,
@@ -190,7 +190,7 @@ async function post(request) {
         actor: create(UserIdSchema, { value: "matrix-actor" }),
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateProjectSchema,
       create(CreateProjectSchema, { project: ids.project, name: `roadmap-${ids.project.number}` }),
     ),
@@ -253,7 +253,7 @@ async function inspect(request) {
   return {
     projects,
     events: created.map((event) => {
-      const payload = AnyMessages.unpack(event.message, ProjectCreatedSchema);
+      const payload = AnyPacker.tryUnpack(event.message, ProjectCreatedSchema);
       const binary = toBinary(EventSchema, event);
       return {
         id: event.id?.value,

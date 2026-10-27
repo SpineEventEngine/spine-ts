@@ -15,7 +15,12 @@
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import { createHash } from "node:crypto";
-import { AnyMessages, RejectionThrowable, type MessageSchema } from "@spine-event-engine/core";
+import {
+  AnyPacker,
+  RejectionThrowable,
+  Validate,
+  type MessageSchema,
+} from "@spine-event-engine/core";
 import {
   CommandContextSchema,
   CommandSchema,
@@ -152,10 +157,10 @@ export class StandaloneHandlerRuntime {
         const changed =
           event.message === undefined
             ? undefined
-            : AnyMessages.unpack(event.message, EntityLog.EntityStateChangedSchema);
+            : AnyPacker.tryUnpack(event.message, EntityLog.EntityStateChangedSchema);
         if (changed?.newState === undefined) return;
         for (const binding of bindings) {
-          const state = AnyMessages.unpack(changed.newState, binding.handler.input.schema);
+          const state = AnyPacker.tryUnpack(changed.newState, binding.handler.input.schema);
           if (state !== undefined) {
             const output = await binding.invoke(
               state,
@@ -179,7 +184,7 @@ export class StandaloneHandlerRuntime {
     if (command.message === undefined)
       throw new Error("Standalone command handler requires a message.");
     for (const binding of bindings) {
-      const message = AnyMessages.unpack(command.message, binding.handler.input.schema);
+      const message = AnyPacker.tryUnpack(command.message, binding.handler.input.schema);
       if (message === undefined) continue;
       let output: unknown;
       try {
@@ -209,7 +214,7 @@ export class StandaloneHandlerRuntime {
     const packed = event.message;
     if (packed === undefined) throw new Error("Standalone event handler requires a message.");
     for (const selected of this.#selectedEventBindings(event, bindings)) {
-      const message = AnyMessages.unpack(packed, selected.handler.input.schema);
+      const message = AnyPacker.tryUnpack(packed, selected.handler.input.schema);
       if (message === undefined) throw new Error("Selected standalone Event schema changed.");
       const output = await selected.invoke(message, StandaloneHandlerRuntime.eventContext(event));
       await this.#publish(selected, output, event);
@@ -233,7 +238,7 @@ export class StandaloneHandlerRuntime {
           ) === key,
       );
       if (binding === undefined) continue;
-      const message = AnyMessages.unpack(event.message, binding.handler.input.schema);
+      const message = AnyPacker.tryUnpack(event.message, binding.handler.input.schema);
       if (message === undefined) continue;
       selected.push(...filter.select(message));
     }
@@ -247,7 +252,7 @@ export class StandaloneHandlerRuntime {
     const packed = command.message;
     if (packed === undefined) throw new Error("Saved standalone Command needs a message.");
     const selected = bindings.filter(
-      ({ handler }) => AnyMessages.unpack(packed, handler.input.schema) !== undefined,
+      ({ handler }) => AnyPacker.tryUnpack(packed, handler.input.schema) !== undefined,
     );
     return this.#savedTarget(
       AgentSavedTargetKind.AGENT_SAVED_STANDALONE_COMMAND,
@@ -430,7 +435,7 @@ export class StandaloneHandlerRuntime {
     return create(CommandSchema, {
       id: metadata.id,
       context: metadata.context,
-      message: AnyMessages.pack(schema, value as never),
+      message: AnyPacker.pack(schema, Validate.check(schema, value as never)),
     });
   }
 
@@ -450,7 +455,7 @@ export class StandaloneHandlerRuntime {
     return create(EventSchema, {
       id: metadata.id,
       context: metadata.context,
-      message: AnyMessages.pack(schema, value as never),
+      message: AnyPacker.pack(schema, Validate.check(schema, value as never)),
     });
   }
 
@@ -463,10 +468,12 @@ export class StandaloneHandlerRuntime {
    */
   async #publishRejection(command: Command, rejection: RejectionThrowable): Promise<void> {
     const metadata = this.#metadata.eventFromCommand(command, {});
+    const message = rejection.messageThrown();
+    Validate.check(rejection.schema, message);
     await this.#publisher.publishRejectionEvent(
       create(EventSchema, {
         id: metadata.id,
-        message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
+        message: AnyPacker.pack(rejection.schema, message),
         context: create(EventContextSchema, {
           ...metadata.context,
           rejection: create(RejectionEventContextSchema, {

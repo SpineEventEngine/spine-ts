@@ -13,7 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { EventContextSchema, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   SubscriptionIdSchema,
@@ -167,7 +167,7 @@ describe("SubscriptionRuntime", () => {
         create(EventSchema, {
           id: create(EventIdSchema, { value: "race-delivery" }),
           context: create(EventContextSchema),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             TaskCreatedSchema,
             create(TaskCreatedSchema, {
               id: create(TaskIdSchema, { value: "race-task" }),

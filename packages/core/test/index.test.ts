@@ -56,7 +56,7 @@ import {
   spineCoreRegistry,
   Validate,
   TypeUrls,
-  AnyMessages,
+  AnyPacker,
   SignalEnvelopes,
 } from "../src/index.js";
 
@@ -342,7 +342,7 @@ function eventContext() {
   const producerId = create(UserIdSchema, { value: "aggregate-1" });
 
   return create(EventContextSchema, {
-    producerId: AnyMessages.pack(UserIdSchema, producerId),
+    producerId: AnyPacker.pack(UserIdSchema, producerId),
     version: create(VersionSchema, { number: 1 }),
   });
 }
@@ -574,12 +574,9 @@ describe("@spine-event-engine/core type registry", () => {
     const registry = TypeRegistry.from(
       module("example.application", [], [module("example.dependency", [UserIdSchema])]),
     );
-    const packed = AnyMessages.pack(
-      UserIdSchema,
-      create(UserIdSchema, { value: "dependency-user" }),
-    );
+    const packed = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "dependency-user" }));
 
-    expect(AnyMessages.unpackUsing(registry, packed)).toEqual(
+    expect(AnyPacker.unpackUsing(registry, packed)).toEqual(
       create(UserIdSchema, { value: "dependency-user" }),
     );
   });
@@ -626,7 +623,7 @@ describe("@spine-event-engine/core type registry", () => {
   it("dynamically unpacks only exact registered type URLs", () => {
     const registry = TypeRegistry.from(module("example.application", [UserIdSchema]));
     const message = create(UserIdSchema, { value: "user-1" });
-    const packed = AnyMessages.pack(UserIdSchema, message);
+    const packed = AnyPacker.pack(UserIdSchema, message);
     const unknown = create(AnySchema, {
       typeUrl: "type.spine.io/spine.core.UserId.extra",
       value: packed.value,
@@ -636,9 +633,9 @@ describe("@spine-event-engine/core type registry", () => {
       value: new Uint8Array([0xff]),
     });
 
-    expect(AnyMessages.unpackUsing(registry, packed)).toEqual(message);
-    expect(AnyMessages.unpackUsing(registry, unknown)).toBeUndefined();
-    expect(AnyMessages.unpackUsing(registry, malformed)).toBeUndefined();
+    expect(AnyPacker.unpackUsing(registry, packed)).toEqual(message);
+    expect(AnyPacker.tryUnpackUsing(registry, unknown)).toBeUndefined();
+    expect(AnyPacker.tryUnpackUsing(registry, malformed)).toBeUndefined();
   });
 
   it("derives type URLs from Spine file type_url_prefix options", () => {
@@ -1123,7 +1120,7 @@ describe("@spine-event-engine/core envelope packing", () => {
     for (const [owner, method] of [
       [Validate, "message"],
       [TypeUrls, "derive"],
-      [AnyMessages, "pack"],
+      [AnyPacker, "pack"],
       [SignalEnvelopes, "command"],
     ] as const) {
       expect(Object.isFrozen(owner)).toBe(true);
@@ -1131,33 +1128,29 @@ describe("@spine-event-engine/core envelope packing", () => {
     }
   });
 
-  it("keeps packing for schemas without a Spine option on the default canonical URL", () => {
-    const packed = AnyMessages.pack(AnySchema, create(AnySchema));
-
-    expect(packed.typeUrl).toBe("type.googleapis.com/google.protobuf.Any");
+  it("returns an existing Any without changing its URL or identity", () => {
+    const message = create(AnySchema);
+    expect(AnyPacker.pack(AnySchema, message)).toBe(message);
   });
 
   it("packs Any values with Spine type URLs and Protobuf-ES binary payloads", () => {
     const message = create(FieldPathSchema, { fieldName: ["task", "id"] });
 
-    const packed = AnyMessages.pack(FieldPathSchema, message);
+    const packed = AnyPacker.pack(FieldPathSchema, message);
 
     expect(packed.typeUrl).toBe("type.spine.io/spine.base.FieldPath");
     expect(packed.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
     expect(packed.typeUrl).not.toBe("type.googleapis.com/spine.base.FieldPath");
     expect(packed.value).toEqual(toBinary(FieldPathSchema, message));
-    expect(AnyMessages.unpack(packed, FieldPathSchema)).toEqual(message);
-    expect(AnyMessages.unpack(packed, ValidationErrorSchema)).toBeUndefined();
+    expect(AnyPacker.unpack(packed, FieldPathSchema)).toEqual(message);
+    expect(AnyPacker.tryUnpack(packed, ValidationErrorSchema)).toBeUndefined();
   });
 
-  it("omits unknown fields from framework-packed Any payloads by default", () => {
+  it("preserves unknown fields from framework-packed Any payloads", () => {
     const message = fieldPathWithUnknownFields();
 
-    const packed = AnyMessages.pack(FieldPathSchema, message);
-    const stableBytes = toBinary(FieldPathSchema, message, { writeUnknownFields: false });
-
-    expect(toBinary(FieldPathSchema, message)).not.toEqual(stableBytes);
-    expect(packed.value).toEqual(stableBytes);
+    const packed = AnyPacker.pack(FieldPathSchema, message);
+    expect(packed.value).toEqual(toBinary(FieldPathSchema, message));
   });
 
   it("returns undefined instead of throwing when matching Any payload bytes are malformed", () => {
@@ -1166,18 +1159,16 @@ describe("@spine-event-engine/core envelope packing", () => {
       value: new Uint8Array([0xff]),
     });
 
-    expect(AnyMessages.unpack(malformed, FieldPathSchema)).toBeUndefined();
+    expect(AnyPacker.tryUnpack(malformed, FieldPathSchema)).toBeUndefined();
   });
 
-  it("lets callers opt out of payload validation when packing already-trusted messages", () => {
+  it("leaves domain validation to the signal boundary", () => {
     const invalidMessage = create(RequiredNameSchema, { name: "" });
-
-    expect(() => AnyMessages.pack(RequiredNameSchema, invalidMessage)).toThrow(ValidationException);
-
-    const packed = AnyMessages.pack(RequiredNameSchema, invalidMessage, { validate: false });
+    expect(() => Validate.check(RequiredNameSchema, invalidMessage)).toThrow(ValidationException);
+    const packed = AnyPacker.pack(RequiredNameSchema, invalidMessage);
 
     expect(packed.typeUrl).toBe(TypeUrls.derive(RequiredNameSchema));
-    expect(AnyMessages.unpack(packed, RequiredNameSchema)).toEqual(invalidMessage);
+    expect(AnyPacker.unpack(packed, RequiredNameSchema)).toEqual(invalidMessage);
   });
 
   it("creates distinct fresh command IDs and clones contexts", () => {
@@ -1199,7 +1190,7 @@ describe("@spine-event-engine/core envelope packing", () => {
     expect(first.systemProperties).toBeUndefined();
     expect(first.message?.typeUrl).toBe(TypeUrls.derive(TestCreateProjectSchema));
     expect(first.message?.value).toEqual(toBinary(TestCreateProjectSchema, message));
-    expect(AnyMessages.unpack(first.message ?? create(AnySchema), TestCreateProjectSchema)).toEqual(
+    expect(AnyPacker.unpack(first.message ?? create(AnySchema), TestCreateProjectSchema)).toEqual(
       message,
     );
 
@@ -1232,7 +1223,7 @@ describe("@spine-event-engine/core envelope packing", () => {
     const origin = SignalEnvelopes.originFromCommand(command);
 
     expect(origin.message?.typeUrl).toBe(TypeUrls.derive(TestCreateProjectSchema));
-    expect(AnyMessages.unpack(origin.message?.id ?? create(AnySchema), CommandIdSchema)).toEqual(
+    expect(AnyPacker.unpack(origin.message?.id ?? create(AnySchema), CommandIdSchema)).toEqual(
       command.id,
     );
     expect(origin.actorContext).toEqual(actorContext);
@@ -1246,7 +1237,7 @@ describe("@spine-event-engine/core envelope packing", () => {
   });
 
   it("rejects a Command without a usable ID before creating an Event origin", () => {
-    const message = AnyMessages.pack(
+    const message = AnyPacker.pack(
       TestCreateProjectSchema,
       create(TestCreateProjectSchema, { memberId: ["project"] }),
     );
@@ -1284,9 +1275,9 @@ describe("@spine-event-engine/core envelope packing", () => {
     expect(first.context).toEqual(context);
     expect(first.message?.typeUrl).toBe(TypeUrls.derive(TestProjectCreatedSchema));
     expect(first.message?.value).toEqual(toBinary(TestProjectCreatedSchema, message));
-    expect(
-      AnyMessages.unpack(first.message ?? create(AnySchema), TestProjectCreatedSchema),
-    ).toEqual(message);
+    expect(AnyPacker.unpack(first.message ?? create(AnySchema), TestProjectCreatedSchema)).toEqual(
+      message,
+    );
 
     if (context.version === undefined) {
       throw new Error("Expected event context version fixture.");

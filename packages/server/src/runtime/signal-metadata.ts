@@ -23,7 +23,7 @@ import {
   type Any,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, SignalEnvelopes, Time, type TimeProvider } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes, Time, type TimeProvider } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -233,7 +233,7 @@ export class SignalMetadata {
 
     return create(OriginSchema, {
       message: this.#messageId(
-        AnyMessages.pack(EventIdSchema, this.#eventId(event)),
+        AnyPacker.pack(EventIdSchema, this.#eventId(event)),
         event.message?.typeUrl,
       ),
       ...(actorContext === undefined ? {} : { actorContext }),
@@ -250,15 +250,15 @@ export class SignalMetadata {
   producerId(value: string | number | bigint | boolean | undefined): Any | undefined {
     switch (typeof value) {
       case "string":
-        return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }));
+        return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value }));
       case "boolean":
-        return AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value }));
+        return AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value }));
       case "number":
         return Number.isFinite(value)
-          ? AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value }))
+          ? AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value }))
           : undefined;
       case "bigint":
-        return AnyMessages.pack(Int64ValueSchema, create(Int64ValueSchema, { value }));
+        return AnyPacker.pack(Int64ValueSchema, create(Int64ValueSchema, { value }));
       default:
         return undefined;
     }

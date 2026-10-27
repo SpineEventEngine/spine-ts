@@ -14,7 +14,7 @@
 
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   BoundedContextNameSchema,
@@ -118,7 +118,7 @@ export class ThirdPartyContext {
       context: create(EventContextSchema, {
         timestamp: actorContext.timestamp ?? create(TimestampSchema),
         origin: { case: "importContext", value: actorContext },
-        producerId: AnyMessages.pack(
+        producerId: AnyPacker.pack(
           BoundedContextNameSchema,
           create(BoundedContextNameSchema, { value: this.#context.name.value }),
         ),

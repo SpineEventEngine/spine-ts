@@ -27,7 +27,7 @@ import {
   TenantIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { AnyMessages, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
 import {
   TaskIdSchema,
@@ -101,8 +101,8 @@ live("MySQL-family record layout", () => {
       const taskId = create(TaskIdSchema, { value: task });
       return create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
-        context: { producerId: AnyMessages.pack(TaskIdSchema, taskId) },
-        message: AnyMessages.pack(
+        context: { producerId: AnyPacker.pack(TaskIdSchema, taskId) },
+        message: AnyPacker.pack(
           TaskCreatedSchema,
           create(TaskCreatedSchema, {
             id: taskId,
@@ -166,7 +166,7 @@ live("MySQL-family record layout", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
         context: { timestamp },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectCreatedSchema,
           create(ProjectCreatedSchema, {
             memberId: [`member-${id}`],
@@ -717,7 +717,7 @@ live("MySQL-family record layout", () => {
     const event = (id: string, member = id) =>
       create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectCreatedSchema,
           create(ProjectCreatedSchema, { memberId: [member] }),
         ),

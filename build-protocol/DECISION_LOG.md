@@ -6531,7 +6531,7 @@ this decision records the target and supersedes conflicting implementation plans
 
 ## D-0147: Shared JVM-like AnyPacker
 
-Date: 2026-10-27. Status: accepted framework-author correction; implementation pending.
+Date: 2026-10-27. Status: implemented and independently reviewed; full-task release pending.
 
 Inspect Spine JVM AnyPacker and introduce the corresponding shared TS abstraction.
 Use it throughout the framework in place of inconsistent Any packing/unpacking
@@ -6566,3 +6566,19 @@ idle operation. It is not a second public shutdown API. The later asynchronous
 Bounded Context build can use ordinary awaited cleanup. Existing public cleanup
 callers must await factory completion. No generic lifecycle framework, compatibility
 wrapper, data migration or additional recovery machinery is introduced.
+
+## D-0149: Domain state supplied to Entity history conformance
+
+Date: 2026-10-27. Status: implemented and independently reviewed with D-0147.
+
+The published EntityHistoryConformance helper must not invent an Entity state
+from google.protobuf.StringValue. Its adapter becomes generic in the generated
+state type and supplies that schema plus state construction/value access. The
+existing check(adapter) entry remains. Tests supply the existing generated
+ProjectState with its string identifier and title. Scalar StringValue encoding
+remains valid for supported primitive identifiers.
+
+This keeps generated domain fixtures in test code. Production storage neither
+imports another package's test artifacts nor embeds descriptor payloads. No
+new schema package, generation target, compatibility wrapper or migration is
+needed. All Any conversion in this helper uses the shared AnyPacker.

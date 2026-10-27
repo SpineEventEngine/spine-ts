@@ -13,7 +13,7 @@
  */
 
 import { AiModel, ModelRef, type AiFailure, type AiModelDefinition } from "@spine-event-engine/ai";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, type MessageSchema } from "@spine-event-engine/core";
 import { assertAiOutcomeContext, backendDefinition } from "@spine-event-engine/ai/spi/adapter";
 import type {
   AiBackendExecution,
@@ -1886,7 +1886,7 @@ describe("Vercel connection registration", () => {
         anthropicContent: create(AnthropicAssistantContentSchema, {
           blocks: [{ content: { case: "text", value: '{"replyText":"Saved"}' } }],
         }),
-        admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, saved),
+        admittedOutput: AnyPacker.pack(ProposedSupportReplySchema, saved),
       }),
     });
     await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: saved });
@@ -2059,7 +2059,7 @@ describe("Vercel connection registration", () => {
       id: "saved-decision",
       response: create(DecisionResponseSchema, {
         outcome: AiOutcome.ADMITTED,
-        admittedOutput: AnyMessages.pack(SupportRoutingResultSchema, saved),
+        admittedOutput: AnyPacker.pack(SupportRoutingResultSchema, saved),
       }),
     });
     await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: saved });
@@ -2168,7 +2168,7 @@ describe("Vercel connection registration", () => {
       response: create(GenerationResponseSchema, {
         rawOutput: '{"replyText":"Saved"}',
         outcome: AiOutcome.ADMITTED,
-        admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, saved),
+        admittedOutput: AnyPacker.pack(ProposedSupportReplySchema, saved),
       }),
     });
     await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: saved });

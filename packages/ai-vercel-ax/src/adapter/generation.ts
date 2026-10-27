@@ -27,7 +27,7 @@ import type {
   LanguageModelV3Message,
   LanguageModelV3Prompt,
 } from "@ai-sdk/provider";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, type MessageSchema } from "@spine-event-engine/core";
 import type { AiFailure } from "@spine-event-engine/ai";
 import {
   assertAiOutcomeContext,
@@ -486,7 +486,7 @@ const requestContent = (
   const outputSchemaJson = JSON.stringify(schema);
   const promptJson = preparedPromptJson(request, prepared, instructions, settings);
   return create(GenerationRequestSchema, {
-    input: AnyMessages.pack(definition.input, request.input),
+    input: AnyPacker.pack(definition.input, request.input),
     instructions,
     outputSchemaJson,
     promptJson,
@@ -639,7 +639,7 @@ const responseContent = (
     ...(partial.openaiContent !== undefined
       ? { openaiContent: typedOpenAiContent(partial.openaiContent) }
       : {}),
-    ...(output ? { admittedOutput: AnyMessages.pack(schema, output) } : {}),
+    ...(output ? { admittedOutput: AnyPacker.pack(schema, output) } : {}),
     ...(failure
       ? { diagnosticId: create(AiDiagnosticIdSchema, { value: failure.diagnosticId }) }
       : {}),
@@ -1377,7 +1377,7 @@ const replayAdmittedGeneration = (
 ): AxChatResponse => {
   const output =
     response.admittedOutput &&
-    AnyMessages.unpack(response.admittedOutput, request.definition.output);
+    AnyPacker.tryUnpack(response.admittedOutput, request.definition.output);
   if (!output) throw new TypeError("Saved generation output missing");
   state.admission = { ok: true, value: output };
   return {

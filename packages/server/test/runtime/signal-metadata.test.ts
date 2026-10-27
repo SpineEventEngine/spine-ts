@@ -20,7 +20,7 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages, Time } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker, Time } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -103,7 +103,7 @@ describe("SignalMetadata", () => {
     });
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
+        id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
         typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
       }),
       actorContext,
@@ -114,7 +114,7 @@ describe("SignalMetadata", () => {
         actorContext,
         origin: grandOrigin,
       }),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         AssignReviewTaskSchema,
         create(AssignReviewTaskSchema, { id: "task-1", name: "Task" }),
       ),
@@ -131,17 +131,14 @@ describe("SignalMetadata", () => {
     expect(
       eventMetadata.context.producerId === undefined
         ? undefined
-        : AnyMessages.unpack(eventMetadata.context.producerId, StringValueSchema)?.value,
+        : AnyPacker.tryUnpack(eventMetadata.context.producerId, StringValueSchema)?.value,
     ).toBe("task-1");
     expect(eventMetadata.context.version?.number).toBe(7);
     expect(eventMetadata.context.origin).toEqual({
       case: "pastMessage",
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: AnyMessages.pack(
-            CommandIdSchema,
-            create(CommandIdSchema, { uuid: "source-command" }),
-          ),
+          id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "source-command" })),
           typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
         }),
         actorContext,
@@ -157,7 +154,7 @@ describe("SignalMetadata", () => {
           value: actorContext,
         },
       }),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         ReviewTaskAssignedSchema,
         create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
       ),
@@ -170,7 +167,7 @@ describe("SignalMetadata", () => {
         actorContext,
         origin: create(OriginSchema, {
           message: create(MessageIdSchema, {
-            id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "source-event" })),
+            id: AnyPacker.pack(EventIdSchema, create(EventIdSchema, { value: "source-event" })),
             typeUrl: TypeUrls.derive(ReviewTaskAssignedSchema),
           }),
           actorContext,
@@ -217,7 +214,7 @@ describe("SignalMetadata", () => {
     });
     const origin = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-origin" })),
+        id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-origin" })),
         typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
       }),
     });
@@ -242,24 +239,24 @@ describe("SignalMetadata", () => {
     expect(
       booleanProducer.producerId === undefined
         ? undefined
-        : AnyMessages.unpack(booleanProducer.producerId, BoolValueSchema)?.value,
+        : AnyPacker.tryUnpack(booleanProducer.producerId, BoolValueSchema)?.value,
     ).toBe(true);
     expect(
       numericProducer.producerId === undefined
         ? undefined
-        : AnyMessages.unpack(numericProducer.producerId, DoubleValueSchema)?.value,
+        : AnyPacker.tryUnpack(numericProducer.producerId, DoubleValueSchema)?.value,
     ).toBe(42);
     expect(
       int64Producer.producerId === undefined
         ? undefined
-        : AnyMessages.unpack(int64Producer.producerId, Int64ValueSchema)?.value,
+        : AnyPacker.tryUnpack(int64Producer.producerId, Int64ValueSchema)?.value,
     ).toBe(42n);
     expect(metadata.producerId(undefined)).toBeUndefined();
   });
 
   it("rejects missing or empty event ids before deriving causality", () => {
     const metadata = new SignalMetadata();
-    const eventMessage = AnyMessages.pack(
+    const eventMessage = AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
     );
@@ -283,7 +280,7 @@ describe("SignalMetadata", () => {
 
   it("rejects missing or empty command ids before deriving event metadata", () => {
     const metadata = new SignalMetadata();
-    const commandMessage = AnyMessages.pack(
+    const commandMessage = AnyPacker.pack(
       AssignReviewTaskSchema,
       create(AssignReviewTaskSchema, { id: "task-1", name: "Task" }),
     );
@@ -311,7 +308,7 @@ describe("SignalMetadata", () => {
     const metadata = new SignalMetadata();
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "   " }),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         ReviewTaskAssignedSchema,
         create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
       ),
@@ -334,7 +331,7 @@ describe("SignalMetadata", () => {
     const metadata = new SignalMetadata();
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
+        id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
         typeUrl: TypeUrls.derive(AssignReviewTaskSchema),
       }),
     });
@@ -346,7 +343,7 @@ describe("SignalMetadata", () => {
           value: grandOrigin,
         },
       }),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         ReviewTaskAssignedSchema,
         create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
       ),
@@ -355,7 +352,7 @@ describe("SignalMetadata", () => {
     expect(metadata.originFromEvent(event)).toEqual(
       create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "past-event" })),
+          id: AnyPacker.pack(EventIdSchema, create(EventIdSchema, { value: "past-event" })),
           typeUrl: TypeUrls.derive(ReviewTaskAssignedSchema),
         }),
         grandOrigin,

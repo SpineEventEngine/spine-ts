@@ -764,7 +764,7 @@ automated checks that reject:
   locally declared in application code.
 
 Reading an existing ID from an accepted envelope is permitted. For example,
-`AnyMessages.unpack(value, EventIdSchema)` decodes the supplied ID; it does not
+`AnyPacker.unpack(value, EventIdSchema)` decodes the supplied ID; it does not
 create a new signal identity. Retain that typed ID for execution reads. This
 exception does not permit constructing replacement IDs or returning framework
 signal envelopes from ordinary handlers. The checker must distinguish this

@@ -21,7 +21,7 @@ import {
   createBackendRegistration,
   type AiBackendExecution,
 } from "@spine-event-engine/ai/spi/adapter";
-import { AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandIdSchema,
@@ -237,7 +237,7 @@ function harness(
       const content =
         kind === "generation"
           ? create(GenerationRequestSchema, {
-              input: AnyMessages.pack(SupportTicketFactsSchema, input),
+              input: AnyPacker.pack(SupportTicketFactsSchema, input),
               instructions: "Propose a support reply.",
               outputSchemaJson: '{"type":"object"}',
               promptJson,
@@ -251,7 +251,7 @@ function harness(
               },
             })
           : create(DecisionRequestSchema, {
-              input: AnyMessages.pack(SupportTicketFactsSchema, input),
+              input: AnyPacker.pack(SupportTicketFactsSchema, input),
               questions: [
                 create(DecisionQuestionSchema, {
                   id: { value: "safe" },
@@ -303,7 +303,7 @@ function harness(
           issues,
         });
         const correctedRequest = create(GenerationRequestSchema, {
-          input: AnyMessages.pack(SupportTicketFactsSchema, input),
+          input: AnyPacker.pack(SupportTicketFactsSchema, input),
           instructions: "Propose a support reply.",
           outputSchemaJson: '{"type":"object"}',
           promptJson: correctivePrompt,
@@ -326,7 +326,7 @@ function harness(
           response: create(GenerationResponseSchema, {
             rawOutput: '{"replyText":"Your order is being prepared."}',
             outcome: AiOutcome.ADMITTED,
-            admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, reply),
+            admittedOutput: AnyPacker.pack(ProposedSupportReplySchema, reply),
           }),
         });
         return { ok: true, value: reply };
@@ -400,7 +400,7 @@ function harness(
           ? create(GenerationResponseSchema, {
               rawOutput: '{"replyText":"Your order is being prepared."}',
               outcome: AiOutcome.ADMITTED,
-              admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, reply),
+              admittedOutput: AnyPacker.pack(ProposedSupportReplySchema, reply),
               digest: { value: "c".repeat(64) },
             })
           : create(DecisionResponseSchema, {
@@ -412,7 +412,7 @@ function harness(
                   value: { case: "booleanProbability", value: 0.75 },
                 },
               ],
-              admittedOutput: AnyMessages.pack(SupportRoutingResultSchema, routed),
+              admittedOutput: AnyPacker.pack(SupportRoutingResultSchema, routed),
             });
       await execution.control.finishAttempt({ ticketId: attempt.id, receivedBytes: 10, response });
       return { ok: true, value: kind === "generation" ? reply : routed };
@@ -420,11 +420,11 @@ function harness(
   });
   const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-7" });
   const agent = create(MessageIdSchema, {
-    id: AnyMessages.pack(SupportReplyAgentIdSchema, agentId),
+    id: AnyPacker.pack(SupportReplyAgentIdSchema, agentId),
     typeUrl: TypeUrls.derive(SupportReplyAgentIdSchema),
   });
   const source = create(MessageIdSchema, {
-    id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "source-7" })),
+    id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "source-7" })),
     typeUrl: TypeUrls.derive(DraftSupportReplySchema),
   });
   expect(source.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
@@ -597,7 +597,7 @@ function harness(
         throw new Error("Expected a saved named operation.");
       operation.evidence.value.result = {
         case: "admittedOutput",
-        value: AnyMessages.pack(SupportTicketFactsSchema, input),
+        value: AnyPacker.pack(SupportTicketFactsSchema, input),
       };
     },
     counts: () => ({ physicalRequests, executeCalls }),

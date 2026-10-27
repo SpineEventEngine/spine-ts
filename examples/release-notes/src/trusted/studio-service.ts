@@ -31,7 +31,7 @@ import {
   type ModelRef,
 } from "@spine-event-engine/ai";
 import { Client, type SubscriptionDelivery } from "@spine-event-engine/client-node";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   EventIdSchema,
@@ -342,7 +342,7 @@ const Admission = {
     event: MessageShape<typeof ReleaseGenerationRequestedSchema>,
     scope: AiScope,
   ): boolean {
-    const agent = scope.agent.id && AnyMessages.unpack(scope.agent.id, ReleaseDraftIdSchema);
+    const agent = scope.agent.id && AnyPacker.tryUnpack(scope.agent.id, ReleaseDraftIdSchema);
     return (
       scope.tenant.kind === "single-tenant" &&
       scope.actor.actor?.value === "guest" &&
@@ -529,9 +529,9 @@ export class ReleaseStudio {
         workerPath: options.workerPath,
         cwd: options.workerCwd,
         resolveComparison: (scope) => {
-          const event = scope.source.id && AnyMessages.unpack(scope.source.id, EventIdSchema);
+          const event = scope.source.id && AnyPacker.tryUnpack(scope.source.id, EventIdSchema);
           const admission = event ? bySource.get(event.value) : undefined;
-          const agent = scope.agent.id && AnyMessages.unpack(scope.agent.id, ReleaseDraftIdSchema);
+          const agent = scope.agent.id && AnyPacker.tryUnpack(scope.agent.id, ReleaseDraftIdSchema);
           return admission &&
             admission.draftId === agent?.value &&
             admission.actor &&
@@ -564,12 +564,12 @@ export class ReleaseStudio {
     bySource: Map<string, GenerationAdmission>,
   ): ModelRef | undefined {
     if (kind !== "generation") return undefined;
-    const event = AnyMessages.unpack(source, ReleaseGenerationRequestedSchema);
+    const event = AnyPacker.tryUnpack(source, ReleaseGenerationRequestedSchema);
     if (!event) return undefined;
     const admission = admissions.get(event.generation?.value ?? "");
     if (!admission || !Admission.matches(admission, event, scope))
       throw new Error("Accepted release generation identity does not match its binding.");
-    const sourceId = scope.source.id && AnyMessages.unpack(scope.source.id, EventIdSchema);
+    const sourceId = scope.source.id && AnyPacker.tryUnpack(scope.source.id, EventIdSchema);
     if (
       !sourceId?.value ||
       (admission.sourceEventId && admission.sourceEventId.value !== sourceId.value)
@@ -616,7 +616,7 @@ export class ReleaseStudio {
         const events = update?.update.case === "eventUpdates" ? update.update.value.event : [];
         for (const event of events) {
           const value =
-            event.message && AnyMessages.unpack(event.message, ReleaseGenerationRequestedSchema);
+            event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema);
           const admission = this.admissions.get(value?.generation?.value ?? "");
           if (
             admission &&
@@ -668,7 +668,7 @@ export class ReleaseStudio {
         const events = update?.update.case === "eventUpdates" ? update.update.value.event : [];
         for (const event of events) {
           const rejected =
-            event.message && AnyMessages.unpack(event.message, GenerationInputsConflictSchema);
+            event.message && AnyPacker.tryUnpack(event.message, GenerationInputsConflictSchema);
           const admission = this.admissions.get(rejected?.generation?.value ?? "");
           if (admission && rejected?.id?.value === admission.draftId)
             admission.rejection = "inputs-conflict";
@@ -1110,10 +1110,10 @@ export class ReleaseStudio {
     id: string,
     version: MessageShape<typeof VersionSchema>,
   ): Uint8Array | undefined {
-    const prepared = event.message && AnyMessages.unpack(event.message, ExportPreparedSchema);
+    const prepared = event.message && AnyPacker.tryUnpack(event.message, ExportPreparedSchema);
     const producer =
       event.context?.producerId &&
-      AnyMessages.unpack(event.context.producerId, ReleaseDraftIdSchema);
+      AnyPacker.tryUnpack(event.context.producerId, ReleaseDraftIdSchema);
     return prepared?.id?.value === id &&
       producer?.value === id &&
       event.context?.version &&
@@ -1325,11 +1325,11 @@ export class ReleaseStudio {
   ): "canceled" | "ignored" | undefined {
     const producer =
       event.context?.producerId &&
-      AnyMessages.unpack(event.context.producerId, ReleaseDraftIdSchema);
+      AnyPacker.tryUnpack(event.context.producerId, ReleaseDraftIdSchema);
     if (producer?.value !== id || !event.message) return undefined;
-    const canceled = AnyMessages.unpack(event.message, ReleaseGenerationCanceledSchema);
+    const canceled = AnyPacker.tryUnpack(event.message, ReleaseGenerationCanceledSchema);
     if (canceled?.id?.value === id && canceled.generation?.value === generation) return "canceled";
-    const ignored = AnyMessages.unpack(event.message, CancelIgnoredSchema);
+    const ignored = AnyPacker.tryUnpack(event.message, CancelIgnoredSchema);
     if (ignored?.id?.value === id && ignored.generation?.value === generation) return "ignored";
     return undefined;
   }

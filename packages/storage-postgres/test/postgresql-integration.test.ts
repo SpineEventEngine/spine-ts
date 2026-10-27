@@ -38,7 +38,7 @@ import {
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import {
-  AnyMessages,
+  AnyPacker,
   Identifiers,
   StringifierRegistry,
   TypeRegistry,
@@ -124,8 +124,8 @@ describe("PostgreSQL live storage acceptance", () => {
         }
       }
     } finally {
-      first.close();
-      second.close();
+      await first.close();
+      await second.close();
     }
   });
 
@@ -165,7 +165,7 @@ describe("PostgreSQL live storage acceptance", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
         context: { timestamp },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectCreatedSchema,
           create(ProjectCreatedSchema, {
             memberId: [`member-${id}`],
@@ -320,7 +320,7 @@ describe("PostgreSQL live storage acceptance", () => {
     const event = (id: string, member = id) =>
       create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectCreatedSchema,
           create(ProjectCreatedSchema, { memberId: [member] }),
         ),
@@ -465,7 +465,7 @@ describe("PostgreSQL live storage acceptance", () => {
       if (target !== undefined)
         await pool.query(`ALTER TABLE ${target} DROP CONSTRAINT IF EXISTS ${quoted(constraint)}`);
       diagnosticRecords.close();
-      events.close();
+      await events.close();
       commits.close();
       entity.close();
       await pool.end();
@@ -666,7 +666,7 @@ function event(id: string, entityId: string) {
         timestamp: create(TimestampSchema, { seconds: 1n }),
       }),
     },
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(TaskIdSchema, { value: entityId }),

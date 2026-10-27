@@ -13,7 +13,7 @@
  */
 
 import { clone } from "@bufbuild/protobuf";
-import { AnyMessages, Validate, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, Validate, type MessageSchema } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import * as AgentInteraction from "@spine-event-engine/proto/agent";
 import type { EventStore } from "@spine-event-engine/storage";
@@ -497,7 +497,7 @@ export class EventBus {
     EventBusRoles.validateSchema(eventBusRoles.get(this) ?? "domain", schema);
 
     const message =
-      event.message === undefined ? undefined : AnyMessages.unpack(event.message, schema);
+      event.message === undefined ? undefined : AnyPacker.tryUnpack(event.message, schema);
 
     if (message === undefined) {
       throw new Error("Event payload does not match its registered schema.");

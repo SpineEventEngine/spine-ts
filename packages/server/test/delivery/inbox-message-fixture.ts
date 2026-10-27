@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import {
@@ -35,7 +35,7 @@ export function createMessage(
   const taskListId = create(TaskListIdSchema, { value: "list-1" });
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: signalId }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(TaskIdSchema, { value: id }),
@@ -50,11 +50,11 @@ export function createMessage(
       shard: ShardIndex.single(),
     }),
     inboxId: Object.freeze({
-      targetId: AnyMessages.pack(TaskListIdSchema, taskListId),
+      targetId: AnyPacker.pack(TaskListIdSchema, taskListId),
       targetTypeUrl: TypeUrls.derive(TaskListSchema),
     }),
     signalId,
-    signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+    signal: AnyPacker.pack(EventSchema, event),
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,
     shard: ShardIndex.single(),

@@ -715,7 +715,7 @@ describe("packed external model consumer", () => {
         join(app, "src/index.ts"),
         [
           'import { create } from "@bufbuild/protobuf";',
-          'import { AnyMessages } from "@spine-event-engine/core";',
+          'import { AnyPacker } from "@spine-event-engine/core";',
           'import { MessageInterfaces } from "@spine-event-engine/core";',
           'import { CommandIdSchema } from "@spine-event-engine/proto";',
           'import { UserIdSchema } from "@external/users-model/generated/external/users/v1/user_pb.js";',
@@ -762,10 +762,10 @@ describe("packed external model consumer", () => {
           "const values = [[UserIdSchema, user], [ChatSchema, chat], " +
             "[CommandIdSchema, commandId]] as const;",
           "for (const [schema, value] of values) {",
-          "  const packed = AnyMessages.pack(schema, value);",
+          "  const packed = AnyPacker.pack(schema, value);",
           "  if (",
-          "    AnyMessages.unpack(packed, schema) === undefined ||",
-          "    AnyMessages.unpackUsing(typeRegistry, packed) === undefined",
+          "    AnyPacker.tryUnpack(packed, schema) === undefined ||",
+          "    AnyPacker.tryUnpackUsing(typeRegistry, packed) === undefined",
           "  ) {",
           "    throw new Error(`Registry/Any round trip failed for ${schema.typeName}.`);",
           "  }",

@@ -32,7 +32,7 @@ import {
   ValidationException,
   type MessageSchema,
   TypeUrls,
-  AnyMessages,
+  AnyPacker,
 } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -132,6 +132,8 @@ import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/t
 import {
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
+  ProjectEnvelopeStateSchema,
+  ProjectOverviewIdSchema,
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 // prettier-ignore
@@ -168,6 +170,8 @@ class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchem
     );
   }
 }
+
+class EnvelopeProjection extends Projection<Any, typeof ProjectEnvelopeStateSchema> {}
 
 class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignTask(): never {
@@ -387,7 +391,10 @@ describe("SpineServices", () => {
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
       expect(
-        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+        AnyPacker.tryUnpack(
+          response.message[0]?.state ?? packMissing(),
+          ProjectOverviewStateSchema,
+        ),
       ).toEqual(createState("task-1", "First"));
       expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
     } finally {
@@ -497,7 +504,7 @@ describe("SpineServices", () => {
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(1);
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-1", "First"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
   });
@@ -527,7 +534,7 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(1);
-    expect(AnyMessages.unpack(response.message[0]?.state ?? packMissing(), TaskSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), TaskSchema)).toEqual(
       task,
     );
     expect(responseErrorMessage(incompatible)).toBe(
@@ -557,7 +564,10 @@ describe("SpineServices", () => {
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
       expect(
-        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+        AnyPacker.tryUnpack(
+          response.message[0]?.state ?? packMissing(),
+          ProjectOverviewStateSchema,
+        ),
       ).toEqual(createState("task-1", "Tenant B"));
     } finally {
       await server.close();
@@ -583,11 +593,11 @@ describe("SpineServices", () => {
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(2);
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-1", "First"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 1 }));
     expect(
-      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-2", "Second"));
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 2 }));
   });
@@ -619,11 +629,11 @@ describe("SpineServices", () => {
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(2);
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-2", "Tenant B"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 2 }));
     expect(
-      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-3", "Tenant B Again"));
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 3 }));
   });
@@ -641,7 +651,7 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-aggregate", "Aggregate"));
   });
 
@@ -658,7 +668,7 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-pm", "Process manager"));
   });
 
@@ -680,11 +690,11 @@ describe("SpineServices", () => {
       createColumnFilterQuery("name", packStringId("Entity")),
       createColumnFilterQuery(
         "archived",
-        AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
+        AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
       ),
       createColumnFilterQuery(
         "deleted",
-        AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
+        AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
       ),
     ];
     const responses = await Promise.all(
@@ -872,7 +882,7 @@ describe("SpineServices", () => {
       );
       const objectId = await queryClient.read(
         createQueryWithIds([
-          AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "task-1" })),
+          AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "task-1" })),
         ]),
       );
       const emptyFilter = await queryClient.read(
@@ -933,12 +943,12 @@ describe("SpineServices", () => {
     const unknownResponse = await handlers.read(createFormattedQuery(unknownField));
     const emptyResponse = await handlers.read(createFormattedQuery(emptyMask));
 
-    const idState = AnyMessages.unpack(
+    const idState = AnyPacker.tryUnpack(
       idResponse.message[0]?.state ?? packMissing(),
       ProjectOverviewStateSchema,
     );
     const allStates = allResponse.message.map((message) =>
-      AnyMessages.unpack(message.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(message.state ?? packMissing(), ProjectOverviewStateSchema),
     );
     if (idState === undefined) {
       throw new Error("Expected ID-filter state.");
@@ -1004,7 +1014,7 @@ describe("SpineServices", () => {
     });
     const query = createColumnFilterQuery(
       "version",
-      AnyMessages.pack(VersionSchema, create(VersionSchema, { number: 2 }), { validate: false }),
+      AnyPacker.pack(VersionSchema, create(VersionSchema, { number: 2 })),
       { operator: Filter_Operator.GREATER_OR_EQUAL },
     );
     query.format = create(ResponseFormatSchema, {
@@ -1040,6 +1050,39 @@ describe("SpineServices", () => {
       createState("task-1", "Open", 1),
       createState("task-3", "Open", 3),
     ]);
+  });
+
+  it("filters an Any-valued Projection column by its complete opaque value", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectOverviewStateSchema,
+    });
+    const context = BoundedContext.singleTenant("AnyColumnQuery").add(repository).build();
+    const selected = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "selected" }));
+    const other = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "other" }));
+    await context.stand().update(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
+        id: "task-1",
+        name: "Selected",
+        attachment: selected,
+      }),
+    );
+    await context
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "task-2", name: "Other", attachment: other }),
+      );
+
+    const response = await registeredQueryHandlers(context).read(
+      createColumnFilterQuery("attachment", selected),
+    );
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(
+      response.message.map((message) => unpackProjectOverviewState(message.state)?.id),
+    ).toEqual(["task-1"]);
+    await context.close();
   });
 
   it("applies tenant-scoped filters and ordering while ignoring wire masks", async () => {
@@ -1512,13 +1555,13 @@ describe("SpineServices", () => {
     const doubleWrapped = await handlers.read(
       createColumnFilterQuery(
         "priority",
-        AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: 2 })),
+        AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value: 2 })),
       ),
     );
     const unsignedWrapped = await handlers.read(
       createColumnFilterQuery(
         "priority",
-        AnyMessages.pack(UInt32ValueSchema, create(UInt32ValueSchema, { value: 2 })),
+        AnyPacker.pack(UInt32ValueSchema, create(UInt32ValueSchema, { value: 2 })),
       ),
     );
 
@@ -1571,7 +1614,7 @@ describe("SpineServices", () => {
       handlers.read(
         createColumnFilterQuery(
           "version",
-          AnyMessages.pack(
+          AnyPacker.pack(
             VersionSchema,
             create(VersionSchema, {
               number: 2,
@@ -1584,13 +1627,13 @@ describe("SpineServices", () => {
       handlers.read(
         createColumnFilterQuery(
           "archived",
-          AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
+          AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
         ),
       ),
       handlers.read(
         createColumnFilterQuery(
           "deleted",
-          AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: true })),
+          AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: true })),
         ),
       ),
     ]);
@@ -1721,7 +1764,7 @@ describe("SpineServices", () => {
     expect(
       event?.message === undefined
         ? undefined
-        : AnyMessages.unpack(event.message, TaskAlreadyDoneSchema),
+        : AnyPacker.tryUnpack(event.message, TaskAlreadyDoneSchema),
     ).toEqual(
       create(TaskAlreadyDoneSchema, {
         id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
@@ -1762,7 +1805,7 @@ describe("SpineServices", () => {
     }
     const event = update.update.value.event[0];
     if (event?.message === undefined) throw new Error("Expected a rejection Event payload.");
-    expect(AnyMessages.unpack(event.message, TaskAlreadyDoneSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(event.message, TaskAlreadyDoneSchema)).toEqual(
       create(TaskAlreadyDoneSchema, {
         id: create(GeneratedTaskIdSchema, { value: "task-declared-rejection" }),
       }),
@@ -2267,7 +2310,7 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected entity state update.");
       }
-      expect(AnyMessages.unpack(state.value, ProjectOverviewStateSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(state.value, ProjectOverviewStateSchema)).toEqual(
         createState("task-1", "First"),
       );
 
@@ -2382,7 +2425,7 @@ describe("SpineServices", () => {
     expect(event).toEqual(source);
     expect(event).not.toBe(source);
     expect(event.id?.value).toBe("event-created");
-    expect(AnyMessages.unpack(event.message, TaskCreatedSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(event.message, TaskCreatedSchema)).toEqual(
       create(TaskCreatedSchema, {
         id: create(GeneratedTaskIdSchema, { value: "aggregate-1" }),
         title: "Created",
@@ -2762,7 +2805,7 @@ describe("SpineServices", () => {
     if (state?.case !== "state") {
       throw new Error("Expected entity state update.");
     }
-    expect(AnyMessages.unpack(state.value, ProjectOverviewStateSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(state.value, ProjectOverviewStateSchema)).toEqual(
       createState("task-projected", "Task (projected)", 2),
     );
     await iterator.return?.();
@@ -2857,7 +2900,7 @@ describe("SpineServices", () => {
     expect(entityUpdateKind(update)?.case).toBe("noLongerMatching");
     expect(entityUpdateKind(update)?.value).toBe(true);
     expect(
-      AnyMessages.unpack(entityUpdateId(update) ?? packMissing(), StringValueSchema)?.value,
+      AnyPacker.tryUnpack(entityUpdateId(update) ?? packMissing(), StringValueSchema)?.value,
     ).toBe("task-1");
     await iterator.return?.();
   });
@@ -3159,10 +3202,7 @@ describe("SpineServices", () => {
           filter: [
             create(FilterSchema, {
               fieldPath: { fieldName: ["id"] },
-              value: AnyMessages.pack(
-                CommandIdSchema,
-                create(CommandIdSchema, { uuid: "wrong-id" }),
-              ),
+              value: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "wrong-id" })),
               operator: Filter_Operator.EQUAL,
             }),
           ],
@@ -3424,6 +3464,118 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
+  it("matches an Any-valued subscription column without unpacking its payload", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectOverviewState;
+        }) => void)
+      | undefined;
+    const context = createFakeContext({
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
+      subscribe: (_schema, callback) => {
+        deliverUpdate = callback;
+        return { closed: false, unsubscribe: () => undefined };
+      },
+    });
+    const selected = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "selected" }));
+    const other = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "other" }));
+    const filter = create(FilterSchema, {
+      fieldPath: { fieldName: ["attachment"] },
+      value: selected,
+      operator: Filter_Operator.EQUAL,
+    });
+    const topic = createFilteredTopicWithCriteria({
+      filter: [
+        create(CompositeFilterSchema, {
+          filter: [filter],
+          operator: CompositeFilter_CompositeOperator.ALL,
+        }),
+      ],
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(topic);
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = nextBusinessUpdate(iterator, subscription);
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
+      id: "task-1",
+      state: create(ProjectOverviewStateSchema, { id: "task-1", attachment: other }),
+    });
+    deliverUpdate?.({
+      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
+      id: "task-2",
+      state: create(ProjectOverviewStateSchema, { id: "task-2", attachment: selected }),
+    });
+    expect(
+      unpackEntityState(
+        (await withTimeout(next, "Any column subscription")).value as
+          SubscriptionUpdate | undefined,
+      )?.id,
+    ).toBe("task-2");
+    await iterator.return?.();
+  });
+
+  it("matches declared Any Entity IDs in system-event subscription filters", async () => {
+    const repository = new Repository({
+      entityType: EnvelopeProjection,
+      schema: ProjectEnvelopeStateSchema,
+    });
+    const context = BoundedContext.singleTenant("EnvelopeProjects")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const selected = AnyPacker.pack(
+        ProjectOverviewIdSchema,
+        create(ProjectOverviewIdSchema, { value: "selected" }),
+      );
+      const other = AnyPacker.pack(
+        ProjectOverviewIdSchema,
+        create(ProjectOverviewIdSchema, { value: "other" }),
+      );
+      const topic = create(TopicSchema, {
+        id: create(TopicIdSchema, { value: "t-envelope-id" }),
+        target: create(TargetSchema, {
+          type: TypeUrls.derive(ProjectEnvelopeStateSchema),
+          criterion: {
+            case: "filters",
+            value: create(TargetFiltersSchema, {
+              idFilter: { id: [selected] },
+            }),
+          },
+        }),
+        context: createActorContext(),
+      });
+      const subscription = await handlers.subscribe(topic);
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      await expectActivationAcknowledgement(iterator, subscription);
+      const next = iterator.next();
+      await postEntityStateChanged(
+        context,
+        ProjectEnvelopeStateSchema,
+        create(ProjectEnvelopeStateSchema, { id: other, name: "Other" }),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectEnvelopeStateSchema,
+        create(ProjectEnvelopeStateSchema, { id: selected, name: "Selected" }),
+      );
+      const delivered = (await withTimeout(next, "Any ID subscription"))
+        .value as SubscriptionUpdate;
+      const kind = entityUpdateKind(delivered);
+      expect(kind?.case).toBe("state");
+      if (kind?.case !== "state") throw new Error("Expected a state update.");
+      expect(AnyPacker.unpack(kind.value, ProjectEnvelopeStateSchema).name).toBe("Selected");
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
+  });
+
   it("delivers ID-only subscriptions and accepts unknown Any ID values", async () => {
     let deliverUpdate:
       | ((update: {
@@ -3443,7 +3595,7 @@ describe("SpineServices", () => {
       },
     });
     const handlers = registeredSubscriptionHandlers(context);
-    const id = AnyMessages.pack(TopicIdSchema, create(TopicIdSchema, { value: "packed-id" }));
+    const id = AnyPacker.pack(TopicIdSchema, create(TopicIdSchema, { value: "packed-id" }));
     const subscription = await handlers.subscribe(
       createFilteredTopicWithCriteria({ idFilter: { id: [id] } }),
     );
@@ -3545,10 +3697,10 @@ describe("SpineServices", () => {
     const delivered = (await withTimeout(next, "message-id subscription")).value as
       SubscriptionUpdate | undefined;
 
-    expect(AnyMessages.unpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
       taskId,
     );
-    expect(AnyMessages.unpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
       create(TaskSchema, {
         id: taskId,
         title: "Matched",
@@ -3576,7 +3728,7 @@ describe("SpineServices", () => {
             filter: [
               create(FilterSchema, {
                 fieldPath: { fieldName: ["id"] },
-                value: AnyMessages.pack(TaskIdSchema, taskId),
+                value: AnyPacker.pack(TaskIdSchema, taskId),
                 operator: Filter_Operator.EQUAL,
               }),
             ],
@@ -3606,10 +3758,10 @@ describe("SpineServices", () => {
     const delivered = (await withTimeout(next, "message field subscription")).value as
       SubscriptionUpdate | undefined;
 
-    expect(AnyMessages.unpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
       taskId,
     );
-    expect(AnyMessages.unpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
       create(TaskSchema, { id: taskId, title: "Matched" }),
     );
     attachment.unsubscribe();
@@ -3835,7 +3987,7 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected entity state update.");
       }
-      expect(AnyMessages.unpack(state.value, ProjectOverviewStateSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(state.value, ProjectOverviewStateSchema)).toEqual(
         createState("task-live", "Live"),
       );
       expect(unknownNext.done).toBe(true);
@@ -4167,10 +4319,7 @@ describe("SpineServices", () => {
     const subscription = await handlers.subscribe(createTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const first = nextBusinessUpdate(iterator, subscription);
-    const anyId = AnyMessages.pack(
-      TopicIdSchema,
-      create(TopicIdSchema, { value: "already-packed" }),
-    );
+    const anyId = AnyPacker.pack(TopicIdSchema, create(TopicIdSchema, { value: "already-packed" }));
     const bytesId = new Uint8Array([7, 8, 9]);
 
     await delay(25);
@@ -4248,20 +4397,20 @@ describe("SpineServices", () => {
     ) {
       throw new Error("Expected packed update IDs.");
     }
-    expect(AnyMessages.unpack(firstId, StringValueSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(firstId, StringValueSchema)).toEqual(
       create(StringValueSchema, { value: "task-first" }),
     );
-    expect(AnyMessages.unpack(secondId, BytesValueSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(secondId, BytesValueSchema)).toEqual(
       create(BytesValueSchema, { value: bytesId }),
     );
     expect(thirdId).toEqual(anyId);
-    expect(AnyMessages.unpack(fourthId, BoolValueSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(fourthId, BoolValueSchema)).toEqual(
       create(BoolValueSchema, { value: true }),
     );
-    expect(AnyMessages.unpack(fifthId, DoubleValueSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(fifthId, DoubleValueSchema)).toEqual(
       create(DoubleValueSchema, { value: 42 }),
     );
-    expect(AnyMessages.unpack(sixthId, Int64ValueSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(sixthId, Int64ValueSchema)).toEqual(
       create(Int64ValueSchema, { value: 9007199254740993n }),
     );
     expect(seventhId).toBeUndefined();
@@ -4601,10 +4750,9 @@ function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Tas
     context: create(CommandContextSchema, {
       actorContext: createActorContext(tenantId),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, { id: "task-1", name }),
-      { validate: false },
     ),
   });
 }
@@ -4615,10 +4763,9 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task") 
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, { id: aggregateId, name }),
-      { validate: false },
     ),
   });
 }
@@ -4629,13 +4776,12 @@ function createValidatedCommand(id: string, aggregateId: string, name: string) {
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, {
         id: aggregateId,
         name,
       }),
-      { validate: false },
     ),
   });
 }
@@ -4649,7 +4795,7 @@ function createAggregateEvent(
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: createEventContext(aggregateId, tenantId),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(GeneratedTaskIdSchema, { value: aggregateId }),
@@ -4669,7 +4815,7 @@ function createPastMessageAggregateEvent(id: string, tenantId: string) {
         value: create(OriginSchema, { actorContext: createActorContext(tenantId) }),
       },
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(GeneratedTaskIdSchema, { value: `aggregate-${id}` }),
@@ -4683,7 +4829,7 @@ function createPastMessageAggregateEvent(id: string, tenantId: string) {
 function createCommandOrigin(commandId: string, actor: string, tenantId: string): Origin {
   return create(OriginSchema, {
     message: create(MessageIdSchema, {
-      id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: commandId })),
+      id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: commandId })),
       typeUrl: TypeUrls.derive(CreateTaskSchema),
     }),
     actorContext: create(ActorContextSchema, {
@@ -4715,7 +4861,7 @@ function createOriginEventTopic(id: string, origin: Origin, tenantId: string): T
               create(FilterSchema, {
                 fieldPath: { fieldName: ["context", "past_message"] },
                 operator: Filter_Operator.EQUAL,
-                value: AnyMessages.pack(OriginSchema, origin),
+                value: AnyPacker.pack(OriginSchema, origin),
               }),
             ],
           }),
@@ -4745,20 +4891,20 @@ function createRejectionEvent(
         case: "importContext",
         value: createActorContext("tenant-rejected"),
       },
-      producerId: AnyMessages.pack(
+      producerId: AnyPacker.pack(
         StringValueSchema,
         create(StringValueSchema, { value: "producer-1" }),
       ),
       rejection: create(RejectionEventContextSchema, {
         command,
-        commandMessage: AnyMessages.pack(
+        commandMessage: AnyPacker.pack(
           CreateReviewProjectSchema,
           create(CreateReviewProjectSchema, { id: "task-rejected", name: "Task" }),
         ),
         stacktrace,
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskAlreadyDoneSchema,
       create(TaskAlreadyDoneSchema, {
         id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
@@ -4769,10 +4915,7 @@ function createRejectionEvent(
 
 function createEventContext(producerId: string, tenantId?: TenantInput) {
   const context = create(EventContextSchema, {
-    producerId: AnyMessages.pack(
-      StringValueSchema,
-      create(StringValueSchema, { value: producerId }),
-    ),
+    producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: producerId })),
   });
 
   if (tenantId !== undefined) {
@@ -4789,12 +4932,12 @@ function createValidatedEvent(id: string, aggregateId: string, name: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(
+      producerId: AnyPacker.pack(
         StringValueSchema,
         create(StringValueSchema, { value: aggregateId }),
       ),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ProjectSubmissionCreatedSchema,
       create(ProjectSubmissionCreatedSchema, { id: aggregateId, name }),
     ),
@@ -4805,13 +4948,10 @@ function createProjectionEvent(id: string, entityId: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(
-        StringValueSchema,
-        create(StringValueSchema, { value: entityId }),
-      ),
+      producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: entityId })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(GeneratedTaskIdSchema, { value: entityId }),
@@ -4824,10 +4964,9 @@ function createProjectionEvent(id: string, entityId: string) {
 
 function createCommandWithoutId() {
   return create(CommandSchema, {
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, { id: "task-1", name: "Task" }),
-      { validate: false },
     ),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
@@ -4839,7 +4978,7 @@ function createQuery(id: string, tenantId?: TenantInput) {
   return createQueryWithIds([packStringId(id)], tenantId);
 }
 
-function createQueryWithIds(ids: ReturnType<typeof AnyMessages.pack>[], tenantId?: TenantInput) {
+function createQueryWithIds(ids: ReturnType<typeof AnyPacker.pack>[], tenantId?: TenantInput) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-1" }),
     target: create(TargetSchema, {
@@ -4855,7 +4994,7 @@ function createQueryWithIds(ids: ReturnType<typeof AnyMessages.pack>[], tenantId
   });
 }
 
-function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof AnyMessages.pack>) {
+function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof AnyPacker.pack>) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-message-id" }),
     target: create(TargetSchema, {
@@ -4863,7 +5002,7 @@ function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof Any
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
-          idFilter: { id: [incompatibleId ?? AnyMessages.pack(TaskIdSchema, id)] },
+          idFilter: { id: [incompatibleId ?? AnyPacker.pack(TaskIdSchema, id)] },
         }),
       },
     }),
@@ -4873,7 +5012,7 @@ function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof Any
 
 function createColumnFilterQuery(
   column = "name",
-  value: ReturnType<typeof AnyMessages.pack> = packStringId("First"),
+  value: ReturnType<typeof AnyPacker.pack> = packStringId("First"),
   options: {
     readonly operator?: Filter_Operator;
     readonly compositeOperator?: CompositeFilter_CompositeOperator;
@@ -4964,7 +5103,7 @@ function createColumnFilterQueryWithComposites(compositeCount: number) {
 
 function createFormattedColumnFilterQuery(
   column: string,
-  value: ReturnType<typeof AnyMessages.pack>,
+  value: ReturnType<typeof AnyPacker.pack>,
   format: Query["format"],
   tenantId?: TenantInput,
 ) {
@@ -5131,7 +5270,7 @@ function createFilteredTopicForTask(
 
 function createMessageIdFilteredTopic(id: TaskId) {
   return createFilteredTopicForTask({
-    idFilter: { id: [AnyMessages.pack(TaskIdSchema, id)] },
+    idFilter: { id: [AnyPacker.pack(TaskIdSchema, id)] },
   });
 }
 
@@ -5197,8 +5336,8 @@ async function postEntityStateChanged(
   const idSchema = schema.fields[0]?.message as MessageSchema | undefined;
   const packedId =
     idSchema !== undefined && id !== undefined
-      ? AnyMessages.pack(idSchema, id as never, { validate: false })
-      : AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: String(id) }));
+      ? AnyPacker.pack(idSchema, id as never)
+      : AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: String(id) }));
   await (
     boundedContextAccess as unknown as {
       postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
@@ -5207,14 +5346,14 @@ async function postEntityStateChanged(
     context,
     create(EventSchema, {
       id: { value: `state-change-${String(++stateChangeSequence)}` },
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         EntityLog.EntityStateChangedSchema,
         create(EntityLog.EntityStateChangedSchema, {
           entity: { id: packedId, typeUrl: TypeUrls.derive(schema) },
-          newState: AnyMessages.pack(schema, state, { validate: false }),
+          newState: AnyPacker.pack(schema, state),
           signalId: [
             {
-              id: AnyMessages.pack(
+              id: AnyPacker.pack(
                 StringValueSchema,
                 create(StringValueSchema, { value: "test-signal" }),
               ),
@@ -5228,19 +5367,19 @@ async function postEntityStateChanged(
 }
 
 function packStringId(id: string) {
-  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }));
+  return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id }));
 }
 
 function packInt32(value: number) {
-  return AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value }));
+  return AnyPacker.pack(Int32ValueSchema, create(Int32ValueSchema, { value }));
 }
 
 function packBytes(value: Uint8Array) {
-  return AnyMessages.pack(BytesValueSchema, create(BytesValueSchema, { value }));
+  return AnyPacker.pack(BytesValueSchema, create(BytesValueSchema, { value }));
 }
 
 function unpackProjectOverviewState(state: Any | undefined) {
-  return AnyMessages.unpack(state ?? packMissing(), ProjectOverviewStateSchema);
+  return AnyPacker.tryUnpack(state ?? packMissing(), ProjectOverviewStateSchema);
 }
 
 function unpackEntityState(update: SubscriptionUpdate | undefined) {
@@ -5266,7 +5405,7 @@ function entityUpdateId(update: SubscriptionUpdate | undefined) {
 }
 
 function packMissing() {
-  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "missing" }));
+  return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "missing" }));
 }
 
 function errorMessage(status: unknown) {
@@ -5313,8 +5452,8 @@ function validationDetails(status: unknown) {
     return undefined;
   }
 
-  return AnyMessages.unpack(
-    value.details as Parameters<typeof AnyMessages.unpack>[0],
+  return AnyPacker.tryUnpack(
+    value.details as Parameters<typeof AnyPacker.unpack>[0],
     ValidationErrorSchema,
   );
 }

@@ -4,7 +4,7 @@ import { Time } from "@spine-event-engine/core/time";
 import { BoundedContext } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import { TenantIdSchema, ZoneIdSchema } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
@@ -72,7 +72,7 @@ export function registerBlackBoxContract(test, testing) {
         (events) => events.length === 1,
       );
       const event = produced[0];
-      if (AnyMessages.unpack(event?.message, ProjectCreatedSchema)?.name !== "First")
+      if (AnyPacker.tryUnpack(event?.message, ProjectCreatedSchema)?.name !== "First")
         throw new Error("BlackBox did not capture the committed produced event");
       event.context = undefined;
       if (blackBox.assertEvents()[0]?.context === undefined)
@@ -81,7 +81,7 @@ export function registerBlackBoxContract(test, testing) {
         () => scope.send(query("project-1")),
         (candidate) => candidate.message.length === 1,
       );
-      const first = AnyMessages.unpack(result.message[0]?.state, ProjectOverviewSchema);
+      const first = AnyPacker.tryUnpack(result.message[0]?.state, ProjectOverviewSchema);
       if (first?.name !== "First (projected)") throw new Error("projection was not immutable");
     } finally {
       await blackBox.close();
@@ -156,7 +156,7 @@ export function registerBlackBoxContract(test, testing) {
         update.done ||
         update.value.kind !== "update" ||
         update.value.update.update.case !== "entityUpdates" ||
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           update.value.update.update.value.update[0]?.kind.value,
           ProjectOverviewSchema,
         )?.name !== "State (projected)"
@@ -234,7 +234,7 @@ export function registerBlackBoxContract(test, testing) {
         update.done ||
         update.value.kind !== "update" ||
         update.value.update.update.case !== "eventUpdates" ||
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           update.value.update.update.value.event[0]?.message,
           ProjectObservedSchema,
         )?.id !== "event-1" ||
@@ -489,7 +489,7 @@ export function registerBlackBoxContract(test, testing) {
         first.done ||
         first.value.kind !== "update" ||
         first.value.update.update.case !== "eventUpdates" ||
-        AnyMessages.unpack(first.value.update.update.value.event[0]?.message, ProjectObservedSchema)
+        AnyPacker.tryUnpack(first.value.update.update.value.event[0]?.message, ProjectObservedSchema)
           ?.id !== "observed"
       ) {
         throw new Error("schema-list group missed its first Event type");
@@ -504,7 +504,7 @@ export function registerBlackBoxContract(test, testing) {
         second.done ||
         second.value.kind !== "update" ||
         second.value.update.update.case !== "eventUpdates" ||
-        AnyMessages.unpack(second.value.update.update.value.event[0]?.message, ProjectCreatedSchema)
+        AnyPacker.tryUnpack(second.value.update.update.value.event[0]?.message, ProjectCreatedSchema)
           ?.id !== "created"
       ) {
         throw new Error("schema-list group did not continue for its second Event type");
@@ -1009,7 +1009,7 @@ function query(id) {
               value: create(TargetFiltersSchema, {
                 idFilter: {
                   id: [
-                    AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+                    AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id })),
                   ],
                 },
               }),

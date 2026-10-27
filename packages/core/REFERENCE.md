@@ -13,7 +13,7 @@ transport semantic tags.
 ## Public entry point
 
 Import from `@spine-event-engine/core`. The package exports `Validate`,
-`ValidationException`, `RejectionThrowable`, `AnyMessages`, `SignalEnvelopes`,
+`ValidationException`, `RejectionThrowable`, `AnyPacker`, `SignalEnvelopes`,
 `TypeUrls`, `TypeRegistry`, `spineCoreRegistry`, `Identifiers`, `Stringifiers`,
 `StringifierRegistry`, the `Stringifier` contract, `Time`, and their exported input,
 result, and metadata types.
@@ -160,10 +160,13 @@ route, persist, or publish themselves.
 
 `TypeUrls.derive(schema)` uses the file's `type_url_prefix` option, or
 `type.googleapis.com` when no prefix is present. A fallback prefix must be
-non-empty and whitespace-free. `AnyMessages.pack()` validates unless
-`validate: false` is given, serializes without unknown fields, and returns a
-Spine-aware `Any`. `unpack()` and `unpackUsing()` return `undefined` for an
-unknown/mismatched URL or malformed bytes.
+non-empty and whitespace-free. `AnyPacker.pack(schema, message)` preserves
+unknown fields and does not validate domain constraints; `pack(any)` returns
+the same envelope unchanged. `unpack()` requires the exact derived type URL,
+and `unpackUsing()` requires an exact registered URL; both throw on mismatch
+or malformed bytes. `tryUnpack()` and `tryUnpackUsing()` return `undefined`
+for mismatch, unregistered URL, or malformed bytes. Signal entry points
+continue to validate inputs unless explicitly configured otherwise.
 
 `SignalEnvelopes.command()` and `.event()` generate fresh secure UUID v4 IDs,
 clone caller-supplied contexts, and pack the supplied domain message. They use

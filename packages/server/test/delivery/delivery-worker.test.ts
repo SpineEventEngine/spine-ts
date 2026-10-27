@@ -18,7 +18,7 @@ import { Time } from "@spine-event-engine/core/time";
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Identifiers, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers, TypeUrls } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -1767,7 +1767,7 @@ function message(
   const id = create(TaskIdSchema, { value: targetId });
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: signalId }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id,
@@ -1783,7 +1783,7 @@ function message(
       targetTypeUrl: TypeUrls.derive(TaskSchema),
     },
     signalId,
-    signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+    signal: AnyPacker.pack(EventSchema, event),
     label,
     status: "TO_DELIVER",
     shard,

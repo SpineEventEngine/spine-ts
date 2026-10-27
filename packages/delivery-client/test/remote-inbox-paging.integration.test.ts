@@ -15,7 +15,7 @@
 import { create } from "@bufbuild/protobuf";
 import { Code } from "@connectrpc/connect";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Time, TypeUrls, type TimeProvider } from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls, type TimeProvider } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -130,7 +130,7 @@ function projectionMessage(index: number, name = `Project ${String(index + 1)}`)
   });
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: `event-${id}` }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ProjectMilestoneAddedSchema,
       create(ProjectMilestoneAddedSchema, { id: milestone, name }),
     ),
@@ -141,11 +141,11 @@ function projectionMessage(index: number, name = `Project ${String(index + 1)}`)
   return {
     id: { value: id, shard: ShardIndex.single() },
     inboxId: {
-      targetId: AnyMessages.pack(ProjectMilestoneIdSchema, milestone),
+      targetId: AnyPacker.pack(ProjectMilestoneIdSchema, milestone),
       targetTypeUrl: TypeUrls.derive(ProjectMilestoneOverviewStateSchema),
     },
     signalId: event.id?.value ?? "",
-    signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+    signal: AnyPacker.pack(EventSchema, event),
     label: "UPDATE_SUBSCRIBER",
     status: "TO_DELIVER",
     shard: ShardIndex.single(),

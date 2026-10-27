@@ -39,7 +39,7 @@ import {
   UInt64ValueSchema,
 } from "@bufbuild/protobuf/wkt";
 import type { MessageSchema } from "@spine-event-engine/core";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import {
   CommandIdSchema,
   type Command,
@@ -286,8 +286,7 @@ export class SpineServices {
    * @returns Acknowledgement for route validation or dispatch.
    */
   async #post(command: Command): Promise<Ack> {
-    const messageId =
-      command.id && AnyMessages.pack(CommandIdSchema, command.id, { validate: false });
+    const messageId = command.id && AnyPacker.pack(CommandIdSchema, command.id);
     const typeUrl = command.message?.typeUrl;
     if (typeUrl === undefined || typeUrl.length === 0)
       return ServiceValues.commandErrorAck(
@@ -1207,7 +1206,13 @@ function validateQueryIds(
     return undefined;
   }
 
-  if (ids.some((id) => id === undefined || AnyMessages.unpack(id, schema) === undefined)) {
+  if (
+    ids.some(
+      (id) =>
+        id === undefined ||
+        (schema.typeName !== AnySchema.typeName && AnyPacker.tryUnpack(id, schema) === undefined),
+    )
+  ) {
     return invalidQueryError(`QueryService.Read id_filter values must pack ${schema.typeName}.`);
   }
 
@@ -1347,7 +1352,7 @@ function normalizedFilters(
 
 function decodeQueryIdValue(value: Any, route: StateRoute): unknown {
   const schema = route.idField.message;
-  return schema === undefined ? decodeAnyValue(value) : AnyMessages.unpack(value, schema);
+  return schema === undefined ? decodeAnyValue(value) : decodeAnyValue(value, schema);
 }
 
 function normalizedComposite(
@@ -1384,12 +1389,12 @@ function requiredComparison(filter: Filter): NormalizedComparisonOperator {
 function decodeColumnValue(filter: Filter, route: StateRoute): unknown {
   const column = filter.fieldPath?.fieldName[0] ?? "";
   if (column === "version" && filter.value !== undefined) {
-    const value = AnyMessages.unpack(filter.value, VersionSchema);
+    const value = AnyPacker.tryUnpack(filter.value, VersionSchema);
     if (value !== undefined) return value;
     throw new TypeError('Validated query column "version" has an invalid value.');
   }
   if ((column === "archived" || column === "deleted") && filter.value !== undefined) {
-    const value = AnyMessages.unpack(filter.value, BoolValueSchema);
+    const value = AnyPacker.tryUnpack(filter.value, BoolValueSchema);
     if (value !== undefined) return value.value;
     throw new TypeError(`Validated query column "${column}" has an invalid value.`);
   }
@@ -1402,7 +1407,11 @@ function decodeColumnValue(filter: Filter, route: StateRoute): unknown {
 
 function filterValueMatches(field: DescField, value: Any): boolean {
   const schema = filterValueSchema(field);
-  if (schema === undefined || value.typeUrl !== TypeUrls.derive(schema)) return false;
+  if (
+    schema === undefined ||
+    (schema.typeName !== AnySchema.typeName && value.typeUrl !== TypeUrls.derive(schema))
+  )
+    return false;
   const decoded =
     field.fieldKind === "message" ? decodeAnyValue(value, schema) : decodeAnyValue(value);
   if (field.fieldKind === "message") {
@@ -1454,13 +1463,13 @@ function systemValueMatches(column: string, value: Any): boolean {
   if (column === "version") {
     return (
       value.typeUrl === TypeUrls.derive(VersionSchema) &&
-      AnyMessages.unpack(value, VersionSchema) !== undefined
+      AnyPacker.tryUnpack(value, VersionSchema) !== undefined
     );
   }
   if (column === "archived" || column === "deleted") {
     return (
       value.typeUrl === TypeUrls.derive(BoolValueSchema) &&
-      AnyMessages.unpack(value, BoolValueSchema) !== undefined
+      AnyPacker.tryUnpack(value, BoolValueSchema) !== undefined
     );
   }
   return false;
@@ -1879,7 +1888,10 @@ function decodeSubscriptionIdValue(value: Any, route: StateRoute): unknown {
     return decodeAnyValue(value);
   }
 
-  const decoded = AnyMessages.unpack(value, route.idField.message);
+  const decoded =
+    route.idField.message.typeName === AnySchema.typeName
+      ? value
+      : AnyPacker.tryUnpack(value, route.idField.message);
   if (decoded === undefined) {
     throw new ConnectError(
       `SubscriptionService.Subscribe id_filter values must pack ${route.idField.message.typeName}.`,
@@ -1895,7 +1907,8 @@ function decodeFieldFilterValue(value: Any | undefined, schema: MessageSchema | 
     return decodeAnyValue(value);
   }
 
-  const decoded = AnyMessages.unpack(value, schema);
+  const decoded =
+    schema.typeName === AnySchema.typeName ? value : AnyPacker.tryUnpack(value, schema);
   if (decoded === undefined) {
     throw new ConnectError(
       `SubscriptionService.Subscribe field filter value must pack ${schema.typeName}.`,
@@ -1912,7 +1925,8 @@ function decodeAnyValue(value: Any | undefined, schema?: MessageSchema): unknown
   }
 
   if (schema !== undefined) {
-    const decoded = AnyMessages.unpack(value, schema);
+    if (schema.typeName === AnySchema.typeName) return value;
+    const decoded = AnyPacker.tryUnpack(value, schema);
     if (decoded !== undefined) {
       return decoded;
     }
@@ -2038,7 +2052,7 @@ function packVersionedState<Schema extends MessageSchema>(
   result: StandReadResult<Schema>,
 ) {
   return create(EntityStateVersionSchema, {
-    state: AnyMessages.pack(schema, result.state, { validate: false }),
+    state: AnyPacker.pack(schema, result.state),
     version: result.version ?? create(VersionSchema),
   });
 }
@@ -2130,9 +2144,7 @@ function commandPostError(error: unknown): ContractError {
     return {
       type: error.type,
       message: error.clientMessage,
-      details: AnyMessages.pack(ValidationErrorSchema, error.validationError, {
-        validate: false,
-      }),
+      details: AnyPacker.pack(ValidationErrorSchema, error.validationError),
     };
   }
 
@@ -2140,9 +2152,7 @@ function commandPostError(error: unknown): ContractError {
     return {
       type: "COMMAND_VALIDATION_ERROR",
       message: "Command payload validation failed.",
-      details: AnyMessages.pack(ValidationErrorSchema, error.validationError, {
-        validate: false,
-      }),
+      details: AnyPacker.pack(ValidationErrorSchema, error.validationError),
     };
   }
 
@@ -2215,15 +2225,15 @@ function tenantOptions(tenantId: TenantId | undefined): { readonly tenantId?: Te
 }
 
 const VALUE_DECODERS = Object.freeze([
-  (value: Any) => AnyMessages.unpack(value, StringValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, BoolValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, Int32ValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, UInt32ValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, Int64ValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, UInt64ValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, FloatValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, DoubleValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, BytesValueSchema)?.value,
+  (value: Any) => AnyPacker.tryUnpack(value, StringValueSchema)?.value,
+  (value: Any) => AnyPacker.tryUnpack(value, BoolValueSchema)?.value,
+  (value: Any) => AnyPacker.tryUnpack(value, Int32ValueSchema)?.value,
+  (value: Any) => AnyPacker.tryUnpack(value, UInt32ValueSchema)?.value,
+  (value: Any) => AnyPacker.tryUnpack(value, Int64ValueSchema)?.value,
+  (value: Any) => AnyPacker.tryUnpack(value, UInt64ValueSchema)?.value,
+  (value: Any) => AnyPacker.tryUnpack(value, FloatValueSchema)?.value,
+  (value: Any) => AnyPacker.tryUnpack(value, DoubleValueSchema)?.value,
+  (value: Any) => AnyPacker.tryUnpack(value, BytesValueSchema)?.value,
 ]);
 
 /**
@@ -2241,9 +2251,7 @@ function createEntityUpdate(
     match === "state"
       ? {
           case: "state" as const,
-          value: AnyMessages.pack(record.route.schema, clone(record.route.schema, update.state), {
-            validate: false,
-          }),
+          value: AnyPacker.pack(record.route.schema, clone(record.route.schema, update.state)),
         }
       : { case: "noLongerMatching" as const, value: true };
 
@@ -2292,7 +2300,7 @@ function cloneClientEvent(event: Event): Event {
 }
 
 function packString(value: string): Any {
-  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }));
+  return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value }));
 }
 
 function packEntityId(route: StateRoute, id: unknown): Any | undefined {
@@ -2300,21 +2308,21 @@ function packEntityId(route: StateRoute, id: unknown): Any | undefined {
     return clone(AnySchema, id);
   }
   if (route.idField.message !== undefined && isMessage(id)) {
-    return AnyMessages.pack(route.idField.message, id, { validate: false });
+    return AnyPacker.pack(route.idField.message, id);
   }
   if (id instanceof Uint8Array) {
-    return AnyMessages.pack(BytesValueSchema, create(BytesValueSchema, { value: id }));
+    return AnyPacker.pack(BytesValueSchema, create(BytesValueSchema, { value: id }));
   }
 
   switch (typeof id) {
     case "string":
       return packString(id);
     case "boolean":
-      return AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
+      return AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
     case "number":
-      return AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
+      return AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
     case "bigint":
-      return AnyMessages.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }));
+      return AnyPacker.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }));
     default:
       return undefined;
   }

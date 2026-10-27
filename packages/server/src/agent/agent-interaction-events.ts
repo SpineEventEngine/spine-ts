@@ -14,7 +14,7 @@
 
 import { create, equals, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls, Validate, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls, Validate, type MessageSchema } from "@spine-event-engine/core";
 import {
   CommandIdSchema,
   EventIdSchema,
@@ -59,14 +59,14 @@ const sourceRef = (accepted: AgentAcceptedInvocation) => {
     if (!id?.uuid.trim()) throw new TypeError("Agent interaction requires source Command ID.");
     const typeUrl = signal.value.message?.typeUrl;
     if (!typeUrl?.trim()) throw new TypeError("Agent interaction requires source payload type.");
-    return create(MessageIdSchema, { id: AnyMessages.pack(CommandIdSchema, id), typeUrl });
+    return create(MessageIdSchema, { id: AnyPacker.pack(CommandIdSchema, id), typeUrl });
   }
   if (signal.case === "event") {
     const id = signal.value.id;
     if (!id?.value.trim()) throw new TypeError("Agent interaction requires source Event ID.");
     const typeUrl = signal.value.message?.typeUrl;
     if (!typeUrl?.trim()) throw new TypeError("Agent interaction requires source payload type.");
-    return create(MessageIdSchema, { id: AnyMessages.pack(EventIdSchema, id), typeUrl });
+    return create(MessageIdSchema, { id: AnyPacker.pack(EventIdSchema, id), typeUrl });
   }
   throw new TypeError("Agent interaction requires a source signal.");
 };
@@ -192,7 +192,7 @@ export const AgentInteractionEvents: AgentInteractionEventFactory = Object.freez
       create(EventSchema, {
         id: origin.id,
         context,
-        message: AnyMessages.pack(schema, payload),
+        message: AnyPacker.pack(schema, payload),
       }),
     );
   },

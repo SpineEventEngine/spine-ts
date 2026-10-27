@@ -14,7 +14,7 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, timestampFromDate, type Any } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Identifiers } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
 import {
   ActorContextSchema,
@@ -79,11 +79,11 @@ describe("LocalEntityInbox", () => {
       });
       const inputs = ["first", "second", "third"].map((target) => ({
         inboxId: {
-          targetId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: target })),
+          targetId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: target })),
           targetTypeUrl,
         },
         signalId: `command-${target}`,
-        signal: AnyMessages.pack(
+        signal: AnyPacker.pack(
           CommandSchema,
           create(CommandSchema, {
             id: create(CommandIdSchema, { uuid: `command-${target}` }),
@@ -92,7 +92,7 @@ describe("LocalEntityInbox", () => {
                 actor: create(UserIdSchema, { value: "batch-test-user" }),
               }),
             }),
-            message: AnyMessages.pack(
+            message: AnyPacker.pack(
               CreateTaskSchema,
               create(CreateTaskSchema, {
                 id: create(TaskIdSchema, { value: target }),

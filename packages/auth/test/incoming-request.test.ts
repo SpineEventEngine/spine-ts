@@ -14,7 +14,7 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { TypeRegistry, AnyMessages } from "@spine-event-engine/core";
+import { TypeRegistry, AnyPacker } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -107,9 +107,7 @@ describe("packed command decoding", () => {
     });
     const registered = create(CommandSchema, {
       context: create(CommandContextSchema, { actorContext: context }),
-      message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "user-1" }), {
-        validate: false,
-      }),
+      message: AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "user-1" })),
     });
     const unknown = create(CommandSchema, {
       context: create(CommandContextSchema, { actorContext: context }),

@@ -14,7 +14,7 @@
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
   BoundedContextOnlineSchema,
@@ -114,7 +114,7 @@ function event(id: string): Event {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id, name: "Review task" }),
     ),

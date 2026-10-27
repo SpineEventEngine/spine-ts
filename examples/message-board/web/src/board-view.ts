@@ -18,7 +18,7 @@ import {
   BoardMessageViewSchema,
   type BoardMessageView,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { ActorContextSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilterSchema,
@@ -61,29 +61,7 @@ export class BoardView {
     return create(QuerySchema, {
       id: create(QueryIdSchema, { value: `message-board-${this.board}` }),
       context: create(ActorContextSchema),
-      target: create(TargetSchema, {
-        type: TypeUrls.derive(BoardMessageViewSchema),
-        criterion: {
-          case: "filters",
-          value: create(TargetFiltersSchema, {
-            filter: [
-              create(CompositeFilterSchema, {
-                operator: CompositeFilter_CompositeOperator.ALL,
-                filter: [
-                  create(FilterSchema, {
-                    fieldPath: { fieldName: ["board"] },
-                    operator: Filter_Operator.EQUAL,
-                    value: AnyMessages.pack(
-                      BoardIdSchema,
-                      create(BoardIdSchema, { value: this.board }),
-                    ),
-                  }),
-                ],
-              }),
-            ],
-          }),
-        },
-      }),
+      target: this.#target(),
       format: create(ResponseFormatSchema, {
         orderBy: [
           create(OrderBySchema, {
@@ -92,6 +70,36 @@ export class BoardView {
           }),
         ],
       }),
+    });
+  }
+
+  /**
+   * Selects messages for this board.
+   * @returns The query and subscription target.
+   */
+  #target() {
+    return create(TargetSchema, {
+      type: TypeUrls.derive(BoardMessageViewSchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          filter: [
+            create(CompositeFilterSchema, {
+              operator: CompositeFilter_CompositeOperator.ALL,
+              filter: [
+                create(FilterSchema, {
+                  fieldPath: { fieldName: ["board"] },
+                  operator: Filter_Operator.EQUAL,
+                  value: AnyPacker.pack(
+                    BoardIdSchema,
+                    create(BoardIdSchema, { value: this.board }),
+                  ),
+                }),
+              ],
+            }),
+          ],
+        }),
+      },
     });
   }
 
@@ -118,7 +126,7 @@ export class BoardView {
     return response.message
       .flatMap((entry) => {
         if (entry.state === undefined) return [];
-        const row = AnyMessages.unpack(entry.state, BoardMessageViewSchema);
+        const row = AnyPacker.tryUnpack(entry.state, BoardMessageViewSchema);
         return row?.board?.value === this.board ? [row] : [];
       })
       .sort(BoardRows.compare);

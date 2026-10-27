@@ -32,7 +32,7 @@ import {
   BoardMessageViewSchema,
   BoardIdSchema,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import type { CompositeFilter, Filter, Target } from "@spine-event-engine/proto/client";
 import {
   CompositeFilter_CompositeOperator,
@@ -166,11 +166,11 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
    */
   private matchesPostOrigin(filter: Filter, context: ActorContext, actor: string): boolean {
     const origin =
-      filter.value === undefined ? undefined : AnyMessages.unpack(filter.value, OriginSchema);
+      filter.value === undefined ? undefined : AnyPacker.tryUnpack(filter.value, OriginSchema);
     const id =
       origin?.message?.id === undefined
         ? undefined
-        : AnyMessages.unpack(origin.message.id, CommandIdSchema);
+        : AnyPacker.tryUnpack(origin.message.id, CommandIdSchema);
     return (
       id !== undefined &&
       id.uuid.trim().length > 0 &&
@@ -251,7 +251,7 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
       return false;
     }
     const board =
-      filter.value === undefined ? undefined : AnyMessages.unpack(filter.value, BoardIdSchema);
+      filter.value === undefined ? undefined : AnyPacker.tryUnpack(filter.value, BoardIdSchema);
     return board !== undefined && boards.includes(board.value);
   }
 }

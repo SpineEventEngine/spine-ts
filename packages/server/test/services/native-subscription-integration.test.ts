@@ -13,7 +13,7 @@
  */
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
-import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type CommandContext,
@@ -405,7 +405,7 @@ function createAggregateCommand(id: string, name: string) {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: `command-${id}` }),
     context: create(CommandContextSchema, { actorContext: createActorContext() }),
-    message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema, { id, name })),
+    message: AnyPacker.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema, { id, name })),
   });
 }
 
@@ -414,9 +414,9 @@ function createProjectionEvent(id: string, name: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
-      producerId: AnyMessages.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
+      producerId: AnyPacker.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id, name }),
     ),
@@ -428,9 +428,9 @@ function createProjectionTriggerEvent(id: string, title: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
-      producerId: AnyMessages.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
+      producerId: AnyPacker.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id, name: title }),
     ),
@@ -442,9 +442,9 @@ function createAggregateEvent(id: string, name: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
-      producerId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
+      producerId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(TaskIdSchema, { value: id }),
@@ -500,7 +500,7 @@ async function expectNativeState<Schema extends MessageSchema>(
   if (state?.case !== "state") {
     throw new Error("Expected a native EntityStateChanged subscription update.");
   }
-  expect(AnyMessages.unpack(state.value, schema)).toEqual(create(schema, expected));
+  expect(AnyPacker.tryUnpack(state.value, schema)).toEqual(create(schema, expected));
 }
 
 async function nextSubscriptionUpdate(

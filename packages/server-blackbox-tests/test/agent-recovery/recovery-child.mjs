@@ -24,7 +24,7 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { AiRegistry, Mcp, ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
-import { AnyMessages, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import { AgentInvocationTerminatedSchema } from "@spine-event-engine/proto/agent";
 import { BoundedContext, EventRouting } from "@spine-event-engine/server";
@@ -181,7 +181,7 @@ async function terminationAudit(box, repository, id) {
     .find(
       (event) =>
         event.message &&
-        AnyMessages.unpack(event.message, AgentInvocationTerminatedSchema) !== undefined,
+        AnyPacker.tryUnpack(event.message, AgentInvocationTerminatedSchema) !== undefined,
     );
   if (original?.id === undefined || original.message === undefined)
     throw new Error("Terminated Agent has no original history System Event.");
@@ -190,7 +190,7 @@ async function terminationAudit(box, repository, id) {
     (events) => events.length === 1,
     { timeoutMs: 10_000 },
   );
-  const termination = AnyMessages.unpack(original.message, AgentInvocationTerminatedSchema);
+  const termination = AnyPacker.tryUnpack(original.message, AgentInvocationTerminatedSchema);
   return {
     systemOriginalId: original.id.value,
     systemStoredId: stored[0]?.id?.value,
@@ -913,7 +913,7 @@ async function run() {
             .assertEvents()
             .map(
               (event) =>
-                event.message && AnyMessages.unpack(event.message, SupportReplyDraftedSchema),
+                event.message && AnyPacker.tryUnpack(event.message, SupportReplyDraftedSchema),
             )
             .filter(Boolean)
         : await box.eventually(
@@ -922,7 +922,7 @@ async function run() {
                 .assertEvents()
                 .map(
                   (event) =>
-                    event.message && AnyMessages.unpack(event.message, SupportReplyDraftedSchema),
+                    event.message && AnyPacker.tryUnpack(event.message, SupportReplyDraftedSchema),
                 )
                 .filter(Boolean),
             (items) => items.length === 1,

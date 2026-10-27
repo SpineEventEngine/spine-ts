@@ -15,7 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { create } from "@bufbuild/protobuf";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { TaskIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
@@ -35,7 +35,7 @@ describe("DeliveryReadiness", () => {
     const received = {
       id: { value: "new-row", shard },
       inboxId: {
-        targetId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
+        targetId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
         targetTypeUrl: TypeUrls.derive(TaskSchema),
       },
       signalId: "event-1",
@@ -79,7 +79,7 @@ describe("DeliveryReadiness", () => {
     const received = {
       id: { value: "new-row", shard },
       inboxId: {
-        targetId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
+        targetId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
         targetTypeUrl: TypeUrls.derive(TaskSchema),
       },
       signalId: "event-1",

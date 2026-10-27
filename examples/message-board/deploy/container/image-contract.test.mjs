@@ -389,7 +389,7 @@ function exerciseRegistry(network, target, origin, image) {
   const script = `
     import { create } from "@bufbuild/protobuf";
     import { Client } from "@spine-event-engine/client-web";
-    import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+    import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
     import { ActorContextSchema } from "@spine-event-engine/proto";
     import {
       CompositeFilterSchema,
@@ -418,7 +418,7 @@ function exerciseRegistry(network, target, origin, image) {
             filter: [create(FilterSchema, {
               fieldPath: { fieldName: ["board"] },
               operator: Filter_Operator.EQUAL,
-              value: AnyMessages.pack(BoardIdSchema, board),
+              value: AnyPacker.pack(BoardIdSchema, board),
             })],
           })],
         }),

@@ -15,6 +15,8 @@ syntax = "proto3";
 
 package spine.server.testing.handlerregistry;
 
+import "spine/options.proto";
+
 message StartReview {
   string id = 1;
 }
@@ -31,4 +33,9 @@ message AssignReviewTask {
 message ScheduleReviewTask {
   string id = 1;
   string name = 2;
+}
+
+message SubmitReviewDecision {
+  string id = 1;
+  string name = 2 [(required) = true];
 }

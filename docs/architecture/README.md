@@ -234,21 +234,20 @@ so remaining rules still run deterministically.
 
 ## Core Envelope Construction
 
-`@spine-event-engine/core` provides Spine-aware `Any` packing. `AnyMessages.pack()` derives
+`@spine-event-engine/core` provides Spine-aware `Any` packing. `AnyPacker.pack()` derives
 the canonical type URL with `TypeUrls.derive(schema)` and serializes the payload
 with Protobuf-ES `toBinary()`. The implementation intentionally does not call
 Buf `anyPack()` directly for Spine domain payloads because that helper emits the
 standard `type.googleapis.com/...` prefix rather than the Spine
 `type.spine.io/...` prefix required for routing.
 
-Framework-packed payloads pass `writeUnknownFields: false` to the Protobuf-ES
-binary writer. This gives the helper stable behavior for messages that carry
-retained unknown fields. Protobuf-ES 2.12.1 does not expose deterministic
+Framework-packed payloads preserve retained unknown binary fields. Protobuf-ES 2.12.1 does not expose deterministic
 map-key ordering. It does not claim fully canonical map ordering.
 
-`AnyMessages.unpack()` performs exact type URL matching against the requested schema
-before binary decoding and returns `undefined` on decode failure, keeping type
-URL comparison and malformed payload handling inside the core module interface.
+`AnyPacker.unpack()` requires the exact full type URL and throws for a mismatch or malformed
+payload. `AnyPacker.tryUnpack()` returns `undefined` for an absent, mismatched, or malformed
+payload. The registry variants apply the same strict and optional behavior to exact registered
+URLs. Packing does not validate domain constraints; signal entry points validate explicitly.
 Callers should not parse or concatenate type URL strings directly.
 
 `SignalEnvelopes.command()` and `SignalEnvelopes.event()` construct generated

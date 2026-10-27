@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
@@ -299,7 +299,7 @@ class ProjectManagementUserLoad {
   private createCommand() {
     return create(CommandSchema, {
       id: metadata.commandId(),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         CreateProjectSchema,
         create(CreateProjectSchema, { id: this.id, name: `Load project ${String(this.index)}` }),
       ),
@@ -340,7 +340,7 @@ class ProjectManagementUserLoad {
       update.update.value.update.some(
         (row) =>
           row.kind.case === "state" &&
-          AnyMessages.unpack(row.kind.value, ProjectSummarySchema)?.id === this.id,
+          AnyPacker.tryUnpack(row.kind.value, ProjectSummarySchema)?.id === this.id,
       )
     );
   }
@@ -377,7 +377,7 @@ class ProjectManagementUserLoad {
       );
       const visible = response.message.some((row) => {
         if (row.state === undefined) return false;
-        return AnyMessages.unpack(row.state, ProjectSummarySchema)?.id === this.id;
+        return AnyPacker.tryUnpack(row.state, ProjectSummarySchema)?.id === this.id;
       });
       if (response.response?.status?.status.case === "ok" && visible)
         return performance.now() - startedAt;
@@ -426,9 +426,7 @@ class ProjectManagementUserLoad {
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [
-              AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: this.id })),
-            ],
+            id: [AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: this.id }))],
           },
         }),
       },
