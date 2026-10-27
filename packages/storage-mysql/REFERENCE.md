@@ -5,6 +5,7 @@ This reference is for coding agents configuring the supported MySQL storage adap
 ## Public entry point
 
 Import `MysqlStorageFactory`, `MysqlStorageOptions`, `MysqlTenantStorageOptions`,
+`MysqlTenantResolver`,
 `MysqlEntityStorageHandle`, `MysqlStorageFactoryBuilder`,
 `MysqlCreateOperation`, `CreateOperationFactory`, `MysqlTableSpec`,
 `MysqlColumnSpec`, `MysqlStorageConfigurationError`,
@@ -15,9 +16,15 @@ Import `MysqlStorageFactory`, `MysqlStorageOptions`, `MysqlTenantStorageOptions`
 ## Connection and schema
 
 `MysqlStorageFactory.newBuilder().setOptions(options).build()` configures one
-single-tenant database. `setTenantOptions(entries)` configures one distinct
-database and pool per complete generated `TenantId`. The factory selects
-the matching pool before table, query, transaction, or lock work.
+shared database without connecting. `setTenantOptions(entries)` configures
+distinct databases for complete generated `TenantId` values;
+`setTenantResolver(resolver)` selects them asynchronously on first use. Fixed
+entries and a resolver are mutually exclusive. Shared options are required in
+both modes. The first storage operation binds each database and its pool;
+concurrent first uses share that binding, while a failed binding can retry.
+`checkConnection()` probes only the shared database with `SELECT 1`, performs
+no schema checks or DDL, and releases a temporary pool unless runtime work
+already bound one. Successful checks are remembered; failed checks can retry.
 `setStringifierRegistry(registry)` configures reversible mappings for
 message-valued IDs and ordinary message columns; the builder snapshots the
 registry so later caller changes do not alter stored or queried values.
@@ -45,23 +52,22 @@ one-byte binary collation, such as `latin1_bin`, and can store only IDs
 representable in that character set. An `utf8mb4` ID of that declared width
 cannot be converted to MyISAM.
 
-Before deployment, run `pnpm --dir packages/storage-mysql inventory:legacy --
---url <database-url>` once for every configured tenant database. The command
-fails closed on connection errors, `_scope`, `_revision`, or an old primary key
-containing `_scope`. Passing this inventory is a startup prerequisite for an
-upgraded application. Factory build repeats the inspection for every configured
-database; the runtime has no dual-layout reader or automatic
-conflict winner.
+The optional `inventory:legacy` command remains available for operators
+examining older layouts. Factory build and `checkConnection()` do not scan
+unrelated tables or perform an upgrade-layout inventory. Requested record
+families are checked when normal storage operations first use them.
 
 ## Lifecycle and tenancy
 
-`close(): Promise<void>` immediately fences new handles, waits for admitted
-Entity commits, and then closes live handles and drains pools. Await it to
-observe cleanup failures; repeated calls return the same completion. A record handle closes independently. A
-single-tenant factory has one database. A multitenant factory requires a
-complete generated `TenantId` on each operation and routes it to its configured
-database. Bounded Context names are diagnostic only and never partition rows,
-tables, locks, or queries.
+`close(): Promise<void>` immediately fences new public operations, waits for
+complete admitted record, Entity, Agent, and commit work, then closes live
+handles and drains pools. Await it to
+observe cleanup failures; repeated calls return the same completion. A record
+handle closes independently. Shared operations use the configured shared
+destination. Creating a multitenant storage handle requires a complete
+generated `TenantId` in its `StorageContext`; that captured tenant selects the
+database for operations through the handle. Bounded Context names are
+diagnostic only and never partition rows, tables, locks, or queries.
 
 Each Entity source and history family has an independent table. Top-level
 provider error messages and public responses omit connection URLs,

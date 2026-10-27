@@ -858,6 +858,7 @@ live("MySQL-family record layout", () => {
 
 tenantLive("MySQL normalized-plan tenant containment", () => {
   it("keeps matching IDs inside the selected tenant and storage group", async () => {
+    if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     if (tenantAUrl === undefined || tenantBUrl === undefined) {
       throw new Error("Dedicated MySQL tenant URLs are required.");
     }
@@ -865,6 +866,7 @@ tenantLive("MySQL normalized-plan tenant containment", () => {
     const tenantB = tenant("b");
     const group = new StorageGroup(`t0190_group_${String(Date.now())}`);
     const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url })
       .setTenantOptions([
         { tenantId: tenantA, options: { url: tenantAUrl } },
         { tenantId: tenantB, options: { url: tenantBUrl } },

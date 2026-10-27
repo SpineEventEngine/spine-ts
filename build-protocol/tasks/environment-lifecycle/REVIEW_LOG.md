@@ -537,3 +537,46 @@ lint, TSDoc, cleanup, formatting and diff pass after correction. No runtime
 algorithm/public contract changed, so no repeated review or broad matrix needed.
 All concern dispositions accepted, with scoped coverage limits retained above.
 Commit/push authored paths; full release/security and later integration remain.
+
+## M4d1 MySQL/MariaDB offline lifecycle review
+
+Baseline 29f2ed641. Scope is offline assembly, deferred fixed/dynamic destinations,
+explicit read-only shared connection checks, complete public-operation admission
+and shutdown, narrow docs and focused regressions. Physical preparation is M4d2.
+Pre-review lint corrected pool reuse and shared/tenant-table collision wording;
+no new public preparation or tenant membership claims.124 unit tests and fresh
+source-mapped LCOV pass, with21 live tests on each MySQL8.4 and MariaDB11.4.
+Static/docs/build checks pass; final implementer freeze precedes dispatch.
+External mysql-offline-review-context.md and mysql-offline-evidence.md define
+exact scope and evidence. Raw changed-line coverage remains external; live tests
+are separate from unit LCOV, final release coverage remains pending.
+
+All four relevant concerns use existing explicitly configured immutable profiles:
+provider_reliability/performance_reliability_reviewer gpt-6-sol/medium;
+provider_style/style_maintainability_reviewer gpt-6-sol/medium;
+repository_api_review/typescript_api_docs_reviewer gpt-6-sol/medium;
+provider_documentation/documentation_reviewer gpt-6-luna/medium. No runtime
+self-introspection is exposed. Three technical concerns first; documentation as
+capacity frees. No source edits, test reruns or children by reviewers. Collect
+complete wave before one accepted correction batch. Estimate0.3-0.6hours for
+review, bounded corrections, confirmation and checkpoint push.
+
+M4d1 full review wave collected. Reliability and maintainability have no confirmed
+P0-P2 findings. Accept three documentation corrections after deduplication:
+build() returns a logical locally validated factory, README tenant pools open on
+first use, and REFERENCE distinguishes shared operations from tenant-scoped
+handles whose StorageContext captures the TenantId. All four reviewers match
+recorded explicit immutable profiles; runtime introspection unavailable. The
+optional combined pending-tenant/probe-cleanup failure test remains nonblocking:
+reviewed source handles the path, existing tests cover constituent behavior.
+One deterministic correction batch to existing Sol/medium implementer, estimate
+0.1-0.2hours including narrow docs/type checks, commit and push. No public contract
+or runtime algorithm changes; no specialist lane needs reopening for prose only.
+
+M4d1 accepted. Prose-only corrections pass TSDoc, generated-doc checks, formatting
+and diff checks. No runtime/public-contract changes reopened review or repeated
+tests. All four concerns have accepted dispositions, no unresolved P0-P2. Fresh
+unit LCOV shows changed factory112/122, record32/33, Entity-history24/35 and Agent
+wrappers14/14 executable lines covered before the final extra Agent-fence test;
+live behavior is recorded separately, not claimed as unit coverage. Commit/push
+this checkpoint; M4d2 and full-task release/security verification remain pending.

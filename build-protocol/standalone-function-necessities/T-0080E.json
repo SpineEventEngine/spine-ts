@@ -388,15 +388,6 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/storage-mysql/src/mysql/storage-factory.ts",
-    "kind": "function-declaration",
-    "identity": "assertNoRetiredLayout()#1",
-    "name": "assertNoRetiredLayout",
-    "disposition": "necessity",
-    "reason": "TypeScript MySQL migration boundary: assertNoRetiredLayout fails factory startup closed when any retired physical layout is detected."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/storage-datastore/src/datastore/agent-execution.ts",
     "kind": "function-declaration",
     "identity": "invocationId()#1",

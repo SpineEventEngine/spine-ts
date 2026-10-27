@@ -680,3 +680,45 @@ temporary preparation resources close, and real Entity/audit requirements are
 covered. Commit and push this checkpoint. MySQL parity follows in two bounded
 slices: offline connection lifecycle, then physical preparation. This follows the
 same accepted D0150 design and avoids mixing their independent review concerns.
+
+M4c checkpoint29f2ed641 pushed immediately to official origin/environment-lifecycle.
+M4d1 MySQL/MariaDB offline lifecycle starts from that commit. Existing implementer
+storage_retention, verified explicit immutable gpt-6-sol/medium, no child agents;
+runtime metadata introspection unavailable. Estimate1-2hours for offline factory,
+shared options/dynamic resolver, explicit remembered connection diagnostic,
+logical handles and full accepted-operation shutdown, dialect-specific unit/live
+checks on both task engines, narrow docs and review. Same D0150 design, no new
+architecture pass. Detailed external mysql-offline-brief.md applies alongside
+TASK full ledger. M4d2 will separately implement physical create/check readiness.
+No shared API redesign, server wiring, Agent recovery addition or data migration.
+
+M6 prerequisite: read-only test/registration inventory under the latest human
+requirement of unconditional Entity state uniqueness, including BlackBox.
+Orchestrator-dispatched scanning function mechanical_checks uses its explicit
+immutable gpt-6-luna/low profile; no children or source edits. Estimate 0.15-0.25
+hours concurrently with M4d1. Identify any existing bypass and representative
+simultaneously open duplicate-state fixtures, then recommend correct lifecycle
+or distinct-domain fixture changes. External duplicate-state-inventory.md holds
+detailed evidence. Runtime self-introspection unavailable. M6 implementation
+remains sequenced after TenantIndex; no new architecture pass is requested.
+
+M6 read-only inventory accepted from the explicitly configured Luna/low scanning
+function. No existing duplicate-state disabling switch was found. Current checks
+are per builder or per Server assembly, leaving separately built Bounded Contexts
+unprotected. Representative constructor-injection, service validation, lookup
+and Server-cleanup tests need revised lifetimes or distinct domain states.
+External duplicate-state-inventory.md records exact anchors. Sequential scenarios
+must also account for retained shared storage: closing a Bounded Context does not
+erase its Entity state, so choose deliberate fresh identifiers when independence
+is intended. No production or test source changed in this inventory.
+
+M4d1 MySQL/MariaDB offline connection lifecycle accepted after full four-concern
+review.124 scoped unit tests pass with fresh source maps; MySQL8.4 and MariaDB11.4
+each pass21 live tests using shared and two tenant databases. Static/docs/build
+checks pass. Three deterministic documentation corrections are verified; runtime
+and tests unchanged after review. Factory assembly is offline, tenant resolution
+coalesces/retries, explicit shared checks release temporary pools, and shutdown
+drains complete accepted Record/Entity/Agent operations. No migration scan or
+provisioning is added. Commit authored paths and push immediately; preserve
+generation-only manifests. Next M4d2 implements physical creation/compatibility
+using D0150 and the existing provider preparation port. Final release pending.

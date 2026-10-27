@@ -20,6 +20,7 @@ import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
   EntityCommitStorageFactories,
+  TenantBoundary,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
@@ -387,6 +388,11 @@ describe("MysqlStorageFactory commit cleanup failures", () => {
     const entity = cleanupEntity();
     const commit = EntityCommitStorageFactories.create(factory, entity);
     await commit.commit(cleanupMutation(entity, false));
+    await (
+      factory as unknown as {
+        resolveDatabase(boundary: TenantBoundary): Promise<unknown>;
+      }
+    ).resolveDatabase(TenantBoundary.single);
     const commitClose = new Error("commit close failed");
     const poolClose = new Error("pool close failed");
     seam.close.mockImplementationOnce(() => {

@@ -18,7 +18,11 @@ import { createPool } from "mysql2/promise";
 import { AnyPacker, Identifiers, StringifierRegistry } from "@spine-event-engine/core";
 import { EventSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
+import {
+  AgentExecutionStorageFactories,
+  AgentHistoryStorageFactories,
+  EntityCommitStorageFactories,
+} from "@spine-event-engine/storage/provider";
 import {
   ColumnTypes,
   RecordColumn,
@@ -26,12 +30,14 @@ import {
   StorageGroup,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
+import { providerEntityInput } from "../../storage/test/entity/agent-execution-provider-fixtures.js";
+import { scope } from "../../storage/test/entity/agent-history-fixtures.js";
 
 import {
   MysqlStorageFactory,
@@ -39,10 +45,14 @@ import {
   type MysqlStorageFactoryBuilder,
   type MysqlTableSpec,
 } from "../src/index.js";
+import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
 
 vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 
 describe("MysqlStorageFactory builder contract", () => {
+  beforeEach(() => {
+    vi.mocked(createPool).mockReset();
+  });
   it("exposes the JVM-style builder without a static create alias", () => {
     const builder: MysqlStorageFactoryBuilder = MysqlStorageFactory.newBuilder();
 
@@ -78,7 +88,7 @@ describe("MysqlStorageFactory builder contract", () => {
     );
   });
 
-  it("connects with parsed options, releases its probe, and closes its pool once", async () => {
+  it("builds offline and checks the shared destination without retaining its probe pool", async () => {
     const release = vi.fn();
     const end = vi.fn(() => Promise.resolve());
     vi.mocked(createPool).mockReturnValue({
@@ -94,6 +104,8 @@ describe("MysqlStorageFactory builder contract", () => {
         tls: { rejectUnauthorized: false },
       })
       .build();
+    expect(createPool).not.toHaveBeenCalled();
+    await factory.checkConnection();
     await factory.close();
     await factory.close();
     await Promise.resolve();
@@ -113,6 +125,283 @@ describe("MysqlStorageFactory builder contract", () => {
     expect(end).toHaveBeenCalledTimes(1);
   });
 
+  it("resolves a dynamic tenant once for concurrent first use, then keeps its destination", async () => {
+    const resolver = vi.fn(() => Promise.resolve({ url: "mysql://db.example/resolved" }));
+    const query = vi.fn(mysqlQuery);
+    const end = vi.fn(() => Promise.resolve());
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end,
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
+      .setTenantResolver(resolver)
+      .build();
+    const identity = tenant("dynamic");
+    const context = { name: "dynamic", multitenant: true, tenantId: identity } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const first = factory.createRecordStorage(context, spec);
+    const second = factory.createRecordStorage(context, spec);
+    expect(resolver).not.toHaveBeenCalled();
+    expect(createPool).not.toHaveBeenCalled();
+    await Promise.all([
+      first.write(create(StringValueSchema, { value: "one" })),
+      second.write(create(StringValueSchema, { value: "two" })),
+    ]);
+    expect(resolver).toHaveBeenCalledOnce();
+    expect(createPool).toHaveBeenCalledOnce();
+    await first.read("one");
+    expect(resolver).toHaveBeenCalledOnce();
+    first.close();
+    second.close();
+    await factory.close();
+    expect(end).toHaveBeenCalledOnce();
+  });
+
+  it("retries a failed dynamic tenant lookup without querying it in shared connection checks", async () => {
+    const resolver = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("directory unavailable"))
+      .mockResolvedValue({ url: "mysql://db.example/retry" });
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(vi.fn(mysqlQuery)))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
+      .setTenantResolver(resolver)
+      .build();
+    await factory.checkConnection();
+    expect(resolver).not.toHaveBeenCalled();
+    const context = { name: "retry", multitenant: true, tenantId: tenant("retry") } as const;
+    const records = factory.createRecordStorage(
+      context,
+      new RecordSpec({
+        recordType: StringValueSchema,
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
+    );
+    await expect(records.read("one")).rejects.toThrow();
+    await expect(records.read("one")).resolves.toBeUndefined();
+    expect(resolver).toHaveBeenCalledTimes(2);
+    records.close();
+    await factory.close();
+  });
+
+  it("rejects shared and tenant access to one physical table in a shared database", async () => {
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(vi.fn(mysqlQuery)))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
+      .setTenantOptions([
+        { tenantId: tenant("one"), options: { url: "mysql://db.example/shared" } },
+      ])
+      .build();
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const shared = factory.createRecordStorage({ name: "shared", multitenant: false }, spec);
+    const selected = factory.createRecordStorage(
+      {
+        name: "tenant",
+        multitenant: true,
+        tenantId: tenant("one"),
+      },
+      spec,
+    );
+    await shared.read("one");
+    await expect(selected.read("one")).rejects.toThrow(/tables collide/i);
+    shared.close();
+    selected.close();
+    await factory.close();
+  });
+
+  it("drains an admitted two-record batch while fencing new public record calls", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let writes = 0;
+    const query = vi.fn(mysqlQuery);
+    const execute = vi.fn(async () => {
+      writes += 1;
+      if (writes === 1) {
+        entered.resolve(undefined);
+        await release.promise;
+      }
+      return [{ affectedRows: 1 }, []];
+    });
+    const end = vi.fn(() => Promise.resolve());
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve({ query, execute, release: vi.fn() })),
+      end,
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/batch" })
+      .build();
+    const records = factory.createRecordStorage(
+      { name: "batch", multitenant: false },
+      new RecordSpec({
+        recordType: StringValueSchema,
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
+    );
+    const batch = records.writeAll([
+      create(StringValueSchema, { value: "one" }),
+      create(StringValueSchema, { value: "two" }),
+    ]);
+    await entered.promise;
+    const closing = factory.close();
+    await expect(records.write(create(StringValueSchema, { value: "late" }))).rejects.toThrow(
+      /closed/i,
+    );
+    expect(end).not.toHaveBeenCalled();
+    release.resolve(undefined);
+    await batch;
+    await closing;
+    expect(writes).toBe(2);
+    expect(end).toHaveBeenCalledOnce();
+  });
+
+  it("drains current and state-history writes admitted before Entity close", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let writes = 0;
+    const write = vi.spyOn(MysqlRecordStorage.prototype, "write").mockImplementation(async () => {
+      writes += 1;
+      entered.resolve(undefined);
+      await release.promise;
+    });
+    const history = vi
+      .spyOn(MysqlRecordStorage.prototype, "writeImmutable")
+      .mockImplementation(async () => {
+        writes += 1;
+        await release.promise;
+      });
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/entity" })
+      .build();
+    const internal = factory as unknown as {
+      createEntityStorage(input: ReturnType<typeof entityInput>): {
+        current: {
+          write(record: ReturnType<typeof create<typeof EntityRecordSchema>>): Promise<void>;
+        };
+        states: {
+          append(record: ReturnType<typeof create<typeof EntityRecordSchema>>): Promise<void>;
+        };
+      };
+    };
+    try {
+      const storage = internal.createEntityStorage(
+        entityInput({ name: "tasks", multitenant: false }),
+      );
+      const taskId = create(TaskIdSchema, { value: "entity-1" });
+      const record = create(EntityRecordSchema, {
+        entityId: Identifiers.pack(TaskIdSchema, taskId),
+        state: AnyPacker.pack(
+          TaskSchema,
+          create(TaskSchema, {
+            id: taskId,
+            title: "Entity",
+            taskListId: create(TaskListIdSchema, { value: "list-1" }),
+          }),
+        ),
+      });
+      const current = storage.current.write(record);
+      const state = storage.states.append(record);
+      await entered.promise;
+      const closing = factory.close();
+      await expect(storage.current.write(record)).rejects.toThrow(/closed/i);
+      await expect(storage.states.append(record)).rejects.toThrow(/closed/i);
+      release.resolve(undefined);
+      await Promise.all([current, state, closing]);
+      expect(writes).toBe(2);
+    } finally {
+      release.resolve(undefined);
+      write.mockRestore();
+      history.mockRestore();
+      await factory.close();
+    }
+  });
+
+  it("admits a batch before its ID callback closes the factory", async () => {
+    const execute = vi.fn(() => Promise.resolve([{ affectedRows: 1 }, []]));
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() =>
+        Promise.resolve({
+          query: vi.fn(mysqlQuery),
+          execute,
+          release: vi.fn(),
+        }),
+      ),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/callback" })
+      .build();
+    let closing: Promise<void> | undefined;
+    const records = factory.createRecordStorage(
+      { name: "callback", multitenant: false },
+      new RecordSpec({
+        recordType: StringValueSchema,
+        idKind: "string",
+        extractId: (record) => {
+          closing ??= factory.close();
+          return record.value;
+        },
+      }),
+    );
+    await expect(
+      records.writeAll([create(StringValueSchema, { value: "first" })]),
+    ).resolves.toBeUndefined();
+    await closing;
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it("retains shared probe and temporary-pool cleanup failures", async () => {
+    const endFailure = new Error("pool disposal failed");
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.reject(new Error("connection refused"))),
+      end: vi.fn(() => Promise.reject(endFailure)),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/probe" })
+      .build();
+    const error = await factory.checkConnection().catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toEqual([
+      expect.objectContaining({ message: "Unable to connect to MySQL." }),
+      endFailure,
+    ]);
+    await factory.close();
+  });
+
+  it("fences escaped Agent history and execution calls when the factory closes", async () => {
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/agent" })
+      .build();
+    const history = AgentHistoryStorageFactories.create(factory, scope);
+    const execution = AgentExecutionStorageFactories.create(factory, {
+      entity: providerEntityInput(),
+      stateType: "spine.server.testing.SupportReplyAgentState",
+    });
+    expect(createPool).not.toHaveBeenCalled();
+    await factory.close();
+    await expect(
+      history.read({ entityId: "agent-1", view: { kind: "full" }, count: 1, maxBytes: 1024 }),
+    ).rejects.toThrow(/closed/i);
+    await expect(execution.pending({ count: 1 })).rejects.toThrow(/closed/i);
+    expect(createPool).not.toHaveBeenCalled();
+  });
+
   it("sanitizes connection failures and closes the failed pool", async () => {
     const end = vi.fn(() => Promise.resolve());
     vi.mocked(createPool).mockReturnValue({
@@ -120,9 +409,10 @@ describe("MysqlStorageFactory builder contract", () => {
       end,
     } as never);
 
-    await expect(
-      MysqlStorageFactory.newBuilder().setOptions({ url: "mysql://db.example/database" }).build(),
-    ).rejects.toThrow("Unable to connect to MySQL.");
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/database" })
+      .build();
+    await expect(factory.checkConnection()).rejects.toThrow("Unable to connect to MySQL.");
     expect(end).toHaveBeenCalledTimes(1);
   });
 
@@ -136,6 +426,7 @@ describe("MysqlStorageFactory builder contract", () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: "mysql://db.example/defaults" })
       .build();
+    await factory.checkConnection();
     await factory.close();
     await Promise.resolve();
 
@@ -225,6 +516,7 @@ describe("MysqlStorageFactory builder contract", () => {
     const tenantTwo = create(TenantIdSchema, { kind: { case: "value", value: "two" } });
 
     const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
       .setTenantOptions([
         { tenantId: tenantOne, options: { url: "mysql://db.example/tenant_one" } },
         { tenantId: tenantTwo, options: { url: "mysql://db.example/tenant_two" } },
@@ -304,12 +596,12 @@ describe("MysqlStorageFactory builder contract", () => {
     expect(secondEnd).toHaveBeenCalledOnce();
   });
 
-  it("closes successful and failed tenant pools once after a partial build failure", async () => {
+  it("keeps a successful tenant usable when another first-use connection fails", async () => {
     const firstEnd = vi.fn(() => Promise.resolve());
     const secondEnd = vi.fn(() => Promise.resolve());
     vi.mocked(createPool)
       .mockReturnValueOnce({
-        getConnection: vi.fn(() => Promise.resolve({ query: vi.fn(mysqlQuery), release: vi.fn() })),
+        getConnection: vi.fn(() => Promise.resolve(mysqlConnection(vi.fn(mysqlQuery)))),
         end: firstEnd,
       } as never)
       .mockReturnValueOnce({
@@ -317,19 +609,39 @@ describe("MysqlStorageFactory builder contract", () => {
         end: secondEnd,
       } as never);
 
-    await expect(
-      MysqlStorageFactory.newBuilder()
-        .setTenantOptions([
-          { tenantId: tenant("one"), options: { url: "mysql://db.example/one" } },
-          { tenantId: tenant("two"), options: { url: "mysql://db.example/two" } },
-        ])
-        .build(),
-    ).rejects.toThrow("Unable to connect to MySQL.");
-    expect(firstEnd).toHaveBeenCalledOnce();
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
+      .setTenantOptions([
+        { tenantId: tenant("one"), options: { url: "mysql://db.example/one" } },
+        { tenantId: tenant("two"), options: { url: "mysql://db.example/two" } },
+      ])
+      .build();
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const first = factory.createRecordStorage(
+      { name: "first", multitenant: true, tenantId: tenant("one") },
+      spec,
+    );
+    const second = factory.createRecordStorage(
+      { name: "second", multitenant: true, tenantId: tenant("two") },
+      spec,
+    );
+    await first.write(create(StringValueSchema, { value: "one" }));
+    await expect(second.write(create(StringValueSchema, { value: "two" }))).rejects.toThrow(
+      "Unable to connect to MySQL.",
+    );
+    expect(firstEnd).not.toHaveBeenCalled();
     expect(secondEnd).toHaveBeenCalledOnce();
+    first.close();
+    second.close();
+    await factory.close();
+    expect(firstEnd).toHaveBeenCalledOnce();
   });
 
-  it("rejects a configured database that still contains the retired physical layout", async () => {
+  it("checks connection without scanning unrelated retired-layout columns", async () => {
     const release = vi.fn();
     const end = vi.fn(() => Promise.resolve());
     const query = vi.fn((sql: string) => {
@@ -343,20 +655,24 @@ describe("MysqlStorageFactory builder contract", () => {
       end,
     } as never);
 
-    await expect(
-      MysqlStorageFactory.newBuilder().setOptions({ url: "mysql://db.example/legacy" }).build(),
-    ).rejects.toThrow(/retired MySQL storage layout/i);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/legacy" })
+      .build();
+    await expect(factory.checkConnection()).resolves.toBeUndefined();
 
     expect(release).toHaveBeenCalledOnce();
     expect(end).toHaveBeenCalledOnce();
+    expect(query.mock.calls.some(([sql]) => sql.includes("information_schema"))).toBe(false);
+    await factory.close();
   });
 
-  it("rejects duplicate tenants, shared physical targets, and mixed tenancy modes", async () => {
+  it("rejects duplicate tenants and physical targets while allowing shared plus tenant settings", async () => {
     const tenant = create(TenantIdSchema, { kind: { case: "value", value: "one" } });
     const other = create(TenantIdSchema, { kind: { case: "value", value: "two" } });
 
     await expect(
       MysqlStorageFactory.newBuilder()
+        .setOptions({ url: "mysql://db.example/shared" })
         .setTenantOptions([
           { tenantId: tenant, options: { url: "mysql://db.example/one" } },
           { tenantId: tenant, options: { url: "mysql://db.example/two" } },
@@ -365,6 +681,7 @@ describe("MysqlStorageFactory builder contract", () => {
     ).rejects.toThrow(/duplicate tenant/i);
     await expect(
       MysqlStorageFactory.newBuilder()
+        .setOptions({ url: "mysql://db.example/shared-other" })
         .setTenantOptions([
           { tenantId: tenant, options: { url: "mysql://db.example/shared" } },
           { tenantId: other, options: { url: "mysql://DB.EXAMPLE:3306/shared" } },
@@ -373,18 +690,18 @@ describe("MysqlStorageFactory builder contract", () => {
     ).rejects.toThrow(/physical database/i);
     await expect(
       MysqlStorageFactory.newBuilder()
+        .setOptions({ url: "mysql://db.example/shared-other" })
         .setTenantOptions([
           { tenantId: tenant, options: { url: "mysql://db.example/Shared" } },
           { tenantId: other, options: { url: "mysql://db.example/shared" } },
         ])
         .build(),
     ).rejects.toThrow(/physical database/i);
-    await expect(
-      MysqlStorageFactory.newBuilder()
-        .setOptions({ url: "mysql://db.example/single" })
-        .setTenantOptions([{ tenantId: tenant, options: { url: "mysql://db.example/tenant" } }])
-        .build(),
-    ).rejects.toThrow(/either single-tenant or multitenant/i);
+    const combined = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/single" })
+      .setTenantOptions([{ tenantId: tenant, options: { url: "mysql://db.example/tenant" } }])
+      .build();
+    await combined.close();
   });
 
   it("enforces MySQL Entity-commit source, history, event-ID, and close guards before opening tables", async () => {

@@ -64,6 +64,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
         .setOptions({ url: required(url) })
         .build();
       const tenants = await MysqlStorageFactory.newBuilder()
+        .setOptions({ url: required(url) })
         .setTenantOptions([
           {
             tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),

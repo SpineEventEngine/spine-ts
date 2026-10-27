@@ -178,6 +178,7 @@ describe("MySQL Agent execution provider boundary", () => {
           Promise.resolve(undefined),
         ),
         commitCapability: () => ({ appendStateImmutable, appendDiagnosticImmutable }),
+        writeCurrentAdmitted: writeCurrent,
         current: { write: writeCurrent },
       },
       events: { ...row, tableName: "agent_events", writeImmutable: writeEvent },

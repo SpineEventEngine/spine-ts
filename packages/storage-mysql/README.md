@@ -38,9 +38,12 @@ The snapshot tag can change before a stable release.
 
 ## 🔌 Create and close a MySQL factory
 
-Provide a MySQL URL that includes a database name. Building the factory opens
-its pool only; each record family creates and verifies its private table lazily
-on first use.
+Provide a MySQL URL that includes a database name. Building the factory
+validates settings locally and opens no pool. `checkConnection()` optionally
+probes the shared database with a read-only query. It reuses an existing
+runtime pool or opens and releases a temporary pool. The first storage
+operation binds its database and creates or verifies
+its private table lazily.
 
 <!-- docs-snippet-path: packages/storage-mysql/src/index.ts -->
 
@@ -83,8 +86,9 @@ require TLS and provide the issuing CA explicitly; do not enable certificate
 verification without the CA material needed by your managed MySQL endpoint.
 
 For a multitenant application, assign each complete generated `TenantId` to a
-different database. The factory creates one pool per configured tenant and
-selects that pool before it opens a table or starts a transaction:
+different database. The factory resolves each tenant's database and opens
+its pool on first use; concurrent first uses share the binding. It selects
+that pool before opening a table or starting a transaction:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -95,12 +99,19 @@ const acme = create(TenantIdSchema, { kind: { case: "value", value: "acme" } });
 const globex = create(TenantIdSchema, { kind: { case: "value", value: "globex" } });
 
 const factory = await MysqlStorageFactory.newBuilder()
+  .setOptions({ url: "mysql://user:password@db/shared" })
   .setTenantOptions([
     { tenantId: acme, options: { url: "mysql://user:password@db/acme" } },
     { tenantId: globex, options: { url: "mysql://user:password@db/globex" } },
   ])
   .build();
 ```
+
+Alternatively, `setTenantResolver(async (tenantId) => options)` resolves each
+tenant's destination on first use. Fixed tenant entries and a resolver cannot
+be combined. Either mode requires shared `setOptions`; tenants must use
+distinct databases. Shared and tenant settings may point to the same database
+only when their physical table families do not collide.
 
 Use a dedicated database account. The account must be able to create and
 inspect the adapter tables and perform normal reads and writes. Do not commit

@@ -1292,7 +1292,6 @@ describe("MysqlRecordStorage", () => {
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
       {
-        databaseName: "test",
         // Drivers may reject with a non-Error value; exercise cause preservation.
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         acquire: () => Promise.reject("connection unavailable"),
@@ -1459,7 +1458,6 @@ function stringStorage(
     }),
     new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
     {
-      databaseName: "test",
       acquire: () => Promise.resolve((acquired(), connection) as never),
       release: () => undefined,
     },
@@ -1603,7 +1601,6 @@ function schemaStorage(
     spec,
     new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
     {
-      databaseName: "test",
       acquire: () => Promise.resolve((onAcquire(), connection) as never),
       release: () => undefined,
     },
@@ -1653,7 +1650,6 @@ function entitySchemaStorage(booleanType: string) {
     spec,
     new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
     {
-      databaseName: "test",
       acquire: () => Promise.resolve(connection as never),
       release: () => undefined,
     },

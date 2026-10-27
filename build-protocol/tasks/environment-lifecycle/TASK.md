@@ -11,8 +11,9 @@ The accepted [proposal](PROPOSAL.md) includes the complete Agent recovery-remova
 task. Implementation is in progress. Repository/EventStore retention, shared AnyPacker,
 provider commit-storage retention and awaitable shutdown are reviewed and pushed.
 Shared preparation contracts and the memory implementation are complete, as is
-PostgreSQL offline assembly and tenant resolution. PostgreSQL physical structure
-preparation is underway; the remaining milestones follow MILESTONES.md. Existing
+PostgreSQL offline assembly, tenant resolution and physical structure preparation.
+MySQL/MariaDB offline connection lifecycle is reviewed and complete; physical
+structure preparation is next. Remaining milestones follow MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.
 

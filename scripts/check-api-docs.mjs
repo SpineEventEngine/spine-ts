@@ -588,6 +588,7 @@ const expectedMysqlStorageExports = [
   "MysqlStorageFactoryBuilder",
   "MysqlStorageOptions",
   "MysqlTenantStorageOptions",
+  "MysqlTenantResolver",
   "MysqlStorageOperationError",
   "MysqlStorageSchemaError",
   "MysqlTableSpec",

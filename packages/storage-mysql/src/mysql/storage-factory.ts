@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { createPool, type Pool, type PoolConnection, type RowDataPacket } from "mysql2/promise";
+import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
 import { toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringifierRegistry } from "@spine-event-engine/core";
@@ -128,6 +128,16 @@ export interface MysqlTenantStorageOptions {
 }
 
 /**
+ * Resolves application-provided tenant database settings on first use.
+ *
+ * @param tenantId Complete generated tenant identity.
+ * @returns Connection options for that tenant.
+ */
+export type MysqlTenantResolver = (
+  tenantId: TenantId,
+) => MysqlStorageOptions | Promise<MysqlStorageOptions>;
+
+/**
  * Describes SQL that creates one resolved record-family table.
  */
 export interface MysqlCreateOperation {
@@ -172,6 +182,14 @@ export interface MysqlStorageFactoryBuilder {
    * @returns Returns this builder.
    */
   setTenantOptions(entries: readonly MysqlTenantStorageOptions[]): this;
+
+  /**
+   * Sets an asynchronous tenant destination resolver without invoking it during build.
+   *
+   * @param resolver Resolves one complete generated tenant ID.
+   * @returns This builder.
+   */
+  setTenantResolver(resolver: MysqlTenantResolver): this;
 
   /**
    * Sets custom reversible message stringifiers used by IDs and columns.
@@ -219,9 +237,9 @@ export interface MysqlStorageFactoryBuilder {
   useOperationFactory(factory: CreateOperationFactory): this;
 
   /**
-   * Builds an initialized MySQL storage factory.
+   * Builds a logical MySQL storage factory without opening a connection.
    *
-   * @returns Resolves to the initialized factory.
+   * @returns A locally validated logical factory without an open connection.
    */
   build(): Promise<MysqlStorageFactory>;
 }
@@ -262,10 +280,12 @@ class MysqlTenantCatalog implements TenantCatalog {
    *
    * @param databases Configured databases in deterministic order.
    * @param byTenant Exact boundary-to-database lookup.
+   * @param dynamic Whether tenant destinations can resolve on demand.
    */
   constructor(
-    private readonly databases: readonly MysqlDatabase[],
-    private readonly byTenant: ReadonlyMap<string | symbol, MysqlDatabase>,
+    private readonly databases: readonly MysqlDatabaseConfig[],
+    private readonly byTenant: ReadonlyMap<string | symbol, MysqlDatabaseConfig>,
+    private readonly dynamic: boolean,
   ) {}
 
   /**
@@ -312,7 +332,7 @@ class MysqlTenantCatalog implements TenantCatalog {
    * @returns Completion when that tenant is configured.
    */
   keep(boundary: TenantBoundary): Promise<void> {
-    return this.byTenant.has(boundary.key)
+    return this.byTenant.has(boundary.key) || (this.dynamic && !boundary.single)
       ? Promise.resolve()
       : Promise.reject(
           new MysqlStorageConfigurationError("MySQL storage has no configured tenant."),
@@ -378,7 +398,19 @@ export class MysqlStorageFactory extends StorageFactory {
 
   readonly #resolver: MysqlTableResolver;
 
-  readonly #databases: ReadonlyMap<string | symbol, MysqlDatabase>;
+  readonly #databases = new Map<string | symbol, MysqlDatabase>();
+
+  readonly #configs: ReadonlyMap<string | symbol, MysqlDatabaseConfig>;
+
+  readonly #pending = new Map<string | symbol, Promise<MysqlDatabase>>();
+
+  readonly #work = new Set<Promise<unknown>>();
+
+  readonly #tenantTargets = new Map<string, string | symbol>();
+
+  readonly #families = new Map<string, string | symbol>();
+
+  #sharedCheck: Promise<void> | undefined;
 
   readonly #catalog: TenantCatalog;
 
@@ -388,23 +420,32 @@ export class MysqlStorageFactory extends StorageFactory {
   #closed: Promise<void> | undefined;
 
   /**
-   * Creates the factory from connected tenant databases.
+   * Creates a logical factory from locally validated settings.
    *
-   * @param databases Supplies configured tenant databases.
+   * @param configs Supplies configured database settings.
+   * @param tenantResolver Resolves dynamic tenant settings when configured.
    * @param resolver Resolves record-family table names.
    * @param createOperation Creates optional table SQL.
    * @param stringifiers Converts message-valued IDs and columns.
    */
   private constructor(
-    databases: readonly MysqlDatabase[],
+    configs: readonly MysqlDatabaseConfig[],
+    private readonly tenantResolver: MysqlTenantResolver | undefined,
     resolver = new MysqlTableResolver(),
     private readonly createOperation?: CreateOperationFactory,
     private readonly stringifiers = new StringifierRegistry(),
   ) {
     super();
     this.#resolver = resolver;
-    this.#databases = new Map(databases.map((database) => [database.boundary.key, database]));
-    this.#catalog = new MysqlTenantCatalog(databases, this.#databases);
+    this.#configs = new Map(configs.map((config) => [config.boundary.key, config]));
+    for (const config of configs)
+      if (!config.boundary.single) this.#tenantTargets.set(config.target, config.boundary.key);
+    const tenants = configs.filter(({ boundary }) => !boundary.single);
+    this.#catalog = new MysqlTenantCatalog(
+      tenants.length || tenantResolver !== undefined ? tenants : configs,
+      this.#configs,
+      tenantResolver !== undefined,
+    );
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
@@ -426,6 +467,7 @@ export class MysqlStorageFactory extends StorageFactory {
             AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
             AgentHistoryRecords.group,
           ),
+          this.admitPublic,
         );
       },
     });
@@ -452,7 +494,7 @@ export class MysqlStorageFactory extends StorageFactory {
     input: AgentExecutionStorageInput<I, S>,
   ): MysqlAgentExecution<I, S> {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
-    const database = this.database(input.entity.context);
+    const boundary = this.database(input.entity.context);
     const context = input.entity.context;
     const digest = (value: string) => AgentHistoryHash.value(value);
     return new MysqlAgentExecution(
@@ -462,24 +504,25 @@ export class MysqlStorageFactory extends StorageFactory {
           context,
           AgentExecutionRecords.invocationSpec(digest),
           AgentExecutionRecords.invocationGroup,
-          database,
+          boundary,
         ),
         head: this.createMysqlRecordStorage(
           context,
           AgentExecutionRecords.headSpec(digest),
           AgentExecutionRecords.headGroup,
-          database,
+          boundary,
         ),
         history: this.createMysqlRecordStorage(
           context,
           AgentHistoryRecords.spec(digest),
           AgentHistoryRecords.group,
-          database,
+          boundary,
         ),
         entity: this.createEntityStorage(input.entity),
-        events: this.createMysqlRecordStorage(context, eventStoreRecordSpec, undefined, database),
+        events: this.createMysqlRecordStorage(context, eventStoreRecordSpec, undefined, boundary),
       },
-      new MysqlAgentTransaction(this.connections(database)),
+      new MysqlAgentTransaction(this.connections(boundary)),
+      this.admitPublic,
     );
   }
 
@@ -489,8 +532,9 @@ export class MysqlStorageFactory extends StorageFactory {
    * @returns Returns a new builder.
    */
   static newBuilder(): MysqlStorageFactoryBuilder {
-    return new Builder((entries, resolver, operation, stringifiers) =>
-      MysqlStorageFactory.connect(entries, resolver, operation, stringifiers),
+    return new Builder(
+      (entries, tenantResolver, resolver, operation, stringifiers) =>
+        new MysqlStorageFactory(entries, tenantResolver, resolver, operation, stringifiers),
     );
   }
 
@@ -501,6 +545,70 @@ export class MysqlStorageFactory extends StorageFactory {
    */
   tenantCatalog(): TenantCatalog {
     return this.#catalog;
+  }
+
+  /**
+   * Checks the shared destination without creating tables or retaining a temporary pool.
+   *
+   * @returns Completion after a read-only connection probe.
+   */
+  override checkConnection(): Promise<void> {
+    if (!this.isOpen()) return Promise.reject(new Error("StorageFactory is closed."));
+    const shared = this.#configs.get(TenantBoundary.single.key);
+    if (shared === undefined)
+      return Promise.reject(
+        new MysqlStorageConfigurationError("Shared MySQL options are required."),
+      );
+    return (this.#sharedCheck ??= this.admitPublic(() => this.checkShared(shared)).catch(
+      (error: unknown) => {
+        this.#sharedCheck = undefined;
+        throw error;
+      },
+    ));
+  }
+
+  /**
+   * Checks the shared database using a retained runtime or disposable temporary pool.
+   *
+   * @param config Validated shared connection settings.
+   * @returns Completion after the read-only probe and any temporary cleanup.
+   */
+  private async checkShared(config: MysqlDatabaseConfig): Promise<void> {
+    const runtime = this.#databases.get(config.boundary.key);
+    const pool = runtime?.pool ?? createPool(config.poolOptions);
+    let failure: Error | undefined;
+    try {
+      const connection = await pool.getConnection();
+      try {
+        await connection.query("SELECT 1");
+      } finally {
+        connection.release();
+      }
+    } catch (error) {
+      failure = new MysqlStorageConnectionError("Unable to connect to MySQL.", { cause: error });
+    }
+    if (runtime === undefined) await this.closeCheckedPool(pool, failure);
+    else if (failure !== undefined) throw failure;
+  }
+
+  /**
+   * Closes a temporary pool while retaining probe and cleanup failures.
+   *
+   * @param pool Temporary pool.
+   * @param failure Prior probe failure, when present.
+   * @returns Completion after disposal or combined failure.
+   */
+  private async closeCheckedPool(pool: Pool, failure?: Error): Promise<void> {
+    let cleanup: unknown;
+    try {
+      await pool.end();
+    } catch (error) {
+      cleanup = error;
+    }
+    if (failure !== undefined && cleanup !== undefined)
+      throw new AggregateError([failure, cleanup], "MySQL connection and cleanup failed.");
+    if (failure !== undefined) throw failure;
+    if (cleanup !== undefined) throw new Error("MySQL pool cleanup failed.", { cause: cleanup });
   }
 
   /**
@@ -525,6 +633,7 @@ export class MysqlStorageFactory extends StorageFactory {
     const errors: unknown[] = [];
     for (const result of await Promise.allSettled(commits))
       if (result.status === "rejected") errors.push(result.reason);
+    await Promise.allSettled([...this.#work, ...this.#pending.values(), this.#sharedCheck]);
     for (const handle of [...this.#handles]) {
       try {
         handle.close();
@@ -560,7 +669,7 @@ export class MysqlStorageFactory extends StorageFactory {
     spec: RecordSpec<I, R>,
     group?: StorageGroup,
   ): RecordStorage<I, R> {
-    return this.createMysqlRecordStorage(context, spec, group);
+    return this.createMysqlRecordStorage(context, spec, group, this.database(context), true, true);
   }
 
   /**
@@ -571,16 +680,18 @@ export class MysqlStorageFactory extends StorageFactory {
    * @param context Supplies the storage and tenant context.
    * @param spec Defines the record family.
    * @param group Selects a grouped history family, when present.
-   * @param database Supplies the resolved tenant database.
+   * @param boundary Captures the tenant database selection.
    * @returns The opened MySQL record-storage handle.
    * @param tracked Whether the factory tracks this public handle.
+   * @param publicHandle Whether calls use the public intake fence.
    */
   private createMysqlRecordStorage<I, R extends Message>(
     context: StorageContext,
     spec: RecordSpec<I, R>,
     group?: StorageGroup,
-    database = this.database(context),
+    boundary = this.database(context),
     tracked = true,
+    publicHandle = false,
   ): MysqlRecordStorage<I, R> {
     const source = spec.sourceType.typeName;
     const table = this.#resolver.resolve(source, group?.name, undefined, spec.recordType.typeName);
@@ -598,11 +709,12 @@ export class MysqlStorageFactory extends StorageFactory {
       context,
       spec,
       table,
-      this.connections(database),
+      this.connections(boundary, table.tableName),
       () => this.#handles.delete(handle),
       create,
       tableSpec,
       this.stringifiers,
+      publicHandle,
     );
     if (tracked) this.#handles.add(handle);
     return handle;
@@ -623,13 +735,14 @@ export class MysqlStorageFactory extends StorageFactory {
     tracked = true,
     lazy = false,
   ): MysqlEntityStorage<I, S> {
-    const database = this.database(input.context);
+    const boundary = this.database(input.context);
     const registration = {} as { handle: { close(): void } };
     const handle = new MysqlEntityStorage(
       input,
-      (spec, group) => this.createMysqlRecordStorage(input.context, spec, group, database, tracked),
+      (spec, group) => this.createMysqlRecordStorage(input.context, spec, group, boundary, tracked),
       () => this.#handles.delete(registration.handle),
       lazy,
+      this.admitPublic,
     );
     registration.handle = handle;
     if (tracked) this.#handles.add(handle);
@@ -648,7 +761,8 @@ export class MysqlStorageFactory extends StorageFactory {
   private createEntityCommitStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): EntityCommitStorage {
-    const database = this.database(input.context);
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    const boundary = this.database(input.context);
     const registration = {} as { handle: { close(): void } };
     const handle = new MysqlEntityCommitStorage(
       input,
@@ -658,7 +772,7 @@ export class MysqlStorageFactory extends StorageFactory {
           input.context,
           eventStoreRecordSpec,
           undefined,
-          database,
+          boundary,
           false,
         ),
       () => this.#commits.delete(registration.handle as MysqlEntityCommitStorage<unknown, Message>),
@@ -671,13 +785,19 @@ export class MysqlStorageFactory extends StorageFactory {
   /**
    * Creates the connection lifecycle for one tenant database.
    *
-   * @param database Supplies the tenant database pool.
+   * @param boundary Captured tenant database selection.
+   * @param tableName Resolved family name for collision checks.
    * @returns The connection acquisition and release operations.
    */
-  private connections(database: MysqlDatabase): MysqlRecordLifecycle {
+  private connections(boundary: TenantBoundary, tableName?: string): MysqlRecordLifecycle {
     return {
-      databaseName: database.databaseName,
-      acquire: () => database.pool.getConnection(),
+      acquire: async () => {
+        const database = await this.resolveDatabase(boundary);
+        if (tableName !== undefined) this.assertFamily(boundary, tableName, database.target);
+        return database.pool.getConnection();
+      },
+      track: (work) => this.track(work),
+      publicOpen: () => this.isOpen(),
       release: (connection: PoolConnection) => {
         connection.release();
       },
@@ -685,66 +805,151 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
+   * Records an admitted operation through factory shutdown.
+   *
+   * @typeParam T Operation result type.
+   * @param work Admitted operation promise.
+   * @returns The original operation outcome.
+   */
+  private track<T>(work: Promise<T>): Promise<T> {
+    this.#work.add(work);
+    void work.then(
+      () => this.#work.delete(work),
+      () => this.#work.delete(work),
+    );
+    return work;
+  }
+
+  /**
+   * Admits complete public work before invoking configurable callbacks.
+   *
+   * @typeParam T Operation result.
+   * @param work Complete public operation.
+   * @returns Its tracked result.
+   */
+  private admitPublic = <T>(work: () => Promise<T>): Promise<T> => {
+    if (!this.isOpen()) return Promise.reject(new Error("StorageFactory is closed."));
+    const { promise, resolve, reject } = Promise.withResolvers<T>();
+    void this.track(promise);
+    try {
+      void work().then(resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+    return promise;
+  };
+
+  /**
    * Resolves the database configured for a storage context.
    *
    * @param context Supplies the storage and tenant context.
    * @returns The configured tenant database.
    */
-  private database(context: StorageContext): MysqlDatabase {
+  private database(context: StorageContext): TenantBoundary {
     const boundary = TenantBoundary.of(context);
-    const database = this.#databases.get(boundary.key);
-    if (database !== undefined) return database;
+    if (this.#configs.has(boundary.key) || (!boundary.single && this.tenantResolver !== undefined))
+      return boundary;
     throw new MysqlStorageConfigurationError(
-      boundary.single
-        ? "MySQL storage is configured for multiple tenants."
-        : "MySQL storage has no configured database for the requested tenant.",
+      "MySQL storage has no configured database for the requested tenant.",
     );
   }
 
   /**
-   * Connects to MySQL and creates an initialized storage factory.
+   * Resolves and retains one tenant database, coalescing concurrent first uses.
    *
-   * @param entries Supplies the tenant database configurations to connect.
-   * @param resolver Resolves configured record-family table names.
-   * @param createOperation Creates optional table-creation SQL.
-   * @param stringifiers Converts message-valued IDs and columns.
-   * @internal
-   * @returns Resolves to the initialized factory.
+   * @param boundary Captured tenant boundary.
+   * @returns The retained database and pool.
    */
-  private static async connect(
-    entries: readonly MysqlDatabaseConfig[],
-    resolver: MysqlTableResolver = new MysqlTableResolver(),
-    createOperation?: CreateOperationFactory,
-    stringifiers = new StringifierRegistry(),
-  ): Promise<MysqlStorageFactory> {
-    const connected: MysqlDatabase[] = [];
+  private resolveDatabase(boundary: TenantBoundary): Promise<MysqlDatabase> {
+    const ready = this.#databases.get(boundary.key);
+    if (ready !== undefined) return Promise.resolve(ready);
+    const pending = this.#pending.get(boundary.key);
+    if (pending !== undefined) return pending;
+    const attempt = Promise.resolve()
+      .then(() => this.bindDatabase(boundary))
+      .then((database) => {
+        this.#databases.set(boundary.key, database);
+        return database;
+      })
+      .finally(() => this.#pending.delete(boundary.key));
+    this.#pending.set(boundary.key, attempt);
+    return attempt;
+  }
+
+  /**
+   * Reads configured or application-resolved settings for a captured tenant.
+   *
+   * @param boundary Captured tenant boundary.
+   * @returns Locally validated database settings.
+   */
+  private async configFor(boundary: TenantBoundary): Promise<MysqlDatabaseConfig> {
+    const fixed = this.#configs.get(boundary.key);
+    if (fixed !== undefined) return fixed;
+    if (boundary.tenantId === undefined || this.tenantResolver === undefined)
+      throw new MysqlStorageConfigurationError("MySQL tenant is not configured.");
+    return MysqlConfigurations.parse(boundary, await this.tenantResolver(boundary.tenantId));
+  }
+
+  /**
+   * Opens a runtime pool only after its selected database responds to a read-only probe.
+   *
+   * @param boundary Captured tenant boundary.
+   * @returns The retained database and pool.
+   */
+  private async bindDatabase(boundary: TenantBoundary): Promise<MysqlDatabase> {
+    const config = await this.configFor(boundary);
+    const reserved = this.reserveTenantTarget(config);
+    let pool: Pool | undefined;
     try {
-      for (const entry of entries) {
-        const pool = createPool(entry.poolOptions);
-        try {
-          const connection = await pool.getConnection();
-          try {
-            await assertNoRetiredLayout(connection);
-          } finally {
-            connection.release();
-          }
-          connected.push({
-            boundary: entry.boundary,
-            databaseName: entry.databaseName,
-            pool,
-          });
-        } catch (error) {
-          await pool.end().catch(() => undefined);
-          if (error instanceof MysqlStorageConfigurationError) throw error;
-          throw new MysqlStorageConnectionError("Unable to connect to MySQL.");
-        }
+      pool = createPool(config.poolOptions);
+      const connection = await pool.getConnection();
+      try {
+        await connection.query("SELECT 1");
+      } finally {
+        connection.release();
       }
-      return new MysqlStorageFactory(connected, resolver, createOperation, stringifiers);
+      return { boundary, pool, databaseName: config.databaseName, target: config.target };
     } catch (error) {
-      await Promise.all(connected.map(({ pool }) => pool.end().catch(() => undefined)));
-      if (error instanceof MysqlStorageConfigurationError) throw error;
-      throw new MysqlStorageConnectionError("Unable to connect to MySQL.");
+      if (reserved) this.#tenantTargets.delete(config.target);
+      const failure = new MysqlStorageConnectionError("Unable to connect to MySQL.", {
+        cause: error,
+      });
+      if (pool !== undefined) await this.closeCheckedPool(pool, failure);
+      throw failure;
     }
+  }
+
+  /**
+   * Rejects two distinct tenants mapped to the same physical database.
+   *
+   * @param config Validated selected database.
+   * @returns Whether this attempt installed a new reservation.
+   */
+  private reserveTenantTarget(config: MysqlDatabaseConfig): boolean {
+    if (config.boundary.single) return false;
+    const prior = this.#tenantTargets.get(config.target);
+    if (prior !== undefined && prior !== config.boundary.key)
+      throw new MysqlStorageConfigurationError(
+        "MySQL tenants must use distinct physical databases.",
+      );
+    if (prior !== undefined) return false;
+    this.#tenantTargets.set(config.target, config.boundary.key);
+    return true;
+  }
+
+  /**
+   * Rejects shared and tenant record families mapped to the same unpartitioned table.
+   *
+   * @param boundary Captured storage boundary.
+   * @param tableName Physical table name.
+   * @param target Normalized database target.
+   */
+  private assertFamily(boundary: TenantBoundary, tableName: string, target: string): void {
+    const key = `${target}\0${tableName}`;
+    const prior = this.#families.get(key);
+    if (prior !== undefined && prior !== boundary.key)
+      throw new MysqlStorageConfigurationError("Shared and tenant MySQL tables collide.");
+    this.#families.set(key, boundary.key);
   }
 }
 
@@ -756,6 +961,8 @@ class Builder implements MysqlStorageFactoryBuilder {
 
   #tenantOptions: readonly MysqlTenantStorageOptions[] | undefined;
 
+  #tenantResolver: MysqlTenantResolver | undefined;
+
   readonly #resolver = new MysqlTableResolver();
 
   #operation: CreateOperationFactory | undefined;
@@ -765,15 +972,16 @@ class Builder implements MysqlStorageFactoryBuilder {
   /**
    * Creates a builder with its storage-factory connection function.
    *
-   * @param connect Connects the configured tenant databases.
+   * @param assemble Constructs a logical factory from locally validated settings.
    */
   constructor(
-    private readonly connect: (
+    private readonly assemble: (
       entries: readonly MysqlDatabaseConfig[],
+      tenantResolver: MysqlTenantResolver | undefined,
       resolver: MysqlTableResolver,
       operation: CreateOperationFactory | undefined,
       stringifiers: StringifierRegistry,
-    ) => Promise<MysqlStorageFactory>,
+    ) => MysqlStorageFactory,
   ) {}
 
   // prettier-ignore
@@ -785,7 +993,7 @@ class Builder implements MysqlStorageFactoryBuilder {
    * @returns Returns this builder.
    */
   setOptions(options: MysqlStorageOptions): this {
-    this.#options = options;
+    this.#options = { ...options, ...(options.tls === undefined ? {} : { tls: { ...options.tls } }) };
     return this;
   }
 
@@ -796,7 +1004,21 @@ class Builder implements MysqlStorageFactoryBuilder {
    * @returns Returns this builder.
    */
   setTenantOptions(entries: readonly MysqlTenantStorageOptions[]): this {
-    this.#tenantOptions = [...entries];
+    this.#tenantOptions = entries.map(({ tenantId, options }) => ({
+      tenantId,
+      options: { ...options, ...(options.tls === undefined ? {} : { tls: { ...options.tls } }) },
+    }));
+    return this;
+  }
+
+  /**
+   * Registers a tenant settings resolver without invoking it during build.
+   *
+   * @param resolver Resolves one complete generated tenant ID.
+   * @returns This builder.
+   */
+  setTenantResolver(resolver: MysqlTenantResolver): this {
+    this.#tenantResolver = resolver;
     return this;
   }
 
@@ -869,61 +1091,48 @@ class Builder implements MysqlStorageFactoryBuilder {
   }
 
   /**
-   * Builds an initialized MySQL storage factory.
+   * Builds a logical MySQL storage factory without opening a connection.
    *
-   * @returns Resolves to the initialized factory.
+   * @returns A locally validated logical factory without an open connection.
    */
-  async build(): Promise<MysqlStorageFactory> {
-    if (this.#options !== undefined && this.#tenantOptions !== undefined) {
-      throw new MysqlStorageConfigurationError(
-        "Configure either single-tenant or multitenant MySQL storage, not both.",
+  build(): Promise<MysqlStorageFactory> {
+    try {
+      if (this.#options === undefined)
+        throw new MysqlStorageConfigurationError("MySQL storage options are required.");
+      if (this.#tenantOptions !== undefined && this.#tenantResolver !== undefined)
+        throw new MysqlStorageConfigurationError(
+          "Configure either tenant options or a tenant resolver, not both.",
+        );
+      const entries = [
+        MysqlConfigurations.single(this.#options),
+        ...(this.#tenantOptions === undefined
+          ? []
+          : MysqlConfigurations.multitenant(this.#tenantOptions)),
+      ];
+      return Promise.resolve(
+        this.assemble(
+          entries,
+          this.#tenantResolver,
+          this.#resolver,
+          this.#operation,
+          this.#stringifiers,
+        ),
+      );
+    } catch (error) {
+      if (error instanceof Error) return Promise.reject(error);
+      return Promise.reject(
+        new MysqlStorageConfigurationError("MySQL builder configuration is invalid.", {
+          cause: error,
+        }),
       );
     }
-    if (this.#options === undefined && this.#tenantOptions === undefined)
-      throw new MysqlStorageConfigurationError("MySQL storage options are required.");
-    const entries =
-      this.#options === undefined
-        ? MysqlConfigurations.multitenant(this.#tenantOptions ?? [])
-        : [MysqlConfigurations.single(this.#options)];
-    return this.connect(entries, this.#resolver, this.#operation, this.#stringifiers);
-  }
-}
-
-interface LegacyColumnRow extends RowDataPacket {
-  readonly table_name: string;
-  readonly column_name: string;
-}
-
-interface LegacyPrimaryRow extends RowDataPacket {
-  readonly table_name: string;
-  readonly column_name: string;
-  readonly seq_in_index: number;
-}
-
-async function assertNoRetiredLayout(connection: PoolConnection): Promise<void> {
-  const [columns] = await connection.query<LegacyColumnRow[]>(
-    "SELECT table_name AS table_name, column_name AS column_name " +
-      "FROM information_schema.columns WHERE table_schema=DATABASE() " +
-      "AND LOWER(column_name) IN ('_scope', '_revision')",
-  );
-  const [primary] = await connection.query<LegacyPrimaryRow[]>(
-    "SELECT table_name AS table_name, column_name AS column_name, seq_in_index AS seq_in_index " +
-      "FROM information_schema.statistics WHERE table_schema=DATABASE() " +
-      "AND index_name='PRIMARY' ORDER BY table_name, seq_in_index",
-  );
-  if (
-    columns.length > 0 ||
-    primary.some((column) => column.column_name.toLowerCase() === "_scope")
-  ) {
-    throw new MysqlStorageConfigurationError(
-      "The configured database contains the retired MySQL storage layout.",
-    );
   }
 }
 
 interface MysqlDatabase {
   readonly boundary: TenantBoundary;
   readonly databaseName: string;
+  readonly target: string;
   readonly pool: Pool;
 }
 

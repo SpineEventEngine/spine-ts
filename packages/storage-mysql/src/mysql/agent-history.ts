@@ -25,7 +25,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 
-import { MysqlRecordStorage } from "./record-storage.js";
+import { MysqlRecordStorage, type OnPublicOperation } from "./record-storage.js";
 import { AgentHistoryIndexBytes } from "./table-spec.js";
 
 /**
@@ -66,10 +66,12 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
    *
    * @param input Repository and complete tenant scope.
    * @param records Native record-family storage.
+   * @param onAdmit Admits complete public history operations.
    */
   constructor(
     private readonly input: AgentHistoryStorageInput<Id>,
     private readonly records: MysqlRecordStorage<string, AgentHistoryRecord>,
+    private readonly onAdmit: OnPublicOperation = (work) => work(),
   ) {}
 
   /**
@@ -80,6 +82,17 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @returns Completion after immutable storage confirms the entry.
    */
   async append(entityId: Id, entry: AgentHistoryEntry): Promise<void> {
+    return this.onAdmit(() => this.appendAdmitted(entityId, entry));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param entityId Typed Agent identifier.
+   * @param entry Original entry.
+   * @returns Completion after immutable storage.
+   */
+  private async appendAdmitted(entityId: Id, entry: AgentHistoryEntry): Promise<void> {
     this.requireOpen();
     if (
       AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry)).length > AgentHistoryIndexBytes
@@ -98,6 +111,16 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @returns Original entries and continuation status.
    */
   async read(request: AgentHistoryRead<Id>): Promise<AgentHistoryPage> {
+    return this.onAdmit(() => this.readAdmitted(request));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param request Typed history page request.
+   * @returns Original entries and continuation status.
+   */
+  private async readAdmitted(request: AgentHistoryRead<Id>): Promise<AgentHistoryPage> {
     this.requireOpen();
     await this.ready();
     const agentKey = this.key(request.entityId);

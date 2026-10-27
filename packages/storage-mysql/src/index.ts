@@ -25,6 +25,7 @@ export {
   type MysqlStorageFactoryBuilder,
   type MysqlStorageOptions,
   type MysqlTenantStorageOptions,
+  type MysqlTenantResolver,
   type MysqlTableSpec,
 } from "./mysql/storage-factory.js";
 export type { MysqlEntityStorageHandle } from "./mysql/entity-history.js";

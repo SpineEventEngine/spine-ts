@@ -46,7 +46,7 @@ import {
 import { AgentHistoryHash } from "./agent-history.js";
 import { MysqlAgentTransaction } from "./agent-transaction.js";
 import { MysqlEntityStorage } from "./entity-history.js";
-import { MysqlRecordStorage } from "./record-storage.js";
+import { MysqlRecordStorage, type OnPublicOperation } from "./record-storage.js";
 import { AgentExecutionIndexBytes } from "./table-spec.js";
 
 /**
@@ -94,11 +94,13 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * @param coordinator Native transaction coordinator.
    * @param input Requested fenced execution change.
    * @param rows Provider record handles bound to the tenant.
+   * @param onAdmit Admits complete public execution operations.
    */
   constructor(
     private readonly input: AgentExecutionStorageInput<I, S>,
     private readonly rows: ExecutionRows<I, S>,
     private readonly coordinator: MysqlAgentTransaction,
+    private readonly onAdmit: OnPublicOperation = (work) => work(),
   ) {}
 
   /**
@@ -107,7 +109,17 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * @param accepted Original accepted signal and selected bindings.
    * @returns Persisted invocation with the original accepted facts.
    */
-  async admit(accepted: AgentAcceptedInvocation): Promise<AgentExecutionRecord> {
+  admit(accepted: AgentAcceptedInvocation): Promise<AgentExecutionRecord> {
+    return this.onAdmit(() => this.admitAccepted(accepted));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param accepted Original accepted signal.
+   * @returns Its stored invocation.
+   */
+  private async admitAccepted(accepted: AgentAcceptedInvocation): Promise<AgentExecutionRecord> {
     const key = AgentExecutionValues.requiredKey(accepted.key, this.input.stateType);
     await this.ready();
     const record = create(AgentExecutionRecordSchema, {
@@ -137,7 +149,17 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * @param request Bounded pending-page request.
    * @returns Bounded eligible work and continuation cursor.
    */
-  async pending(request: AgentPendingRead): Promise<AgentPendingPage> {
+  pending(request: AgentPendingRead): Promise<AgentPendingPage> {
+    return this.onAdmit(() => this.pendingAdmitted(request));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param request Bounded pending request.
+   * @returns Eligible work.
+   */
+  private async pendingAdmitted(request: AgentPendingRead): Promise<AgentPendingPage> {
     await this.ready();
     if (!Number.isSafeInteger(request.count) || request.count < 1)
       throw new RangeError("Agent pending count must be a positive safe integer.");
@@ -149,7 +171,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
     for (const head of observed) {
       if (head.scope?.stateType !== this.input.stateType || head.pending === undefined)
         throw new Error("MySQL Agent execution head scope or candidate is invalid.");
-      const record = await this.read(head.pending);
+      const record = await this.readAdmitted(head.pending);
       if (record !== undefined) records.push(record);
     }
     const last = observed.at(-1);
@@ -194,7 +216,17 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * @param key Original Agent invocation identity.
    * @returns Complete stored invocation when present.
    */
-  async read(key: AgentInvocationKey): Promise<AgentExecutionRecord | undefined> {
+  read(key: AgentInvocationKey): Promise<AgentExecutionRecord | undefined> {
+    return this.onAdmit(() => this.readAdmitted(key));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param key Invocation identity.
+   * @returns Stored invocation when present.
+   */
+  private async readAdmitted(key: AgentInvocationKey): Promise<AgentExecutionRecord | undefined> {
     await this.ready();
     const record = await this.rows.invocation.read(
       invocationId(AgentExecutionValues.requiredKey(key, this.input.stateType)),
@@ -211,7 +243,23 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * @param token Exclusive claim token.
    * @returns Claimed work and preferences when eligible.
    */
-  async claim(
+  claim(
+    key: AgentInvocationKey,
+    token: string,
+    expiresAt: Timestamp,
+  ): Promise<AgentExecutionClaim | undefined> {
+    return this.onAdmit(() => this.claimAdmitted(key, token, expiresAt));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param key Invocation identity.
+   * @param token Exclusive token.
+   * @param expiresAt Lease expiry.
+   * @returns Claimed work when eligible.
+   */
+  private async claimAdmitted(
     key: AgentInvocationKey,
     token: string,
     expiresAt: Timestamp,
@@ -291,7 +339,23 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * @param token Exclusive claim token.
    * @returns Whether the current lease was extended.
    */
-  async renew(key: AgentInvocationKey, token: string, expiresAt: Timestamp): Promise<boolean> {
+  renew(key: AgentInvocationKey, token: string, expiresAt: Timestamp): Promise<boolean> {
+    return this.onAdmit(() => this.renewAdmitted(key, token, expiresAt));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param key Invocation identity.
+   * @param token Current token.
+   * @param expiresAt New expiry.
+   * @returns Whether extended.
+   */
+  private async renewAdmitted(
+    key: AgentInvocationKey,
+    token: string,
+    expiresAt: Timestamp,
+  ): Promise<boolean> {
     await this.ready();
     return this.transaction(key, async () => {
       const pair = await this.claimed(key, token);
@@ -315,7 +379,17 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * @param input Requested fenced execution change.
    * @returns Completion after fenced evidence is persisted.
    */
-  async update(input: AgentExecutionUpdate): Promise<void> {
+  update(input: AgentExecutionUpdate): Promise<void> {
+    return this.onAdmit(() => this.updateAdmitted(input));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param input Fenced update.
+   * @returns Completion after persistence.
+   */
+  private async updateAdmitted(input: AgentExecutionUpdate): Promise<void> {
     await this.ready();
     this.validateRecord(input.next);
     await this.transaction(input.key, async () => {
@@ -340,7 +414,17 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * @param input Requested fenced execution change.
    * @returns Completion after conditional Entity and evidence commit.
    */
-  async complete(input: AgentExecutionComplete<I, S>): Promise<void> {
+  complete(input: AgentExecutionComplete<I, S>): Promise<void> {
+    return this.onAdmit(() => this.completeAdmitted(input));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param input Fenced completion.
+   * @returns Completion after persistence.
+   */
+  private async completeAdmitted(input: AgentExecutionComplete<I, S>): Promise<void> {
     await this.ready();
     this.validateRecord(input.next);
     await this.transaction(input.key, async () => {
@@ -372,7 +456,25 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
    * @param token Exclusive claim token.
    * @returns Completion after original output IDs are marked delivered.
    */
-  async markDelivered(
+  markDelivered(
+    key: AgentInvocationKey,
+    token: string,
+    expectedRecordBytes: Uint8Array,
+    signals: readonly CommandId[],
+  ): Promise<void> {
+    return this.onAdmit(() => this.markDeliveredAdmitted(key, token, expectedRecordBytes, signals));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param key Invocation identity.
+   * @param token Current token.
+   * @param expectedRecordBytes Exact prior bytes.
+   * @param signals Original output IDs.
+   * @returns Completion after delivery.
+   */
+  private async markDeliveredAdmitted(
     key: AgentInvocationKey,
     token: string,
     expectedRecordBytes: Uint8Array,
@@ -732,7 +834,7 @@ export class MysqlAgentExecution<I, S extends Message> implements AgentExecution
     for (const diagnostic of commit.diagnostics ?? [])
       await this.rows.entity.commitCapability().appendDiagnosticImmutable(diagnostic);
     for (const event of commit.events ?? []) await this.rows.events.writeImmutable(event);
-    await this.rows.entity.current.write(commit.next);
+    await this.rows.entity.writeCurrentAdmitted(commit.next);
   }
 
   /**

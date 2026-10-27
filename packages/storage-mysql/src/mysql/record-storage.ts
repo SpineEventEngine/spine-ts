@@ -48,15 +48,19 @@ import { MysqlIdColumn } from "./id-column.js";
 const maximumNormalizedPlanBinds = 1_000;
 
 /**
+ * Admits a complete public provider operation before its callbacks run.
+ *
+ * @typeParam T Operation result.
+ * @param work Complete public operation.
+ * @returns Its tracked result.
+ */
+export type OnPublicOperation = <T>(work: () => Promise<T>) => Promise<T>;
+
+/**
  * Describes the private connection lifecycle for a record-family handle.
  */
 export interface MysqlRecordLifecycle {
   // prettier-ignore
-
-  /**
-   * Names the selected physical MySQL database.
-   */
-  readonly databaseName: string;
 
   /**
    * Acquires one MySQL connection.
@@ -71,6 +75,22 @@ export interface MysqlRecordLifecycle {
    * @param connection Provides the connection to release.
    */
   release(connection: import("mysql2/promise").PoolConnection): void;
+
+  /**
+   * Records an admitted operation through factory closure.
+   *
+   * @typeParam T Operation result.
+   * @param work Complete admitted operation.
+   * @returns The same operation result.
+   */
+  track?<T>(work: Promise<T>): Promise<T>;
+
+  /**
+   * Checks the factory intake fence.
+   *
+   * @returns Whether the factory accepts new public record work.
+   */
+  publicOpen?(): boolean;
 }
 
 /**
@@ -215,6 +235,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @param createOperation Creates optional table-creation SQL.
    * @param tableSpec Supplies the canonical table layout.
    * @param stringifiers The schema-bound message stringifiers.
+   * @param publicHandle Whether this is a public factory record handle.
    */
   constructor(
     context: StorageContext,
@@ -225,6 +246,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     private readonly createOperation?: () => string,
     tableSpec?: MysqlTableSpec<I, R>,
     stringifiers: StringifierRegistry = new StringifierRegistry(),
+    private readonly publicHandle = false,
   ) {
     super(context, recordSpec);
     this.#idColumn = new MysqlIdColumn(recordSpec.idType, stringifiers);
@@ -252,14 +274,72 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
 
   /**
+   * Registers a complete public operation before invoking configurable callbacks.
+   * @typeParam T Operation result type.
+   * @param work Complete operation.
+   * @returns Admitted operation outcome.
+   */
+  private admit<T>(work: () => Promise<T>): Promise<T> {
+    if (!this.isOpen() || (this.publicHandle && this.lifecycle.publicOpen?.() === false))
+      return Promise.reject(new Error("MySQL record storage is closed."));
+    const { promise, resolve, reject } = Promise.withResolvers<T>();
+    void this.lifecycle.track?.(promise);
+    try {
+      void work().then(resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+    return promise;
+  }
+
+  /**
+   * @inheritdoc
+   */
+  override index(query: RecordQuery<I> = {}): Promise<readonly I[]> {
+    return this.admit(() => super.index(query));
+  }
+
+  /**
+   * @inheritdoc
+   */
+  override query(query: RecordQuery<I> = {}): Promise<readonly R[]> {
+    return this.admit(() => super.query(query));
+  }
+
+  /**
+   * @inheritdoc
+   */
+  override queryEntries(query: RecordQuery<I> = {}): Promise<readonly RecordEntry<I, R>[]> {
+    return this.admit(() => super.queryEntries(query));
+  }
+
+  /**
+   * @inheritdoc
+   */
+  override queryPlan(plan: NormalizedQueryPlan<I>): Promise<readonly R[]> {
+    return this.admit(async () =>
+      (await super.queryPlanEntries(plan)).map((entry) => entry.record),
+    );
+  }
+
+  /**
+   * @inheritdoc
+   */
+  override queryPlanEntries(plan: NormalizedQueryPlan<I>): Promise<readonly RecordEntry<I, R>[]> {
+    return this.admit(() => super.queryPlanEntries(plan));
+  }
+
+  /**
    * Deletes the record identified by an ID.
    *
    * @param id Identifies the record to delete.
    * @returns Resolves whether a record was deleted.
    */
-  override async delete(id: I): Promise<boolean> {
-    this.validateId(id);
-    return super.delete(id);
+  override delete(id: I): Promise<boolean> {
+    return this.admit(() => {
+      this.validateId(id);
+      return super.delete(id);
+    });
   }
 
   /**
@@ -268,9 +348,11 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @param id Identifies the record to read.
    * @returns Resolves to the stored record when present.
    */
-  override async read(id: I): Promise<R | undefined> {
-    this.validateId(id);
-    return super.read(id);
+  override read(id: I): Promise<R | undefined> {
+    return this.admit(() => {
+      this.validateId(id);
+      return super.read(id);
+    });
   }
 
   /**
@@ -279,9 +361,11 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @param record Provides the record to write.
    * @returns Resolves after the record is written.
    */
-  override async write(record: R): Promise<void> {
-    this.validateId(this.recordSpec.idValueIn(record));
-    await super.write(record);
+  override write(record: R): Promise<void> {
+    return this.admit(() => {
+      this.validateId(this.recordSpec.idValueIn(record));
+      return super.write(record);
+    });
   }
 
   /**
@@ -290,10 +374,12 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @param records Provides the records to write.
    * @returns Resolves after the records are written.
    */
-  override async writeAll(records: Iterable<R>): Promise<void> {
-    const stored = [...records];
-    for (const record of stored) this.validateId(this.recordSpec.idValueIn(record));
-    await super.writeAll(stored);
+  override writeAll(records: Iterable<R>): Promise<void> {
+    return this.admit(() => {
+      const stored = [...records];
+      for (const record of stored) this.validateId(this.recordSpec.idValueIn(record));
+      return super.writeAll(stored);
+    });
   }
 
   /**
@@ -304,13 +390,11 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @param next Provides the replacement record.
    * @returns Resolves whether the conditional mutation was applied.
    */
-  override async compareAndSet(
-    id: I,
-    expected: R | undefined,
-    next: R | undefined,
-  ): Promise<boolean> {
-    this.validateId(id);
-    return super.compareAndSet(id, expected, next);
+  override compareAndSet(id: I, expected: R | undefined, next: R | undefined): Promise<boolean> {
+    return this.admit(() => {
+      this.validateId(id);
+      return super.compareAndSet(id, expected, next);
+    });
   }
 
   /**
@@ -319,7 +403,17 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @param record Provides the immutable record.
    * @returns Resolves after the record is written or confirmed identical.
    */
-  async writeImmutable(record: R): Promise<void> {
+  writeImmutable(record: R): Promise<void> {
+    return this.admit(() => this.writeImmutableAdmitted(record));
+  }
+
+  /**
+   * Writes an immutable record within an admitted complete operation.
+   *
+   * @param record Original record.
+   * @returns Completion after insertion or identical-content confirmation.
+   */
+  private async writeImmutableAdmitted(record: R): Promise<void> {
     const id = this.recordSpec.idValueIn(record);
     this.idKey(id);
     await this.using(async (connection) => {
@@ -342,7 +436,17 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @param record Provides the immutable record to check.
    * @returns Resolves when the record is absent or identical.
    */
-  async assertImmutable(record: R): Promise<void> {
+  assertImmutable(record: R): Promise<void> {
+    return this.admit(() => this.assertImmutableAdmitted(record));
+  }
+
+  /**
+   * Checks immutable content within an admitted complete operation.
+   *
+   * @param record Original record.
+   * @returns Completion after absent or identical content is confirmed.
+   */
+  private async assertImmutableAdmitted(record: R): Promise<void> {
     const id = this.recordSpec.idValueIn(record);
     this.idKey(id);
     await this.using(async (connection) => {
