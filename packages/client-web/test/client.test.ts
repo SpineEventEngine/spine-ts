@@ -14,7 +14,14 @@
 
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import { FieldMaskSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import type { Interceptor, Transport, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
+import {
+  Code,
+  ConnectError,
+  type Interceptor,
+  type Transport,
+  type UnaryRequest,
+  type UnaryResponse,
+} from "@connectrpc/connect";
 import { AnyPacker, Time } from "@spine-event-engine/core";
 import {
   AckSchema,
@@ -1685,6 +1692,39 @@ describe("Client", () => {
       await client.close();
       expect(cancels).toBe(2);
     }
+  });
+
+  it("surfaces structured unknown-tenant subscription failure without retry", async () => {
+    const unknown = new ConnectError("Tenant is not registered.", Code.NotFound, undefined, [
+      { desc: ErrorSchema, value: create(ErrorSchema, { type: "TENANT_UNKNOWN" }) },
+    ]);
+    let subscribes = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport((method) => {
+          if (method.name === "Subscribe") {
+            subscribes++;
+            throw unknown;
+          }
+          return create(ResponseSchema);
+        }),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+
+    await expect(subscription.activate()).rejects.toBe(unknown);
+    await expect(updates.next()).rejects.toBe(unknown);
+    expect(subscribes).toBe(1);
+    await client.close();
   });
 
   it("cleans an initially accepted wire when Activate iterator setup fails before retrying", async () => {

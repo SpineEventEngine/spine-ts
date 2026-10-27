@@ -28,15 +28,15 @@ import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("LocalProjectionInbox", () => {
-  it("keeps a multitenant descriptor tenant before inbox persistence", async () => {
+  it("checks a multitenant descriptor tenant before inbox persistence", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-dynamic") },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const kept = Promise.withResolvers<undefined>();
-    const keep = vi.fn(() => kept.promise);
+    const admitted = Promise.withResolvers<undefined>();
+    const onAdmit = vi.fn(() => admitted.promise);
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
-    const inbox = new LocalProjectionInbox("Tasks", undefined, keep);
+    const inbox = new LocalProjectionInbox("Tasks", undefined, onAdmit);
     inbox.register({ targetTypeUrl, replay: () => Promise.resolve() });
 
     const receiving = inbox.receive(
@@ -46,13 +46,35 @@ describe("LocalProjectionInbox", () => {
     );
     await Promise.resolve();
 
-    expect(keep).toHaveBeenCalledExactlyOnceWith(tenant("tenant-dynamic"));
+    expect(onAdmit).toHaveBeenCalledExactlyOnceWith(tenant("tenant-dynamic"));
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toEqual([]);
 
-    kept.resolve(undefined);
+    admitted.resolve(undefined);
     await receiving;
+  });
+
+  it("rejects a saved Projection inbox row after its tenant is removed", async () => {
+    const failure = new Error("tenant removed");
+    let admitted = true;
+    const replay = vi.fn(() => Promise.resolve());
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const inbox = new LocalProjectionInbox("Tasks", undefined, () =>
+      admitted ? Promise.resolve() : Promise.reject(failure),
+    );
+    inbox.register({ targetTypeUrl, replay });
+    const saved: InboxMessage = {
+      ...projectionInput(targetTypeUrl, "saved"),
+      id: { value: "row-saved", shard: ShardIndex.single() },
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
+      version: 1n,
+    };
+
+    await inbox.replay(saved, tenant("tenant-a"));
+    admitted = false;
+    await expect(inbox.replay(saved, tenant("tenant-a"))).rejects.toBe(failure);
+    expect(replay).toHaveBeenCalledOnce();
   });
 
   it("settles persisted rows after ownership transfer", async () => {

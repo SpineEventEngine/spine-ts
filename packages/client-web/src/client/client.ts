@@ -15,13 +15,20 @@
 import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { type Any } from "@bufbuild/protobuf/wkt";
-import { createClient, type Interceptor, type Transport } from "@connectrpc/connect";
+import {
+  Code,
+  ConnectError,
+  createClient,
+  type Interceptor,
+  type Transport,
+} from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
 import { SignalEnvelopes, AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
   CommandIdSchema,
+  ErrorSchema,
   FieldPathSchema,
   OriginSchema,
   TenantIdSchema,
@@ -1771,6 +1778,12 @@ class TopicSubscription implements Subscription {
    * @returns Whether the failure permits another connection attempt.
    */
   #retryable(error: unknown): boolean {
+    if (
+      error instanceof ConnectError &&
+      error.code === Code.NotFound &&
+      error.findDetails(ErrorSchema).some((detail) => detail.type === "TENANT_UNKNOWN")
+    )
+      return false;
     return (
       error instanceof SubscriptionStreamEndedError ||
       (error instanceof Error &&

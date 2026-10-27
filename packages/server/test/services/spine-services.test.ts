@@ -45,6 +45,7 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  ErrorSchema,
   FieldPathSchema,
   InternetDomainSchema,
   MessageIdSchema,
@@ -94,8 +95,10 @@ import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/ser
 import {
   EventStore,
   InMemoryStorageFactory,
+  StorageFactory,
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
+import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 import type { ILogLayer } from "loglayer";
 
@@ -114,6 +117,7 @@ import {
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
+import { TenantIndexes } from "../../src/context/tenant-index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { spineServicesAccess } from "../../src/services/spine-services.js";
@@ -548,6 +552,7 @@ describe("SpineServices", () => {
       schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A"), {
       tenantId: tenantValue("tenant-a"),
     });
@@ -608,6 +613,7 @@ describe("SpineServices", () => {
       schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A"), {
       tenantId: tenantValue("tenant-a"),
       version: create(VersionSchema, { number: 1 }),
@@ -1091,6 +1097,7 @@ describe("SpineServices", () => {
       schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A", 1), {
       tenantId: tenantValue("tenant-a"),
     });
@@ -1209,6 +1216,7 @@ describe("SpineServices", () => {
       schema: ProjectOverviewStateSchema,
     });
     const context = BoundedContext.multitenant("ImplicitQueryCap").add(repository).build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     const tenantAUpdates = Array.from({ length: 1_001 }, (_, index) =>
       context
         .stand()
@@ -1925,6 +1933,7 @@ describe("SpineServices", () => {
         createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
+    await multitenant.tenantIndex.keep(tenantEmail("tenant@example.test"));
     const singleServer = await startServices(singleTenant);
 
     try {
@@ -1963,6 +1972,73 @@ describe("SpineServices", () => {
     } finally {
       await multiServer.close();
     }
+  });
+
+  it("returns structured NotFound for an unknown tenant before command or query work", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const dispatched: string[] = [];
+    const context = BoundedContext.multitenant("Tasks")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addCommandDispatcher(
+        createCommandDispatcher((command) => dispatched.push(command.id?.uuid ?? "missing")),
+      )
+      .build();
+    const server = await startServices(context);
+    try {
+      const transport = createGrpcTransport({ baseUrl: server.baseUrl });
+      const commands = createClient(CommandService, transport);
+      const queries = createClient(QueryService, transport);
+      for (const operation of [
+        () => commands.post(createProjectionCommand("unknown-command", "tenant-a")),
+        () => queries.read(createQuery("task-1", "tenant-a")),
+      ]) {
+        const failure = await operation().then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(failure).toBeInstanceOf(ConnectError);
+        expect((failure as ConnectError).code).toBe(Code.NotFound);
+        expect((failure as ConnectError).findDetails(ErrorSchema)[0]?.type).toBe("TENANT_UNKNOWN");
+      }
+      expect(dispatched).toEqual([]);
+      await index.keep(tenantValue("tenant-a"));
+      await commands.post(createProjectionCommand("known-command", "tenant-a"));
+      expect(dispatched).toEqual(["known-command"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("checks live membership for subscription creation, activation, and cancellation", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const contains = index.contains.bind(index);
+    let removed = false;
+    const lookup = vi
+      .spyOn(index, "contains")
+      .mockImplementation(async (tenantId) => !removed && contains(tenantId));
+    const context = BoundedContext.multitenant("SubscriptionTenants")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createTopic("tenant-a");
+
+    await expect(handlers.subscribe(topic)).rejects.toMatchObject({ code: Code.NotFound });
+    const lookupFailure = new Error("directory unavailable");
+    lookup.mockRejectedValueOnce(lookupFailure);
+    await expect(handlers.subscribe(topic)).rejects.toBe(lookupFailure);
+    await index.keep(tenantValue("tenant-a"));
+    const subscription = await handlers.subscribe(topic);
+    removed = true;
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toMatchObject({ code: Code.NotFound });
+    await expect(Promise.resolve(handlers.cancel(subscription))).rejects.toMatchObject({
+      code: Code.NotFound,
+    });
+    removed = false;
+    await handlers.cancel(subscription);
+    await context.close();
   });
 
   it("treats command tenant domain and email variants as present", async () => {
@@ -2121,6 +2197,7 @@ describe("SpineServices", () => {
     const multitenant = createFakeContext({
       stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
+      admittedTenants: [tenantEmail("tenant@example.test")],
       subscribe: (_schema, callback, options) => {
         deliverUpdate = callback;
         capturedTenantKeys.push(options.tenantId);
@@ -2205,6 +2282,7 @@ describe("SpineServices", () => {
     const multitenant = createFakeContext({
       stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
+      admittedTenants: [tenantDomain("tenant.example")],
       readVersioned: (_schema, _id, options) => {
         capturedTenantKeys.push(options.tenantId);
         return Promise.resolve({
@@ -2238,6 +2316,7 @@ describe("SpineServices", () => {
     const multitenant = createFakeContext({
       stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
+      admittedTenants: [tenantDomain("tenant.example")],
       readAllVersioned: (_schema, options) => {
         capturedTenantKeys.push(options.tenantId);
         return Promise.resolve([
@@ -2479,6 +2558,7 @@ describe("SpineServices", () => {
         },
       })
       .build();
+    await admitTenants(context, "tenant-rejected");
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(
       createEventTopic("tenant-rejected", TaskAlreadyDoneSchema),
@@ -2533,6 +2613,7 @@ describe("SpineServices", () => {
     const context = BoundedContext.multitenant("TenantEvents")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic("tenant-a"));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
@@ -2568,6 +2649,7 @@ describe("SpineServices", () => {
     const context = BoundedContext.multitenant("PastMessageTenantEvents")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
+    await admitTenants(context, "tenant-past", "tenant-other");
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic("tenant-past"));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
@@ -2605,6 +2687,7 @@ describe("SpineServices", () => {
     const context = BoundedContext.multitenant("CommandOriginEvents")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
+    await admitTenants(context, "tenant-a");
     const handlers = registeredSubscriptionHandlers(context);
     const alice = createCommandOrigin("command-alice", "alice", "tenant-a");
     const bob = createCommandOrigin("command-bob", "bob", "tenant-a");
@@ -3228,6 +3311,7 @@ describe("SpineServices", () => {
     const context = createFakeContext({
       stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
+      admittedTenants: [tenantValue("tenant-a")],
       subscribe: (_schema, callback, options) => {
         capturedTenantKeys.push(options.tenantId);
         deliverUpdate = callback;
@@ -5301,6 +5385,10 @@ function tenantValue(value: string): TenantId {
   });
 }
 
+async function admitTenants(context: BoundedContext, ...values: string[]): Promise<void> {
+  await Promise.all(values.map((value) => context.tenantIndex.keep(tenantValue(value))));
+}
+
 function tenantDomain(value: string): TenantId {
   return create(TenantIdSchema, {
     kind: {
@@ -5558,6 +5646,7 @@ class RejectingDeleteRegistry extends InMemorySubscriptionRegistry {
 
 function createFakeContext(options: {
   readonly isMultitenant?: boolean;
+  readonly admittedTenants?: readonly TenantId[];
   readonly commandTypes?: readonly string[];
   readonly entityFamily?: "aggregate" | "projection" | "process-manager";
   readonly eventTypes?: readonly string[];
@@ -5594,7 +5683,16 @@ function createFakeContext(options: {
   const queryVersioned = options.queryVersioned ?? createFakeQueryVersioned(options);
 
   return {
+    name: { value: "FakeContext" },
     isMultitenant: options.isMultitenant ?? false,
+    tenantIndex: {
+      contains: (tenantId: TenantId) =>
+        Promise.resolve(
+          options.admittedTenants?.some(
+            (admitted) => TenantBoundary.from(admitted).key === TenantBoundary.from(tenantId).key,
+          ) ?? false,
+        ),
+    },
     commandBus: () =>
       Object.freeze({
         acceptedCommandTypes: () => commandTypes,

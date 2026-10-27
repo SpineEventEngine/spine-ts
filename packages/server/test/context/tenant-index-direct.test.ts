@@ -19,9 +19,46 @@ import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/
 import { describe, expect, it, vi } from "vitest";
 
 import { TenantIndexes } from "../../src/context/tenant-index.js";
+import { TenantAdmissions, TenantUnknownError } from "../../src/context/tenant-unknown-error.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("live tenant index", () => {
+  it("reports a detached complete identity only for confirmed missing membership", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const requested = create(TenantIdSchema, {
+      kind: { case: "domain", value: create(InternetDomainSchema, { value: "original.test" }) },
+    });
+    const failure = await TenantAdmissions.require(index, "Projects", true, requested).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(TenantUnknownError);
+    expect(failure).toMatchObject({ type: "TENANT_UNKNOWN", contextName: "Projects" });
+    if (!(failure instanceof TenantUnknownError)) throw new Error("Expected typed tenant error.");
+    requested.kind = { case: "value", value: "mutated" };
+    const copy = failure.tenantId;
+    copy.kind = { case: "value", value: "changed result" };
+    expect(failure.tenantId.kind).toMatchObject({
+      case: "domain",
+      value: { value: "original.test" },
+    });
+    const lookupFailure = new Error("directory unavailable");
+    vi.spyOn(index, "contains").mockRejectedValueOnce(lookupFailure);
+    await expect(TenantAdmissions.require(index, "Projects", true, requested)).rejects.toBe(
+      lookupFailure,
+    );
+  });
+
+  it("rejects missing or inapplicable tenant shapes without directory lookup", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const lookup = vi.spyOn(index, "contains");
+    await expect(TenantAdmissions.require(index, "Single", false, tenant("extra"))).rejects.toThrow(
+      "does not accept context.tenantId",
+    );
+    await expect(TenantAdmissions.require(index, "Multi", true)).rejects.toThrow(
+      "requires context.tenantId",
+    );
+    expect(lookup).not.toHaveBeenCalled();
+  });
   it("registers complete identities through the provider catalog without storage creation", async () => {
     const factory = new InMemoryStorageFactory();
     const createRecordStorage = vi.spyOn(factory, "createRecordStorage");

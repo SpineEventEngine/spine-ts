@@ -15,8 +15,9 @@ PostgreSQL offline assembly, tenant resolution and physical structure preparatio
 MySQL/MariaDB offline connection lifecycle and physical structure preparation are
 reviewed and complete. Datastore native/custom preparation is also reviewed and
 complete. Public live TenantIndex configuration and native membership are reviewed
-and complete. Tenant admission and identifiable errors are next; remaining
-milestones follow MILESTONES.md. Existing
+and complete. Tenant admission and identifiable errors are reviewed and complete.
+Unconditional duplicate-state registration is next; remaining milestones follow
+MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.
 

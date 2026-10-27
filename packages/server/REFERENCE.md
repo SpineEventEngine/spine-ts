@@ -175,6 +175,15 @@ those entries and rejects unknown IDs. A dynamic SQL tenant resolver does not
 register or enumerate tenants. Single-tenant contexts do not insert a synthetic
 member into this directory.
 
+Multitenant receiving contexts check current index membership before Command,
+Event, query, direct repository/history, and subscription work. Inbox persistence
+and later replay check separately, so removing a tenant prevents saved work from
+restoring it. Input does not call `keep()` implicitly. A confirmed missing member
+raises `TenantUnknownError` with the complete tenant ID and context name; native
+services return `NotFound` with a structured `spine.base.Error` detail whose type
+is `TENANT_UNKNOWN`. Lookup failures remain operational errors. Single-tenant
+work does not consult the directory.
+
 To override the default channel factory, add
 `integrationChannelFactory: customFactory` to the same settings object.
 

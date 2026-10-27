@@ -187,6 +187,13 @@ override. Single-tenant execution uses `SINGLE_TENANT`, even when the request
 omits a tenant field. A named tenant cannot query a single-tenant context: that
 fails before reading. See the [query contract](REFERENCE.md#handler-routing-and-operations)
 for the complete tenant rules and empty-result behavior.
+For a multitenant receiving context, explicitly register each accepted tenant
+through `context.tenantIndex.keep(tenantId)` or the configured directory.
+Provider-backed indexes may only confirm existing membership: fixed SQL catalogs
+cannot add tenants, and the Datastore index requires native namespace metadata.
+Use an application-managed `TenantIndex` to register tenants before provider
+data exists or to add tenants dynamically.
+Unknown tenants fail before reads or handlers run; input never registers them.
 
 Use `EntityQuery.all(...)` when every predicate must match and
 `EntityQuery.either(...)` when any branch may match.

@@ -35,6 +35,7 @@ export type {
   TenantIndexRead,
   TenantIndexSignal,
 } from "./context/tenant-index.js";
+export { TenantUnknownError } from "./context/tenant-unknown-error.js";
 
 export {
   Stand,

@@ -137,15 +137,15 @@ describe("LocalEntityInbox", () => {
     );
   });
 
-  it("keeps one multitenant descriptor tenant before batch persistence", async () => {
+  it("checks one multitenant descriptor tenant before batch persistence", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-dynamic") },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const kept = Promise.withResolvers<undefined>();
-    const keep = vi.fn(() => kept.promise);
+    const admitted = Promise.withResolvers<undefined>();
+    const onAdmit = vi.fn(() => admitted.promise);
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const inbox = new LocalEntityInbox("Tasks", undefined, keep);
+    const inbox = new LocalEntityInbox("Tasks", undefined, onAdmit);
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
@@ -159,13 +159,30 @@ describe("LocalEntityInbox", () => {
     );
     await Promise.resolve(undefined);
 
-    expect(keep).toHaveBeenCalledExactlyOnceWith(tenant("tenant-dynamic"));
+    expect(onAdmit).toHaveBeenCalledExactlyOnceWith(tenant("tenant-dynamic"));
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toEqual([]);
 
-    kept.resolve(undefined);
+    admitted.resolve(undefined);
     await receiving;
+  });
+
+  it("rejects a saved Entity inbox row after its tenant is removed", async () => {
+    const failure = new Error("tenant removed");
+    let admitted = true;
+    const replay = vi.fn(() => Promise.resolve(undefined));
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const inbox = new LocalEntityInbox("Tasks", undefined, () =>
+      admitted ? Promise.resolve() : Promise.reject(failure),
+    );
+    inbox.register({ targetTypeUrl, labels: ["HANDLE_COMMAND"], replay });
+    const saved = writtenResult(processInput(targetTypeUrl, "saved"), 1n).message;
+
+    await inbox.replay(saved, tenant("tenant-a"));
+    admitted = false;
+    await expect(inbox.replay(saved, tenant("tenant-a"))).rejects.toBe(failure);
+    expect(replay).toHaveBeenCalledOnce();
   });
 
   it("exact-drains persisted batch rows before propagating a later write failure", async () => {

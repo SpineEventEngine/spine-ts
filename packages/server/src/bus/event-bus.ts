@@ -60,6 +60,7 @@ const forgettingBus: unique symbol = Symbol("forgetting-bus");
 const forgettingBuses = new WeakSet<EventBus>();
 const eventBusRoles = new WeakMap<EventBus, EventBusRole>();
 const eventBusLoggers = new WeakMap<EventBus, ILogLayer>();
+const eventAdmissions = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 
 type EventBusRole = "domain" | "system";
 
@@ -91,6 +92,14 @@ interface AcceptedEventDispatcher {
 
 interface EventBusAccess {
   // prettier-ignore
+
+  /**
+   * Sets receiving-context admission before Event storage or dispatch.
+   *
+   * @param eventBus Context Event bus.
+   * @param onAdmit Checks current tenant membership.
+   */
+  setAdmission(eventBus: EventBus, onAdmit: (event: Event) => Promise<void>): void;
 
   /**
    * Creates a package-internal bus without an event store.
@@ -383,6 +392,8 @@ export class EventBus {
     if (typeUrl === undefined || typeUrl === "") {
       throw new Error("EventBus requires event.message.typeUrl.");
     }
+
+    await eventAdmissions.get(this)?.(event);
 
     const dispatchers = this.#registry.find(typeUrl, event.context?.external === true);
 
@@ -747,6 +758,17 @@ interface EventSubscriberRecord {
  * @internal
  */
 export const eventBusAccess: EventBusAccess = Object.freeze({
+  /**
+   * Sets the context's live Event tenant check.
+   *
+   * @param eventBus Context Event bus.
+   * @param onAdmit Checks current membership.
+   */
+  setAdmission(eventBus: EventBus, onAdmit: (event: Event) => Promise<void>): void {
+    if (!storedDispatchers.has(eventBus))
+      throw new TypeError("Event admission requires an EventBus instance.");
+    eventAdmissions.set(eventBus, onAdmit);
+  },
   clearLogger(eventBus: EventBus): void {
     if (!storedDispatchers.has(eventBus)) {
       throw new TypeError("EventBus logger requires an EventBus instance.");

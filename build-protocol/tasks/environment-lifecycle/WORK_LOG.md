@@ -5,20 +5,21 @@
 Started 2026-10-27 from freshly fetched official master
 `ff6c8669537a016c47f012150306500d3b52b5d1`. Branch `environment-lifecycle` is in
 `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
-Checkpoints `c0c312b57`, `6ccfc3efc`, `f8a663cbe`, `0974d7627`, `c03c9844b` and `6991951cc` were pushed to official
-`origin/environment-lifecycle`. They contain initial repository and EventStore
-retention, safe closure, repository query/history retention and shared AnyPacker with the accepted task specification. No PR has
-been created. Full-task acceptance remains pending.
+Latest accepted checkpoint `abb145983` is pushed to official
+`origin/environment-lifecycle`. Repository/EventStore/query/history retention,
+shared AnyPacker, provider commit retention/shutdown, memory/SQL/Datastore
+preparation, and public live TenantIndex/native membership are complete.
+M5b tenant input checks and identifiable errors are verified and reviewed; the
+authored checkpoint is ready for commit/push. M6 strict state registration is next.
+Unconditional duplicate-state registration (including tests), Agent recovery
+removal, shared environment/Delivery, explicit/lazy initialization, subscription
+monitoring, environment tenant preparation and final integration follow in
+MILESTONES.md. No PR has been created. Full-task release/security/CI acceptance
+remains pending.
 
-Repository query/history retention has converged after focused verification and
-independent review. Protected Agent history and Entity maintenance operations
-now share admission and shutdown tracking; see REVIEW_LOG.md. This checkpoint
-was committed and pushed as f8a663cbe. AnyPacker implementation and caller adoption are now complete. The correction
-preflight, targeted API/reliability reviews and final changed-path coverage
-confirmation passed. Checkpoint 0974d7627 was committed and pushed to official
-origin/environment-lifecycle; provider lifecycle work follows. The prior checkpoint remains
-independently reviewable.
-No compatibility alias or provider workaround was introduced.
+The sections below retain earlier decisions and implementation evidence; later
+accepted checkpoints supersede earlier next-step wording. Current scope and
+human requirements are maintained in TASK.md and PROPOSAL.md.
 
 ## Accepted retention decisions
 
@@ -49,7 +50,7 @@ No compatibility alias or provider workaround was introduced.
 - Agent recovery removal precedes shared saved-work scanning. Inbox/shard retention
   lands with the complete Delivery shutdown chain.
 
-## AnyPacker decision and next implementation
+## AnyPacker implementation record
 
 D-0147 and TASK.md record the human requirement: use JVM-like AnyPacker throughout
 instead of a Datastore native-key workaround. No workaround was implemented.
@@ -868,3 +869,116 @@ paging state and fixed-SQL documentation. Final affected tests 24/24 and emulato
 clean. Parent confirms index 42/42 and Datastore 18/18 changed executable LCOV.
 Authored checkpoint is committed/pushed before M5b input admission and errors.
 Generation-only metadata stays unstaged; full release verification remains pending.
+
+M5a checkpoint abb145983 pushed immediately to official origin/environment-lifecycle.
+M5b begins: receiving-context live membership before tenant resolution, storage,
+Inbox persistence or handlers; no implicit keep; typed TENANT_UNKNOWN and canonical
+NOT_FOUND(5) with structured Spine error through actual service/client paths.
+Missing/inapplicable IDs remain distinct; directory failures remain operational.
+Shared subscription lookup may discover tenant before checking. Current membership
+is rechecked at saved Inbox dispatch; single-tenant work never consults a synthetic
+company member. This high-risk slice implements the accepted public/protocol
+contract, with prior architecture and JVM M5 guardrail unchanged. No repeated
+architecture pass. The external tenant-admission-implementation-brief.md plus
+admission/error/catalog inventories define implementation and behavior acceptance.
+
+Same sole implementer storage_retention, explicit immutable gpt-6-sol/medium; no
+children, introspection unavailable. Estimate 2–4 hours covers runtime/service/client
+implementation, explicit known-tenant fixture setup, fresh build/focused tests and
+coverage/static/narrow docs, and relevant independent review. Include transport
+identification now so the newly introduced error is usable; M12 still integrates
+complete startup/protocol behavior. No new generic error hierarchy, persisted
+registry, data migration, provisioning, retry timer or Agent recovery work.
+
+M8 supporting inventory runs independently during M5b. Existing mechanical_checks
+orchestrator-dispatched scanning function, explicit immutable gpt-6-luna/low; no
+children, source edits or test runs. Estimate 0.2–0.4 hours alongside implementation.
+Map current environment Delivery creation/defaults/Server attachment, per-context
+Inbox/shard storage selection, committed-write notification and primary/background
+dispatch, packed-signal tenant extraction and shutdown/resource ordering. Use
+current files with exact paths; do not repeat M5 admission or M7 Agent inventories.
+Record read-only source evidence in external shared-delivery-inventory.md for M8.
+Runtime introspection unavailable; configured profile is authoritative.
+
+M8 inventory accepted from explicit immutable Luna/low scanning function. Current
+environment shares ports/workers but constructs Delivery wrappers per runtime or
+supervisor group; Server performs attachment. Committed receive notifies readiness,
+which later forwards to workers. Existing workers decode packed Command/Event
+tenants, and periodic scans/watch provide recovery. Exact source/shutdown/test
+paths are in shared-delivery-inventory.md. No code/tests changed. One bounded
+follow-up records Inbox/shard factory scope and key/dedup identity to support the
+single-tenant shared storage change without guessing existing semantics.
+
+M8 targeted follow-up accepted: local Delivery retains Inbox/work-registry wrappers
+but creates/closes underlying RecordStorage per operation. Current local mappings
+append separate names and retain tenant scope; InboxId/message/shard protobufs have
+no tenant field. In-flight handoff keys include tenant, while target blocking,
+recent dedup, shard assignment and shard sessions omit it. Remote ports forward
+packed messages/shards and the inspected delivery-server core uses in-memory
+shard+UUID/shard identity. Single-tenant Inbox conversion therefore must also
+retain physical records and qualify logical recipient/dedup identity from the
+packed signal, rather than merely change the storage context flag. Exact paths
+and distinctions are appended to shared-delivery-inventory.md. No source edits
+or tests; same explicit immutable Luna/low profile, no children.
+
+M9/M10 supporting read-only scan: same mechanical_checks function, explicit
+immutable gpt-6-luna/low, no children/edits/tests. Estimate0.2–0.4hours alongside
+M5b implementation. Locate subscription monitoring construction/start/initial pass,
+periodic work/error restart/close and direct storage dependencies, with exact
+callers from Bounded Context/Server. Identify existing awaited completion and
+failure surfaces and focused tests; no redesign or Agent recovery duplication.
+Record external subscription-monitor-inventory.md. This prepares explicit/lazy
+startup work without changing the current tenant-admission slice.
+
+M9/M10 subscription inventory accepted from explicit immutable Luna/low function.
+Current SubscriptionRuntime is per paired Bounded Context, start returns void,
+detaches its first reconciliation and installs a ten-second timer immediately.
+Initial errors become WARN only if a logger is installed; buildAsync awaits only
+integration readiness. Reconciliation tail/timer coalescing already permits later
+retries; consume awaits a particular reconcile separately. Registry has a retained
+single-tenant RecordStorage, and close drains reconciliation/observers/consumers
+before registry close. Exact paths and tests in subscription-monitor-inventory.md
+support later awaited initial startup and post-success WARN/retry behavior. No
+new intervals or behavior were selected by this source scan; no source/tests
+changed, no runtime introspection exposed.
+
+M5b initial freeze reports 737/737 tests across seven affected suites and green
+build/tooling/static/docs checks, plus focused restored Agent history evidence.
+Parent changed-LCOV inspection includes new untracked error source (19/19), all
+service changes (20/20), context checks (17/17), Inbox (10/10), client (3/3).
+Three defensive invalid-instance branches remain intentionally uncovered. The
+public Repository.history paginated path at repository.ts:1189 is another actual
+input path, so parent requests one focused assertion before specialist dispatch,
+in addition to already covered protected Agent reads. Same implementer, test-only
+unless a defect emerges; estimate0.1–0.2hours within review allowance. No complete
+review wave has started; no production edits are expected.
+
+## M6 strict state registration preparation
+
+High-risk lifecycle/public-contract slice; existing frozen architecture and
+PROPOSAL section 3 remain binding. Latest human instruction forbids duplicate
+domain state types even in tests, with no optional setting. Estimate 1.5–2.5
+hours includes implementation, focused tests/static/coverage, independent review,
+corrections and checkpoint push. Existing sole implementer storage_retention is
+explicit immutable gpt-6-sol/medium; runtime metadata is not exposed. No children.
+External duplicate-state-implementation-brief.md and duplicate-state-inventory.md
+record acceptance cases and known invalid concurrent test fixtures.
+
+JVM guardrail refreshed after searching spine-jvm-docs runtime/context notes:
+PR1698 revision728e7654a711 ServerEnvironment.java serve/forget/contextsServing and
+reset; BoundedContext.java register/serveStateOf and shutdown; and
+BoundedContextBuilder.java build/closeAfterFailure were read directly from the
+official raw repository. The local JVM checkout lacks this commit, so exact
+remote source was used. Reserve before repository registration changes Delivery,
+rollback only a newly inserted association, retain accepted repositories through
+cleanup, and preserve initiating plus cleanup errors. The PR's historical
+optional test setting is explicitly superseded by the human's unconditional rule.
+No new library is needed for this domain-specific identity registry. M6 starts
+after the M5b authored checkpoint is committed and pushed.
+
+M5b review converged: reliability/style/API clean; README provider-catalog
+qualification corrected. Generated docs including API/audience/snippets, README
+formatting and diff checks pass after the prose-only correction. Runtime/tests
+remain the reviewed frozen versions. No accepted P0–P2 remains. Commit the
+authored changes, immediately push official feature branch, then start M6.
+Generation-only manifests remain unstaged for final coordinated convergence.

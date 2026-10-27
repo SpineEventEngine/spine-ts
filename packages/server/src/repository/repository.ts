@@ -1186,6 +1186,7 @@ const RepositoryAgentReads = {
   ): Promise<HistoryPage<AgentHistoryEntry>> {
     if (repositoryRuntimes.get(repository) !== captured.runtime)
       throw new Error("Agent read requires an active repository.");
+    await captured.runtime.onAdmit(captured.context.tenantId);
     return RepositoryStorage.track(repository, async () => {
       const input = RepositoryStorage.entityStorageInput(repository, captured.context);
       const history = RepositoryStorage.openRepositoryAgentHistory(
@@ -2067,6 +2068,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     const runtime = repositoryRuntimes.get(repository);
     if (runtime === undefined) throw new Error("Agent history requires an active repository.");
     const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
+    await runtime.onAdmit(context.tenantId);
     const input = RepositoryStorage.entityStorageInput(repository, context);
     return RepositoryStorage.track(repository, () =>
       RepositoryStorage.openRepositoryAgentHistory(repository, runtime.storageFactory, input).read({
@@ -2088,6 +2090,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     const runtime = repositoryRuntimes.get(repository);
     if (runtime === undefined) throw new Error("Agent history requires an active repository.");
     const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
+    await runtime.onAdmit(context.tenantId);
     const input = RepositoryStorage.entityStorageInput(repository, context);
     return RepositoryStorage.track(repository, () => {
       const history = RepositoryStorage.openRepositoryAgentHistory(
@@ -2444,6 +2447,7 @@ interface RoutingInput<Id> {
 interface RepositoryRuntime {
   readonly context: StorageMode;
   readonly storageFactory: StorageFactory;
+  readonly onAdmit: (tenantId: TenantId | undefined) => Promise<void>;
   readonly ai?: AiRegistry;
   readonly stand: Stand;
   readonly signalMetadata: SignalMetadata;
@@ -2732,6 +2736,7 @@ class RepositoryReadScope<
       throw new Error("Repository read access has finished.");
     if (query.schema !== this.#repository.stateSchema)
       throw new TypeError("Repository query must select the receiving Entity state schema.");
+    await this.#runtime.onAdmit(this.#context.tenantId);
     const plan = RepositoryReadPredicates.plan(query.buildPlan());
     return RepositoryStorage.track(this.#repository, () => {
       const storage = RepositoryStorage.repositoryReadEntityStorage(
@@ -2890,6 +2895,7 @@ class AggregateExecutionSupport {
       storage,
       entityId,
       this.#repository.stateSchema,
+      this.#storageContext.tenantId,
     );
 
     return this.#loadedAggregate(entityId, current, entity, storage, storageInput);
@@ -7810,6 +7816,7 @@ const RepositoryEntities = {
       storage,
       entityId,
       repository.stateSchema,
+      storageInput.context.tenantId,
     );
     if (repository.entityFamily === "agent")
       this.bindAgentHistory(repository, entity, entityId, storageInput, storage.agentHistory);
@@ -7839,10 +7846,16 @@ const RepositoryEntities = {
   ): void {
     if (history === undefined) throw new Error("Agent history storage is required.");
     const lifetime = RepositoryStorage.lifetime(repository);
+    const runtime = repositoryRuntimes.get(repository);
     AgentHistoryReads.bind(entity, {
       storage: history,
       entityId,
-      onAdmit: (onRead) => RepositoryStorage.track(repository, onRead, lifetime),
+      onAdmit: async (onRead) => {
+        if (runtime === undefined || repositoryRuntimes.get(repository) !== runtime)
+          throw new Error("Agent history requires its active runtime.");
+        await runtime.onAdmit(input.context.tenantId);
+        return RepositoryStorage.track(repository, onRead, lifetime);
+      },
       scope: {
         context: input.context.name,
         tenant: JSON.stringify(input.context.tenantId ?? null),
@@ -11345,6 +11358,7 @@ const RepositoryHistoryInternals = {
    * @param storage Entity storage used for reads and maintenance.
    * @param entityId Identifier used to select history records.
    * @param schema Schema used to unpack state records.
+   * @param tenantId Captured tenant for later live membership checks.
    */
   bindEntityHistory(
     repository: RepositoryView,
@@ -11352,26 +11366,59 @@ const RepositoryHistoryInternals = {
     storage: Pick<RepositoryReadEntityPort, "states" | "events">,
     entityId: unknown,
     schema: DescriptorMessageSchema,
+    tenantId?: TenantId,
   ): void {
     const lifetime = RepositoryStorage.lifetime(repository);
-    const stateCache = RepositoryHistoryInternals.createHistoryCache(
+    const runtime = repositoryRuntimes.get(repository);
+    const onAdmit = async (): Promise<void> => {
+      if (runtime === undefined || repositoryRuntimes.get(repository) !== runtime)
+        throw new Error("Repository history requires its active runtime.");
+      await runtime.onAdmit(tenantId);
+    };
+    const { stateCache, eventCache } = this.boundHistoryCaches(storage, entityId, schema);
+    entityStateHistoryCaches.set(entity, stateCache);
+    entityHistoryAccess.bind(entity, {
+      stateAt: async (time) => {
+        await onAdmit();
+        return this.readBoundStateAt(repository, lifetime, storage, entityId, time);
+      },
+      states: async (depth) => {
+        await onAdmit();
+        return this.readBoundStates(repository, lifetime, schema, stateCache, depth);
+      },
+      events: async (depth) => {
+        await onAdmit();
+        return this.readBoundEvents(repository, lifetime, eventCache, depth);
+      },
+      stateMaintenance: this.boundStateMaintenance(repository, lifetime, storage.states, onAdmit),
+      eventMaintenance: this.boundEventMaintenance(repository, lifetime, storage.events, onAdmit),
+    });
+  },
+
+  /**
+   * Creates state and Event caches over retained history ports.
+   *
+   * @param storage Retained history ports.
+   * @param entityId Captured Entity identifier.
+   * @param schema State schema for record version decoding.
+   * @returns Bound state and Event caches.
+   */
+  boundHistoryCaches(
+    storage: Pick<RepositoryReadEntityPort, "states" | "events">,
+    entityId: unknown,
+    schema: DescriptorMessageSchema,
+  ) {
+    const stateCache = this.createHistoryCache(
       (depth, startingFromVersion) => storage.states.backward(entityId, depth, startingFromVersion),
       (record) => BigInt(EntityRecords.unpack(schema, record).versionMessage.number),
       { requireDescendingVersions: true },
     );
-    entityStateHistoryCaches.set(entity, stateCache);
-    const eventCache = RepositoryHistoryInternals.createHistoryCache(
+    const eventCache = this.createHistoryCache(
       (depth, startingFromVersion) => storage.events.backward(entityId, depth, startingFromVersion),
       (event) => RepositorySignals.readEventVersion(event),
       { cacheCompleteVersionGroups: true },
     );
-    entityHistoryAccess.bind(entity, {
-      stateAt: (time) => this.readBoundStateAt(repository, lifetime, storage, entityId, time),
-      states: (depth) => this.readBoundStates(repository, lifetime, schema, stateCache, depth),
-      events: (depth) => this.readBoundEvents(repository, lifetime, eventCache, depth),
-      stateMaintenance: this.boundStateMaintenance(repository, lifetime, storage.states),
-      eventMaintenance: this.boundEventMaintenance(repository, lifetime, storage.events),
-    });
+    return { stateCache, eventCache };
   },
 
   /**
@@ -11380,18 +11427,24 @@ const RepositoryHistoryInternals = {
    * @param repository Repository with the bound Entity.
    * @param lifetime Runtime that provided the retained port.
    * @param states Retained state-history port.
+   * @param onAdmit Checks current membership before physical work.
    * @returns Guarded maintenance methods.
    */
   boundStateMaintenance(
     repository: RepositoryView,
     lifetime: RepositoryStorageLifetime,
     states: EntityStateHistoryPort<unknown, Message>,
+    onAdmit: () => Promise<void>,
   ): Pick<EntityStateHistoryPort<unknown, Message>, "trim" | "truncate"> {
     return {
-      trim: (id, keep) =>
-        RepositoryStorage.track(repository, () => states.trim(id, keep), lifetime),
-      truncate: (time) =>
-        RepositoryStorage.track(repository, () => states.truncate(time), lifetime),
+      trim: async (id, keep) => {
+        await onAdmit();
+        return RepositoryStorage.track(repository, () => states.trim(id, keep), lifetime);
+      },
+      truncate: async (time) => {
+        await onAdmit();
+        return RepositoryStorage.track(repository, () => states.truncate(time), lifetime);
+      },
     };
   },
 
@@ -11401,16 +11454,20 @@ const RepositoryHistoryInternals = {
    * @param repository Repository with the bound Entity.
    * @param lifetime Runtime that provided the retained port.
    * @param events Retained Event-history port.
+   * @param onAdmit Checks current membership before physical work.
    * @returns Guarded maintenance method.
    */
   boundEventMaintenance(
     repository: RepositoryView,
     lifetime: RepositoryStorageLifetime,
     events: EntityEventHistoryPort<unknown>,
+    onAdmit: () => Promise<void>,
   ): Pick<EntityEventHistoryPort<unknown>, "truncate"> {
     return {
-      truncate: (time) =>
-        RepositoryStorage.track(repository, () => events.truncate(time), lifetime),
+      truncate: async (time) => {
+        await onAdmit();
+        return RepositoryStorage.track(repository, () => events.truncate(time), lifetime);
+      },
     };
   },
 

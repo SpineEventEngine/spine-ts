@@ -729,3 +729,41 @@ and documentation clarification verified by parent. No unresolved P0–P2 findin
 All four concern dispositions and explicit immutable profile checks are recorded.
 Parent confirms fresh changed-line LCOV and diff cleanliness. Commit/push the
 authored slice, then continue tenant admission; no full-task completion claim.
+
+## M5b tenant admission and identifiable errors review
+
+Baseline abb145983; frozen authored runtime/service/client/tests/docs diff. Final
+affected seven-suite pass is737/737 plus focused public/protected Agent history
+regression. Fresh narrow LCOV hits previously uncovered public page guard1189 and
+protected access7855/7857. Parent broad LCOV confirms new error19/19, contexts17/17,
+services20/20, Inbox10/10 and client3/3; defensive invalid-instance branches are
+explicit limits. Build/tooling/ESLint/TSDoc/cleanup/copyright/docs/format/diff pass.
+Evidence is external tenant-admission-implementation-evidence.md; reviewer inputs
+are tenant-admission-review-context.md and full TASK human ledger. Parent updated
+stale WORK_LOG header and verified changed current docs do not claim future setup.
+
+All four canonical concerns apply. Existing provider_reliability, provider_style
+and repository_api_review use explicit immutable gpt-6-sol/medium profiles;
+provider_documentation uses explicit immutable gpt-6-luna/medium. No exposed runtime
+introspection, no child delegation, edits/builds/tests by reviewers. Technical
+lanes first, documentation when capacity frees. Collect one complete wave before
+one accepted correction batch to the same implementer. Review/correction/push
+estimate0.4–0.8hours remains current; preceding bounded test correction was
+0.1–0.2hours within it. No full-task release/security acceptance claimed.
+
+M5b full wave collected: reliability, style and TypeScript/API are clean. Accept
+documentation P2: README registration guidance must qualify read-only provider
+catalogs; fixed SQL catalogs and Datastore native catalogs confirm existing
+membership, and dynamic registration requires an application-managed index.
+Reliability's suggested extra zero-resolver assertions for imported Events and
+alternate history reads are advisory: the shared admission guard is exercised
+and reviewed, so no duplicate coverage matrix is added. All four explicit
+immutable profiles match dispatch; runtime metadata is unavailable. Return the
+single documentation correction to the existing Sol/medium implementer, then
+run deterministic affected-doc/diff checks. No substantive runtime change or
+review lane reopening is required. The recorded review estimate remains current.
+
+M5b accepted: parent verified the README qualification and external final
+evidence. Deterministic docs/format/diff checks pass; runtime and tests are
+unchanged. All four concern dispositions are complete, with no unresolved
+accepted P0–P2. Full-task release verification remains deferred until convergence.

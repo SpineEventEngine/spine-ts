@@ -46,8 +46,17 @@ const commandBusDrainers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusCloseFinishers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusAborters = new WeakMap<CommandBus, () => void>();
 const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
+const commandAdmissions = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
 
 interface CommandBusAccess {
+  /**
+   * Sets receiving-context admission before command dispatch.
+   *
+   * @param commandBus Context command bus.
+   * @param onAdmit Checks current tenant membership.
+   */
+  setAdmission(commandBus: CommandBus, onAdmit: (command: Command) => Promise<void>): void;
+
   /**
    * Posts an accepted internal command.
    *
@@ -314,6 +323,7 @@ export class CommandBus {
   }
 
   async #dispatch(command: Command): Promise<void> {
+    await commandAdmissions.get(this)?.(command);
     await this.#checkedDispatcher(command).dispatch(command);
   }
 
@@ -360,6 +370,17 @@ export class CommandBus {
  * @internal
  */
 export const commandBusAccess: CommandBusAccess = Object.freeze({
+  /**
+   * Sets the context's live Command tenant check.
+   *
+   * @param commandBus Context command bus.
+   * @param onAdmit Checks current membership.
+   */
+  setAdmission(commandBus: CommandBus, onAdmit: (command: Command) => Promise<void>): void {
+    if (!commandBusWorkCounters.has(commandBus))
+      throw new TypeError("Command admission requires a CommandBus instance.");
+    commandAdmissions.set(commandBus, onAdmit);
+  },
   postInternal(commandBus: CommandBus, command: Command): Promise<void> {
     const postInternal = internalCommandPosters.get(commandBus);
 

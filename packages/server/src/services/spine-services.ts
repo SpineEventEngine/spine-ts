@@ -85,6 +85,7 @@ import {
 } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
 import { EventOriginFilters } from "../stand/event-origin-filter.js";
+import { TenantAdmissions, TenantUnknownError } from "../context/tenant-unknown-error.js";
 import { AckSchema, type Ack } from "@spine-event-engine/proto";
 import {
   ResponseSchema,
@@ -305,6 +306,7 @@ export class SpineServices {
         status: ServiceValues.okStatus(),
       });
     } catch (error) {
+      if (error instanceof TenantUnknownError) throw TenantStatuses.unknown(error);
       const postError = ServiceValues.commandPostError(error);
       this.#logCommandPostFailure(route, command, error);
       return create(AckSchema, {
@@ -425,7 +427,8 @@ export class SpineServices {
         ServiceValues.createReadPlan(target, query, route),
         destination,
       );
-    } catch {
+    } catch (error) {
+      if (error instanceof TenantUnknownError) throw TenantStatuses.unknown(error);
       return ServiceValues.queryErrorResponse("QUERY_READ_ERROR", "Query read failed.");
     }
   }
@@ -453,7 +456,13 @@ export class SpineServices {
     });
   }
 
-  #subscribe(topic: Topic): Subscription | Promise<Subscription> {
+  /**
+   * Validates a topic synchronously and checks live membership before registry creation.
+   *
+   * @param topic Requested subscription topic.
+   * @returns Created subscription after admission.
+   */
+  #subscribe(topic: Topic): Promise<Subscription> {
     const route = this.#subscriptionRoute(topic);
     ServiceValues.validateTopic(topic);
     const shape = ServiceValues.createSubscriptionShape(topic, route);
@@ -483,7 +492,9 @@ export class SpineServices {
     if (registry === undefined) {
       throw new ConnectError("Subscription registry is unavailable.", Code.FailedPrecondition);
     }
-    return registry.create(subscription).then(() => clone(SubscriptionSchema, subscription));
+    return TenantStatuses.require(route.context, tenantId)
+      .then(() => registry.create(subscription))
+      .then(() => clone(SubscriptionSchema, subscription));
   }
 
   async *#activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> {
@@ -536,7 +547,9 @@ export class SpineServices {
    */
   async #startActivationRecord(id: string): Promise<SubscriptionRecord | undefined> {
     const record = this.#subscriptions.get(id) ?? (await this.#findSubscription(id));
-    if (record === undefined || record.delivery.active) return undefined;
+    if (record === undefined) return undefined;
+    await this.#requireSubscriptionTenant(record);
+    if (record.delivery.active) return undefined;
     const activation = await this.#subscriptionRegistry(record.route.context)?.activate(
       create(SubscriptionIdSchema, { value: id }),
     );
@@ -581,6 +594,12 @@ export class SpineServices {
     }
   }
 
+  /**
+   * Leaves an absent subscription ID inert and checks known records before removal.
+   *
+   * @param subscription Subscription identity supplied by the caller.
+   * @returns Cancellation response after any required membership check.
+   */
   #cancel(subscription: Subscription): Response | Promise<Response> {
     const id = subscription.id?.value;
 
@@ -588,7 +607,29 @@ export class SpineServices {
       return ServiceValues.okResponse();
     }
 
-    return this.#removeSubscription(id).then(() => ServiceValues.okResponse());
+    return this.#cancelKnown(id);
+  }
+
+  /**
+   * Checks the canonical record's tenant before cancellation side effects.
+   *
+   * @param id Subscription ID with a possible shared-registry record.
+   * @returns Successful cancellation response after removal.
+   */
+  async #cancelKnown(id: string): Promise<Response> {
+    const record = this.#subscriptions.get(id) ?? (await this.#findSubscription(id));
+    if (record !== undefined) await this.#requireSubscriptionTenant(record);
+    await this.#removeSubscription(id);
+    return ServiceValues.okResponse();
+  }
+
+  /**
+   * Checks the discovered subscription tenant before tenant-specific control work.
+   *
+   * @param record Canonical shared-registry subscription record.
+   */
+  async #requireSubscriptionTenant(record: SubscriptionRecord): Promise<void> {
+    await TenantStatuses.require(record.route.context, record.tenantId);
   }
 
   #subscriptionRoute(topic: Topic): SubscriptionRoute {
@@ -2110,6 +2151,57 @@ function stateRouteIdField(
 
   return field;
 }
+
+/**
+ * Maps confirmed tenant absence to native service errors.
+ */
+const TenantStatuses = Object.freeze({
+  /**
+   * Checks live membership and maps only confirmed missing membership to NotFound.
+   *
+   * @param context Receiving context and its selected index.
+   * @param tenantId Complete selected tenant identity.
+   * @returns Completion after current membership is confirmed.
+   */
+  async require(context: BoundedContext, tenantId?: TenantId): Promise<void> {
+    try {
+      await TenantAdmissions.require(
+        context.tenantIndex,
+        context.name.value,
+        context.isMultitenant,
+        tenantId,
+      );
+    } catch (error) {
+      if (error instanceof TenantUnknownError) throw TenantStatuses.unknown(error);
+      throw error;
+    }
+  },
+
+  /**
+   * Exposes a confirmed unknown tenant as a native NotFound RPC with Spine details.
+   *
+   * @param error Receiving-context membership failure.
+   * @returns Connect failure preserving its stable Spine error type.
+   */
+  unknown(error: TenantUnknownError): ConnectError {
+    return new ConnectError(
+      error.message,
+      Code.NotFound,
+      undefined,
+      [
+        {
+          desc: ErrorSchema,
+          value: create(ErrorSchema, {
+            type: error.type,
+            code: Code.NotFound,
+            message: error.message,
+          }),
+        },
+      ],
+      error,
+    );
+  },
+});
 
 function tenantMismatch(
   multitenant: boolean,

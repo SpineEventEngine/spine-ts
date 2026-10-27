@@ -816,6 +816,7 @@ const expectedServerExports = [
   "TenantIndexPage",
   "TenantIndexRead",
   "TenantIndexSignal",
+  "TenantUnknownError",
   "EntityTransaction",
   "EntityTransactionAcceptedCommit",
   "EntityTransactionCommitResult",

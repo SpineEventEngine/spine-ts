@@ -46,7 +46,7 @@ export class LocalEntityInbox implements EntityInbox {
 
   readonly #readiness: DeliveryReadiness;
 
-  readonly #keepTenant: (tenantId: TenantId) => Promise<void>;
+  readonly #onAdmit: (tenantId: TenantId) => Promise<void>;
 
   readonly #strategy: DeliveryStrategy;
 
@@ -70,19 +70,19 @@ export class LocalEntityInbox implements EntityInbox {
    * Creates a local Entity Inbox.
    * @param contextName Names the bounded context that owns this inbox.
    * @param readiness Coordinates delivery readiness after persistence.
-   * @param keepTenant Records a tenant before its message is persisted.
+   * @param onAdmit Checks current tenant membership before persistence or replay.
    * @param strategy Derives shard ownership for Entity Inbox targets.
    */
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
-    keepTenant: (tenantId: TenantId) => Promise<void> = () => Promise.resolve(),
+    onAdmit: (tenantId: TenantId) => Promise<void> = () => Promise.resolve(),
     strategy: DeliveryStrategy = UniformAcrossAllShards.singleShard(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
       readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
-    this.#keepTenant = keepTenant;
+    this.#onAdmit = onAdmit;
     this.#strategy = strategy;
   }
 
@@ -196,7 +196,7 @@ export class LocalEntityInbox implements EntityInbox {
     deliveryTenantId?: TenantId,
   ): Promise<InboxMessage> {
     await this.#followUpFor(input, deliveryTenantId);
-    await this.#keepDeliveryTenant(deliveryTenantId);
+    await this.#admitDeliveryTenant(deliveryTenantId);
     const written = await this.#writeInboxRow(
       delivery,
       input,
@@ -225,7 +225,7 @@ export class LocalEntityInbox implements EntityInbox {
       .map((input) => this.#followUpFor(input, deliveryTenantId))
       .filter((followUp): followUp is Promise<void> => followUp !== undefined);
     if (followUps.length > 0) await Promise.all(followUps);
-    await this.#keepDeliveryTenant(deliveryTenantId);
+    await this.#admitDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
     const failures: unknown[] = [];
 
@@ -241,9 +241,9 @@ export class LocalEntityInbox implements EntityInbox {
     }
   }
 
-  async #keepDeliveryTenant(deliveryTenantId: TenantId | undefined): Promise<void> {
+  async #admitDeliveryTenant(deliveryTenantId: TenantId | undefined): Promise<void> {
     if (deliveryTenantId !== undefined) {
-      await this.#keepTenant(deliveryTenantId);
+      await this.#onAdmit(deliveryTenantId);
     }
   }
 
@@ -508,6 +508,7 @@ export class LocalEntityInbox implements EntityInbox {
   ): Promise<(() => Promise<void>) | undefined> {
     receptionObservation.markManaged();
     LocalEntityInbox.#assert(message);
+    await this.#admitDeliveryTenant(deliveryTenantId);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
 

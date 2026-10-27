@@ -78,6 +78,7 @@ import {
 } from "./local-inbox-handoff.js";
 import { LocalEntityInbox } from "./entity-inbox.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
+import { TenantAdmissions } from "./tenant-unknown-error.js";
 import type { TenantIndex } from "./tenant-index.js";
 import { EffectiveTenants } from "./effective-tenant.js";
 import { AgentScheduler, type AgentScanScope } from "../agent/agent-scheduler.js";
@@ -118,7 +119,7 @@ import {
   type EntityHandlersMetadata,
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
-import { Stand } from "../stand/stand.js";
+import { Stand, standAccess } from "../stand/stand.js";
 import { SubscriptionRuntime, subscriptionRuntimeAccess } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
@@ -234,6 +235,11 @@ interface RepositoryRegistration {
    * Context storage factory.
    */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Checks live membership before a direct repository read.
+   */
+  readonly onAdmit: (tenantId: TenantId | undefined) => Promise<void>;
 
   /**
    * Application AI registry selected before Agent repository intake.
@@ -930,6 +936,7 @@ export class BoundedContext {
     this.#subscriptionRuntime = input.subscriptionRuntime;
     this.#storageFactory = input.storageFactory;
     this.#ai = input.ai;
+    this.#installTenantAdmission(input.tenantIndex);
     this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(input.deliveryStrategy);
     this.#commandEndpoint = Object.freeze({
       acceptedCommandTypes: () => this.#commandBus.acceptedCommandTypes(),
@@ -946,6 +953,46 @@ export class BoundedContext {
     this.#registerAndStart(input.repositories);
     this.#startAgentScheduler(delivery.tenantIndex);
     Object.freeze(this);
+  }
+
+  /**
+   * Installs live membership checks on context signal buses.
+   *
+   * @param index Effective receiving-context membership index.
+   */
+  #installTenantAdmission(index: TenantIndex): void {
+    const contextName = this.#snapshot.spec.name.value;
+    const multitenant = this.#snapshot.tenantMode === "multitenant";
+    commandBusAccess.setAdmission(this.#commandBus, (command) =>
+      TenantAdmissions.require(
+        index,
+        contextName,
+        multitenant,
+        command.context?.actorContext?.tenantId,
+      ),
+    );
+    eventBusAccess.setAdmission(this.#eventBus, (event) =>
+      TenantAdmissions.require(
+        index,
+        contextName,
+        multitenant,
+        ContextParts.readReplayTenant(event),
+      ),
+    );
+  }
+
+  /**
+   * Checks this context's live index before repository work.
+   *
+   * @param tenantId Captured tenant identity, when applicable.
+   */
+  #admitTenant(tenantId?: TenantId): Promise<void> {
+    return TenantAdmissions.require(
+      this.tenantIndex,
+      this.#snapshot.name.value,
+      this.isMultitenant,
+      tenantId,
+    );
   }
 
   /**
@@ -1012,17 +1059,23 @@ export class BoundedContext {
    */
   #createDelivery(tenantIndex: TenantIndex): ContextDeliveryParts {
     const deliveryReadiness = new DeliveryReadiness();
-    const keepTenant = (tenantId: TenantId) => tenantIndex.keep(tenantId);
+    const onAdmit = (tenantId: TenantId) =>
+      TenantAdmissions.require(
+        tenantIndex,
+        this.#snapshot.name.value,
+        this.#snapshot.tenantMode === "multitenant",
+        tenantId,
+      );
     const entityInbox = new LocalEntityInbox(
       this.#snapshot.name.value,
       deliveryReadiness,
-      keepTenant,
+      onAdmit,
       this.#deliveryStrategy,
     );
     const projectionInbox = new LocalProjectionInbox(
       this.#snapshot.name.value,
       deliveryReadiness,
-      keepTenant,
+      onAdmit,
     );
     return { deliveryReadiness, tenantIndex, entityInbox, projectionInbox };
   }
@@ -1138,6 +1191,7 @@ export class BoundedContext {
       name: ContextParts.cloneName(this.#snapshot.name),
       storageContext: ContextParts.createStorageMode(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
+      onAdmit: (tenantId) => this.#admitTenant(tenantId),
       ...(this.#ai === undefined ? {} : { ai: this.#ai }),
       stand: this.#stand,
       entityInbox: this.#entityInbox,
@@ -2334,10 +2388,7 @@ export class BoundedContextBuilder {
     buses: ContextBuildBuses,
     resources: ContextBuildResources,
   ): ContextBuildRuntime {
-    const stand = new Stand({
-      context: ContextParts.createStorageMode(this.#specSnapshot),
-      storageFactory,
-    });
+    const stand = this.#buildStand(storageFactory);
     resources.stand = stand;
     const registry =
       resources.registry ??
@@ -2355,6 +2406,29 @@ export class BoundedContextBuilder {
     );
     resources.runtime = runtime;
     return { stand, registry, runtime };
+  }
+
+  /**
+   * Builds the context Stand with a captured live membership directory.
+   *
+   * @param storageFactory Provider used for Entity records.
+   * @returns Direct read-side Stand.
+   */
+  #buildStand(storageFactory: StorageFactory): Stand {
+    const tenantIndex = this.#tenantIndex ?? ServerEnvironment.instance().tenantIndex;
+    const stand = new Stand({
+      context: ContextParts.createStorageMode(this.#specSnapshot),
+      storageFactory,
+    });
+    standAccess.setAdmission(stand, (tenantId) =>
+      TenantAdmissions.require(
+        tenantIndex,
+        this.#specSnapshot.name.value,
+        this.#specSnapshot.multitenant,
+        tenantId,
+      ),
+    );
+    return stand;
   }
 
   #createContext(
@@ -4011,6 +4085,7 @@ const ContextParts = Object.freeze({
     repositoryAccess.bindRuntime(repository, {
       context: registration.storageContext,
       storageFactory: registration.storageFactory,
+      onAdmit: registration.onAdmit,
       ...(registration.ai === undefined ? {} : { ai: registration.ai }),
       stand: registration.stand,
       signalMetadata: new SignalMetadata(),

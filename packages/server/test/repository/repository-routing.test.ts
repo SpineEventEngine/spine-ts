@@ -109,7 +109,7 @@ import {
   EventDispatchedToSubscriberSchema,
   EventDispatchedToReactorSchema,
 } from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { ILogLayer } from "loglayer";
 
 import {
@@ -121,6 +121,7 @@ import {
   ProcessManager,
   Projection,
   Repository,
+  ServerEnvironment,
   type RepositoryOptions,
   type EntityOptions,
   RepositoryIdentityError,
@@ -146,6 +147,7 @@ import {
   SupportReplyAgentStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { TenantIndexes } from "../../src/context/tenant-index.js";
 import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
@@ -1943,9 +1945,19 @@ class BlockingProcessManager extends ProcessManager<string, typeof ProjectQueueS
 
 class GuardedSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
   static reactions = 0;
+  static latest: GuardedSupportAgent | undefined;
+
+  static restored(): GuardedSupportAgent | undefined {
+    return this.latest;
+  }
+
+  readAudit(): Promise<unknown> {
+    return this.fullHistory({ pageSize: 1 });
+  }
 
   onTicketUpdated(event: SupportTicketUpdated): SupportReplyDrafted {
     GuardedSupportAgent.reactions += 1;
+    GuardedSupportAgent.latest = this;
     const reply = `Answer: ${event.question}`;
     this.update((state) => Object.assign(state, { id: this.id, proposedReply: reply }));
     return create(SupportReplyDraftedSchema, { agent: this.id, reply });
@@ -1982,6 +1994,26 @@ class SplitRouteProcessManager extends ProcessManager<string, typeof ProjectQueu
 }
 
 describe("repository signal routing", () => {
+  beforeAll(async () => {
+    const index = ServerEnvironment.instance().tenantIndex;
+    await Promise.all(
+      [
+        "first",
+        "second",
+        "tenant-a",
+        "tenant-b",
+        "tenant-command",
+        "tenant-transform",
+        "tenant-other",
+        "pm-tenant",
+        " tenant-a ",
+        "a",
+        "b",
+      ].map((value) => index.keep(createTenantId(value))),
+    );
+    await index.keep(createTenantId("example.com", "domain"));
+    await index.keep(createTenantId("owner@example.com", "email"));
+  });
   it("rejects class-aware routes attached to a different Entity constructor", () => {
     const wrongCommand = CommandRouting.create(InjectedProjectAggregate).route(
       CreateProjectSchema,
@@ -2637,11 +2669,21 @@ describe("repository signal routing", () => {
     const context = BoundedContext.multitenant("TenantRepositoryReads")
       .add(repository)
       .withStorageFactory(factory)
+      .withTenantIndex(TenantIndexes.fromFactory(new InMemoryStorageFactory()))
       .build();
     try {
       expect(() => repositoryReadAccess.bind(repository)).toThrow("requires tenantId");
       const firstTenant = createTenantId("first");
       const secondTenant = createTenantId("second");
+      const creation = vi.spyOn(factory, "createEntityStorage");
+      const unknown = repositoryReadAccess.bind(repository, firstTenant);
+      await expect(unknown.findIds(ProjectStateQuery.create().build())).rejects.toMatchObject({
+        type: "TENANT_UNKNOWN",
+      });
+      expect(creation).not.toHaveBeenCalled();
+      unknown.close();
+      await context.tenantIndex.keep(firstTenant);
+      await context.tenantIndex.keep(secondTenant);
       for (const [tenantId, name] of [
         [firstTenant, "First"],
         [secondTenant, "Second"],
@@ -2843,6 +2885,26 @@ describe("repository signal routing", () => {
     } finally {
       await nextContext.close();
     }
+  });
+
+  it("rejects a bound history read after its tenant leaves the live index", async () => {
+    const index = TenantIndexes.fromFactory(new InMemoryStorageFactory());
+    const repository = createExecutingRepository();
+    repository.setStateHistoryEnabled(true);
+    const context = BoundedContext.multitenant("HistoryMembers")
+      .withTenantIndex(index)
+      .add(repository)
+      .build();
+    await index.keep(createTenantId("history-tenant"));
+    await context
+      .commandBus()
+      .post(createAggregateCommand("history-member", "history-entity", "Task", "history-tenant"));
+    const entity = ExecutingProjectAggregate.latest;
+    if (entity === undefined) throw new Error("Expected a restored Aggregate.");
+    vi.spyOn(index, "contains").mockResolvedValue(false);
+
+    await expect(entity.readStateHistory(1)).rejects.toMatchObject({ type: "TENANT_UNKNOWN" });
+    await context.close();
   });
 
   it("drains bound stateAt and Event-history reads and rejects old callbacks after rebind", async () => {
@@ -9250,6 +9312,81 @@ describe("repository signal routing", () => {
     ).resolves.toBeDefined();
     await context.close();
     expect(factory.agentHistoryCloses).toBe(1);
+  });
+
+  it("checks current tenant membership before direct Agent audit history reads", async () => {
+    const index = TenantIndexes.fromFactory(new InMemoryStorageFactory());
+    const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-tenant-history" });
+    const repository = createGuardedSupportAgentRepository(agentId, false);
+    const context = BoundedContext.multitenant("SupportAudit")
+      .withTenantIndex(index)
+      .add(repository)
+      .withAi(
+        AiRegistry.create({
+          defaultModels: {},
+          invocationLimits: {
+            operations: 1,
+            modelRequests: 1,
+            toolCalls: 0,
+            recordedReads: 0,
+            deadlineMs: 1_000,
+            totalInputBytes: 4_000,
+            totalOutputBytes: 4_000,
+            maxRecoveryBytes: 32_000,
+          },
+          concurrentOperations: 1,
+          queuedOperations: 0,
+        }),
+      )
+      .persistSystemEvents()
+      .build();
+    const tenantId = createTenantId("audit-tenant");
+    await expect(
+      repositoryAccess.agentHistory(repository, agentId, { kind: "full" }, { count: 1 }, tenantId),
+    ).rejects.toMatchObject({ type: "TENANT_UNKNOWN" });
+    await expect(
+      repositoryAccess.agentHistoryPage(repository, agentId, { pageSize: 1 }, tenantId),
+    ).rejects.toMatchObject({ type: "TENANT_UNKNOWN" });
+    const publicHistory = repository.agentHistory(agentId, { tenantId });
+    await expect(publicHistory.fullHistory({ pageSize: 1 })).rejects.toMatchObject({
+      type: "TENANT_UNKNOWN",
+    });
+    await index.keep(tenantId);
+    await expect(
+      repositoryAccess.agentHistory(repository, agentId, { kind: "full" }, { count: 1 }, tenantId),
+    ).resolves.toMatchObject({ entries: [] });
+    await expect(
+      repositoryAccess.agentHistoryPage(repository, agentId, { pageSize: 1 }, tenantId),
+    ).resolves.toMatchObject({ items: [] });
+    await expect(publicHistory.fullHistory({ pageSize: 1 })).resolves.toMatchObject({ items: [] });
+    GuardedSupportAgent.latest = undefined;
+    GuardedSupportAgent.reactions = 0;
+    const event = SignalEnvelopes.event({
+      schema: SupportTicketUpdatedSchema,
+      message: create(SupportTicketUpdatedSchema, { agent: agentId, question: "History?" }),
+      context: create(EventContextSchema, {
+        producerId: AnyPacker.pack(SupportReplyAgentIdSchema, agentId),
+        version: create(VersionSchema, { number: 1 }),
+        origin: {
+          case: "pastMessage",
+          value: create(OriginSchema, {
+            actorContext: create(ActorContextSchema, { tenantId }),
+          }),
+        },
+      }),
+    });
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected Agent Event dispatcher.");
+    await dispatcher.dispatch(event);
+    await waitForCondition(() => GuardedSupportAgent.reactions === 1);
+    const entity = GuardedSupportAgent.restored();
+    if (entity === undefined) throw new Error("Expected restored Agent.");
+    const lookup = vi.spyOn(index, "contains").mockResolvedValue(false);
+    await expect(entity.readAudit()).rejects.toMatchObject({ type: "TENANT_UNKNOWN" });
+    lookup.mockRestore();
+    await expect(entity.readAudit()).resolves.toHaveProperty("items");
+    await context.close();
+    await expect(entity.readAudit()).rejects.toThrow("active runtime");
   });
 
   it("bounds delivery lanes while delivered Inbox rows suppress a duplicate after lane eviction", async () => {

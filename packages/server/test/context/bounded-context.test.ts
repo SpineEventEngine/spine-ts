@@ -1420,6 +1420,7 @@ describe("BoundedContext assembly", () => {
     let recovered: BoundedContext | undefined;
 
     try {
+      await selectedIndex.keep(tenantId);
       first = await BoundedContext.multitenant(contextName)
         .withStorageFactory(storageFactory)
         .withTenantIndex(selectedIndex)
@@ -1572,6 +1573,72 @@ describe("BoundedContext assembly", () => {
     await context.commandBus().post(createProjectionCommand("command-1"));
 
     expect(observed).toEqual(["command-1"]);
+  });
+
+  it("checks the live receiving tenant before direct command or event dispatch", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const commands: string[] = [];
+    const events: string[] = [];
+    const context = BoundedContext.multitenant("Tasks")
+      .withTenantIndex(index)
+      .addCommandDispatcher(
+        createCommandDispatcher([AssignReviewTaskSchema], (command) => {
+          commands.push(command.id?.uuid ?? "missing");
+        }),
+      )
+      .addEventDispatcher(
+        createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
+          events.push(event.id?.value ?? "missing");
+        }),
+      )
+      .build();
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("unknown", "task-1", "a")),
+    ).rejects.toMatchObject({ type: "TENANT_UNKNOWN" });
+    await expect(
+      context.eventBus().post(createProjectionEvent("unknown", "task-1", tenant("a"))),
+    ).rejects.toMatchObject({ type: "TENANT_UNKNOWN" });
+    expect(commands).toEqual([]);
+    expect(events).toEqual([]);
+    context.stand().register(ProjectOverviewStateSchema);
+    await expect(
+      context.stand().read(ProjectOverviewStateSchema, "task-1", { tenantId: tenant("a") }),
+    ).rejects.toMatchObject({ type: "TENANT_UNKNOWN" });
+    await expect(
+      context.stand().queryVersioned(ProjectOverviewStateSchema, {}, { tenantId: tenant("a") }),
+    ).rejects.toMatchObject({ type: "TENANT_UNKNOWN" });
+    const lookupFailure = new Error("tenant directory unavailable");
+    vi.spyOn(index, "contains").mockRejectedValueOnce(lookupFailure);
+    await expect(
+      context.commandBus().post(createAggregateCommand("failed-lookup", "task-1", "a")),
+    ).rejects.toBe(lookupFailure);
+    await index.keep(tenant("a"));
+    await context.commandBus().post(createAggregateCommand("known", "task-1", "a"));
+    await context.eventBus().post(createProjectionEvent("known", "task-1", tenant("a")));
+    expect(commands).toEqual(["known"]);
+    expect(events).toEqual(["known"]);
+    await expect(
+      context.stand().read(ProjectOverviewStateSchema, "task-1", { tenantId: tenant("a") }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("does not consult a configured company index for single-tenant work", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const lookup = vi.spyOn(index, "contains").mockRejectedValue(new Error("unexpected lookup"));
+    const observed: string[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .withTenantIndex(index)
+      .addCommandDispatcher(
+        createCommandDispatcher([AssignReviewTaskSchema], (command) => {
+          observed.push(command.id?.uuid ?? "missing");
+        }),
+      )
+      .build();
+
+    await context.commandBus().post(createAggregateCommand("single", "task-1"));
+    expect(observed).toEqual(["single"]);
+    expect(lookup).not.toHaveBeenCalled();
   });
 
   it("does not register command dispatchers removed before build", async () => {
@@ -2654,7 +2721,10 @@ describe("BoundedContext assembly", () => {
       .build();
 
     try {
-      const command = context.commandBus().post(createProjectionCommand("terminal-command"));
+      await context.tenantIndex.keep(tenant("tenant-a"));
+      const command = context
+        .commandBus()
+        .post(createProjectionCommand("terminal-command", "task-1", tenant("tenant-a")));
       await vi.waitFor(() => {
         expect(order).toEqual(["domain command accepted"]);
       });
@@ -2973,11 +3043,12 @@ function createEventDispatcher(
   };
 }
 
-function createProjectionCommand(id: string, targetId = "task-1") {
+function createProjectionCommand(id: string, targetId = "task-1", tenantId?: TenantId) {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
+        ...(tenantId === undefined ? {} : { tenantId }),
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),

@@ -405,7 +405,7 @@ export class Stand {
 
     try {
       const registration = this.#registration(schema, "read");
-      const tenantId = this.#tenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(options.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
         const stored = await storage.current.read(id);
@@ -454,7 +454,7 @@ export class Stand {
 
     try {
       const registration = this.#registration(schema, "read");
-      const tenantId = this.#tenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(options.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
         const stored = await storage.current.query(Stand.#legacyPlan(query));
@@ -485,7 +485,7 @@ export class Stand {
     const finish = this.#beginOperation();
     try {
       const registration = this.#registration(schema, "read");
-      const tenantId = this.#tenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(options.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
         const stored = await storage.current.query(plan);
@@ -515,7 +515,7 @@ export class Stand {
 
     try {
       const registration = this.#registration(schema, "clear");
-      const tenantId = this.#tenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(options.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
         const entries = await storage.current.query({
@@ -608,7 +608,7 @@ export class Stand {
       const registration = this.#registration(schema, "update");
       if (metadata !== undefined && metadata.schema !== registration.schema)
         throw new Error("Repository metadata does not match the Entity state schema.");
-      const tenantId = this.#tenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(options.tenantId);
       const snapshot = Stand.#snapshotUpdateOptions(options);
       const stateCopy = clone(schema, state);
       const id = Stand.#readStateId(stateCopy, registration);
@@ -741,7 +741,7 @@ export class Stand {
     const finish = this.#beginOperation();
     try {
       const registration = this.#registration(schema, "read");
-      const tenantId = this.#tenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(options.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
       try {
         const stored = await storage.current.read(id);
@@ -1038,6 +1038,18 @@ export class Stand {
     return TenantBoundary.from(tenantId).tenantId;
   }
 
+  /**
+   * Validates shape and awaits live membership before leasing a storage handle.
+   *
+   * @param tenantId Selected tenant identity.
+   * @returns Detached selected tenant identity, when applicable.
+   */
+  async #checkedTenantId(tenantId: TenantId | undefined): Promise<TenantId | undefined> {
+    const selected = this.#tenantId(tenantId);
+    await standAdmissions.get(this)?.(selected);
+    return selected;
+  }
+
   #storageContext(tenantId: TenantId | undefined): StorageContext {
     if (!this.#context.multitenant) {
       this.#tenantId(tenantId);
@@ -1267,6 +1279,14 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
  */
 interface StandAccess {
   /**
+   * Sets receiving-context admission before Entity record work.
+   *
+   * @param stand Context Stand.
+   * @param onAdmit Checks current membership.
+   */
+  setAdmission(stand: Stand, onAdmit: (tenantId: TenantId | undefined) => Promise<void>): void;
+
+  /**
    * Finds observer metadata for a registered type URL.
    *
    * @param stand Stand to inspect.
@@ -1336,6 +1356,18 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
+  /**
+   * Installs an internal receiving-context membership check.
+   *
+   * @param stand Context Stand.
+   * @param onAdmit Checks current membership.
+   */
+  setAdmission(stand: Stand, onAdmit: (tenantId: TenantId | undefined) => Promise<void>): void {
+    if (!(stand instanceof Stand))
+      throw new TypeError("Stand admission requires a Stand instance.");
+    standAdmissions.set(stand, onAdmit);
+  },
+
   /**
    * Finds observer metadata on the supplied Stand.
    *
@@ -1451,5 +1483,7 @@ type CurrentReadCall = <Schema extends MessageSchema>(
 ) => Promise<StandCurrentRecord<Schema> | undefined>;
 
 const deferredUpdates = new WeakMap<Stand, DeferredUpdateCall>();
+
+const standAdmissions = new WeakMap<Stand, (tenantId: TenantId | undefined) => Promise<void>>();
 
 const currentReads = new WeakMap<Stand, CurrentReadCall>();
