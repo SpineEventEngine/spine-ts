@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, ScalarType, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   EventIdSchema,
@@ -36,11 +36,15 @@ import { TaskListSchema } from "../../../../examples/todo/generated/spine/exampl
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import { EventStore } from "../../src/event/event-store.js";
+import { ColumnTypes } from "../../src/record/column-type.js";
+import { RecordColumn } from "../../src/record/record-column.js";
 import { stateHistorySpec } from "../../src/entity/entity-history-record-spec.js";
 import type { EntityCommitStorage } from "../../src/internal/entity-commit.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
+import { StoragePreparations } from "../../src/internal/storage-preparation.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
+import { InMemoryStorageBackend } from "../../src/memory/in-memory-storage-backend.js";
 import {
   MemoryEntityRecordStorage,
   MemoryEntityStorageFactory,
@@ -52,6 +56,114 @@ import { RecordSpec } from "../../src/record/record-spec.js";
 import { StorageFactory } from "../../src/storage/storage-factory.js";
 
 describe("MemoryEntityCommitStorage", () => {
+  it("admits all three memory preparation calls before close", async () => {
+    const factory = new InMemoryStorageFactory();
+    const preparation = StoragePreparations.for(factory);
+    const input = entityInput(true);
+    const agent = {
+      context: input.context,
+      stateType: TaskSchema.typeName,
+      id: { key: (id: string) => id },
+    };
+    const admitted = [
+      preparation.prepareRecord(input.context, input.recordSpec, undefined, "check"),
+      preparation.prepareEntity(input, "check"),
+      preparation.prepareAgentHistory(agent, "check"),
+    ];
+    await factory.close();
+    await expect(Promise.all(admitted)).resolves.toEqual([undefined, undefined, undefined]);
+    await expect(
+      preparation.prepareRecord(input.context, input.recordSpec, undefined, "check"),
+    ).rejects.toThrow(/closed/);
+    await expect(preparation.prepareEntity(input, "check")).rejects.toThrow(/closed/);
+    await expect(preparation.prepareAgentHistory(agent, "check")).rejects.toThrow(/closed/);
+  });
+
+  it("rejects Entity query columns that differ from its current RecordSpec", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = {
+      ...entityInput(false),
+      columns: [
+        new RecordColumn<EntityRecord>("actual", ColumnTypes.scalar(ScalarType.STRING), () => "x"),
+      ],
+    };
+    await expect(StoragePreparations.for(factory).prepareEntity(input, "check")).rejects.toThrow(
+      /columns|incompatible/,
+    );
+    expect(() => factory.createEntityStorage(input)).toThrow(/columns|incompatible/);
+    await factory.close();
+  });
+
+  it("validates Agent audit tenancy before registering a preparation", async () => {
+    const factory = new InMemoryStorageFactory();
+    const preparation = StoragePreparations.for(factory);
+    const audit = { stateType: TaskSchema.typeName, id: { key: (id: string) => id } };
+    await expect(
+      preparation.prepareAgentHistory(
+        { ...audit, context: { name: "Tasks", multitenant: true } as never },
+        "check",
+      ),
+    ).rejects.toThrow(/tenantId/);
+    await expect(
+      preparation.prepareAgentHistory(
+        {
+          ...audit,
+          context: {
+            name: "Tasks",
+            multitenant: false,
+            tenantId: create(TenantIdSchema, { kind: { case: "value", value: "extra" } }),
+          } as never,
+        },
+        "check",
+      ),
+    ).rejects.toThrow(/does not accept/);
+    await expect(
+      preparation.prepareAgentHistory({ ...audit, context }, "check"),
+    ).resolves.toBeUndefined();
+    await factory.close();
+  });
+  it("prepares current, history, and Agent audit definitions without opening tenant storage", async () => {
+    const backend = new InMemoryStorageBackend();
+    const factory = new InMemoryStorageFactory(backend);
+    const input = {
+      ...entityInput(true),
+      context: {
+        name: "Tasks",
+        multitenant: true,
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "unseen" } }),
+      } as const,
+    };
+    const createEntity = vi.spyOn(MemoryEntityStorageFactory.prototype, "create");
+    try {
+      const preparation = StoragePreparations.for(factory);
+      await preparation.prepareEntity(input, "check");
+      await preparation.prepareEntity(input, "create");
+      await expect(
+        preparation.prepareAgentHistory(
+          {
+            context: input.context,
+            stateType: " ",
+            id: { key: (id: string) => id },
+          },
+          "check",
+        ),
+      ).rejects.toThrow(/state type/);
+      await preparation.prepareAgentHistory(
+        {
+          context: input.context,
+          stateType: TaskSchema.typeName,
+          id: { key: (id: string) => id },
+        },
+        "check",
+      );
+      expect(createEntity).not.toHaveBeenCalled();
+      expect(InMemoryStorageBackend.tenantCount(backend)).toBe(0);
+      await expect(factory.tenantCatalog().all()).resolves.toEqual([]);
+    } finally {
+      createEntity.mockRestore();
+      await factory.close();
+    }
+  });
   it("retains one current adapter across repeated current-only commits", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput(false);

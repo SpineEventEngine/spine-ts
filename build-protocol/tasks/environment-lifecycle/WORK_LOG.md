@@ -5,7 +5,7 @@
 Started 2026-10-27 from freshly fetched official master
 `ff6c8669537a016c47f012150306500d3b52b5d1`. Branch `environment-lifecycle` is in
 `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
-Checkpoints `c0c312b57`, `6ccfc3efc`, `f8a663cbe` and `0974d7627` were pushed to official
+Checkpoints `c0c312b57`, `6ccfc3efc`, `f8a663cbe`, `0974d7627` and `c03c9844b` were pushed to official
 `origin/environment-lifecycle`. They contain initial repository and EventStore
 retention, safe closure, repository query/history retention and shared AnyPacker with the accepted task specification. No PR has
 been created. Full-task acceptance remains pending.
@@ -511,3 +511,40 @@ Datastore create/check proofs; same pass corrected them to identical documented
 native structural facts, with application-managed index deployment outside that
 proof. Five slices start with shared contract/memory. Existing JVM source paths
 and inspection impact are recorded in the accepted design.
+
+M3 checkpoint c03c9844b pushed immediately to official origin/environment-lifecycle.
+Only generation-only manifest changes remain outside that commit.
+
+M4a shared preparation contract and memory starts at c03c9844b. High-risk public/
+provider contract, covered by D-0150's accepted bounded architecture. Existing
+implementer storage_retention resumes with explicit immutable Sol/medium profile,
+metadata introspection unavailable. Scope: storage package factory checkConnection,
+provider-only preparation port, memory implementation/pure validation, focused
+behavior tests and narrow README/REFERENCE/TSDoc. Exclude SQL/Datastore, server
+readiness wiring and Agent recovery removal. No subagents or parallel writer.
+Estimate 0.5-1.0 hours including tests, docs, deterministic checks and independent
+review. Synchronous creation remains offline. Preparation never creates Storage,
+application records or tenant membership; unsupported custom capabilities fail
+clearly. Closed factories reject. Compatible definitions are reusable and
+incompatible same-family layouts cannot reuse prior success. Avoid a generic
+resource/lifecycle framework. Retained Storage behavior remains covered by M3.
+
+M4a mechanical scope extension: new provider exports require the existing API
+documentation checker's exact export inventory and its test to be updated. The
+current TSDoc gate also flags one M3 Datastore retainCleanup summary verb. Same
+implementer may correct that comment and checker expectations; no Datastore
+runtime behavior or broader architecture change. Storage 305-test suite and
+build pass; finish deterministic checks and current focused coverage before
+review. These ordinary gate failures are resolved within the current slice.
+
+M4a full review wave accepted four reliability corrections and one narrow TSDoc
+clarification; style/API clean. REVIEW_LOG records exact findings and parent
+coverage evidence. Same implementer receives one correction batch, estimated
+0.2-0.4 hours; no SQL/server changes. Targeted reliability confirmation follows
+focused tests and static checks.
+
+M4a shared contract/memory accepted after complete review and one correction
+batch. Final 309 storage, 353 repository-routing and 62 focused coverage tests
+pass with static gates. Targeted reliability confirms all four findings resolved;
+API/style clean and documentation accurate. Commit and immediately push this
+bounded slice. SQL/Datastore checkConnection and preparation are not yet claimed.

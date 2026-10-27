@@ -629,7 +629,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Retains a bundle until asynchronous or idle cleanup settles.
+   * Creates repeatable cleanup methods that retain a bundle until closure settles.
    *
    * @param bundle The complete provider bundle.
    * @param onRemove Removes the settled factory root.

@@ -38,6 +38,19 @@ export abstract class StorageFactory {
   }
 
   /**
+   * Checks the configured shared destination without preparing record families.
+   *
+   * Memory validates locally; remote providers perform their documented read-only check.
+   * Providers without a connection diagnostic reject explicitly.
+   *
+   * @returns Completion after the read-only connection check.
+   */
+  checkConnection(): Promise<void> {
+    if (!this.#open) return Promise.reject(new Error("StorageFactory is closed."));
+    return Promise.reject(new Error("StorageFactory does not support connection checks."));
+  }
+
+  /**
    * Stops admitting new factory operations synchronously.
    */
   protected fenceClose(): void {

@@ -128,6 +128,11 @@ to filter names and values: MySQL checks declared columns, while other adapters
 can support different query shapes. A provider can push down supported ID and
 declared-column query parts while preserving the common result semantics.
 
+`await factory.checkConnection()` checks the configured shared destination. The
+in-memory factory validates this locally without admitting a tenant or creating
+records. Other adapters must implement the diagnostic explicitly; the base
+factory rejects an unsupported check.
+
 The storage API clones data at its boundaries. For the base factory and the
 in-memory implementation, closing a factory prevents new record handles while
 existing handles remain usable. Closing a record handle invalidates that

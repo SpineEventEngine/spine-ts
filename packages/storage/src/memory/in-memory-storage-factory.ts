@@ -39,6 +39,10 @@ import {
   type EntityCommitStorage,
 } from "../internal/entity-commit.js";
 import { AgentHistoryStorageFactories } from "../internal/agent-history.js";
+import {
+  StoragePreparations,
+  type EntityStoragePreparationInput,
+} from "../internal/storage-preparation.js";
 import type { AgentHistoryStorage, AgentHistoryStorageInput } from "../entity/agent-history.js";
 import { MemoryAgentHistory } from "./in-memory-agent-history.js";
 import { AgentExecutionStorageFactories } from "../internal/agent-execution.js";
@@ -81,6 +85,142 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
+    StoragePreparations.register(this, {
+      prepareRecord: (context, spec, group) => this.prepareRecord(context, spec, group),
+      prepareEntity: (input) => this.prepareEntity(input),
+      prepareAgentHistory: (input) => this.prepareAgentHistory(input),
+    });
+  }
+
+  /**
+   * Validates the local memory connection while the factory remains open.
+   *
+   * @returns Completion without a remote request or tenant admission.
+   */
+  override checkConnection(): Promise<void> {
+    return this.isOpen()
+      ? Promise.resolve()
+      : Promise.reject(new Error("StorageFactory is closed."));
+  }
+
+  /**
+   * Checks one ordinary record definition without constructing a handle.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Record message type.
+   * @param context Complete storage scope.
+   * @param spec Declarative record family.
+   * @param group Optional physical group.
+   * @returns Completion after local validation.
+   */
+  private prepareRecord<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): Promise<void> {
+    try {
+      if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+      this.declareRecord(context, spec, group);
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error ? error : new Error("Memory preparation failed.", { cause: error }),
+      );
+    }
+  }
+
+  /**
+   * Checks current Entity and enabled histories without constructing handles.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param input Declarative Entity layout.
+   * @returns Completion after local validation.
+   */
+  private prepareEntity<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+  ): Promise<void> {
+    try {
+      if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+      this.declareEntity(input);
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error ? error : new Error("Memory preparation failed.", { cause: error }),
+      );
+    }
+  }
+
+  /**
+   * Checks the surviving Agent audit family without creating records.
+   *
+   * @typeParam I Agent identifier type.
+   * @param input Agent state type and complete scope.
+   * @returns Completion after local validation.
+   */
+  private prepareAgentHistory<I>(input: AgentHistoryStorageInput<I>): Promise<void> {
+    try {
+      if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+      TenantBoundary.of(input.context);
+      if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error ? error : new Error("Memory preparation failed.", { cause: error }),
+      );
+    }
+  }
+
+  /**
+   * Records all Entity family definitions without opening tenant slices.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param input Declarative Entity layout.
+   */
+  private declareEntity<I, S extends Message>(input: EntityStoragePreparationInput<I, S>): void {
+    const tenant = TenantBoundary.of(input.context);
+    if (!InMemoryStorageBackend.sameColumns(input.columns, input.recordSpec.columns))
+      throw new Error("Memory Entity query columns differ from the current record definition.");
+    InMemoryStorageBackend.define(
+      this.#backend,
+      "entity",
+      tenant,
+      input.sourceType.typeName,
+      input.recordSpec,
+    );
+    if (input.stateHistory) {
+      const history = stateHistorySpec(input.stateSchema);
+      this.declareRecord(input.context, history.spec, history.group);
+    }
+    if (input.eventHistory) {
+      const history = eventHistorySpec(input.stateSchema);
+      this.declareRecord(input.context, history.spec, history.group);
+    }
+  }
+
+  /**
+   * Records an ordinary physical family without admitting a tenant.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Record message type.
+   * @param context Complete storage scope.
+   * @param spec Declarative record layout.
+   * @param group Optional physical group.
+   */
+  private declareRecord<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): void {
+    const family = JSON.stringify([spec.sourceType.typeName, group?.name ?? null]);
+    InMemoryStorageBackend.define(
+      this.#backend,
+      "record",
+      TenantBoundary.of(context),
+      family,
+      spec,
+    );
   }
 
   /**
@@ -135,6 +275,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
   createEntityStorage(input: unknown): unknown {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     const entity = input as EntityStorageInput<unknown, Message>;
+    this.declareEntity(entity);
     const stateHistory = entity.stateHistory ? stateHistorySpec(entity.stateSchema) : undefined;
     const eventHistory = entity.eventHistory ? eventHistorySpec(entity.stateSchema) : undefined;
     return this.#entities.create({
@@ -172,6 +313,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     input: EntityStorageInput<I, S>,
   ): EntityCommitStorage {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    this.declareEntity(input);
     const handle = new MemoryEntityCommitStorage(
       this.#entities,
       (context, spec, group) => this.tenantRecords(context, spec, group),
@@ -193,6 +335,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     input: AgentHistoryStorageInput<Id>,
   ): AgentHistoryStorage<Id> {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
     return MemoryAgentHistory.open(this.#backend, input);
   }
 
@@ -226,6 +369,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     recordSpec: RecordSpec<I, R>,
     group?: StorageGroup,
   ): RecordStorage<I, R> {
+    this.declareRecord(context, recordSpec, group);
     return new InMemoryRecordStorage(context, recordSpec, () =>
       this.tenantRecords(context, recordSpec, group),
     );

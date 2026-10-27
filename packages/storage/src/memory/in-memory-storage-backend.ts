@@ -12,6 +12,12 @@
  * the License.
  */
 
+import type { Message } from "@bufbuild/protobuf";
+
+import type { RecordSpec } from "../record/record-spec.js";
+import type { RecordColumn } from "../record/record-column.js";
+import type { TenantBoundary } from "../internal/tenancy.js";
+
 /**
  * Opaque token selecting one ephemeral in-memory storage backend.
  *
@@ -45,6 +51,42 @@ export class InMemoryStorageBackend {
     create: () => T,
   ): T {
     return MemoryBackendScopes.bind(backend, namespace, tenant, family, create);
+  }
+
+  /**
+   * Validates a physical family without binding storage or admitting a tenant.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Record message type.
+   * @param backend Shared backend token.
+   * @param namespace Separates current Entity and generic records.
+   * @param tenant Complete tenant boundary.
+   * @param family Source and optional group identity.
+   * @param spec Declarative record layout.
+   */
+  static define<I, R extends Message>(
+    backend: InMemoryStorageBackend,
+    namespace: "entity" | "record",
+    tenant: TenantBoundary,
+    family: string,
+    spec: RecordSpec<I, R>,
+  ): void {
+    MemoryDefinitions.define(backend, namespace, tenant, family, spec);
+  }
+
+  /**
+   * Compares two physical column declarations without evaluating their readers.
+   *
+   * @typeParam R Stored record message type.
+   * @param left First column declaration.
+   * @param right Second column declaration.
+   * @returns Whether names and value types match.
+   */
+  static sameColumns<R extends Message>(
+    left: readonly RecordColumn<R>[],
+    right: readonly RecordColumn<R>[],
+  ): boolean {
+    return MemoryDefinitions.columns(left) === MemoryDefinitions.columns(right);
   }
 
   /**
@@ -100,6 +142,95 @@ const scopesByBackend = new WeakMap<
 >();
 const tenantsByBackend = new WeakMap<InMemoryStorageBackend, Map<string, TenantBoundary>>();
 const tenantOrderByBackend = new WeakMap<InMemoryStorageBackend, TenantBoundary[]>();
+const definitionsByBackend = new WeakMap<
+  InMemoryStorageBackend,
+  Map<string | symbol, Map<string, string>>
+>();
+
+/**
+ * Checks one backend's immutable record-family declarations.
+ */
+const MemoryDefinitions = {
+  /**
+   * Records or checks a declaration without application data or tenant admission.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Record message type.
+   * @param backend Shared backend token.
+   * @param namespace Current Entity or ordinary records.
+   * @param tenant Complete tenant boundary.
+   * @param family Source and optional group identity.
+   * @param spec Complete provider-visible layout.
+   */
+  define<I, R extends Message>(
+    backend: InMemoryStorageBackend,
+    namespace: "entity" | "record",
+    tenant: TenantBoundary,
+    family: string,
+    spec: RecordSpec<I, R>,
+  ): void {
+    let tenants = definitionsByBackend.get(backend);
+    if (tenants === undefined)
+      definitionsByBackend.set(
+        backend,
+        (tenants = new Map<string | symbol, Map<string, string>>()),
+      );
+    let families = tenants.get(tenant.key);
+    if (families === undefined) tenants.set(tenant.key, (families = new Map<string, string>()));
+    const key = JSON.stringify([namespace, family]);
+    const signature = this.signature(spec);
+    const existing = families.get(key);
+    if (existing !== undefined && existing !== signature)
+      throw new Error("Memory storage family has an incompatible record definition.");
+    families.set(key, signature);
+  },
+
+  /**
+   * Encodes the physical declaration without invoking extractors or comparing callbacks.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Record message type.
+   * @param spec Declarative record layout.
+   * @returns Stable source, record, ID, and column structure.
+   */
+  signature<I, R extends Message>(spec: RecordSpec<I, R>): string {
+    const id = spec.idType;
+    return JSON.stringify([
+      spec.sourceType.typeName,
+      spec.recordType.typeName,
+      typeof id === "string" ? ["primitive", id] : ["message", id.typeName],
+      this.columns(spec.columns),
+    ]);
+  },
+
+  /**
+   * Encodes columns in name order without changing the supplied declaration.
+   *
+   * @typeParam R Stored record message type.
+   * @param columns Declarative query columns.
+   * @returns Canonical column names and value types.
+   */
+  columns<R extends Message>(columns: readonly RecordColumn<R>[]): string {
+    return JSON.stringify(
+      columns
+        .map((column) => {
+          const type = column.type;
+          return {
+            name: column.name,
+            type: [
+              type.kind,
+              type.kind === "scalar"
+                ? [type.scalar, type.longAsString]
+                : type.kind === "enum"
+                  ? type.enum.typeName
+                  : type.message.typeName,
+            ],
+          };
+        })
+        .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
+    );
+  },
+};
 
 /**
  * Binds provider tenant and record-family identities for each backend.
@@ -213,4 +344,3 @@ const MemoryBackendScopes = {
     return tenantOrderByBackend.get(backend)?.slice(start, start + count) ?? [];
   },
 };
-import type { TenantBoundary } from "../internal/tenancy.js";

@@ -63,6 +63,10 @@ const expectedStorageProviderExports = [
   "EntityStateHistoryPort",
   "EntityStorageConformance",
   "EntityStorageInput",
+  "EntityStoragePreparationInput",
+  "StoragePreparation",
+  "StoragePreparationMode",
+  "StoragePreparations",
   "StorageQueryValues",
   "TenantBoundary",
   "TenantCatalog",
@@ -75,6 +79,7 @@ const expectedStorageProviderExports = [
   "disabledEventHistoryPort",
   "disabledStateHistoryPort",
   "eventHistorySpec",
+  "eventStoreAccess",
   "eventStoreRecordSpec",
   "stateHistorySpec",
 ];

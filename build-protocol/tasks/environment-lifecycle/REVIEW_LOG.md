@@ -345,3 +345,59 @@ formatted deterministically after review; no runtime change. Global formatting
 and diff checks pass. Complete release/security gates remain deferred until the
 coordinated task converges. The provider patch is ready for checkpoint commit and
 immediate push; generation-only manifest churn remains unstaged.
+
+## M4a shared preparation and memory review
+
+Baseline c03c9844b. Frozen source covers storage factory checkConnection,
+provider-only preparation port, memory definition validation, tests/docs and
+mechanical export inventory. Narrow M3 Datastore comment correction only.
+Preflight: 305 storage tests, 58 focused coverage tests, build/tooling checks,
+lint, TSDoc, cleanup, docs and scoped formatting/diff checks pass. Exact evidence
+is external preparation-memory-evidence.md; complete scope/ledger is in the
+review context and D-0150/FACTORY_PREPARATION.md.
+
+Reuse verified explicit immutable profiles: provider_reliability (existing
+performance_reliability_reviewer, Sol/medium), provider_style (existing
+style_maintainability_reviewer, Sol/medium), repository_api_review (existing
+typescript_api_docs_reviewer, Sol/medium), provider_documentation (existing
+documentation_reviewer, Luna/medium). No runtime self-introspection available.
+Three technical lanes first; docs follows capacity. Collect one complete wave
+before any accepted correction batch. No source edits or reviewer test reruns.
+
+M4a full review wave collected. Style and API: no findings. Reliability: accepted
+prep-then-close race caused by microtask-deferred local validation; missing Agent
+tenant validation; equivalent reordered columns falsely conflicting; actual
+Entity query columns diverging from signed recordSpec columns. Documentation's
+Agent-scope claim overlaps the tenant validation defect; correct implementation.
+Accept narrow TSDoc clarification that memory checkConnection validates local
+state without remote I/O. Reviewer docs evidence-path miss does not invalidate
+its source findings; parent read exact preparation-memory-evidence.md and parsed
+fresh LCOV: changed runtime lines hit 18/18 backend, 27/28 memory factory, 2/2
+base factory and 7/7 preparation registry. Missing line is repeated invalid Agent
+state check in normal creation, not a claim of global coverage.
+
+One accepted correction batch, estimate 0.2-0.4 hours, same explicit Sol/medium
+implementer: perform synchronous local preparation inside an async method before
+returning (no generic pending-work framework), validate Agent TenantBoundary,
+canonicalize columns by name without mutating caller arrays, and validate or
+include actual Entity query declarations. Tests cover prep immediately followed
+by close, malformed Agent scope, reordered equivalent records and differing
+Entity query columns. Refine connection TSDoc. Recheck focused behavior and
+static gates; targeted reliability confirmation only, deterministic doc changes
+do not reopen lanes. No architecture change or additional full review wave.
+
+M4a correction freeze: all four regression cases were red before fixes and green
+afterward. Full storage 309/309; actual server repository routing 353/353; focused
+LCOV 62/62. Build/tooling, lint, cleanup, TSDoc, docs, scoped formatting and diff
+checks pass. Reuse provider_reliability's explicit immutable Sol/medium profile
+for targeted confirmation of those four findings only. Documentation changes
+are deterministic; no public signature or architecture change reopens other lanes.
+Exact evidence: external preparation-memory-correction-evidence.md.
+
+M4a accepted. Targeted reliability confirmation resolves all four prior findings;
+no remaining P0-P2. API/style clean, documentation overclaim resolved by tenant
+validation and precise prose. Deterministic connection-doc clarification needs
+no extra review. All four concerns accepted with explicit immutable expected
+profiles and runtime metadata limitation recorded. No source changes after
+current evidence. Commit/push shared contract and memory slice; full release
+and persistent-provider preparation remain pending.
