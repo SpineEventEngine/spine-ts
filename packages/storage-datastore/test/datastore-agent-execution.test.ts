@@ -120,7 +120,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
         next: prepared,
       });
       handle.close();
-      factory.close();
+      await factory.close();
       const reopened = DatastoreStorageFactory.newBuilder().setClient(client).build();
       const recovery = AgentExecutionStorageFactories.create(reopened, input);
       try {
@@ -136,11 +136,11 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
         );
       } finally {
         recovery.close();
-        reopened.close();
+        await reopened.close();
       }
     } finally {
       handle.close();
-      factory.close();
+      await factory.close();
     }
   }, 120_000);
 
@@ -166,7 +166,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
         version: create(VersionSchema, { number: 1 }),
       }),
     );
-    current.close();
+    await current.close();
     const storage = AgentExecutionStorageFactories.create(factory, input);
     const history = AgentHistoryStorageFactories.create(factory, {
       context: entity.context,
@@ -243,7 +243,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
     } finally {
       history.close();
       storage.close();
-      factory.close();
+      await factory.close();
     }
   }, 120_000);
 
@@ -276,7 +276,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
       expect(fresh.records).toHaveLength(2);
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
       Time.setProvider(previous);
     }
   }, 120_000);
@@ -331,7 +331,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
       await exerciseAgentExecutionLifecycle(storage);
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   }, 120_000);
 
@@ -350,7 +350,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
       toBinary(AgentExecutionRecordSchema, required(await handle.read(key))),
     );
     handle.close();
-    first.close();
+    await first.close();
     const reopened = DatastoreStorageFactory.newBuilder().setClient(client).build();
     try {
       const after = AgentExecutionStorageFactories.create(reopened, input);
@@ -380,7 +380,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent execution", () => {
       await expect(after.pending({ count: 1 })).resolves.toMatchObject({ records: [] });
       after.close();
     } finally {
-      reopened.close();
+      await reopened.close();
     }
   }, 120_000);
 });

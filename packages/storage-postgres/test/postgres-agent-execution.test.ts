@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { VersionSchema } from "@spine-event-engine/proto";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   AgentExecutionCompletionSchema,
   AgentExecutionRecordSchema,
@@ -68,7 +68,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent execution", () => {
         toBinary(AgentExecutionRecordSchema, required(await handle.read(required(original.key)))),
       );
       handle.close();
-      first.close();
+      await first.close();
 
       const reopened = await PostgresStorageFactory.newBuilder()
         .setOptions({ url: required(url), schema })
@@ -139,17 +139,17 @@ describe.runIf(url !== undefined)("PostgreSQL Agent execution", () => {
           entityId: required(id),
           next: create(EntityRecordSchema, {
             entityId: stale.recipientId,
-            state: create(AnySchema, {
-              typeUrl: `type.spine.server.testing/${SupportReplyAgentStateSchema.typeName}`,
-              value: toBinary(
-                SupportReplyAgentStateSchema,
-                create(SupportReplyAgentStateSchema, { id, proposedReply: "Existing" }),
-              ),
-            }),
+            state: AnyPacker.pack(
+              SupportReplyAgentStateSchema,
+              create(SupportReplyAgentStateSchema, {
+                id,
+                proposedReply: "Existing",
+              }),
+            ),
             version: create(VersionSchema, { number: 1 }),
           }),
         });
-        commit.close();
+        await commit.close();
         const staleClaim = required(
           await after.claim(required(stale.key), "stale-claim", expiry),
         ).record;
@@ -204,7 +204,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent execution", () => {
         await exerciseAgentExecutionLifecycle(after);
         after.close();
       } finally {
-        reopened.close();
+        await reopened.close();
       }
     } finally {
       await pool.query(`DROP SCHEMA "${schema}" CASCADE`);

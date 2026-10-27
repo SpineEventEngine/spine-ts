@@ -336,5 +336,5 @@ async function inspectDelivery() {
 async function close() {
   if (running !== undefined) await running.close();
   if (delivery !== undefined) await delivery.close();
-  if (factory !== undefined) factory.close();
+  if (factory !== undefined) await factory.close();
 }

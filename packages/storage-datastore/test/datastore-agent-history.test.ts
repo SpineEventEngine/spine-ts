@@ -38,10 +38,10 @@ import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/sp
 const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
 
 describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
-  it("rejects creation of an Agent history handle after factory closure", () => {
+  it("rejects creation of an Agent history handle after factory closure", async () => {
     const client = new Datastore({ projectId: `spine-agent-closed-${randomUUID()}` });
     const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
-    factory.close();
+    await factory.close();
     expect(() => AgentHistoryStorageFactories.create(factory, scope)).toThrow(
       "StorageFactory is closed.",
     );
@@ -61,7 +61,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
         occurredAt,
       });
     } finally {
-      factory.close();
+      await factory.close();
     }
   }, 120_000);
 
@@ -73,7 +73,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
     const first = AgentHistoryStorageFactories.create(firstFactory, input);
     await first.append("ticket-datastore", entry);
     first.close();
-    firstFactory.close();
+    await firstFactory.close();
     const reopened = DatastoreStorageFactory.newBuilder().setClient(client).build();
     try {
       const history = AgentHistoryStorageFactories.create(reopened, input);
@@ -95,7 +95,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
       expect(stored).toHaveLength(1);
       history.close();
     } finally {
-      reopened.close();
+      await reopened.close();
     }
   }, 120_000);
 
@@ -123,7 +123,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
       ).rejects.toThrow("scope digest collides");
     } finally {
       history.close();
-      factory.close();
+      await factory.close();
     }
   });
 
@@ -160,7 +160,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
       ).rejects.toThrow("conversation digest collides");
     } finally {
       history.close();
-      factory.close();
+      await factory.close();
     }
   });
 
@@ -174,7 +174,7 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
       ).rejects.toThrow("indexed-value limit");
     } finally {
       history.close();
-      factory.close();
+      await factory.close();
     }
   });
 });

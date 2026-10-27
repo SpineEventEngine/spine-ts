@@ -116,14 +116,19 @@ describe("DatastoreStorageFactory", () => {
 
   it("selects one coherent custom Entity handle", () => {
     const client = {};
-    const commits = { close: () => undefined, commit: () => Promise.resolve("committed" as const) };
+    const commits = {
+      close: () => Promise.resolve(),
+      closeIdle: () => undefined,
+      commit: () => Promise.resolve(),
+    };
     const handle = {
       current: {},
       states: {},
       events: {},
       commits,
       isOpen: () => true,
-      close: () => undefined,
+      close: () => Promise.resolve(),
+      closeIdle: () => undefined,
     };
     const factory = DatastoreStorageFactory.newBuilder()
       .setClient(client as never)

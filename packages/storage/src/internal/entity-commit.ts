@@ -145,9 +145,16 @@ export interface EntityCommitStorage {
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void>;
 
   /**
-   * Closes this independent commit handle.
+   * Closes retained resources after admitted work settles.
+   *
+   * @returns The repeatable close outcome, including cleanup failures.
    */
-  close(): void;
+  close(): Promise<void>;
+
+  /**
+   * Closes an idle commit handle during synchronous assembly rollback.
+   */
+  closeIdle(): void;
 }
 
 /**

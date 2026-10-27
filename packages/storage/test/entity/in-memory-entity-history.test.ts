@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType } from "@bufbuild/protobuf";
+import { create, ScalarType } from "@bufbuild/protobuf";
 import {
   AnySchema,
   StringValueSchema,
@@ -91,7 +91,7 @@ describe("InMemoryEntityHistory", () => {
       idKey: (id: string) => id,
       unpackId: (id) =>
         id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-          ? fromBinary(StringValueSchema, id.value).value
+          ? AnyPacker.tryUnpack(id, StringValueSchema)?.value
           : undefined,
       columns: [
         new RecordColumn(
@@ -628,7 +628,7 @@ function input(
       pack: (id) => pack(create(StringValueSchema, { value: id })),
       unpack: (id) =>
         id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-          ? fromBinary(StringValueSchema, id.value).value
+          ? AnyPacker.tryUnpack(id, StringValueSchema)?.value
           : undefined,
     },
     columns: [],
@@ -638,7 +638,7 @@ function input(
       idKind: "string",
       extractId: (record) => {
         if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-        return fromBinary(StringValueSchema, record.entityId.value).value;
+        return AnyPacker.unpack(record.entityId, StringValueSchema).value;
       },
     }),
     sourceType: ProjectStateSchema,

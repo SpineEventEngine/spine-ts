@@ -12,10 +12,15 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType } from "@bufbuild/protobuf";
+import { create, ScalarType } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
-import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import {
+  AnyPacker,
+  Identifiers,
+  StringifierRegistry,
+  TypeRegistry,
+} from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
@@ -33,8 +38,12 @@ import {
 } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import { DatastoreStorageFactory } from "../../src/index.js";
-import { DatastoreEntityStorage } from "../../src/datastore/entity-history.js";
-import { HistoryDatastoreBackend } from "./entity-history-fixture.js";
+import type { DatastoreEntityStorageHandle } from "../../src/datastore/storage-factory.js";
+import {
+  DatastoreEntityCommitStorage,
+  DatastoreEntityStorage,
+} from "../../src/datastore/entity-history.js";
+import { deferred, HistoryDatastoreBackend } from "./entity-history-fixture.js";
 
 function taskId(value: string): TaskId {
   return create(TaskIdSchema, { value });
@@ -44,7 +53,7 @@ function input(
   columns: readonly RecordColumn<ReturnType<typeof create<typeof EntityRecordSchema>>>[] = [],
 ): EntityStorageInput<TaskId, Task> {
   const unpack = (id: ReturnType<typeof create<typeof AnySchema>>) =>
-    id.typeUrl.endsWith(TaskIdSchema.typeName) ? fromBinary(TaskIdSchema, id.value) : undefined;
+    AnyPacker.tryUnpack(id, TaskIdSchema);
   return {
     context: { name: "GeneratedEntity", multitenant: false },
     id: {
@@ -181,7 +190,9 @@ describe("Datastore generated Entity records", () => {
     const backend = new HistoryDatastoreBackend();
     const store = factory(backend);
     const entity = input(true);
+    const createBundle = vi.spyOn(store, "createEntityStorage");
     const commits = EntityCommitStorageFactories.create(store, entity);
+    expect(createBundle).not.toHaveBeenCalled();
 
     await commits.commit({
       context: entity.context,
@@ -197,6 +208,98 @@ describe("Datastore generated Entity records", () => {
     expect(stored?.version?.number).toBe(1);
     expect(stored?.state?.typeUrl).toContain(TaskSchema.typeName);
     expect(backend.entities).toHaveLength(1);
+  });
+
+  it("retains one current record handle across current-only commits", async () => {
+    const store = factory(new HistoryDatastoreBackend());
+    const entity = input(false);
+    let opens = 0;
+    const closeRecord = vi.fn();
+    const commits = new DatastoreEntityCommitStorage(entity as never, (spec, group) => {
+      opens += 1;
+      const port = store.createRecordStorage(entity.context, spec, group);
+      const close = port.close.bind(port);
+      port.close = () => {
+        closeRecord();
+        close();
+      };
+      return port;
+    });
+    for (const title of ["first", "second"])
+      await commits.commit({
+        context: entity.context,
+        entity,
+        entityId: taskId("task"),
+        next: record(title, 1),
+      });
+    expect(opens).toBe(1);
+    expect(closeRecord).not.toHaveBeenCalled();
+    await commits.close();
+    expect(closeRecord).toHaveBeenCalledTimes(1);
+    await store.close();
+  });
+  it("retains acquisition and rollback-close failures, then retries", async () => {
+    const store = factory(new HistoryDatastoreBackend());
+    const entity = input();
+    const acquisition = new Error("diagnostic open failed");
+    const cleanup = new Error("new record close failed");
+    const closed = vi.fn();
+    let opens = 0;
+    const commits = new DatastoreEntityCommitStorage(entity as never, (spec, group) => {
+      opens += 1;
+      if (opens === 3) throw acquisition;
+      const port = store.createRecordStorage(entity.context, spec, group);
+      const original = port.close.bind(port);
+      port.close = () => {
+        closed();
+        original();
+        if (opens <= 3) throw cleanup;
+      };
+      return port;
+    });
+    const mutation = {
+      context: entity.context,
+      entity,
+      entityId: taskId("task"),
+      next: record("stored", 1),
+      states: [record("stored", 1)],
+      diagnostics: [event("diagnostic", 1)],
+    };
+    await expect(commits.commit(mutation)).rejects.toMatchObject({
+      errors: [acquisition, cleanup, cleanup],
+    });
+    expect(closed).toHaveBeenCalledTimes(2);
+    await expect(commits.commit(mutation)).resolves.toBeUndefined();
+    await commits.close();
+    await store.close();
+  });
+  it("attempts every retained commit record close after multiple failures", async () => {
+    const store = factory(new HistoryDatastoreBackend());
+    const entity = input();
+    const failures = [new Error("current close"), new Error("state close")];
+    const closed = vi.fn();
+    let opens = 0;
+    const commits = new DatastoreEntityCommitStorage(entity as never, (spec, group) => {
+      const port = store.createRecordStorage(entity.context, spec, group);
+      const index = opens++;
+      const original = port.close.bind(port);
+      port.close = () => {
+        closed(index);
+        original();
+        throw failures[index] ?? new Error("Unexpected retained close.");
+      };
+      return port;
+    });
+    await commits.commit({
+      context: entity.context,
+      entity,
+      entityId: taskId("task"),
+      next: record("stored", 1),
+      states: [record("stored", 1)],
+    });
+    await expect(commits.close()).rejects.toMatchObject({ errors: [failures[1], failures[0]] });
+    expect(closed).toHaveBeenCalledTimes(2);
+    await store.close();
   });
 
   it("does not open or write disabled history families", async () => {
@@ -554,6 +657,34 @@ describe("Datastore generated Entity records", () => {
     expect(client.deleteCalls).toBeGreaterThan(0);
   });
 
+  it.each([
+    { total: 129, keep: 1 },
+    { total: 257, keep: 129 },
+  ])("trims $total states to $keep across keyset pages", async ({ total, keep }) => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema, TaskSchema, TaskCreatedSchema]));
+    const storage = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .setStringifierRegistry(stringifiers)
+      .build()
+      .createEntityStorage(input());
+    for (let version = 1; version <= total; version += 1)
+      await storage.states.append(record(`state-${String(version)}`, version));
+    const query = client.runQuery.bind(client);
+    vi.spyOn(client, "runQuery").mockImplementation((request) => {
+      if (client.queryCalls > 4) throw new Error("trim did not advance its provider page");
+      return query(request);
+    });
+
+    await storage.states.trim(taskId("task"), keep);
+    const retained = await storage.states.backward(taskId("task"), total);
+    expect(retained).toHaveLength(keep);
+    expect(retained.at(-1)?.version?.number).toBe(total - keep + 1);
+    expect(client.queryLimits.every((limit) => limit <= 128)).toBe(true);
+  });
+
   it("resumes a large time-based deletion without an unbounded scan", async () => {
     const backend = new HistoryDatastoreBackend();
     const client = backend.client();
@@ -655,7 +786,8 @@ describe("Datastore generated Entity records", () => {
     next.state = packState("mutated");
     await expect(pending).resolves.toBeUndefined();
     const stored = await store.createEntityStorage(entity).current.read(taskId("task"));
-    expect(fromBinary(TaskSchema, stored?.state?.value ?? new Uint8Array()).title).toBe("captured");
+    if (stored?.state === undefined) throw new Error("Expected a stored Task state.");
+    expect(AnyPacker.unpack(stored.state, TaskSchema).title).toBe("captured");
     expect(client.saveCalls).toBe(1);
   });
 
@@ -739,16 +871,16 @@ describe("Datastore generated Entity records", () => {
     const store = factory(new HistoryDatastoreBackend());
     const handle = store.createEntityStorage(entity);
 
-    handle.close();
-    handle.close();
+    await handle.close();
+    await handle.close();
     expect(handle.isOpen()).toBe(false);
     await expect(handle.current.read(taskId("task"))).rejects.toThrow("closed");
     await expect(handle.states.backward(taskId("task"), 1)).rejects.toThrow("closed");
     await expect(handle.events.backward(taskId("task"), 1)).rejects.toThrow("closed");
 
     const commits = EntityCommitStorageFactories.create(store, entity);
-    commits.close();
-    commits.close();
+    await commits.close();
+    await commits.close();
     await expect(
       commits.commit({
         context: entity.context,
@@ -757,5 +889,276 @@ describe("Datastore generated Entity records", () => {
         next: record("current", 1),
       }),
     ).rejects.toThrow("closed");
+  });
+
+  it("keeps a bundle's read handle open until an admitted commit settles", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .build();
+    const entity = input(false);
+    const closeRead = vi.spyOn(DatastoreEntityStorage.prototype, "close");
+    const handle = store.createEntityStorage(entity);
+    const entered = deferred<undefined>();
+    const release = deferred<undefined>();
+    const read = client.get.bind(client);
+    vi.spyOn(client, "get").mockImplementation(async (key) => {
+      entered.resolve(undefined);
+      await release.promise;
+      return read(key);
+    });
+    const commit = handle.commits.commit({
+      context: entity.context,
+      entity,
+      entityId: taskId("task"),
+      next: record("committed", 1),
+    });
+    await entered.promise;
+    const closing = handle.close();
+    expect(handle.isOpen()).toBe(false);
+    expect(closeRead).not.toHaveBeenCalled();
+    release.resolve(undefined);
+    await commit;
+    await closing;
+    expect(handle.isOpen()).toBe(false);
+    expect(closeRead).toHaveBeenCalledOnce();
+    closeRead.mockRestore();
+  });
+
+  it("closes the complete custom Entity bundle through provider commit access", async () => {
+    const client = new HistoryDatastoreBackend().client();
+    const close = vi.fn().mockResolvedValue(undefined);
+    const closeIdle = vi.fn();
+    const commitClose = vi.fn().mockResolvedValue(undefined);
+    const commits = {
+      commit: vi.fn().mockResolvedValue(undefined),
+      close: commitClose,
+      closeIdle: vi.fn(),
+    };
+    const creator = vi.fn(
+      () =>
+        ({
+          current: {} as never,
+          states: {} as never,
+          events: {} as never,
+          commits,
+          isOpen: () => true,
+          close,
+          closeIdle,
+        }) satisfies DatastoreEntityStorageHandle<unknown, Task>,
+    );
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .useEntityStorage(TaskSchema, creator)
+      .build();
+    const port = EntityCommitStorageFactories.create(store, input(false));
+    expect(creator).toHaveBeenCalledOnce();
+    await port.close();
+    expect(close).toHaveBeenCalledOnce();
+    expect(commitClose).not.toHaveBeenCalled();
+    await store.close();
+    expect(close).toHaveBeenCalledOnce();
+  });
+  it("repeats successful custom idle cleanup without releasing the bundle twice", async () => {
+    const client = new HistoryDatastoreBackend().client();
+    const released = vi.fn();
+    let closed = false;
+    const release = () => {
+      if (!closed) {
+        closed = true;
+        released();
+      }
+    };
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .useEntityStorage(
+        TaskSchema,
+        () =>
+          ({
+            current: {} as never,
+            states: {} as never,
+            events: {} as never,
+            commits: { commit: vi.fn(), close: vi.fn(), closeIdle: vi.fn() },
+            isOpen: () => !closed,
+            close: () => {
+              release();
+              return Promise.resolve();
+            },
+            closeIdle: release,
+          }) satisfies DatastoreEntityStorageHandle<unknown, Task>,
+      )
+      .build();
+    const port = EntityCommitStorageFactories.create(store, input(false));
+    const closePort = vi.spyOn(port, "close");
+    port.closeIdle();
+    port.closeIdle();
+    expect(released).toHaveBeenCalledOnce();
+    await store.close();
+    expect(released).toHaveBeenCalledOnce();
+    expect(closePort).not.toHaveBeenCalled();
+  });
+  it("retains a closing custom bundle after idle cleanup rejects", async () => {
+    const release = deferred<undefined>();
+    let released = false;
+    const close = vi.fn(async () => {
+      await release.promise;
+      released = true;
+    });
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(new HistoryDatastoreBackend().client() as never)
+      .useEntityStorage(TaskSchema, () => ({
+        current: {} as never,
+        states: {} as never,
+        events: {} as never,
+        commits: { commit: vi.fn(), close: vi.fn(), closeIdle: vi.fn() },
+        isOpen: () => false,
+        close,
+        closeIdle: () => {
+          throw new Error("closing bundle is active");
+        },
+      }))
+      .build();
+    const port = EntityCommitStorageFactories.create(store, input(false));
+    const closing = port.close();
+    expect(() => {
+      port.closeIdle();
+    }).toThrow(/active/);
+    const catalogClose = vi.spyOn(store.tenantCatalog(), "close").mockImplementation(() => {
+      if (!released) throw new Error("catalog closed before bundle settled");
+      return Promise.resolve();
+    });
+    const factoryClosing = store.close();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(catalogClose).not.toHaveBeenCalled();
+    release.resolve(undefined);
+    await expect(closing).resolves.toBeUndefined();
+    await expect(factoryClosing).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledOnce();
+  });
+  it("removes individually settled Datastore bundles before factory shutdown", async () => {
+    const store = factory(new HistoryDatastoreBackend());
+    const handles = Array.from({ length: 4 }, () => store.createEntityStorage(input(false)));
+    const closes = handles.map((handle) => vi.spyOn(handle, "close"));
+    await Promise.all(handles.map((handle) => handle.close()));
+    await store.close();
+    for (const close of closes) expect(close).toHaveBeenCalledTimes(1);
+  });
+  it("admits ID-validation callbacks before reentrant factory close", async () => {
+    const store = factory(new HistoryDatastoreBackend());
+    const base = input(false);
+    let closing: Promise<void> | undefined;
+    const entity = {
+      ...base,
+      id: {
+        ...base.id,
+        unpack: (id: ReturnType<typeof AnyPacker.pack>) => {
+          expect(() => {
+            commit.closeIdle();
+          }).toThrow(/active/);
+          closing = store.close();
+          return base.id.unpack(id);
+        },
+      },
+    };
+    const commit = EntityCommitStorageFactories.create(store, entity);
+    await expect(
+      commit.commit({
+        context: entity.context,
+        entity,
+        entityId: taskId("task"),
+        next: record("captured", 1),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(closing).resolves.toBeUndefined();
+  });
+
+  it("rejects idle bundle cleanup during an admitted commit without closing read records", async () => {
+    const client = new HistoryDatastoreBackend().client();
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .build();
+    const handle = store.createEntityStorage(input(false));
+    const entered = deferred<undefined>();
+    const release = deferred<undefined>();
+    const read = client.get.bind(client);
+    vi.spyOn(client, "get").mockImplementation(async (key) => {
+      entered.resolve(undefined);
+      await release.promise;
+      return read(key);
+    });
+    const closeRead = vi.spyOn(DatastoreEntityStorage.prototype, "close");
+    const entity = input(false);
+    const work = handle.commits.commit({
+      context: entity.context,
+      entity,
+      entityId: taskId("task"),
+      next: record("one", 1),
+    });
+    await entered.promise;
+    expect(() => {
+      handle.closeIdle();
+    }).toThrow(/active/);
+    expect(closeRead).not.toHaveBeenCalled();
+    release.resolve(undefined);
+    await work;
+    await handle.close();
+    closeRead.mockRestore();
+  });
+
+  it("attempts every built-in read-family close despite multiple failures", () => {
+    const closed = vi.fn();
+    const storage = new DatastoreEntityStorage(
+      input(),
+      () =>
+        ({
+          close: () => {
+            closed();
+            throw new Error("record close failed");
+          },
+          isOpen: () => true,
+        }) as never,
+    );
+    expect(() => {
+      storage.close();
+    }).toThrow(AggregateError);
+    expect(closed).toHaveBeenCalledTimes(3);
+  });
+
+  it("fences every custom bundle and closes the catalog after a synchronous close failure", async () => {
+    const client = new HistoryDatastoreBackend().client();
+    const bundleFailure = new Error("first bundle failed");
+    const catalogFailure = new Error("catalog close failed");
+    const first = vi.fn((): Promise<void> => {
+      throw bundleFailure;
+    });
+    const second = vi.fn().mockResolvedValue(undefined);
+    const closes = [first, second];
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .useEntityStorage(TaskSchema, () => {
+        const close = closes.shift();
+        if (close === undefined) throw new Error("Expected another custom bundle close.");
+        return {
+          current: {} as never,
+          states: {} as never,
+          events: {} as never,
+          commits: { commit: vi.fn(), close: vi.fn(), closeIdle: vi.fn() },
+          isOpen: () => true,
+          close,
+          closeIdle: vi.fn(),
+        } satisfies DatastoreEntityStorageHandle<unknown, Task>;
+      })
+      .build();
+    store.createEntityStorage(input(false));
+    store.createEntityStorage(input(false));
+    const catalogClose = vi.spyOn(store.tenantCatalog(), "close").mockRejectedValue(catalogFailure);
+    await expect(store.close()).rejects.toMatchObject({
+      errors: [bundleFailure, catalogFailure],
+    });
+    expect(first).toHaveBeenCalledOnce();
+    expect(second).toHaveBeenCalledOnce();
+    expect(catalogClose).toHaveBeenCalledOnce();
   });
 });

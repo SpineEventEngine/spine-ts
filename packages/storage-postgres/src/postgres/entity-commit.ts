@@ -46,7 +46,7 @@ type OpenRecords = <I, R extends Message>(
 ) => PostgresRecordStorage<I, R>;
 
 /**
- * Opens and closes the exact record families participating in one commit.
+ * Retains current and optional record families across commits on one handle.
  *
  * @typeParam I Entity identifier type.
  * @typeParam S Entity state message type.
@@ -54,30 +54,58 @@ type OpenRecords = <I, R extends Message>(
 class PostgresCommitRecords<I, S extends Message> {
   readonly current: PostgresRecordStorage<I, EntityRecord>;
 
-  readonly states: PostgresRecordStorage<EntityStateKey, EntityRecord> | undefined;
+  states: PostgresRecordStorage<EntityStateKey, EntityRecord> | undefined;
 
-  readonly diagnostics: PostgresRecordStorage<EventId, Event> | undefined;
+  diagnostics: PostgresRecordStorage<EventId, Event> | undefined;
 
-  readonly events: PostgresRecordStorage<EventId, Event> | undefined;
+  events: PostgresRecordStorage<EventId, Event> | undefined;
 
   readonly #handles: PostgresRecordStorage<unknown, Message>[];
 
   /**
-   * Opens the current record family and each enabled immutable family.
-   *
-   * @param input Describes the Entity commit and enabled histories.
-   * @param open Opens one record family.
+   * Whether this record family is closed.
    */
-  constructor(input: EntityCommitInput<I, S>, open: OpenRecords) {
-    const current = open(input.entity.recordSpec);
-    const handles: PostgresRecordStorage<unknown, Message>[] = [current as never];
-    this.current = current;
-    this.states = input.states?.length ? this.openState(input, open, handles) : undefined;
-    this.diagnostics = input.diagnostics?.length
-      ? this.openDiagnostic(input, open, handles)
-      : undefined;
-    this.events = input.events?.length ? this.openEvents(open, handles) : undefined;
-    this.#handles = handles;
+  #closed = false;
+
+  /**
+   * Opens the current record family for one Entity scope.
+   *
+   * @param open Opens one record family.
+   * @param entity The Entity persistence contract.
+   */
+  constructor(entity: EntityStorageInput<I, S>, open: OpenRecords) {
+    this.current = open(entity.recordSpec);
+    this.#handles = [this.current as never];
+  }
+
+  /**
+   * Acquires only missing requested families, rolling back a failed new group.
+   *
+   * @param input The captured Entity persistence input.
+   * @param open Opens a generated record family.
+   */
+  ensure(input: EntityCommitInput<I, S>, open: OpenRecords): void {
+    const acquired: PostgresRecordStorage<unknown, Message>[] = [];
+    try {
+      const states = input.states?.length
+        ? (this.states ?? this.openState(input, open, acquired))
+        : undefined;
+      const diagnostics = input.diagnostics?.length
+        ? (this.diagnostics ?? this.openDiagnostic(input, open, acquired))
+        : undefined;
+      const events = input.events?.length
+        ? (this.events ?? this.openEvents(open, acquired))
+        : undefined;
+      this.states = states ?? this.states;
+      this.diagnostics = diagnostics ?? this.diagnostics;
+      this.events = events ?? this.events;
+      this.#handles.push(...acquired);
+    } catch (error) {
+      const failures = this.closeGroup(acquired);
+      if (failures.length)
+        throw new AggregateError([error, ...failures], "PostgreSQL family acquisition failed.");
+      throw error;
+    }
   }
 
   /**
@@ -118,10 +146,33 @@ class PostgresCommitRecords<I, S extends Message> {
   }
 
   /**
-   * Closes every temporary record-family handle.
+   * Closes every retained record-family handle.
    */
   close(): void {
-    for (const handle of this.#handles) handle.close();
+    if (this.#closed) return;
+    this.#closed = true;
+    const failures = this.closeGroup(this.#handles);
+    if (failures.length === 1) throw failures[0] as Error;
+    if (failures.length)
+      throw new AggregateError(failures, "PostgreSQL commit records close failed.");
+  }
+
+  /**
+   * Closes every newly acquired handle and collects cleanup failures.
+   *
+   * @param handles The acquired record handles.
+   * @returns Cleanup failures from acquired handles.
+   */
+  private closeGroup(handles: readonly PostgresRecordStorage<unknown, Message>[]): unknown[] {
+    const failures: unknown[] = [];
+    for (const handle of handles) {
+      try {
+        handle.close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    return failures;
   }
 
   /**
@@ -188,11 +239,22 @@ class PostgresCommitRecords<I, S extends Message> {
 export class PostgresEntityCommitStorage<I, S extends Message> implements EntityCommitStorage {
   #open = true;
 
+  #records: PostgresCommitRecords<I, S> | undefined;
+
+  /**
+   * Synchronous idle-close result, including any cleanup failure.
+   */
+  #idleOutcome: { error?: Error } | undefined;
+
+  readonly #active = new Set<Promise<void>>();
+
+  #closing: Promise<void> | undefined;
+
   /**
    * Creates a PostgreSQL Entity commit handle for one Entity storage boundary.
    *
    * @param entity Defines the captured Entity source, state, and tenant scope.
-   * @param open Opens temporary current and history record-family handles.
+   * @param open Opens current and optional history record-family handles.
    * @param onClose Removes this handle from the factory's live-handle set.
    */
   constructor(
@@ -209,11 +271,63 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    * @param input Defines the next current record plus histories.
    * @returns Completion after every requested record write.
    */
-  async commit<Id, State extends Message>(input: EntityCommitInput<Id, State>): Promise<void> {
-    this.validate(input);
-    const prepared = EntityCommitSnapshots.capture(input);
-    const records = new PostgresCommitRecords(prepared, this.open);
+  commit<Id, State extends Message>(input: EntityCommitInput<Id, State>): Promise<void> {
+    return this.track(() => {
+      this.validate(input);
+      const prepared = EntityCommitSnapshots.capture(input);
+      return this.persist(prepared);
+    });
+  }
+
+  /**
+   * Registers a commit before invoking provider construction callbacks.
+   *
+   * @param action The admitted provider operation.
+   * @returns The admitted provider operation completion.
+   */
+  private track(action: () => Promise<void>): Promise<void> {
+    let complete!: () => void;
+    let fail!: (error: unknown) => void;
+    const work = new Promise<void>((resolve, reject) => {
+      complete = resolve;
+      fail = reject;
+    });
+    this.#active.add(work);
+    void work.then(
+      () => this.#active.delete(work),
+      () => this.#active.delete(work),
+    );
     try {
+      action().then(complete, fail);
+    } catch (error) {
+      fail(error);
+    }
+    return work;
+  }
+
+  /**
+   * Persists an admitted captured mutation, including a safe retry.
+   *
+   * @param prepared The immutable prepared mutation.
+   * @returns Completion after the captured mutation is persisted.
+   * @typeParam Id Entity identifier or record type.
+   * @typeParam State Generated Entity state message type.
+   */
+  private async persist<Id, State extends Message>(
+    prepared: EntityCommitInput<Id, State>,
+  ): Promise<void> {
+    let records = this.#records as unknown as PostgresCommitRecords<Id, State> | undefined;
+    let fresh = false;
+    try {
+      if (records === undefined) {
+        records = new PostgresCommitRecords(
+          this.entity,
+          this.open,
+        ) as unknown as PostgresCommitRecords<Id, State>;
+        fresh = true;
+      }
+      records.ensure(prepared, this.open);
+      this.#records ??= records as unknown as PostgresCommitRecords<I, S>;
       await records.prepare();
       try {
         await this.apply(prepared, records);
@@ -222,9 +336,14 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
         await this.apply(prepared, records);
       }
     } catch (error) {
+      if (fresh && this.#records === undefined) {
+        try {
+          records?.close();
+        } catch (cleanup) {
+          throw new AggregateError([error, cleanup], "PostgreSQL commit acquisition failed.");
+        }
+      }
       throw PostgresStorageErrors.operation(error);
-    } finally {
-      records.close();
     }
   }
 
@@ -244,8 +363,9 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
   }> {
     this.validate(input);
     const snapshot = EntityCommitSnapshots.capture(input);
-    const records = new PostgresCommitRecords(snapshot, this.open);
+    const records = new PostgresCommitRecords(snapshot.entity, this.open);
     try {
+      records.ensure(snapshot, this.open);
       await records.prepare();
     } catch (error) {
       records.close();
@@ -279,12 +399,69 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
 
   /**
    * Closes this handle to new commits while allowing started work to settle.
+   *
+   * @returns Completion after admitted work and retained records close.
    */
-  close(): void {
-    if (this.#open) {
-      this.#open = false;
-      this.onClose();
+  close(): Promise<void> {
+    this.#open = false;
+    if (this.#idleOutcome !== undefined)
+      return (this.#closing ??=
+        this.#idleOutcome.error === undefined
+          ? Promise.resolve()
+          : Promise.reject(this.#idleOutcome.error));
+    return (this.#closing ??= this.drain());
+  }
+
+  /**
+   * Closes only when no commit remains admitted.
+   */
+  closeIdle(): void {
+    if (this.#active.size) throw new Error("Entity commit cannot close idle while work is active.");
+    if (this.#idleOutcome !== undefined) {
+      if (this.#idleOutcome.error !== undefined) throw this.#idleOutcome.error;
+      return;
     }
+    if (this.#closing !== undefined) throw new Error("Entity commit close is in progress.");
+    this.#open = false;
+    const errors: unknown[] = [];
+    try {
+      this.#records?.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    this.#records = undefined;
+    try {
+      this.onClose();
+    } catch (error) {
+      errors.push(error);
+    }
+    const failure =
+      errors.length > 1 ? new AggregateError(errors) : (errors[0] as Error | undefined);
+    this.#idleOutcome = failure === undefined ? {} : { error: failure };
+    if (failure !== undefined) throw failure;
+  }
+
+  /**
+   * Waits for admitted commits before releasing factory tracking.
+   *
+   * @returns Completion after admitted work and cleanup settle.
+   */
+  private async drain(): Promise<void> {
+    await Promise.allSettled([...this.#active]);
+    const errors: unknown[] = [];
+    try {
+      this.#records?.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    this.#records = undefined;
+    try {
+      this.onClose();
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length === 1) throw errors[0] as Error;
+    if (errors.length) throw new AggregateError(errors, "PostgreSQL commit close failed.");
   }
 
   /**

@@ -274,8 +274,8 @@ describe("Postgres record storage", () => {
       .build();
     const storage = factory.createRecordStorage({ name: "test", multitenant: false }, recordSpec());
 
-    factory.close();
-    factory.close();
+    await factory.close();
+    await factory.close();
     await Promise.resolve();
 
     expect(storage.isOpen()).toBe(false);

@@ -306,10 +306,15 @@ export interface PostgresStorageFactoryBuilder {
 export class PostgresStorageFactory extends StorageFactory {
   readonly #handles = new Set<{ close(): void }>();
 
+  readonly #commits = new Set<PostgresEntityCommitStorage<unknown, Message>>();
+
   readonly #databases: ReadonlyMap<string | symbol, PostgresDatabase>;
 
   readonly #catalog: TenantCatalog;
 
+  /**
+   * Whether this record family is closed.
+   */
   #closed: Promise<void> | undefined;
 
   /**
@@ -408,10 +413,14 @@ export class PostgresStorageFactory extends StorageFactory {
 
   /**
    * Closes the factory and begins idempotent PostgreSQL pool draining.
+   *
+   * @returns Completion after handles and the pool close.
    */
-  override close(): void {
-    this.#closed ??= this.drain();
-    void this.#closed.catch(() => undefined);
+  override close(): Promise<void> {
+    this.fenceClose();
+    if (this.#closed !== undefined) return this.#closed;
+    const commits = [...this.#commits].map((handle) => handle.close());
+    return (this.#closed = this.drain(commits));
   }
 
   /**
@@ -441,11 +450,13 @@ export class PostgresStorageFactory extends StorageFactory {
    * @param recordSpec Describes the record family.
    * @param group Optionally separates records sharing a source type.
    * @returns The live PostgreSQL record handle.
+   * @param tracked Whether the factory tracks this public handle.
    */
   private createPostgresRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     group?: StorageGroup,
+    tracked = true,
   ): PostgresRecordStorage<I, R> {
     const database = this.database(context);
     const table = this.resolver.resolve(
@@ -472,7 +483,7 @@ export class PostgresStorageFactory extends StorageFactory {
       this.operation === undefined ? undefined : createOperation(this.operation, spec),
       this.stringifiers,
     );
-    this.#handles.add(handle);
+    if (tracked) this.#handles.add(handle);
     return handle;
   }
 
@@ -515,11 +526,12 @@ export class PostgresStorageFactory extends StorageFactory {
     const registration = {} as { handle: PostgresEntityCommitStorage<I, S> };
     const handle = new PostgresEntityCommitStorage(
       input,
-      (spec, group) => this.createPostgresRecordStorage(input.context, spec, group),
-      () => this.#handles.delete(registration.handle),
+      (spec, group) => this.createPostgresRecordStorage(input.context, spec, group, false),
+      () =>
+        this.#commits.delete(registration.handle as PostgresEntityCommitStorage<unknown, Message>),
     );
     registration.handle = handle;
-    this.#handles.add(handle);
+    this.#commits.add(handle as PostgresEntityCommitStorage<unknown, Message>);
     return handle;
   }
 
@@ -527,12 +539,30 @@ export class PostgresStorageFactory extends StorageFactory {
    * Closes live handles, the tenant catalog, and all pools.
    *
    * @returns A promise that resolves after every pool closes.
+   * @param commits The admitted commit completions.
    */
-  private async drain(): Promise<void> {
-    super.close();
-    for (const handle of this.#handles) handle.close();
-    await this.#catalog.close();
-    await Promise.all([...this.#databases.values()].map(({ pool }) => pool.end()));
+  private async drain(commits: readonly Promise<void>[]): Promise<void> {
+    const errors: unknown[] = [];
+    for (const result of await Promise.allSettled(commits))
+      if (result.status === "rejected") errors.push(result.reason);
+    for (const handle of [...this.#handles]) {
+      try {
+        handle.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    try {
+      await this.#catalog.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    for (const result of await Promise.allSettled(
+      [...this.#databases.values()].map(({ pool }) => pool.end()),
+    ))
+      if (result.status === "rejected") errors.push(result.reason);
+    if (errors.length === 1) throw errors[0];
+    if (errors.length) throw new AggregateError(errors, "PostgreSQL factory close failed.");
   }
 
   /**

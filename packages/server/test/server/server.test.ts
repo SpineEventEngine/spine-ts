@@ -3283,9 +3283,9 @@ class CloseTrackingStorageFactory extends InMemoryStorageFactory {
     this.#closed = closed;
   }
 
-  override close(): void {
+  override close(): Promise<void> {
     this.#closed.push("storage");
-    super.close();
+    return super.close();
   }
 }
 
@@ -3320,13 +3320,13 @@ class FlakyCloseStorageFactory extends InMemoryStorageFactory {
     this.#error = error;
   }
 
-  override close(): void {
+  override close(): Promise<void> {
     this.#attempts += 1;
     this.#closed.push("storage");
     if (this.#attempts === 1) {
-      throw this.#error;
+      return Promise.reject(this.#error);
     }
-    super.close();
+    return super.close();
   }
 }
 

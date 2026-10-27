@@ -26,7 +26,9 @@ implementation are independently reviewed; provider lifecycle work follows. Exis
 - Single-tenant shared Inbox; derive dispatch tenant from the packed signal.
 - Primary delivery follows committed Inbox writes; scanning is a safety net.
 - Dynamic application-controlled TenantIndex, resolver and TENANT_UNKNOWN.
-- Apply JVM PR 1698 registration and cleanup semantics.
+- Apply JVM PR 1698 registration and cleanup semantics, with unconditional
+  rejection of duplicate Entity state types across open domain Bounded Contexts.
+  This applies in tests and BlackBox too; no disabling switch or test exception.
 - Remove automatic Agent recovery fully; retain normal execution and audit.
 - No existing-data migration, conversion scans, migration utilities or tests.
 - No framework database provisioning; no arbitrary limits or recovery substitutes.

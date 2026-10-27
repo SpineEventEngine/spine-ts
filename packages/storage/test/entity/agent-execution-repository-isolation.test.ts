@@ -96,7 +96,7 @@ describe("in-memory Agent repository separation", () => {
     } finally {
       reply.close();
       recovery.close();
-      factory.close();
+      await factory.close();
     }
   });
 
@@ -166,7 +166,7 @@ describe("in-memory Agent repository separation", () => {
       recoveryHistory.close();
       reply.close();
       recovery.close();
-      factory.close();
+      await factory.close();
       Time.setProvider(previous);
     }
   });

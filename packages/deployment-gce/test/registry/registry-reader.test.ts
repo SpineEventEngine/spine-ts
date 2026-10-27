@@ -92,7 +92,7 @@ describe("GceRegistryReader", () => {
     } finally {
       await stop();
       await registry.close();
-      factory.close();
+      await factory.close();
     }
   });
 

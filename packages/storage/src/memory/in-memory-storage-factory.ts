@@ -58,6 +58,10 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
 
   readonly #catalog: MemoryTenantCatalog;
 
+  readonly #commits = new Set<MemoryEntityCommitStorage>();
+
+  #closing: Promise<void> | undefined;
+
   /**
    * Creates a factory with a fresh backend, or deliberately shares one.
    *
@@ -89,11 +93,34 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
   }
 
   /**
-   * Closes the catalog view and this factory.
+   * Closes retained resources after admitted work settles.
+   *
+   * @returns The repeatable close outcome.
    */
-  override close(): void {
-    void this.#catalog.close();
-    super.close();
+  override close(): Promise<void> {
+    this.fenceClose();
+    if (this.#closing !== undefined) return this.#closing;
+    const commits = [...this.#commits].map((handle) => handle.close());
+    return (this.#closing = this.drain(commits));
+  }
+
+  /**
+   * Waits for commit handles, then reports their and catalog cleanup failures.
+   *
+   * @param commits The admitted commit completions.
+   * @returns Completion after admitted work and cleanup settle.
+   */
+  private async drain(commits: readonly Promise<void>[]): Promise<void> {
+    const settled = await Promise.allSettled(commits);
+    const failures: unknown[] = [];
+    for (const result of settled) if (result.status === "rejected") failures.push(result.reason);
+    try {
+      await this.#catalog.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length) throw new AggregateError(failures, "Memory storage factory close failed.");
   }
 
   /**
@@ -145,11 +172,14 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     input: EntityStorageInput<I, S>,
   ): EntityCommitStorage {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
-    return new MemoryEntityCommitStorage(
+    const handle = new MemoryEntityCommitStorage(
       this.#entities,
       (context, spec, group) => this.tenantRecords(context, spec, group),
       input as unknown as EntityStorageInput<unknown, Message>,
+      () => this.#commits.delete(handle),
     );
+    this.#commits.add(handle);
+    return handle;
   }
 
   /**

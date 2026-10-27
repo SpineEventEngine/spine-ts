@@ -97,7 +97,7 @@ describe("Datastore Agent execution provider boundary", () => {
       }
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 
@@ -122,7 +122,7 @@ describe("Datastore Agent execution provider boundary", () => {
       expect(second.hasMore).toBe(false);
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 
@@ -239,7 +239,7 @@ describe("Datastore Agent execution provider boundary", () => {
       );
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 
@@ -289,7 +289,7 @@ describe("Datastore Agent execution provider boundary", () => {
       expect((await storage.read(key))?.claimToken).toBe("recovered");
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
       Time.setProvider(previous);
     }
   });
@@ -356,7 +356,7 @@ describe("Datastore Agent execution provider boundary", () => {
       ).toEqual(expectedRecordBytes);
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 
@@ -486,7 +486,7 @@ describe("Datastore Agent execution provider boundary", () => {
           Execution.AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
         );
       } finally {
-        persisted.close();
+        await persisted.close();
       }
       const following = accepted(randomUUID(), required(key.scope).agentKey);
       const followingKey = required(following.key);
@@ -526,7 +526,7 @@ describe("Datastore Agent execution provider boundary", () => {
       );
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 
@@ -620,7 +620,7 @@ describe("Datastore Agent execution provider boundary", () => {
       );
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 
@@ -657,7 +657,7 @@ describe("Datastore Agent execution provider boundary", () => {
       expect(backend.entities.size).toBe(0);
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 });

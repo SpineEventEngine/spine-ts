@@ -49,7 +49,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
       .build();
-    factory.close();
+    await factory.close();
     expect(() => AgentHistoryStorageFactories.create(factory, scope)).toThrow(
       "StorageFactory is closed.",
     );
@@ -89,8 +89,8 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
           occurredAt,
         });
       } finally {
-        factory.close();
-        tenants.close();
+        await factory.close();
+        await tenants.close();
       }
     },
     120_000,
@@ -111,7 +111,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
     const first = AgentHistoryStorageFactories.create(factory, input);
     await first.append("ticket-pg", entry);
     first.close();
-    factory.close();
+    await factory.close();
     const reopened = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: required(url), schema })
       .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table)
@@ -146,7 +146,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
       );
       history.close();
     } finally {
-      reopened.close();
+      await reopened.close();
       await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
       await pool.end();
     }
@@ -182,7 +182,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
       ).rejects.toThrow("PostgreSQL record operation failed");
       history.close();
     } finally {
-      factory.close();
+      await factory.close();
       await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
       await pool.end();
     }
@@ -224,7 +224,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
         ).rejects.toThrow("PostgreSQL record operation failed");
         history.close();
       } finally {
-        factory.close();
+        await factory.close();
         await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
         await pool.end();
       }

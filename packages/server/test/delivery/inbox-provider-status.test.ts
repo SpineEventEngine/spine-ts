@@ -112,7 +112,7 @@ describe.each(providers)("$name Inbox status lists", ({ name, url }) => {
           ).map((message) => message.id.value),
         ).toEqual(["status-2"]);
       } finally {
-        factory.close();
+        await factory.close();
       }
     },
   );

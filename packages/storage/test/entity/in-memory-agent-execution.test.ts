@@ -13,8 +13,8 @@
  */
 
 import { clone, create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { Time } from "@spine-event-engine/core";
+import { EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import { AiModelKind, ModelPreferenceSchema } from "@spine-event-engine/proto/agent";
 import {
@@ -432,13 +432,13 @@ describe("in-memory Agent execution", () => {
     await current.current.write(
       create(EntityRecordSchema, {
         entityId: entity.id.pack(id),
-        state: create(AnySchema, {
-          typeUrl: `type.spine.server.testing/${SupportReplyAgentStateSchema.typeName}`,
-          value: toBinary(
-            SupportReplyAgentStateSchema,
-            create(SupportReplyAgentStateSchema, { id, proposedReply: "Existing reply" }),
-          ),
-        }),
+        state: AnyPacker.pack(
+          SupportReplyAgentStateSchema,
+          create(SupportReplyAgentStateSchema, {
+            id,
+            proposedReply: "Existing reply",
+          }),
+        ),
         version: create(VersionSchema, { number: 1 }),
       }),
     );
@@ -509,10 +509,10 @@ describe("in-memory Agent execution", () => {
     const commandId = create(CommandIdSchema, { uuid: "reply-draft-command" });
     const command = create(CommandSchema, {
       id: commandId,
-      message: create(AnySchema, {
-        typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
-        value: toBinary(DraftSupportReplySchema, create(DraftSupportReplySchema, { agent: id })),
-      }),
+      message: AnyPacker.pack(
+        DraftSupportReplySchema,
+        create(DraftSupportReplySchema, { agent: id }),
+      ),
     });
     const next = clone(AgentExecutionRecordSchema, claimed);
     next.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;
@@ -620,10 +620,7 @@ describe("in-memory Agent execution", () => {
       const draft = create(DraftSupportReplySchema, { agent });
       const command = create(CommandSchema, {
         id: create(CommandIdSchema, { uuid: "reclaimed-command" }),
-        message: create(AnySchema, {
-          typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
-          value: toBinary(DraftSupportReplySchema, draft),
-        }),
+        message: AnyPacker.pack(DraftSupportReplySchema, draft),
       });
       const completed = clone(AgentExecutionRecordSchema, first.record);
       completed.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;

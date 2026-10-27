@@ -173,8 +173,15 @@ export interface DatastoreEntityStorageHandle<I, S extends Message> {
 
   /**
    * Closes the handle.
+   *
+   * @returns Completion after retained resources are closed.
    */
-  close(): void;
+  close(): Promise<void>;
+
+  /**
+   * Closes an idle bundle during synchronous assembly rollback.
+   */
+  closeIdle(): void;
 }
 
 /**
@@ -287,6 +294,15 @@ export interface DatastoreStorageFactoryBuilder {
  * A Google Cloud Datastore-backed implementation of the Spine TS storage port.
  */
 export class DatastoreStorageFactory extends StorageFactory implements TenantCatalogProvider {
+  readonly #commits = new Set<EntityCommitStorage>();
+
+  readonly #bundles = new Set<DatastoreEntityStorageHandle<unknown, Message>>();
+
+  /**
+   * Repeatable asynchronous close completion.
+   */
+  #closing: Promise<void> | undefined;
+
   /**
    * Caller-supplied Datastore client.
    */
@@ -369,7 +385,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     this.#stringifiers = new StringifierRegistry(stringifiers);
     this.#catalog = new DatastoreTenantCatalog(client, this.#namespaceConverter);
     EntityCommitStorageFactories.register(this, {
-      createEntityCommitStorage: (input) => this.createEntityStorage(input).commits,
+      createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
     this.registerAgentHistory();
     this.registerAgentExecution();
@@ -545,7 +561,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     const custom = this.#entityCreators.get(input.sourceType.typeName);
     if (custom !== undefined)
-      return custom(input, this.#client) as DatastoreEntityStorageHandle<I, S>;
+      return this.retainBundle(custom(input, this.#client) as DatastoreEntityStorageHandle<I, S>);
     const openRecords: OpenEntityRecords = (recordSpec, group) =>
       this.createEntityRecordStorage(input.context, recordSpec, group);
     const storage = new DatastoreEntityStorage(input, openRecords);
@@ -553,7 +569,104 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       input as EntityStorageInput<unknown, Message>,
       openRecords,
     );
-    return new DefaultEntityHandle(storage, commits);
+    return this.retainBundle(new DefaultEntityHandle(storage, commits));
+  }
+
+  /**
+   * Registers a coherent Entity bundle for factory shutdown.
+   *
+   * @param bundle The coherent Entity storage bundle.
+   * @returns The tracked Entity storage bundle.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam S Generated Entity state message type.
+   */
+  private retainBundle<I, S extends Message>(
+    bundle: DatastoreEntityStorageHandle<I, S>,
+  ): DatastoreEntityStorageHandle<I, S> {
+    const retained: DatastoreEntityStorageHandle<I, S> = {
+      current: bundle.current,
+      states: bundle.states,
+      events: bundle.events,
+      commits: bundle.commits,
+      isOpen: () => bundle.isOpen(),
+      ...this.retainCleanup(bundle, () => this.#bundles.delete(retained)),
+    };
+    this.#bundles.add(retained);
+    return retained;
+  }
+
+  /**
+   * Opens direct built-in commit access without an unused Entity read bundle.
+   *
+   * @param input The captured Entity persistence input.
+   * @returns The provider commit handle.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam S Generated Entity state message type.
+   */
+  private createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    const custom = this.#entityCreators.get(input.sourceType.typeName);
+    if (custom !== undefined) {
+      const bundle = custom(input, this.#client) as DatastoreEntityStorageHandle<I, S>;
+      const adapter: EntityCommitStorage = {
+        commit: (work) => bundle.commits.commit(work),
+        ...this.retainCleanup(bundle, () => this.#commits.delete(adapter)),
+      };
+      this.#commits.add(adapter);
+      return adapter;
+    }
+    const openRecords: OpenEntityRecords = (recordSpec, group) =>
+      this.createEntityRecordStorage(input.context, recordSpec, group);
+    const commits = new DatastoreEntityCommitStorage(
+      input as EntityStorageInput<unknown, Message>,
+      openRecords,
+      () => this.#commits.delete(commits),
+    );
+    this.#commits.add(commits);
+    return commits;
+  }
+
+  /**
+   * Retains a bundle until asynchronous or idle cleanup settles.
+   *
+   * @param bundle The complete provider bundle.
+   * @param onRemove Removes the settled factory root.
+   * @returns Repeatable close methods.
+   */
+  private retainCleanup(
+    bundle: Pick<DatastoreEntityStorageHandle<unknown, Message>, "close" | "closeIdle">,
+    onRemove: () => void,
+  ): Pick<EntityCommitStorage, "close" | "closeIdle"> {
+    let closing: Promise<void> | undefined;
+    return {
+      close: () => {
+        if (closing !== undefined) return closing;
+        try {
+          closing = bundle.close();
+        } catch (error) {
+          closing = Promise.reject(
+            error instanceof Error
+              ? error
+              : new Error("Datastore cleanup failed.", { cause: error }),
+          );
+        }
+        return (closing = closing.then(
+          () => {
+            onRemove();
+          },
+          (error: unknown) => {
+            onRemove();
+            throw error;
+          },
+        ));
+      },
+      closeIdle: () => {
+        bundle.closeIdle();
+        onRemove();
+      },
+    };
   }
 
   /**
@@ -659,17 +772,51 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
 
   /**
    * Closes the factory and its native tenant catalog.
+   *
+   * @returns Completion after retained resources are closed.
    */
-  override close(): void {
-    super.close();
-    void this.#catalog.close();
+  override close(): Promise<void> {
+    this.fenceClose();
+    if (this.#closing !== undefined) return this.#closing;
+    const closing = Promise.withResolvers<undefined>();
+    this.#closing = closing.promise;
+    this.drain().then(() => {
+      closing.resolve(undefined);
+    }, closing.reject);
+    return closing.promise;
+  }
+
+  /**
+   * Waits for admitted commits before closing remaining factory resources.
+   *
+   * @returns Completion after admitted work and cleanup settle.
+   */
+  private async drain(): Promise<void> {
+    const errors: unknown[] = [];
+    const roots = [...this.#commits, ...this.#bundles];
+    const pending = roots.map((handle) => {
+      try {
+        return handle.close();
+      } catch (error) {
+        return Promise.reject(
+          error instanceof Error ? error : new Error("Datastore cleanup failed.", { cause: error }),
+        );
+      }
+    });
+    for (const result of await Promise.allSettled(pending))
+      if (result.status === "rejected") errors.push(result.reason);
+    try {
+      await this.#catalog.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length) throw new AggregateError(errors, "Datastore factory close failed.");
   }
 }
 
 /**
-
  * Configures a Datastore storage factory before construction.
-
  */
 class Builder implements DatastoreStorageFactoryBuilder {
   /**
@@ -842,6 +989,12 @@ class Builder implements DatastoreStorageFactoryBuilder {
  * @typeParam S Entity state message type.
  */
 class DefaultEntityHandle<I, S extends Message> implements DatastoreEntityStorageHandle<I, S> {
+  #open = true;
+
+  #idleOutcome: { error?: Error } | undefined;
+
+  #closing: Promise<void> | undefined;
+
   /**
    * Current Entity record access.
    */
@@ -860,7 +1013,7 @@ class DefaultEntityHandle<I, S extends Message> implements DatastoreEntityStorag
   /**
    * Ordered Entity commit access.
    */
-  readonly commits: EntityCommitStorage;
+  readonly commits: DatastoreEntityCommitStorage;
 
   /**
    * Shared record-family handles.
@@ -873,7 +1026,7 @@ class DefaultEntityHandle<I, S extends Message> implements DatastoreEntityStorag
    * @param storage Opens current and retained Entity records.
    * @param commits Writes one prepared Entity mutation.
    */
-  constructor(storage: DatastoreEntityStorage<I, S>, commits: EntityCommitStorage) {
+  constructor(storage: DatastoreEntityStorage<I, S>, commits: DatastoreEntityCommitStorage) {
     this.#storage = storage;
     this.current = storage.current;
     this.states = storage.states;
@@ -887,15 +1040,79 @@ class DefaultEntityHandle<I, S extends Message> implements DatastoreEntityStorag
    * @returns Whether operations remain available.
    */
   isOpen(): boolean {
-    return this.#storage.isOpen();
+    return this.#open && this.#storage.isOpen();
   }
 
   /**
    * Closes generated records and commit access.
+   *
+   * @returns Completion after retained resources are closed.
    */
-  close(): void {
-    this.#storage.close();
-    this.commits.close();
+  close(): Promise<void> {
+    if (this.#closing !== undefined) return this.#closing;
+    this.#open = false;
+    if (this.#idleOutcome !== undefined) {
+      const failure = this.#idleOutcome.error;
+      return (this.#closing = failure === undefined ? Promise.resolve() : Promise.reject(failure));
+    }
+    const completion = this.commits.close();
+    return (this.#closing = this.drain(completion));
+  }
+
+  /**
+   * Closes read records after an admitted commit settles.
+   *
+   * @param completion The admitted commit completion.
+   * @returns Completion after admitted work and cleanup settle.
+   */
+  private async drain(completion: Promise<void>): Promise<void> {
+    const errors: unknown[] = [];
+    try {
+      await completion;
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      this.#storage.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length) throw new AggregateError(errors, "Datastore Entity close failed.");
+  }
+
+  /**
+   * Closes a bundle synchronously when no commit or close remains in progress.
+   */
+  closeIdle(): void {
+    if (this.#idleOutcome !== undefined) {
+      if (this.#idleOutcome.error !== undefined) throw this.#idleOutcome.error;
+      return;
+    }
+    if (this.#closing !== undefined) throw new Error("Entity bundle close is in progress.");
+    this.commits.assertIdle();
+    this.#open = false;
+    const errors: unknown[] = [];
+    try {
+      this.commits.closeIdle();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      this.#storage.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    const failure =
+      errors.length > 1
+        ? new AggregateError(errors, "Datastore bundle idle close failed.")
+        : errors[0] === undefined
+          ? undefined
+          : errors[0] instanceof Error
+            ? errors[0]
+            : new Error("Datastore cleanup failed.", { cause: errors[0] });
+    this.#idleOutcome = failure === undefined ? {} : { error: failure };
+    if (failure !== undefined) throw failure;
   }
 }
 

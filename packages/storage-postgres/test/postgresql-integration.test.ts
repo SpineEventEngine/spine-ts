@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message, ScalarType } from "@bufbuild/protobuf";
+import { create, toBinary, type Message, ScalarType } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import {
   EventIdSchema,
@@ -80,8 +80,8 @@ describe("PostgreSQL live storage acceptance", () => {
     factory = await postgresBuilder().setOptions({ url }).build();
   });
 
-  afterAll(() => {
-    factory.close();
+  afterAll(async () => {
+    await factory.close();
   });
 
   it("keeps an immutable EventStore prefix and admits the same complete Events on retry", async () => {
@@ -270,7 +270,7 @@ describe("PostgreSQL live storage acceptance", () => {
       await expect(storage.read("custom")).resolves.toEqual(value("custom"));
     } finally {
       storage.close();
-      custom.close();
+      await custom.close();
     }
   });
 
@@ -300,7 +300,7 @@ describe("PostgreSQL live storage acceptance", () => {
     } finally {
       records.close();
       other.close();
-      second.close();
+      await second.close();
       await pool.end();
     }
   });
@@ -390,7 +390,7 @@ describe("PostgreSQL live storage acceptance", () => {
     } finally {
       first.close();
       second.close();
-      tenants.close();
+      await tenants.close();
     }
   });
 
@@ -420,7 +420,7 @@ describe("PostgreSQL live storage acceptance", () => {
       await expect(entity.states.backward(id, 10)).resolves.toEqual([]);
       await expect(entity.states.backward(truncationId, 200)).resolves.toEqual([]);
     } finally {
-      commits.close();
+      await commits.close();
       entity.close();
     }
   });
@@ -466,7 +466,7 @@ describe("PostgreSQL live storage acceptance", () => {
         await pool.query(`ALTER TABLE ${target} DROP CONSTRAINT IF EXISTS ${quoted(constraint)}`);
       diagnosticRecords.close();
       await events.close();
-      commits.close();
+      await commits.close();
       entity.close();
       await pool.end();
     }
@@ -510,9 +510,9 @@ describe("PostgreSQL live storage acceptance", () => {
         reader.close();
       }
     } finally {
-      firstCommit.close();
-      secondCommit.close();
-      second.close();
+      await firstCommit.close();
+      await secondCommit.close();
+      await second.close();
     }
   });
 
@@ -520,7 +520,7 @@ describe("PostgreSQL live storage acceptance", () => {
     const closing = await postgresBuilder().setOptions({ url }).build();
     const scope = context("lifecycle");
     const records = closing.createRecordStorage(scope, stringSpec(), group("lifecycle"));
-    closing.close();
+    await closing.close();
     await Promise.resolve();
 
     expect(records.isOpen()).toBe(false);
@@ -608,7 +608,7 @@ function entityInput(
       pack: (id) => Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
       unpack: (packed) =>
         packed.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
-          ? fromBinary(TaskIdSchema, packed.value).value
+          ? AnyPacker.tryUnpack(packed, TaskIdSchema)?.value
           : undefined,
     },
     columns: [],
@@ -618,7 +618,7 @@ function entityInput(
       idKind: "string",
       extractId: (record) => {
         if (record.entityId === undefined) throw new Error("Entity record ID is required.");
-        return fromBinary(TaskIdSchema, record.entityId.value).value;
+        return AnyPacker.unpack(record.entityId, TaskIdSchema).value;
       },
     }),
     sourceType: TaskSchema,

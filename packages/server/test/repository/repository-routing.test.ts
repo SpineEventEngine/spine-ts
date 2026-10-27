@@ -4365,7 +4365,7 @@ describe("repository signal routing", () => {
       await waitForCondition(() => diagnostics.length === 1);
 
       const diagnostic = AnyPacker.tryUnpack(
-        diagnostics[0]?.message as never,
+        diagnostics[0]?.message,
         EventDispatchedToReactorSchema,
       );
       expect(diagnostic).toMatchObject({
@@ -7133,7 +7133,7 @@ describe("repository signal routing", () => {
       await waitForCondition(() => diagnostics.length === 1);
 
       const diagnostic = AnyPacker.tryUnpack(
-        diagnostics[0]?.message as never,
+        diagnostics[0]?.message,
         CommandDispatchedToHandlerSchema,
       );
       expect(diagnostic).toMatchObject({
@@ -9128,37 +9128,43 @@ describe("repository signal routing", () => {
     expect(factory.entityCloses).toBe(factory.entityOpens);
   });
 
-  it("attempts every tenant port close and shares one repository close outcome", async () => {
-    const factory = new RetainedEntityStorageFactory();
-    const repository = createRoutingRepository();
-    const context = BoundedContext.multitenant("Tasks")
-      .add(repository)
-      .withStorageFactory(factory)
-      .build();
-    const dispatcher = repositoryAccess.eventDispatcher(repository);
-    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
-    await dispatcher.dispatch(
-      createProjectCreated("close-tenant-a", "close-a", { importTenantId: "tenant-a" }),
-    );
-    await dispatcher.dispatch(
-      createProjectCreated("close-tenant-b", "close-b", { importTenantId: "tenant-b" }),
-    );
-    factory.failCommitClose = true;
-    factory.failEntityClose = true;
+  it.each([false, true])(
+    "attempts every tenant port close after sync commit failure %s",
+    async (syncClose) => {
+      const factory = new RetainedEntityStorageFactory();
+      const repository = createRoutingRepository();
+      const context = BoundedContext.multitenant("Tasks")
+        .add(repository)
+        .withStorageFactory(factory)
+        .build();
+      const dispatcher = repositoryAccess.eventDispatcher(repository);
+      if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+      await dispatcher.dispatch(
+        createProjectCreated("close-tenant-a", "close-a", { importTenantId: "tenant-a" }),
+      );
+      await dispatcher.dispatch(
+        createProjectCreated("close-tenant-b", "close-b", { importTenantId: "tenant-b" }),
+      );
+      factory.failCommitClose = true;
+      factory.failCommitCloseSynchronously = syncClose;
+      factory.failEntityClose = true;
 
-    const closing = repositoryAccess.clearRuntime(repository);
-    expect(repositoryAccess.clearRuntime(repository)).toBe(closing);
-    const failure = await closing.catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure as AggregateError).errors.map((error: Error) => error.message)).toEqual([
-      "Entity close failed",
-      "commit close failed",
-      "Entity close failed",
-      "commit close failed",
-    ]);
-    await expect(context.close()).rejects.toThrow();
-    expect(factory.entityCloses).toBe(factory.entityOpens);
-  });
+      const closing = repositoryAccess.clearRuntime(repository);
+      expect(repositoryAccess.clearRuntime(repository)).toBe(closing);
+      const failure = await closing.catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect(
+        (failure as AggregateError).errors.map((error: Error) => error.message).sort(),
+      ).toEqual([
+        "Entity close failed",
+        "Entity close failed",
+        "commit close failed",
+        "commit close failed",
+      ]);
+      await expect(context.close()).rejects.toThrow();
+      expect(factory.entityCloses).toBe(factory.entityOpens);
+    },
+  );
 
   it("preserves Agent port acquisition failure when history cleanup also fails", async () => {
     const factory = new RetainedEntityStorageFactory();
@@ -10440,7 +10446,7 @@ describe("repository signal routing", () => {
       await waitForCondition(() => diagnostics.length === 1);
 
       const diagnostic = AnyPacker.tryUnpack(
-        diagnostics[0]?.message as never,
+        diagnostics[0]?.message,
         EventDispatchedToSubscriberSchema,
       );
       expect(diagnostic).toMatchObject({
@@ -10852,10 +10858,7 @@ describe("repository signal routing", () => {
         TypeUrls.derive(EntityCreatedSchema),
         TypeUrls.derive(EntityStateChangedSchema),
       ]);
-      const stateChanged = AnyPacker.tryUnpack(
-        changes[1]?.message as never,
-        EntityStateChangedSchema,
-      );
+      const stateChanged = AnyPacker.tryUnpack(changes[1]?.message, EntityStateChangedSchema);
       expect(stateChanged?.when).toEqual(changes[1]?.context?.timestamp);
       changes.splice(0);
       await context
@@ -10865,7 +10868,7 @@ describe("repository signal routing", () => {
       expect(changes.map((event) => event.message?.typeUrl)).toEqual([
         TypeUrls.derive(EntityArchivedSchema),
       ]);
-      const archived = AnyPacker.tryUnpack(changes[0]?.message as never, EntityArchivedSchema);
+      const archived = AnyPacker.tryUnpack(changes[0]?.message, EntityArchivedSchema);
       expect(archived?.when).toEqual(changes[0]?.context?.timestamp);
     } finally {
       await context.close();
@@ -10921,7 +10924,7 @@ describe("repository signal routing", () => {
         EntityDeletedSchema,
         EntityRestoredSchema,
       ].entries()) {
-        const lifecycle = AnyPacker.tryUnpack(changes[index]?.message as never, schema);
+        const lifecycle = AnyPacker.tryUnpack(changes[index]?.message, schema);
         expect(lifecycle).toMatchObject({
           entity: { typeUrl: TypeUrls.derive(ProjectStateSchema) },
           signalId: [{ typeUrl: TypeUrls.derive(CreateProjectSchema) }],
@@ -15863,6 +15866,7 @@ class RetainedEntityStorageFactory extends InMemoryStorageFactory {
   commitCreations = 0;
   failCommitOnce = false;
   failCommitClose = false;
+  failCommitCloseSynchronously = false;
   failEntityClose = false;
   failAgentExecutionOnce = false;
   failAgentHistoryClose = false;
@@ -15903,7 +15907,16 @@ class RetainedEntityStorageFactory extends InMemoryStorageFactory {
     return {
       commit: (work) => storage.commit(work),
       close: () => {
-        storage.close();
+        if (this.failCommitCloseSynchronously) {
+          this.failCommitCloseSynchronously = false;
+          throw new Error("commit close failed");
+        }
+        return storage.close().then(() => {
+          if (this.failCommitClose) throw new Error("commit close failed");
+        });
+      },
+      closeIdle: () => {
+        storage.closeIdle();
         if (this.failCommitClose) throw new Error("commit close failed");
       },
     };
@@ -16332,8 +16345,9 @@ class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
         await this.#gate;
         await storage.commit(unit);
       },
-      close: () => {
-        storage.close();
+      close: () => storage.close(),
+      closeIdle: () => {
+        storage.closeIdle();
       },
     } satisfies EntityCommitStorage;
   }
@@ -16354,8 +16368,9 @@ class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
         }
         await storage.commit(unit);
       },
-      close: () => {
-        storage.close();
+      close: () => storage.close(),
+      closeIdle: () => {
+        storage.closeIdle();
       },
     } satisfies EntityCommitStorage;
   }
@@ -16411,8 +16426,9 @@ class FailingSourceDiagnosticStorageFactory extends InMemoryStorageFactory {
         }
         await storage.commit(unit);
       },
-      close: () => {
-        storage.close();
+      close: () => storage.close(),
+      closeIdle: () => {
+        storage.closeIdle();
       },
     } satisfies EntityCommitStorage;
   }
@@ -16454,8 +16470,9 @@ class FailingProcessManagerProducedEventFactory extends InMemoryStorageFactory {
           for (const event of unit.events ?? []) this.fail(event);
         await storage.commit(unit);
       },
-      close: () => {
-        storage.close();
+      close: () => storage.close(),
+      closeIdle: () => {
+        storage.closeIdle();
       },
     } satisfies EntityCommitStorage;
   }

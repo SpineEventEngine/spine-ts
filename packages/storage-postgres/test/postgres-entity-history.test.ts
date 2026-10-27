@@ -12,9 +12,14 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import {
+  AnyPacker,
+  Identifiers,
+  StringifierRegistry,
+  TypeRegistry,
+} from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -787,9 +792,7 @@ function task(id: string, title: string): Task {
 
 function entityInput(stateHistory = false, eventHistory = false): EntityStorageInput<TaskId, Task> {
   const unpack = (id: NonNullable<EntityRecord["entityId"]>): TaskId | undefined =>
-    id.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
-      ? fromBinary(TaskIdSchema, id.value)
-      : undefined;
+    AnyPacker.tryUnpack(id, TaskIdSchema);
   return {
     context: { name: "Tasks", multitenant: false },
     id: {

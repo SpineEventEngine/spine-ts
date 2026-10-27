@@ -12,10 +12,10 @@
  * the License.
  */
 
-import { create, fromBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createPool } from "mysql2/promise";
-import { Identifiers, StringifierRegistry } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers, StringifierRegistry } from "@spine-event-engine/core";
 import { EventSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
@@ -94,8 +94,8 @@ describe("MysqlStorageFactory builder contract", () => {
         tls: { rejectUnauthorized: false },
       })
       .build();
-    factory.close();
-    factory.close();
+    await factory.close();
+    await factory.close();
     await Promise.resolve();
 
     expect(createPool).toHaveBeenCalledWith(
@@ -136,7 +136,7 @@ describe("MysqlStorageFactory builder contract", () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: "mysql://db.example/defaults" })
       .build();
-    factory.close();
+    await factory.close();
     await Promise.resolve();
 
     expect(createPool).toHaveBeenLastCalledWith({
@@ -204,7 +204,7 @@ describe("MysqlStorageFactory builder contract", () => {
     expect(selects[1]?.values).toEqual(["user:42", "user:42", "user:42"]);
     expect(calls.flatMap((call) => call.values ?? [])).not.toContain("changed:42");
     records.close();
-    factory.close();
+    await factory.close();
   });
 
   it("builds one pool per complete configured tenant and enumerates those boundaries", async () => {
@@ -298,7 +298,7 @@ describe("MysqlStorageFactory builder contract", () => {
     ).toThrow(/no configured database/i);
     first.close();
     second.close();
-    factory.close();
+    await factory.close();
     await Promise.resolve();
     expect(firstEnd).toHaveBeenCalledOnce();
     expect(secondEnd).toHaveBeenCalledOnce();
@@ -414,7 +414,7 @@ describe("MysqlStorageFactory builder contract", () => {
       }),
     };
     const closed = EntityCommitStorageFactories.create(factory, entity);
-    closed.close();
+    await closed.close();
     await expect(closed.commit(mutation)).rejects.toThrow(/closed/i);
 
     const commits = EntityCommitStorageFactories.create(factory, entity);
@@ -427,7 +427,7 @@ describe("MysqlStorageFactory builder contract", () => {
         context: { name: "other", multitenant: true, tenantId: tenant("other") },
       }),
     ).rejects.toThrow(/context is incompatible/i);
-    commits.close();
+    await commits.close();
 
     const noHistory = entityInput({ name: "no-history", multitenant: false }, false, false);
     const disabled = EntityCommitStorageFactories.create(factory, noHistory);
@@ -447,14 +447,14 @@ describe("MysqlStorageFactory builder contract", () => {
         diagnostics: [create(EventSchema)],
       }),
     ).rejects.toThrow(/event history is disabled/i);
-    disabled.close();
+    await disabled.close();
 
     const missingId = EntityCommitStorageFactories.create(factory, entity);
     await expect(missingId.commit({ ...mutation, events: [create(EventSchema)] })).rejects.toThrow(
       /requires non-blank unique delivery event IDs/i,
     );
-    missingId.close();
-    factory.close();
+    await missingId.close();
+    await factory.close();
   });
 
   it("uses a configured create operation for a grouped record family before inspecting its layout", async () => {
@@ -505,7 +505,7 @@ describe("MysqlStorageFactory builder contract", () => {
     expect(table?.tableName).toContain("history");
     expect(query.mock.calls.some(([sql]) => sql.includes("CREATE TABLE"))).toBe(true);
     records.close();
-    factory.close();
+    await factory.close();
   });
 });
 
@@ -516,7 +516,7 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
     idSchema: TaskIdSchema,
     extractId: (record) => {
       if (record.entityId === undefined) throw new Error("Task Entity ID is required.");
-      return fromBinary(TaskIdSchema, record.entityId.value);
+      return AnyPacker.unpack(record.entityId, TaskIdSchema);
     },
   });
   return {
@@ -527,9 +527,7 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
       pack: (id: ReturnType<typeof create<typeof TaskIdSchema>>) =>
         Identifiers.pack(TaskIdSchema, id),
       unpack: (packed: ReturnType<typeof create<typeof AnySchema>>) =>
-        packed.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
-          ? fromBinary(TaskIdSchema, packed.value)
-          : undefined,
+        AnyPacker.tryUnpack(packed, TaskIdSchema),
     },
     columns: [],
     recordSpec,

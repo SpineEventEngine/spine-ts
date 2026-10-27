@@ -356,10 +356,10 @@ export class LifecycleTrackingStorageFactory extends InMemoryStorageFactory {
     return this.#storageCloseCalls.get(storage) ?? 0;
   }
 
-  override close(): void {
+  override close(): Promise<void> {
     this.#closeCalls += 1;
     this.#events.push("facility");
-    super.close();
+    return super.close();
   }
 }
 

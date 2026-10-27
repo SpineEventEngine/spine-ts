@@ -55,8 +55,9 @@ conflict winner.
 
 ## Lifecycle and tenancy
 
-`close(): void` marks the factory and its live handles closed and starts pool
-draining. Callers do not await it. A record handle closes independently. A
+`close(): Promise<void>` immediately fences new handles, waits for admitted
+Entity commits, and then closes live handles and drains pools. Await it to
+observe cleanup failures; repeated calls return the same completion. A record handle closes independently. A
 single-tenant factory has one database. A multitenant factory requires a
 complete generated `TenantId` on each operation and routes it to its configured
 database. Bounded Context names are diagnostic only and never partition rows,

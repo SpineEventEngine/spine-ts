@@ -13,7 +13,8 @@
  */
 
 /**
- * Common closeable contract shared by storage factories and concrete storages.
+ * Synchronous closeable contract for individual storage handles.
+ * Factories expose their separate asynchronous close completion.
  */
 export interface Storage {
   // prettier-ignore

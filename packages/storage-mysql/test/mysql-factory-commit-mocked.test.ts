@@ -13,9 +13,9 @@
  */
 
 /* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { Identifiers } from "@spine-event-engine/core";
+import { create } from "@bufbuild/protobuf";
+import type { Any } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, Identifiers } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
@@ -40,6 +40,8 @@ const seam = vi.hoisted(() => ({
   close: vi.fn(),
   failDiagnostic: 0,
   diagnosticFailure: new Error("driver detail"),
+  acquisitionFailure: undefined as Error | undefined,
+  poolEnd: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("mysql2/promise", () => ({
@@ -49,7 +51,7 @@ vi.mock("mysql2/promise", () => ({
         query: () => Promise.resolve([[], []]),
         release: () => undefined,
       }),
-    end: () => Promise.resolve(),
+    end: seam.poolEnd,
   })),
 }));
 vi.mock("../src/mysql/entity-history.js", () => ({
@@ -67,6 +69,9 @@ vi.mock("../src/mysql/entity-history.js", () => ({
           throw seam.diagnosticFailure;
         }
       },
+    };
+    ensure = () => {
+      if (seam.acquisitionFailure !== undefined) throw seam.acquisitionFailure;
     };
     prepare = async () => seam.calls.push("families.prepare");
     close() {
@@ -111,10 +116,7 @@ describe("MysqlStorageFactory mocked entity commits", () => {
         key: (id: ReturnType<typeof create<typeof TaskIdSchema>>) => id.value,
         pack: (id: ReturnType<typeof create<typeof TaskIdSchema>>) =>
           Identifiers.pack(TaskIdSchema, id),
-        unpack: (packed: { typeUrl: string; value: Uint8Array }) =>
-          packed.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
-            ? fromBinary(TaskIdSchema, packed.value)
-            : undefined,
+        unpack: (packed: Any) => AnyPacker.tryUnpack(packed, TaskIdSchema),
       },
       columns: [],
       sourceType: TaskSchema,
@@ -125,26 +127,17 @@ describe("MysqlStorageFactory mocked entity commits", () => {
     const commits = EntityCommitStorageFactories.create(factory, entity);
     const taskId = create(TaskIdSchema, { value: "order-1" });
     const next = create(EntityRecordSchema, {
-      entityId: create(AnySchema, {
-        typeUrl: `type.spine.io/${TaskIdSchema.typeName}`,
-        value: toBinary(TaskIdSchema, taskId),
-      }),
-      state: create(AnySchema, {
-        typeUrl: `type.spine.io/${TaskSchema.typeName}`,
-        value: toBinary(TaskSchema, create(TaskSchema, { id: taskId, title: "Order" })),
-      }),
+      entityId: AnyPacker.pack(TaskIdSchema, taskId),
+      state: AnyPacker.pack(TaskSchema, create(TaskSchema, { id: taskId, title: "Order" })),
     });
-    const domainEvent = create(AnySchema, {
-      typeUrl: `type.spine.io/${TaskCreatedSchema.typeName}`,
-      value: toBinary(
-        TaskCreatedSchema,
-        create(TaskCreatedSchema, {
-          id: taskId,
-          title: "Order",
-          taskListId: create(TaskListIdSchema, { value: "list-1" }),
-        }),
-      ),
-    });
+    const domainEvent = AnyPacker.pack(
+      TaskCreatedSchema,
+      create(TaskCreatedSchema, {
+        id: taskId,
+        title: "Order",
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+      }),
+    );
     await expect(
       commits.commit({
         context,
@@ -228,7 +221,7 @@ describe("MysqlStorageFactory mocked entity commits", () => {
           diagnostics: [diagnostic],
         }),
       ).rejects.toThrow("MySQL Entity commit failed");
-      expect(seam.calls).toEqual(["families.prepare", "events.prepare", "state", "diagnostic"]);
+      expect(seam.calls).toEqual(["families.prepare", "state", "diagnostic"]);
     }
     seam.calls = [];
     seam.failDiagnostic = 1;
@@ -245,7 +238,6 @@ describe("MysqlStorageFactory mocked entity commits", () => {
     ).resolves.toBeUndefined();
     expect(seam.calls).toEqual([
       "families.prepare",
-      "events.prepare",
       "state",
       "diagnostic",
       "state",
@@ -256,7 +248,7 @@ describe("MysqlStorageFactory mocked entity commits", () => {
     await expect(
       commits.commit({ context, entity, entityId: taskId, next }),
     ).resolves.toBeUndefined();
-    expect(seam.calls).toEqual(["families.prepare", "events.prepare", "write"]);
+    expect(seam.calls).toEqual(["families.prepare", "write"]);
     const eventWithId = (value: string) =>
       create(EventSchema, { id: create(EventIdSchema, { value }), message: domainEvent });
     const otherId = create(TaskIdSchema, { value: "another-task" });
@@ -296,9 +288,156 @@ describe("MysqlStorageFactory mocked entity commits", () => {
         next,
       }),
     ).rejects.toThrow("context is incompatible");
-    commits.close();
-    commits.close();
-    expect(seam.close).toHaveBeenCalledTimes(12);
-    factory.close();
+    expect(seam.close).not.toHaveBeenCalled();
+    await commits.close();
+    await commits.close();
+    expect(seam.close).toHaveBeenCalledTimes(2);
+    await factory.close();
   });
 });
+
+describe("MysqlStorageFactory commit cleanup failures", () => {
+  it("admits ID-validation callbacks before reentrant factory close", async () => {
+    seam.close.mockReset();
+    seam.poolEnd.mockReset().mockResolvedValue(undefined);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/commit_capture" })
+      .build();
+    const base = cleanupEntity();
+    let closing: Promise<void> | undefined;
+    const entity = {
+      ...base,
+      id: {
+        ...base.id,
+        unpack: (id: Any) => {
+          expect(() => {
+            commit.closeIdle();
+          }).toThrow(/active/);
+          closing = factory.close();
+          return base.id.unpack(id);
+        },
+      },
+    };
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    await expect(commit.commit(cleanupMutation(entity, true))).resolves.toBeUndefined();
+    await expect(closing).resolves.toBeUndefined();
+    expect(seam.close).toHaveBeenCalledTimes(2);
+  });
+  it("retains acquisition and both rollback-close errors", async () => {
+    seam.close.mockReset();
+    seam.poolEnd.mockReset().mockResolvedValue(undefined);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/commit_cleanup" })
+      .build();
+    const entity = cleanupEntity();
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    const acquisition = new Error("family acquisition failed");
+    const eventClose = new Error("new delivery close failed");
+    const storageClose = new Error("new Entity close failed");
+    seam.acquisitionFailure = acquisition;
+    seam.close
+      .mockImplementationOnce(() => {
+        throw eventClose;
+      })
+      .mockImplementationOnce(() => {
+        throw storageClose;
+      });
+    try {
+      await expect(commit.commit(cleanupMutation(entity, true))).rejects.toMatchObject({
+        cause: { errors: [acquisition, eventClose, storageClose] },
+      });
+      expect(seam.close).toHaveBeenCalledTimes(2);
+      seam.acquisitionFailure = undefined;
+      await expect(commit.commit(cleanupMutation(entity, true))).resolves.toBeUndefined();
+    } finally {
+      seam.acquisitionFailure = undefined;
+      await factory.close();
+    }
+  });
+
+  it("attempts both retained commit closes and reports both failures", async () => {
+    seam.close.mockReset();
+    seam.poolEnd.mockReset().mockResolvedValue(undefined);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/commit_cleanup" })
+      .build();
+    const entity = cleanupEntity();
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    await commit.commit(cleanupMutation(entity, true));
+    const eventClose = new Error("delivery close failed");
+    const storageClose = new Error("Entity close failed");
+    seam.close
+      .mockImplementationOnce(() => {
+        throw eventClose;
+      })
+      .mockImplementationOnce(() => {
+        throw storageClose;
+      });
+    await expect(commit.close()).rejects.toMatchObject({ errors: [eventClose, storageClose] });
+    expect(seam.close).toHaveBeenCalledTimes(2);
+    await factory.close();
+  });
+
+  it("reports commit and pool failure after both cleanup attempts", async () => {
+    seam.close.mockReset();
+    seam.poolEnd.mockReset().mockResolvedValue(undefined);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/commit_cleanup" })
+      .build();
+    const entity = cleanupEntity();
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    await commit.commit(cleanupMutation(entity, false));
+    const commitClose = new Error("commit close failed");
+    const poolClose = new Error("pool close failed");
+    seam.close.mockImplementationOnce(() => {
+      throw commitClose;
+    });
+    seam.poolEnd.mockRejectedValueOnce(poolClose);
+    await expect(factory.close()).rejects.toMatchObject({ errors: [commitClose, poolClose] });
+    expect(seam.close).toHaveBeenCalledTimes(1);
+    expect(seam.poolEnd).toHaveBeenCalledTimes(1);
+  });
+});
+
+function cleanupEntity(): EntityStorageInput<TaskId, Task> {
+  return {
+    context: { name: "Tasks", multitenant: false },
+    id: {
+      clone: (id: TaskId) => create(TaskIdSchema, id),
+      key: (id: TaskId) => id.value,
+      pack: (id: TaskId) => AnyPacker.pack(TaskIdSchema, id),
+      unpack: (id: Any) => AnyPacker.tryUnpack(id, TaskIdSchema),
+    },
+    columns: [],
+    sourceType: TaskSchema,
+    stateSchema: TaskSchema,
+    stateHistory: true,
+    eventHistory: true,
+  } as unknown as EntityStorageInput<TaskId, Task>;
+}
+
+function cleanupMutation(entity: EntityStorageInput<TaskId, Task>, withEvent: boolean) {
+  const id = create(TaskIdSchema, { value: "cleanup-task" });
+  const message = AnyPacker.pack(
+    TaskCreatedSchema,
+    create(TaskCreatedSchema, {
+      id,
+      title: "Created",
+      taskListId: create(TaskListIdSchema, { value: "list-1" }),
+    }),
+  );
+  return {
+    context: entity.context,
+    entity,
+    entityId: id,
+    next: create(EntityRecordSchema, {
+      entityId: AnyPacker.pack(TaskIdSchema, id),
+      state: AnyPacker.pack(TaskSchema, create(TaskSchema, { id, title: "Task" })),
+    }),
+    ...(withEvent
+      ? {
+          events: [create(EventSchema, { id: create(EventIdSchema, { value: "event" }), message })],
+        }
+      : {}),
+  };
+}

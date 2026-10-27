@@ -19,6 +19,12 @@ history and Entity commit contracts, query values, tenant boundaries/catalogs,
 and record access. The storage root intentionally does not export
 these provider seams; application code uses its root storage contracts instead.
 
+`StorageFactory.close()` synchronously rejects new handles and returns a Promise
+for admitted provider work and cleanup. Await it to observe cleanup failures;
+repeated calls return the same completion. Provider-only Entity commit handles
+also await admitted commits before releasing retained records. Ordinary
+`RecordStorage.close()` remains synchronous.
+
 The provider entry point also exports `AgentHistoryStorage`,
 `AgentHistoryStorageFactories`, `AgentHistoryKeys`, and
 `AgentHistoryConformance`. Calling `AgentHistoryStorageFactories.create()` to
@@ -197,14 +203,17 @@ that stated overlap. See each provider reference for mappings and index needs.
 
 ## Lifecycle
 
-The base `StorageFactory.close()` prevents later record-storage creation. The
-in-memory factory follows that behavior and leaves existing record handles open
-until each handle closes. `RecordStorage.close()` rejects that handle's later
-operations. Datastore follows the base factory behavior. Adapters can define a
-stronger shutdown lifecycle: the MySQL factory closes live handles while it
-drains its pool. Read the [Datastore reference](../storage-datastore/REFERENCE.md)
-and [MySQL reference](../storage-mysql/REFERENCE.md) or [PostgreSQL reference](../storage-postgres/REFERENCE.md) before relying on shutdown
-behavior. The in-memory backend is ephemeral and process-local. Passing one
+`StorageFactory.close()` fences new storage creation immediately and returns a
+promise that settles after its retained commit work and provider resources close.
+The in-memory factory drains retained commits and closes its tenant catalog;
+independent record handles remain open until their own synchronous
+`RecordStorage.close()`. PostgreSQL and MySQL also close their live record
+handles and connection pools. Datastore closes retained Entity bundles and its
+tenant catalog. Cleanup failures reject the factory close promise. Read the
+[Datastore reference](../storage-datastore/REFERENCE.md),
+[MySQL reference](../storage-mysql/REFERENCE.md), and
+[PostgreSQL reference](../storage-postgres/REFERENCE.md) for provider details.
+The in-memory backend is ephemeral and process-local. Passing one
 `InMemoryStorageBackend` to multiple in-memory factories deliberately shares
 its scoped rows.
 

@@ -34,9 +34,7 @@ import type { NormalizedQueryEntry, NormalizedQueryPlan } from "@spine-event-eng
 import { MysqlRecordStorage } from "./record-storage.js";
 
 /**
-
  * Opens one MySQL record family for Entity storage.
-
  */
 interface OpenRecords {
   /**
@@ -107,40 +105,32 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   readonly current: EntityRecordStorage<I>;
 
   /**
-
    * Current record-family handle.
-
    */
   readonly #current: CurrentStorage<I, S>;
 
   /**
-
    * Optional state-history handle.
-
    */
-  readonly #states: States<I, S> | undefined;
+  #states: States<I, S> | undefined;
 
   /**
-
    * Optional diagnostic-history handle.
-
    */
-  readonly #events: Events<I, S> | undefined;
+  #events: Events<I, S> | undefined;
 
   /**
    * Exposes Entity state history records.
    */
-  readonly states: EntityStateHistoryPort<I, S>;
+  states: EntityStateHistoryPort<I, S>;
 
   /**
    * Exposes Entity event history records.
    */
-  readonly events: EntityEventHistoryPort<I>;
+  events: EntityEventHistoryPort<I>;
 
   /**
-
    * Whether this Entity storage accepts operations.
-
    */
   #open = true;
 
@@ -150,22 +140,57 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
    * @param input Configures the Entity storage families.
    * @param open Opens one record-family storage handle.
    * @param onClose Removes this Entity handle from its factory.
+   * @param lazy Whether optional families are acquired on first use.
    */
   constructor(
-    input: EntityStorageInput<I, S>,
-    open: OpenRecords,
+    private readonly input: EntityStorageInput<I, S>,
+    private readonly open: OpenRecords,
     private readonly onClose: () => void = () => undefined,
+    lazy = false,
   ) {
     this.#current = new CurrentStorage(input, open(input.recordSpec));
     this.current = this.#current;
-    const states = input.stateHistory ? stateHistorySpec(input.stateSchema) : undefined;
-    const events = input.eventHistory ? eventHistorySpec(input.stateSchema) : undefined;
-    this.#states =
-      states === undefined ? undefined : new States(input, open(states.spec, states.group));
-    this.#events =
-      events === undefined ? undefined : new Events(input, open(events.spec, events.group));
-    this.states = this.#states ?? disabledStates();
-    this.events = this.#events ?? disabledEvents();
+    this.states = disabledStates();
+    this.events = disabledEvents();
+    if (!lazy) this.ensure(Boolean(input.stateHistory), Boolean(input.eventHistory));
+  }
+
+  /**
+   * Acquires only missing requested history families, rolling back a failed upgrade.
+   *
+   * @param wantEvents Whether diagnostic Event history is required.
+   * @param wantStates Whether state history is required.
+   */
+  ensure(wantStates: boolean, wantEvents: boolean): void {
+    if (!this.#open) throw new Error("MySQL Entity storage is closed.");
+    let states: States<I, S> | undefined;
+    let events: Events<I, S> | undefined;
+    try {
+      if (wantStates && this.#states === undefined) {
+        const layout = stateHistorySpec(this.input.stateSchema);
+        states = new States(this.input, this.open(layout.spec, layout.group));
+      }
+      if (wantEvents && this.#events === undefined) {
+        const layout = eventHistorySpec(this.input.stateSchema);
+        events = new Events(this.input, this.open(layout.spec, layout.group));
+      }
+      this.#states ??= states;
+      this.#events ??= events;
+      this.states = this.#states ?? disabledStates();
+      this.events = this.#events ?? disabledEvents();
+    } catch (error) {
+      const failures: unknown[] = [];
+      for (const port of [states, events]) {
+        try {
+          port?.close();
+        } catch (cleanup) {
+          failures.push(cleanup);
+        }
+      }
+      if (failures.length)
+        throw new AggregateError([error, ...failures], "MySQL family acquisition failed.");
+      throw error;
+    }
   }
 
   /**
@@ -183,10 +208,21 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   close(): void {
     if (!this.#open) return;
     this.#open = false;
-    this.#current.close();
-    this.states.close();
-    this.events.close();
-    this.onClose();
+    const failures: unknown[] = [];
+    for (const port of [this.#current, this.#states, this.#events]) {
+      try {
+        port?.close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    try {
+      this.onClose();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length === 1) throw failures[0] as Error;
+    if (failures.length) throw new AggregateError(failures, "MySQL Entity storage close failed.");
   }
 
   /**
@@ -370,9 +406,7 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
   }
 
   /**
-
    * Closes the current record handle.
-
    */
   close(): void {
     this.records.close();
@@ -524,9 +558,7 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
   }
 
   /**
-
    * Closes the state-history handle.
-
    */
   close(): void {
     this.records.close();
@@ -636,9 +668,7 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
   }
 
   /**
-
    * Closes the diagnostic-history handle.
-
    */
   close(): void {
     this.records.close();

@@ -137,7 +137,7 @@ describe("StorageSubscriptionRegistry provider configuration", () => {
     await exerciseRegistry(factory);
 
     expect(queries.some((sql) => sql.includes("`stand_subscription_records`"))).toBe(true);
-    factory.close();
+    await factory.close();
   });
 
   it("uses the configured Datastore SubscriptionRecord storage handle", async () => {
@@ -154,6 +154,6 @@ describe("StorageSubscriptionRegistry provider configuration", () => {
     await exerciseRegistry(factory);
 
     expect(selected).toBe(true);
-    factory.close();
+    await factory.close();
   });
 });

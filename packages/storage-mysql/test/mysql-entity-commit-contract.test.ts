@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { Identifiers } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -37,6 +37,59 @@ import { MysqlEntityStorage } from "../src/mysql/entity-history.js";
 import { mysqlCurrentRecord, mysqlEntityTables } from "../src/mysql/testing.js";
 
 describe("MysqlEntityStorage independent histories", () => {
+  it("opens commit history families lazily and rolls back a failed upgrade", () => {
+    const current = fakeRecords([]);
+    const failedState = fakeRecords([]);
+    const closeFailedState = vi.spyOn(failedState, "close");
+    const retainedState = fakeRecords([]);
+    const diagnostics = fakeRecords([]);
+    const ports = [current, failedState, retainedState, diagnostics];
+    let attempts = 0;
+    const open = vi.fn(() => {
+      attempts += 1;
+      if (attempts === 3) throw new Error("diagnostic acquisition failed");
+      return ports.shift() as never;
+    });
+    const storage = new MysqlEntityStorage(entityInput(true, true), open, () => undefined, true);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(() => {
+      storage.ensure(true, true);
+    }).toThrow(/diagnostic acquisition failed/);
+    expect(closeFailedState).toHaveBeenCalledTimes(1);
+    expect(storage.isOpen()).toBe(true);
+    storage.ensure(true, true);
+    storage.ensure(true, true);
+    expect(open).toHaveBeenCalledTimes(5);
+    storage.close();
+  });
+  it("attempts every retained MySQL family close and preserves all failures", () => {
+    const failures = [
+      new Error("current close"),
+      new Error("state close"),
+      new Error("event close"),
+    ];
+    const closeRecords = failures.map((failure) => ({
+      ...fakeRecords([]),
+      close: vi.fn(() => {
+        throw failure;
+      }),
+    }));
+    const ports = [...closeRecords];
+    const released = vi.fn();
+    const storage = new MysqlEntityStorage(
+      entityInput(true, true),
+      () => ports.shift() as never,
+      released,
+    );
+    try {
+      storage.close();
+      throw new Error("Expected close failure.");
+    } catch (error) {
+      expect(error).toMatchObject({ errors: failures });
+    }
+    for (const record of closeRecords) expect(record.close).toHaveBeenCalledTimes(1);
+    expect(released).toHaveBeenCalledTimes(1);
+  });
   it("resolves only enabled Task families", () => {
     expect(mysqlEntityTables(entityInput(false, false))).toHaveLength(1);
     expect(mysqlEntityTables(entityInput(true, true))).toHaveLength(3);
@@ -131,10 +184,7 @@ function entityInput(
       clone: (value) => create(TaskIdSchema, value),
       key: (value) => value.value,
       pack: (value) => Identifiers.pack(TaskIdSchema, value),
-      unpack: (value) =>
-        value.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
-          ? fromBinary(TaskIdSchema, value.value)
-          : undefined,
+      unpack: (value) => AnyPacker.tryUnpack(value, TaskIdSchema),
     },
     columns: [],
     recordSpec: new RecordSpec({
@@ -142,7 +192,7 @@ function entityInput(
       recordType: EntityRecordSchema,
       idSchema: TaskIdSchema,
       extractId: (value) =>
-        value.entityId === undefined ? taskId("") : fromBinary(TaskIdSchema, value.entityId.value),
+        value.entityId === undefined ? taskId("") : AnyPacker.unpack(value.entityId, TaskIdSchema),
     }),
     sourceType: TaskSchema,
     stateSchema: TaskSchema,

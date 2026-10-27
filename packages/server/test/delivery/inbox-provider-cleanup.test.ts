@@ -62,9 +62,9 @@ describe.skipIf(!providerEnabled(inboxProvider, "mysql", mysqlUrl !== undefined)
         .setStringifierRegistry(stringifiers)
         .build();
     });
-    afterAll(() => {
-      factory.close();
-      secondFactory.close();
+    afterAll(async () => {
+      await factory.close();
+      await secondFactory.close();
     });
 
     it("deletes eligible delivered IDs directly", async () => {
@@ -220,9 +220,9 @@ describe.skipIf(!providerEnabled(inboxProvider, "postgresql", postgresqlUrl !== 
         .setStringifierRegistry(stringifiers)
         .build();
     });
-    afterAll(() => {
-      factory.close();
-      secondFactory.close();
+    afterAll(async () => {
+      await factory.close();
+      await secondFactory.close();
     });
 
     it("deletes eligible delivered IDs directly", async () => {
@@ -260,7 +260,7 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
       try {
         await expect(removeExact(factory, context)).resolves.toBeUndefined();
       } finally {
-        factory.close();
+        await factory.close();
       }
     });
 
@@ -286,8 +286,8 @@ describe.skipIf(!providerEnabled(inboxProvider, "datastore", datastoreHost !== u
           ),
         ).resolves.toBeUndefined();
       } finally {
-        firstFactory.close();
-        secondFactory.close();
+        await firstFactory.close();
+        await secondFactory.close();
       }
     });
   },

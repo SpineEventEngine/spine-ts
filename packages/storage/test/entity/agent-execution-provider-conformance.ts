@@ -14,7 +14,8 @@
 
 import { randomUUID } from "node:crypto";
 import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker } from "@spine-event-engine/core";
 import { CommandIdSchema, CommandSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
   AgentAcceptedInvocationSchema,
@@ -153,10 +154,7 @@ async function completedOutput<I, S extends Message>(
   const draft = create(DraftSupportReplySchema, { agent, question: "Please review." });
   const command = create(CommandSchema, {
     id,
-    message: create(AnySchema, {
-      typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
-      value: toBinary(DraftSupportReplySchema, draft),
-    }),
+    message: AnyPacker.pack(DraftSupportReplySchema, draft),
   });
   const next = clone(AgentExecutionRecordSchema, prior);
   next.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;

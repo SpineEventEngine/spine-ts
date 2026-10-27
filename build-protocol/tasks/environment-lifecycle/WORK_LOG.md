@@ -5,10 +5,9 @@
 Started 2026-10-27 from freshly fetched official master
 `ff6c8669537a016c47f012150306500d3b52b5d1`. Branch `environment-lifecycle` is in
 `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
-Checkpoints `c0c312b57`, `6ccfc3efc` and `f8a663cbe` were pushed to official
+Checkpoints `c0c312b57`, `6ccfc3efc`, `f8a663cbe` and `0974d7627` were pushed to official
 `origin/environment-lifecycle`. They contain initial repository and EventStore
-retention, safe closure, repository query/history retention and the accepted
-task specification. No PR has
+retention, safe closure, repository query/history retention and shared AnyPacker with the accepted task specification. No PR has
 been created. Full-task acceptance remains pending.
 
 Repository query/history retention has converged after focused verification and
@@ -16,7 +15,8 @@ independent review. Protected Agent history and Entity maintenance operations
 now share admission and shutdown tracking; see REVIEW_LOG.md. This checkpoint
 was committed and pushed as f8a663cbe. AnyPacker implementation and caller adoption are now complete. The correction
 preflight, targeted API/reliability reviews and final changed-path coverage
-confirmation passed; checkpoint push is next. The prior checkpoint remains
+confirmation passed. Checkpoint 0974d7627 was committed and pushed to official
+origin/environment-lifecycle; provider lifecycle work follows. The prior checkpoint remains
 independently reviewable.
 No compatibility alias or provider workaround was introduced.
 
@@ -137,10 +137,11 @@ close; AnyPacker uses local base-libraries/base/.../protobuf/AnyPacker.java.
 
 ## Next actions
 
-Complete AnyPacker core/JSON behavior, full caller adoption and independent review,
-then commit and immediately push. Continue MILESTONES.md
-through provider preparation, TenantIndex, context registration, Agent recovery
-removal, shared environment/Delivery and startup behavior. Keep narrow API docs
+AnyPacker is reviewed and pushed at 0974d7627. Complete provider retention,
+awaitable cleanup, and Datastore trim with focused/live tests and independent
+review, then commit and immediately push. Continue MILESTONES.md through factory
+preparation, TenantIndex, context registration, Agent recovery removal, shared
+environment/Delivery and startup behavior. Keep narrow API docs
 current; finish broad examples after interfaces stabilize. Run final release,
 security and exact-SHA CI gates, select the required unused common workspace
 version and push every feature commit. No existing-data migration, PR creation
@@ -231,3 +232,282 @@ ProjectOverviewId Any and rejecting an unequal lookup. The two narrow tests and
 tooling/format/lint/diff checks passed; fresh LCOV confirms descriptor execution.
 All AnyPacker review concerns are accepted. Next: checkpoint/push, then D-0148
 provider lifetime/retention work. Full release/security remain pending.
+
+## Active provider milestone
+
+AnyPacker checkpoint 0974d7627 is pushed. Continue D-0148 and milestone 3 with
+the existing implementer storage_retention (explicit immutable Sol/medium).
+Estimated 2–4 hours for shared awaitable shutdown, retained internal records in
+memory/PostgreSQL/MySQL-MariaDB/Datastore, Datastore trim pagination, focused and
+live provider checks, reviews and checkpoints. Follow the accepted external
+provider-close-contract.md; no new architecture pass without a concrete blocker.
+Start with awaitable close propagation and memory retention, keeping all built-in
+providers/callers compiling and current close outcomes observable. Then retain
+SQL and Datastore commit records in bounded patches and fix independent trim
+pagination. No ordinary RecordStorage close contract change, generic lifecycle
+framework, migration, Agent recovery extension or provider Any workaround.
+
+Behavior acceptance: retain each used family once, acquire optional families only
+when used, drain admitted commits before child/pool closure, synchronously reject
+new work on close, preserve retries and captured inputs, attempt every cleanup
+and expose all failures, roll back only newly acquired partial families and allow
+retry. Keep independent public handles and borrowed ports independent. Internal
+idle cleanup remains guarded for synchronous rollback. No full release gate yet.
+
+In parallel, mechanical_checks (same explicit immutable Luna/low) inventories
+factory/EntityCommitStorage close callers at immutable baseline 0974d7627. Focus
+on discarded completion in callbacks/finally/teardown and synchronous rollback
+callers; distinguish existing returned/awaited calls. Read-only evidence for the
+writer, not a new architecture decision or independent implementation stream.
+
+Provider baseline tests first failed for intended reasons: two current-only
+commits created two memory Entity stores, and factory close did not fence a
+previously issued commit handle while a write was gated. Shared-close/memory
+implementation is active. Read-only caller inventory is accepted from the explicit
+Luna/low function: repository ordinary versus idle cleanup, memory/PostgreSQL
+Agent finally blocks, Datastore bundle propagation, direct tests/examples and
+custom factory overrides need attention. Evidence is external
+provider-close-callers.md; no new architecture decision or child edits.
+
+Provider contract intermediate evidence: storage/all three persistent provider/
+server package typechecks pass. Memory commit suite passes 29 tests. Four focused
+provider suites pass 79 tests after preserving asynchronous commit rejection and
+confirming PostgreSQL pool close follows admitted writes. The writer is tightening
+cleanup failure aggregation and caller propagation before freezing the coherent
+shared-close/memory-retention slice. SQL/Datastore internal record retention and
+Datastore trim remain subsequent patches; no provider milestone commit yet.
+
+Provider sequencing refinement: after shared-close/memory behavior and typechecks
+are green, continue bounded PostgreSQL, MySQL and Datastore retention patches in
+the same implementation context. Review the coherent milestone after those
+related lifetime classes converge, rather than review signatures immediately
+before editing them again. Earlier focused review remains available for a
+concrete correctness blocker. Datastore pagination can close separately if its
+diff is independently substantial. No extra implementation stream or commit yet.
+
+Lifetime inspection confirmed two implementation defects during this slice:
+memory acquisition ran before the admitted Promise was tracked, and idle cleanup
+stored an already-rejected Promise. Correct before review: record admission before
+backend callbacks and retain idle failure synchronously until an ordinary async
+close is requested. Focused gated tests establish the required behavior.
+
+Provider checkpoint: shared-close/memory focused suites pass 79 tests and affected
+package typechecks/cleanup checks pass. PostgreSQL retention regression failed as
+expected with two record closes before wrapper close, then passes with retained
+current storage. Its 16 commit tests and package typecheck pass. Optional-family
+rollback and cleanup diagnostics remain under implementation before MySQL and
+Datastore retention. No review or provider commit yet.
+
+While the writer finishes milestone 3, mechanical_checks (existing read-only
+function, explicit immutable gpt-6-luna/low) inventories milestone 4 preparation
+entry points at committed 0974d7627: factory construction connections, record
+initializers, provider catalog/tenant settings, and existing tests. This is source
+mapping only; accepted architecture remains unchanged, no source edits or tests.
+Results are external to version control and feed the next bounded implementation
+brief. Runtime metadata remains unavailable beyond the configured dispatch.
+
+MySQL retention checkpoint: mocked repeated commits first failed with 12 premature
+record closes, then passed after current/delivery records and lazy histories were
+retained. A real MysqlEntityStorage test covers partial optional-family rollback
+and retry without duplicate acquisition. Two focused suites pass 7 tests and
+MySQL typechecking passes. PostgreSQL optional-family rollback/retry also passes.
+Writer proceeds with Datastore, then narrow TSDoc/caller propagation and preflight.
+
+Accepted the read-only factory-preparation map from mechanical_checks at immutable
+0974d7627. Confirmed explicit Luna/low dispatch and no source changes; separate
+runtime metadata unavailable. The map identifies builder connection probes and
+coupled creation/verification in PG/MySQL, plus provider-native catalog and test
+seams. Its final claim that the TS resolver contract is unsettled is not accepted:
+the human approved setTenantResolver(tenantId => options). The proposal only says
+JVM JDBC does not already establish that API. No product question is reopened.
+
+Datastore retention checkpoint: repeated commits first opened current storage
+twice, then passed with retained current and lazy optional records. Entity-history
+suite passes 31 tests; combined factory/history suites pass 41; package typecheck
+passes. Built-in commit capability avoids discarding a whole read bundle; custom
+creator selection remains tracked. The memory reentrant admission and idle-close
+failure tests now explicitly pass 2/2. Writer continues caller awaits, Datastore
+trim and coherent preflight before independent review. No M3 commit yet.
+
+Datastore trimming regression reproduced repeated first-page reads for 257 records
+retaining 129. The 129-to-1 case already passed after shared AnyPacker correction.
+Keyset cursor progress now passes all 33 Entity-history tests. No native-key
+identity workaround or existing-data conversion was introduced. Named memory
+regressions are `registers reentrant acquisition before close` and `reports idle
+cleanup synchronously without orphan rejection`; both pass. Integration/caller
+checks continue before the frozen review input.
+
+A gated Datastore bundle-close regression exposed premature synchronous read-port
+closure while a commit was active. Bundle shutdown now fences commits immediately,
+awaits their drain, then closes read records and aggregates both cleanup failures.
+The new test failed before the correction; all 34 history tests now pass. Caller
+propagation/docs and deterministic checks remain before the review wave.
+
+A demonstrated custom-provider contract blocker needs a bounded architecture
+review, estimated 0.15–0.3 hours within M3. The existing Datastore custom Entity
+creator returns a bundle; returning only bundle.commits leaves extra read/history
+resources until factory close. Ordinary commit close can await bundle closure,
+but synchronous repository rollback has no original bundle idle-close contract.
+The in-progress optional closeIdle member is not an accepted decision yet. Do not
+silently discard a Promise or merely report unsupported cleanup while leaking the
+bundle. requirements_splitter custom_provider_cleanup uses explicit
+gpt-6-astra/high, read-only, no subagents, to settle the smallest provider contract
+and lifetime rules. Ordinary caller/TSDoc fixes continue with the sole writer.
+
+Accepted custom_provider_cleanup requirements-splitter decision after reading its
+source-backed report; explicit Astra/high dispatch confirmed, separate runtime
+metadata unavailable. No repository edits/tests by that role. D-0148 now requires
+async normal bundle close and mandatory internal idle cleanup. The custom commit
+adapter delegates closure to the entire bundle, with one factory disposal root.
+Idle cleanup must reject active work or unfinished async cleanup before release;
+all paths preserve cleanup outcomes and attempt every release. No optional-method
+fallback, custom-provider bypass or generic lifecycle class. Exact paths/tests
+are in external custom-provider-cleanup-decision.md; sole implementer continues.
+
+M3 runtime/test freeze: the custom Datastore bundle contract and one-path disposal
+are implemented. Red custom individual-close and admitted-bundle tests now pass;
+six focused suites pass 103 tests. Affected package/tooling typechecks, TSDoc and
+cleanup checker pass. Writer restricts remaining edits to narrow docs/formatting.
+Independent mechanical preflight begins with mechanical_checks, reused explicit
+immutable Luna/low profile, covering focused provider/repository tests, changed
+production branch coverage, tooling/docs/lint and all four live database engines.
+Use dedicated task containers only. No full release gate; one aggregate review
+wave follows clean preflight. The current M3 remainder estimate is 1–2 hours for
+custom cleanup integration, tests, specialist review and immediate pushed commit.
+
+Independent preflight first result: 544/545 tests pass in 12 focused files. The
+remaining assertion expects old per-tenant interleaving of Entity/commit cleanup
+errors. Inspection confirms all four errors survive; commits now drain before
+physical ports, as D-0148 requires. Correct the assertion without introducing an
+unnecessary error-order promise. Writer's final lint inventory has 26 issues in
+four files (external provider-eslint-remaining.log); 32 earlier floating test-close
+calls were corrected and typechecked before the frozen run.
+
+Orchestrator source inspection during that failure triage also confirmed
+RepositoryStorage.closeLifetimePorts uses commits.map(commit => commit.close())
+without capturing a synchronous throw. A custom provider can then prevent the
+remaining commit and physical cleanup attempts. Include a focused synchronous
+throw regression and preserve immediate fencing/attempt-all semantics in the
+pre-review correction batch. Independent coverage/live checks continue first.
+
+Live preflight: PostgreSQL 12/12, MySQL 15/15 and MariaDB 15/15 pass. Datastore
+passes 12/13 including the former trim timeout; its failure is a read assertion
+before unawaited async bundle close has settled. Update those close callers.
+The touched live history fixture also still uses StringValue as Entity state
+and manual Any helpers; replace it with existing ProjectState/ProjectId helpers,
+shared AnyPacker, and domain-appropriate Events. Scalar record/ID fixtures remain
+legitimate. The earlier residual Any audit explicitly covered production only;
+normal provider test helpers still contain direct Any payload conversions. Extend
+fixture adoption during this correction, preserving deliberate malformed/wire
+encoding tests and avoiding a core/proto dependency inversion.
+
+Independent preflight function complete and accepted with explicit Luna/low
+configuration; runtime metadata limitation recorded. Full report is external
+provider-preflight.md. Production/tests unfreeze for one pre-review correction
+batch, estimated 0.4–0.7 hours: obsolete cleanup error-order assertion, live
+Datastore awaited close and domain-correct fixtures/shared Any helpers, repository
+synchronous close-throw containment, remaining 26 lint errors, and behavior tests
+for required acquisition-plus-cleanup and multi-resource cleanup failure reporting.
+Ordinary Any test helpers missed by the production-only adoption audit are included;
+intentional malformed/raw encoding tests and package dependency direction remain
+unchanged. Same implementer, no new writer or architecture pass. Re-run focused
+affected tests/Datastore emulator and deterministic checks before review.
+
+While the implementer corrects provider fixture helpers, mechanical_checks reuses
+its explicit immutable Luna/low profile for a distinct read-only Any audit outside
+storage packages: ordinary tests/examples versus intentional raw Protobuf or
+malformed-envelope tests. The earlier residual audit covered production. Identify
+only genuine remaining Any payload pack/unpack helpers, avoid raw RPC bytes and
+core/proto dependency inversion, and save an external bounded caller list. No
+source edits or duplicate provider-helper audit.
+
+The corrected Datastore emulator run passes 13/13 tests, including the former trim
+timeout and awaited bundle cleanup with domain-correct Project fixtures. The
+read-only non-storage Any fixture audit is accepted as a caller inventory from
+explicit Luna/low (metadata limitation unchanged). Ordinary helper conversions
+remain in server/integration/delivery/transport tests and remote-app fixtures;
+intentional malformed/wire/alias cases remain explicit. Keep M3's correction
+bounded to provider fixtures. Finish the listed non-storage helpers with their
+scheduled server/Delivery/fixture changes before final acceptance; do not reopen
+completed production AnyPacker design or create core/proto dependency inversion.
+The external any-fixture-adoption-audit.md is the exact pending list.
+
+Correction evidence checkpoint: repository synchronous/async cleanup failure cases
+both pass and preserve the exact four-error multiset. Six provider suites pass
+109 tests including acquisition-plus-rollback, multi-record close and catalog
+cleanup failures. Combined repository/provider coverage run passes 563 tests in
+13 files; scoped ESLint is clean. Three test-only Any helper typing corrections
+are awaiting the final tooling rerun. Fresh LCOV is external
+provider-correction-coverage/lcov.info. Mechanical_checks (same explicit immutable
+Luna/low) now inspects changed-branch evidence only, without duplicating active
+writer typechecks or test runs, before the review wave.
+
+Human correction during M3: duplicate domain Entity state types must always be
+rejected, including tests. No disabling switch or test-only exception is allowed.
+Source search confirms the planned switch/registry is not implemented yet; M6 is
+pending. Updated TASK ledger, PROPOSAL, MILESTONES and D-0146 before implementation.
+The internal state record therefore contains at most one domain context per type.
+Do not add a Tests profile for this rule. Preserve System Context exclusion,
+identity-based registration, early reservations, attempt-all cleanup and reset
+protection. Tests close/reuse contexts or use distinct domain schemas; process
+replicas remain separate environments. No new architecture pass is needed for
+this simplification of an unimplemented contract. Work continues.
+
+Provider correction freeze: 563 focused tests plus 15 additional Agent/provider
+tests pass; all static/docs gates pass. Fresh live PG and Datastore each pass
+13 tests; MySQL/MariaDB each pass 15 with a tenant-specific skip after replacing
+stale task-test databases containing old handwritten Any URLs. Finish the skipped
+tenant cases in fresh dedicated test databases before accepting live evidence.
+No existing-data migration is involved. Writer is idle pending review/corrections.
+
+Accepted corrected-coverage inspection from explicit Luna/low. Some earlier
+failure tests exercise read storage rather than retained commit storage. Finish
+only the concrete new-contract gaps in provider-correction-coverage.md: PG/MySQL/
+Datastore acquisition-plus-rollback errors; MySQL/Datastore commit multi-close;
+MySQL commit-plus-pool and Datastore bundle-plus-catalog aggregation; successful
+custom bundle idle disposal and repeatable outcome. Continue the same pre-review
+correction, estimated 0.2–0.4 hours including fresh tenant-isolation SQL tests.
+No broader coverage matrix or unrelated baseline branch work. Same implementer;
+review starts after this cheap preflight is clean.
+
+Final pre-review acceptance: the remaining 3 focused suites pass 64 tests; parent
+independently parsed fresh LCOV and confirmed all cited new failure/idle lines
+have hits. Current AnyPacker tenant isolation passes separately on MySQL and
+MariaDB with fresh dedicated tenant databases. Static gates remain clean; final
+follow-up changed tests only. The one full review wave begins, estimated
+0.3–0.6 hours including bounded corrections. Production/tests stay frozen until
+all relevant review concerns are collected. Full release/security stay pending.
+
+M3 review wave complete. Accepted one correction batch listed in REVIEW_LOG:
+callback admission, settled-root removal, missing await callers and narrow docs.
+Estimate 0.3-0.6 hours including focused tests and targeted review. Parent confirmed
+row-validation ID callbacks share the capture admission defect. All current
+production work remains assigned to one implementer; no architecture change or
+full verification rerun is needed for this bounded correction.
+
+M4 bounded contract planning while M3 corrections continue: the accepted async
+application tenant resolver must coexist with synchronous createRecordStorage and
+provider Entity factories. Current SQL layout binding assumes a resolved pool/
+schema. Shared preparation also lacks an exact provider SPI for model requirements.
+This is a demonstrated public/provider-contract gap, not a repeat of the full
+accepted architecture pass. Dispatch requirements_splitter preparation_contract
+with explicit gpt-6-astra/high to freeze the smallest coherent contracts and
+implementation slices; read-only source, external design report only. Estimate
+0.2-0.4 hours including source inspection and recommendation. No production
+changes until M3 commits and the parent accepts this bounded recommendation.
+
+M3 provider retention/lifecycle accepted after all four review concerns and
+targeted correction confirmations. Current evidence: 104 focused tests with fresh
+LCOV after final race test, earlier 111 affected tests, prior 563 combined tests,
+all four live provider families, current build/tooling/lint/docs/format checks.
+No physical I/O change followed live evidence. Final doc-only stale Datastore
+paragraph corrected. Commit and push provider checkpoint; preserve generation-only
+manifest changes for final convergence. No PR requested or created.
+
+M4 bounded architecture accepted as D-0150 and FACTORY_PREPARATION.md. Explicit
+requirements_splitter preparation_contract used Astra/high; runtime metadata
+unavailable, immutable dispatch confirmed. The parent identified inconsistent
+Datastore create/check proofs; same pass corrected them to identical documented
+native structural facts, with application-managed index deployment outside that
+proof. Five slices start with shared contract/memory. Existing JVM source paths
+and inspection impact are recorded in the accepted design.

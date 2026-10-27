@@ -1415,6 +1415,7 @@ interface RepositoryStorageLifetime {
   readonly entities: Map<string, Map<string | symbol, RetainedEntitySlot>>;
   readonly histories: Map<string, Map<string | symbol, AgentHistoryStorage<unknown>>>;
   readonly ports: Set<RepositoryClosePort>;
+  readonly commits: Set<EntityCommitStorage>;
   readonly active: Set<Promise<unknown>>;
   eventStore?: EventStore;
   closing?: Promise<void>;
@@ -2896,6 +2897,7 @@ class AggregateExecutionSupport {
 
   /**
    * Returns one restored Aggregate with its captured storage configuration.
+   *
    * @param entityId Aggregate identifier.
    * @param current Stored Aggregate snapshot, if present.
    * @param entity Restored Aggregate instance.
@@ -7997,6 +7999,7 @@ Object.freeze(RepositoryEntities);
 const RepositorySignals = {
   /**
    * Packs a repository-produced value after checking its domain constraints.
+   *
    * @typeParam Schema Generated schema for the value.
    * @param schema Generated schema for the value.
    * @param message Repository-produced message to pack.
@@ -8848,6 +8851,7 @@ Object.freeze(RepositorySignals);
 
 /**
  * Internal repository stand operations.
+ *
  * @internal
  */
 export const RepositoryStand = {
@@ -10728,6 +10732,7 @@ Object.freeze(RepositoryRoutes);
 const RepositoryStorage = {
   /**
    * Returns one retained EventStore for unchanged Process Manager output.
+   *
    * @param repository Registered Process Manager repository.
    * @param runtime Its captured runtime services.
    * @returns Tenant-aware EventStore for produced Events.
@@ -10740,6 +10745,7 @@ const RepositoryStorage = {
 
   /**
    * Creates one repository runtime's retained storage registry.
+   *
    * @returns Empty registry accepting storage work.
    */
   newLifetime(): RepositoryStorageLifetime {
@@ -10747,6 +10753,7 @@ const RepositoryStorage = {
       entities: new Map(),
       histories: new Map(),
       ports: new Set(),
+      commits: new Set(),
       active: new Set(),
       open: true,
     };
@@ -10754,6 +10761,7 @@ const RepositoryStorage = {
 
   /**
    * Returns the active storage registry for one registered repository.
+   *
    * @param repository Registered repository.
    * @returns Its current retained-storage registry.
    */
@@ -10765,6 +10773,7 @@ const RepositoryStorage = {
 
   /**
    * Admits one complete physical storage operation before runtime closure.
+   *
    * @typeParam T Result of the operation.
    * @param repository Registered repository.
    * @param work Work that acquires and uses retained storage.
@@ -10788,6 +10797,7 @@ const RepositoryStorage = {
 
   /**
    * Starts repository shutdown after new admissions are fenced.
+   *
    * @param repository Repository being detached.
    * @returns Completion after admitted operations and every close attempt.
    */
@@ -10806,6 +10816,7 @@ const RepositoryStorage = {
 
   /**
    * Rejects synchronous rollback while repository storage work remains active.
+   *
    * @param repository Repository being rolled back.
    */
   assertIdle(repository: RepositoryView): void {
@@ -10816,6 +10827,7 @@ const RepositoryStorage = {
 
   /**
    * Closes retained resources synchronously during idle assembly rollback.
+   *
    * @param repository Repository being rolled back.
    */
   closeRuntimeIdle(repository: RepositoryView): void {
@@ -10834,7 +10846,7 @@ const RepositoryStorage = {
         errors.push(error);
       }
     }
-    errors.push(...this.closeLifetimePorts(lifetime));
+    errors.push(...this.closeLifetimePortsIdle(lifetime));
     const failure = this.closeFailure(errors);
     lifetime.idleOutcome = failure === undefined ? {} : { error: failure };
     if (failure !== undefined) throw failure;
@@ -10842,6 +10854,7 @@ const RepositoryStorage = {
 
   /**
    * Waits for admitted storage operations, closes the retained EventStore, and releases all ports.
+   *
    * @param lifetime Repository storage registry being closed.
    * @returns Completion after every close attempt.
    */
@@ -10855,20 +10868,33 @@ const RepositoryStorage = {
         errors.push(error);
       }
     }
-    errors.push(...this.closeLifetimePorts(lifetime));
+    errors.push(...(await this.closeLifetimePorts(lifetime)));
     const failure = this.closeFailure(errors);
     if (failure !== undefined) throw failure;
   },
 
   /**
    * Closes each retained physical port once.
+   *
    * @param lifetime Repository storage registry being closed.
    * @returns Every close failure in attempt order.
    */
-  closeLifetimePorts(lifetime: RepositoryStorageLifetime): unknown[] {
+  async closeLifetimePorts(lifetime: RepositoryStorageLifetime): Promise<unknown[]> {
+    const commits = [...lifetime.commits];
+    lifetime.commits.clear();
     const ports = [...lifetime.ports];
     lifetime.ports.clear();
     const errors: unknown[] = [];
+    const closing = commits.map((commit) => {
+      try {
+        return commit.close();
+      } catch (error) {
+        errors.push(error);
+        return Promise.resolve();
+      }
+    });
+    for (const result of await Promise.allSettled(closing))
+      if (result.status === "rejected") errors.push(result.reason);
     for (const port of ports) {
       try {
         port.close();
@@ -10883,7 +10909,40 @@ const RepositoryStorage = {
   },
 
   /**
+   * Closes ports synchronously during assembly rollback.
+   *
+   * @param lifetime The captured repository storage lifetime.
+   * @returns Synchronous cleanup failures, if any.
+   */
+  closeLifetimePortsIdle(lifetime: RepositoryStorageLifetime): unknown[] {
+    const commits = [...lifetime.commits];
+    lifetime.commits.clear();
+    const ports = [...lifetime.ports];
+    lifetime.ports.clear();
+    lifetime.entities.clear();
+    lifetime.histories.clear();
+    delete lifetime.eventStore;
+    const errors: unknown[] = [];
+    for (const commit of commits) {
+      try {
+        commit.closeIdle();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    for (const port of ports) {
+      try {
+        port.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    return errors;
+  },
+
+  /**
    * Returns one close failure or aggregates multiple failures.
+   *
    * @param errors Physical port cleanup failures.
    * @returns The reported cleanup failure, if any.
    */
@@ -10914,6 +10973,7 @@ const RepositoryStorage = {
 
   /**
    * Returns the canonical tenant/model/history bucket for Entity storage.
+   *
    * @typeParam I Typed Entity identifier.
    * @typeParam S Generated Entity state.
    * @param lifetime Active repository storage registry.
@@ -10939,6 +10999,7 @@ const RepositoryStorage = {
 
   /**
    * Returns the canonical tenant/model bucket for Agent audit history.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.
    * @param lifetime Active repository storage registry.
@@ -10960,6 +11021,7 @@ const RepositoryStorage = {
 
   /**
    * Returns retained read-only Entity storage without acquiring a commit port.
+   *
    * @typeParam I Typed Entity identifier.
    * @typeParam S Generated Entity state.
    * @param repository Registered repository.
@@ -10985,6 +11047,7 @@ const RepositoryStorage = {
 
   /**
    * Returns shared Agent audit history for one tenant and model.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.
    * @param repository Registered Agent repository.
@@ -11019,13 +11082,14 @@ const RepositoryStorage = {
    * @param acquisitionError Earlier acquisition failure, if any.
    */
   closePorts(
-    ports: readonly Pick<EntityCommitStorage, "close">[],
+    ports: readonly (RepositoryClosePort | EntityCommitStorage)[],
     acquisitionError?: unknown,
   ): void {
     const errors: unknown[] = acquisitionError === undefined ? [] : [acquisitionError];
     for (const port of ports) {
       try {
-        port.close();
+        if ("closeIdle" in port) port.closeIdle();
+        else port.close();
       } catch (error) {
         errors.push(error);
       }
@@ -11068,6 +11132,7 @@ const RepositoryStorage = {
 
   /**
    * Adds commit and Agent ports to a retained or newly acquired Entity port.
+   *
    * @typeParam I Typed Entity identifier.
    * @typeParam S Generated Entity state.
    * @param repository Registered repository.
@@ -11105,7 +11170,8 @@ const RepositoryStorage = {
       this.retainUpgradedSlot(lifetime, bucket, key, existing, full, entity, commit, ports);
       return full;
     } catch (error) {
-      const rollback: RepositoryClosePort[] = commits === undefined ? [] : [commits];
+      const rollback: (RepositoryClosePort | EntityCommitStorage)[] =
+        commits === undefined ? [] : [commits];
       if (existing === undefined) rollback.push(entity);
       this.closePorts(rollback, error);
       throw error;
@@ -11114,6 +11180,7 @@ const RepositoryStorage = {
 
   /**
    * Records a completed Entity storage upgrade in the current lifetime.
+   *
    * @typeParam I Typed Entity identifier.
    * @typeParam S Generated Entity state.
    * @param lifetime Active repository registry.
@@ -11139,12 +11206,13 @@ const RepositoryStorage = {
     slot.full = full as RepositoryEntityStorage<unknown, Message>;
     bucket.set(key, slot);
     lifetime.ports.add(entity);
-    lifetime.ports.add(commit);
+    lifetime.commits.add(commit);
     if (ports !== undefined) lifetime.ports.add(ports.agentExecution);
   },
 
   /**
    * Acquires Agent execution while reusing or preparing shared audit history.
+   *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.
    * @param repository Registered Agent repository.
@@ -11308,6 +11376,7 @@ const RepositoryHistoryInternals = {
 
   /**
    * Admits complete state-history maintenance against a captured runtime.
+   *
    * @param repository Repository with the bound Entity.
    * @param lifetime Runtime that provided the retained port.
    * @param states Retained state-history port.
@@ -11328,6 +11397,7 @@ const RepositoryHistoryInternals = {
 
   /**
    * Admits complete Event-history maintenance against a captured runtime.
+   *
    * @param repository Repository with the bound Entity.
    * @param lifetime Runtime that provided the retained port.
    * @param events Retained Event-history port.
@@ -11346,6 +11416,7 @@ const RepositoryHistoryInternals = {
 
   /**
    * Reads one bound historical state within repository admission.
+   *
    * @param repository Registered repository.
    * @param lifetime Captured repository storage lifetime.
    * @param storage Retained Entity read port.
@@ -11369,6 +11440,7 @@ const RepositoryHistoryInternals = {
 
   /**
    * Reads a complete bound state-history page within repository admission.
+   *
    * @param repository Registered repository.
    * @param lifetime Captured repository storage lifetime.
    * @param schema State schema used to unpack rows.
@@ -11395,6 +11467,7 @@ const RepositoryHistoryInternals = {
 
   /**
    * Reads a complete bound Event-history page within repository admission.
+   *
    * @param repository Registered repository.
    * @param lifetime Captured repository storage lifetime.
    * @param cache Bound Event-history cache.

@@ -80,7 +80,7 @@ describe("direct durable record provider selection", () => {
       [...new Set(selected.map((type) => (type as { readonly typeName: string }).typeName))].sort(),
     ).toEqual([InboxMessageSchema.typeName, ShardSessionRecordSchema.typeName].sort());
 
-    factory.close();
+    await factory.close();
   });
 
   it("opens the configured MySQL table for each direct durable record family", async () => {
@@ -142,7 +142,7 @@ describe("direct durable record provider selection", () => {
     expect(schema).not.toContain("provider-inbox");
     expect(schema).not.toContain("provider-shard");
 
-    factory.close();
+    await factory.close();
   });
 });
 

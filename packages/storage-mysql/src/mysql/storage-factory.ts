@@ -374,12 +374,17 @@ class MysqlTenantCursor implements TenantCatalogCursor {
 export class MysqlStorageFactory extends StorageFactory {
   readonly #handles = new Set<{ close(): void }>();
 
+  readonly #commits = new Set<MysqlEntityCommitStorage<unknown, Message>>();
+
   readonly #resolver: MysqlTableResolver;
 
   readonly #databases: ReadonlyMap<string | symbol, MysqlDatabase>;
 
   readonly #catalog: TenantCatalog;
 
+  /**
+   * Whether this record family is closed.
+   */
   #closed: Promise<void> | undefined;
 
   /**
@@ -500,14 +505,44 @@ export class MysqlStorageFactory extends StorageFactory {
 
   /**
    * Closes all storage handles and the connection pool.
+   *
+   * @returns Completion after handles and the pool close.
    */
-  override close(): void {
-    this.#closed ??= (async () => {
-      super.close();
-      for (const handle of this.#handles) handle.close();
-      await Promise.all([...this.#databases.values()].map(({ pool }) => pool.end()));
-    })();
-    void this.#closed;
+  override close(): Promise<void> {
+    this.fenceClose();
+    if (this.#closed !== undefined) return this.#closed;
+    const commits = [...this.#commits].map((handle) => handle.close());
+    return (this.#closed = this.drain(commits));
+  }
+
+  /**
+   * Closes independent handles and pools after admitted commit work.
+   *
+   * @param commits The admitted commit completions.
+   * @returns Completion after admitted work and cleanup settle.
+   */
+  private async drain(commits: readonly Promise<void>[]): Promise<void> {
+    const errors: unknown[] = [];
+    for (const result of await Promise.allSettled(commits))
+      if (result.status === "rejected") errors.push(result.reason);
+    for (const handle of [...this.#handles]) {
+      try {
+        handle.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    try {
+      await this.#catalog.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    for (const result of await Promise.allSettled(
+      [...this.#databases.values()].map(({ pool }) => pool.end()),
+    ))
+      if (result.status === "rejected") errors.push(result.reason);
+    if (errors.length === 1) throw errors[0];
+    if (errors.length) throw new AggregateError(errors, "MySQL factory close failed.");
   }
 
   /**
@@ -538,19 +573,17 @@ export class MysqlStorageFactory extends StorageFactory {
    * @param group Selects a grouped history family, when present.
    * @param database Supplies the resolved tenant database.
    * @returns The opened MySQL record-storage handle.
+   * @param tracked Whether the factory tracks this public handle.
    */
   private createMysqlRecordStorage<I, R extends Message>(
     context: StorageContext,
     spec: RecordSpec<I, R>,
     group?: StorageGroup,
     database = this.database(context),
+    tracked = true,
   ): MysqlRecordStorage<I, R> {
-    const table = this.#resolver.resolve(
-      spec.sourceType.typeName,
-      group?.name,
-      undefined,
-      spec.recordType.typeName,
-    );
+    const source = spec.sourceType.typeName;
+    const table = this.#resolver.resolve(source, group?.name, undefined, spec.recordType.typeName);
     const tableSpec = resolvedMysqlTableSpec({
       tableName: table.tableName,
       sourceType: spec.sourceType,
@@ -571,7 +604,7 @@ export class MysqlStorageFactory extends StorageFactory {
       tableSpec,
       this.stringifiers,
     );
-    this.#handles.add(handle);
+    if (tracked) this.#handles.add(handle);
     return handle;
   }
 
@@ -582,19 +615,24 @@ export class MysqlStorageFactory extends StorageFactory {
    * @typeParam S Entity state message type.
    * @param input Configures the Entity storage families.
    * @returns The MySQL Entity storage handle.
+   * @param lazy Whether optional families are acquired on first use.
+   * @param tracked Whether the factory tracks this public handle.
    */
   private createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
+    tracked = true,
+    lazy = false,
   ): MysqlEntityStorage<I, S> {
     const database = this.database(input.context);
     const registration = {} as { handle: { close(): void } };
     const handle = new MysqlEntityStorage(
       input,
-      (spec, group) => this.createMysqlRecordStorage(input.context, spec, group, database),
+      (spec, group) => this.createMysqlRecordStorage(input.context, spec, group, database, tracked),
       () => this.#handles.delete(registration.handle),
+      lazy,
     );
     registration.handle = handle;
-    this.#handles.add(handle);
+    if (tracked) this.#handles.add(handle);
     return handle;
   }
 
@@ -614,12 +652,19 @@ export class MysqlStorageFactory extends StorageFactory {
     const registration = {} as { handle: { close(): void } };
     const handle = new MysqlEntityCommitStorage(
       input,
-      () => this.createEntityStorage(input),
-      () => this.createMysqlRecordStorage(input.context, eventStoreRecordSpec, undefined, database),
-      () => this.#handles.delete(registration.handle),
+      () => this.createEntityStorage(input, false, true),
+      () =>
+        this.createMysqlRecordStorage(
+          input.context,
+          eventStoreRecordSpec,
+          undefined,
+          database,
+          false,
+        ),
+      () => this.#commits.delete(registration.handle as MysqlEntityCommitStorage<unknown, Message>),
     );
     registration.handle = handle;
-    this.#handles.add(handle);
+    this.#commits.add(handle as MysqlEntityCommitStorage<unknown, Message>);
     return handle;
   }
 
@@ -979,8 +1024,35 @@ const MysqlConfigurations = Object.freeze({
  * @typeParam I Captured Entity identifier type.
  * @typeParam S Captured Entity state type.
  */
+type MysqlDeliveryStorage = MysqlRecordStorage<
+  import("@spine-event-engine/proto").EventId,
+  import("@spine-event-engine/proto").Event
+>;
+
+/**
+ * Commits one MySQL Entity scope through retained record families.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam S Generated Entity state message type.
+ */
 class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStorage {
   #open = true;
+
+  /**
+   * Retained Entity record families.
+   */
+  #storage: MysqlEntityStorage<I, S> | undefined;
+
+  #events: MysqlDeliveryStorage | undefined;
+
+  #idleOutcome: { error?: Error } | undefined;
+
+  /**
+   * Commit completions admitted before the close fence.
+   */
+  readonly #active = new Set<Promise<void>>();
+
+  #closing: Promise<void> | undefined;
 
   /**
    * Creates a commit handle for one Entity scope.
@@ -1008,16 +1080,59 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * @param input Supplies the affected Entity and immutable records.
    * @returns Completion after the provider commit.
    */
-  async commit<Id, State extends Message>(
+  commit<Id, State extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
   ): Promise<void> {
-    this.validate(input);
-    const prepared = EntityCommitSnapshots.capture(input);
-    const storage = this.openStorage();
-    const events = this.openEvents();
+    return this.track(() => {
+      this.validate(input);
+      const prepared = EntityCommitSnapshots.capture(input);
+      return this.persist(prepared);
+    });
+  }
+
+  /**
+   * Registers a commit before invoking provider construction callbacks.
+   *
+   * @param action The admitted provider operation.
+   * @returns The admitted provider operation completion.
+   */
+  private track(action: () => Promise<void>): Promise<void> {
+    let complete!: () => void;
+    let fail!: (error: unknown) => void;
+    const work = new Promise<void>((resolve, reject) => {
+      complete = resolve;
+      fail = reject;
+    });
+    this.#active.add(work);
+    void work.then(
+      () => this.#active.delete(work),
+      () => this.#active.delete(work),
+    );
     try {
+      action().then(complete, fail);
+    } catch (error) {
+      fail(error);
+    }
+    return work;
+  }
+
+  /**
+   * Persists an admitted captured mutation and one safe retry.
+   *
+   * @param prepared The immutable prepared mutation.
+   * @returns Completion after the captured mutation is persisted.
+   * @typeParam Id Entity identifier or record type.
+   * @typeParam State Generated Entity state message type.
+   */
+  private async persist<Id, State extends Message>(
+    prepared: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
+  ): Promise<void> {
+    let storage: MysqlEntityStorage<I, S>;
+    let events: MysqlDeliveryStorage | undefined;
+    try {
+      [storage, events] = this.openCommit(prepared);
       await storage.prepare();
-      await events.prepare();
+      await events?.prepare();
       try {
         await this.apply(prepared, storage, events);
       } catch (error) {
@@ -1026,9 +1141,44 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       }
     } catch (error) {
       throw mysqlError(MysqlStorageOperationError, "MySQL Entity commit failed.", error);
-    } finally {
-      events.close();
-      storage.close();
+    }
+  }
+
+  /**
+   * Opens only the record families required by this commit.
+   *
+   * @param input The captured Entity persistence input.
+   * @returns The retained records required by this commit.
+   * @typeParam Id Entity identifier or record type.
+   * @typeParam State Generated Entity state message type.
+   */
+  private openCommit<Id, State extends Message>(
+    input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
+  ): [MysqlEntityStorage<I, S>, MysqlDeliveryStorage | undefined] {
+    const storage = this.#storage ?? this.openStorage();
+    let freshEvents: MysqlDeliveryStorage | undefined;
+    try {
+      if (input.events?.length && this.#events === undefined) freshEvents = this.openEvents();
+      storage.ensure(Boolean(input.states?.length), Boolean(input.diagnostics?.length));
+      this.#storage ??= storage;
+      this.#events ??= freshEvents;
+      return [storage, input.events?.length ? this.#events : undefined];
+    } catch (error) {
+      const failures: unknown[] = [];
+      try {
+        freshEvents?.close();
+      } catch (cleanup) {
+        failures.push(cleanup);
+      }
+      if (this.#storage === undefined)
+        try {
+          storage.close();
+        } catch (cleanup) {
+          failures.push(cleanup);
+        }
+      if (failures.length)
+        throw new AggregateError([error, ...failures], "MySQL family acquisition failed.");
+      throw error;
     }
   }
 
@@ -1062,14 +1212,16 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   private async apply<Id, State extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
     storage: MysqlEntityStorage<I, S>,
-    events: MysqlRecordStorage<
-      import("@spine-event-engine/proto").EventId,
-      import("@spine-event-engine/proto").Event
-    >,
+    events:
+      | MysqlRecordStorage<
+          import("@spine-event-engine/proto").EventId,
+          import("@spine-event-engine/proto").Event
+        >
+      | undefined,
   ): Promise<void> {
     for (const state of input.states ?? []) await storage.states.append(state);
     for (const diagnostic of input.diagnostics ?? []) await storage.events.append(diagnostic);
-    for (const event of input.events ?? []) await events.writeImmutable(event);
+    for (const event of input.events ?? []) await events?.writeImmutable(event);
     const current = await storage.current.read(input.entityId as unknown as I);
     if (!sameEntity(current, input.next)) await storage.current.write(input.next);
   }
@@ -1137,11 +1289,69 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
 
   /**
    * Closes this commit handle after work already started settles.
+   *
+   * @returns Completion after retained resources are closed.
    */
-  close(): void {
-    if (!this.#open) return;
+  close(): Promise<void> {
     this.#open = false;
-    this.onClose();
+    if (this.#idleOutcome !== undefined)
+      return (this.#closing ??=
+        this.#idleOutcome.error === undefined
+          ? Promise.resolve()
+          : Promise.reject(this.#idleOutcome.error));
+    return (this.#closing ??= this.drain());
+  }
+
+  /**
+   * Closes only when no commit remains admitted.
+   */
+  closeIdle(): void {
+    if (this.#active.size) throw new Error("Entity commit cannot close idle while work is active.");
+    if (this.#idleOutcome !== undefined) {
+      if (this.#idleOutcome.error !== undefined) throw this.#idleOutcome.error;
+      return;
+    }
+    if (this.#closing !== undefined) throw new Error("Entity commit close is in progress.");
+    this.#open = false;
+    const failure = this.closeRetained();
+    this.#idleOutcome = failure === undefined ? {} : { error: failure };
+    if (failure !== undefined) throw failure;
+  }
+
+  /**
+   * Waits for admitted commits before releasing factory tracking.
+   *
+   * @returns Completion after admitted work and cleanup settle.
+   */
+  private async drain(): Promise<void> {
+    await Promise.allSettled([...this.#active]);
+    const failure = this.closeRetained();
+    if (failure !== undefined) throw failure;
+  }
+
+  /**
+   * Closes every retained record family and collects cleanup failures.
+   *
+   * @returns A cleanup failure, if any.
+   */
+  private closeRetained(): Error | undefined {
+    const errors: unknown[] = [];
+    for (const port of [this.#events, this.#storage]) {
+      try {
+        port?.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    this.#events = undefined;
+    this.#storage = undefined;
+    try {
+      this.onClose();
+    } catch (error) {
+      errors.push(error);
+    }
+    if (errors.length === 1) return errors[0] as Error;
+    return errors.length ? new AggregateError(errors, "MySQL commit close failed.") : undefined;
   }
 
   /**

@@ -15,7 +15,8 @@
 import { randomUUID } from "node:crypto";
 import { createPool, type RowDataPacket } from "mysql2/promise";
 import { clone, create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import {
@@ -79,7 +80,7 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
       );
       storage.close();
     } finally {
-      first.close();
+      await first.close();
     }
     const reopened = await builder().build();
     const pool = createPool(required(url));
@@ -145,17 +146,17 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
         entityId: id,
         next: create(EntityRecordSchema, {
           entityId: stale.recipientId,
-          state: create(AnySchema, {
-            typeUrl: `type.spine.server.testing/${SupportReplyAgentStateSchema.typeName}`,
-            value: toBinary(
-              SupportReplyAgentStateSchema,
-              create(SupportReplyAgentStateSchema, { id, proposedReply: "Existing" }),
-            ),
-          }),
+          state: AnyPacker.pack(
+            SupportReplyAgentStateSchema,
+            create(SupportReplyAgentStateSchema, {
+              id,
+              proposedReply: "Existing",
+            }),
+          ),
           version: create(VersionSchema, { number: 1 }),
         }),
       });
-      commit.close();
+      await commit.close();
       const staleClaim = required(await storage.claim(staleKey, "mysql-stale", expiry)).record;
       const staleNext = clone(AgentExecutionRecordSchema, staleClaim);
       staleNext.status = AgentInvocationStatus.AGENT_INVOCATION_COMPLETED;
@@ -247,13 +248,13 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
       });
       const nextCurrent = create(EntityRecordSchema, {
         entityId: collision.recipientId,
-        state: create(AnySchema, {
-          typeUrl: `type.spine.server.testing/${SupportReplyAgentStateSchema.typeName}`,
-          value: toBinary(
-            SupportReplyAgentStateSchema,
-            create(SupportReplyAgentStateSchema, { id: collisionId, proposedReply: "New" }),
-          ),
-        }),
+        state: AnyPacker.pack(
+          SupportReplyAgentStateSchema,
+          create(SupportReplyAgentStateSchema, {
+            id: collisionId,
+            proposedReply: "New",
+          }),
+        ),
         version: create(VersionSchema, { number: 1 }),
       });
       await expect(
@@ -286,7 +287,7 @@ describe.runIf(url !== undefined)("MySQL Agent execution", () => {
       await exerciseAgentExecutionLifecycle(storage);
       storage.close();
     } finally {
-      reopened.close();
+      await reopened.close();
       await pool.query(`DROP TABLE IF EXISTS \`${table}\``);
       await pool.query(`DROP TABLE IF EXISTS \`${head}\``);
       await pool.end();

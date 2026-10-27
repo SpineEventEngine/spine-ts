@@ -111,8 +111,9 @@ model request runs.
 
 ## Lifecycle and errors
 
-`factory.close()` is idempotent, closes registered handles, prevents new handle
-creation, and drains pools. Record and Entity handles can close independently.
+Await `factory.close()` to observe cleanup failures. It synchronously prevents new handle
+creation, waits for admitted Entity commits, then closes registered handles and pools.
+Repeated calls return the same completion. Record and Entity handles can close independently.
 Acquired clients are released in `finally` blocks. History maintenance applies
 each deletion page independently. Top-level provider error messages and public
 responses omit URLs, credentials, SQL text, and driver details. The original

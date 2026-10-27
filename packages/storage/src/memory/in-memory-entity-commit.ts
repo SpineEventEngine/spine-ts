@@ -31,6 +31,8 @@ import type { StorageContext } from "../storage/storage.js";
 import {
   MemoryEntityStorageFactory,
   ENTITY_SCOPE_MUTATION_KEY,
+  InMemoryEntityHistory,
+  MemoryEntityEventHistory,
   type EntityBackend,
   type EntityStorageInput,
   type InMemoryEntityStorage,
@@ -51,15 +53,12 @@ type OpenRecords = <I, R extends Message>(
 ) => TenantRecords<I, R>;
 
 /**
- * Handles opened for one ordered Entity mutation.
- *
- * @typeParam I Entity identifier type.
- * @typeParam S Entity state type.
+ * Retained current, history, diagnostic, and delivery handles for a commit.
  */
-type CommitHandles<I, S extends Message> = readonly [
-  InMemoryEntityStorage<I, S>,
-  InMemoryRecordStorage<EntityStateKey, EntityRecord> | undefined,
-  InMemoryRecordStorage<EventId, Event> | undefined,
+type CommitHandles = readonly [
+  InMemoryEntityStorage<unknown, Message>,
+  InMemoryEntityHistory<unknown, Message> | undefined,
+  MemoryEntityEventHistory<unknown> | undefined,
   InMemoryRecordStorage<EventId, Event> | undefined,
 ];
 
@@ -73,18 +72,34 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   readonly #tenantKey: TenantBoundary["key"];
 
   /**
-
    * Whether this handle uses multitenant storage.
-
    */
   readonly #multitenant: boolean;
 
   /**
-
    * Whether this handle accepts commits.
-
    */
   #open = true;
+
+  readonly #active = new Set<Promise<void>>();
+
+  /**
+   * Repeatable asynchronous close completion.
+   */
+  #closing: Promise<void> | undefined;
+
+  #idleOutcome: { error?: Error } | undefined;
+
+  #entity: InMemoryEntityStorage<unknown, Message> | undefined;
+
+  /**
+   * Retained state-history records.
+   */
+  #states: InMemoryEntityHistory<unknown, Message> | undefined;
+
+  #diagnostics: MemoryEntityEventHistory<unknown> | undefined;
+
+  #delivery: InMemoryRecordStorage<EventId, Event> | undefined;
 
   /**
    * Creates one source- and tenant-bound commit handle.
@@ -92,11 +107,13 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    * @param entities Opens current Entity storage.
    * @param openRecords Opens generated history and Event record slices.
    * @param input Captures the Entity source and tenant boundary.
+   * @param onClose Releases factory tracking after terminal cleanup.
    */
   constructor(
     private readonly entities: MemoryEntityStorageFactory,
     private readonly openRecords: OpenRecords,
     private readonly input: EntityStorageInput<unknown, Message>,
+    private readonly onClose: () => void = () => undefined,
   ) {
     this.#tenantKey = TenantBoundary.of(input.context).key;
     this.#multitenant = input.context.multitenant;
@@ -113,7 +130,10 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
     this.requireOpen();
     this.requireCompatible(input);
-    return this.apply(EntityCommitSnapshots.capture(input));
+    return this.track(() => {
+      const snapshot = EntityCommitSnapshots.capture(input);
+      return this.apply(snapshot);
+    });
   }
 
   /**
@@ -136,6 +156,30 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     extra: { apply(): void; restore(): void },
   ): Promise<void> {
     this.requireOpen();
+    return this.track(() =>
+      this.runAgentConditional(entity, entityId, expectedVersion, input, extra),
+    );
+  }
+
+  /**
+   * Performs the captured conditional Agent change.
+   *
+   * @param entity The Entity persistence contract.
+   * @param entityId The captured Entity identifier.
+   * @param expectedVersion The required prior Entity version.
+   * @param extra The additional conditional records.
+   * @param input The captured Entity persistence input.
+   * @returns Completion after the conditional Agent change settles.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam S Generated Entity state message type.
+   */
+  private runAgentConditional<I, S extends Message>(
+    entity: EntityStorageInput<I, S>,
+    entityId: I,
+    expectedVersion: number,
+    input: EntityCommitInput<I, S> | undefined,
+    extra: { apply(): void; restore(): void },
+  ): Promise<void> {
     const backend = this.entities.backend(entity);
     const key = entity.id.key(entityId);
     const snapshot = input === undefined ? undefined : EntityCommitSnapshots.capture(input);
@@ -227,10 +271,35 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   }
 
   /**
-   * Closes this handle to new commits.
+   * Closes retained resources after admitted work settles.
+   *
+   * @returns The repeatable close outcome.
    */
-  close(): void {
+  close(): Promise<void> {
     this.#open = false;
+    if (this.#idleOutcome !== undefined)
+      return (this.#closing ??=
+        this.#idleOutcome.error === undefined
+          ? Promise.resolve()
+          : Promise.reject(this.#idleOutcome.error));
+    return (this.#closing ??= this.drain());
+  }
+
+  /**
+   * Closes retained adapters only when no commit is admitted.
+   */
+  closeIdle(): void {
+    if (this.#active.size) throw new Error("Entity commit cannot close idle while work is active.");
+    if (this.#idleOutcome !== undefined) {
+      if (this.#idleOutcome.error !== undefined) throw this.#idleOutcome.error;
+      return;
+    }
+    if (this.#closing !== undefined) throw new Error("Entity commit close is in progress.");
+    this.#open = false;
+    const failure = this.closeRetained();
+    this.#idleOutcome = failure === undefined ? {} : { error: failure };
+    this.onClose();
+    if (failure !== undefined) throw failure;
   }
 
   /**
@@ -244,63 +313,220 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   private async apply<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
     this.requireEnabledHistories(input);
     this.validateRows(input);
-    const [entity, stateStorage, diagnosticStorage, eventStorage] = this.openCommit(input);
-    try {
-      for (const state of input.states ?? []) await entity.states.append(state);
-      for (const diagnostic of input.diagnostics ?? []) await entity.events.append(diagnostic);
-      for (const event of input.events ?? []) {
-        if (event.id === undefined || eventStorage === undefined)
-          throw new Error("Entity commit requires delivery-event IDs.");
-        await this.appendEvent(eventStorage, event.id, event);
-      }
-      await entity.current.write(input.next);
-    } finally {
-      entity.close();
-      stateStorage?.close();
-      diagnosticStorage?.close();
-      eventStorage?.close();
+    const [entity, states, diagnostics, delivery] = this.openCommit(input);
+    for (const state of input.states ?? []) await states?.append(state);
+    for (const diagnostic of input.diagnostics ?? []) await diagnostics?.append(diagnostic);
+    for (const event of input.events ?? []) {
+      if (event.id === undefined || delivery === undefined)
+        throw new Error("Entity commit requires delivery-event IDs.");
+      await this.appendEvent(delivery, event.id, event);
     }
+    await entity.current.write(input.next);
   }
 
   /**
-   * Opens the record families needed by one captured mutation.
+   * Acquires only missing record families and retains them for this handle.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Entity state type.
    * @param input Supplies requested history and delivery records.
-   * @returns Entity and record handles to close after the mutation.
+   * @returns Retained Entity and requested family handles.
    */
-  private openCommit<I, S extends Message>(input: EntityCommitInput<I, S>): CommitHandles<I, S> {
-    const states = input.states?.length ? stateHistorySpec(input.entity.stateSchema) : undefined;
-    const diagnostics = input.diagnostics?.length
-      ? eventHistorySpec(input.entity.stateSchema)
-      : undefined;
-    const stateStorage =
-      states === undefined
-        ? undefined
-        : new InMemoryRecordStorage(input.context, states.spec, () =>
-            this.openRecords(input.context, states.spec, states.group),
-          );
-    const diagnosticStorage =
-      diagnostics === undefined
-        ? undefined
-        : new InMemoryRecordStorage(input.context, diagnostics.spec, () =>
-            this.openRecords(input.context, diagnostics.spec, diagnostics.group),
-          );
-    const eventStorage = input.events?.length
-      ? new InMemoryRecordStorage(input.context, eventStoreRecordSpec, () =>
-          this.openRecords(input.context, eventStoreRecordSpec),
-        )
-      : undefined;
+  private openCommit<I, S extends Message>(input: EntityCommitInput<I, S>): CommitHandles {
+    const acquired: { close(): void }[] = [];
+    try {
+      const entity = this.#entity ?? this.openCurrent(input, acquired);
+      const states = input.states?.length
+        ? (this.#states ?? this.openStates(input, acquired))
+        : undefined;
+      const diagnostics = input.diagnostics?.length
+        ? (this.#diagnostics ?? this.openDiagnostics(input, acquired))
+        : undefined;
+      const delivery = input.events?.length
+        ? (this.#delivery ?? this.openDelivery(input, acquired))
+        : undefined;
+      this.#entity = entity;
+      if (states !== undefined) this.#states = states;
+      if (diagnostics !== undefined) this.#diagnostics = diagnostics;
+      if (delivery !== undefined) this.#delivery = delivery;
+      return [entity, states, diagnostics, delivery];
+    } catch (error) {
+      const failures = this.closeGroup(acquired);
+      if (failures.length)
+        throw new AggregateError([error, ...failures], "Entity commit acquisition failed.");
+      throw error;
+    }
+  }
+
+  /**
+   * Opens the current Entity adapter once.
+   *
+   * @param acquired Newly acquired handles to close on failure.
+   * @param input The captured Entity persistence input.
+   * @returns The retained current Entity record handle.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam S Generated Entity state message type.
+   */
+  private openCurrent<I, S extends Message>(
+    input: EntityCommitInput<I, S>,
+    acquired: { close(): void }[],
+  ): InMemoryEntityStorage<unknown, Message> {
     const entityInput = { ...input.entity };
     delete entityInput.stateHistoryStorage;
     delete entityInput.eventHistoryStorage;
-    const entity = this.entities.create({
-      ...entityInput,
-      ...(stateStorage === undefined ? {} : { stateHistoryStorage: stateStorage }),
-      ...(diagnosticStorage === undefined ? {} : { eventHistoryStorage: diagnosticStorage }),
+    const entity = this.entities.create(entityInput);
+    acquired.push(entity);
+    return entity as unknown as InMemoryEntityStorage<unknown, Message>;
+  }
+
+  /**
+   * Opens retained state-history storage and its adapter.
+   *
+   * @param acquired Newly acquired handles to close on failure.
+   * @param input The captured Entity persistence input.
+   * @returns The retained state-history record handle.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam S Generated Entity state message type.
+   */
+  private openStates<I, S extends Message>(
+    input: EntityCommitInput<I, S>,
+    acquired: { close(): void }[],
+  ): InMemoryEntityHistory<unknown, Message> {
+    const states = input.states?.length ? stateHistorySpec(input.entity.stateSchema) : undefined;
+    if (states === undefined) throw new Error("State history was not requested.");
+    const records = new InMemoryRecordStorage(input.context, states.spec, () =>
+      this.openRecords(input.context, states.spec, states.group),
+    );
+    acquired.push(records);
+    const adapter = new InMemoryEntityHistory({
+      id: input.entity.id,
+      records,
+      stateSchema: input.entity.stateSchema,
+      queue: this.entities.backend(input.entity).mutationQueue,
     });
-    return [entity, stateStorage, diagnosticStorage, eventStorage];
+    return adapter as unknown as InMemoryEntityHistory<unknown, Message>;
+  }
+
+  /**
+   * Opens retained diagnostic history storage and its adapter.
+   *
+   * @param acquired Newly acquired handles to close on failure.
+   * @param input The captured Entity persistence input.
+   * @returns The retained diagnostic Event record handle.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam S Generated Entity state message type.
+   */
+  private openDiagnostics<I, S extends Message>(
+    input: EntityCommitInput<I, S>,
+    acquired: { close(): void }[],
+  ): MemoryEntityEventHistory<unknown> {
+    const layout = eventHistorySpec(input.entity.stateSchema);
+    const records = new InMemoryRecordStorage(input.context, layout.spec, () =>
+      this.openRecords(input.context, layout.spec, layout.group),
+    );
+    acquired.push(records);
+    return new MemoryEntityEventHistory({
+      id: input.entity.id,
+      records,
+      queue: this.entities.backend(input.entity).mutationQueue,
+    }) as MemoryEntityEventHistory<unknown>;
+  }
+
+  /**
+   * Opens retained delivery Event storage.
+   *
+   * @param acquired Newly acquired handles to close on failure.
+   * @param input The captured Entity persistence input.
+   * @returns The retained delivery Event record handle.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam S Generated Entity state message type.
+   */
+  private openDelivery<I, S extends Message>(
+    input: EntityCommitInput<I, S>,
+    acquired: { close(): void }[],
+  ): InMemoryRecordStorage<EventId, Event> {
+    const records = new InMemoryRecordStorage(input.context, eventStoreRecordSpec, () =>
+      this.openRecords(input.context, eventStoreRecordSpec),
+    );
+    acquired.push(records);
+    return records;
+  }
+
+  /**
+   * Registers provider work before invoking the operation.
+   *
+   * @param action The admitted provider operation.
+   * @returns The admitted provider operation completion.
+   */
+  private track(action: () => Promise<void>): Promise<void> {
+    let complete!: () => void;
+    let fail!: (error: unknown) => void;
+    const work = new Promise<void>((resolve, reject) => {
+      complete = resolve;
+      fail = reject;
+    });
+    this.#active.add(work);
+    void work.then(
+      () => this.#active.delete(work),
+      () => this.#active.delete(work),
+    );
+    try {
+      action().then(complete, fail);
+    } catch (error) {
+      fail(error);
+    }
+    return work;
+  }
+
+  /**
+   * Waits for admitted commits and reports every retained close failure.
+   *
+   * @returns Completion after admitted work and cleanup settle.
+   */
+  private async drain(): Promise<void> {
+    await Promise.allSettled([...this.#active]);
+    const failure = this.closeRetained();
+    this.onClose();
+    if (failure !== undefined) throw failure;
+  }
+
+  /**
+   * Closes retained adapters once after no commit remains active.
+   *
+   * @returns A cleanup failure, if any.
+   */
+  private closeRetained(): Error | undefined {
+    const ports: { close(): void }[] = [];
+    for (const port of [this.#delivery, this.#diagnostics, this.#states, this.#entity]) {
+      if (port !== undefined) ports.push(port);
+    }
+    this.#delivery = undefined;
+    this.#diagnostics = undefined;
+    this.#states = undefined;
+    this.#entity = undefined;
+    const failures = this.closeGroup(ports);
+    if (failures.length === 1) return failures[0] as Error;
+    return failures.length
+      ? new AggregateError(failures, "Entity commit close failed.")
+      : undefined;
+  }
+
+  /**
+   * Closes every newly acquired handle and collects cleanup failures.
+   *
+   * @param ports The acquired record handles.
+   * @returns Cleanup failures from acquired handles.
+   */
+  private closeGroup(ports: readonly { close(): void }[]): unknown[] {
+    const failures: unknown[] = [];
+    for (const port of ports) {
+      try {
+        port.close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    return failures;
   }
 
   /**

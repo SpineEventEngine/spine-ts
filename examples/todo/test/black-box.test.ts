@@ -166,7 +166,7 @@ describe("@spine-event-engine/example-todo", () => {
 
     expect(createRecordStorage).toHaveBeenCalled();
     await context.close();
-    storageFactory.close();
+    await storageFactory.close();
   });
 
   it("accepts application-owned Delivery and subscription facilities", async () => {
@@ -181,7 +181,7 @@ describe("@spine-event-engine/example-todo", () => {
     });
 
     await context.close();
-    storageFactory.close();
+    await storageFactory.close();
   });
 
   it("keeps generated registry discovery out of application context assembly", () => {

@@ -274,3 +274,74 @@ confirmed findings are resolved, and no runtime change followed the targeted
 reviews. Full-task release/security gates remain pending. Commit authored code,
 Proto fixtures, tests, docs/checkers and task records; retain generation-only
 manifest churn outside this checkpoint until coordinated convergence.
+
+## Provider lifecycle and retention review wave
+
+Baseline 0974d7627 to the frozen M3 working tree in the environment-lifecycle
+worktree. Runtime/test scope: retained private provider commit storage, awaitable
+factory/commit close, synchronous rollback, custom Datastore bundle disposal,
+Datastore trim progress, caller awaits and ordinary provider Any helper adoption.
+The latest unconditional domain-state registration rule is recorded for M6;
+no test exception or disabling switch may be introduced. Later milestones are
+not current M3 runtime claims. Shared AnyPacker design is already reviewed.
+
+Cheap preflight: 563 combined tests, final 64-test targeted coverage, 15 extra
+Agent/provider tests; PostgreSQL/Datastore 13 each, MySQL/MariaDB full non-tenant
+suites plus separately passing current tenant cases. Typechecks, scoped lint,
+TSDoc, cleanup, docs API/audience/snippets, formatting and diff checks pass.
+Parent LCOV inspection confirms the specific previously missing failure paths.
+Exact commands and limitations are in external provider-correction-evidence.md.
+
+| Existing role                    | Assignment                    | Explicit configured model / reasoning | Scope                                                                                                 |
+| -------------------------------- | ----------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| performance_reliability_reviewer | provider_reliability          | gpt-6-sol / medium                    | Admission, drains, retained records, rollback, error aggregation, Datastore paging and custom bundles |
+| style_maintainability_reviewer   | provider_style                | gpt-6-sol / medium                    | Changed runtime structure, bounded helpers, clarity and unnecessary abstractions                      |
+| typescript_api_docs_reviewer     | repository_api_review (reuse) | gpt-6-sol / medium                    | Awaitable public/provider contracts, caller propagation and narrow API/TSDoc                          |
+| documentation_reviewer           | provider_documentation        | gpt-6-luna / medium                   | Changed storage README/REFERENCE and lifecycle claims                                                 |
+
+Explicit model/reasoning fields are required for new dispatches; the reused API
+reviewer retains its verified explicit immutable profile. Runtime introspection
+is unavailable. No child delegation or source edits. Three technical concerns
+run first; documentation follows as capacity frees. Collect all findings before
+one accepted correction batch. No whole-change re-review for deterministic
+record/format changes. Review outcomes pending.
+
+M3 full concern wave collected. All dispatch profiles matched the required explicit
+models/reasoning; runtime self-introspection was unavailable. Reliability reported
+P1 input capture before commit tracking in all four providers and P2 memory/
+Datastore closed roots retained indefinitely. Parent inspection confirms SQL row
+validation also invokes supplied ID unpack/key callbacks before tracking, so the
+same admission correction covers validation and capture. API reported P2 missing
+awaits in project-worker.mjs, sql-recovery-writer.mjs, deployment provider tests,
+deployment-gce registry-reader tests and deployment README; also stale exported
+Storage TSDoc. Documentation confirmed the README issue and stale storage
+REFERENCE provider lifecycle comparison. Style found no P0-P2 issues; accept its
+two local TSDoc corrections for CommitHandles and PostgresCommitRecords.
+
+One accepted correction batch, estimated 0.3-0.6 hours: fence/check open and track
+the full admitted commit before configurable callbacks, remove closed factory
+roots only after settling (including idle disposal), propagate awaited closes,
+correct narrow documentation, and add focused reentrant-close/retention tests.
+Do not add a lifecycle abstraction or weaken independently closeable handles.
+Targeted reliability/API confirmation follows deterministic checks; style and
+documentation corrections need only mechanical/source verification. Original
+implementation context should be reused if available; otherwise resume its exact
+frozen state in one replacement implementer, Sol/medium.
+
+M3 accepted corrections are frozen. Focused preflight passes 104 tests with fresh
+LCOV after the final Datastore idle/async-close race regression; earlier six-suite
+run passed 111. Build/tooling typechecks, lint, cleanup, TSDoc, docs and scoped
+formatting pass. Parent formats its record-only changes. Reuse provider_reliability
+and repository_api_review with their explicit immutable Sol/medium profiles for
+targeted confirmation only. The parent-detected premature removal after failed
+idle close was reproduced and corrected in this same batch. Read-only style/docs
+corrections need no reopened lane. No full release gate yet.
+
+M3 accepted: targeted API and reliability confirmations resolve every prior P1/P2.
+Parent independently inspected fresh LCOV for callback admission and terminal
+cleanup, including success/error removal. All four canonical concerns accepted.
+The Datastore reference's remaining stale final paragraph was corrected and
+formatted deterministically after review; no runtime change. Global formatting
+and diff checks pass. Complete release/security gates remain deferred until the
+coordinated task converges. The provider patch is ready for checkpoint commit and
+immediate push; generation-only manifest churn remains unstaged.

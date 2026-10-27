@@ -364,18 +364,33 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     this.requireOpen();
     const rows = await this.ready();
     const coordinator = input.entityCommit === undefined ? undefined : this.commits();
-    const prepared =
-      input.entityCommit === undefined
-        ? undefined
-        : await AgentExecutionValues.require(coordinator).prepareAgentConditional(
-            input.entityCommit,
-          );
+    let prepared:
+      Awaited<ReturnType<PostgresEntityCommitStorage<I, S>["prepareAgentConditional"]>> | undefined;
+    let operationError: unknown;
     try {
+      if (input.entityCommit !== undefined)
+        prepared = await AgentExecutionValues.require(coordinator).prepareAgentConditional(
+          input.entityCommit,
+        );
       await rows.head.transaction((client) => this.completeLocked(client, rows, input, prepared));
-    } finally {
-      prepared?.close();
-      coordinator?.close();
+    } catch (error) {
+      operationError = error;
     }
+    const closeErrors: unknown[] = [];
+    try {
+      prepared?.close();
+    } catch (error) {
+      closeErrors.push(error);
+    }
+    try {
+      await coordinator?.close();
+    } catch (error) {
+      closeErrors.push(error);
+    }
+    if (operationError !== undefined) closeErrors.unshift(operationError);
+    if (closeErrors.length === 1) throw closeErrors[0];
+    if (closeErrors.length)
+      throw new AggregateError(closeErrors, "Agent completion cleanup failed.");
   }
 
   /**

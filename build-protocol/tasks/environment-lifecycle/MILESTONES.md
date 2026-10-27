@@ -20,15 +20,17 @@ a time; independent checks and relevant reviews may run concurrently. See the
    commits with awaitable factory/commit shutdown (D-0148). Correct Datastore trim
    pagination and verify
    deletion after the shared Any fix, including retention spanning pages.
-4. **Factory preparation:** shared contracts and memory first, then bounded
+4. **Factory preparation:** see [the accepted detailed contract](FACTORY_PREPARATION.md).
+   Shared contracts and memory first, then bounded
    PostgreSQL, MySQL/MariaDB and Datastore slices. Offline factory build, explicit
    connection checks, creation and read-only compatibility, tenant resolvers,
    coordinated preparation and released temporary connections. No provisioning.
 5. **TenantIndex and admission:** public membership/paging, effective live index,
    explicit keep, typed TENANT_UNKNOWN/NOT_FOUND, operational lookup errors,
    cleanup policy and direct input admission. No hidden tenant catalog.
-6. **JVM PR 1698:** early state reservations with context identity, Tests profile,
-   default guard, System exclusion, duplicate lookup, registration rollback,
+6. **JVM PR 1698:** unconditional early state reservations with context identity,
+   including tests and BlackBox; no disabling switch or test-profile exception.
+   Preserve System exclusion, unique-destination lookup, registration rollback,
    attempt-all context cleanup and reset protection. Completed-context tracking
    is separate from early reservations.
 7. **Agent recovery removal:** fresh signals execute live without scheduler;
@@ -56,7 +58,9 @@ a time; independent checks and relevant reviews may run concurrently. See the
     coordination and shared lazy/explicit attempts. No monitoring side effect.
 12. **Server and protocols:** gRPC-only Server, typed errors through native/browser/
     gateway/client surfaces, complete ingress coverage, lookup ambiguity before
-    readiness, revised managed startup, BlackBox and examples.
+    readiness, revised managed startup, BlackBox and examples. Finish ordinary
+    non-storage test/remote-app Any helper adoption from the residual audit;
+    preserve intentional malformed, opaque and wire-compatibility inputs.
 13. **Convergence:** current public documentation, provider and reopening evidence,
     final specialist/security review, cheap preflight then release verification,
     unused common workspace version, required feature pushes and exact remote

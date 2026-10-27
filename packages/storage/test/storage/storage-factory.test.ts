@@ -130,7 +130,7 @@ describe("StorageFactory", () => {
     const first = firstFactory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
     await first.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
 
-    firstFactory.close();
+    await firstFactory.close();
 
     const sibling = secondFactory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
     await expect(sibling.read(create(EventIdSchema, { value: "event-1" }))).resolves.toMatchObject({
@@ -273,11 +273,11 @@ describe("StorageFactory", () => {
     },
   );
 
-  it("rejects record storage creation after the factory closes", () => {
+  it("rejects record storage creation after the factory closes", async () => {
     const factory = new InMemoryStorageFactory();
     const spec = createEventSpec();
 
-    factory.close();
+    await factory.close();
 
     expect(factory.isOpen()).toBe(false);
     expect(() => factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec)).toThrow(
@@ -285,11 +285,11 @@ describe("StorageFactory", () => {
     );
   });
 
-  it("rejects internal entity and atomic commit storage creation after the factory closes", () => {
+  it("rejects internal entity and atomic commit storage creation after the factory closes", async () => {
     const factory = new InMemoryStorageFactory();
     const input = createEntityInput();
 
-    factory.close();
+    await factory.close();
 
     expect(() => factory.createEntityStorage(input)).toThrow(/closed/);
     expect(() => EntityCommitStorageFactories.create(factory, input)).toThrow(/closed/);

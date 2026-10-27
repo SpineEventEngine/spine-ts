@@ -53,6 +53,24 @@ export type OpenEntityRecords = <I, R extends Message>(
   group?: import("@spine-event-engine/storage").StorageGroup,
 ) => RecordStorage<I, R>;
 
+type CommitStateRecords = RecordStorage<
+  import("@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js").EntityStateKey,
+  EntityRecord
+>;
+type CommitEventRecords = RecordStorage<import("@spine-event-engine/proto").EventId, Event>;
+
+/**
+ * Record families selected for one admitted Entity commit.
+ *
+ * @typeParam I Entity identifier type.
+ */
+type CommitFamilies<I> = [
+  RecordStorage<I, EntityRecord>,
+  CommitStateRecords | undefined,
+  CommitEventRecords | undefined,
+  CommitEventRecords | undefined,
+];
+
 /**
  * Groups Entity current and optional history record families.
  *
@@ -115,7 +133,16 @@ export class DatastoreEntityStorage<I, S extends Message> {
   close(): void {
     if (this.#open) {
       this.#open = false;
-      for (const record of this.#records) record.close();
+      const errors: unknown[] = [];
+      for (const record of this.#records) {
+        try {
+          record.close();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (errors.length === 1) throw errors[0];
+      if (errors.length) throw new AggregateError(errors, "Datastore Entity records close failed.");
     }
   }
 
@@ -135,15 +162,37 @@ export class DatastoreEntityStorage<I, S extends Message> {
 export class DatastoreEntityCommitStorage implements EntityCommitStorage {
   #open = true;
 
+  #current: RecordStorage<unknown, EntityRecord> | undefined;
+
+  /**
+   * Retained state-history records.
+   */
+  #states: CommitStateRecords | undefined;
+
+  #diagnostics: CommitEventRecords | undefined;
+
+  #events: CommitEventRecords | undefined;
+
+  /**
+   * Synchronous idle-close result, including any cleanup failure.
+   */
+  #idleOutcome: { error?: Error } | undefined;
+
+  readonly #active = new Set<Promise<void>>();
+
+  #closing: Promise<void> | undefined;
+
   /**
    * Creates commit storage for one Entity persistence contract.
    *
    * @param input Defines the Entity source and tenant boundary.
    * @param openRecords Opens each generated record family.
+   * @param onClose Releases factory tracking after terminal cleanup.
    */
   constructor(
     private readonly input: EntityStorageInput<unknown, Message>,
     private readonly openRecords: OpenEntityRecords,
+    private readonly onClose: () => void = () => undefined,
   ) {}
 
   /**
@@ -157,31 +206,95 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    * @param input Supplies the prepared Entity mutation.
    * @returns Completion after every requested record write.
    */
-  async commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
-    this.validate(input);
-    const prepared = EntityCommitSnapshots.capture(input);
-    const current = this.openRecords(prepared.entity.recordSpec);
-    const stateLayout = stateHistorySpec(prepared.entity.stateSchema);
-    const diagnosticLayout = eventHistorySpec(prepared.entity.stateSchema);
-    const states = prepared.states?.length
-      ? this.openRecords(stateLayout.spec, stateLayout.group)
-      : undefined;
-    const diagnostics = prepared.diagnostics?.length
-      ? this.openRecords(diagnosticLayout.spec, diagnosticLayout.group)
-      : undefined;
-    const events = prepared.events?.length ? this.openRecords(eventStoreRecordSpec) : undefined;
+  commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
+    return this.track(() => {
+      this.validate(input);
+      const prepared = EntityCommitSnapshots.capture(input);
+      return this.persist(prepared);
+    });
+  }
+
+  /**
+   * Registers a commit before invoking provider construction callbacks.
+   *
+   * @param action The admitted provider operation.
+   * @returns The admitted provider operation completion.
+   */
+  private track(action: () => Promise<void>): Promise<void> {
+    let complete!: () => void;
+    let fail!: (error: unknown) => void;
+    const work = new Promise<void>((resolve, reject) => {
+      complete = resolve;
+      fail = reject;
+    });
+    this.#active.add(work);
+    void work.then(
+      () => this.#active.delete(work),
+      () => this.#active.delete(work),
+    );
     try {
-      try {
-        await this.apply(prepared, current, states, diagnostics, events);
-      } catch (error) {
-        if (!this.retryable(error)) throw error;
-        await this.apply(prepared, current, states, diagnostics, events);
-      }
-    } finally {
-      current.close();
-      states?.close();
-      diagnostics?.close();
-      events?.close();
+      action().then(complete, fail);
+    } catch (error) {
+      fail(error);
+    }
+    return work;
+  }
+
+  /**
+   * Persists an admitted captured mutation and one safe retry.
+   *
+   * @param prepared The immutable prepared mutation.
+   * @returns Completion after the captured mutation is persisted.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam S Generated Entity state message type.
+   */
+  private async persist<I, S extends Message>(prepared: EntityCommitInput<I, S>): Promise<void> {
+    const [current, states, diagnostics, events] = this.openCommit(prepared);
+    try {
+      await this.apply(prepared, current, states, diagnostics, events);
+    } catch (error) {
+      if (!this.retryable(error)) throw error;
+      await this.apply(prepared, current, states, diagnostics, events);
+    }
+  }
+
+  /**
+   * Acquires only missing requested families and rolls back a failed group.
+   *
+   * @param input The captured Entity persistence input.
+   * @returns The retained records required by this commit.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam S Generated Entity state message type.
+   */
+  private openCommit<I, S extends Message>(input: EntityCommitInput<I, S>): CommitFamilies<I> {
+    const acquired: { close(): void }[] = [];
+    try {
+      const current = this.#current ?? this.openRecords(this.input.recordSpec);
+      if (this.#current === undefined) acquired.push(current);
+      const stateLayout = stateHistorySpec(this.input.stateSchema);
+      const diagnosticLayout = eventHistorySpec(this.input.stateSchema);
+      const states = input.states?.length
+        ? (this.#states ?? this.openRecords(stateLayout.spec, stateLayout.group))
+        : undefined;
+      if (states !== undefined && this.#states === undefined) acquired.push(states);
+      const diagnostics = input.diagnostics?.length
+        ? (this.#diagnostics ?? this.openRecords(diagnosticLayout.spec, diagnosticLayout.group))
+        : undefined;
+      if (diagnostics !== undefined && this.#diagnostics === undefined) acquired.push(diagnostics);
+      const events = input.events?.length
+        ? (this.#events ?? this.openRecords(eventStoreRecordSpec))
+        : undefined;
+      if (events !== undefined && this.#events === undefined) acquired.push(events);
+      this.#current = current;
+      this.#states ??= states;
+      this.#diagnostics ??= diagnostics;
+      this.#events ??= events;
+      return [current as RecordStorage<I, EntityRecord>, states, diagnostics, events];
+    } catch (error) {
+      const failures = this.closeGroup(acquired);
+      if (failures.length)
+        throw new AggregateError([error, ...failures], "Datastore family acquisition failed.");
+      throw error;
     }
   }
 
@@ -242,9 +355,91 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
 
   /**
    * Closes this commit storage to further commits.
+   *
+   * @returns Completion after admitted work and record cleanup settle.
    */
-  close(): void {
+  close(): Promise<void> {
     this.#open = false;
+    if (this.#idleOutcome !== undefined)
+      return (this.#closing ??=
+        this.#idleOutcome.error === undefined
+          ? Promise.resolve()
+          : Promise.reject(this.#idleOutcome.error));
+    return (this.#closing ??= this.drain());
+  }
+
+  /**
+   * Closes only when no commit remains admitted.
+   */
+  closeIdle(): void {
+    this.assertIdle();
+    if (this.#idleOutcome !== undefined) {
+      if (this.#idleOutcome.error !== undefined) throw this.#idleOutcome.error;
+      return;
+    }
+    this.#open = false;
+    const failure = this.closeRetained();
+    this.#idleOutcome = failure === undefined ? {} : { error: failure };
+    this.onClose();
+    if (failure !== undefined) throw failure;
+  }
+
+  /**
+   * Rejects synchronous disposal while asynchronous work remains admitted.
+   */
+  assertIdle(): void {
+    if (this.#active.size || (this.#closing !== undefined && this.#idleOutcome === undefined))
+      throw new Error("Entity commit cannot close idle while work is active.");
+  }
+
+  /**
+   * Waits for every admitted commit before completing close.
+   *
+   * @returns Completion after admitted work and cleanup settle.
+   */
+  private async drain(): Promise<void> {
+    await Promise.allSettled([...this.#active]);
+    const failure = this.closeRetained();
+    this.onClose();
+    if (failure !== undefined) throw failure;
+  }
+
+  /**
+   * Closes every retained record once after admitted work settles.
+   *
+   * @returns A cleanup failure, if any.
+   */
+  private closeRetained(): Error | undefined {
+    const ports = [this.#events, this.#diagnostics, this.#states, this.#current].filter(
+      (port) => port !== undefined,
+    );
+    this.#events = undefined;
+    this.#diagnostics = undefined;
+    this.#states = undefined;
+    this.#current = undefined;
+    const failures = this.closeGroup(ports);
+    if (failures.length === 1) return failures[0] as Error;
+    return failures.length
+      ? new AggregateError(failures, "Datastore commit close failed.")
+      : undefined;
+  }
+
+  /**
+   * Closes every newly acquired handle and collects cleanup failures.
+   *
+   * @param ports The acquired record handles.
+   * @returns Cleanup failures from acquired handles.
+   */
+  private closeGroup(ports: readonly { close(): void }[]): unknown[] {
+    const failures: unknown[] = [];
+    for (const port of ports) {
+      try {
+        port.close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    return failures;
   }
 
   /**
@@ -421,6 +616,8 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
   async trim(id: I, keep: number): Promise<void> {
     this.requireOpen();
     requireKeep(keep);
+    let retained = 0;
+    let cursor: DatastorePageCursor | undefined;
     for (;;) {
       const page = await this.provider().queryProviderPage({
         filters: [entityFilter(this.input, id)],
@@ -429,10 +626,14 @@ class StateHistory<I, S extends Message> implements EntityStateHistoryPort<I, S>
           { property: "created", direction: "desc" },
         ],
         limit: 128,
+        ...(cursor === undefined ? {} : { cursor }),
       });
-      const removable = page.entries.slice(keep);
+      const retainHere = Math.min(page.entries.length, Math.max(0, keep - retained));
+      retained += retainHere;
+      const removable = page.entries.slice(retainHere);
       await this.provider().deleteProviderEntries(removable);
       if (!page.hasMore) break;
+      cursor = page.cursor;
     }
   }
 

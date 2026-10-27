@@ -40,6 +40,11 @@ Entity contract, and caller-supplied client, but not the built-in converter or
 stringifier registry; they must provide equivalent tenant, ID, and column mapping.
 The built-in Entity provider writes its record families independently; custom
 record creators do not join a combined Entity transaction.
+Custom Entity bundles return a `Promise<void>` from `close()` and provide synchronous
+`closeIdle()` for internal assembly rollback. Their close fences new commits immediately,
+waits for admitted work, and releases every resource acquired by the custom creator.
+The factory tracks each bundle as one disposal unit and awaits its close before
+closing the native tenant catalog.
 
 ## Physical layout
 
@@ -188,6 +193,6 @@ errors are surfaced without payload data. The emulator suite is required for
 provider acceptance; cloud smoke remains credential-gated.
 
 `build()` and storage-handle creation issue no request. Closing the factory is
-idempotent and prevents creation of another handle without closing the
-caller-supplied client or already-created handles. Each record, Entity, and commit
-handle has an independent idempotent lifecycle and rejects work after it is closed.
+idempotent, prevents creation of another handle, and drains tracked Entity bundles
+and commit handles. It leaves ordinary independent record handles and the
+caller-supplied client open. Each handle rejects work after it is closed.

@@ -47,7 +47,7 @@ try {
   if (stored?.value !== "task-42") throw new Error("The record was not stored.");
 } finally {
   records.close();
-  factory.close();
+  await factory.close();
 }
 ```
 
@@ -65,8 +65,8 @@ tenant or database targets are rejected during construction.
 
 Tables are initialized lazily and checked against the expected PostgreSQL
 layout. Each acquired client is released; history maintenance applies deletion
-pages independently. Call `factory.close()` when the application stops; it is
-idempotent and drains live handles and pools. A closed factory cannot create new
+pages independently. Await `factory.close()` when the application stops; it is
+idempotent, drains live handles and pools, and reports cleanup failures. A closed factory cannot create new
 handles.
 
 The provider supports record CRUD, compare-and-set, immutable append, Entity

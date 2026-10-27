@@ -12,12 +12,12 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { randomUUID } from "node:crypto";
 import {
-  AnySchema,
   StringValueSchema,
   TimestampSchema,
+  type Any,
   type StringValue,
 } from "@bufbuild/protobuf/wkt";
 import {
@@ -88,8 +88,8 @@ live("MySQL-family record layout", () => {
       .setStringifierRegistry(stringifiers)
       .build();
   });
-  afterAll(() => {
-    factory.close();
+  afterAll(async () => {
+    await factory.close();
   });
 
   it("keeps an immutable EventStore prefix and admits identical Events on retry", async () => {
@@ -479,7 +479,7 @@ live("MySQL-family record layout", () => {
     } finally {
       await eventStore.close();
       eventRecords.close();
-      commits.close();
+      await commits.close();
       await pool.end();
       if (admin !== undefined) await admin.end();
     }
@@ -492,7 +492,7 @@ live("MySQL-family record layout", () => {
     } as const;
     const input = entityInput(context);
     const closed = EntityCommitStorageFactories.create(factory, input);
-    closed.close();
+    await closed.close();
     await expect(closed.commit(mutation(context, input, "closed"))).rejects.toThrow(/closed/i);
 
     const commits = EntityCommitStorageFactories.create(factory, input);
@@ -515,7 +515,7 @@ live("MySQL-family record layout", () => {
         }),
       ).rejects.toThrow(/requires non-blank unique delivery event IDs/i);
     } finally {
-      commits.close();
+      await commits.close();
     }
   });
 
@@ -534,7 +534,7 @@ live("MySQL-family record layout", () => {
         commits.commit({ ...mutation(context, input, "diagnostic"), states: [] }),
       ).rejects.toThrow(/event history is disabled/i);
     } finally {
-      commits.close();
+      await commits.close();
     }
   });
 
@@ -615,8 +615,8 @@ live("MySQL-family record layout", () => {
       for (const table of tables) await pool.query(`ALTER TABLE \`${table}\` ENGINE=InnoDB`);
       eventRecords.close();
       await eventStore.close();
-      currentOnlyCommits.close();
-      commits.close();
+      await currentOnlyCommits.close();
+      await commits.close();
       await pool.end();
     }
   });
@@ -783,17 +783,14 @@ live("MySQL-family record layout", () => {
         ...mutation(context, input, "same"),
         next: {
           ...current("same"),
-          state: create(AnySchema, {
-            typeUrl: `type.spine.io/${TaskSchema.typeName}`,
-            value: toBinary(
-              TaskSchema,
-              create(TaskSchema, {
-                id: create(TaskIdSchema, { value: "same" }),
-                title: "Different",
-                taskListId: create(TaskListIdSchema, { value: "list-1" }),
-              }),
-            ),
-          }),
+          state: AnyPacker.pack(
+            TaskSchema,
+            create(TaskSchema, {
+              id: create(TaskIdSchema, { value: "same" }),
+              title: "Different",
+              taskListId: create(TaskListIdSchema, { value: "list-1" }),
+            }),
+          ),
         },
       };
       const outcomes = await Promise.all([first.commit(left), second.commit(right)]);
@@ -831,8 +828,8 @@ live("MySQL-family record layout", () => {
       );
     } finally {
       await eventStore.close();
-      first.close();
-      second.close();
+      await first.close();
+      await second.close();
       await pool.end();
     }
   });
@@ -853,7 +850,7 @@ live("MySQL-family record layout", () => {
       await expect(commits.commit(same)).resolves.toBeUndefined();
       await expect(mysqlCurrentRecord(pool, input, id)).resolves.toEqual(before);
     } finally {
-      commits.close();
+      await commits.close();
       await pool.end();
     }
   });
@@ -903,7 +900,7 @@ tenantLive("MySQL normalized-plan tenant containment", () => {
     } finally {
       first.close();
       second.close();
-      factory.close();
+      await factory.close();
     }
   });
 });
@@ -919,7 +916,7 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
     idKind: "string",
     extractId: (record) => {
       if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-      return fromBinary(TaskIdSchema, record.entityId.value).value;
+      return AnyPacker.unpack(record.entityId, TaskIdSchema).value;
     },
   });
   return {
@@ -928,10 +925,7 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
       clone: (id: string) => id,
       key: (id: string) => id,
       pack: (id: string) => packed(id),
-      unpack: (id: { typeUrl: string; value: Uint8Array }) =>
-        id.typeUrl === `type.spine.io/${TaskIdSchema.typeName}`
-          ? fromBinary(TaskIdSchema, id.value).value
-          : undefined,
+      unpack: (id: Any) => AnyPacker.tryUnpack(id, TaskIdSchema)?.value,
     },
     columns: [],
     recordSpec,
@@ -943,25 +937,19 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
 }
 
 function packed(value: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${TaskIdSchema.typeName}`,
-    value: toBinary(TaskIdSchema, create(TaskIdSchema, { value })),
-  });
+  return AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value }));
 }
 function current(id: string) {
   return create(EntityRecordSchema, {
     entityId: packed(id),
-    state: create(AnySchema, {
-      typeUrl: `type.spine.io/${TaskSchema.typeName}`,
-      value: toBinary(
-        TaskSchema,
-        create(TaskSchema, {
-          id: create(TaskIdSchema, { value: id }),
-          title: "Next",
-          taskListId: create(TaskListIdSchema, { value: "list-1" }),
-        }),
-      ),
-    }),
+    state: AnyPacker.pack(
+      TaskSchema,
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: "Next",
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+      }),
+    ),
     lifecycleFlags: { archived: false, deleted: false },
     version: create(VersionSchema, { number: 1 }),
   });
@@ -1001,15 +989,12 @@ function mutation(context: StorageContext, input: ReturnType<typeof entityInput>
 }
 
 function taskCreated(id: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${TaskCreatedSchema.typeName}`,
-    value: toBinary(
-      TaskCreatedSchema,
-      create(TaskCreatedSchema, {
-        id: create(TaskIdSchema, { value: id }),
-        title: "Created",
-        taskListId: create(TaskListIdSchema, { value: "list-1" }),
-      }),
-    ),
-  });
+  return AnyPacker.pack(
+    TaskCreatedSchema,
+    create(TaskCreatedSchema, {
+      id: create(TaskIdSchema, { value: id }),
+      title: "Created",
+      taskListId: create(TaskListIdSchema, { value: "list-1" }),
+    }),
+  );
 }

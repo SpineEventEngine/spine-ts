@@ -117,7 +117,7 @@ describe("PostgresStorageFactory connection", () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: "postgresql://db.example/spine" })
       .build();
-    factory.close();
+    await factory.close();
 
     expect(driver.query.mock.calls.some(([sql]) => sql.includes("current_schema"))).toBe(true);
 
@@ -204,7 +204,7 @@ describe("PostgresStorageFactory connection", () => {
     await expect(catalog.keep(TenantBoundary.from(tenant("unknown")))).rejects.toThrow(
       /not configured/i,
     );
-    factory.close();
+    await factory.close();
   });
 
   it("rejects duplicate tenants and normalized physical database targets", async () => {
@@ -292,8 +292,8 @@ describe("PostgresStorageFactory connection", () => {
         tls: { rejectUnauthorized: false },
       })
       .build();
-    factory.close();
-    factory.close();
+    await factory.close();
+    await factory.close();
     await Promise.resolve();
 
     expect(driver.Pool).toHaveBeenCalledWith({

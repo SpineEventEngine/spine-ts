@@ -183,7 +183,7 @@ describe("SpecScanner", () => {
       expect(await storage.current.read(create(AnySchema))).toBeUndefined();
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 

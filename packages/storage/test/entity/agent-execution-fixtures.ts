@@ -12,8 +12,9 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { ActorContextSchema, CommandIdSchema, CommandSchema } from "@spine-event-engine/proto";
 import {
   AgentAcceptedInvocationSchema,
@@ -46,7 +47,7 @@ import {
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
 
-const idTypeUrl = `type.spine.server.testing/${SupportReplyAgentIdSchema.typeName}`;
+const idTypeUrl = TypeUrls.derive(SupportReplyAgentIdSchema);
 
 /**
  * Builds a typed support Agent repository layout for provider execution checks.
@@ -58,15 +59,8 @@ export function entityInput(): EntityStorageInput<SupportReplyAgentId, SupportRe
     id: {
       clone: (id) => create(SupportReplyAgentIdSchema, { ticketNumber: id.ticketNumber }),
       key: (id) => id.ticketNumber,
-      pack: (id) =>
-        create(AnySchema, {
-          typeUrl: idTypeUrl,
-          value: toBinary(SupportReplyAgentIdSchema, id),
-        }),
-      unpack: (value) =>
-        value.typeUrl === idTypeUrl
-          ? fromBinary(SupportReplyAgentIdSchema, value.value)
-          : undefined,
+      pack: (id) => AnyPacker.pack(SupportReplyAgentIdSchema, id),
+      unpack: (value) => AnyPacker.tryUnpack(value, SupportReplyAgentIdSchema),
     },
     columns: [],
     recordSpec: new RecordSpec<SupportReplyAgentId, EntityRecord>({
@@ -76,7 +70,7 @@ export function entityInput(): EntityStorageInput<SupportReplyAgentId, SupportRe
       extractId: (record) => {
         if (record.entityId?.typeUrl !== idTypeUrl)
           throw new TypeError("Support Agent current record requires its typed ID.");
-        return fromBinary(SupportReplyAgentIdSchema, record.entityId.value);
+        return AnyPacker.unpack(record.entityId, SupportReplyAgentIdSchema);
       },
     }),
     sourceType: SupportReplyAgentStateSchema,
@@ -97,13 +91,13 @@ export function accepted(sourceId: string, ticketNumber = "T-execution") {
   });
   const command = create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: sourceId }),
-    message: create(AnySchema, {
-      typeUrl: `type.spine.server.testing/${DraftSupportReplySchema.typeName}`,
-      value: toBinary(
-        DraftSupportReplySchema,
-        create(DraftSupportReplySchema, { agent: id, question: "When will my order arrive?" }),
-      ),
-    }),
+    message: AnyPacker.pack(
+      DraftSupportReplySchema,
+      create(DraftSupportReplySchema, {
+        agent: id,
+        question: "When will my order arrive?",
+      }),
+    ),
   });
   return create(AgentAcceptedInvocationSchema, {
     key: create(AgentInvocationKeySchema, {
@@ -113,10 +107,7 @@ export function accepted(sourceId: string, ticketNumber = "T-execution") {
       }),
       sourceSignal: signal,
     }),
-    recipientId: create(AnySchema, {
-      typeUrl: `type.spine.server.testing/${SupportReplyAgentIdSchema.typeName}`,
-      value: toBinary(SupportReplyAgentIdSchema, id),
-    }),
+    recipientId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
     signal: { case: "command", value: command },
     actor: create(ActorContextSchema),
     order: create(AgentInboxOrderSchema, {

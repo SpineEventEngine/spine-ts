@@ -12,11 +12,11 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { EventIdSchema, EventSchema, TenantIdSchema, type Event } from "@spine-event-engine/proto";
-import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -288,79 +288,85 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
   it("keeps Entity current, histories, and Event Store in separate physical families", async () => {
     const client = new Datastore({ projectId: unique("entity-project").toLowerCase() });
     const context = { name: unique("entity"), multitenant: false } as const;
-    const entity = entityInput(context, true);
+    const entity = projectEntityInput(context);
     const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+    stringifiers.setTypeRegistry(
+      new TypeRegistry([ProjectIdSchema, ProjectStateSchema, ProjectCreatedSchema]),
+    );
     const factory = DatastoreStorageFactory.newBuilder()
       .setClient(client)
       .setStringifierRegistry(stringifiers)
       .build();
     const handle = factory.createEntityStorage(entity);
-    const first = entityRecord("current", 1);
+    const first = projectRecord("current", 1);
 
     try {
       await expect(
         handle.commits.commit({
           context,
           entity,
-          entityId: "task",
+          entityId: "project-1",
           next: first,
-          states: [entityRecord("retained", 1)],
-          diagnostics: [entityEvent("diagnostic", 1)],
-          events: [entityEvent("delivery", 1)],
+          states: [projectRecord("retained", 1)],
+          diagnostics: [projectEvent("diagnostic", 1)],
+          events: [projectEvent("delivery", 1)],
         }),
       ).resolves.toBeUndefined();
       await expect(
         handle.commits.commit({
           context,
           entity,
-          entityId: "task",
-          next: entityRecord("next", 2),
+          entityId: "project-1",
+          next: projectRecord("next", 2),
         }),
       ).resolves.toBeUndefined();
       await expect(
-        handle.commits.commit({ context, entity, entityId: "task", next: first }),
+        handle.commits.commit({ context, entity, entityId: "project-1", next: first }),
       ).resolves.toBeUndefined();
       const concurrent = await Promise.all(
         ["two", "three"].map((value) =>
           handle.commits.commit({
             context,
             entity,
-            entityId: "task",
-            next: entityRecord(value, 2),
+            entityId: "project-1",
+            next: projectRecord(value, 2),
           }),
         ),
       );
       expect(concurrent).toEqual([undefined, undefined]);
-      await expect(handle.current.read("task")).resolves.toMatchObject({ version: { number: 2 } });
+      await expect(handle.current.read("project-1")).resolves.toMatchObject({
+        version: { number: 2 },
+      });
 
       const kinds = await Promise.all([
-        rows(client, StringValueSchema.typeName),
-        rows(client, `${StringValueSchema.typeName}_EntityRecord`),
-        rows(client, `${StringValueSchema.typeName}_Event`),
+        rows(client, ProjectStateSchema.typeName),
+        rows(client, `${ProjectStateSchema.typeName}_EntityRecord`),
+        rows(client, `${ProjectStateSchema.typeName}_Event`),
         rows(client, EventSchema.typeName),
       ]);
       expect(kinds.map((value) => value.length)).toEqual([1, 1, 1, 1]);
       expect(kinds.flat().every((row) => row.bytes instanceof Uint8Array)).toBe(true);
 
       for (let version = 2; version <= 129; version += 1)
-        await handle.states.append(entityRecord(`state-${String(version)}`, version));
-      await handle.states.trim("task", 1);
-      await expect(handle.states.backward("task", 2)).resolves.toHaveLength(1);
+        await handle.states.append(projectRecord(`state-${String(version)}`, version));
+      await handle.states.trim("project-1", 1);
+      await expect(handle.states.backward("project-1", 2)).resolves.toHaveLength(1);
 
-      const disabled = factory.createEntityStorage(
-        entityInput({ name: unique("disabled"), multitenant: false }, false),
-      );
-      await expect(disabled.states.append(entityRecord("state", 1))).rejects.toThrow("disabled");
-      disabled.close();
-      handle.close();
-      await expect(handle.current.read("task")).rejects.toThrow("closed");
+      const disabled = factory.createEntityStorage({
+        ...projectEntityInput({ name: unique("disabled"), multitenant: false }),
+        stateHistory: false,
+        eventHistory: false,
+      });
+      await expect(disabled.states.append(projectRecord("state", 1))).rejects.toThrow("disabled");
+      await disabled.close();
+      await handle.close();
+      await expect(handle.current.read("project-1")).rejects.toThrow("closed");
     } finally {
-      handle.close();
+      await handle.close();
       await Promise.all([
-        deleteKind(client, StringValueSchema.typeName),
-        deleteKind(client, `${StringValueSchema.typeName}_EntityRecord`),
-        deleteKind(client, `${StringValueSchema.typeName}_Event`),
+        deleteKind(client, ProjectStateSchema.typeName),
+        deleteKind(client, `${ProjectStateSchema.typeName}_EntityRecord`),
+        deleteKind(client, `${ProjectStateSchema.typeName}_Event`),
         deleteKind(client, EventSchema.typeName),
       ]);
     }
@@ -442,10 +448,7 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       expect(storedA.flat().every((row) => row.bytes instanceof Uint8Array)).toBe(true);
       expect(storedB.map((records) => records.length)).toEqual([0, 0, 0, 0]);
     } finally {
-      deliveryA.close();
-      deliveryB.close();
-      handleA.close();
-      handleB.close();
+      await Promise.all([deliveryA.close(), deliveryB.close(), handleA.close(), handleB.close()]);
       await Promise.all(
         kinds.flatMap((kind) => [deleteKind(client, kind, "Va"), deleteKind(client, kind, "Vb")]),
       );
@@ -500,63 +503,6 @@ function message(value: string) {
   return create(StringValueSchema, { value });
 }
 
-function entityInput(
-  context: StorageContext,
-  histories: boolean,
-): EntityStorageInput<string, ReturnType<typeof message>> {
-  return {
-    context,
-    id: {
-      clone: (id) => id,
-      key: (id) => id,
-      pack: pack,
-      unpack: (id) =>
-        id.typeUrl.endsWith(StringValueSchema.typeName)
-          ? fromBinary(StringValueSchema, id.value).value
-          : undefined,
-    },
-    columns: [],
-    recordSpec: new RecordSpec<string, EntityRecord>({
-      sourceType: StringValueSchema,
-      recordType: EntityRecordSchema,
-      idKind: "string",
-      extractId: (record) => {
-        if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-        return fromBinary(StringValueSchema, record.entityId.value).value;
-      },
-    }),
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
-    ...(histories ? { stateHistory: true, eventHistory: true } : {}),
-  };
-}
-
-function pack(value: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${StringValueSchema.typeName}`,
-    value: toBinary(StringValueSchema, message(value)),
-  });
-}
-
-function entityRecord(value: string, version: number) {
-  return create(EntityRecordSchema, {
-    entityId: pack("task"),
-    state: pack(value),
-    version: { number: version, timestamp: create(TimestampSchema, { seconds: BigInt(version) }) },
-  });
-}
-
-function entityEvent(id: string, version: number) {
-  return create(EventSchema, {
-    id: create(EventIdSchema, { value: id }),
-    context: {
-      producerId: pack("task"),
-      timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
-      version: { number: version },
-    },
-  });
-}
-
 function projectEntityInput(
   context: StorageContext,
 ): EntityStorageInput<string, ReturnType<typeof projectState>> {
@@ -566,10 +512,7 @@ function projectEntityInput(
       clone: (id) => id,
       key: (id) => id,
       pack: packProjectId,
-      unpack: (id) =>
-        id.typeUrl.endsWith(ProjectIdSchema.typeName)
-          ? fromBinary(ProjectIdSchema, id.value).value
-          : undefined,
+      unpack: (id) => AnyPacker.tryUnpack(id, ProjectIdSchema)?.value,
     },
     columns: [],
     recordSpec: new RecordSpec<string, EntityRecord>({
@@ -578,7 +521,7 @@ function projectEntityInput(
       idKind: "string",
       extractId: (record) => {
         if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-        return fromBinary(ProjectIdSchema, record.entityId.value).value;
+        return AnyPacker.unpack(record.entityId, ProjectIdSchema).value;
       },
     }),
     sourceType: ProjectStateSchema,
@@ -593,19 +536,13 @@ function projectState(title: string) {
 }
 
 function packProjectId(value: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${ProjectIdSchema.typeName}`,
-    value: toBinary(ProjectIdSchema, create(ProjectIdSchema, { value })),
-  });
+  return AnyPacker.pack(ProjectIdSchema, create(ProjectIdSchema, { value }));
 }
 
 function projectRecord(title: string, version: number) {
   return create(EntityRecordSchema, {
     entityId: packProjectId("project-1"),
-    state: create(AnySchema, {
-      typeUrl: `type.spine.io/${ProjectStateSchema.typeName}`,
-      value: toBinary(ProjectStateSchema, projectState(title)),
-    }),
+    state: AnyPacker.pack(ProjectStateSchema, projectState(title)),
     version: { number: version, timestamp: create(TimestampSchema, { seconds: BigInt(version) }) },
   });
 }
@@ -618,13 +555,10 @@ function projectEvent(id: string, version: number) {
       timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
       version: { number: version },
     },
-    message: create(AnySchema, {
-      typeUrl: `type.spine.io/${ProjectCreatedSchema.typeName}`,
-      value: toBinary(
-        ProjectCreatedSchema,
-        create(ProjectCreatedSchema, { memberId: [`member-${id}`] }),
-      ),
-    }),
+    message: AnyPacker.pack(
+      ProjectCreatedSchema,
+      create(ProjectCreatedSchema, { memberId: [`member-${id}`] }),
+    ),
   });
 }
 

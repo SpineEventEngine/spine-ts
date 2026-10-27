@@ -66,7 +66,7 @@ try {
   void liveNodes;
 } finally {
   await registry.close();
-  factory.close();
+  await factory.close();
 }
 ```
 

@@ -165,7 +165,7 @@ describe("in-memory Agent history", () => {
       domain: (id, time) => event(id, time, false),
       occurredAt,
     });
-    factory.close();
+    await factory.close();
   });
 
   it("retrieves generation history with domain-correct unpackable payloads", async () => {
@@ -208,7 +208,7 @@ describe("in-memory Agent history", () => {
       ).toBe("Review this reply.");
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 

@@ -114,5 +114,5 @@ try {
   };
   process.stdout.write(`${JSON.stringify(facts)}\n`);
 } finally {
-  factory.close();
+  await factory.close();
 }

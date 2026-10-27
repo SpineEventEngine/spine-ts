@@ -51,7 +51,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
       .build();
-    factory.close();
+    await factory.close();
     expect(() => AgentHistoryStorageFactories.create(factory, scope)).toThrow(
       "StorageFactory is closed.",
     );
@@ -91,8 +91,8 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
           occurredAt,
         });
       } finally {
-        factory.close();
-        tenants.close();
+        await factory.close();
+        await tenants.close();
       }
     },
     120_000,
@@ -110,7 +110,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
     const first = AgentHistoryStorageFactories.create(factory, input);
     await first.append("ticket-mysql", entry);
     first.close();
-    factory.close();
+    await factory.close();
     const reopened = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
       .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table)
@@ -154,7 +154,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       });
       history.close();
     } finally {
-      reopened.close();
+      await reopened.close();
       await pool.query(`DROP TABLE IF EXISTS \`${table}\``);
       await pool.end();
     }
@@ -184,7 +184,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       ).rejects.toThrow("index is incompatible");
       history.close();
     } finally {
-      factory.close();
+      await factory.close();
       await pool.query(`DROP TABLE IF EXISTS \`${table}\``);
       await pool.end();
     }
@@ -219,7 +219,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       ]);
     } finally {
       history.close();
-      factory.close();
+      await factory.close();
     }
   }, 120_000);
 });

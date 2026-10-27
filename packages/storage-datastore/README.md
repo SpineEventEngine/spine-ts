@@ -73,7 +73,7 @@ try {
   if (stored?.value !== "task-42") throw new Error("The record was not stored.");
 } finally {
   await records.close();
-  factory.close();
+  await factory.close();
 }
 ```
 

@@ -55,12 +55,12 @@ The earlier suggestion to permit overlapping domain Entity state types using a B
 
 ### Registration rule
 
-With checking enabled, an Entity state TypeUrl can be served by only one open domain Bounded Context in the environment.
+An Entity state TypeUrl can be served by only one open domain Bounded Context in the environment. This is unconditional, including tests and BlackBox. There is no switch to disable it.
 
 ```ts
 const first = await BoundedContext.singleTenant("First").add(Calculator).build();
 
-const second = await BoundedContext.singleTenant("Second").add(Calculator).build(); // DuplicateEntityStateException outside the test default.
+const second = await BoundedContext.singleTenant("Second").add(Calculator).build(); // DuplicateEntityStateException, including in tests.
 ```
 
 Different repository objects, Entity classes sharing the state type, tenant sets, databases, or Entity IDs do not make this valid. Different state types may use equal IDs; equal IDs in different tenants of one multitenant Bounded Context are also valid.
@@ -69,7 +69,7 @@ The rule applies within one runtime environment. Separate application replicas c
 
 ### Environment record and early check
 
-Keep an internal record of state TypeUrl to an ordered collection of Bounded Context object references.
+Keep an internal record of state TypeUrl to its single registered domain Bounded Context object reference.
 
 - Compare objects by identity, not name. Equal names do not merge distinct instances.
 - Check and insert together before repository registration can change shared Delivery. In TS, do not put an await between checking and insertion.
@@ -87,24 +87,19 @@ Provide the equivalent internal lookup:
 contextsServing(stateType: TypeUrl): readonly BoundedContextName[];
 ```
 
-Return a read-only list in registration order: zero, one, or several names. Equal names from different objects remain separate entries. Keep object references internally for execution; never resolve a recipient by turning it into a name and looking that name up again.
+Return a read-only list containing zero or one name. A second distinct Bounded Context is rejected during registration even if both contexts have equal names. Keep the object reference internally for execution; never resolve a recipient by turning it into a name and looking that name up again.
 
-For a lookup requiring one destination, reject several registrations with DuplicateEntityStateException before filtering for readiness. No registration uses the existing missing-destination error. Exactly one can proceed through readiness and tenant checks. Do not use this domain lookup for System Context targets.
+A lookup uses the single registered domain Bounded Context. An absent registration uses the existing missing-destination error. The registered context proceeds through readiness and tenant checks; readiness cannot make a duplicate registration acceptable. Do not use this domain lookup for System Context targets.
 
 The follow-on JVM catch-up work is outside this task.
 
-### Defaults and reset
+### Unconditional checking and reset
 
-Checking defaults to off in Tests and on everywhere else. The record is always maintained.
-
-Current TS has Local and Production profiles. Add a distinct Tests profile, selected explicitly by test controls and NODE_ENV=test. Ordinary Local applications keep checking enabled. BlackBox respects the configured setting.
-
-```ts
-// Proposed setting; configure before environmental setup.
-ServerEnvironment.when(EnvironmentType.Tests).checkDuplicateEntityStates(true);
-```
-
-Disabling the guard permits registration for test compatibility; it does not promise safe execution of overlapping domain models.
+Duplicate state registration is rejected in every environment and test mode.
+Do not introduce a Tests profile for this feature, a checkDuplicateEntityStates
+setting, or a BlackBox bypass. Existing general test controls cannot disable the
+rule. Tests must use distinct domain state types, close a previous context before
+reusing its type, or run separate application replicas in separate processes.
 
 A settings-only test reset preserves live resources and registrations. A full singleton reset must reject before teardown while any Bounded Context, build, or cleanup remains active, including empty or deferred Bounded Contexts. Current TS resets by closing resources and replacing the singleton, so preserving only the state-type map would be insufficient. [Current reset](https://github.com/SpineEventEngine/spine-ts/blob/ff6c8669537a016c47f012150306500d3b52b5d1/packages/server/src/server/server-environment.ts#L321)
 
@@ -825,7 +820,7 @@ Do not introduce new arbitrary limits, polling intervals, or recovery substitute
 Implementation tests must cover:
 
 - Retention of Storage objects and shared preparation across repeated/concurrent use.
-- PR #1698 defaults, identity comparison, early guard, same-name objects, System exclusion, lookup order/ambiguity, failed registration/build/close cleanup, reuse after closure, and reset protection.
+- Unconditional PR #1698 registration checks in applications, tests and BlackBox; identity comparison, early rejection, same-name objects, System exclusion, unique-destination lookup, failed registration/build/close cleanup, reuse after closure, and reset protection. No disabling switch may remain.
 - One shared Delivery and single-tenant Inbox/shard scope across all tenants.
 - Correct packed-signal tenant resolution, tenant-sensitive duplicates, notification/idle races, and multi-process delivery coordination.
 - Public TenantIndex default/override/live access, contains versus lookup failure, explicit keep, read-only implementations, enumeration, and restart discovery.

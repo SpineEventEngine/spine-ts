@@ -382,7 +382,7 @@ describe("DatastoreTenantCatalog", () => {
     const catalog = factory.tenantCatalog();
 
     expect(factory.tenantCatalog()).toBe(catalog);
-    factory.close();
+    await factory.close();
     await expect(catalog.all()).rejects.toThrow("catalog is closed");
   });
 

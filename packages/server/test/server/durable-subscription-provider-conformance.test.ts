@@ -125,7 +125,7 @@ describe("DurableSubscriptionBindings provider selection", () => {
         (sql) => !sql.includes("SubscriptionBinding") && !sql.includes("SubscriptionBindingQuota"),
       ),
     ).toBe(true);
-    factory.close();
+    await factory.close();
   });
 
   it("uses only the configured Datastore approved-record creator", async () => {
@@ -145,6 +145,6 @@ describe("DurableSubscriptionBindings provider selection", () => {
       GatewayAuthenticatedSubscriptionSchema,
       GatewayAuthenticatedSubscriptionSchema,
     ]);
-    factory.close();
+    await factory.close();
   });
 });

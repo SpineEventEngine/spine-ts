@@ -6519,6 +6519,11 @@ net. The current TenantIndex controls admission, with TENANT_UNKNOWN represented
 by a typed Spine error and canonical gRPC NOT_FOUND. Application code registers
 tenants and supplies existing database settings; Spine does not create databases.
 JVM PR 1698 supplies duplicate Entity state registration and cleanup semantics.
+The human's later correction makes duplicate state rejection unconditional across
+open domain Bounded Contexts, including tests and BlackBox. No disabling switch,
+test-profile exception or duplicate-registration execution mode is allowed. This
+supersedes the PR's historical configurable test behavior; System Contexts remain
+excluded from the domain registration record.
 
 Automatic Agent recovery is removed in full, including saved outgoing Command
 obligations. Ordinary delivery already handed to framework delivery continues
@@ -6546,7 +6551,7 @@ existing-data migration is authorized.
 
 ## D-0148: Awaitable factory and Entity commit shutdown
 
-Date: 2026-10-27. Status: accepted implementation decision for D-0146; pending.
+Date: 2026-10-27. Status: implemented and independently reviewed; full-task release pending.
 
 Retained commit storage must finish admitted commits before closing its internal
 record storage. Current provider factory shutdown can close those records while
@@ -6567,6 +6572,17 @@ Bounded Context build can use ordinary awaited cleanup. Existing public cleanup
 callers must await factory completion. No generic lifecycle framework, compatibility
 wrapper, data migration or additional recovery machinery is introduced.
 
+The Datastore custom Entity bundle follows the same explicit contract:
+close(): Promise<void> plus mandatory internal closeIdle(): void. A private commit
+adapter delegates disposal to the complete custom bundle; the factory tracks
+that acquisition through exactly one disposal path. Public bundle acquisition
+remains tracked as a bundle. Optional idle cleanup or deferred factory cleanup
+cannot fulfill synchronous rollback. Custom creators return idle bundles and
+clean up any partial acquisition before throwing. Idle cleanup validates no
+admitted work or unfinished async close before releasing anything, starts no
+deferred work, and preserves its outcome for repeated cleanup. The later async
+assembly milestone can remove this temporary synchronous requirement.
+
 ## D-0149: Domain state supplied to Entity history conformance
 
 Date: 2026-10-27. Status: implemented and independently reviewed with D-0147.
@@ -6582,3 +6598,45 @@ This keeps generated domain fixtures in test code. Production storage neither
 imports another package's test artifacts nor embeds descriptor payloads. No
 new schema package, generation target, compatibility wrapper or migration is
 needed. All Any conversion in this helper uses the shared AnyPacker.
+
+## D-0150: Offline factory assembly and provider preparation
+
+Date: 2026-10-27. Status: accepted bounded contract; implementation pending.
+
+Keep synchronous Storage construction, with logical SQL handles resolving their
+physical destination inside awaited operations. SQL build performs local
+validation only. The accepted async setTenantResolver resolves tenant options;
+setOptions supplies the shared database. checkConnection() checks only that
+shared destination, without tenant enumeration, resolver calls, DDL or writes.
+Explicit checks/preparation dispose temporary connections and pools. Successful
+destination binding is stable for the factory lifetime; failed attempts retry.
+
+The provider-only StoragePreparation port accepts existing RecordSpec, declarative
+Entity input and surviving Agent audit input, with create/check modes. Register
+it using the existing provider registry pattern. No preparation constructs
+throwaway Storage. Unknown custom implementations fail clearly until they provide
+this capability; memory deliberately supplies local checks. No recovery-only
+Agent preparation API is added. The server later enumerates pure definitions
+from actual registered models and framework storage; late additions cannot reuse
+an obsolete whole-context readiness boolean.
+
+Factory-local physical-family preparation coordinates creation and compatibility
+with ordinary storage use. Creation includes required inspection. A successful
+read-only compatibility check permits later use without DDL. Separate successful
+evidence from pending attempts, clear failures, and preserve completed families
+when another fails. A pending read-only check is never escalated to creation.
+Concurrent close drains admitted resolution/preparation before pool cleanup.
+
+Datastore create/check establish the same documented native structural facts: kind,
+namespace, mapping/configuration and read connection access. Kinds require no
+remote creation. Neither mode certifies deployed composite indexes, arbitrary
+future query combinations or write permissions. Index deployment remains an
+explicit application prerequisite. Custom preparation that cannot prove a claimed
+requirement fails both modes without caching success. No sentinel data or fake DDL.
+
+Accepted detailed contracts, JVM source evidence and five bounded implementation
+slices are in [Factory preparation](tasks/environment-lifecycle/FACTORY_PREPARATION.md).
+The explicit Astra/high requirements splitter resolved the async/synchronous
+contract gap; the parent corrected an initially inconsistent Datastore proof
+claim in that same pass. No additional architecture pass is needed absent a
+material new contract or demonstrated blocker. No migration or provisioning.

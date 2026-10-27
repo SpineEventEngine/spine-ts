@@ -13,8 +13,12 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import {
+  AnyPacker,
+  Identifiers,
+  StringifierRegistry,
+  TypeRegistry,
+} from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -36,6 +40,8 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskListSchema } from "../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
 import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
+import { PostgresRecordStorage } from "../src/postgres/record-storage.js";
+import { PostgresEntityCommitStorage } from "../src/postgres/entity-commit.js";
 
 const driver = vi.hoisted(() => {
   let commitFailure: Error | undefined;
@@ -185,6 +191,188 @@ vi.mock("pg", () => ({ Pool: driver.Pool }));
 import { PostgresStorageFactory } from "../src/index.js";
 
 describe("PostgreSQL Entity commit", () => {
+  it("retains a current record handle across repeated commits", async () => {
+    const factory = await postgresFactory();
+    const entity = entityInput();
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    const closeRecord = vi.spyOn(PostgresRecordStorage.prototype, "close");
+    try {
+      for (const value of ["first", "second"])
+        await commit.commit({
+          context: entity.context,
+          entity,
+          entityId: "task",
+          next: record("task", value),
+        });
+      expect(closeRecord).not.toHaveBeenCalled();
+      await commit.close();
+      expect(closeRecord).toHaveBeenCalledTimes(1);
+    } finally {
+      closeRecord.mockRestore();
+      await factory.close();
+    }
+  });
+  it("attempts every retained PostgreSQL record close after multiple failures", async () => {
+    const factory = await postgresFactory();
+    const entity = entityInput(true, true);
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    await commit.commit({
+      context: entity.context,
+      entity,
+      entityId: "task",
+      next: record("task"),
+      states: [record("task")],
+      diagnostics: [event("diagnostic")],
+      events: [event("delivery")],
+    });
+    const failures = Array.from({ length: 4 }, (_, index) => new Error(`record ${String(index)}`));
+    const original = Object.getOwnPropertyDescriptor(PostgresRecordStorage.prototype, "close")
+      ?.value as PostgresRecordStorage<unknown, import("@bufbuild/protobuf").Message>["close"];
+    let closed = 0;
+    const close = vi.spyOn(PostgresRecordStorage.prototype, "close").mockImplementation(function (
+      this: PostgresRecordStorage<unknown, import("@bufbuild/protobuf").Message>,
+    ) {
+      original.call(this);
+      throw failures[closed++] ?? new Error("Unexpected retained close.");
+    });
+    try {
+      await expect(commit.close()).rejects.toMatchObject({ errors: failures });
+      expect(closed).toBe(4);
+      await expect(commit.close()).rejects.toMatchObject({ errors: failures });
+    } finally {
+      close.mockRestore();
+      await factory.close();
+    }
+  });
+  it("reports commit and pool close failures after attempting both", async () => {
+    const factory = await postgresFactory();
+    const entity = entityInput();
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    await commit.commit({
+      context: entity.context,
+      entity,
+      entityId: "task",
+      next: record("task"),
+    });
+    const commitFailure = new Error("retained record close");
+    const poolFailure = new Error("pool end");
+    const original = Object.getOwnPropertyDescriptor(PostgresRecordStorage.prototype, "close")
+      ?.value as PostgresRecordStorage<unknown, import("@bufbuild/protobuf").Message>["close"];
+    const close = vi
+      .spyOn(PostgresRecordStorage.prototype, "close")
+      .mockImplementationOnce(function (
+        this: PostgresRecordStorage<unknown, import("@bufbuild/protobuf").Message>,
+      ) {
+        original.call(this);
+        throw commitFailure;
+      });
+    driver.end.mockImplementationOnce(() => Promise.reject(poolFailure));
+    try {
+      await expect(factory.close()).rejects.toMatchObject({
+        errors: [commitFailure, poolFailure],
+      });
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(driver.end).toHaveBeenCalledTimes(1);
+    } finally {
+      close.mockRestore();
+    }
+  });
+  it("admits ID-validation callbacks before reentrant factory close", async () => {
+    const factory = await postgresFactory();
+    const base = entityInput();
+    let closing: Promise<void> | undefined;
+    const entity = {
+      ...base,
+      id: {
+        ...base.id,
+        unpack: (id: ReturnType<typeof AnyPacker.pack>) => {
+          expect(() => {
+            commit.closeIdle();
+          }).toThrow(/active/);
+          closing = factory.close();
+          return base.id.unpack(id);
+        },
+      },
+    };
+    const commit = EntityCommitStorageFactories.create(factory, entity);
+    await expect(
+      commit.commit({ context: entity.context, entity, entityId: "task", next: record("task") }),
+    ).resolves.toBeUndefined();
+    await expect(closing).resolves.toBeUndefined();
+  });
+  it("rolls back a failed optional family while retaining current storage", async () => {
+    const factory = await postgresFactory();
+    const entity = entityInput(true, true);
+    const cleanup = new Error("new state close failed");
+    const acquisition = new Error("diagnostic open failed");
+    const originalClose = Object.getOwnPropertyDescriptor(PostgresRecordStorage.prototype, "close")
+      ?.value as PostgresRecordStorage<unknown, import("@bufbuild/protobuf").Message>["close"];
+    const closeRecord = vi
+      .spyOn(PostgresRecordStorage.prototype, "close")
+      .mockImplementationOnce(function (
+        this: PostgresRecordStorage<unknown, import("@bufbuild/protobuf").Message>,
+      ) {
+        originalClose.call(this);
+        throw cleanup;
+      });
+    let opens = 0;
+    let failDiagnostic = true;
+    const open = <Id, R extends import("@bufbuild/protobuf").Message>(
+      spec: RecordSpec<Id, R>,
+      group?: import("@spine-event-engine/storage").StorageGroup,
+    ): PostgresRecordStorage<Id, R> => {
+      opens += 1;
+      if (opens === 3 && failDiagnostic) {
+        failDiagnostic = false;
+        throw acquisition;
+      }
+      return factory.createRecordStorage(entity.context, spec, group) as PostgresRecordStorage<
+        Id,
+        R
+      >;
+    };
+    const commit = new PostgresEntityCommitStorage(entity, open, () => undefined);
+    try {
+      await commit.commit({
+        context: entity.context,
+        entity,
+        entityId: "task",
+        next: record("task"),
+      });
+      await expect(
+        commit.commit({
+          context: entity.context,
+          entity,
+          entityId: "task",
+          next: record("task"),
+          states: [record("task")],
+          diagnostics: [event("diag")],
+        }),
+      ).rejects.toMatchObject({ cause: { errors: [acquisition, cleanup] } });
+      expect(closeRecord).toHaveBeenCalledTimes(1);
+      await commit.commit({
+        context: entity.context,
+        entity,
+        entityId: "task",
+        next: record("task"),
+      });
+      for (let index = 0; index < 2; index += 1)
+        await commit.commit({
+          context: entity.context,
+          entity,
+          entityId: "task",
+          next: record("task"),
+          states: [record("task")],
+          diagnostics: [event("diag")],
+        });
+      expect(opens).toBe(5);
+      await commit.close();
+      expect(closeRecord).toHaveBeenCalledTimes(4);
+    } finally {
+      closeRecord.mockRestore();
+      await factory.close();
+    }
+  });
   beforeEach(() => {
     driver.reset();
   });
@@ -241,8 +429,8 @@ describe("PostgreSQL Entity commit", () => {
     const entity = entityInput();
     const commit = EntityCommitStorageFactories.create(factory, entity);
 
-    commit.close();
-    commit.close();
+    await commit.close();
+    await commit.close();
     const connections = driver.connect.mock.calls.length;
 
     await expect(
@@ -383,7 +571,7 @@ describe("PostgreSQL Entity commit", () => {
 
     expect(driver.durableWrites()).toBe(4);
     expect(driver.query.mock.calls.filter(([sql]) => sql.includes("DO NOTHING"))).toHaveLength(3);
-    factory.close();
+    await factory.close();
   });
 
   it("retains state history when a later diagnostic append fails", async () => {
@@ -405,7 +593,7 @@ describe("PostgreSQL Entity commit", () => {
 
     expect(driver.durableWrites()).toBe(1);
     expect(driver.query.mock.calls.map(([sql]) => sql)).not.toContain("ROLLBACK");
-    factory.close();
+    await factory.close();
   });
 
   it("replays captured records once after a deadlock without changing Event IDs", async () => {
@@ -461,7 +649,7 @@ describe("PostgreSQL Entity commit", () => {
       }),
     ).rejects.toThrow("collides");
     expect(driver.durableWrites()).toBe(before);
-    factory.close();
+    await factory.close();
   });
 
   it("coordinates independent factory handles through current-record replay", async () => {
@@ -487,8 +675,8 @@ describe("PostgreSQL Entity commit", () => {
       }),
     ).resolves.toBeUndefined();
 
-    firstFactory.close();
-    secondFactory.close();
+    await firstFactory.close();
+    await secondFactory.close();
   });
 
   it("lets started work release before the factory drain completes", async () => {
@@ -504,14 +692,13 @@ describe("PostgreSQL Entity commit", () => {
     });
     await driver.waitUntilBlocked();
 
-    factory.close();
-    await Promise.resolve();
-    await Promise.resolve();
+    const closing = factory.close();
     const drained = driver.waitUntilDrained();
-    expect(driver.end).toHaveBeenCalledTimes(1);
+    expect(driver.end).not.toHaveBeenCalled();
     driver.unblock();
 
     await expect(inFlight).resolves.toBeUndefined();
+    await closing;
     await drained;
     await expect(
       commit.commit({ context: entity.context, entity, entityId: "task", next: record("task") }),
@@ -531,7 +718,7 @@ function entityInput(
       pack: (id) => Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
       unpack: (packed) =>
         packed.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
-          ? fromBinary(TaskIdSchema, packed.value).value
+          ? AnyPacker.tryUnpack(packed, TaskIdSchema)?.value
           : undefined,
     },
     columns: [],
@@ -551,24 +738,15 @@ function entityInput(
 function event(id: string, alternate = false): Event {
   const taskId = create(TaskIdSchema, { value: "task" });
   const message = alternate
-    ? create(AnySchema, {
-        typeUrl: `type.spine.io/${TaskRenamedSchema.typeName}`,
-        value: toBinary(
-          TaskRenamedSchema,
-          create(TaskRenamedSchema, { id: taskId, title: "Changed" }),
-        ),
-      })
-    : create(AnySchema, {
-        typeUrl: `type.spine.io/${TaskCreatedSchema.typeName}`,
-        value: toBinary(
-          TaskCreatedSchema,
-          create(TaskCreatedSchema, {
-            id: taskId,
-            title: "Created",
-            taskListId: create(TaskListIdSchema, { value: "list-1" }),
-          }),
-        ),
-      });
+    ? AnyPacker.pack(TaskRenamedSchema, create(TaskRenamedSchema, { id: taskId, title: "Changed" }))
+    : AnyPacker.pack(
+        TaskCreatedSchema,
+        create(TaskCreatedSchema, {
+          id: taskId,
+          title: "Created",
+          taskListId: create(TaskListIdSchema, { value: "list-1" }),
+        }),
+      );
   return create(EventSchema, {
     id: { value: id },
     message,

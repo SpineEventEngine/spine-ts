@@ -347,17 +347,47 @@ class MemoryAgentExecutionHandle<I, S extends Message> implements AgentExecution
     const commits = EntityCommitStorageFactories.create(this.factory, this.input.entity);
     if (!(commits instanceof MemoryEntityCommitStorage))
       throw new Error("Memory Agent execution requires its memory Entity commit coordinator.");
-    try {
-      await commits.commitAgentConditional(
+    await this.commitWithCleanup(commits, () =>
+      commits.commitAgentConditional(
         this.input.entity,
         entityId,
         expectedVersion,
         input.entityCommit,
         this.publication(input, scope, staged),
-      );
-    } finally {
-      commits.close();
+      ),
+    );
+  }
+
+  /**
+   * Commits Agent work and preserves coordinator cleanup failures.
+   *
+   * @param commits The admitted commit completions.
+   * @param runCommit The requested value.
+   * @returns Completion after Agent work and coordinator cleanup.
+   */
+  private async commitWithCleanup(
+    commits: MemoryEntityCommitStorage,
+    runCommit: () => Promise<void>,
+  ): Promise<void> {
+    let operationError: unknown;
+    try {
+      await runCommit();
+    } catch (error) {
+      operationError = error;
     }
+    let closeError: unknown;
+    try {
+      await commits.close();
+    } catch (error) {
+      closeError = error;
+    }
+    if (operationError !== undefined && closeError !== undefined)
+      throw new AggregateError(
+        [operationError, closeError],
+        "Agent completion and cleanup failed.",
+      );
+    if (operationError !== undefined) throw operationError as Error;
+    if (closeError !== undefined) throw closeError as Error;
   }
 
   /**
