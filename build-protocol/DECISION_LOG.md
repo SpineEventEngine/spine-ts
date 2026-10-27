@@ -6499,3 +6499,32 @@ This correction supersedes the Agent design's durable Event-output delivery
 promise. It does not authorize restoring cross-record transactions for ordinary
 storage operations or changing Command delivery contracts. No production
 application requires legacy schemas or data migration.
+
+## D-0146: Shared Environment and Explicit or Lazy Preparation
+
+Date: 2026-10-27. Status: accepted; implementation in progress.
+
+The [accepted proposal](tasks/environment-lifecycle/PROPOSAL.md) governs the
+shared environment lifecycle task. ServerEnvironment supplies one StorageFactory,
+TransportFactory and Delivery, plus overridable TenantIndex and AI defaults.
+Server remains gRPC-centric. Storage objects are retained across operations.
+Bounded Context build flags select eager or first-input preparation independently.
+Failed lazy preparation rejects that request and can retry on later input;
+explicit startup preparation fails the application. Periodic subscription failures
+after successful startup log WARN and attempt restart without stopping processing.
+
+InboxStorage is always single-tenant and shared. Dispatch reads the tenant from
+the saved signal. Committed writes notify Delivery; periodic scans are a safety
+net. The current TenantIndex controls admission, with TENANT_UNKNOWN represented
+by a typed Spine error and canonical gRPC NOT_FOUND. Application code registers
+tenants and supplies existing database settings; Spine does not create databases.
+JVM PR 1698 supplies duplicate Entity state registration and cleanup semantics.
+
+Automatic Agent recovery is removed in full, including saved outgoing Command
+obligations. Ordinary delivery already handed to framework delivery continues
+under its existing rules. New signals execute normally; persistent state and all
+four history APIs remain. This supersedes recovery promises in D-0129 and earlier
+Agent documentation, and extends D-0145. There is no existing-data migration work.
+
+Current supported APIs remain documented until each implementation slice lands;
+this decision records the target and supersedes conflicting implementation plans.

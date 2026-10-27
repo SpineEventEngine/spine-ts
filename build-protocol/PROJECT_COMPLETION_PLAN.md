@@ -14,7 +14,13 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
-Current work: [SQL delivery and subscription reliability](tasks/sql-delivery-reliability/TASK.md)
+Current work: [Shared environment and storage lifecycle](tasks/environment-lifecycle/TASK.md)
+on `environment-lifecycle`, based on freshly fetched official master `ff6c866`.
+Storage retention is first. The accepted proposal includes dynamic TenantIndex,
+shared Delivery, explicit and lazy preparation, JVM PR 1698 and complete Agent
+recovery removal. No migration work is authorized. Implementation is in progress.
+
+Previous work: [SQL delivery and subscription reliability](tasks/sql-delivery-reliability/TASK.md)
 on `sql-delivery-subscription-reliability` in
 [PR #19](https://github.com/SpineEventEngine/spine-ts/pull/19). The author requested
 integration of official `master`, including the Agent feature from PR #18.

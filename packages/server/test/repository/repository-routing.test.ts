@@ -8637,6 +8637,97 @@ describe("repository signal routing", () => {
     await failingContext.close();
   });
 
+  it("retains one Entity storage across repeated repository dispatch and closes it with the context", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+
+    try {
+      await dispatcher.dispatch(createProjectCreated("retained-event-1", "retained-project"));
+      await dispatcher.dispatch(createProjectCreated("retained-event-2", "retained-project"));
+      expect(factory.commitCreations).toBe(1);
+    } finally {
+      await context.close();
+    }
+    expect(factory.entityCloses).toBe(factory.entityOpens);
+  });
+
+  it("retains separate Entity storage per tenant during concurrent dispatch", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+
+    try {
+      await Promise.all(
+        ["tenant-a", "tenant-b"].flatMap((tenant) =>
+          ["1", "2"].map((number) =>
+            dispatcher.dispatch(
+              createProjectCreated(`retained-${tenant}-${number}`, `project-${tenant}-${number}`, {
+                importTenantId: tenant,
+              }),
+            ),
+          ),
+        ),
+      );
+      expect(factory.commitCreations).toBe(2);
+    } finally {
+      await context.close();
+    }
+    expect(factory.entityCloses).toBe(factory.entityOpens);
+  });
+
+  it("closes a partially acquired Entity storage and retries on the next dispatch", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+    factory.failCommitOnce = true;
+
+    try {
+      await expect(
+        dispatcher.dispatch(createProjectCreated("retained-failure-1", "retry-project")),
+      ).rejects.toThrow("commit acquisition failed");
+      expect(factory.entityCloses).toBe(factory.entityOpens);
+      await expect(
+        dispatcher.dispatch(createProjectCreated("retained-failure-2", "retry-project")),
+      ).resolves.toBeUndefined();
+      expect(factory.commitCreations).toBe(2);
+    } finally {
+      await context.close();
+    }
+    expect(factory.entityCloses).toBe(factory.entityOpens);
+  });
+
+  it("closes Entity storage when its retained commit handle fails to close", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+    await dispatcher.dispatch(createProjectCreated("retained-close-1", "close-project"));
+    factory.failCommitClose = true;
+
+    await expect(context.close()).rejects.toThrow();
+    expect(factory.entityCloses).toBe(factory.entityOpens);
+  });
+
   it("bounds delivery lanes while delivered Inbox rows suppress a duplicate after lane eviction", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -15183,6 +15274,44 @@ class CurrentRecordTestStorage<S extends Message = Message> {
 }
 
 type ReadEntityStorage = EntityStorageConformance<unknown, Message> & { close(): void };
+
+class RetainedEntityStorageFactory extends InMemoryStorageFactory {
+  entityOpens = 0;
+  entityCloses = 0;
+  commitCreations = 0;
+  failCommitOnce = false;
+  failCommitClose = false;
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    this.commitCreations++;
+    if (this.failCommitOnce) {
+      this.failCommitOnce = false;
+      throw new Error("commit acquisition failed");
+    }
+    const storage = super.createEntityCommitStorage(input);
+    return {
+      commit: (work) => storage.commit(work),
+      close: () => {
+        storage.close();
+        if (this.failCommitClose) throw new Error("commit close failed");
+      },
+    };
+  }
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as ReadEntityStorage;
+    this.entityOpens++;
+    return {
+      ...storage,
+      close: () => {
+        this.entityCloses++;
+        storage.close();
+      },
+    };
+  }
+}
 
 class ObservedReadStorageFactory extends InMemoryStorageFactory {
   readonly plans: NormalizedQueryPlan<unknown>[] = [];

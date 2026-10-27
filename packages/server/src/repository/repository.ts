@@ -10716,15 +10716,14 @@ const RepositoryStorage = {
     if (candidate.createEntityStorage === undefined)
       throw new Error("StorageFactory does not provide required atomic Entity commit storage.");
     const entity = candidate.createEntityStorage(input);
-    const commits = EntityCommitStorageFactories.create(factory, input);
+    const commits = this.openEntityCommits(factory, input, entity);
     let ports:
       | { agentHistory: AgentHistoryStorage<I>; agentExecution: AgentExecutionStorage<I, S> }
       | undefined;
     try {
       if (agent) ports = this.openAgentPorts(factory, input);
     } catch (error) {
-      commits.close();
-      entity.close();
+      this.closePorts([commits, entity], error);
       throw error;
     }
     return {
@@ -10732,12 +10731,58 @@ const RepositoryStorage = {
       commits,
       ...ports,
       close: () => {
-        ports?.agentExecution.close();
-        ports?.agentHistory.close();
-        commits.close();
-        entity.close();
+        this.closePorts([
+          ...(ports === undefined ? [] : [ports.agentExecution, ports.agentHistory]),
+          commits,
+          entity,
+        ]);
       },
     };
+  },
+
+  /**
+   * Opens the commit port and closes Entity storage if acquisition fails.
+   *
+   * @typeParam I Entity identifier type.
+   * @typeParam S Generated Entity state type.
+   * @param factory Provider storage factory.
+   * @param input Entity storage location and schema.
+   * @param entity Already acquired Entity storage.
+   * @returns The acquired commit port.
+   */
+  openEntityCommits<I, S extends Message>(
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+    entity: Pick<EntityCommitStorage, "close">,
+  ): EntityCommitStorage {
+    try {
+      return EntityCommitStorageFactories.create(factory, input);
+    } catch (error) {
+      this.closePorts([entity], error);
+      throw error;
+    }
+  },
+
+  /**
+   * Closes every acquired port, retaining the first failure and any later failures.
+   *
+   * @param ports Acquired ports in close order.
+   * @param acquisitionError Earlier acquisition failure, if any.
+   */
+  closePorts(
+    ports: readonly Pick<EntityCommitStorage, "close">[],
+    acquisitionError?: unknown,
+  ): void {
+    const errors: unknown[] = acquisitionError === undefined ? [] : [acquisitionError];
+    for (const port of ports) {
+      try {
+        port.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, "Entity storage cleanup failed.");
   },
 
   /**
@@ -10771,7 +10816,7 @@ const RepositoryStorage = {
   },
 
   /**
-   * Returns one shared Entity storage handle per context and state type.
+   * Returns one retained Entity storage handle per context and state type.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Generated Entity state type.
@@ -10787,6 +10832,8 @@ const RepositoryStorage = {
   ): RepositoryEntityStorage<I, S> {
     const key = JSON.stringify({ context: input.context, state: input.sourceType.typeName });
     let handles = repositoryEntityHandles.get(repository);
+    const existing = handles?.get(key);
+    if (existing !== undefined) return existing as RepositoryEntityStorage<I, S>;
     const handle = RepositoryStorage.openEntityStorage(
       factory,
       input,
@@ -10795,11 +10842,6 @@ const RepositoryStorage = {
     if (handles === undefined) {
       handles = new Map();
       repositoryEntityHandles.set(repository, handles);
-    }
-    const existing = handles.get(key);
-    if (existing !== undefined) {
-      handle.close();
-      return existing as RepositoryEntityStorage<I, S>;
     }
     handles.set(key, handle);
     return handle;
