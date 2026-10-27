@@ -13,190 +13,130 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { describe, expect, it, vi } from "vitest";
-import { InMemoryStorageFactory, StorageFactory } from "@spine-event-engine/storage";
-import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
 import { InternetDomainSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
+import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/provider";
+import { describe, expect, it, vi } from "vitest";
 
 import { TenantIndexes } from "../../src/context/tenant-index.js";
 import { tenant } from "../tenant-fixture.js";
 
-describe("provider tenant index", () => {
-  it("admits complete TenantIds through the factory catalog without record storage", async () => {
+describe("live tenant index", () => {
+  it("registers complete identities through the provider catalog without storage creation", async () => {
     const factory = new InMemoryStorageFactory();
     const createRecordStorage = vi.spyOn(factory, "createRecordStorage");
-    const index = TenantIndexes.create({
-      contextName: "Tasks",
-      tenantMode: "multitenant",
-      storageFactory: factory,
-    });
-
-    const tenantA = tenant("tenant-a");
-    const tenantB = create(TenantIdSchema, {
+    const index = TenantIndexes.fromFactory(factory);
+    const value = tenant("tenant-a");
+    const domain = create(TenantIdSchema, {
       kind: { case: "domain", value: create(InternetDomainSchema, { value: "example.test" }) },
     });
-    await index.keep(tenantA);
-    await index.keep(tenantB);
-    await index.keep(tenantA);
-
-    const admitted = await index.all();
-    expect(admitted).toHaveLength(2);
-    expect(admitted).toEqual(expect.arrayContaining([tenantA, tenantB]));
+    await index.keep(value);
+    await index.keep(domain);
+    await index.keep(value);
+    await expect(index.contains(value)).resolves.toBe(true);
+    await expect(index.contains(tenant("missing"))).resolves.toBe(false);
+    expect(await index.all()).toEqual([domain, value]);
     expect(createRecordStorage).not.toHaveBeenCalled();
-    index.close();
   });
 
-  it("reads bounded provider pages when the unrelated all path is unavailable", async () => {
-    const source = new InMemoryStorageFactory();
-    const catalog = source.tenantCatalog();
-    await catalog.keep(TenantBoundary.from(tenant("first")));
-    await catalog.keep(TenantBoundary.from(tenant("second")));
-    const index = TenantIndexes.create({
-      contextName: "Tasks",
-      tenantMode: "multitenant",
-      storageFactory: new CatalogFactory({
+  it("reads finite pages without using full enumeration", async () => {
+    const source = new InMemoryStorageFactory().tenantCatalog();
+    await source.keep(TenantBoundary.from(tenant("first")));
+    await source.keep(TenantBoundary.from(tenant("second")));
+    const index = TenantIndexes.fromFactory(
+      new CatalogFactory({
+        contains: (boundary) => source.contains(boundary),
         all: () => Promise.reject(new Error("full enumeration forbidden")),
-        page: (request) => catalog.page(request),
-        keep: (boundary) => catalog.keep(boundary),
+        page: (request) => source.page(request),
+        keep: (boundary) => source.keep(boundary),
         close: () => Promise.resolve(),
       }),
-    });
+    );
     const signal = new AbortController().signal;
     const first = await index.page({ count: 1, signal });
     expect(first.ids).toHaveLength(1);
-    if (first.after === undefined) throw new Error("Expected tenant continuation.");
+    if (first.after === undefined) throw new Error("Expected continuation.");
     const second = await index.page({ count: 1, signal, after: first.after });
     expect(second.ids).toHaveLength(1);
     expect(second.hasMore).toBe(false);
-    index.close();
-    await expect(index.page({ count: 1, signal })).rejects.toThrow(/closed/);
   });
 
-  it("reports SINGLE_TENANT without a storage partition and rejects recording or later access", async () => {
-    const index = TenantIndexes.create({
-      contextName: "Tasks",
-      tenantMode: "single-tenant",
-      storageFactory: new InMemoryStorageFactory(),
-    });
-
-    await expect(index.all()).resolves.toEqual([tenant("SINGLE_TENANT")]);
+  it("uses detached, bounded transient memory for a factory without a catalog", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const original = tenant("registered");
+    await index.keep(original);
+    original.kind = { case: "value", value: "mutated" };
+    await expect(index.contains(tenant("registered"))).resolves.toBe(true);
+    await expect(index.contains(tenant("mutated"))).resolves.toBe(false);
+    const listed = await index.all();
+    const first = listed[0];
+    if (first === undefined) throw new Error("Expected registered tenant.");
+    first.kind = { case: "value", value: "changed-result" };
+    await expect(index.all()).resolves.toEqual([tenant("registered")]);
     const signal = new AbortController().signal;
-    await expect(index.page({ count: 1, signal })).resolves.toMatchObject({
-      ids: [tenant("SINGLE_TENANT")],
-      hasMore: false,
-    });
+    const page = await index.page({ count: 1, signal });
+    expect(page).toMatchObject({ ids: [tenant("registered")], hasMore: false });
+    await index.keep(tenant("second"));
+    const firstPage = await index.page({ count: 1, signal });
+    expect(firstPage.hasMore).toBe(true);
+    if (firstPage.after === undefined) throw new Error("Expected bounded continuation.");
+    expect(Object.isFrozen(firstPage.after)).toBe(true);
+    const mutable = firstPage.after as unknown as Record<string, unknown>;
+    expect(Reflect.set(mutable, "index", 0)).toBe(false);
+    expect(Reflect.set(mutable, "length", Infinity)).toBe(false);
+    const secondPage = await index.page({ count: 1, signal, after: firstPage.after });
+    expect(secondPage.ids).toEqual([tenant("second")]);
+    expect(secondPage.hasMore).toBe(false);
     await expect(
-      index.page({
-        count: 1,
-        signal,
-        after: {
-          [Symbol.toStringTag]: "TenantCatalogCursor",
-        },
-      }),
+      index.page({ count: 1, signal, after: { [Symbol.toStringTag]: "TenantCatalogCursor" } }),
     ).rejects.toThrow(/continuation/);
-    await expect(index.keep(tenant("tenant-a"))).rejects.toThrow("does not accept");
-    index.close();
-    await expect(index.all()).rejects.toThrow("closed");
-    await expect(index.page({ count: 1, signal })).rejects.toThrow("closed");
-    await expect(index.keep(tenant("tenant-a"))).rejects.toThrow("closed");
+    const foreign = TenantIndexes.fromFactory({} as StorageFactory);
+    await expect(foreign.page({ count: 1, signal, after: firstPage.after })).rejects.toThrow(
+      /continuation/,
+    );
+    await expect(index.page({ count: 0, signal })).rejects.toThrow();
   });
 
-  it("rejects an incomplete generated tenant at the shared boundary", async () => {
-    const index = TenantIndexes.create({
-      contextName: "Tasks",
-      tenantMode: "multitenant",
-      storageFactory: new InMemoryStorageFactory(),
-    });
-
+  it("rejects incomplete tenant identities before provider lookup", async () => {
+    const index = TenantIndexes.fromFactory(new InMemoryStorageFactory());
     await expect(index.keep(create(TenantIdSchema))).rejects.toThrow(/non-empty TenantId/);
   });
 
-  it("rejects multitenant index use after close", async () => {
-    const index = TenantIndexes.create({
-      contextName: "Tasks",
-      tenantMode: "multitenant",
-      storageFactory: new InMemoryStorageFactory(),
-    });
-    index.close();
-
-    await expect(index.all()).rejects.toThrow(/TenantIndex.*closed/);
-    await expect(index.keep(tenant("tenant-a"))).rejects.toThrow(/TenantIndex.*closed/);
-  });
-
-  it("rejects a provider without a tenant catalog", () => {
-    expect(() =>
-      TenantIndexes.create({
-        contextName: "Tasks",
-        tenantMode: "multitenant",
-        storageFactory: {} as StorageFactory,
-      }),
-    ).toThrow(/provider-owned tenant catalog/);
-  });
-
-  it("rejects a single-tenant boundary returned by a multitenant catalog", async () => {
-    const factory = new CatalogFactory({
-      all: () => Promise.resolve([TenantBoundary.single]),
-      page: () => Promise.resolve({ boundaries: [TenantBoundary.single], hasMore: false }),
-      keep: () => Promise.resolve(),
-      close: () => Promise.resolve(),
-    });
-    const index = TenantIndexes.create({
-      contextName: "Tasks",
-      tenantMode: "multitenant",
-      storageFactory: factory,
-    });
-
-    await expect(index.all()).rejects.toThrow(/returned a single-tenant boundary/);
-    await expect(index.page({ count: 1, signal: new AbortController().signal })).rejects.toThrow(
-      /returned a single-tenant boundary/,
-    );
-  });
-
-  it("fails setup when a catalog does not implement paging", () => {
-    const legacy = {
-      all: () => Promise.resolve([]),
-      keep: () => Promise.resolve(),
-      close: () => Promise.resolve(),
-    } as unknown as TenantCatalog;
-    expect(() =>
-      TenantIndexes.create({
-        contextName: "Tasks",
-        tenantMode: "multitenant",
-        storageFactory: new CatalogFactory(legacy),
-      }),
-    ).toThrow(/paged/);
-  });
-
-  it("rejects a provider page that arrives after its index closes", async () => {
-    let deliver:
-      ((page: { boundaries: readonly TenantBoundary[]; hasMore: false }) => void) | undefined;
-    const delayed = new Promise<{ boundaries: readonly TenantBoundary[]; hasMore: false }>(
-      (resolve) => {
-        deliver = resolve;
-      },
-    );
-    const index = TenantIndexes.create({
-      contextName: "Tasks",
-      tenantMode: "multitenant",
-      storageFactory: new CatalogFactory({
-        all: () => Promise.resolve([]),
-        page: () => delayed,
+  it("rejects single-tenant boundaries returned by a provider catalog", async () => {
+    const index = TenantIndexes.fromFactory(
+      new CatalogFactory({
+        contains: () => Promise.resolve(false),
+        all: () => Promise.resolve([TenantBoundary.single]),
+        page: () => Promise.resolve({ boundaries: [TenantBoundary.single], hasMore: false }),
         keep: () => Promise.resolve(),
         close: () => Promise.resolve(),
       }),
-    });
-    const reading = index.page({ count: 1, signal: new AbortController().signal });
-    index.close();
-    deliver?.({ boundaries: [TenantBoundary.from(tenant("late"))], hasMore: false });
-    await expect(reading).rejects.toThrow(/closed/);
+    );
+    await expect(index.all()).rejects.toThrow(/single-tenant boundary/);
+    await expect(index.page({ count: 1, signal: new AbortController().signal })).rejects.toThrow(
+      /single-tenant boundary/,
+    );
   });
 });
 
+/**
+ * Substitutes one provider catalog for focused index tests.
+ */
 class CatalogFactory extends InMemoryStorageFactory {
+  /**
+   * Captures the selected test catalog.
+   *
+   * @param catalog Catalog to expose through the provider seam.
+   */
   constructor(private readonly catalog: TenantCatalog) {
     super();
   }
 
+  /**
+   * Returns the supplied test catalog.
+   *
+   * @returns The supplied test catalog.
+   */
   override tenantCatalog(): TenantCatalog {
     return this.catalog;
   }

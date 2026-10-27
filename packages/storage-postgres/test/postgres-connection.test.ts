@@ -252,6 +252,8 @@ describe("PostgresStorageFactory connection", () => {
     });
     const configured = boundaries[0];
     if (configured === undefined) throw new Error("Expected one configured PostgreSQL tenant.");
+    await expect(catalog.contains(configured)).resolves.toBe(true);
+    await expect(catalog.contains(TenantBoundary.from(tenant("unknown")))).resolves.toBe(false);
     await expect(catalog.keep(configured)).resolves.toBeUndefined();
     await expect(catalog.keep(TenantBoundary.from(tenant("unknown")))).rejects.toThrow(
       /not configured/i,
@@ -271,8 +273,11 @@ describe("PostgresStorageFactory connection", () => {
     await factory.checkConnection();
     await expect(factory.tenantCatalog().all()).resolves.toEqual([]);
     await expect(
+      factory.tenantCatalog().contains(TenantBoundary.from(tenant("dynamic"))),
+    ).resolves.toBe(false);
+    await expect(
       factory.tenantCatalog().keep(TenantBoundary.from(tenant("dynamic"))),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow(/not configured/);
     expect(resolve).not.toHaveBeenCalled();
     await factory.close();
   });

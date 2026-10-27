@@ -679,3 +679,53 @@ remain accepted. No unresolved P0–P2 findings. Parent fresh diff-to-LCOV inspe
 confirms factory 114/117 and internal mapping 2/2 changed executable lines.
 Full-task release/security checks remain pending. Commit/push authored paths,
 leaving generation-only metadata unstaged.
+
+## M5a TenantIndex and native membership review
+
+Baseline 3b5bcc3aa. Public mode-independent live index, actual environment/context
+default and override references, independent shared lifetime, and native catalog
+contains/keep behavior are frozen. Obsolete per-context index helpers are removed;
+ordinary memory storage binding no longer registers tenants. SQL lists only fixed
+named tenants; Datastore native lookup is read-only with no TTL registration cache.
+Final generated build, tooling, 271 focused tests with LCOV, eight Datastore
+emulator tests and all static/docs checks pass. External
+tenant-index-implementation-evidence.md records exact commands and scope. Changed
+index executable lines 41/41, Datastore 15/15, PG 4/4, MySQL 3/3, memory 4/4;
+Bounded Context 7/9 in selected suites. No full-task release claim.
+
+Four concerns use existing explicit immutable profiles: provider_reliability,
+provider_style and repository_api_review gpt-6-sol/medium; provider_documentation
+gpt-6-luna/medium. Runtime introspection unavailable. Read external
+tenant-index-review-context.md and full TASK ledger. No edits/tests/builds or
+children by reviewers. Three technical lanes first, documentation as capacity
+frees; collect the full wave before one accepted correction batch. Estimate
+0.3–0.6 hours for review, corrections, verification and checkpoint push. Input
+admission/TENANT_UNKNOWN remain M5b; Agent removal remains M7.
+
+M5a complete review wave collected. API is clean. Accept reliability P2: transient
+memory continuation stores writable JavaScript properties despite TypeScript
+private/readonly; use private runtime state and a frozen cursor so callers cannot
+repeat or prolong traversal. Accept style P2: removed Datastore early-admission
+cache left an empty synthetic first page and dead phase/snapshot/index fields;
+start native paging immediately and retain only native continuation state. Accept
+documentation clarification: fixed SQL catalogs list configured entries, keep is
+idempotent for known IDs and rejects unknown IDs. Other membership and lifetime
+checks are clean. All four explicit immutable profiles match dispatch; runtime
+introspection unavailable. Same Sol/medium implementer receives one correction
+batch; estimate 0.2–0.4 hours includes focused behavior/static/live checks and
+targeted reliability/style review. Public contract unchanged, so deterministic
+prose correction does not reopen API/docs lanes.
+
+M5a correction frozen: both paging regressions failed before correction; final
+24 focused tests and eight Datastore emulator tests pass. Fresh build/tooling,
+cleanup/TSDoc/ESLint/docs/format/diff checks pass. Current-build changed executable
+coverage is index 42/42 and Datastore catalog 18/18. Exact external evidence is
+tenant-index-correction-evidence.md. Targeted reliability/style confirmation uses
+the same explicit immutable Sol/medium profiles; no API/docs lane reopened for
+the unchanged contract and deterministic prose clarification.
+
+M5a accepted: targeted reliability and style confirm both corrections; API clean
+and documentation clarification verified by parent. No unresolved P0–P2 findings.
+All four concern dispositions and explicit immutable profile checks are recorded.
+Parent confirms fresh changed-line LCOV and diff cleanliness. Commit/push the
+authored slice, then continue tenant admission; no full-task completion claim.

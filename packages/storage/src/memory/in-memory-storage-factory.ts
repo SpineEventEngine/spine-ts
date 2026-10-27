@@ -411,11 +411,22 @@ class MemoryTenantCatalog implements TenantCatalog {
   #open = true;
 
   /**
-   * Binds the catalog to its memory backend.
+   * Binds explicit membership to the shared memory backend.
    *
-   * @param backend Backend retaining tenant boundaries.
+   * @param backend Backend retaining registered tenant boundaries.
    */
   constructor(private readonly backend: InMemoryStorageBackend) {}
+
+  /**
+   * Checks explicit membership without admitting a storage family.
+   *
+   * @param boundary Complete tenant boundary to inspect.
+   * @returns Whether the boundary was registered through this catalog.
+   */
+  contains(boundary: TenantBoundary): Promise<boolean> {
+    this.requireOpen();
+    return Promise.resolve(InMemoryStorageBackend.contains(this.backend, boundary));
+  }
 
   /**
    * Reads admitted tenant boundaries.

@@ -271,12 +271,13 @@ the context repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
-internal system-pairing metadata and a framework tenant index:
-single-tenant contexts list the built-in `SINGLE_TENANT` identity, and multitenant contexts use the
-configured provider's tenant catalog. MySQL enumerates configured
-tenant/database entries, Datastore enumerates native namespaces, and memory
-enumerates tenant slices; no generic `TenantId` record is persisted. These
-internals are not part of the end-user `BoundedContext` API. The full
+built-in system-pairing metadata and use the live `TenantIndex` selected by
+`ServerEnvironment`, or the builder's `withTenantIndex()` override. Both
+`environment.tenantIndex` and `context.tenantIndex` return that exact object.
+Single-tenant contexts do not register a synthetic directory member. A default
+provider catalog exposes explicit memory registrations, configured SQL tenants,
+or Datastore native namespaces; a custom factory without a catalog gets a
+transient in-memory index. No generic `TenantId` record is persisted. The full
 system-context runtime,
 command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
 broader JVM production runtime remain outside this public surface.

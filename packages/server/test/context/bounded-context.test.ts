@@ -73,6 +73,7 @@ import {
   type EntityOptions,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { TenantIndexes } from "../../src/context/tenant-index.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
@@ -114,8 +115,8 @@ interface InternalSystemPairing {
 }
 
 interface InternalTenantIndex {
-  readonly tenantMode: "single-tenant" | "multitenant";
   all(): Promise<readonly TenantId[]>;
+  contains(tenantId: TenantId): Promise<boolean>;
   keep(tenantId: TenantId): Promise<void>;
 }
 
@@ -535,35 +536,35 @@ describe("BoundedContext assembly", () => {
     await context.close();
   });
 
-  it("exposes a constant single-tenant index through internal context access", async () => {
+  it("does not register a synthetic tenant for a single-tenant context", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const tenantIndex = internalTenantIndex(context);
 
-    expect(tenantIndex.tenantMode).toBe("single-tenant");
-    await expect(tenantIndex.all()).resolves.toEqual([tenant("SINGLE_TENANT")]);
-    await expect(tenantIndex.keep(tenant("tenant-a"))).rejects.toThrow(
-      'Single-tenant context "Tasks" does not accept tenant recording.',
-    );
+    expect(context.tenantMode).toBe("single-tenant");
+    expect(context.tenantIndex).toBe(ServerEnvironment.instance().tenantIndex);
+    await expect(tenantIndex.contains(tenant("tenant-a"))).resolves.toBe(false);
   });
 
-  it("rejects single-tenant index access after context close", async () => {
+  it("keeps the shared index usable after context close", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const tenantIndex = internalTenantIndex(context);
 
     await context.close();
 
-    await expect(tenantIndex.all()).rejects.toThrow("TenantIndex is closed.");
-    await expect(tenantIndex.keep(tenant("tenant-a"))).rejects.toThrow("TenantIndex is closed.");
+    await tenantIndex.keep(tenant("after-close"));
+    await expect(tenantIndex.contains(tenant("after-close"))).resolves.toBe(true);
   });
 
   it("stores multitenant index entries through the configured storage factory", async () => {
     const storageFactory = new InMemoryStorageFactory();
+    const selectedIndex = TenantIndexes.fromFactory(storageFactory);
     const first = BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
+      .withTenantIndex(selectedIndex)
       .build();
     const firstIndex = internalTenantIndex(first);
 
-    expect(firstIndex.tenantMode).toBe("multitenant");
+    expect(firstIndex).toBe(selectedIndex);
 
     await firstIndex.keep(tenant("tenant-b"));
     await firstIndex.keep(tenant("tenant-a"));
@@ -573,6 +574,7 @@ describe("BoundedContext assembly", () => {
 
     const recovered = BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
+      .withTenantIndex(selectedIndex)
       .build();
     const recoveredIndex = internalTenantIndex(recovered);
 
@@ -581,9 +583,11 @@ describe("BoundedContext assembly", () => {
 
   it("describes actual delivery storage and tenant startup scopes through internal access", async () => {
     const storageFactory = new InMemoryStorageFactory();
+    const selectedIndex = TenantIndexes.fromFactory(storageFactory);
     const single = BoundedContext.singleTenant("Tasks").withStorageFactory(storageFactory).build();
     const multitenant = BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
+      .withTenantIndex(selectedIndex)
       .build();
 
     await internalTenantIndex(multitenant).keep(tenant("tenant-b"));
@@ -1403,6 +1407,7 @@ describe("BoundedContext assembly", () => {
 
   it("retains a dynamic-tenant row after an Inbox read fault for fresh-runtime recovery", async () => {
     const storageFactory = new FailingInboxReadStorageFactory();
+    const selectedIndex = TenantIndexes.fromFactory(storageFactory);
     const tenantId = tenant("tenant-first-row");
     const contextName = "FreshRecoveryTasks";
     const firstRegistry = createGeneratedRegistryFixture([
@@ -1417,6 +1422,7 @@ describe("BoundedContext assembly", () => {
     try {
       first = await BoundedContext.multitenant(contextName)
         .withStorageFactory(storageFactory)
+        .withTenantIndex(selectedIndex)
         .withGeneratedRegistryRoot(firstRegistry.root)
         .add(FreshRecoveryProcessManager)
         .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
@@ -1450,6 +1456,7 @@ describe("BoundedContext assembly", () => {
 
       recovered = await BoundedContext.multitenant(contextName)
         .withStorageFactory(storageFactory)
+        .withTenantIndex(selectedIndex)
         .withGeneratedRegistryRoot(recoveryRegistry.root)
         .add(FreshRecoveryProcessManager)
         .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
@@ -1499,6 +1506,7 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new ObservingStorageFactory([]);
     const customers = BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
+      .withTenantIndex(TenantIndexes.fromFactory(storageFactory))
       .build();
     const tenantIndex = internalTenantIndex(customers);
 
@@ -2404,6 +2412,7 @@ describe("BoundedContext assembly", () => {
 
     const context = BoundedContext.multitenant("Tasks")
       .withStorageFactory(storageFactory)
+      .withTenantIndex(TenantIndexes.fromFactory(storageFactory))
       .add(repository)
       .build();
     const tenantIndex = internalTenantIndex(context);
@@ -2714,7 +2723,6 @@ describe("BoundedContext assembly", () => {
       "transport",
       "importBus",
       "systemContext",
-      "tenantIndex",
       "repositoryLifecycle",
       "openStorage",
       "dispatch",

@@ -78,7 +78,7 @@ import {
 } from "./local-inbox-handoff.js";
 import { LocalEntityInbox } from "./entity-inbox.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
-import { TenantIndexes, type TenantIndex } from "./tenant-index.js";
+import type { TenantIndex } from "./tenant-index.js";
 import { EffectiveTenants } from "./effective-tenant.js";
 import { AgentScheduler, type AgentScanScope } from "../agent/agent-scheduler.js";
 import { AgentExecutionCapacity } from "../agent/agent-execution-capacity.js";
@@ -755,6 +755,11 @@ interface BoundedContextAssembly {
   readonly snapshot: BoundedContextSnapshot;
 
   /**
+   * Effective live tenant membership index.
+   */
+  readonly tenantIndex: TenantIndex;
+
+  /**
    * Command dispatch for this context.
    */
   readonly commandBus: CommandBus;
@@ -934,11 +939,11 @@ export class BoundedContext {
       acceptedEventTypes: () => ContextParts.exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => ContextParts.postContextEvent(this, event),
     });
-    const delivery = this.#createDelivery(input.storageFactory);
+    const delivery = this.#createDelivery(input.tenantIndex);
     this.#entityInbox = delivery.entityInbox;
     this.#projectionInbox = delivery.projectionInbox;
     this.#installReferences(input, delivery);
-    this.#registerAndStart(input.repositories, delivery.tenantIndex);
+    this.#registerAndStart(input.repositories);
     this.#startAgentScheduler(delivery.tenantIndex);
     Object.freeze(this);
   }
@@ -964,10 +969,7 @@ export class BoundedContext {
         scope: (id, index) => {
           const repository = repositories[index];
           if (repository === undefined) throw new Error("Agent repository scope is unavailable.");
-          return this.#agentScope(
-            repository,
-            tenantIndex.tenantMode === "single-tenant" ? undefined : id,
-          );
+          return this.#agentScope(repository, this.tenantMode === "single-tenant" ? undefined : id);
         },
       },
       AgentExecutionCapacity.for(this.#ai),
@@ -1005,16 +1007,11 @@ export class BoundedContext {
   /**
    * Creates tenant-aware Inboxes and their shared readiness signal.
    *
-   * @param storageFactory Provider supplying the tenant catalog.
+   * @param tenantIndex Effective membership index for this context.
    * @returns Inboxes, tenant index, and readiness signal.
    */
-  #createDelivery(storageFactory: StorageFactory): ContextDeliveryParts {
+  #createDelivery(tenantIndex: TenantIndex): ContextDeliveryParts {
     const deliveryReadiness = new DeliveryReadiness();
-    const tenantIndex = TenantIndexes.create({
-      contextName: this.#snapshot.name.value,
-      tenantMode: this.#snapshot.tenantMode,
-      storageFactory,
-    });
     const keepTenant = (tenantId: TenantId) => tenantIndex.keep(tenantId);
     const entityInbox = new LocalEntityInbox(
       this.#snapshot.name.value,
@@ -1071,22 +1068,21 @@ export class BoundedContext {
   }
 
   /**
-   * Registers repositories and starts subscriptions, closing the tenant index on failure.
+   * Registers repositories and starts subscriptions, clearing failed metadata.
    *
    * @param repositories Prepared repositories.
-   * @param tenantIndex Index to close if registration fails.
    */
-  #registerAndStart(repositories: readonly RepositoryView[], tenantIndex: TenantIndex): void {
+  #registerAndStart(repositories: readonly RepositoryView[]): void {
     try {
       this.#registerRepositories(repositories);
       this.#subscriptionRuntime.start();
     } catch (error) {
       try {
-        ContextParts.cleanupFailedContext(this, tenantIndex);
+        ContextParts.cleanupFailedContext(this);
       } catch (cleanupError) {
         throw new AggregateError(
           [error, cleanupError],
-          "Bounded Context build failed, and tenant index cleanup also failed.",
+          "Bounded Context build failed, and metadata cleanup also failed.",
         );
       }
       throw error;
@@ -1227,6 +1223,15 @@ export class BoundedContext {
    */
   get isMultitenant(): boolean {
     return this.#snapshot.tenantMode === "multitenant";
+  }
+
+  /**
+   * Returns the live index configured for this Bounded Context.
+   *
+   * @returns The effective configured index.
+   */
+  get tenantIndex(): TenantIndex {
+    return ContextParts.requireTenantIndex(this);
   }
 
   /**
@@ -1432,9 +1437,6 @@ export class BoundedContext {
     await this.#closePart(() => this.#stand.close(), errors);
     await this.#closePart(() => this.#systemStand.close(), errors);
     await this.#closePart(() => this.#subscriptionRuntime.finishClose(), errors);
-    await this.#closePart(() => {
-      ContextParts.requireTenantIndex(this).close();
-    }, errors);
     await this.#closeRepositories(errors);
     if (errors.length > 0) {
       this.#closed = undefined;
@@ -1759,6 +1761,8 @@ export class BoundedContextBuilder {
 
   #aiRegistry: AiRegistry | undefined;
 
+  #tenantIndex: TenantIndex | undefined;
+
   #subscriptionRegistry: StandSubscriptionRegistry | undefined;
 
   #persistSystemEvents = false;
@@ -1983,6 +1987,17 @@ export class BoundedContextBuilder {
    */
   withStorageFactory(storageFactory: StorageFactory): this {
     this.#storageFactory = storageFactory;
+    return this;
+  }
+
+  /**
+   * Sets a live tenant index for this Bounded Context.
+   *
+   * @param tenantIndex Application membership index.
+   * @returns This builder.
+   */
+  withTenantIndex(tenantIndex: TenantIndex): this {
+    this.#tenantIndex = tenantIndex;
     return this;
   }
 
@@ -2357,6 +2372,7 @@ export class BoundedContextBuilder {
       buses,
       running,
       ai,
+      this.#tenantIndex ?? ServerEnvironment.instance().tenantIndex,
     );
   }
 
@@ -2748,6 +2764,7 @@ const ContextParts = Object.freeze({
    * @param buses Prepared domain and System buses.
    * @param running Prepared Stand and subscription runtime.
    * @param ai Effective AI registry when Agent repositories are present.
+   * @param tenantIndex Effective live membership index.
    * @returns Constructed bounded context.
    */
   createBoundedContext(
@@ -2758,6 +2775,7 @@ const ContextParts = Object.freeze({
     buses: ContextBuildBuses,
     running: ContextBuildRuntime,
     ai?: AiRegistry,
+    tenantIndex?: TenantIndex,
   ): BoundedContext {
     return constructBoundedContext({
       snapshot: ContextParts.snapshotFor(specSnapshot),
@@ -2770,6 +2788,7 @@ const ContextParts = Object.freeze({
       subscriptionRuntime: running.runtime,
       systemSpec: buses.systemSpec,
       storageFactory,
+      tenantIndex: tenantIndex ?? ServerEnvironment.instance().tenantIndex,
       repositories,
       deliveryStrategy,
       ...(ai === undefined ? {} : { ai }),
@@ -3749,14 +3768,12 @@ const ContextParts = Object.freeze({
   },
 
   /**
-   * Clears metadata for a failed context build and closes its tenant index.
+   * Clears metadata for a failed context build without closing its shared index.
    *
    * @param context Context whose build failed.
-   * @param tenantIndex Tenant index to close.
    */
-  cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex): void {
+  cleanupFailedContext(context: BoundedContext): void {
     ContextParts.clearContextMetadata(context);
-    tenantIndex.close();
   },
 
   /**
@@ -3806,7 +3823,7 @@ const ContextParts = Object.freeze({
   ): ContextDeliveryDescriptor {
     return Object.freeze<ContextDeliveryDescriptor>({
       storageFactory,
-      startupScopes: () => ContextParts.deliveryStartupScopes(tenantIndex),
+      startupScopes: () => ContextParts.deliveryStartupScopes(context, tenantIndex),
       storageContext: (scope) => ContextParts.deliveryStorageContext(context, scope),
       endpoints: () => Object.freeze([...entityInbox.endpoints(), ...projections.endpoints()]),
       replay: (message, tenantId) =>
@@ -3821,11 +3838,15 @@ const ContextParts = Object.freeze({
   /**
    * Lists delivery startup scopes, one per tenant in multitenant contexts.
    *
+   * @param context Context model setting selecting single or multitenant scopes.
    * @param tenantIndex Tenant index supplying configured scopes.
    * @returns Frozen startup scope list.
    */
-  async deliveryStartupScopes(tenantIndex: TenantIndex): Promise<readonly DeliveryTenantScope[]> {
-    if (tenantIndex.tenantMode === "single-tenant") {
+  async deliveryStartupScopes(
+    context: BoundedContextSnapshot,
+    tenantIndex: TenantIndex,
+  ): Promise<readonly DeliveryTenantScope[]> {
+    if (context.tenantMode === "single-tenant") {
       return Object.freeze([Object.freeze({})]);
     }
 

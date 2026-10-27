@@ -23,6 +23,7 @@ import {
   AgentHistoryStorageFactories,
   EntityCommitStorageFactories,
   StoragePreparations,
+  TenantBoundary,
 } from "@spine-event-engine/storage/provider";
 import {
   ColumnTypes,
@@ -437,6 +438,12 @@ describe("MysqlStorageFactory builder contract", () => {
       .setTenantResolver(resolver)
       .build();
     const identity = tenant("dynamic");
+    await expect(factory.tenantCatalog().contains(TenantBoundary.from(identity))).resolves.toBe(
+      false,
+    );
+    await expect(factory.tenantCatalog().keep(TenantBoundary.from(identity))).rejects.toThrow(
+      /no configured tenant/,
+    );
     const context = { name: "dynamic", multitenant: true, tenantId: identity } as const;
     const spec = new RecordSpec({
       recordType: StringValueSchema,
@@ -827,6 +834,12 @@ describe("MysqlStorageFactory builder contract", () => {
       expect.objectContaining({ single: false, tenantId: tenantTwo }),
     ]);
     const catalog = factory.tenantCatalog();
+    await expect(catalog.contains(TenantBoundary.from(tenantOne))).resolves.toBe(true);
+    await expect(
+      catalog.contains(
+        TenantBoundary.from(create(TenantIdSchema, { kind: { case: "value", value: "missing" } })),
+      ),
+    ).resolves.toBe(false);
     const signal = new AbortController().signal;
     const firstPage = await catalog.page({ count: 1, signal });
     expect(firstPage.boundaries).toHaveLength(1);

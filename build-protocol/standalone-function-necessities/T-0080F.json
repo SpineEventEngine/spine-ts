@@ -1288,15 +1288,6 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/context/tenant-index.ts",
-    "kind": "function-declaration",
-    "identity": "tenantCatalog()#1",
-    "name": "tenantCatalog",
-    "disposition": "necessity",
-    "reason": "TypeScript provider-catalog boundary: tenantCatalog fails multitenant startup closed unless the configured factory supplies its native catalog."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/server/src/entity/entity-storage-descriptor.ts",
     "kind": "function-declaration",
     "identity": "primitiveIdKind()#1",

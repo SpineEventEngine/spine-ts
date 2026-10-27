@@ -802,3 +802,69 @@ tests pass, along with build/tooling/static/docs checks. Review and external
 evidence record the exact scope and remaining global verification. No root
 contract change during correction. Commit/push this checkpoint; next is M5a
 public live TenantIndex and honest native catalog semantics.
+
+M4e checkpoint 3b5bcc3aa pushed immediately to official origin/environment-lifecycle.
+M5a starts from this checkpoint: public live TenantIndex, effective environment
+and Bounded Context configuration, and honest native catalog membership. This
+is a high-risk public/lifecycle slice under the accepted frozen proposal; the
+provider inventory resolves current mechanics without a repeated architecture
+pass. Existing implementer storage_retention retains its explicit immutable
+gpt-6-sol/medium profile; no children, runtime introspection unavailable. Estimate
+2–3 hours includes implementation, focused native/server tests, narrow docs,
+mechanical checks and four-concern review. External
+tenant-index-implementation-outline.md defines ordered M5a/M5b/M5c scope.
+
+M5a acceptance: public contains/keep/all/page and supporting public paging types;
+actual live default/override object identity; no public tenantMode/close burden;
+closing one Bounded Context leaves supplied indexes usable; lookup failures
+remain failures; explicit keep is idempotent and read-visible. Native memory
+membership comes from explicit registration, not record-family binding. Fixed
+SQL catalogs are read-only and cannot register resolver-only tenants. Datastore
+native discovery is read-only; remove expiring early-registration success, reject
+keep for an absent namespace without writing records or infrastructure. Apps
+use supplied directories to register before persistence. A factory with no native
+catalog receives a transient memory index unless an application index is supplied;
+no hidden persisted registry or fabricated resolver enumeration. No synthetic
+single-tenant identity leaks into the company index. M5b removes implicit ingress
+keep and adds typed unknown-tenant admission; this slice does not claim it yet.
+Preserve generation-only metadata and previous checkpoint behavior outside scope.
+
+M5b supporting scan: existing mechanical_checks function, explicit immutable
+gpt-6-luna/low, inventories existing typed framework errors and transport/client
+serialization paths only. No source changes, tests or child dispatch. This is
+independent of M5a writing and does not repeat the tenant-entrypoint inventory.
+Estimate 0.15–0.25 hours alongside M5a. Record exact paths/contracts for Command
+Ack, query response, subscription errors, Connect/gRPC/native/browser/gateway
+forwarding and direct in-process exceptions in external tenant-error-inventory.md.
+No new error design or numeric code; accepted TENANT_UNKNOWN/NOT_FOUND remains.
+Runtime introspection unavailable; immutable configured profile applies.
+
+M5b error inventory accepted from the explicit immutable Luna/low scanning
+function. Existing Spine base.Error has type/message/code/details; Command and
+query services currently return most errors inside successful response bodies.
+Unknown membership must bypass those normalizing catches as the already-approved
+NOT_FOUND(5) with structured TENANT_UNKNOWN detail. Built-in browser/coordinator
+forwarding preserves backend ConnectError except availability rewrites or
+combined cleanup errors. Client web/node callers receive transport rejections as
+Connect errors; no current tenant-specific decoder exists. Exact paths and
+subscription lookup/cancel behavior are recorded in external
+tenant-error-inventory.md. No source edits, tests or design changes by the scan;
+no domain Rejection or new numeric status is introduced.
+
+M5b client follow-up: source confirms client-web subscription #retryable currently
+treats generic Connect errors as retryable. The accepted unknown-tenant request
+error must remain identifiable and terminal rather than being hidden by a later
+activation timeout. Record this for the admission/protocol slice: recognize the
+structured TENANT_UNKNOWN detail, preserve transient transport retries and Node
+delegation, and avoid message parsing. No client implementation is changed in
+M5a.
+
+M5a public live TenantIndex is accepted. Effective default/override objects remain
+shared and usable after Bounded Context close; native catalogs expose honest
+current membership without implicit memory storage admission or Datastore TTL
+registration. Four-concern review resolved writable fallback cursors, dead native
+paging state and fixed-SQL documentation. Final affected tests 24/24 and emulator
+8/8 pass after the earlier 271-test scoped pass; build/tooling/static/docs are
+clean. Parent confirms index 42/42 and Datastore 18/18 changed executable LCOV.
+Authored checkpoint is committed/pushed before M5b input admission and errors.
+Generation-only metadata stays unstaged; full release verification remains pending.

@@ -84,20 +84,17 @@ still have more candidates. Continue until `hasMore` is false, rather than
 stopping at the first empty page. Repeating a valid continuation may repeat the
 page. A fresh sweep starts without a continuation.
 
-Memory pages use an admission-time index and capture its length for that sweep;
+Memory pages use an explicit-registration index and capture its length for that sweep;
 PostgreSQL and MySQL page their configured tenant collections. Datastore pages
-its bounded early-admission cache and then native namespace metadata using a
-query limit and native cursor. A tenant can appear in both phases. Existing
-Agent claims prevent that duplicate discovery from running the same accepted
-invocation concurrently. An empty native `MORE_RESULTS_AFTER_LIMIT` tail that repeats its cursor ends
+native namespace metadata using a query limit and native cursor. An empty native
+`MORE_RESULTS_AFTER_LIMIT` tail that repeats its cursor ends
 that sweep; other continuing pages must advance. Datastore destroys its query
 stream when the caller cancels the read.
 
 Catalogs check cancellation before starting work and before returning a result.
 Paging is a finite traversal, not an atomic catalog snapshot: a concurrent
-admission can appear in the current or next sweep. Agent recovery uses this
-paged contract; the separate `all()` operation remains available for existing
-callers that require the complete catalog.
+registration can appear in the current or next sweep. The separate `all()`
+operation remains available to callers requiring the complete catalog.
 
 ## Agent execution storage
 

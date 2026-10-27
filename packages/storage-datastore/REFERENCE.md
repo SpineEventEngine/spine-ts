@@ -96,11 +96,10 @@ numbers, and integers outside their declared/provider range fail before an
 RPC. Stored `bytes` remain authoritative; declared properties are rematerialized
 after decoding.
 
-`keep()` bridges native `__namespace__` metadata lag without storing a tenant
-record. Its early-admission cache retains at most 1,000 tenants for at most 60
-seconds and removes an entry sooner when native metadata becomes visible. A
-full cache fails closed; applications can retry after metadata appears or an
-entry expires.
+`contains()` checks the exact native `__namespace__` metadata key without
+writing records or scanning the catalog. `keep()` confirms an existing
+namespace and rejects a missing one. Applications needing registration before
+the first Datastore entity exists supply their own tenant index.
 
 Declared string and boolean columns use native values. Integer columns use
 Datastore int values, float/double columns use Datastore double values, bytes
@@ -169,10 +168,9 @@ of at most 128 rows and sum serialized entry bytes. A fetched chunk can be
 larger than the returned byte budget.
 
 The factory has one tenant catalog. It reads native `__namespace__` metadata,
-converts only namespaces recognized by its `NamespaceConverter`, and keeps an early
-in-memory cache for newly admitted tenants. `keep()` stores no `TenantId` row or
-other discovery record; Datastore exposes native metadata after an application
-entity is written in that namespace.
+converts only namespaces recognized by its `NamespaceConverter`. `keep()`
+stores no `TenantId` row or other discovery record; Datastore exposes native
+metadata after an application entity is written in that namespace.
 
 Before deployment to an existing project, run `pnpm --dir
 packages/storage-datastore inventory:legacy -- --project <project-id>`. It

@@ -164,6 +164,17 @@ contexts share one in-memory factory, including in production. Local and test
 environments default storage in memory and use the core registry only as a
 fallback; those defaults are not production configuration.
 
+`tenantIndex` selects a live application membership directory. When omitted,
+the environment uses its storage factory's native catalog where available, or
+a transient in-memory index for a custom factory without a catalog. The
+transient index lasts only for this environment instance. `contains()` checks
+membership without preparing storage; `keep()` makes a registration visible to
+later reads and may reject for a read-only catalog. PostgreSQL and MySQL
+catalogs expose only configured tenant entries: `keep()` is idempotent for
+those entries and rejects unknown IDs. A dynamic SQL tenant resolver does not
+register or enumerate tenants. Single-tenant contexts do not insert a synthetic
+member into this directory.
+
 To override the default channel factory, add
 `integrationChannelFactory: customFactory` to the same settings object.
 
@@ -539,6 +550,9 @@ path, so handler effects must be replay-safe.
 Create a context with `BoundedContext.singleTenant(name)` or
 `BoundedContext.multitenant(name)`. Names are immutable. Use
 `withStorageFactory(factory)` to supply record/event storage.
+`withTenantIndex(index)` selects a different live membership directory for one
+context; `context.tenantIndex` and `ServerEnvironment.instance().tenantIndex`
+return the configured objects. Closing a context does not close either index.
 `withGeneratedRegistryRoot(root)` enables framework discovery of the generated
 handler registry for classes registered with `add(EntityClass)`;
 `buildAsync()` performs that discovery and assembly. `build()` remains for

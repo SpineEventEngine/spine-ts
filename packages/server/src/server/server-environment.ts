@@ -20,6 +20,7 @@ import { spineCoreRegistry, type TypeRegistryLookup } from "@spine-event-engine/
 import { RetryableCloseGroup } from "./retryable-close.js";
 import { emitServerWarning } from "./server-log.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
+import { TenantIndexes, type TenantIndex } from "../context/tenant-index.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import type { DeliverySource } from "../delivery/delivery-supervisor.js";
@@ -80,6 +81,11 @@ export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
  */
 export interface ServerEnvironmentSettings {
   // prettier-ignore
+
+  /**
+   * Live default membership index for Bounded Contexts.
+   */
+  readonly tenantIndex?: TenantIndex;
 
   /**
    * Storage facility selected for server assembly, including server-added context builders.
@@ -150,6 +156,11 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly storageFactory: StorageFactory;
 
   /**
+   * Live default tenant membership index.
+   */
+  readonly tenantIndex: TenantIndex;
+
+  /**
    * Message-channel factory selected for private bounded-context integration.
    *
    * This is either the configured override or one environment-owned
@@ -174,15 +185,26 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
 
   readonly #ownedCloseables: readonly unknown[];
+
   readonly #closeGroup: RetryableCloseGroup;
+
   #close: Promise<void> | undefined;
+
   #deliveryOpen: Promise<void> | undefined;
+
   #deliveryOpened = false;
 
+  /**
+   * Initializes resolved environment facilities.
+   *
+   * @param environment Selected process environment.
+   * @param settings Resolved facilities and settings.
+   */
   private constructor(environment: Environment, settings: RequiredFacilities) {
     this.environment = environment;
     this.nodeId = crypto.randomUUID();
     this.storageFactory = settings.storageFactory;
+    this.tenantIndex = settings.tenantIndex ?? TenantIndexes.fromFactory(settings.storageFactory);
     this.integrationChannelFactory = settings.integrationChannelFactory;
     this.typeRegistry = settings.typeRegistry;
     this.delivery = settings.delivery;
@@ -306,6 +328,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
+  readonly tenantIndex: TenantIndex | undefined;
   readonly integrationChannelFactory: TransportFactory;
   readonly typeRegistry: TypeRegistryLookup;
   readonly delivery: ServerEnvironmentCloseable | undefined;
@@ -347,30 +370,126 @@ export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<
   });
 
 interface ServerEnvironmentAccess {
+  /**
+   * Attaches a context delivery generation.
+   *
+   * @param environment Resolved server environment.
+   * @param options Delivery attachment options.
+   * @returns Installed attachment handle.
+   */
   attach(
     environment: ServerEnvironment,
     options: EnvironmentAttachOptions,
   ): Promise<EnvironmentAttachmentHandle>;
+
+  /**
+   * Checks whether startup failure remains pending.
+   *
+   * @param environment Resolved server environment.
+   * @returns Whether startup failure remains pending.
+   */
   failedStartPending(environment: ServerEnvironment): boolean;
+
+  /**
+   * Checks whether failed-start retry remains pending.
+   *
+   * @param environment Resolved server environment.
+   * @param error Failure to inspect.
+   * @returns Whether retry remains pending.
+   */
   failedStartRetryPending(environment: ServerEnvironment, error: unknown): boolean;
+
+  /**
+   * Retries failed startup.
+   *
+   * @param environment Resolved server environment.
+   * @returns Retry completion.
+   */
   retryFailedStart(environment: ServerEnvironment): Promise<void>;
+
+  /**
+   * Removes one delivery attachment.
+   *
+   * @param environment Resolved server environment.
+   * @param attachment Attachment to remove.
+   * @returns Detach completion.
+   */
   detach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle): Promise<void>;
+
+  /**
+   * Retries a failed detach.
+   *
+   * @param environment Resolved server environment.
+   * @param attachment Attachment to retry.
+   * @returns Retry completion.
+   */
   retryDetach(
     environment: ServerEnvironment,
     attachment: EnvironmentAttachmentHandle,
   ): Promise<void>;
+
+  /**
+   * Checks whether detach retry remains pending.
+   *
+   * @param environment Resolved server environment.
+   * @param attachment Attachment to inspect.
+   * @returns Whether retry remains pending.
+   */
   detachRetryPending(
     environment: ServerEnvironment,
     attachment: EnvironmentAttachmentHandle,
   ): boolean;
+
+  /**
+   * Checks whether an attachment endpoint can be used.
+   *
+   * @param environment Resolved server environment.
+   * @param attachment Attachment to inspect.
+   * @returns Whether endpoint use is safe.
+   */
   endpointSafe(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle): boolean;
+
+  /**
+   * Stops environment delivery.
+   *
+   * @param environment Resolved server environment.
+   * @returns Delivery shutdown completion.
+   */
   stopDelivery(environment: ServerEnvironment): Promise<void>;
+
+  /**
+   * Retries environment delivery shutdown.
+   *
+   * @param environment Resolved server environment.
+   * @returns Delivery shutdown retry completion.
+   */
   retryDeliveryStop(environment: ServerEnvironment): Promise<void>;
+
+  /**
+   * Sets deterministic test attachment workers before lifecycle use.
+   *
+   * @param environment Resolved server environment.
+   * @param createWorker Worker constructor.
+   */
   installTestAttachments(
     environment: ServerEnvironment,
     createWorker: () => EnvironmentGenerationWorker,
   ): void;
+
+  /**
+   * Returns the environment logger.
+   *
+   * @param environment Resolved server environment.
+   * @returns Its configured logger.
+   */
   loggerFor(environment: ServerEnvironment): ILogLayer;
+
+  /**
+   * Records a warning when a production context uses a volatile registry.
+   *
+   * @param environment Resolved server environment.
+   * @param context Context whose registry is inspected.
+   */
   warnVolatileRegistry(environment: ServerEnvironment, context: BoundedContext): void;
 }
 
@@ -512,11 +631,24 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
  * @internal Groups private facility-assembly operations for the environment singleton.
  */
 const ServerEnvironmentValues = Object.freeze({
+  /**
+   * Returns the installed environment logger.
+   *
+   * @param environment Resolved server environment.
+   * @returns Its logger.
+   */
   loggerFor(environment: ServerEnvironment): ILogLayer {
     const logger = environmentLoggers.get(environment);
     if (logger === undefined) throw new TypeError("ServerEnvironment logger is not available.");
     return logger;
   },
+
+  /**
+   * Gets an openable delivery facility when configured.
+   *
+   * @param delivery Configured delivery facility.
+   * @returns Openable delivery or undefined.
+   */
   openableDelivery(
     delivery: ServerEnvironmentCloseable | undefined,
   ): ServerEnvironmentDelivery | undefined {
@@ -532,6 +664,13 @@ const ServerEnvironmentValues = Object.freeze({
     }
     return candidate as ServerEnvironmentDelivery;
   },
+
+  /**
+   * Maps delivery to its environment ports.
+   *
+   * @param delivery Configured delivery facility.
+   * @returns Ports when delivery is openable.
+   */
   ports(delivery: ServerEnvironmentCloseable | undefined): EnvironmentDeliveryPorts | undefined {
     const remote = ServerEnvironmentValues.openableDelivery(delivery);
     if (remote === undefined) return undefined;
@@ -541,6 +680,13 @@ const ServerEnvironmentValues = Object.freeze({
       ...(remote.source === undefined ? {} : { source: remote.source }),
     };
   },
+
+  /**
+   * Lists facilities closed by the environment.
+   *
+   * @param options Resolved facilities.
+   * @returns Facilities in shutdown order.
+   */
   facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
     return Object.freeze([
       ...(options.delivery === undefined ? [] : [options.delivery]),
@@ -549,6 +695,13 @@ const ServerEnvironmentValues = Object.freeze({
       options.storageFactory,
     ]);
   },
+
+  /**
+   * Creates a default logger when none was supplied.
+   *
+   * @param logger Optional application logger.
+   * @returns Logger child for this environment.
+   */
   logger(logger: ILogLayer | undefined): ILogLayer {
     return (
       logger ??
@@ -565,6 +718,14 @@ const ServerEnvironmentValues = Object.freeze({
       })
     ).child();
   },
+
+  /**
+   * Resolves configured facilities with local defaults where supported.
+   *
+   * @param type Selected environment type.
+   * @param settings Configured facilities.
+   * @returns Complete resolved facilities.
+   */
   resolveFacilities(
     type: EnvironmentType,
     settings: ServerEnvironmentSettings,
@@ -578,6 +739,7 @@ const ServerEnvironmentValues = Object.freeze({
       }
       return {
         storageFactory: settings.storageFactory,
+        tenantIndex: settings.tenantIndex,
         integrationChannelFactory:
           settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
         typeRegistry: settings.typeRegistry,
@@ -588,6 +750,7 @@ const ServerEnvironmentValues = Object.freeze({
     }
     return {
       storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
+      tenantIndex: settings.tenantIndex,
       integrationChannelFactory:
         settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
       typeRegistry: settings.typeRegistry ?? spineCoreRegistry,

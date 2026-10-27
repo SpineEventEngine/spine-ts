@@ -19,7 +19,6 @@ import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 
 import { DatastoreStorageFactory, DefaultNamespaceConverter } from "../src/index.js";
-import { NamespaceAssignments } from "../src/datastore/namespace.js";
 import { DatastoreTenantCatalog } from "../src/datastore/tenant-catalog.js";
 
 describe("DatastoreTenantCatalog", () => {
@@ -27,11 +26,8 @@ describe("DatastoreTenantCatalog", () => {
     const client = new NamespaceClient(["external", "Valpha", "Vbeta"]);
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const signal = new AbortController().signal;
-    const early = await catalog.page({ count: 1, signal });
-    expect(early.boundaries).toEqual([]);
-    expect(early.hasMore).toBe(true);
-    if (early.after === undefined) throw new Error("Expected early-cache continuation.");
-    const filtered = await catalog.page({ count: 1, signal, after: early.after });
+    const filtered = await catalog.page({ count: 1, signal });
+    expect(client.pageLimits).toEqual([1]);
     expect(filtered.boundaries).toEqual([]);
     expect(filtered.hasMore).toBe(true);
     if (filtered.after === undefined) throw new Error("Expected native continuation.");
@@ -55,9 +51,6 @@ describe("DatastoreTenantCatalog", () => {
     await expect(catalog.page({ count: 1, signal, after: forged })).rejects.toThrow();
     const constructed = Reflect.construct(found.after.constructor, [
       catalog,
-      [],
-      "native",
-      0,
       "2",
     ]) as typeof found.after;
     await expect(catalog.page({ count: 1, signal, after: constructed })).rejects.toThrow();
@@ -87,9 +80,7 @@ describe("DatastoreTenantCatalog", () => {
     ];
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const signal = new AbortController().signal;
-    const early = await catalog.page({ count: 1, signal });
-    if (early.after === undefined) throw new Error("Expected native phase.");
-    const malformed = await catalog.page({ count: 1, signal, after: early.after });
+    const malformed = await catalog.page({ count: 1, signal });
     expect(malformed.boundaries).toEqual([]);
     expect(malformed.hasMore).toBe(true);
     if (malformed.after === undefined) throw new Error("Expected native continuation.");
@@ -111,9 +102,7 @@ describe("DatastoreTenantCatalog", () => {
     );
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const signal = new AbortController().signal;
-    const early = await catalog.page({ count: 129, signal });
-    if (early.after === undefined) throw new Error("Expected native phase.");
-    const first = await catalog.page({ count: 129, signal, after: early.after });
+    const first = await catalog.page({ count: 129, signal });
     expect(first.boundaries).toHaveLength(129);
     expect(first.hasMore).toBe(true);
     if (first.after === undefined) throw new Error("Expected native continuation.");
@@ -132,9 +121,7 @@ describe("DatastoreTenantCatalog", () => {
     const client = new NamespaceClient(["Va", "Vb", "Vc"]);
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const signal = new AbortController().signal;
-    const early = await catalog.page({ count: 2 ** 31, signal });
-    if (early.after === undefined) throw new Error("Expected native phase.");
-    const native = await catalog.page({ count: 2 ** 31, signal, after: early.after });
+    const native = await catalog.page({ count: 2 ** 31, signal });
     expect(native.boundaries).toHaveLength(3);
     expect(native.hasMore).toBe(false);
     expect(client.pageLimits.length).toBeGreaterThan(0);
@@ -150,9 +137,7 @@ describe("DatastoreTenantCatalog", () => {
     client.repeatCursor = true;
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const signal = new AbortController().signal;
-    const early = await catalog.page({ count: 1, signal });
-    if (early.after === undefined) throw new Error("Expected native phase.");
-    const first = await catalog.page({ count: 1, signal, after: early.after });
+    const first = await catalog.page({ count: 1, signal });
     if (first.after === undefined) throw new Error("Expected first native cursor.");
     await expect(catalog.page({ count: 1, signal, after: first.after })).rejects.toThrow(
       /nonadvancing/,
@@ -164,9 +149,7 @@ describe("DatastoreTenantCatalog", () => {
     client.tailAfterLimit = true;
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const signal = new AbortController().signal;
-    const early = await catalog.page({ count: 1, signal });
-    if (early.after === undefined) throw new Error("Expected native phase.");
-    const found = await catalog.page({ count: 1, signal, after: early.after });
+    const found = await catalog.page({ count: 1, signal });
     if (found.after === undefined) throw new Error("Expected SDK tail cursor.");
     const tail = await catalog.page({ count: 1, signal, after: found.after });
     expect(tail.boundaries).toEqual([]);
@@ -179,9 +162,7 @@ describe("DatastoreTenantCatalog", () => {
     client.tailAfterLimit = true;
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const signal = new AbortController().signal;
-    const early = await catalog.page({ count: 1, signal });
-    if (early.after === undefined) throw new Error("Expected native phase.");
-    const found = await catalog.page({ count: 1, signal, after: early.after });
+    const found = await catalog.page({ count: 1, signal });
     if (found.after === undefined) throw new Error("Expected native cursor.");
     await expect(catalog.page({ count: 1, signal, after: found.after })).rejects.toThrow(
       /nonadvancing continuation/,
@@ -193,19 +174,13 @@ describe("DatastoreTenantCatalog", () => {
     client.missingCursor = true;
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const signal = new AbortController().signal;
-    const early = await catalog.page({ count: 1, signal });
-    if (early.after === undefined) throw new Error("Expected native phase.");
-    await expect(catalog.page({ count: 1, signal, after: early.after })).rejects.toThrow(
-      /continuation/,
-    );
+    await expect(catalog.page({ count: 1, signal })).rejects.toThrow(/continuation/);
   });
 
-  it("pages multiple early admissions before querying native namespaces", async () => {
-    const client = new NamespaceClient([]);
+  it("pages only native namespaces without an early admission cache", async () => {
+    const client = new NamespaceClient(["Vone", "Vtwo", "Vthree"]);
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const signal = new AbortController().signal;
-    for (const value of ["one", "two", "three"])
-      await catalog.keep(TenantBoundary.from(tenant(value)));
     const values: string[] = [];
     let after;
     for (let pageIndex = 0; pageIndex < 3; pageIndex += 1) {
@@ -215,17 +190,11 @@ describe("DatastoreTenantCatalog", () => {
         ...(after === undefined ? {} : { after }),
       });
       const boundary = page.boundaries[0];
-      if (boundary?.tenantId?.kind.case !== "value")
-        throw new Error("Expected early value tenant.");
-      values.push(boundary.tenantId.kind.value);
+      if (boundary?.tenantId?.kind.case === "value") values.push(boundary.tenantId.kind.value);
       after = page.after;
-      expect(page.hasMore).toBe(true);
     }
     expect(values).toEqual(["one", "two", "three"]);
-    expect(client.pageLimits).toEqual([]);
-    if (after === undefined) throw new Error("Expected native phase.");
-    expect((await catalog.page({ count: 1, signal, after })).hasMore).toBe(false);
-    expect(client.pageLimits).toEqual([1]);
+    expect(client.pageLimits).toEqual([1, 1, 1]);
   });
 
   it("rejects oversized native streams and unrecognized continuation metadata", async () => {
@@ -237,18 +206,12 @@ describe("DatastoreTenantCatalog", () => {
       );
     const signal = new AbortController().signal;
     const large = new DatastoreTenantCatalog(oversized as never, new DefaultNamespaceConverter());
-    const largeEarly = await large.page({ count: 1, signal });
-    if (largeEarly.after === undefined) throw new Error("Expected native phase.");
-    await expect(large.page({ count: 1, signal, after: largeEarly.after })).rejects.toThrow(
-      /page limit/,
-    );
+    await expect(large.page({ count: 1, signal })).rejects.toThrow(/page limit/);
 
     const malformed = new NamespaceClient(["Va"]);
     malformed.invalidMetadata = true;
     const invalid = new DatastoreTenantCatalog(malformed as never, new DefaultNamespaceConverter());
-    const invalidEarly = await invalid.page({ count: 1, signal });
-    if (invalidEarly.after === undefined) throw new Error("Expected native phase.");
-    await expect(invalid.page({ count: 1, signal, after: invalidEarly.after })).rejects.toThrow(
+    await expect(invalid.page({ count: 1, signal })).rejects.toThrow(
       /invalid continuation metadata/,
     );
   });
@@ -264,9 +227,7 @@ describe("DatastoreTenantCatalog", () => {
     client.runQueryStream = () => stream;
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const controller = new AbortController();
-    const early = await catalog.page({ count: 1, signal: controller.signal });
-    if (early.after === undefined) throw new Error("Expected native phase.");
-    const reading = catalog.page({ count: 1, signal: controller.signal, after: early.after });
+    const reading = catalog.page({ count: 1, signal: controller.signal });
     controller.abort();
     await expect(reading).rejects.toThrow(/cancelled/);
     expect(() => {
@@ -287,9 +248,7 @@ describe("DatastoreTenantCatalog", () => {
     client.runQueryStream = () => stream;
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
     const controller = new AbortController();
-    const early = await catalog.page({ count: 1, signal: controller.signal });
-    if (early.after === undefined) throw new Error("Expected native phase.");
-    const reading = catalog.page({ count: 1, signal: controller.signal, after: early.after });
+    const reading = catalog.page({ count: 1, signal: controller.signal });
     const outcome = reading.then(
       () => "resolved",
       (error: unknown) => (error instanceof Error ? error.message : String(error)),
@@ -327,9 +286,7 @@ describe("DatastoreTenantCatalog", () => {
         });
       const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
       const controller = new AbortController();
-      const early = await catalog.page({ count: 1, signal: controller.signal });
-      if (early.after === undefined) throw new Error("Expected native phase.");
-      const reading = catalog.page({ count: 1, signal: controller.signal, after: early.after });
+      const reading = catalog.page({ count: 1, signal: controller.signal });
       let settled = false;
       void reading.then(
         () => {
@@ -362,14 +319,19 @@ describe("DatastoreTenantCatalog", () => {
     expect(client.saved).toBe(0);
   });
 
-  it("keeps an admitted tenant only in the early cache", async () => {
-    const client = new NamespaceClient([]);
+  it("confirms only existing native membership without creating records", async () => {
+    const client = new NamespaceClient(["Vpresent"]);
     const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
-    const boundary = TenantBoundary.from(tenant("early"));
+    const present = TenantBoundary.from(tenant("present"));
+    const missing = TenantBoundary.from(tenant("missing"));
 
-    await catalog.keep(boundary);
+    await expect(catalog.contains(present)).resolves.toBe(true);
+    await expect(catalog.contains(missing)).resolves.toBe(false);
+    await catalog.keep(present);
+    await catalog.keep(present);
+    await expect(catalog.keep(missing)).rejects.toThrow(/not present/);
 
-    await expect(catalog.all()).resolves.toMatchObject([{ key: boundary.key }]);
+    await expect(catalog.all()).resolves.toMatchObject([{ key: present.key }]);
     expect(client.saved).toBe(0);
     await expect(catalog.keep(TenantBoundary.single)).rejects.toThrow("requires a tenant");
   });
@@ -391,6 +353,11 @@ describe("DatastoreTenantCatalog", () => {
     malformed.response = [{}];
     await expect(
       new DatastoreTenantCatalog(malformed as never, new DefaultNamespaceConverter()).all(),
+    ).rejects.toThrow("invalid namespace metadata");
+    await expect(
+      new DatastoreTenantCatalog(malformed as never, new DefaultNamespaceConverter()).contains(
+        TenantBoundary.from(tenant("bad")),
+      ),
     ).rejects.toThrow("invalid namespace metadata");
 
     const failed = new NamespaceClient([]);
@@ -428,57 +395,9 @@ describe("DatastoreTenantCatalog", () => {
 
     await expect(catalog.all()).rejects.toThrow(/round trip|same tenant boundary/);
 
-    const kept = new DatastoreTenantCatalog(new NamespaceClient([]) as never, {
-      toNamespace: () => "same",
-      fromNamespace: () => tenant("first"),
-    });
-    await kept.keep(TenantBoundary.from(tenant("first")));
-    await expect(kept.keep(TenantBoundary.from(tenant("second")))).rejects.toThrow(
-      /round trip|already assigned/,
+    await expect(catalog.contains(TenantBoundary.from(tenant("first")))).rejects.toThrow(
+      /round trip/,
     );
-  });
-
-  it("drops observed and expired early admissions and bounds the cache", async () => {
-    let now = 100;
-    const client = new NamespaceClient([]);
-    const catalog = new DatastoreTenantCatalog(
-      client as never,
-      new NamespaceAssignments(new DefaultNamespaceConverter()),
-      { now: () => now, earlyTenantTtlMs: 10, maxEarlyTenants: 2 },
-    );
-    await catalog.keep(TenantBoundary.from(tenant("one")));
-    await catalog.keep(TenantBoundary.from(tenant("two")));
-    await expect(catalog.keep(TenantBoundary.from(tenant("three")))).rejects.toThrow(
-      /early-admission cache is full/i,
-    );
-
-    client.response = [[{ [client.KEY]: { name: "Vone" } }]];
-    await expect(catalog.all()).resolves.toHaveLength(2);
-    await expect(catalog.keep(TenantBoundary.from(tenant("three")))).resolves.toBeUndefined();
-
-    now = 111;
-    await expect(catalog.all()).resolves.toMatchObject([
-      { key: TenantBoundary.from(tenant("one")).key },
-    ]);
-  });
-
-  it("does not allow internal test controls to disable the cache bound", () => {
-    expect(
-      () =>
-        new DatastoreTenantCatalog(
-          new NamespaceClient([]) as never,
-          new DefaultNamespaceConverter(),
-          { earlyTenantTtlMs: Number.POSITIVE_INFINITY },
-        ),
-    ).toThrow(/TTL must be finite and positive/i);
-    expect(
-      () =>
-        new DatastoreTenantCatalog(
-          new NamespaceClient([]) as never,
-          new DefaultNamespaceConverter(),
-          { maxEarlyTenants: Number.POSITIVE_INFINITY },
-        ),
-    ).toThrow(/capacity must be a positive safe integer/i);
   });
 });
 
@@ -502,6 +421,7 @@ class NamespaceClient {
   invalidMetadata = false;
   response: unknown;
   failure: Error | undefined;
+  exactNamespace: string | undefined;
 
   constructor(namespaces: readonly string[]) {
     this.response = [
@@ -514,10 +434,14 @@ class NamespaceClient {
   createQuery(...args: string[]) {
     this.queryArgs.push(...args);
     this.startValue = undefined;
+    this.exactNamespace = undefined;
     return {
       select: (property: string) => {
         this.selected = property;
         return {
+          filter: () => {
+            this.exactNamespace = this.lastKeyNamespace;
+          },
           limit: (count: number) => {
             this.limitValue = count;
             return {
@@ -529,6 +453,13 @@ class NamespaceClient {
         };
       },
     };
+  }
+
+  lastKeyNamespace: string | undefined;
+
+  key(options: { path: readonly (string | number)[] }) {
+    this.lastKeyNamespace = String(options.path[1]);
+    return options;
   }
 
   runQueryStream(): Readable {
@@ -559,7 +490,19 @@ class NamespaceClient {
 
   runQuery(): Promise<unknown> {
     return this.failure === undefined
-      ? Promise.resolve(this.response)
+      ? Promise.resolve(
+          this.exactNamespace === undefined ||
+            !Array.isArray(this.response) ||
+            !Array.isArray(this.response[0])
+            ? this.response
+            : [
+                (this.response as [unknown[]])[0].filter(
+                  (value) =>
+                    (value as Record<symbol, { name?: string }>)[this.KEY]?.name ===
+                    this.exactNamespace,
+                ),
+              ],
+        )
       : Promise.reject(this.failure);
   }
 }

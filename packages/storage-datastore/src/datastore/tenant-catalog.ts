@@ -12,8 +12,8 @@
  * the License.
  */
 
-import { Time } from "@spine-event-engine/core/time";
 import { Datastore } from "@google-cloud/datastore";
+import { PropertyFilter, and } from "@google-cloud/datastore";
 import {
   TenantBoundary,
   TenantCatalogReads,
@@ -26,33 +26,13 @@ import {
 
 import { NamespaceAssignments, type NamespaceConverter } from "./namespace.js";
 
-const earlyTenantTtlMs = 60_000;
-const maxEarlyTenants = 1_000;
-
-interface EarlyTenantOptions {
-  readonly now?: () => number;
-  readonly earlyTenantTtlMs?: number;
-  readonly maxEarlyTenants?: number;
-}
-
 /**
  * Discovers Spine tenants from Datastore's native namespace metadata.
  */
 export class DatastoreTenantCatalog implements TenantCatalog {
   readonly #cursorIdentity = {};
 
-  readonly #kept = new Map<
-    string,
-    { readonly boundary: TenantBoundaryValue; readonly expiresAt: number }
-  >();
-
   readonly #converter: NamespaceAssignments;
-
-  readonly #now: () => number;
-
-  readonly #earlyTenantTtlMs: number;
-
-  readonly #maxEarlyTenants: number;
 
   #open = true;
 
@@ -61,28 +41,46 @@ export class DatastoreTenantCatalog implements TenantCatalog {
    *
    * @param client The caller-owned Datastore client.
    * @param converter Converts owned native namespaces to tenant identifiers.
-   * @param options Internal deterministic early-admission cache controls.
    */
   constructor(
     private readonly client: Datastore,
     converter: NamespaceConverter,
-    options: EarlyTenantOptions = {},
   ) {
     this.#converter =
       converter instanceof NamespaceAssignments ? converter : new NamespaceAssignments(converter);
-    this.#now = options.now ?? (() => Time.currentTimeMillis());
-    this.#earlyTenantTtlMs = options.earlyTenantTtlMs ?? earlyTenantTtlMs;
-    this.#maxEarlyTenants = options.maxEarlyTenants ?? maxEarlyTenants;
-    if (!Number.isFinite(this.#earlyTenantTtlMs) || this.#earlyTenantTtlMs <= 0)
-      throw new Error("Datastore early-admission TTL must be finite and positive.");
-    if (!Number.isSafeInteger(this.#maxEarlyTenants) || this.#maxEarlyTenants <= 0)
-      throw new Error("Datastore early-admission capacity must be a positive safe integer.");
+  }
+
+  /**
+   * Checks exact native namespace metadata without listing the catalog.
+   *
+   * @param boundary Complete named tenant boundary.
+   * @returns Whether Datastore has metadata for its namespace.
+   */
+  async contains(boundary: TenantBoundaryValue): Promise<boolean> {
+    this.requireOpen();
+    if (boundary.single || boundary.tenantId === undefined)
+      throw new Error("Datastore tenant catalog requires a tenant boundary.");
+    const namespace = this.#converter.toNamespace(boundary.tenantId);
+    const key = this.client.key({ namespace: "", path: ["__namespace__", namespace] });
+    const query = this.client
+      .createQuery("", "__namespace__")
+      .select("__key__")
+      .filter(
+        and([new PropertyFilter("__key__", ">=", key), new PropertyFilter("__key__", "<=", key)]),
+      );
+    const response = await this.client.runQuery(query);
+    this.requireOpen();
+    if (!Array.isArray(response) || !Array.isArray(response[0]))
+      throw new Error("Datastore returned invalid namespace metadata.");
+    return (response[0] as unknown[]).some(
+      (value) => namespaceName(value, this.client.KEY) === namespace,
+    );
   }
 
   /**
    * Lists tenant boundaries represented by owned native namespaces.
    *
-   * @returns The discovered and early-admitted tenant boundaries.
+   * @returns The discovered native tenant boundaries.
    */
   async all(): Promise<readonly TenantBoundaryValue[]> {
     this.requireOpen();
@@ -96,7 +94,6 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     if (!Array.isArray(response) || !Array.isArray(response[0]))
       throw new Error("Datastore returned invalid namespace metadata.");
 
-    this.purgeExpired();
     const byBoundary = new Map<string, { namespace: string; boundary: TenantBoundaryValue }>();
     for (const value of response[0] as unknown[]) {
       const namespace = namespaceName(value, this.client.KEY);
@@ -108,13 +105,6 @@ export class DatastoreTenantCatalog implements TenantCatalog {
       if (prior !== undefined && prior.namespace !== namespace)
         throw new Error("Datastore namespaces resolve to the same tenant boundary.");
       byBoundary.set(String(boundary.key), { namespace, boundary });
-      this.#kept.delete(namespace);
-    }
-    for (const [namespace, { boundary }] of this.#kept) {
-      const prior = byBoundary.get(String(boundary.key));
-      if (prior !== undefined && prior.namespace !== namespace)
-        throw new Error("Datastore namespaces resolve to the same tenant boundary.");
-      byBoundary.set(String(boundary.key), { namespace, boundary });
     }
     return [...byBoundary.values()]
       .sort((left, right) => left.namespace.localeCompare(right.namespace))
@@ -122,7 +112,7 @@ export class DatastoreTenantCatalog implements TenantCatalog {
   }
 
   /**
-   * Reads one bounded early-admission or native namespace page.
+   * Reads one bounded native namespace page.
    *
    * @param request Finite candidate limit and instance-bound continuation.
    * @returns A possibly empty continuing tenant page.
@@ -133,53 +123,13 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     const prior = request.after;
     if (prior !== undefined && !(prior instanceof DatastoreTenantCursor))
       throw new TypeError("Datastore tenant catalog continuation is invalid.");
-    const cursor = prior?.state(this.#cursorIdentity);
-    if (cursor === undefined) {
-      this.purgeExpired();
-      const early = Object.freeze([...this.#kept.values()].map(({ boundary }) => boundary));
-      return this.#earlyPage(request, early, 0);
-    }
-    if (cursor.phase === "early") return this.#earlyPage(request, cursor.early, cursor.index);
-    return this.#nativePage(request, cursor.early, cursor.nativeCursor);
-  }
-
-  /**
-   * Reads only a bounded part of the fixed early-admission snapshot.
-   */
-  #earlyPage(
-    request: TenantCatalogRead,
-    early: readonly TenantBoundaryValue[],
-    index: number,
-  ): TenantCatalogPage {
-    const end = Math.min(early.length, index + request.count);
-    if (index === end)
-      return {
-        boundaries: [],
-        after: new DatastoreTenantCursor(this.#cursorIdentity, early, "native", 0),
-        hasMore: true,
-      };
-    request.signal.throwIfAborted();
-    this.requireOpen();
-    return {
-      boundaries: early.slice(index, end),
-      after: new DatastoreTenantCursor(
-        this.#cursorIdentity,
-        early,
-        end < early.length ? "early" : "native",
-        end,
-      ),
-      hasMore: true,
-    };
+    return this.#nativePage(request, prior?.state(this.#cursorIdentity));
   }
 
   /**
    * Converts one finite native metadata response without filling filtered pages.
    */
-  async #nativePage(
-    request: TenantCatalogRead,
-    early: readonly TenantBoundaryValue[],
-    start?: string,
-  ): Promise<TenantCatalogPage> {
+  async #nativePage(request: TenantCatalogRead, start?: string): Promise<TenantCatalogPage> {
     const boundaries: TenantBoundaryValue[] = [];
     let cursor = start;
     let remaining = request.count;
@@ -190,12 +140,7 @@ export class DatastoreTenantCatalog implements TenantCatalog {
       const result = await this.#nativeCandidates(query, request, limit);
       request.signal.throwIfAborted();
       this.requireOpen();
-      const chunk = this.#nativeResult(
-        result,
-        early,
-        cursor,
-        this.#nativeBoundaries(result.values),
-      );
+      const chunk = this.#nativeResult(result, cursor, this.#nativeBoundaries(result.values));
       boundaries.push(...chunk.boundaries);
       remaining -= result.values.length;
       if (!chunk.hasMore || remaining === 0)
@@ -219,7 +164,6 @@ export class DatastoreTenantCatalog implements TenantCatalog {
       const tenantId = this.#converter.fromNamespace(namespace);
       if (tenantId === undefined) continue;
       boundaries.push(TenantBoundary.from(tenantId));
-      this.#kept.delete(namespace);
     }
     return boundaries;
   }
@@ -229,7 +173,6 @@ export class DatastoreTenantCatalog implements TenantCatalog {
    */
   #nativeResult(
     result: NativeCandidatePage,
-    early: readonly TenantBoundaryValue[],
     start: string | undefined,
     boundaries: readonly TenantBoundaryValue[],
   ): TenantCatalogPage {
@@ -252,9 +195,10 @@ export class DatastoreTenantCatalog implements TenantCatalog {
       throw new Error("Datastore tenant catalog returned a nonadvancing continuation.");
     if (!more && result.moreResults !== Datastore.NO_MORE_RESULTS)
       throw new Error("Datastore tenant catalog returned invalid continuation metadata.");
-    const after = more
-      ? new DatastoreTenantCursor(this.#cursorIdentity, early, "native", 0, result.endCursor)
-      : undefined;
+    const after =
+      more && result.endCursor !== undefined
+        ? new DatastoreTenantCursor(this.#cursorIdentity, result.endCursor)
+        : undefined;
     return { boundaries, ...(after === undefined ? {} : { after }), hasMore: more };
   }
 
@@ -271,40 +215,14 @@ export class DatastoreTenantCatalog implements TenantCatalog {
   }
 
   /**
-   * Records an admitted tenant until native metadata becomes visible.
-   *
-   * No record is written. Datastore creates namespace metadata when the first
-   * application entity is persisted in that namespace.
+   * Checks an existing native namespace without creating one.
    *
    * @param boundary The admitted multitenant boundary.
-   * @returns Completion of the in-memory catalog update.
+   * @returns Completion when native metadata confirms membership.
    */
-  keep(boundary: TenantBoundaryValue): Promise<void> {
-    return Promise.resolve().then(() => {
-      this.keepNow(boundary);
-    });
-  }
-
-  /**
-   * Stores a tenant namespace until native Datastore metadata becomes visible.
-   *
-   * @param boundary The tenant admitted for early reads.
-   */
-  private keepNow(boundary: TenantBoundaryValue): void {
-    this.requireOpen();
-    if (boundary.single || boundary.tenantId === undefined)
-      throw new Error("Datastore tenant catalog requires a tenant boundary.");
-    this.purgeExpired();
-    const namespace = this.#converter.toNamespace(boundary.tenantId);
-    const existing = this.#kept.get(namespace);
-    if (existing !== undefined && existing.boundary.key !== boundary.key)
-      throw new Error("Datastore namespace is already assigned to another tenant.");
-    if (existing === undefined && this.#kept.size >= this.#maxEarlyTenants)
-      throw new Error("Datastore early-admission cache is full.");
-    this.#kept.set(namespace, {
-      boundary,
-      expiresAt: this.#now() + this.#earlyTenantTtlMs,
-    });
+  async keep(boundary: TenantBoundaryValue): Promise<void> {
+    if (!(await this.contains(boundary)))
+      throw new Error("Datastore tenant namespace is not present.");
   }
 
   /**
@@ -314,7 +232,6 @@ export class DatastoreTenantCatalog implements TenantCatalog {
    */
   close(): Promise<void> {
     this.#open = false;
-    this.#kept.clear();
     return Promise.resolve();
   }
 
@@ -324,54 +241,26 @@ export class DatastoreTenantCatalog implements TenantCatalog {
   private requireOpen(): void {
     if (!this.#open) throw new Error("Datastore tenant catalog is closed.");
   }
-
-  /**
-   * Removes early tenant admissions after their configured TTL.
-   */
-  private purgeExpired(): void {
-    const now = this.#now();
-    for (const [namespace, admission] of this.#kept) {
-      if (admission.expiresAt <= now) this.#kept.delete(namespace);
-    }
-  }
 }
 
 /**
- * Immutable phase and native cursor tied to one Datastore catalog.
+ * Immutable native cursor tied to one Datastore catalog.
  */
 class DatastoreTenantCursor implements TenantCatalogCursor {
   readonly [Symbol.toStringTag] = "TenantCatalogCursor" as const;
 
   readonly #identity: object;
 
-  readonly #early: readonly TenantBoundaryValue[];
-
-  readonly #phase: "early" | "native";
-
-  readonly #index: number;
-
-  readonly #nativeCursor: string | undefined;
+  readonly #nativeCursor: string;
 
   /**
-   * Captures one early-cache or native namespace continuation.
+   * Captures one native namespace continuation.
    *
    * @param identity Private catalog issuance identity.
-   * @param early Bounded early-admission snapshot.
-   * @param phase Current early or native phase.
-   * @param index Next early-admission position.
-   * @param nativeCursor Native namespace continuation, when present.
+   * @param nativeCursor Native namespace continuation.
    */
-  constructor(
-    identity: object,
-    early: readonly TenantBoundaryValue[],
-    phase: "early" | "native",
-    index: number,
-    nativeCursor?: string,
-  ) {
+  constructor(identity: object, nativeCursor: string) {
     this.#identity = identity;
-    this.#early = early;
-    this.#phase = phase;
-    this.#index = index;
     this.#nativeCursor = nativeCursor;
     Object.freeze(this);
   }
@@ -380,22 +269,12 @@ class DatastoreTenantCursor implements TenantCatalogCursor {
    * Verifies issuance before exposing this catalog's sweep position.
    *
    * @param identity Private identity of the reading catalog.
-   * @returns Bounded early snapshot and phase-specific continuation.
+   * @returns Native namespace continuation.
    */
-  state(identity: object): {
-    early: readonly TenantBoundaryValue[];
-    phase: "early" | "native";
-    index: number;
-    nativeCursor?: string;
-  } {
+  state(identity: object): string {
     if (this.#identity !== identity)
       throw new TypeError("Datastore tenant catalog continuation is invalid.");
-    return {
-      early: this.#early,
-      phase: this.#phase,
-      index: this.#index,
-      ...(this.#nativeCursor === undefined ? {} : { nativeCursor: this.#nativeCursor }),
-    };
+    return this.#nativeCursor;
   }
 }
 

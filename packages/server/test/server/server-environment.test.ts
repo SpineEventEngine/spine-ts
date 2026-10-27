@@ -13,11 +13,18 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { create } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { SignalEnvelopes, spineCoreRegistry } from "@spine-event-engine/core";
-import { EventContextSchema } from "@spine-event-engine/proto";
-import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
+import { EventContextSchema, type TenantId } from "@spine-event-engine/proto";
+import {
+  InMemoryStorageFactory,
+  StorageFactory,
+  type RecordSpec,
+  type RecordStorage,
+  type StorageContext,
+  type StorageGroup,
+} from "@spine-event-engine/storage";
 import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 
 import {
@@ -36,6 +43,8 @@ import type {
 } from "../../src/server/environment-delivery-worker.js";
 import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
+import type { TenantIndex } from "../../src/context/tenant-index.js";
+import { tenant } from "../tenant-fixture.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Server } from "../../src/server/server.js";
 import { emitServerError, emitServerWarning } from "../../src/server/server-log.js";
@@ -55,6 +64,31 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("uses transient membership when a custom storage factory has no catalog", async () => {
+    const factory = new CataloglessStorageFactory();
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
+    const environment = ServerEnvironment.instance();
+    const context = BoundedContext.singleTenant("CataloglessTasks").build();
+    expect(context.tenantIndex).toBe(environment.tenantIndex);
+    await environment.tenantIndex.keep(tenant("known"));
+    await expect(context.tenantIndex.contains(tenant("known"))).resolves.toBe(true);
+    await context.close();
+  });
+  it("shares the configured live index and keeps a context override separate", async () => {
+    const company = tenantIndex();
+    const billing = tenantIndex();
+    ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: company });
+    const environment = ServerEnvironment.instance();
+    const orders = BoundedContext.multitenant("IndexOrders").build();
+    const invoices = BoundedContext.multitenant("IndexInvoices").withTenantIndex(billing).build();
+    expect(environment.tenantIndex).toBe(company);
+    expect(orders.tenantIndex).toBe(company);
+    expect(invoices.tenantIndex).toBe(billing);
+    await orders.close();
+    await company.keep(tenant("after-orders-close"));
+    await expect(company.contains(tenant("after-orders-close"))).resolves.toBe(true);
+    await invoices.close();
+  });
   it("defaults one process-wide integration channel factory in production", async () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
@@ -829,6 +863,49 @@ function environmentDescriptor(environment: ServerEnvironment): ContextDeliveryD
       return Promise.resolve();
     },
   });
+}
+
+function tenantIndex(): TenantIndex {
+  const entries = new Map<string, TenantId>();
+  return {
+    contains: (id) => Promise.resolve(entries.has(JSON.stringify(id))),
+    keep: (id) => {
+      entries.set(JSON.stringify(id), id);
+      return Promise.resolve();
+    },
+    all: () => Promise.resolve([...entries.values()]),
+    page: (request) =>
+      Promise.resolve({ ids: [...entries.values()].slice(0, request.count), hasMore: false }),
+  };
+}
+
+/**
+ * Delegates storage while omitting the provider tenant catalog capability.
+ */
+class CataloglessStorageFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+
+  /**
+   * Creates a delegated record handle without a tenant catalog.
+   *
+   * @returns A delegated record handle without a tenant catalog.
+   */
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    return this.#delegate.createRecordStorage(context, spec, group);
+  }
+
+  /**
+   * Closes delegated storage.
+   *
+   * @returns Completion after delegated storage closes.
+   */
+  override close(): Promise<void> {
+    return this.#delegate.close();
+  }
 }
 
 async function waitFor(condition: () => boolean): Promise<void> {

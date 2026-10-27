@@ -391,12 +391,7 @@ export class PostgresStorageFactory extends StorageFactory {
     for (const config of configs)
       if (!config.boundary.single) this.#tenantTargets.set(config.target, config.boundary.key);
     const tenants = configs.filter(({ boundary }) => !boundary.single);
-    this.#catalog = new PostgresTenantCatalog(
-      tenants.length || tenantResolver !== undefined
-        ? tenants.map(({ boundary }) => boundary)
-        : [TenantBoundary.single],
-      tenantResolver !== undefined,
-    );
+    this.#catalog = new PostgresTenantCatalog(tenants.map(({ boundary }) => boundary));
     this.registerPorts();
   }
 
@@ -1611,15 +1606,21 @@ class PostgresTenantCatalog implements TenantCatalog {
   readonly #cursorIdentity = {};
 
   /**
+   * Checks fixed configured membership without invoking a resolver.
+   *
+   * @param boundary Complete tenant boundary to inspect.
+   * @returns Whether the boundary is explicitly configured.
+   */
+  contains(boundary: TenantBoundary): Promise<boolean> {
+    return Promise.resolve(this.boundaries.some(({ key }) => key === boundary.key));
+  }
+
+  /**
    * Creates a catalog from configured tenant boundaries.
    *
    * @param boundaries Supply the enumerable configured boundaries.
-   * @param dynamic Whether application resolution accepts non-enumerable tenants.
    */
-  constructor(
-    private readonly boundaries: readonly TenantBoundary[],
-    private readonly dynamic: boolean,
-  ) {}
+  constructor(private readonly boundaries: readonly TenantBoundary[]) {}
 
   /**
    * Returns every configured boundary.
@@ -1665,10 +1666,7 @@ class PostgresTenantCatalog implements TenantCatalog {
    * @returns A promise that resolves when the boundary is configured.
    */
   keep(boundary: TenantBoundary): Promise<void> {
-    if (
-      !this.boundaries.some(({ key }) => key === boundary.key) &&
-      !(this.dynamic && !boundary.single)
-    ) {
+    if (!this.boundaries.some(({ key }) => key === boundary.key)) {
       return Promise.reject(
         new PostgresStorageConfigurationError("PostgreSQL tenant is not configured."),
       );

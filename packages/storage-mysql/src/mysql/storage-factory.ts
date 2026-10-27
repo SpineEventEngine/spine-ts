@@ -286,16 +286,24 @@ class MysqlTenantCatalog implements TenantCatalog {
   readonly #cursorIdentity = {};
 
   /**
+   * Checks fixed configured membership without invoking a resolver.
+   *
+   * @param boundary Complete tenant boundary to inspect.
+   * @returns Whether the boundary is explicitly configured.
+   */
+  contains(boundary: TenantBoundary): Promise<boolean> {
+    return Promise.resolve(this.byTenant.has(boundary.key));
+  }
+
+  /**
    * Stores configured database mappings for bounded catalog pages.
    *
    * @param databases Configured databases in deterministic order.
    * @param byTenant Exact boundary-to-database lookup.
-   * @param dynamic Whether tenant destinations can resolve on demand.
    */
   constructor(
     private readonly databases: readonly MysqlDatabaseConfig[],
     private readonly byTenant: ReadonlyMap<string | symbol, MysqlDatabaseConfig>,
-    private readonly dynamic: boolean,
   ) {}
 
   /**
@@ -342,7 +350,7 @@ class MysqlTenantCatalog implements TenantCatalog {
    * @returns Completion when that tenant is configured.
    */
   keep(boundary: TenantBoundary): Promise<void> {
-    return this.byTenant.has(boundary.key) || (this.dynamic && !boundary.single)
+    return this.byTenant.has(boundary.key)
       ? Promise.resolve()
       : Promise.reject(
           new MysqlStorageConfigurationError("MySQL storage has no configured tenant."),
@@ -457,11 +465,7 @@ export class MysqlStorageFactory extends StorageFactory {
     for (const config of configs)
       if (!config.boundary.single) this.#tenantTargets.set(config.target, config.boundary.key);
     const tenants = configs.filter(({ boundary }) => !boundary.single);
-    this.#catalog = new MysqlTenantCatalog(
-      tenants.length || tenantResolver !== undefined ? tenants : configs,
-      this.#configs,
-      tenantResolver !== undefined,
-    );
+    this.#catalog = new MysqlTenantCatalog(tenants, this.#configs);
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });

@@ -29,7 +29,11 @@ import {
   StorageGroup,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import { StoragePreparations, type EntityStorageInput } from "@spine-event-engine/storage/provider";
+import {
+  StoragePreparations,
+  TenantBoundary,
+  type EntityStorageInput,
+} from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
 import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
@@ -258,6 +262,12 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     );
 
     try {
+      await expect(
+        factory.tenantCatalog().contains(TenantBoundary.from(tenant("missing"))),
+      ).resolves.toBe(false);
+      await expect(
+        factory.tenantCatalog().keep(TenantBoundary.from(tenant("missing"))),
+      ).rejects.toThrow(/not present/);
       await single.write(message("same"));
       await otherContext.write(message("same"));
       await Promise.all([group, tenantA, tenantB].map((storage) => storage.write(message("same"))));
@@ -265,6 +275,10 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       await group.write(message("group"));
       await tenantA.write(message("tenant-a"));
       await tenantB.write(message("tenant-b"));
+      await expect(
+        factory.tenantCatalog().contains(TenantBoundary.from(tenant("a"))),
+      ).resolves.toBe(true);
+      await factory.tenantCatalog().keep(TenantBoundary.from(tenant("a")));
       await expect(single.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(otherContext.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(group.read("same")).resolves.toMatchObject({ value: "same" });

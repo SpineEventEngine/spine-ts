@@ -28,6 +28,13 @@ export {
   type TenantMode,
 } from "./context/bounded-context.js";
 export { ThirdPartyContext } from "./integration/third-party-context.js";
+export type {
+  TenantIndex,
+  TenantIndexCursor,
+  TenantIndexPage,
+  TenantIndexRead,
+  TenantIndexSignal,
+} from "./context/tenant-index.js";
 
 export {
   Stand,

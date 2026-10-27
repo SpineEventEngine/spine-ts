@@ -23,6 +23,29 @@ import { TenantBoundary } from "../../src/internal/tenancy.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
 
 describe("InMemoryStorageBackend", () => {
+  it("keeps directory membership separate from ordinary tenant storage", async () => {
+    const factory = new InMemoryStorageFactory();
+    const tenantId = create(TenantIdSchema, { kind: { case: "value", value: "stored" } });
+    const boundary = TenantBoundary.from(tenantId);
+    const spec = new RecordSpec<string, StringValue>({
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const storage = factory.createRecordStorage(
+      { name: "Tasks", multitenant: true, tenantId },
+      spec,
+    );
+    await storage.writeAll([create(StringValueSchema, { value: "one" })]);
+    await expect(factory.tenantCatalog().contains(boundary)).resolves.toBe(false);
+    await expect(factory.tenantCatalog().all()).resolves.toEqual([]);
+    await factory.tenantCatalog().keep(boundary);
+    await expect(factory.tenantCatalog().contains(boundary)).resolves.toBe(true);
+    storage.close();
+    await factory.close();
+  });
+
   it("keeps equal record types separate when their source types differ", () => {
     const backend = new InMemoryStorageBackend();
     const firstSpec = new RecordSpec<string, StringValue>({

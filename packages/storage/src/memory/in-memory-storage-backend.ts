@@ -100,6 +100,17 @@ export class InMemoryStorageBackend {
   }
 
   /**
+   * Checks explicitly admitted membership without binding storage.
+   *
+   * @param backend Shared memory backend.
+   * @param tenant Complete boundary to inspect.
+   * @returns Whether the boundary was explicitly admitted.
+   */
+  static contains(backend: InMemoryStorageBackend, tenant: TenantBoundary): boolean {
+    return MemoryBackendScopes.contains(backend, tenant);
+  }
+
+  /**
    * Lists multitenant boundaries admitted to this backend.
    *
    * @param backend Selects the shared backend.
@@ -256,7 +267,6 @@ const MemoryBackendScopes = {
     family: string,
     create: () => T,
   ): T {
-    this.admit(backend, tenant);
     let scopes = scopesByBackend.get(backend);
     if (scopes === undefined) {
       scopes = new Map();
@@ -302,6 +312,17 @@ const MemoryBackendScopes = {
       tenantOrderByBackend.set(backend, ordered);
     }
     ordered.push(tenant);
+  },
+
+  /**
+   * Checks the explicit tenant index without creating a storage scope.
+   *
+   * @param backend Shared memory backend.
+   * @param tenant Complete boundary to inspect.
+   * @returns Whether the boundary was explicitly admitted.
+   */
+  contains(backend: InMemoryStorageBackend, tenant: TenantBoundary): boolean {
+    return tenantsByBackend.get(backend)?.has(String(tenant.key)) ?? false;
   },
 
   /**
