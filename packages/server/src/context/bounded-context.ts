@@ -1465,11 +1465,13 @@ export class BoundedContext {
    * @param errors Failures collected during context closure.
    */
   async #closeRepositories(errors: unknown[]): Promise<void> {
-    for (const repository of this.#repositoryViews) {
-      await this.#closePart(() => {
-        repositoryAccess.clearRuntime(repository);
+    const closing = [...this.#repositoryViews].map((repository) => {
+      return repositoryAccess.clearRuntime(repository).finally(() => {
         registeredRepositories.delete(repository);
-      }, errors);
+      });
+    });
+    for (const result of await Promise.allSettled(closing)) {
+      if (result.status === "rejected") errors.push(result.reason);
     }
   }
 
@@ -3973,7 +3975,7 @@ const ContextParts = Object.freeze({
         registeredRepositories.set(repository, { name: registration.name });
       },
       close: () => {
-        repositoryAccess.clearRuntime(repository);
+        repositoryAccess.clearRuntimeIdle(repository);
       },
     };
   },

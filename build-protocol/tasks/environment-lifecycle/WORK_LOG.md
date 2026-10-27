@@ -5,85 +5,161 @@
 Started 2026-10-27 from freshly fetched official master
 `ff6c8669537a016c47f012150306500d3b52b5d1`. Branch `environment-lifecycle` is in
 `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
-Checkpoint `c0c312b57` was pushed to official `origin/environment-lifecycle`.
-It contains the initial repository Entity-storage retention fix and accepted task
-specification. It is not final acceptance. No PR has been created.
+Checkpoints `c0c312b57` and `6ccfc3efc` were pushed to official
+`origin/environment-lifecycle`. They contain initial repository and EventStore
+retention, safe EventStore close and the accepted task specification. No PR has
+been created. Full-task acceptance remains pending.
 
-Implementation follows [MILESTONES.md](MILESTONES.md). The current patch combines
-repository retained-composite acquisition cleanup and EventStore retention. The
-first complete review wave found one accepted P1: immediate EventStore close could
-interrupt an admitted batch. Its correction passed independent preflight and affected re-review; see
-REVIEW_LOG.md.
+Repository query/history retention has converged after focused verification and
+independent review. Protected Agent history and Entity maintenance operations
+now share admission and shutdown tracking; see REVIEW_LOG.md. This checkpoint
+is ready for commit and immediate push. The new AnyPacker core work resumes next. Its three
+WIP files are preserved outside Git in the evidence directory under
+`any-packer-wip/`; current core source is restored to HEAD for repository checks.
+No compatibility alias or provider workaround was introduced.
 
-## Accepted implementation decisions
+## Accepted retention decisions
 
 - Repository cache lookup precedes construction; failed partial acquisition closes
   resources already opened and preserves acquisition plus cleanup errors.
 - EventStore retains record storage per complete tenant identity and fixed group.
-- Normal EventStore close returns a promise, fences new physical storage groups,
-  drains admitted batch/check/query groups and attempts every retained close.
-  Provider-only eventStoreAccess.closeIdle supports synchronous construction
-  failure only with no active storage work. Normal callers await close; constructor cleanup uses the guard.
-- The acceptThenAppend callback gap is outside physical storage work, preserving
-  its close-then-reject behavior without introducing a self-deadlock.
-- Agent recovery removal precedes shared saved-work scanning. Retained Inbox/shard
-  stores must land with the complete Delivery shutdown chain.
-- Remaining retention includes repository reads/history/duplicate checks and
-  per-commit inner record handles in all four providers. Existing attempt-all
-  cleanup gaps in clearRuntime/history-switch remain for the next repository slice.
+  Normal close returns a promise, fences new physical operations, drains admitted
+  batch/check/query groups and attempts every retained close. Provider-only
+  eventStoreAccess.closeIdle supports synchronous idle construction rollback.
+- The acceptThenAppend callback runs outside a physical storage operation. A
+  callback can await close; its later insertion then rejects without deadlock.
+- Repository read/write access shares Entity storage by canonical tenant, model
+  and captured history boolean. Reads do not open commit ports. A failed upgrade
+  preserves prior read storage and closes only newly acquired resources.
+- Agent audit history is retained separately from the state-history setting.
+  No recovery-only execution-read cache is introduced.
+- Changing the history setting retains both possible configurations. Future
+  acquisitions select the current setting; an acquired commit uses its captured
+  storageInput.stateHistory. A synchronous setting change never closes active
+  resources.
+- Ordinary clearRuntime detaches admission, drains direct operations, closes the
+  retained Process Manager EventStore, then attempts every physical port close.
+  Normal context cleanup starts all repository drains and removes registration
+  records in finally. Idle rollback remains internal and synchronous.
+- Entity-bound callbacks capture the exact repository lifetime, so old Entity
+  instances cannot use storage after closure or rebinding. Protected Agent audit
+  and Entity maintenance paths enforce this same rule.
+- Agent recovery removal precedes shared saved-work scanning. Inbox/shard retention
+  lands with the complete Delivery shutdown chain.
+
+## AnyPacker decision and next implementation
+
+D-0147 and TASK.md record the human requirement: use JVM-like AnyPacker throughout
+instead of a Datastore native-key workaround. No workaround was implemented.
+The architecture pass inspected local JVM AnyPacker and JsonFormat behavior.
+Packing an existing Any returns the same object and preserves its URL and bytes.
+Packing a normal message derives its descriptor URL and preserves unknown binary
+fields. Typed unpack checks the complete URL; registry unpack honors the exact
+registered URL. Optional unpack helpers return undefined for absent/invalid data.
+
+Domain validation stays explicit at signal/API entry points, including existing
+validate:false behavior. AnyPacker performs Protobuf conversion. Unrelated
+record/transport serialization policies remain unchanged. Shared Stringifiers
+must preserve each actual JSON @type occurrence, including Any values inside
+packed payloads, repeated/map/oneof fields and well-known JSON shapes. Arbitrary
+Struct/Value data containing @type stays ordinary data. Proto JSON does not promise
+preservation of unknown binary fields.
+
+Existing implementer storage_retention (immutable explicit gpt-6-sol/medium)
+starts with core source, focused tests/fixtures and core README/REFERENCE, then
+adopts the helper across production, normal tests and examples. Preserve malformed
+and wire-preservation fixtures when their raw values are the test subject. Remove
+AnyMessages without a compatibility wrapper. No new dependency is needed.
+Estimated added work: 1.5–3 hours including adoption, tests and independent review.
+
+## Provider baseline and confirmed defects
+
+Dedicated task containers remain available for subsequent provider checks; ports,
+credentials and exact commands are recorded in external sql-baseline.md and
+Datastore evidence. PostgreSQL 18.6 passed 12 live storage tests. MySQL 8.4.10 and
+MariaDB 11.4.13 each passed 15 cases across base and targeted tenant runs. Datastore
+Agent audit-history baseline passed; Entity history trim exposed two defects.
+
+A nine-query trace confirmed that JSON decoding changes the Any ID URL. Deletion
+then reconstructs a different database key and removes no record. Fix shared Any
+handling, as directed by the human; do not carry native keys as a substitute.
+Separately, trim repeatedly reads its first page. Keeping at least the page size
+can make it remove nothing forever. Implement keyset continuation and a cumulative
+retained count, with tests spanning pages. Inspect related truncate progress.
+Required regressions include 129 states trimmed to one, retention spanning pages,
+and deletion after custom Any URL round trips. No arbitrary loop limit or timeout
+increase. No provider changes have been made yet.
+
+Provider commit wrappers still recreate internal storage per commit. The next
+provider slice must retain those ports and coordinate admitted commits with
+factory shutdown. Preserve independent externally requested factory handles;
+do not add global caching of all factory outputs.
 
 ## Verification evidence
 
-Node 24.18.0 and pnpm 11.9.0; frozen dependency installation succeeded.
-Baseline Proto generation, build/tooling typechecks and 50 focused tests passed.
-Before review, the combined retention patch passed 386 tests across repository
-routing, history cache and EventStore. Source/tooling typechecks, ESLint, cleanup,
-TSDoc, formatting, documentation audience and diff checks passed. Exact focused
-LCOV covered every changed executable line and branch; this was not a global
-coverage claim. A truncated first coverage extraction was corrected before use.
+Node 24.18.0 and pnpm 11.9.0; frozen dependency installation, baseline Proto
+generation and build/tooling typechecks passed. First EventStore preflight passed
+386 focused tests. The close-race correction passed 523 tests and affected
+checks; the final provider-only cleanup seam passed 534 tests and API confirmation.
+Changed EventStore branches were inspected with focused coverage. Two Agent tests
+also exercised awaited testing-helper cleanup.
 
-The close-race regression failed against immediate closure. The correction's
-523-test run across five suites, storage/server/MySQL typechecks, lint, cleanup,
-TSDoc and formatting passed. Independent preflight confirmed those results and all changed EventStore
-branches. Two existing Agent integration tests exercised the testing utility.
-The accepted API correction moved idle cleanup behind the provider seam; 534
-focused tests and all narrow checks passed afterward, and API review confirmed
-the public declaration excludes it. Four normal test cleanup calls await close. Final release and live
-provider checks have not run. Baseline generation refreshes tracked generationId
-stamps; those unrelated stamp changes were excluded from the checkpoint.
-Raw outputs and detailed assignment evidence are outside version control under
-`/tmp/spine-environment-lifecycle-20261027`.
+Repository read-retention preflight passed 478 tests initially and 483 after
+mechanical corrections, with server typecheck, ESLint, cleanup, TSDoc, formatting
+and diff checks. Focused coverage thresholds were disabled only for inspecting
+changed branches; no global coverage claim is made. Specialist review selected
+434 tests plus 25 Entity tests, all passing. All accepted findings are resolved. The final naming correction passed 37
+affected tests; independent final preflight confirmed new admission/maintenance
+coverage and tooling/docs checks. Final release verification and security review remain pending.
+
+Baseline generation refreshes tracked generationId stamps; those changes remain
+excluded from retention commits. Raw logs, exact LCOV, diagnostic traces and
+assignment details are outside Git in
+`/tmp/spine-environment-lifecycle-20261027`. Key reports: repository-read-retention.md,
+repository-read-independent/, provider-retention-next-slice.md, sql-baseline.md,
+datastore-short-trace.log and any-packer-inventory.md.
 
 ## Assignment evidence
 
-| Existing role or dispatched function | Agent                    | Explicit configured profile | Scope                                                                               |
-| ------------------------------------ | ------------------------ | --------------------------- | ----------------------------------------------------------------------------------- |
-| requirements_splitter                | application_architecture | gpt-6-astra / high          | Frozen milestone sequence; bounded follow-up for demonstrated close contract defect |
-| implementer                          | storage_retention        | gpt-6-sol / medium          | Current retention patches, focused tests and accepted corrections                   |
-| Mechanical/scanning function         | mechanical_checks        | gpt-6-luna / low            | Independent preflight/LCOV and provider handle inventory                            |
+| Existing role or dispatched function | Agent                    | Explicit configured profile | Scope                                                                           |
+| ------------------------------------ | ------------------------ | --------------------------- | ------------------------------------------------------------------------------- |
+| requirements_splitter                | application_architecture | gpt-6-astra / high          | Frozen architecture; demonstrated close defect; human AnyPacker contract change |
+| implementer                          | storage_retention        | gpt-6-sol / medium          | Retention, accepted corrections, next AnyPacker implementation                  |
+| Mechanical/scanning function         | mechanical_checks        | gpt-6-luna / low            | Focused preflight/coverage, provider baseline, Any caller inventory             |
 
-Model and reasoning were explicit in original dispatches and immutable on reuse.
-Each agent confirmed its configured profile; runtime introspection is unavailable.
-Specialist assignments and dispositions are recorded in REVIEW_LOG.md. No child
-delegation occurred. Source inspection used the JVM runtime notes and local
-`core-jvm` Repository.storage()/close(), InboxStorage, EventBus and delegated
-storage close. No dependency or generic infrastructure was added.
+Model and reasoning were explicit at dispatch and immutable on reuse. Runtime
+introspection is unavailable. Specialist assignments and dispositions are in
+REVIEW_LOG.md. No child delegation occurred. JVM guardrails include core-jvm
+Repository.storage()/close(), Delivery retained InboxStorage, EventBus and storage
+close; AnyPacker uses local base-libraries/base/.../protobuf/AnyPacker.java.
 
 ## Next actions
 
-Commit and push the accepted EventStore retention and drain correction. Continue repository/query/history retention and provider
-preparation in the frozen order. Keep narrow API docs current; finish broad
-examples after interfaces stabilize. Run the full release and security gates at
-convergence, choose the required unused common workspace version, and verify
-remote state. No existing-data migration, PR creation or master write is authorized.
+Finish the single accepted repository correction batch and focused affected
+review, commit and immediately push. Resume AnyPacker, then execute MILESTONES.md
+through provider preparation, TenantIndex, context registration, Agent recovery
+removal, shared environment/Delivery and startup behavior. Keep narrow API docs
+current; finish broad examples after interfaces stabilize. Run final release,
+security and exact-SHA CI gates, select the required unused common workspace
+version and push every feature commit. No existing-data migration, PR creation
+or master write is authorized.
 
-## Next repository slice preparation
+## Provider close question for the next milestone
 
-Read-only implementation analysis exposed a concrete close-contract blocker:
-clearRuntime and the public administrative state-history switch are synchronous,
-while direct query/history reads can be in flight outside bus drains. Retaining
-their storage requires defining when those handles close. The existing
-requirements_splitter (explicit immutable gpt-6-astra/high) receives only this
-bounded blocker and the unchanged-state Process Manager EventStore cleanup path;
-it must preserve current administration semantics and avoid a new framework-wide
-lifecycle abstraction. No implementation of this slice has started.
+Read-only provider analysis demonstrated that PostgreSQL factory shutdown closes
+inner RecordStorage directly even when a retained commit is still using it. Its
+current close API returns void and suppresses the internal drain rejection. The
+existing requirements_splitter application_architecture (explicit immutable
+Astra/high) receives only this concrete admission/close question across providers,
+with no source edits. Decide the smallest safe contract before provider retention;
+ordinary work remains with the implementer. Expected analysis 0.15–0.3 hours,
+within the overall estimate. This does not delay the AnyPacker milestone.
+
+Provider close decision accepted after source inspection: StorageFactory.close
+and provider-only EntityCommitStorage.close return Promise<void>, with a
+synchronous admission fence and asynchronous completion. RecordStorage close
+stays synchronous. Commit wrappers drain before releasing their private records;
+factory teardown does not close those records independently. Guarded internal
+idle cleanup supports current synchronous rollback. Cleanup failures belong to
+close promises, preserving completed commit results. Concrete paths and tests
+are in external provider-close-contract.md; implement after AnyPacker.

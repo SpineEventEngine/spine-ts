@@ -9,47 +9,55 @@ a time; independent checks and relevant reviews may run concurrently. See the
    acquisition/attempt-all cleanup; EventStore retention per captured tenant;
    retained repository query/history storage with request facades remaining
    short-lived. Include Agent history readers, Process Manager duplicate-history
-   reads and provider wrappers that recreate inner RecordStorage on each operation.
-   Repeated use creates no throwaway storage; failure can retry;
-   shutdown releases all acquired stores. Inbox retention waits for milestone 6.
-2. **Factory preparation:** shared contracts and memory first, then bounded
+   reads. Repeated use creates no throwaway storage; failure can retry;
+   shutdown releases all acquired stores. Inbox retention waits for milestone 8.
+2. **Shared AnyPacker:** implement JVM-like packing/unpacking and consistent
+   callers, including exact per-occurrence Any URLs in nested identifier JSON
+   round trips. Preserve packed Any instances and binary unknown fields. Retain
+   semantic validation at signal/API entry points. No native-key workaround.
+3. **Provider storage retention:** retain inner RecordStorage in memory,
+   PostgreSQL, MySQL/MariaDB and Datastore commit wrappers. Coordinate admitted
+   commits with awaitable factory/commit shutdown (D-0148). Correct Datastore trim
+   pagination and verify
+   deletion after the shared Any fix, including retention spanning pages.
+4. **Factory preparation:** shared contracts and memory first, then bounded
    PostgreSQL, MySQL/MariaDB and Datastore slices. Offline factory build, explicit
    connection checks, creation and read-only compatibility, tenant resolvers,
    coordinated preparation and released temporary connections. No provisioning.
-3. **TenantIndex and admission:** public membership/paging, effective live index,
+5. **TenantIndex and admission:** public membership/paging, effective live index,
    explicit keep, typed TENANT_UNKNOWN/NOT_FOUND, operational lookup errors,
    cleanup policy and direct input admission. No hidden tenant catalog.
-4. **JVM PR 1698:** early state reservations with context identity, Tests profile,
+6. **JVM PR 1698:** early state reservations with context identity, Tests profile,
    default guard, System exclusion, duplicate lookup, registration rollback,
    attempt-all context cleanup and reset protection. Completed-context tracking
    is separate from early reservations.
-5. **Agent recovery removal:** fresh signals execute live without scheduler;
+7. **Agent recovery removal:** fresh signals execute live without scheduler;
    remove replay, saved backlog and private outgoing obligations across runtime,
    storage, Proto, config and tests. Preserve active retries, state and all audit
    histories. Accepted interrupted work cannot return through ordinary Inbox
    delivery. This precedes shared saved-work scanning.
-6. **Shared environment and Delivery:** completeSetup, one environment Delivery,
+8. **Shared environment and Delivery:** completeSetup, one environment Delivery,
    one single-tenant Inbox and shard store, packed-signal tenant extraction,
    membership before persistence and dispatch, committed-write notifications,
    tenant-qualified identity and safe idle transitions. Shutdown fences input,
    stops notification/scan producers, settles dispatch and shard release, closes
    created delivery storage, then factories. Closing one context leaves shared
    resources open. Supplied ports follow explicit cleanup delegation.
-7. **Bounded Context initialization:** asynchronous build with independent eager
+9. **Bounded Context initialization:** asynchronous build with independent eager
    flags, runtime preparation methods and first-input gating across every ingress.
    Failed lazy attempts reject requests and remain retryable; explicit startup
    failure stops environment intake. Install consumers behind the gate so Events
    can trigger lazy preparation. No active/inactive context API.
-8. **Subscription monitoring:** awaited first pass, separate initial-success and
-   current-health state, WARN and restart after later errors, no overlapping loops
-   or restart after close. No whole-environment failure after initial success.
-9. **Environment preparation:** completed/open context snapshot, paged effective
-   indexes, all supplied IDs validated before structure work, no keep, close
-   coordination and shared lazy/explicit attempts. No monitoring side effect.
-10. **Server and protocols:** gRPC-only Server, typed errors through native/browser/
+10. **Subscription monitoring:** awaited first pass, separate initial-success and
+    current-health state, WARN and restart after later errors, no overlapping loops
+    or restart after close. No whole-environment failure after initial success.
+11. **Environment preparation:** completed/open context snapshot, paged effective
+    indexes, all supplied IDs validated before structure work, no keep, close
+    coordination and shared lazy/explicit attempts. No monitoring side effect.
+12. **Server and protocols:** gRPC-only Server, typed errors through native/browser/
     gateway/client surfaces, complete ingress coverage, lookup ambiguity before
     readiness, revised managed startup, BlackBox and examples.
-11. **Convergence:** current public documentation, provider and reopening evidence,
+13. **Convergence:** current public documentation, provider and reopening evidence,
     final specialist/security review, cheap preflight then release verification,
     unused common workspace version, required feature pushes and exact remote
     state. No PR creation or merge without explicit instruction.

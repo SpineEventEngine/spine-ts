@@ -82,7 +82,7 @@ import {
   type NormalizedQueryEntry,
   StorageQueryPolicy,
 } from "@spine-event-engine/storage";
-import { TenantBoundary } from "@spine-event-engine/storage/provider";
+import { TenantBoundary, eventStoreAccess } from "@spine-event-engine/storage/provider";
 import type {
   EntityEventHistoryPort,
   EntityRecordStorage,
@@ -939,12 +939,13 @@ export class Repository<
   }
 
   /**
-   * Sets whether future state-history rows are appended for this repository.
+   * Sets state-history storage for future acquisitions. Admitted stores retain
+   * the setting captured when they began, and prior configurations stay reusable.
    *
    * This JVM-parity switch is for controlled administration/testing, not
    * routine request-time behavior. It never deletes or reconstructs history.
    *
-   * @param enabled Whether later successful stores append state-history rows.
+   * @param enabled Whether newly admitted stores append state-history rows.
    */
   setStateHistoryEnabled(enabled: boolean): void {
     if (typeof enabled !== "boolean") {
@@ -953,11 +954,6 @@ export class Repository<
     const configuration = RepositoryStorage.historyConfiguration(this);
     if (configuration.stateHistory === enabled) return;
     configuration.stateHistory = enabled;
-    const handles = repositoryEntityHandles.get(this);
-    if (handles !== undefined) {
-      for (const handle of handles.values()) handle.close();
-      handles.clear();
-    }
   }
 
   /**
@@ -1190,13 +1186,13 @@ const RepositoryAgentReads = {
   ): Promise<HistoryPage<AgentHistoryEntry>> {
     if (repositoryRuntimes.get(repository) !== captured.runtime)
       throw new Error("Agent read requires an active repository.");
-    const input = RepositoryStorage.entityStorageInput(repository, captured.context);
-    const history = AgentHistoryStorageFactories.create(captured.runtime.storageFactory, {
-      context: captured.context,
-      stateType: repository.stateSchema.typeName,
-      id: { key: input.id.key },
-    });
-    try {
+    return RepositoryStorage.track(repository, async () => {
+      const input = RepositoryStorage.entityStorageInput(repository, captured.context);
+      const history = RepositoryStorage.openRepositoryAgentHistory(
+        repository,
+        captured.runtime.storageFactory,
+        input,
+      );
       const page = await AgentHistoryReads.readBound(
         {
           storage: history,
@@ -1210,9 +1206,7 @@ const RepositoryAgentReads = {
         items: page.items,
         ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
       };
-    } finally {
-      history.close();
-    }
+    });
   },
 
   /**
@@ -1262,16 +1256,18 @@ const RepositoryAgentReads = {
     });
     if (repositoryRuntimes.get(repository) !== captured.runtime)
       throw new Error("Agent read requires an active repository.");
-    const storage = AgentExecutionStorageFactories.create(captured.runtime.storageFactory, {
-      entity: input,
-      stateType: repository.stateSchema.typeName,
+    return RepositoryStorage.track(repository, async () => {
+      const storage = AgentExecutionStorageFactories.create(captured.runtime.storageFactory, {
+        entity: input,
+        stateType: repository.stateSchema.typeName,
+      });
+      try {
+        const record = await storage.read(key);
+        return record === undefined ? undefined : this.status(record.status);
+      } finally {
+        storage.close();
+      }
     });
-    try {
-      const record = await storage.read(key);
-      return record === undefined ? undefined : this.status(record.status);
-    } finally {
-      storage.close();
-    }
   },
 
   /**
@@ -1404,18 +1400,28 @@ const repositoryProjectionDirect = new WeakMap<
   (event: Event, rebuild?: boolean) => Promise<void>
 >();
 const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
-const repositoryEntityHandles = new WeakMap<
-  RepositoryView,
-  Map<
-    string,
-    {
-      /**
-       * Closes the retained Entity storage handle.
-       */
-      close(): void;
-    }
-  >
->();
+interface RepositoryClosePort {
+  /**
+   * Closes this physical storage port.
+   */
+  close(): void;
+}
+type RepositoryReadEntityPort = ReturnType<EntityStorageFactory["createEntityStorage"]>;
+interface RetainedEntitySlot {
+  readonly entity: RepositoryReadEntityPort;
+  full?: RepositoryEntityStorage<unknown, Message>;
+}
+interface RepositoryStorageLifetime {
+  readonly entities: Map<string, Map<string | symbol, RetainedEntitySlot>>;
+  readonly histories: Map<string, Map<string | symbol, AgentHistoryStorage<unknown>>>;
+  readonly ports: Set<RepositoryClosePort>;
+  readonly active: Set<Promise<unknown>>;
+  eventStore?: EventStore;
+  closing?: Promise<void>;
+  idleOutcome?: { error?: Error };
+  open: boolean;
+}
+const repositoryStorageLifetimes = new WeakMap<RepositoryView, RepositoryStorageLifetime>();
 const entityStateHistoryCaches = new WeakMap<
   object,
   {
@@ -1926,8 +1932,16 @@ export interface RepositoryAccess {
    * Clears runtime state and open storage handles for a repository.
    *
    * @param repository The repository to detach.
+   * @returns Completion after admitted work and retained storage close.
    */
-  clearRuntime(repository: RepositoryView): void;
+  clearRuntime(repository: RepositoryView): Promise<void>;
+
+  /**
+   * Clears a repository during synchronous assembly rollback when no work is active.
+   *
+   * @param repository Repository to detach.
+   */
+  clearRuntimeIdle(repository: RepositoryView): void;
 }
 
 /**
@@ -2053,16 +2067,13 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     if (runtime === undefined) throw new Error("Agent history requires an active repository.");
     const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
     const input = RepositoryStorage.entityStorageInput(repository, context);
-    const history = AgentHistoryStorageFactories.create(runtime.storageFactory, {
-      context,
-      stateType: repository.stateSchema.typeName,
-      id: { key: input.id.key },
-    });
-    try {
-      return await history.read({ entityId, view, ...read });
-    } finally {
-      history.close();
-    }
+    return RepositoryStorage.track(repository, () =>
+      RepositoryStorage.openRepositoryAgentHistory(repository, runtime.storageFactory, input).read({
+        entityId,
+        view,
+        ...read,
+      }),
+    );
   },
 
   async agentHistoryPage(
@@ -2077,13 +2088,13 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     if (runtime === undefined) throw new Error("Agent history requires an active repository.");
     const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
     const input = RepositoryStorage.entityStorageInput(repository, context);
-    const history = AgentHistoryStorageFactories.create(runtime.storageFactory, {
-      context,
-      stateType: repository.stateSchema.typeName,
-      id: { key: input.id.key },
-    });
-    try {
-      return await AgentHistoryReads.readBound(
+    return RepositoryStorage.track(repository, () => {
+      const history = RepositoryStorage.openRepositoryAgentHistory(
+        repository,
+        runtime.storageFactory,
+        input,
+      );
+      return AgentHistoryReads.readBound(
         {
           storage: history,
           entityId,
@@ -2092,9 +2103,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
         { kind: "full" },
         request,
       );
-    } finally {
-      history.close();
-    }
+    });
   },
 
   /**
@@ -2237,6 +2246,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
    */
   bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void {
     repositoryRuntimes.set(repository, Object.freeze(runtime));
+    repositoryStorageLifetimes.set(repository, RepositoryStorage.newLifetime());
   },
 
   /**
@@ -2244,14 +2254,22 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
    *
    * @param repository Repository to detach.
    */
-  clearRuntime(repository: RepositoryView): void {
+  clearRuntime(repository: RepositoryView): Promise<void> {
     repositoryRuntimes.delete(repository);
     repositoryDispatchGuards.delete(repository);
-    const handles = repositoryEntityHandles.get(repository);
-    if (handles !== undefined) {
-      for (const handle of handles.values()) handle.close();
-      handles.clear();
-    }
+    return RepositoryStorage.closeRuntime(repository);
+  },
+
+  /**
+   * Closes idle repository storage during synchronous assembly rollback.
+   *
+   * @param repository Repository to detach.
+   */
+  clearRuntimeIdle(repository: RepositoryView): void {
+    RepositoryStorage.assertIdle(repository);
+    repositoryRuntimes.delete(repository);
+    repositoryDispatchGuards.delete(repository);
+    RepositoryStorage.closeRuntimeIdle(repository);
   },
 });
 
@@ -2471,6 +2489,13 @@ interface LoadedAggregate {
   readonly states: EntityStateHistoryPort<unknown, Message>;
   readonly events: EntityEventHistoryPort<unknown>;
   readonly version: bigint;
+  readonly storageInput: EntityStorageInput<unknown, Message>;
+}
+
+interface BoundRepositoryStorage {
+  readonly commits: EntityCommitStorage;
+  readonly events: EntityEventHistoryPort<unknown>;
+  readonly agentHistory?: AgentHistoryStorage<unknown>;
   readonly storageInput: EntityStorageInput<unknown, Message>;
 }
 
@@ -2707,15 +2732,14 @@ class RepositoryReadScope<
     if (query.schema !== this.#repository.stateSchema)
       throw new TypeError("Repository query must select the receiving Entity state schema.");
     const plan = RepositoryReadPredicates.plan(query.buildPlan());
-    const storage = RepositoryStorage.openReadEntityStorage(
-      this.#runtime.storageFactory,
-      RepositoryStorage.entityStorageInput(this.#repository, this.#context),
-    );
-    try {
-      return await storage.current.query(plan);
-    } finally {
-      storage.close();
-    }
+    return RepositoryStorage.track(this.#repository, () => {
+      const storage = RepositoryStorage.repositoryReadEntityStorage(
+        this.#repository,
+        this.#runtime.storageFactory,
+        RepositoryStorage.entityStorageInput(this.#repository, this.#context),
+      );
+      return storage.current.query(plan);
+    });
   }
 }
 
@@ -2860,12 +2884,32 @@ class AggregateExecutionSupport {
     );
     const entity = this.#instantiateAggregate(entityId, current);
     RepositoryHistoryInternals.bindEntityHistory(
+      this.#repository,
       entity,
       storage,
       entityId,
       this.#repository.stateSchema,
     );
 
+    return this.#loadedAggregate(entityId, current, entity, storage, storageInput);
+  }
+
+  /**
+   * Returns one restored Aggregate with its captured storage configuration.
+   * @param entityId Aggregate identifier.
+   * @param current Stored Aggregate snapshot, if present.
+   * @param entity Restored Aggregate instance.
+   * @param storage Retained Entity storage.
+   * @param storageInput Captured storage configuration.
+   * @returns Loaded Aggregate for command execution.
+   */
+  #loadedAggregate(
+    entityId: unknown,
+    current: Awaited<ReturnType<typeof standAccess.readCurrent>>,
+    entity: object,
+    storage: RepositoryEntityStorage<unknown, Message>,
+    storageInput: EntityStorageInput<unknown, Message>,
+  ): LoadedAggregate {
     return Object.freeze({
       commits: storage.commits,
       current:
@@ -2987,9 +3031,7 @@ class AggregateExecutionSupport {
       entity: loaded.storageInput,
       entityId,
       next: record,
-      ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
-        ? { states: [record] }
-        : {}),
+      ...(loaded.storageInput.stateHistory ? { states: [record] } : {}),
       diagnostics: diagnostics.map((event) => clone(EventSchema, event)),
       events,
     });
@@ -3991,9 +4033,7 @@ class ProjectionEventExecution {
       entity: loaded.storageInput,
       entityId,
       next: record,
-      ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
-        ? { states: [record] }
-        : {}),
+      ...(loaded.storageInput.stateHistory ? { states: [record] } : {}),
     });
   }
 
@@ -4400,12 +4440,7 @@ class ProcessManagerExecutionSupport {
     const priorNumber = loaded.current?.version?.number ?? 0;
     if (version.number === priorNumber) {
       await this.#appendUnchangedDiagnostics(loaded, diagnostics);
-      const store = new EventStore(this.#runtime.context, this.#runtime.storageFactory);
-      try {
-        await store.appendAll(producedEvents);
-      } finally {
-        await store.close();
-      }
+      await RepositoryStorage.eventStore(this.#repository, this.#runtime).appendAll(producedEvents);
       await this.#appendAgentEvents(loaded, producedEvents);
       return true;
     }
@@ -4525,7 +4560,7 @@ class ProcessManagerExecutionSupport {
       entity: loaded.storageInput,
       entityId,
       next: record,
-      ...(history.stateHistory ? { states: [record] } : {}),
+      ...(loaded.storageInput.stateHistory ? { states: [record] } : {}),
       ...(history.processManagerEventHistory
         ? { diagnostics: diagnostics.map((event) => clone(EventSchema, event)) }
         : {}),
@@ -5467,9 +5502,7 @@ const AgentExecutionRunner = {
         entity: loaded.storageInput,
         entityId,
         next: prepared,
-        ...(RepositoryStorage.historyConfiguration(repository).stateHistory
-          ? { states: [prepared] }
-          : {}),
+        ...(loaded.storageInput.stateHistory ? { states: [prepared] } : {}),
       });
       deferred.notify();
       return completed;
@@ -7228,11 +7261,6 @@ interface RepositoryEntityStorage<I, S extends Message> {
   readonly commits: EntityCommitStorage;
   readonly agentHistory?: AgentHistoryStorage<I>;
   readonly agentExecution?: AgentExecutionStorage<I, S>;
-
-  /**
-   * Closes the Entity history and commit storage handles.
-   */
-  close(): void;
 }
 
 /**
@@ -7764,12 +7792,7 @@ const RepositoryEntities = {
     tenantId: TenantId | undefined,
     entityId: unknown,
     entity: object,
-  ): {
-    readonly commits: EntityCommitStorage;
-    readonly events: EntityEventHistoryPort<unknown>;
-    readonly agentHistory?: AgentHistoryStorage<unknown>;
-    readonly storageInput: EntityStorageInput<unknown, Message>;
-  } {
+  ): BoundRepositoryStorage {
     const storageInput = RepositoryStorage.entityStorageInput(
       repository,
       RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
@@ -7779,9 +7802,15 @@ const RepositoryEntities = {
       runtime.storageFactory,
       storageInput,
     );
-    RepositoryHistoryInternals.bindEntityHistory(entity, storage, entityId, repository.stateSchema);
+    RepositoryHistoryInternals.bindEntityHistory(
+      repository,
+      entity,
+      storage,
+      entityId,
+      repository.stateSchema,
+    );
     if (repository.entityFamily === "agent")
-      this.bindAgentHistory(entity, entityId, storageInput, storage.agentHistory);
+      this.bindAgentHistory(repository, entity, entityId, storageInput, storage.agentHistory);
     return {
       commits: storage.commits,
       events: storage.events,
@@ -7793,21 +7822,25 @@ const RepositoryEntities = {
   /**
    * Attaches the indexed history port to one restored Agent.
    *
+   * @param repository Repository tracking the captured runtime.
    * @param entity Restored Agent instance.
    * @param entityId Typed Agent identifier.
    * @param input Entity storage scope.
    * @param history Mandatory Agent history port.
    */
   bindAgentHistory(
+    repository: RepositoryView,
     entity: object,
     entityId: unknown,
     input: EntityStorageInput<unknown, Message>,
     history: AgentHistoryStorage<unknown> | undefined,
   ): void {
     if (history === undefined) throw new Error("Agent history storage is required.");
+    const lifetime = RepositoryStorage.lifetime(repository);
     AgentHistoryReads.bind(entity, {
       storage: history,
       entityId,
+      onAdmit: (onRead) => RepositoryStorage.track(repository, onRead, lifetime),
       scope: {
         context: input.context.name,
         tenant: JSON.stringify(input.context.tenantId ?? null),
@@ -10679,6 +10712,173 @@ Object.freeze(RepositoryRoutes);
  */
 const RepositoryStorage = {
   /**
+   * Returns one retained EventStore for unchanged Process Manager output.
+   * @param repository Registered Process Manager repository.
+   * @param runtime Its captured runtime services.
+   * @returns Tenant-aware EventStore for produced Events.
+   */
+  eventStore(repository: RepositoryView, runtime: RepositoryRuntime): EventStore {
+    const lifetime = this.lifetime(repository);
+    lifetime.eventStore ??= new EventStore(runtime.context, runtime.storageFactory);
+    return lifetime.eventStore;
+  },
+
+  /**
+   * Creates one repository runtime's retained storage registry.
+   * @returns Empty registry accepting storage work.
+   */
+  newLifetime(): RepositoryStorageLifetime {
+    return {
+      entities: new Map(),
+      histories: new Map(),
+      ports: new Set(),
+      active: new Set(),
+      open: true,
+    };
+  },
+
+  /**
+   * Returns the active storage registry for one registered repository.
+   * @param repository Registered repository.
+   * @returns Its current retained-storage registry.
+   */
+  lifetime(repository: RepositoryView): RepositoryStorageLifetime {
+    const lifetime = repositoryStorageLifetimes.get(repository);
+    if (lifetime?.open !== true) throw new Error("Repository storage requires an active runtime.");
+    return lifetime;
+  },
+
+  /**
+   * Admits one complete physical storage operation before runtime closure.
+   * @typeParam T Result of the operation.
+   * @param repository Registered repository.
+   * @param work Work that acquires and uses retained storage.
+   * @param expected Captured lifetime for a bound history reader, if any.
+   * @returns The operation result or its original failure.
+   */
+  async track<T>(
+    repository: RepositoryView,
+    work: () => Promise<T>,
+    expected?: RepositoryStorageLifetime,
+  ): Promise<T> {
+    const lifetime = this.lifetime(repository);
+    if (expected !== undefined && lifetime !== expected)
+      throw new Error("Repository history requires its active runtime.");
+    const result = work();
+    lifetime.active.add(result);
+    return result.finally(() => {
+      lifetime.active.delete(result);
+    });
+  },
+
+  /**
+   * Starts repository shutdown after new admissions are fenced.
+   * @param repository Repository being detached.
+   * @returns Completion after admitted operations and every close attempt.
+   */
+  closeRuntime(repository: RepositoryView): Promise<void> {
+    const lifetime = repositoryStorageLifetimes.get(repository);
+    if (lifetime === undefined) return Promise.resolve();
+    if (lifetime.closing !== undefined) return lifetime.closing;
+    if (lifetime.idleOutcome !== undefined) {
+      const error = lifetime.idleOutcome.error;
+      return error === undefined ? Promise.resolve() : Promise.reject(error);
+    }
+    lifetime.open = false;
+    lifetime.closing = this.drainLifetime(lifetime);
+    return lifetime.closing;
+  },
+
+  /**
+   * Rejects synchronous rollback while repository storage work remains active.
+   * @param repository Repository being rolled back.
+   */
+  assertIdle(repository: RepositoryView): void {
+    const lifetime = repositoryStorageLifetimes.get(repository);
+    if (lifetime !== undefined && (lifetime.active.size > 0 || lifetime.closing !== undefined))
+      throw new Error("Repository idle cleanup requires no active storage work.");
+  },
+
+  /**
+   * Closes retained resources synchronously during idle assembly rollback.
+   * @param repository Repository being rolled back.
+   */
+  closeRuntimeIdle(repository: RepositoryView): void {
+    const lifetime = repositoryStorageLifetimes.get(repository);
+    if (lifetime === undefined) return;
+    if (lifetime.idleOutcome !== undefined) {
+      if (lifetime.idleOutcome.error !== undefined) throw lifetime.idleOutcome.error;
+      return;
+    }
+    lifetime.open = false;
+    const errors: unknown[] = [];
+    if (lifetime.eventStore !== undefined) {
+      try {
+        eventStoreAccess.closeIdle(lifetime.eventStore);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    errors.push(...this.closeLifetimePorts(lifetime));
+    const failure = this.closeFailure(errors);
+    lifetime.idleOutcome = failure === undefined ? {} : { error: failure };
+    if (failure !== undefined) throw failure;
+  },
+
+  /**
+   * Waits for admitted storage operations, closes the retained EventStore, and releases all ports.
+   * @param lifetime Repository storage registry being closed.
+   * @returns Completion after every close attempt.
+   */
+  async drainLifetime(lifetime: RepositoryStorageLifetime): Promise<void> {
+    await Promise.allSettled([...lifetime.active]);
+    const errors: unknown[] = [];
+    if (lifetime.eventStore !== undefined) {
+      try {
+        await lifetime.eventStore.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    errors.push(...this.closeLifetimePorts(lifetime));
+    const failure = this.closeFailure(errors);
+    if (failure !== undefined) throw failure;
+  },
+
+  /**
+   * Closes each retained physical port once.
+   * @param lifetime Repository storage registry being closed.
+   * @returns Every close failure in attempt order.
+   */
+  closeLifetimePorts(lifetime: RepositoryStorageLifetime): unknown[] {
+    const ports = [...lifetime.ports];
+    lifetime.ports.clear();
+    const errors: unknown[] = [];
+    for (const port of ports) {
+      try {
+        port.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    lifetime.entities.clear();
+    lifetime.histories.clear();
+    delete lifetime.eventStore;
+    return errors;
+  },
+
+  /**
+   * Returns one close failure or aggregates multiple failures.
+   * @param errors Physical port cleanup failures.
+   * @returns The reported cleanup failure, if any.
+   */
+  closeFailure(errors: readonly unknown[]): Error | undefined {
+    if (errors.length === 0) return undefined;
+    if (errors.length === 1) return errors[0] as Error;
+    return new AggregateError(errors, "Repository storage close failed.");
+  },
+
+  /**
    * Opens provider Entity storage for one read scope without a commit handle.
    *
    * @typeParam I Entity identifier type.
@@ -10698,69 +10898,103 @@ const RepositoryStorage = {
   },
 
   /**
-   * Opens Entity storage and an atomic commit port from a storage factory.
-   *
-   * @typeParam I Entity identifier type.
-   * @typeParam S Generated Entity state type.
-   * @param factory Provider storage factory.
-   * @param input Entity storage location and schema.
-   * @param agent Whether to open mandatory Agent history.
-   * @returns Storage ports closed together by one handle.
+   * Returns the canonical tenant/model/history bucket for Entity storage.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @param lifetime Active repository storage registry.
+   * @param input Captured Entity storage configuration.
+   * @returns Slots for one model and history configuration.
    */
-  openEntityStorage<I, S extends Message>(
-    factory: StorageFactory,
+  entityBucket<I, S extends Message>(
+    lifetime: RepositoryStorageLifetime,
     input: EntityStorageInput<I, S>,
-    agent = false,
-  ): RepositoryEntityStorage<I, S> {
-    const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
-    if (candidate.createEntityStorage === undefined)
-      throw new Error("StorageFactory does not provide required atomic Entity commit storage.");
-    const entity = candidate.createEntityStorage(input);
-    const commits = this.openEntityCommits(factory, input, entity);
-    let ports:
-      | { agentHistory: AgentHistoryStorage<I>; agentExecution: AgentExecutionStorage<I, S> }
-      | undefined;
-    try {
-      if (agent) ports = this.openAgentPorts(factory, input);
-    } catch (error) {
-      this.closePorts([commits, entity], error);
-      throw error;
+  ): Map<string | symbol, RetainedEntitySlot> {
+    const key = JSON.stringify({
+      context: input.context.name,
+      state: input.sourceType.typeName,
+      history: input.stateHistory,
+    });
+    let bucket = lifetime.entities.get(key);
+    if (bucket === undefined) {
+      bucket = new Map();
+      lifetime.entities.set(key, bucket);
     }
-    return {
-      ...entity,
-      commits,
-      ...ports,
-      close: () => {
-        this.closePorts([
-          ...(ports === undefined ? [] : [ports.agentExecution, ports.agentHistory]),
-          commits,
-          entity,
-        ]);
-      },
-    };
+    return bucket;
   },
 
   /**
-   * Opens the commit port and closes Entity storage if acquisition fails.
-   *
-   * @typeParam I Entity identifier type.
-   * @typeParam S Generated Entity state type.
-   * @param factory Provider storage factory.
-   * @param input Entity storage location and schema.
-   * @param entity Already acquired Entity storage.
-   * @returns The acquired commit port.
+   * Returns the canonical tenant/model bucket for Agent audit history.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   * @param lifetime Active repository storage registry.
+   * @param input Captured Agent storage configuration.
+   * @returns Audit ports independent of the state-history switch.
    */
-  openEntityCommits<I, S extends Message>(
+  historyBucket<I, S extends Message>(
+    lifetime: RepositoryStorageLifetime,
+    input: EntityStorageInput<I, S>,
+  ): Map<string | symbol, AgentHistoryStorage<unknown>> {
+    const key = JSON.stringify({ context: input.context.name, state: input.sourceType.typeName });
+    let bucket = lifetime.histories.get(key);
+    if (bucket === undefined) {
+      bucket = new Map();
+      lifetime.histories.set(key, bucket);
+    }
+    return bucket;
+  },
+
+  /**
+   * Returns retained read-only Entity storage without acquiring a commit port.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @param repository Registered repository.
+   * @param factory Repository storage factory.
+   * @param input Captured Entity storage configuration.
+   * @returns Reusable current, state-history, and event-history ports.
+   */
+  repositoryReadEntityStorage<I, S extends Message>(
+    repository: RepositoryView,
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
-    entity: Pick<EntityCommitStorage, "close">,
-  ): EntityCommitStorage {
-    try {
-      return EntityCommitStorageFactories.create(factory, input);
-    } catch (error) {
-      this.closePorts([entity], error);
-      throw error;
-    }
+  ): ReturnType<EntityStorageFactory["createEntityStorage"]> {
+    const lifetime = this.lifetime(repository);
+    const bucket = this.entityBucket(lifetime, input);
+    const key = TenantBoundary.of(input.context).key;
+    const existing = bucket.get(key);
+    if (existing !== undefined) return existing.entity;
+    const entity = this.openReadEntityStorage(factory, input);
+    bucket.set(key, { entity });
+    lifetime.ports.add(entity);
+    return entity;
+  },
+
+  /**
+   * Returns shared Agent audit history for one tenant and model.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   * @param repository Registered Agent repository.
+   * @param factory Repository storage factory.
+   * @param input Captured Entity storage configuration.
+   * @returns Reusable Agent audit-history port.
+   */
+  openRepositoryAgentHistory<I, S extends Message>(
+    repository: RepositoryView,
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+  ): AgentHistoryStorage<I> {
+    const lifetime = this.lifetime(repository);
+    const bucket = this.historyBucket(lifetime, input);
+    const key = TenantBoundary.of(input.context).key;
+    const existing = bucket.get(key);
+    if (existing !== undefined) return existing;
+    const history = AgentHistoryStorageFactories.create(factory, {
+      context: input.context,
+      stateType: input.sourceType.typeName,
+      id: { key: input.id.key },
+    });
+    bucket.set(key, history);
+    lifetime.ports.add(history);
+    return history;
   },
 
   /**
@@ -10786,37 +11020,8 @@ const RepositoryStorage = {
   },
 
   /**
-   * Opens both mandatory Agent ports and closes the first if the second fails.
-   *
-   * @typeParam I Typed Agent identifier.
-   * @typeParam S Generated Agent state message.
-   * @param factory Storage factory registered with the Bounded Context.
-   * @param input Original Inbox or storage input.
-   * @returns Indexed history and execution handles for the same tenant.
-   */
-  openAgentPorts<I, S extends Message>(
-    factory: StorageFactory,
-    input: EntityStorageInput<I, S>,
-  ): { agentHistory: AgentHistoryStorage<I>; agentExecution: AgentExecutionStorage<I, S> } {
-    const agentHistory = AgentHistoryStorageFactories.create(factory, {
-      context: input.context,
-      stateType: input.sourceType.typeName,
-      id: { key: input.id.key },
-    });
-    try {
-      const agentExecution = AgentExecutionStorageFactories.create(factory, {
-        entity: input,
-        stateType: input.sourceType.typeName,
-      });
-      return { agentHistory, agentExecution };
-    } catch (error) {
-      this.closePorts([agentHistory], error);
-      throw error;
-    }
-  },
-
-  /**
-   * Returns one retained Entity storage handle per context and state type.
+   * Returns one retained Entity storage handle per context, tenant, state type,
+   * and captured state-history configuration.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Generated Entity state type.
@@ -10830,21 +11035,138 @@ const RepositoryStorage = {
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
   ): RepositoryEntityStorage<I, S> {
-    const key = JSON.stringify({ context: input.context, state: input.sourceType.typeName });
-    let handles = repositoryEntityHandles.get(repository);
-    const existing = handles?.get(key);
-    if (existing !== undefined) return existing as RepositoryEntityStorage<I, S>;
-    const handle = RepositoryStorage.openEntityStorage(
+    const lifetime = this.lifetime(repository);
+    const bucket = this.entityBucket(lifetime, input);
+    const key = TenantBoundary.of(input.context).key;
+    const existing = bucket.get(key);
+    if (existing?.full !== undefined) return existing.full as RepositoryEntityStorage<I, S>;
+    return this.upgradeRepositoryEntityStorage(
+      repository,
       factory,
       input,
-      repository.entityFamily === "agent",
+      lifetime,
+      bucket,
+      key,
+      existing,
     );
-    if (handles === undefined) {
-      handles = new Map();
-      repositoryEntityHandles.set(repository, handles);
+  },
+
+  /**
+   * Adds commit and Agent ports to a retained or newly acquired Entity port.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @param repository Registered repository.
+   * @param factory Repository storage factory.
+   * @param input Captured Entity storage configuration.
+   * @param lifetime Active repository registry.
+   * @param bucket Entity slots for this model and history configuration.
+   * @param key Canonical tenant key.
+   * @param existing Read-only slot if one was opened earlier.
+   * @returns Complete retained write storage.
+   */
+  upgradeRepositoryEntityStorage<I, S extends Message>(
+    repository: RepositoryView,
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+    lifetime: RepositoryStorageLifetime,
+    bucket: Map<string | symbol, RetainedEntitySlot>,
+    key: string | symbol,
+    existing?: RetainedEntitySlot,
+  ): RepositoryEntityStorage<I, S> {
+    const entity = existing?.entity ?? this.openReadEntityStorage(factory, input);
+    let commits: EntityCommitStorage | undefined;
+    try {
+      const commit = EntityCommitStorageFactories.create(factory, input);
+      commits = commit;
+      const ports =
+        repository.entityFamily === "agent"
+          ? this.openRepositoryAgentPorts(repository, factory, input, lifetime)
+          : undefined;
+      const full = {
+        ...entity,
+        commits: commit,
+        ...ports,
+      } as unknown as RepositoryEntityStorage<I, S>;
+      this.retainUpgradedSlot(lifetime, bucket, key, existing, full, entity, commit, ports);
+      return full;
+    } catch (error) {
+      const rollback: RepositoryClosePort[] = commits === undefined ? [] : [commits];
+      if (existing === undefined) rollback.push(entity);
+      this.closePorts(rollback, error);
+      throw error;
     }
-    handles.set(key, handle);
-    return handle;
+  },
+
+  /**
+   * Records a completed Entity storage upgrade in the current lifetime.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @param lifetime Active repository registry.
+   * @param bucket Entity slots for one model and history configuration.
+   * @param key Canonical tenant key.
+   * @param existing Previously retained read-only slot, if any.
+   * @param full Completed Entity storage.
+   * @param entity Shared Entity read port.
+   * @param commit Newly acquired commit port.
+   * @param ports Newly acquired Agent ports, if applicable.
+   */
+  retainUpgradedSlot<I, S extends Message>(
+    lifetime: RepositoryStorageLifetime,
+    bucket: Map<string | symbol, RetainedEntitySlot>,
+    key: string | symbol,
+    existing: RetainedEntitySlot | undefined,
+    full: RepositoryEntityStorage<I, S>,
+    entity: RepositoryReadEntityPort,
+    commit: EntityCommitStorage,
+    ports?: { agentExecution: AgentExecutionStorage<I, S> },
+  ): void {
+    const slot = existing ?? { entity };
+    slot.full = full as RepositoryEntityStorage<unknown, Message>;
+    bucket.set(key, slot);
+    lifetime.ports.add(entity);
+    lifetime.ports.add(commit);
+    if (ports !== undefined) lifetime.ports.add(ports.agentExecution);
+  },
+
+  /**
+   * Acquires Agent execution while reusing or preparing shared audit history.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   * @param repository Registered Agent repository.
+   * @param factory Repository storage factory.
+   * @param input Captured Entity storage configuration.
+   * @param lifetime Active repository registry.
+   * @returns Agent history and execution ports.
+   */
+  openRepositoryAgentPorts<I, S extends Message>(
+    repository: RepositoryView,
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+    lifetime: RepositoryStorageLifetime,
+  ): { agentHistory: AgentHistoryStorage<I>; agentExecution: AgentExecutionStorage<I, S> } {
+    const bucket = this.historyBucket(lifetime, input);
+    const key = TenantBoundary.of(input.context).key;
+    const prior = bucket.get(key);
+    const history = (prior ??
+      AgentHistoryStorageFactories.create(factory, {
+        context: input.context,
+        stateType: input.sourceType.typeName,
+        id: { key: input.id.key },
+      })) as AgentHistoryStorage<I>;
+    try {
+      const execution = AgentExecutionStorageFactories.create(factory, {
+        entity: input,
+        stateType: input.sourceType.typeName,
+      });
+      if (prior === undefined) {
+        bucket.set(key, history);
+        lifetime.ports.add(history);
+      }
+      return { agentHistory: history, agentExecution: execution };
+    } catch (error) {
+      if (prior === undefined) this.closePorts([history], error);
+      throw error;
+    }
   },
 
   /**
@@ -10935,17 +11257,20 @@ const RepositoryHistoryInternals = {
   /**
    * Binds state and Event history readers to one restored Entity instance.
    *
+   * @param repository Registered repository admitting history reads.
    * @param entity Instance receiving the history accessors.
    * @param storage Entity storage used for reads and maintenance.
    * @param entityId Identifier used to select history records.
    * @param schema Schema used to unpack state records.
    */
   bindEntityHistory(
+    repository: RepositoryView,
     entity: object,
-    storage: ReturnType<EntityStorageFactory["createEntityStorage"]>,
+    storage: Pick<RepositoryReadEntityPort, "states" | "events">,
     entityId: unknown,
     schema: DescriptorMessageSchema,
   ): void {
+    const lifetime = RepositoryStorage.lifetime(repository);
     const stateCache = RepositoryHistoryInternals.createHistoryCache(
       (depth, startingFromVersion) => storage.states.backward(entityId, depth, startingFromVersion),
       (record) => BigInt(EntityRecords.unpack(schema, record).versionMessage.number),
@@ -10958,19 +11283,120 @@ const RepositoryHistoryInternals = {
       { cacheCompleteVersionGroups: true },
     );
     entityHistoryAccess.bind(entity, {
-      stateAt: async (time) =>
-        RepositoryHistoryInternals.cloneHistoryState(await storage.states.stateAt(entityId, time)),
-      states: async (depth) =>
-        RepositoryHistoryInternals.freezeHistoryStates(
-          (await stateCache.read(depth)).map(
-            (record) => EntityRecords.unpack(schema, record).state,
-          ),
-        ),
-      events: async (depth) =>
-        RepositoryHistoryInternals.freezeHistoryEvents(await eventCache.read(depth)),
-      stateMaintenance: storage.states,
-      eventMaintenance: storage.events,
+      stateAt: (time) => this.readBoundStateAt(repository, lifetime, storage, entityId, time),
+      states: (depth) => this.readBoundStates(repository, lifetime, schema, stateCache, depth),
+      events: (depth) => this.readBoundEvents(repository, lifetime, eventCache, depth),
+      stateMaintenance: this.boundStateMaintenance(repository, lifetime, storage.states),
+      eventMaintenance: this.boundEventMaintenance(repository, lifetime, storage.events),
     });
+  },
+
+  /**
+   * Admits complete state-history maintenance against a captured runtime.
+   * @param repository Repository with the bound Entity.
+   * @param lifetime Runtime that provided the retained port.
+   * @param states Retained state-history port.
+   * @returns Guarded maintenance methods.
+   */
+  boundStateMaintenance(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    states: EntityStateHistoryPort<unknown, Message>,
+  ): Pick<EntityStateHistoryPort<unknown, Message>, "trim" | "truncate"> {
+    return {
+      trim: (id, keep) =>
+        RepositoryStorage.track(repository, () => states.trim(id, keep), lifetime),
+      truncate: (time) =>
+        RepositoryStorage.track(repository, () => states.truncate(time), lifetime),
+    };
+  },
+
+  /**
+   * Admits complete Event-history maintenance against a captured runtime.
+   * @param repository Repository with the bound Entity.
+   * @param lifetime Runtime that provided the retained port.
+   * @param events Retained Event-history port.
+   * @returns Guarded maintenance method.
+   */
+  boundEventMaintenance(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    events: EntityEventHistoryPort<unknown>,
+  ): Pick<EntityEventHistoryPort<unknown>, "truncate"> {
+    return {
+      truncate: (time) =>
+        RepositoryStorage.track(repository, () => events.truncate(time), lifetime),
+    };
+  },
+
+  /**
+   * Reads one bound historical state within repository admission.
+   * @param repository Registered repository.
+   * @param lifetime Captured repository storage lifetime.
+   * @param storage Retained Entity read port.
+   * @param entityId Captured Entity identifier.
+   * @param time Historical instant.
+   * @returns Historical state, if present.
+   */
+  readBoundStateAt(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    storage: Pick<RepositoryReadEntityPort, "states">,
+    entityId: unknown,
+    time: Timestamp,
+  ): Promise<Message | undefined> {
+    return RepositoryStorage.track(
+      repository,
+      async () => this.cloneHistoryState(await storage.states.stateAt(entityId, time)),
+      lifetime,
+    );
+  },
+
+  /**
+   * Reads a complete bound state-history page within repository admission.
+   * @param repository Registered repository.
+   * @param lifetime Captured repository storage lifetime.
+   * @param schema State schema used to unpack rows.
+   * @param cache Bound state-history cache.
+   * @param depth Requested history depth.
+   * @returns Frozen historical states.
+   */
+  readBoundStates(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    schema: DescriptorMessageSchema,
+    cache: { readonly read: (depth: number) => Promise<readonly EntityRecord[]> },
+    depth: number,
+  ): Promise<readonly Message[]> {
+    return RepositoryStorage.track(
+      repository,
+      async () =>
+        this.freezeHistoryStates(
+          (await cache.read(depth)).map((record) => EntityRecords.unpack(schema, record).state),
+        ),
+      lifetime,
+    );
+  },
+
+  /**
+   * Reads a complete bound Event-history page within repository admission.
+   * @param repository Registered repository.
+   * @param lifetime Captured repository storage lifetime.
+   * @param cache Bound Event-history cache.
+   * @param depth Requested history depth.
+   * @returns Frozen historical Events.
+   */
+  readBoundEvents(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    cache: { readonly read: (depth: number) => Promise<readonly Event[]> },
+    depth: number,
+  ): Promise<readonly Event[]> {
+    return RepositoryStorage.track(
+      repository,
+      async () => this.freezeHistoryEvents(await cache.read(depth)),
+      lifetime,
+    );
   },
 
   /**
@@ -11469,13 +11895,15 @@ const DispatchGuards = {
       repository,
       RepositoryTenants.storageContextForEvent(runtime.context, event),
     );
-    const storage = RepositoryStorage.openEntityStorage(runtime.storageFactory, input);
-    try {
+    return RepositoryStorage.track(repository, async () => {
+      const storage = RepositoryStorage.repositoryReadEntityStorage(
+        repository,
+        runtime.storageFactory,
+        input,
+      );
       const persisted = await storage.events.backward(entityId, depth);
       return persisted.some((candidate) => candidate.id?.value === journalEventId);
-    } finally {
-      storage.close();
-    }
+    });
   },
 
   /**

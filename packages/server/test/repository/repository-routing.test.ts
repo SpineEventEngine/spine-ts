@@ -25,6 +25,7 @@ import {
   Int64ValueSchema,
   StringValueSchema,
   TimestampSchema,
+  type Timestamp,
   timestampFromDate,
 } from "@bufbuild/protobuf/wkt";
 import {
@@ -563,6 +564,7 @@ class MalformedFirstFieldAggregate extends Aggregate<string, typeof ProjectState
 }
 
 class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  static latest: ExecutingProjectAggregate | undefined;
   static assigneeCalls = 0;
   static directUpdateCalls = 0;
   static failure: Error | undefined;
@@ -574,6 +576,7 @@ class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSch
   }
 
   createProject(command: CreateProject): ProjectCreated | readonly ProjectCreated[] {
+    ExecutingProjectAggregate.latest = this;
     ExecutingProjectAggregate.assigneeCalls++;
 
     if (ExecutingProjectAggregate.failure !== undefined) {
@@ -610,6 +613,28 @@ class ExecutingProjectAggregate extends Aggregate<string, typeof ProjectStateSch
     }
 
     return create(ProjectCreatedSchema, { id: command.id, name: command.name, priority: 1 });
+  }
+
+  readStateHistory(depth: number): Promise<readonly Readonly<ProjectState>[]> {
+    return this.stateHistoryBackward(depth);
+  }
+
+  readStateAt(time: Timestamp): Promise<Readonly<ProjectState> | undefined> {
+    return this.stateAt(time);
+  }
+
+  readEventHistory(depth: number): Promise<readonly Readonly<SpineEvent>[]> {
+    return this.eventHistoryBackward(depth);
+  }
+
+  maintainState(kind: "trim" | "truncate"): Promise<void> {
+    return kind === "trim"
+      ? this.stateHistoryStorage().trim(this.id, 1)
+      : this.stateHistoryStorage().truncate(create(TimestampSchema, { seconds: 4_000_000_000n }));
+  }
+
+  maintainEvents(): Promise<void> {
+    return this.eventStorage().truncate(create(TimestampSchema, { seconds: 4_000_000_000n }));
   }
 }
 
@@ -2473,7 +2498,7 @@ describe("repository signal routing", () => {
       expect(factory.commitCreations).toBe(0);
       expect(factory.commitCreations).toBe(beforeRead.commits);
       expect(factory.writeCalls).toBe(beforeRead.writes);
-      expect(factory.readCloses).toBe(beforeRead.closes + 1);
+      expect(factory.readCloses).toBe(beforeRead.closes);
       expect(factory.plans.at(-1)?.predicate).toMatchObject({
         kind: "all",
         predicates: [
@@ -2667,10 +2692,235 @@ describe("repository signal routing", () => {
         "current-record provider failed",
       );
       expect(factory.commitCreations).toBe(0);
-      expect(factory.readCloses).toBe(1);
+      expect(factory.readCloses).toBe(0);
       reads.close();
     } finally {
       await context.close();
+    }
+    expect(factory.readCloses).toBe(1);
+  });
+
+  it("retains a read-only Entity handle across query invocations until context close", async () => {
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new ObservedReadStorageFactory();
+    const context = BoundedContext.singleTenant("RetainedRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const query = ProjectStateQuery.create().build();
+    try {
+      const first = repositoryReadAccess.bind(repository);
+      expect(await first.findIds(query)).toEqual([]);
+      first.close();
+      const second = repositoryReadAccess.bind(repository);
+      expect(await second.findStates(query)).toEqual([]);
+      second.close();
+      expect(factory.commitCreations).toBe(0);
+      expect(factory.readCloses).toBe(0);
+    } finally {
+      await context.close();
+    }
+    expect(factory.readCloses).toBe(1);
+  });
+
+  it("uses a fresh storage lifetime after the same repository is rebound", async () => {
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new ObservedReadStorageFactory();
+    const firstContext = BoundedContext.singleTenant("ReboundReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const oldReads = repositoryReadAccess.bind(repository);
+    const query = ProjectStateQuery.create().build();
+    expect(await oldReads.findIds(query)).toEqual([]);
+    await firstContext.close();
+    expect(factory).toMatchObject({ readOpens: 1, readCloses: 1 });
+
+    const nextContext = BoundedContext.singleTenant("ReboundReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      await expect(oldReads.findIds(query)).rejects.toThrow("finished");
+      const nextReads = repositoryReadAccess.bind(repository);
+      expect(await nextReads.findIds(query)).toEqual([]);
+      expect(factory).toMatchObject({ readOpens: 2, readCloses: 1 });
+      nextReads.close();
+    } finally {
+      oldReads.close();
+      await nextContext.close();
+    }
+    expect(factory.readCloses).toBe(2);
+  });
+
+  it("drains an admitted direct query after repository close fences new reads", async () => {
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const factory = new GatedRepositoryReadFactory();
+    const context = BoundedContext.singleTenant("GatedRepositoryReads")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const reads = repositoryReadAccess.bind(repository);
+    const query = ProjectStateQuery.create().build();
+    const admitted = reads.findIds(query);
+    await factory.entered;
+    expect(() => {
+      repositoryAccess.clearRuntimeIdle(repository);
+    }).toThrow("idle cleanup");
+    const closing = repositoryAccess.clearRuntime(repository);
+    expect(factory.readCloses).toBe(0);
+    await expect(reads.findIds(query)).rejects.toThrow("finished");
+    factory.release();
+    await expect(admitted).resolves.toEqual([]);
+    await expect(closing).resolves.toBeUndefined();
+    expect(factory.readCloses).toBe(1);
+    await context.close();
+    expect(factory.readCloses).toBe(1);
+  });
+
+  it("reports idle rollback cleanup failure once after closing retained read storage", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const context = BoundedContext.singleTenant("IdleRepositoryCleanup")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const reads = repositoryReadAccess.bind(repository);
+    await reads.findIds(ProjectStateQuery.create().build());
+    factory.failEntityClose = true;
+    expect(() => {
+      repositoryAccess.clearRuntimeIdle(repository);
+    }).toThrow("Entity close failed");
+    expect(() => {
+      repositoryAccess.clearRuntimeIdle(repository);
+    }).toThrow("Entity close failed");
+    expect(factory.entityCloses).toBe(1);
+    await expect(context.close()).rejects.toThrow("BoundedContext close failed");
+    expect(factory.entityCloses).toBe(1);
+  });
+
+  it("closes idle retained read storage once across repeated rollback cleanup", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = new Repository({ entityType: ProjectAggregate, schema: ProjectStateSchema });
+    const context = BoundedContext.singleTenant("IdleRepositorySuccess")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    await repositoryReadAccess.bind(repository).findIds(ProjectStateQuery.create().build());
+    repositoryAccess.clearRuntimeIdle(repository);
+    repositoryAccess.clearRuntimeIdle(repository);
+    await context.close();
+    expect(factory.entityCloses).toBe(1);
+  });
+
+  it("drains admitted bound Entity history reads before closing retained storage", async () => {
+    const repository = createExecutingRepository();
+    repository.setStateHistoryEnabled(true);
+    const factory = new GatedEntityHistoryFactory();
+    const context = BoundedContext.singleTenant("GatedEntityHistory")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    await context.commandBus().post(createAggregateCommand("history-drain", "history-drain"));
+    const entity = ExecutingProjectAggregate.latest;
+    if (entity === undefined) throw new Error("Expected a restored Aggregate.");
+    const admitted = entity.readStateHistory(1);
+    await factory.entered;
+    const closing = repositoryAccess.clearRuntime(repository);
+    expect(factory.readCloses).toBe(0);
+    await expect(entity.readStateHistory(2)).rejects.toThrow("active runtime");
+    factory.release();
+    await expect(admitted).resolves.toHaveLength(1);
+    await expect(closing).resolves.toBeUndefined();
+    expect(factory.readCloses).toBe(1);
+    await context.close();
+    const nextContext = BoundedContext.singleTenant("GatedEntityHistory")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      await expect(entity.readStateHistory(1)).rejects.toThrow("active runtime");
+    } finally {
+      await nextContext.close();
+    }
+  });
+
+  it("drains bound stateAt and Event-history reads and rejects old callbacks after rebind", async () => {
+    for (const kind of ["stateAt", "events"] as const) {
+      const repository = createExecutingRepository();
+      repository.setStateHistoryEnabled(true);
+      const factory = new GatedEntityHistoryFactory(kind);
+      const context = BoundedContext.singleTenant(`GatedBound${kind}`)
+        .add(repository)
+        .withStorageFactory(factory)
+        .build();
+      await context.commandBus().post(createAggregateCommand(`bound-${kind}`, `bound-${kind}`));
+      const entity = ExecutingProjectAggregate.latest;
+      if (entity === undefined) throw new Error("Expected a restored Aggregate.");
+      const read = () =>
+        kind === "stateAt"
+          ? entity.readStateAt(create(TimestampSchema, { seconds: 4_000_000_000n }))
+          : entity.readEventHistory(1);
+      const admitted = read();
+      await factory.entered;
+      const closing = repositoryAccess.clearRuntime(repository);
+      expect(factory.readCloses).toBe(0);
+      await expect(read()).rejects.toThrow("active runtime");
+      factory.release();
+      await expect(admitted).resolves.toBeDefined();
+      await closing;
+      expect(factory.readCloses).toBe(1);
+      await context.close();
+      const rebound = BoundedContext.singleTenant(`GatedBound${kind}`)
+        .add(repository)
+        .withStorageFactory(factory)
+        .build();
+      try {
+        await expect(read()).rejects.toThrow("active runtime");
+      } finally {
+        await rebound.close();
+      }
+    }
+  });
+
+  it("drains bound state and Event maintenance and rejects stale Entity instances", async () => {
+    for (const kind of ["trim", "stateTruncate", "eventTruncate"] as const) {
+      const repository = createExecutingRepository();
+      repository.setStateHistoryEnabled(true);
+      const factory = new GatedEntityHistoryFactory(kind);
+      factory.armed = false;
+      const context = BoundedContext.singleTenant(`GatedMaintenance${kind}`)
+        .add(repository)
+        .withStorageFactory(factory)
+        .build();
+      await context
+        .commandBus()
+        .post(createAggregateCommand(`maintain-${kind}`, `maintain-${kind}`));
+      factory.armed = true;
+      const entity = ExecutingProjectAggregate.latest;
+      if (entity === undefined) throw new Error("Expected restored Aggregate.");
+      const maintain = () =>
+        kind === "eventTruncate"
+          ? entity.maintainEvents()
+          : entity.maintainState(kind === "trim" ? "trim" : "truncate");
+      const admitted = maintain();
+      await factory.entered;
+      const closing = repositoryAccess.clearRuntime(repository);
+      expect(factory.readCloses).toBe(0);
+      await expect(maintain()).rejects.toThrow("active runtime");
+      factory.release();
+      await admitted;
+      await closing;
+      await context.close();
+      const rebound = BoundedContext.singleTenant(`GatedMaintenance${kind}`)
+        .add(repository)
+        .withStorageFactory(factory)
+        .build();
+      try {
+        await expect(maintain()).rejects.toThrow("active runtime");
+      } finally {
+        await rebound.close();
+      }
     }
   });
   it("keeps constructor services separate for the same Entity class in two contexts", async () => {
@@ -3437,6 +3687,51 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("history-off-again", "history-transition", "Third"));
       await expect(storage.readStates("history-transition")).resolves.toHaveLength(1);
     } finally {
+      await context.close();
+    }
+  });
+
+  it("uses the captured history setting during a gated commit and reuses both configurations", async () => {
+    const factory = new GatedStandReadStorageFactory();
+    const repository = createExecutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectStateSchema,
+      stateHistory: true,
+    });
+    factory.enableGate = true;
+    try {
+      const first = context
+        .commandBus()
+        .post(createAggregateCommand("captured-history-off", "captured-history", "First"));
+      await factory.reached;
+      repository.setStateHistoryEnabled(true);
+      factory.release();
+      await first;
+      expect(await storage.readStates("captured-history")).toEqual([]);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("captured-history-on", "captured-history", "Second"));
+      repository.setStateHistoryEnabled(false);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("captured-history-off-again", "captured-history", "Third"));
+      repository.setStateHistoryEnabled(true);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("captured-history-on-again", "captured-history", "Fourth"));
+      expect((await storage.readStates("captured-history")).map((row) => row.version)).toEqual([
+        4n,
+        2n,
+      ]);
+      expect(factory.commitCreations).toBe(2);
+    } finally {
+      factory.release();
       await context.close();
     }
   });
@@ -8596,14 +8891,15 @@ describe("repository signal routing", () => {
     const aggregateEvent = createProjectCreated("event-aggregate-probe", "aggregate-probe");
 
     await aggregateDispatcher.dispatch(aggregateEvent);
-    expect(aggregateFactory.closedProbes).toBe(1);
+    expect(aggregateFactory.closedProbes).toBe(0);
     await aggregateDispatcher.dispatch(
       createProjectCreated("event-aggregate-probe-other", "aggregate-probe-other"),
     );
-    expect(aggregateFactory.closedProbes).toBe(2);
+    expect(aggregateFactory.closedProbes).toBe(0);
     await aggregateDispatcher.dispatch(aggregateEvent);
-    expect(aggregateFactory.closedProbes).toBe(3);
+    expect(aggregateFactory.closedProbes).toBe(0);
     await aggregateContext.close();
+    expect(aggregateFactory.closedProbes).toBe(1);
 
     const pmFactory = new CountingProbeStorageFactory();
     const pmRepository = createGuardedProcessManagerReactRepository(1);
@@ -8616,12 +8912,13 @@ describe("repository signal routing", () => {
     const pmEvent = createProjectCreated("event-pm-probe", "pm-probe");
 
     await pmDispatcher.dispatch(createProjectCreated("event-pm-probe-retry", "pm-probe"));
-    expect(pmFactory.closedProbes).toBe(1);
+    expect(pmFactory.closedProbes).toBe(0);
     await pmDispatcher.dispatch(createProjectCreated("event-pm-probe-other", "pm-probe-other"));
-    expect(pmFactory.closedProbes).toBe(2);
+    expect(pmFactory.closedProbes).toBe(0);
     await pmDispatcher.dispatch(pmEvent);
-    expect(pmFactory.closedProbes).toBe(3);
+    expect(pmFactory.closedProbes).toBe(0);
     await pmContext.close();
+    expect(pmFactory.closedProbes).toBe(1);
 
     const failingFactory = new CountingProbeStorageFactory(true);
     const failingRepository = createGuardedAggregateRepository();
@@ -8637,8 +8934,9 @@ describe("repository signal routing", () => {
         createProjectCreated("event-aggregate-probe-fail", "aggregate-probe-fail"),
       ),
     ).rejects.toThrow("guard probe read failed");
-    expect(failingFactory).toMatchObject({ opened: 1, closed: 1, closedProbes: 1 });
+    expect(failingFactory).toMatchObject({ opened: 1, closed: 0, closedProbes: 0 });
     await failingContext.close();
+    expect(failingFactory).toMatchObject({ opened: 1, closed: 1, closedProbes: 1 });
   });
 
   it("retains one Entity storage across repeated repository dispatch and closes it with the context", async () => {
@@ -8659,6 +8957,60 @@ describe("repository signal routing", () => {
       await context.close();
     }
     expect(factory.entityCloses).toBe(factory.entityOpens);
+  });
+
+  it("upgrades the repository read handle while Stand opens its separate current-read handle", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const reads = repositoryReadAccess.bind(repository);
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+    try {
+      expect(await reads.findIds(ProjectStateQuery.create().build())).toEqual([]);
+      expect(factory).toMatchObject({ entityOpens: 1, entityCloses: 0, commitCreations: 0 });
+      await dispatcher.dispatch(createProjectCreated("read-before-write", "read-before-write"));
+      expect(factory).toMatchObject({ entityOpens: 2, entityCloses: 0, commitCreations: 1 });
+      expect(factory.openedStorageScopes).toEqual([
+        `${ProjectStateSchema.typeName}:false`,
+        `${ProjectStateSchema.typeName}:undefined`,
+      ]);
+      expect(await reads.findIds(ProjectStateQuery.create().build())).toEqual([]);
+    } finally {
+      reads.close();
+      await context.close();
+    }
+    expect(factory.entityCloses).toBe(2);
+  });
+
+  it("keeps an existing read handle after commit acquisition fails and retries upgrade", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const reads = repositoryReadAccess.bind(repository);
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+    try {
+      expect(await reads.findIds(ProjectStateQuery.create().build())).toEqual([]);
+      factory.failCommitOnce = true;
+      await expect(
+        dispatcher.dispatch(createProjectCreated("upgrade-fail", "upgrade-id")),
+      ).rejects.toThrow("commit acquisition failed");
+      expect(factory).toMatchObject({ entityOpens: 1, entityCloses: 0, commitCreations: 1 });
+      expect(await reads.findIds(ProjectStateQuery.create().build())).toEqual([]);
+      await dispatcher.dispatch(createProjectCreated("upgrade-retry", "upgrade-id"));
+      expect(factory).toMatchObject({ entityOpens: 2, entityCloses: 0, commitCreations: 2 });
+    } finally {
+      reads.close();
+      await context.close();
+    }
+    expect(factory.entityCloses).toBe(2);
   });
 
   it("retains separate Entity storage per tenant during concurrent dispatch", async () => {
@@ -8778,6 +9130,38 @@ describe("repository signal routing", () => {
     expect(factory.entityCloses).toBe(factory.entityOpens);
   });
 
+  it("attempts every tenant port close and shares one repository close outcome", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+    await dispatcher.dispatch(
+      createProjectCreated("close-tenant-a", "close-a", { importTenantId: "tenant-a" }),
+    );
+    await dispatcher.dispatch(
+      createProjectCreated("close-tenant-b", "close-b", { importTenantId: "tenant-b" }),
+    );
+    factory.failCommitClose = true;
+    factory.failEntityClose = true;
+
+    const closing = repositoryAccess.clearRuntime(repository);
+    expect(repositoryAccess.clearRuntime(repository)).toBe(closing);
+    const failure = await closing.catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors.map((error: Error) => error.message)).toEqual([
+      "Entity close failed",
+      "commit close failed",
+      "Entity close failed",
+      "commit close failed",
+    ]);
+    await expect(context.close()).rejects.toThrow();
+    expect(factory.entityCloses).toBe(factory.entityOpens);
+  });
+
   it("preserves Agent port acquisition failure when history cleanup also fails", async () => {
     const factory = new RetainedEntityStorageFactory();
     const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-port-failure" });
@@ -8818,6 +9202,50 @@ describe("repository signal routing", () => {
     expect(factory.agentHistoryCloses).toBe(1);
     expect(factory.entityCloses).toBe(factory.entityOpens);
     await context.close();
+  });
+
+  it("keeps shared Agent audit history after execution-port acquisition fails", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared-port-failure" });
+    const repository = createGuardedSupportAgentRepository(agentId, false);
+    const context = BoundedContext.singleTenant("SupportSharedGuard")
+      .add(repository)
+      .withStorageFactory(factory)
+      .withAi(
+        AiRegistry.create({
+          defaultModels: {},
+          invocationLimits: {
+            operations: 1,
+            modelRequests: 1,
+            toolCalls: 0,
+            recordedReads: 0,
+            deadlineMs: 1_000,
+            totalInputBytes: 4_000,
+            totalOutputBytes: 4_000,
+            maxRecoveryBytes: 32_000,
+          },
+          concurrentOperations: 1,
+          queuedOperations: 0,
+        }),
+      )
+      .persistSystemEvents()
+      .build();
+    await repositoryAccess.agentHistory(repository, agentId, { kind: "full" }, { count: 1 });
+    factory.failAgentExecutionOnce = true;
+    await expect(
+      Promise.resolve().then(() =>
+        repositoryAccess.pendingAcceptedAgents(repository, undefined, undefined, 1),
+      ),
+    ).rejects.toThrow("Agent execution acquisition failed");
+    expect(factory.agentHistoryCloses).toBe(0);
+    await expect(
+      repositoryAccess.agentHistory(repository, agentId, { kind: "full" }, { count: 1 }),
+    ).resolves.toMatchObject({ entries: [] });
+    await expect(
+      repositoryAccess.pendingAcceptedAgents(repository, undefined, undefined, 1),
+    ).resolves.toBeDefined();
+    await context.close();
+    expect(factory.agentHistoryCloses).toBe(1);
   });
 
   it("bounds delivery lanes while delivered Inbox rows suppress a duplicate after lane eviction", async () => {
@@ -12085,6 +12513,71 @@ describe("repository signal routing", () => {
     } finally {
       await context.close();
     }
+  });
+
+  it("reuses unchanged-state Process Manager Event storage until repository shutdown", async () => {
+    DiagnosticOnlyProcessManager.calls = 0;
+    const factory = new CountingEventRecordFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createDiagnosticOnlyProcessManagerRepository())
+      .withStorageFactory(factory)
+      .build();
+    const state = create(ProjectQueueStateSchema, { id: "pm-repeat", queue: "existing" });
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProjectQueueStateSchema,
+      eventHistory: true,
+    });
+    try {
+      await storage.writeCurrent({
+        entityId: "pm-repeat",
+        state,
+        version: 1n,
+        lifecycle: { archived: false, deleted: false },
+      });
+      await context
+        .stand()
+        .update(ProjectQueueStateSchema, state, { version: create(VersionSchema, { number: 1 }) });
+      await context.commandBus().post(createAggregateCommand("pm-repeat-1", "pm-repeat"));
+      const afterFirst = factory.eventRecords;
+      const closedAfterFirst = factory.eventCloses;
+      expect(afterFirst).toBeGreaterThan(0);
+      await context.commandBus().post(createAggregateCommand("pm-repeat-2", "pm-repeat"));
+      expect(factory.eventRecords).toBe(afterFirst);
+      expect(factory.eventCloses).toBe(closedAfterFirst);
+      expect(factory.eventCloses).toBeLessThan(factory.eventRecords);
+    } finally {
+      await context.close();
+    }
+    expect(factory.eventCloses).toBe(factory.eventRecords);
+    expect(DiagnosticOnlyProcessManager.calls).toBe(2);
+  });
+
+  it("closes retained Entity ports when the Process Manager EventStore close fails", async () => {
+    FilteredProcessManager.reset();
+    const factory = new CountingEventRecordFactory();
+    const repository = createVoidProcessManagerRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    await context.eventBus().post(createProjectCreated("pm-close-error", "pm-close-error"));
+    expect(FilteredProcessManager.calls).toEqual(["react-fallback:Task"]);
+    const beforeEntityCloses = factory.entityCloses;
+    const close = vi
+      .spyOn(EventStore.prototype, "close")
+      .mockRejectedValueOnce(new Error("PM EventStore close failed"));
+    try {
+      await expect(repositoryAccess.clearRuntime(repository)).rejects.toThrow(
+        "PM EventStore close failed",
+      );
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      close.mockRestore();
+    }
+    expect(factory.entityCloses).toBeGreaterThan(beforeEntityCloses);
+    await expect(context.close()).rejects.toThrow("BoundedContext close failed");
   });
 
   it("retains a void Process Manager reaction without creating invalid initial state", async () => {
@@ -15369,6 +15862,7 @@ type ReadEntityStorage = EntityStorageConformance<unknown, Message> & { close():
 
 class RetainedEntityStorageFactory extends InMemoryStorageFactory {
   entityOpens = 0;
+  openedStorageScopes: string[] = [];
   entityCloses = 0;
   commitCreations = 0;
   failCommitOnce = false;
@@ -15422,6 +15916,8 @@ class RetainedEntityStorageFactory extends InMemoryStorageFactory {
   override createEntityStorage(input: unknown): unknown {
     const storage = super.createEntityStorage(input) as ReadEntityStorage;
     this.entityOpens++;
+    const scope = input as EntityStorageInput<unknown, Message>;
+    this.openedStorageScopes.push(`${scope.sourceType.typeName}:${String(scope.stateHistory)}`);
     return {
       ...storage,
       close: () => {
@@ -15437,6 +15933,7 @@ class ObservedReadStorageFactory extends InMemoryStorageFactory {
   readonly plans: NormalizedQueryPlan<unknown>[] = [];
   commitCreations = 0;
   writeCalls = 0;
+  readOpens = 0;
   readCloses = 0;
 
   protected override createEntityCommitStorage<I, S extends Message>(
@@ -15448,6 +15945,7 @@ class ObservedReadStorageFactory extends InMemoryStorageFactory {
 
   override createEntityStorage(input: unknown): unknown {
     const storage = super.createEntityStorage(input) as ReadEntityStorage;
+    this.readOpens += 1;
     return {
       current: {
         read: (id: unknown) => storage.current.read(id),
@@ -15467,6 +15965,114 @@ class ObservedReadStorageFactory extends InMemoryStorageFactory {
         storage.close();
       },
     };
+  }
+}
+
+class GatedRepositoryReadFactory extends ObservedReadStorageFactory {
+  #reached!: () => void;
+  #release!: () => void;
+  readonly entered = new Promise<void>((resolve) => {
+    this.#reached = resolve;
+  });
+  readonly #gate = new Promise<void>((resolve) => {
+    this.#release = resolve;
+  });
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as ReadEntityStorage;
+    return {
+      ...storage,
+      current: {
+        ...storage.current,
+        query: async (plan: NormalizedQueryPlan<unknown>) => {
+          this.#reached();
+          await this.#gate;
+          return storage.current.query(plan);
+        },
+      },
+    };
+  }
+
+  release(): void {
+    this.#release();
+  }
+}
+
+class GatedEntityHistoryFactory extends ObservedReadStorageFactory {
+  constructor(
+    private readonly kind:
+      "states" | "stateAt" | "events" | "trim" | "stateTruncate" | "eventTruncate" = "states",
+  ) {
+    super();
+  }
+
+  #reached!: () => void;
+  #release!: () => void;
+  armed = true;
+  readonly entered = new Promise<void>((resolve) => {
+    this.#reached = resolve;
+  });
+  readonly #gate = new Promise<void>((resolve) => {
+    this.#release = resolve;
+  });
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as ReadEntityStorage;
+    return {
+      ...storage,
+      states: {
+        ...storage.states,
+        backward: async (id: unknown, depth: number, startingFromVersion?: bigint) => {
+          if (this.kind === "states") {
+            this.#reached();
+            await this.#gate;
+          }
+          return storage.states.backward(id, depth, startingFromVersion);
+        },
+        stateAt: async (id: unknown, time: Timestamp) => {
+          if (this.kind === "stateAt") {
+            this.#reached();
+            await this.#gate;
+          }
+          return storage.states.stateAt(id, time);
+        },
+        trim: async (id: unknown, keep: number) => {
+          if (this.armed && this.kind === "trim") {
+            this.#reached();
+            await this.#gate;
+          }
+          return storage.states.trim(id, keep);
+        },
+        truncate: async (time: Timestamp) => {
+          if (this.armed && this.kind === "stateTruncate") {
+            this.#reached();
+            await this.#gate;
+          }
+          return storage.states.truncate(time);
+        },
+      },
+      events: {
+        ...storage.events,
+        backward: async (id: unknown, depth: number, startingFromVersion?: bigint) => {
+          if (this.kind === "events") {
+            this.#reached();
+            await this.#gate;
+          }
+          return storage.events.backward(id, depth, startingFromVersion);
+        },
+        truncate: async (time: Timestamp) => {
+          if (this.armed && this.kind === "eventTruncate") {
+            this.#reached();
+            await this.#gate;
+          }
+          return storage.events.truncate(time);
+        },
+      },
+    };
+  }
+
+  release(): void {
+    this.#release();
   }
 }
 
@@ -15592,8 +16198,50 @@ class CountingProbeStorageFactory extends InMemoryStorageFactory {
   }
 }
 
+class CountingEventRecordFactory extends InMemoryStorageFactory {
+  eventRecords = 0;
+  eventCloses = 0;
+  entityCloses = 0;
+
+  override createEntityStorage(input: unknown): unknown {
+    const storage = super.createEntityStorage(input) as ReadEntityStorage;
+    return {
+      ...storage,
+      close: () => {
+        this.entityCloses += 1;
+        storage.close();
+      },
+    };
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, spec, group);
+    if (spec.recordType.typeName === EventSchema.typeName) {
+      this.eventRecords += 1;
+      const close = storage.close.bind(storage);
+      storage.close = () => {
+        this.eventCloses += 1;
+        close();
+      };
+    }
+    return storage;
+  }
+}
+
 class GatedStandReadStorageFactory extends InMemoryStorageFactory {
   enableGate = false;
+  commitCreations = 0;
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    this.commitCreations += 1;
+    return super.createEntityCommitStorage(input);
+  }
 
   #entered = false;
 

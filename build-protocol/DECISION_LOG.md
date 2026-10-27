@@ -6528,3 +6528,41 @@ Agent documentation, and extends D-0145. There is no existing-data migration wor
 
 Current supported APIs remain documented until each implementation slice lands;
 this decision records the target and supersedes conflicting implementation plans.
+
+## D-0147: Shared JVM-like AnyPacker
+
+Date: 2026-10-27. Status: accepted framework-author correction; implementation pending.
+
+Inspect Spine JVM AnyPacker and introduce the corresponding shared TS abstraction.
+Use it throughout the framework in place of inconsistent Any packing/unpacking
+paths. Preserve the appropriate type URL and packed Any values, including the
+serialization round trips used by storage identifiers. The implementation must
+follow actual JVM behavior and the TS descriptor/type-registry contracts.
+
+This supersedes the proposed Datastore native-key deletion workaround recorded
+during D-0146 implementation: correct the shared Protobuf handling instead. The
+independent Datastore history-trimming pagination defect remains in scope. No
+existing-data migration is authorized.
+
+## D-0148: Awaitable factory and Entity commit shutdown
+
+Date: 2026-10-27. Status: accepted implementation decision for D-0146; pending.
+
+Retained commit storage must finish admitted commits before closing its internal
+record storage. Current provider factory shutdown can close those records while
+a commit still uses them, and void factory close methods hide later pool/catalog
+failures from callers.
+
+StorageFactory.close and provider-only EntityCommitStorage.close will return
+Promise<void>. Calling close immediately rejects new work; the promise settles
+after admitted operations and all cleanup attempts. Ordinary RecordStorage.close
+remains synchronous. Commit-internal records are released by the commit wrapper,
+not independently by factory teardown. Factories await those wrappers before
+closing remaining handles, catalog and pools. Cleanup failures are reported by
+close, without retroactively changing completed commit results.
+
+Current synchronous assembly/acquisition rollback uses a guarded provider-internal
+idle operation. It is not a second public shutdown API. The later asynchronous
+Bounded Context build can use ordinary awaited cleanup. Existing public cleanup
+callers must await factory completion. No generic lifecycle framework, compatibility
+wrapper, data migration or additional recovery machinery is introduced.

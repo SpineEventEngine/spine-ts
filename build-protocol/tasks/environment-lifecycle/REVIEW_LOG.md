@@ -92,3 +92,79 @@ passed 534 tests, storage/server/MySQL and tooling typechecks, lint, cleanup, TS
 formatting and diff checks. Independent API declaration/caller inspection and
 diff check clean. P1 and P2 are resolved; all four bounded concerns accepted.
 Live providers, full release coverage and final security remain pending.
+
+## Repository query/history retention package
+
+Next package baseline is 6ccfc3efc. After author freeze, existing mechanical
+function mechanical_checks (immutable explicit gpt-6-luna/low) runs independent
+focused preflight and exact changed-branch coverage before review. Review scope
+will be repository storage sharing and direct-read lifetime, captured history
+configuration, Process Manager retained EventStore and context cleanup callers.
+The complete TASK.md human ledger applies; provider defects are a separate slice.
+
+Repository correction preflight passed 482 focused tests and affected typecheck,
+cleanup, TSDoc, ESLint and formatting. Focused coverage is used to inspect changed
+branches; repository-wide coverage is reserved for final release verification.
+Dead acquisition/composite-close helpers were removed and disposed lifetime maps
+are cleared. Review assignments after author freeze (read-only, no delegation):
+
+- performance_reliability_reviewer, gpt-6-sol/medium: direct read admission/drain,
+  shared Entity/history ports, captured settings, rebind and attempt-all cleanup.
+- typescript_api_docs_reviewer, gpt-6-sol/medium: internal cleanup API and callers,
+  public history-switch behavior and API/TSDoc claims.
+- style_maintainability_reviewer, gpt-6-sol/medium: retention structures, helper
+  necessity and focused test quality.
+- documentation_reviewer, gpt-6-luna/medium: changed lifecycle TSDoc and current
+  task claims only. Broad future milestone documentation is not this review.
+
+All profiles are explicit at dispatch. Runtime metadata is unavailable beyond
+configured profiles. Full TASK.md human ledger applies; superseded historical
+text is not a finding unless presented as current behavior. Collect the complete
+wave before any correction batch. Expected review/integration time: 0.3–0.6 hours.
+
+Complete repository review wave collected; explicit configured profiles confirmed,
+runtime introspection unavailable. API clean. Accepted reliability P1s: protected
+Agent audit reads bypass retained-lifetime admission; protected Entity state/Event
+maintenance exposes raw trim/truncate operations. Both must capture the exact
+lifetime, reject stale callers and drain admitted work. Accepted style P2: the
+read-to-write reuse test counts two unrelated Entity openings without proving port
+identity. Accepted documentation P2s: describe captured settings for in-flight
+commits and include tenant/history configuration in retention identity.
+Style P3 on the single-use upgrade helper is advisory; simplify only if naturally
+needed by these fixes, without expanding scope. No other blocking findings.
+
+Return one correction batch to existing implementer storage_retention, immutable
+gpt-6-sol/medium; pause core-only AnyPacker edits at a safe point. Source scope
+adds agent/agent-history.ts only as needed for the admitted read callback.
+Estimate 0.3–0.6 hours including focused checks and affected reliability/API
+confirmation. Final author preflight was 483 tests; older 478/482 counts denote
+earlier snapshots, not conflicting results. Reviewer selected 434 tests plus
+25 Entity tests, all passed; it did not rerun the author's exact four suites.
+
+Repository correction frozen: 494 tests passed across five focused suites, with
+server typecheck, lint/format/cleanup/TSDoc and diff checks. Exact focused LCOV
+is in external repository-history-review-coverage/. Core WIP remains external
+and does not affect this checkpoint. Targeted second review: existing reliability
+reviewer repository_reliability_review (immutable explicit Sol/medium) checks both
+protected-operation fixes; existing API reviewer repository_api_review (same
+explicit profile) checks the new internal admission callback and narrow claims.
+Style test assertion and wording corrections are deterministic and do not reopen
+those lanes. Mechanical function mechanical_checks (immutable Luna/low) inspects
+changed-branch coverage and final source/check evidence without duplicating tests.
+
+Targeted reliability review confirmed both P1s resolved with gated tests. API
+confirmed types, callers and captured-setting documentation; accepted final P2
+is purely deterministic callback naming (admit/read must use on-prefixed names).
+Rename in the same implementation context, run affected narrow checks, and do not
+reopen specialist lanes for a name-only correction. Estimated 0.05–0.1 hours.
+
+Repository slice converged: both reliability P1s and all accepted P2s resolved.
+Naming-only correction passed 37 affected tests and all narrow checks. Independent
+final preflight confirmed recorded 494-test run and coverage of both Agent admission
+outcomes and all three maintenance delegates; tooling typecheck, docs audience and
+diff check passed. Idle retained-EventStore failure and prepared-repository close
+delegate are not naturally reached by synchronous assembly, which acquires no
+repository storage; the underlying idle seam is tested directly. No coverage-only
+fixture is added. All four concerns accepted; full release/security remain pending.
+Checkpoint includes only the five authored source/test files and current task
+records, excluding generated manifest stamps and external AnyPacker WIP.

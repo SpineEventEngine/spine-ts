@@ -188,11 +188,13 @@ class CommandingSupportAgent extends Agent<
 }
 
 class WaitingSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  static latest: WaitingSupportAgent | undefined;
   static entered: (() => void) | undefined;
   static gate: Promise<void> | undefined;
   static invokeAfterWait = false;
 
   async draft(command: DraftSupportReply): Promise<SupportReplyDrafted> {
+    WaitingSupportAgent.latest = this;
     WaitingSupportAgent.entered?.();
     if (command.question === "Wait for service") await WaitingSupportAgent.gate;
     if (command.question === "Wait for service" && WaitingSupportAgent.invokeAfterWait)
@@ -206,6 +208,10 @@ class WaitingSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReply
       });
     this.update((state) => Object.assign(state, { id: this.id, proposedReply: "Ready" }));
     return create(SupportReplyDraftedSchema, { agent: this.id, reply: "Ready" });
+  }
+
+  readBoundHistory(): Promise<HistoryPage<unknown>> {
+    return this.fullHistory({ pageSize: 1 });
   }
 }
 
@@ -290,12 +296,14 @@ class RecordingExecutionFactory extends InMemoryStorageFactory {
 }
 
 class FailingAgentReadFactory extends InMemoryStorageFactory {
+  createdHistory = 0;
   closedHistory = 0;
   closedExecution = 0;
 
   protected override createAgentHistoryStorage<Id>(
     input: AgentHistoryStorageInput<Id>,
   ): AgentHistoryStorage<Id> {
+    this.createdHistory += 1;
     const storage = super.createAgentHistoryStorage(input);
     const close = storage.close.bind(storage);
     storage.read = () => Promise.reject(new Error("history provider unavailable"));
@@ -317,6 +325,74 @@ class FailingAgentReadFactory extends InMemoryStorageFactory {
       close();
     };
     return storage;
+  }
+}
+
+class CountingAgentHistoryFactory extends InMemoryStorageFactory {
+  failNextHistory = false;
+  historyOpens = 0;
+  historyCloses = 0;
+
+  protected override createAgentHistoryStorage<Id>(
+    input: AgentHistoryStorageInput<Id>,
+  ): AgentHistoryStorage<Id> {
+    if (this.failNextHistory) {
+      this.failNextHistory = false;
+      throw new Error("Agent history acquisition failed");
+    }
+    const storage = super.createAgentHistoryStorage(input);
+    const close = storage.close.bind(storage);
+    this.historyOpens += 1;
+    storage.close = () => {
+      this.historyCloses += 1;
+      close();
+    };
+    return storage;
+  }
+}
+
+class GatedProtectedAgentHistoryFactory extends CountingAgentHistoryFactory {
+  acceptedKey: AgentInvocationKey | undefined;
+  armed = false;
+  #entered!: () => void;
+  #release!: () => void;
+  readonly entered = new Promise<void>((resolve) => {
+    this.#entered = resolve;
+  });
+  readonly gate = new Promise<void>((resolve) => {
+    this.#release = resolve;
+  });
+
+  protected override createAgentExecutionStorage<I, S extends Message>(
+    input: AgentExecutionStorageInput<I, S>,
+  ): AgentExecutionStorage<I, S> {
+    const storage = super.createAgentExecutionStorage(input);
+    const admit = storage.admit.bind(storage);
+    storage.admit = async (accepted) => {
+      const result = await admit(accepted);
+      this.acceptedKey = accepted.key;
+      return result;
+    };
+    return storage;
+  }
+
+  protected override createAgentHistoryStorage<Id>(
+    input: AgentHistoryStorageInput<Id>,
+  ): AgentHistoryStorage<Id> {
+    const storage = super.createAgentHistoryStorage(input);
+    const read = storage.read.bind(storage);
+    storage.read = async (request) => {
+      if (this.armed) {
+        this.#entered();
+        await this.gate;
+      }
+      return read(request);
+    };
+    return storage;
+  }
+
+  release(): void {
+    this.#release();
   }
 }
 
@@ -380,6 +456,51 @@ async function collectHistoryIds<T>(
 }
 
 describe("Agent registration readiness", () => {
+  it("drains protected Agent history reads and rejects an old Agent after rebind", async () => {
+    const factory = new GatedProtectedAgentHistoryFactory();
+    const configured = waitingRepository();
+    const context = BoundedContext.singleTenant("ProtectedAgentHistory")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-protected-history" });
+    await context.commandBus().post(
+      SignalEnvelopes.command({
+        schema: DraftSupportReplySchema,
+        message: create(DraftSupportReplySchema, { agent: id, question: "Draft" }),
+        context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
+      }),
+    );
+    if (factory.acceptedKey === undefined) throw new Error("Expected accepted Agent signal.");
+    await repositoryAccess.runAcceptedAgent(configured, undefined, factory.acceptedKey);
+    factory.armed = true;
+    const agent = WaitingSupportAgent.latest;
+    if (agent === undefined) throw new Error("Expected restored Agent.");
+    const admitted = agent.readBoundHistory();
+    await factory.entered;
+    const closing = repositoryAccess.clearRuntime(configured);
+    expect(factory.historyCloses).toBe(0);
+    await expect(agent.readBoundHistory()).rejects.toThrow("active runtime");
+    factory.release();
+    expect((await admitted).items).toHaveLength(1);
+    await closing;
+    expect(factory.historyCloses).toBe(1);
+    await context.close();
+    const rebound = BoundedContext.singleTenant("ProtectedAgentHistory")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    try {
+      await expect(agent.readBoundHistory()).rejects.toThrow("active runtime");
+    } finally {
+      await rebound.close();
+    }
+  });
+
   it("closes Agent provider handles when public history or execution reads fail", async () => {
     const factory = new FailingAgentReadFactory();
     const configured = waitingRepository();
@@ -395,7 +516,11 @@ describe("Agent registration readiness", () => {
       await expect(configured.agentHistory(id, {}).fullHistory({ pageSize: 1 })).rejects.toThrow(
         "history provider unavailable",
       );
-      expect(factory.closedHistory).toBe(historyCloses + 1);
+      await expect(configured.agentHistory(id, {}).fullHistory({ pageSize: 1 })).rejects.toThrow(
+        "history provider unavailable",
+      );
+      expect(factory.createdHistory).toBe(1);
+      expect(factory.closedHistory).toBe(historyCloses);
       const executionCloses = factory.closedExecution;
       await expect(
         configured.agentExecution(id, create(CommandIdSchema, { uuid: "source" }), {}),
@@ -404,6 +529,74 @@ describe("Agent registration readiness", () => {
     } finally {
       await context.close();
     }
+    expect(factory.closedHistory).toBe(1);
+  });
+
+  it("shares retained Agent audit history across public and testing reads by tenant", async () => {
+    const factory = new CountingAgentHistoryFactory();
+    const configured = waitingRepository();
+    const context = BoundedContext.multitenant("SharedAgentHistory")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared-history" });
+    const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-A" } });
+    const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-B" } });
+    const before = factory.historyOpens;
+    try {
+      const reader = configured.agentHistory(id, { tenantId: tenantA });
+      expect(await reader.fullHistory({ pageSize: 1 })).toEqual({ items: [] });
+      expect(await reader.fullHistory({ pageSize: 1 })).toEqual({ items: [] });
+      expect(
+        await repositoryAccess.agentHistory(
+          configured,
+          id,
+          { kind: "full" },
+          { count: 1 },
+          tenantA,
+        ),
+      ).toMatchObject({ entries: [] });
+      expect(factory.historyOpens).toBe(before + 1);
+      configured.setStateHistoryEnabled(true);
+      expect(await reader.fullHistory({ pageSize: 1 })).toEqual({ items: [] });
+      expect(factory.historyOpens).toBe(before + 1);
+      expect(
+        await configured.agentHistory(id, { tenantId: tenantB }).fullHistory({ pageSize: 1 }),
+      ).toEqual({ items: [] });
+      expect(factory.historyOpens).toBe(before + 2);
+      expect(factory.historyCloses).toBe(0);
+    } finally {
+      await context.close();
+    }
+    expect(factory.historyCloses).toBe(factory.historyOpens);
+  });
+
+  it("retries Agent audit-history creation after a failed first acquisition", async () => {
+    const factory = new CountingAgentHistoryFactory();
+    const configured = waitingRepository();
+    const context = BoundedContext.singleTenant("RetryAgentHistory")
+      .withAi(ai())
+      .persistSystemEvents()
+      .withStorageFactory(factory)
+      .add(configured)
+      .build();
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-retry-history" });
+    factory.failNextHistory = true;
+    try {
+      await expect(configured.agentHistory(id, {}).fullHistory({ pageSize: 1 })).rejects.toThrow(
+        "Agent history acquisition failed",
+      );
+      expect(factory.historyOpens).toBe(0);
+      expect(await configured.agentHistory(id, {}).fullHistory({ pageSize: 1 })).toEqual({
+        items: [],
+      });
+      expect(factory.historyOpens).toBe(1);
+    } finally {
+      await context.close();
+    }
+    expect(factory.historyCloses).toBe(1);
   });
 
   it("isolates public Agent history by tenant and detaches returned entries", async () => {

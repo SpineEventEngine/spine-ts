@@ -103,6 +103,15 @@ export interface AgentHistoryBinding<Id> {
    * Optional maximum serialized entry bytes in one response.
    */
   readonly maxBytes?: number;
+
+  /**
+   * Admits the complete protected page, including journal and cache work.
+   * @param onRead Complete page read to admit.
+   * @returns Its result after all work settles.
+   */
+  readonly onAdmit?: (
+    onRead: () => Promise<HistoryPage<AgentHistoryEntry>>,
+  ) => Promise<HistoryPage<AgentHistoryEntry>>;
 }
 
 const bindings = new WeakMap<object, AgentHistoryBinding<unknown>>();
@@ -371,22 +380,8 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
     view: AgentHistoryView,
     request: HistoryRead,
   ): Promise<HistoryPage<AgentHistoryEntry>> {
-    if (!Number.isSafeInteger(request.pageSize) || request.pageSize <= 0)
-      throw new RangeError("Agent history pageSize must be a positive safe integer.");
-    const maxBytes = AgentHistoryPages.limit(binding.maxBytes);
-    const after = AgentHistoryCursorValues.decode(
-      request.cursor?.value,
-      binding.scope,
-      view,
-      maxBytes,
-    );
-    const live = (): Promise<AgentHistoryPage> =>
-      AgentHistoryPages.load(binding, view, request, after, maxBytes);
-    const page =
-      binding.journal === undefined
-        ? await live()
-        : await binding.journal(binding.scope, view, request, live, maxBytes);
-    return AgentHistoryPages.present(binding.scope, view, page);
+    const onRead = () => AgentHistoryPages.readBound(binding, view, request);
+    return binding.onAdmit === undefined ? onRead() : binding.onAdmit(onRead);
   },
 });
 
@@ -394,6 +389,37 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
  * Loads and presents complete provider pages at the protected read boundary.
  */
 const AgentHistoryPages = Object.freeze({
+  /**
+   * Reads and presents one complete protected Agent history page.
+   * @typeParam Id Typed Agent identifier.
+   * @param binding Captured Agent history binding.
+   * @param view Indexed history category.
+   * @param request Requested page and continuation.
+   * @returns Complete protected page.
+   */
+  async readBound<Id>(
+    binding: AgentHistoryBinding<Id>,
+    view: AgentHistoryView,
+    request: HistoryRead,
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
+    if (!Number.isSafeInteger(request.pageSize) || request.pageSize <= 0)
+      throw new RangeError("Agent history pageSize must be a positive safe integer.");
+    const maxBytes = this.limit(binding.maxBytes);
+    const after = AgentHistoryCursorValues.decode(
+      request.cursor?.value,
+      binding.scope,
+      view,
+      maxBytes,
+    );
+    const live = (): Promise<AgentHistoryPage> =>
+      this.load(binding, view, request, after, maxBytes);
+    const page =
+      binding.journal === undefined
+        ? await live()
+        : await binding.journal(binding.scope, view, request, live, maxBytes);
+    return this.present(binding.scope, view, page);
+  },
+
   /**
    * Loads a scoped provider page after validating the request.
    *

@@ -8,8 +8,8 @@ Branch: `environment-lifecycle`. Baseline: freshly fetched official
 `origin/master` at `ff6c8669537a016c47f012150306500d3b52b5d1`.
 Worktree: `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
 The accepted [proposal](PROPOSAL.md) includes the complete Agent recovery-removal
-task. Implementation is in progress; the first repository retention checkpoint
-is pushed. Existing behavior descriptions in the proposal refer to the baseline; proposed APIs become supported only after implementation.
+task. Implementation is in progress; initial repository and EventStore retention
+checkpoints are pushed, and repository query/history retention is reviewed. Existing behavior descriptions in the proposal refer to the baseline; proposed APIs become supported only after implementation.
 
 ## Human-Imposed Requirements Ledger
 
@@ -29,6 +29,9 @@ is pushed. Existing behavior descriptions in the proposal refer to the baseline;
 - Remove automatic Agent recovery fully; retain normal execution and audit.
 - No existing-data migration, conversion scans, migration utilities or tests.
 - No framework database provisioning; no arbitrary limits or recovery substitutes.
+- Introduce JVM-like AnyPacker and use it consistently across the codebase.
+  Preserve Any type URLs through packing and round trips; do not work around the
+  Datastore key defect by carrying native keys instead of correcting packing.
 - Preserve independent Bounded Context operation during other context builds.
 
 ## Workflow
