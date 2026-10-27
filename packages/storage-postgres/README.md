@@ -54,20 +54,26 @@ try {
 The URL must include a database name. Use `postgres:` or `postgresql:` URLs;
 credentials should come from the deployment environment. TLS options, pool
 limits, connection timeout, and an explicit schema are configured through the
-factory options. When no schema is supplied, the factory resolves
-`current_schema()` once and uses that validated schema for all later operations.
+factory options. Building the factory and creating a record handle do not open
+a connection. Call `await factory.checkConnection()` for a read-only check of
+the shared database; it opens and closes a temporary pool unless normal storage
+use already opened one. When no schema is supplied, the first awaited use
+resolves the server's `current_schema()` and retains that schema for later use.
 
-For multitenancy, configure one database and pool per complete generated
-`TenantId`. A schema is not a substitute for the database boundary. Duplicate
-tenant or database targets are rejected during construction.
+For multitenancy, set the shared database with `setOptions()` and select tenant
+databases with `setTenantOptions()` or `setTenantResolver()`. The resolver may be
+asynchronous and is called only on first use of a tenant. Distinct tenants must
+resolve to distinct databases; a schema is not a substitute for that boundary.
+The shared database may coincide with a tenant database only when their record
+families do not map to the same physical table.
 
 ## Lifecycle and operations
 
 Tables are initialized lazily and checked against the expected PostgreSQL
 layout. Each acquired client is released; history maintenance applies deletion
 pages independently. Await `factory.close()` when the application stops; it is
-idempotent, drains live handles and pools, and reports cleanup failures. A closed factory cannot create new
-handles.
+idempotent, drains admitted work and pools, and reports cleanup failures. A
+closed factory cannot create new handles or check a connection.
 
 The provider supports record CRUD, compare-and-set, immutable append, Entity
 state and event history, declared-column filtering, sorting, limits, offsets,

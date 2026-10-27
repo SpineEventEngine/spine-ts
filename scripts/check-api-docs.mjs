@@ -605,6 +605,7 @@ const expectedPostgresStorageExports = [
   "PostgresStorageFactoryBuilder",
   "PostgresStorageFactoryOptions",
   "PostgresTenantStorageOptions",
+  "PostgresTenantResolver",
   "PostgresStorageOperationError",
   "PostgresStorageSchemaError",
   "PostgresTableSpec",

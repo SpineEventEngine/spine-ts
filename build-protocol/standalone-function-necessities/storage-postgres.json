@@ -1,15 +1,6 @@
 [
   {
     "rule": "standalone-function",
-    "file": "packages/storage-postgres/src/postgres/storage-factory.ts",
-    "kind": "function-declaration",
-    "identity": "createOperation()#1",
-    "name": "createOperation",
-    "disposition": "necessity",
-    "reason": "TypeScript PostgreSQL factory boundary: createOperation remains standalone because generic record-family types require the exact public creation callback bridge."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/storage-postgres/src/postgres/record-storage.ts",
     "kind": "function-declaration",
     "identity": "quote()#1",

@@ -362,6 +362,7 @@ describe("PostgreSQL live storage acceptance", () => {
     const tenantA = tenant("a");
     const tenantB = tenant("b");
     const tenants = await postgresBuilder()
+      .setOptions({ url })
       .setTenantOptions([
         { tenantId: tenantA, options: { url: tenantAUrl } },
         { tenantId: tenantB, options: { url: tenantBUrl } },

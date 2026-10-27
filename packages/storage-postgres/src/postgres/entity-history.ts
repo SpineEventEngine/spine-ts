@@ -37,7 +37,11 @@ import type {
 } from "@spine-event-engine/storage";
 
 import { PostgresStorageDataError, PostgresStorageErrors } from "./errors.js";
-import { PostgresRecordStorage, type PostgresRecordExecutor } from "./record-storage.js";
+import {
+  PostgresRecordStorage,
+  type OnPublicOperation,
+  type PostgresRecordExecutor,
+} from "./record-storage.js";
 import type { PostgresParameter } from "./parameter.js";
 
 /**
@@ -122,24 +126,26 @@ export class PostgresEntityStorage<I, S extends Message> implements PostgresEnti
    * @param records Stores current Entity record envelopes.
    * @param open Opens grouped PostgreSQL record families.
    * @param onClose Unregisters this Entity handle from its factory.
+   * @param onAdmit Admits complete public Entity operations before callbacks.
    */
   constructor(
     input: EntityStorageInput<I, S>,
     private readonly records: PostgresRecordStorage<I, EntityRecord>,
     open: OpenRecords,
     private readonly onClose: () => void,
+    private readonly onAdmit: OnPublicOperation,
   ) {
-    this.current = new PostgresCurrentStorage(input, records);
+    this.current = new PostgresCurrentStorage(input, records, onAdmit);
     const states = input.stateHistory ? stateHistorySpec(input.stateSchema) : undefined;
     this.states =
       states === undefined
         ? disabledStateHistoryPort<I, S>()
-        : new PostgresStates(input, open(states.spec, states.group));
+        : new PostgresStates(input, open(states.spec, states.group), onAdmit);
     const events = input.eventHistory ? eventHistorySpec(input.stateSchema) : undefined;
     this.events =
       events === undefined
         ? disabledEventHistoryPort<I>()
-        : new PostgresEvents(input, open(events.spec, events.group));
+        : new PostgresEvents(input, open(events.spec, events.group), onAdmit);
   }
 
   /**
@@ -180,10 +186,12 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    *
    * @param input Supplies Entity identity and state-schema definitions.
    * @param records Stores immutable Entity state records.
+   * @param onAdmit Admits complete public history operations.
    */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: PostgresRecordStorage<EntityStateKey, EntityRecord>,
+    private readonly onAdmit: OnPublicOperation,
   ) {
     this.#executor = records.historyExecutor();
   }
@@ -195,9 +203,11 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    * @returns Completion after PostgreSQL stores the record.
    */
   append(record: EntityRecord): Promise<void> {
-    if (!this.#open) return Promise.reject(new Error("Entity state history is closed."));
-    return this.records.writeImmutable(record).catch((error: unknown) => {
-      throw PostgresStorageErrors.operation(error);
+    return this.onAdmit(() => {
+      if (!this.#open) return Promise.reject(new Error("Entity state history is closed."));
+      return this.records.writeImmutable(record).catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
     });
   }
 
@@ -209,7 +219,22 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    * @param startingFromVersion Optional inclusive starting version.
    * @returns Entity state records in descending version order.
    */
-  async backward(
+  backward(
+    entityId: I,
+    depth: number,
+    startingFromVersion?: bigint,
+  ): Promise<readonly EntityRecord[]> {
+    return this.onAdmit(() => this.backwardAdmitted(entityId, depth, startingFromVersion));
+  }
+
+  /**
+   * Reads an admitted state-history page.
+   * @param entityId Entity whose history is read.
+   * @param depth Maximum number of states to return.
+   * @param startingFromVersion Optional inclusive version.
+   * @returns Entity state records in descending version order.
+   */
+  private async backwardAdmitted(
     entityId: I,
     depth: number,
     startingFromVersion?: bigint,
@@ -237,7 +262,17 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    * @param time Inclusive state timestamp.
    * @returns Decoded state, or `undefined` when no state existed.
    */
-  async stateAt(entityId: I, time: Timestamp): Promise<S | undefined> {
+  stateAt(entityId: I, time: Timestamp): Promise<S | undefined> {
+    return this.onAdmit(() => this.stateAtAdmitted(entityId, time));
+  }
+
+  /**
+   * Reads an admitted Entity state at a timestamp.
+   * @param entityId Entity whose state is read.
+   * @param time Inclusive state timestamp.
+   * @returns Decoded state, or absence.
+   */
+  private async stateAtAdmitted(entityId: I, time: Timestamp): Promise<S | undefined> {
     this.assertOpen();
     await this.#executor.prepare();
     const records = await this.#executor
@@ -269,7 +304,17 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    * @param keepMostRecent Number of newest states to retain.
    * @returns Completion after all older pages are deleted.
    */
-  async trim(entityId: I, keepMostRecent: number): Promise<void> {
+  trim(entityId: I, keepMostRecent: number): Promise<void> {
+    return this.onAdmit(() => this.trimAdmitted(entityId, keepMostRecent));
+  }
+
+  /**
+   * Removes older admitted Entity state history.
+   * @param entityId Entity whose history is trimmed.
+   * @param keepMostRecent Number of newest states to retain.
+   * @returns Completion after all older pages are deleted.
+   */
+  private async trimAdmitted(entityId: I, keepMostRecent: number): Promise<void> {
     this.assertOpen();
     HistoryValues.assertKeep(keepMostRecent);
     await this.#executor
@@ -292,7 +337,16 @@ class PostgresStates<I, S extends Message> implements EntityStateHistoryPort<I, 
    * @param olderThan Exclusive history cutoff.
    * @returns Completion after all matching pages are deleted.
    */
-  async truncate(olderThan: Timestamp): Promise<void> {
+  truncate(olderThan: Timestamp): Promise<void> {
+    return this.onAdmit(() => this.truncateAdmitted(olderThan));
+  }
+
+  /**
+   * Deletes admitted Entity state history.
+   * @param olderThan Exclusive history cutoff.
+   * @returns Completion after all matching pages are deleted.
+   */
+  private async truncateAdmitted(olderThan: Timestamp): Promise<void> {
     this.assertOpen();
     await this.#executor
       .using(async (client) => {
@@ -552,10 +606,12 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
    *
    * @param input Supplies Entity identity and state-schema definitions.
    * @param records Stores immutable Entity events.
+   * @param onAdmit Admits complete public event-history operations.
    */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: PostgresRecordStorage<EventId, Event>,
+    private readonly onAdmit: OnPublicOperation,
   ) {
     this.#executor = records.historyExecutor();
   }
@@ -567,9 +623,11 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
    * @returns Completion after PostgreSQL stores the event.
    */
   append(record: Event): Promise<void> {
-    if (!this.#open) return Promise.reject(new Error("Entity event history is closed."));
-    return this.records.writeImmutable(record).catch((error: unknown) => {
-      throw PostgresStorageErrors.operation(error);
+    return this.onAdmit(() => {
+      if (!this.#open) return Promise.reject(new Error("Entity event history is closed."));
+      return this.records.writeImmutable(record).catch((error: unknown) => {
+        throw PostgresStorageErrors.operation(error);
+      });
     });
   }
 
@@ -581,7 +639,22 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
    * @param version Optional inclusive starting version.
    * @returns Events in descending version order.
    */
-  async backward(id: I, depth: number, version?: bigint): Promise<readonly Event[]> {
+  backward(id: I, depth: number, version?: bigint): Promise<readonly Event[]> {
+    return this.onAdmit(() => this.backwardAdmitted(id, depth, version));
+  }
+
+  /**
+   * Reads an admitted Entity event-history page.
+   * @param id Entity identifier.
+   * @param depth Maximum number of events to return.
+   * @param version Optional inclusive starting version.
+   * @returns Events in descending version order.
+   */
+  private async backwardAdmitted(
+    id: I,
+    depth: number,
+    version?: bigint,
+  ): Promise<readonly Event[]> {
     this.assertOpen();
     HistoryValues.assertDepth(depth);
     await this.#executor.prepare();
@@ -604,7 +677,16 @@ class PostgresEvents<I, S extends Message> implements EntityEventHistoryPort<I> 
    * @param olderThan Exclusive history cutoff.
    * @returns Completion after all matching pages are deleted.
    */
-  async truncate(olderThan: Timestamp): Promise<void> {
+  truncate(olderThan: Timestamp): Promise<void> {
+    return this.onAdmit(() => this.truncateAdmitted(olderThan));
+  }
+
+  /**
+   * Deletes admitted Entity event history.
+   * @param olderThan Exclusive history cutoff.
+   * @returns Completion after all matching pages are deleted.
+   */
+  private async truncateAdmitted(olderThan: Timestamp): Promise<void> {
     this.assertOpen();
     await this.#executor
       .using(async (client) => {
@@ -814,10 +896,12 @@ class PostgresCurrentStorage<I, S extends Message> implements EntityRecordStorag
    *
    * @param input Supplies materialized Entity columns.
    * @param records Stores current Entity records.
+   * @param onAdmit Admits complete public current-record operations.
    */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: RecordStorage<I, EntityRecord>,
+    private readonly onAdmit: OnPublicOperation,
   ) {}
 
   /**
@@ -827,7 +911,7 @@ class PostgresCurrentStorage<I, S extends Message> implements EntityRecordStorag
    * @returns The current record, or `undefined` when absent.
    */
   read(id: I): Promise<EntityRecord | undefined> {
-    return this.records.read(id);
+    return this.onAdmit(() => this.records.read(id));
   }
 
   /**
@@ -837,7 +921,7 @@ class PostgresCurrentStorage<I, S extends Message> implements EntityRecordStorag
    * @returns Completion after PostgreSQL stores the record.
    */
   write(record: EntityRecord): Promise<void> {
-    return this.records.write(record);
+    return this.onAdmit(() => this.records.write(record));
   }
 
   /**
@@ -849,13 +933,15 @@ class PostgresCurrentStorage<I, S extends Message> implements EntityRecordStorag
   async query(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly NormalizedQueryEntry<I, EntityRecord>[]> {
-    const entries = await this.records.queryPlanEntries(plan);
-    return entries.map((entry) => ({
-      id: entry.id,
-      record: entry.record,
-      columns: new Map(
-        this.input.columns.map((column) => [column.name, column.valueIn(entry.record)]),
-      ),
-    }));
+    return this.onAdmit(async () => {
+      const entries = await this.records.queryPlanEntries(plan);
+      return entries.map((entry) => ({
+        id: entry.id,
+        record: entry.record,
+        columns: new Map(
+          this.input.columns.map((column) => [column.name, column.valueIn(entry.record)]),
+        ),
+      }));
+    });
   }
 }

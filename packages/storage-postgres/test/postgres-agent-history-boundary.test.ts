@@ -105,7 +105,9 @@ describe("PostgreSQL Agent history provider boundary", () => {
     });
     const close = vi.fn();
     const records = { historyExecutor: () => executor, writeImmutable, close };
-    const history = new PostgresAgentHistory(scope, records as never);
+    const history = new PostgresAgentHistory(scope, records as never, <T>(work: () => Promise<T>) =>
+      work(),
+    );
     const time = occurredAt(1_789_000_001n, 123_456_789);
     const first = conversation("conversation-a", "thread-a", time);
     const system = event("system-a", time, true);
@@ -219,10 +221,14 @@ describe("PostgreSQL Agent history provider boundary", () => {
       using: <T>(work: (connection: typeof client) => Promise<T>) => work(client),
       table: () => '"test_history"',
     };
-    const history = new PostgresAgentHistory(scope, {
-      historyExecutor: () => executor,
-      close: vi.fn(),
-    } as never);
+    const history = new PostgresAgentHistory(
+      scope,
+      {
+        historyExecutor: () => executor,
+        close: vi.fn(),
+      } as never,
+      <T>(work: () => Promise<T>) => work(),
+    );
     await expect(
       history.read({ entityId: "ticket-a", view: { kind: "full" }, count: 1, maxBytes: 10_000 }),
     ).rejects.toThrow(/index is incompatible/i);

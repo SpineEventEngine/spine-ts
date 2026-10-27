@@ -143,6 +143,7 @@ describe("Postgres record storage", () => {
       return Promise.resolve({ rowCount: 1, rows: [] });
     });
     driver.connect.mockClear();
+    driver.Pool.mockClear();
     driver.release.mockClear();
     driver.end.mockClear();
     driver.calls.length = 0;
@@ -210,6 +211,7 @@ describe("Postgres record storage", () => {
   it("passes distinct tenant schemas to custom table creation", async () => {
     const schemas: string[] = [];
     const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
       .setTenantOptions([
         {
           tenantId: create(TenantIdSchema, { kind: { case: "value", value: "a" } }),
@@ -238,6 +240,259 @@ describe("Postgres record storage", () => {
     await second.write(create(StringValueSchema, { value: "second" }));
 
     expect(schemas).toEqual(["tenant_a_schema", "tenant_b_schema"]);
+  });
+
+  it("coalesces concurrent tenant directory resolution and retains the successful database", async () => {
+    const resolver = vi.fn(() => ({ url: "postgresql://db.example/tenant_a", schema: "spine" }));
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .setTenantResolver(resolver)
+      .build();
+    const context = { name: "tenant", multitenant: true as const, tenantId: tenantId("a") };
+    const first = factory.createRecordStorage(context, recordSpec());
+    const second = factory.createRecordStorage(context, recordSpec());
+    await Promise.all([
+      first.write(create(StringValueSchema, { value: "first" })),
+      second.write(create(StringValueSchema, { value: "second" })),
+    ]);
+    expect(resolver).toHaveBeenCalledOnce();
+    expect(driver.Pool).toHaveBeenCalledOnce();
+    await factory.close();
+    expect(driver.end).toHaveBeenCalledOnce();
+  });
+
+  it("retries a failed tenant directory lookup on the next admitted operation", async () => {
+    const resolver = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("directory unavailable"))
+      .mockResolvedValue({ url: "postgresql://db.example/tenant_a", schema: "spine" });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .setTenantResolver(resolver)
+      .build();
+    const storage = factory.createRecordStorage(
+      { name: "tenant", multitenant: true, tenantId: tenantId("a") },
+      recordSpec(),
+    );
+    await expect(storage.write(create(StringValueSchema, { value: "first" }))).rejects.toThrow();
+    await expect(
+      storage.write(create(StringValueSchema, { value: "second" })),
+    ).resolves.toBeUndefined();
+    expect(resolver).toHaveBeenCalledTimes(2);
+    await factory.close();
+  });
+
+  it("rejects a shared and tenant family mapped to one unpartitioned table", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .setTenantResolver(() => ({ url: "postgresql://db.example/shared", schema: "spine" }))
+      .build();
+    const shared = factory.createRecordStorage(
+      { name: "shared", multitenant: false },
+      recordSpec(),
+    );
+    const tenant = factory.createRecordStorage(
+      { name: "tenant", multitenant: true, tenantId: tenantId("a") },
+      recordSpec(),
+    );
+    await shared.write(create(StringValueSchema, { value: "shared" }));
+    const [failure] = await Promise.allSettled([
+      tenant.write(create(StringValueSchema, { value: "tenant" })),
+    ]);
+    if (failure.status !== "rejected") throw new Error("Expected physical family collision.");
+    expect(((failure.reason as Error).cause as Error).message).toMatch(/collide/i);
+    await factory.close();
+  });
+
+  it("rejects two resolved tenants targeting the same physical database", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .setTenantResolver(() => ({ url: "postgresql://db.example/tenant", schema: "spine" }))
+      .build();
+    const first = factory.createRecordStorage(
+      { name: "tenant", multitenant: true, tenantId: tenantId("a") },
+      recordSpec(),
+    );
+    const second = factory.createRecordStorage(
+      { name: "tenant", multitenant: true, tenantId: tenantId("b") },
+      recordSpec(),
+    );
+    await first.write(create(StringValueSchema, { value: "first" }));
+    const [failure] = await Promise.allSettled([
+      second.write(create(StringValueSchema, { value: "second" })),
+    ]);
+    if (failure.status !== "rejected") throw new Error("Expected tenant database collision.");
+    expect(((failure.reason as Error).cause as Error).message).toMatch(
+      /distinct physical databases/i,
+    );
+    await factory.close();
+  });
+
+  it("drains an admitted first write before closing its newly bound pool", async () => {
+    let admit: ((client: Awaited<ReturnType<typeof driver.connect>>) => void) | undefined;
+    let entered: (() => void) | undefined;
+    const connecting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    driver.connect.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          admit = resolve;
+          entered?.();
+        }),
+    );
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const storage = factory.createRecordStorage({ name: "test", multitenant: false }, recordSpec());
+    const write = storage.write(create(StringValueSchema, { value: "first" }));
+    await connecting;
+    const closing = factory.close();
+    let settled = false;
+    void closing.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(driver.end).not.toHaveBeenCalled();
+    if (admit === undefined) throw new Error("Expected a gated PostgreSQL connection.");
+    admit({ query: driver.query, release: driver.release });
+    await expect(write).resolves.toBeUndefined();
+    await closing;
+    expect(driver.end).toHaveBeenCalledOnce();
+  });
+
+  it("fences new public work while a previously admitted batch finishes", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const storage = factory.createRecordStorage({ name: "test", multitenant: false }, recordSpec());
+    await (storage as PostgresRecordStorage<string, StringValue>).prepare();
+    let release: (() => void) | undefined;
+    let entered: (() => void) | undefined;
+    const firstWrite = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith("INSERT INTO") && release === undefined)
+        return new Promise((resolve) => {
+          release = () => {
+            resolve({ rowCount: 1, rows: [] });
+          };
+          entered?.();
+        });
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+    const batch = storage.writeAll([
+      create(StringValueSchema, { value: "first" }),
+      create(StringValueSchema, { value: "second" }),
+    ]);
+    await firstWrite;
+    const closing = factory.close();
+    await expect(storage.write(create(StringValueSchema, { value: "late" }))).rejects.toThrow(
+      /closed/i,
+    );
+    if (release === undefined) throw new Error("Expected gated first row.");
+    release();
+    await expect(batch).resolves.toBeUndefined();
+    await closing;
+    expect(driver.calls.filter(({ sql }) => sql.startsWith("INSERT INTO"))).toHaveLength(2);
+    expect(driver.end).toHaveBeenCalledOnce();
+  });
+
+  it("drains a compare-and-set retry admitted before factory close", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const storage = factory.createRecordStorage({ name: "test", multitenant: false }, recordSpec());
+    await (storage as PostgresRecordStorage<string, StringValue>).prepare();
+    let release: (() => void) | undefined;
+    let entered: (() => void) | undefined;
+    const firstAttempt = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let inserts = 0;
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith('SELECT "bytes"')) return Promise.resolve({ rows: [] });
+      if (sql.startsWith("INSERT INTO")) {
+        inserts += 1;
+        if (inserts === 1)
+          return new Promise((resolve) => {
+            release = () => {
+              resolve({ rowCount: 0, rows: [] });
+            };
+            entered?.();
+          });
+      }
+      return Promise.resolve({ rowCount: 1, rows: [] });
+    });
+    const change = storage.compareAndSet(
+      "slot",
+      undefined,
+      create(StringValueSchema, { value: "next" }),
+    );
+    await firstAttempt;
+    const closing = factory.close();
+    await expect(storage.read("late")).rejects.toThrow(/closed/i);
+    if (release === undefined) throw new Error("Expected gated CAS attempt.");
+    release();
+    await expect(change).resolves.toBe(true);
+    await closing;
+    expect(inserts).toBe(2);
+    expect(driver.end).toHaveBeenCalledOnce();
+  });
+
+  it("admits a public write before its materializer closes the factory reentrantly", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    let closing: Promise<void> | undefined;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => {
+        closing ??= factory.close();
+        return record.value;
+      },
+      columns: valueColumns(),
+    });
+    const storage = factory.createRecordStorage({ name: "test", multitenant: false }, spec);
+    await expect(
+      storage.write(create(StringValueSchema, { value: "first" })),
+    ).resolves.toBeUndefined();
+    if (closing === undefined) throw new Error("Expected materializer-triggered close.");
+    await closing;
+    expect(driver.calls.some(({ sql }) => sql.startsWith("INSERT INTO"))).toBe(true);
+    expect(driver.end).toHaveBeenCalledOnce();
+  });
+
+  it("admits a write before its tenant resolver closes the factory reentrantly", async () => {
+    let closing: Promise<void> | undefined;
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .setTenantResolver(() => {
+        closing = factory.close();
+        return { url: "postgresql://db.example/tenant_a", schema: "spine" };
+      })
+      .build();
+    const storage = factory.createRecordStorage(
+      { name: "tenant", multitenant: true, tenantId: tenantId("a") },
+      recordSpec(),
+    );
+    await expect(
+      storage.write(create(StringValueSchema, { value: "first" })),
+    ).resolves.toBeUndefined();
+    if (closing === undefined) throw new Error("Expected resolver-triggered close.");
+    await closing;
+    expect(driver.end).toHaveBeenCalledOnce();
+    expect(() =>
+      factory.createRecordStorage(
+        { name: "tenant", multitenant: true, tenantId: tenantId("a") },
+        recordSpec(),
+      ),
+    ).toThrow(/closed/i);
   });
 
   it("routes a public grouped table-name registration only to its grouped family", async () => {
@@ -279,7 +534,10 @@ describe("Postgres record storage", () => {
     await Promise.resolve();
 
     expect(storage.isOpen()).toBe(false);
-    expect(driver.end).toHaveBeenCalledOnce();
+    expect(driver.end).not.toHaveBeenCalled();
+    await expect((storage as PostgresRecordStorage<string, StringValue>).prepare()).rejects.toThrow(
+      /closed/i,
+    );
     expect(() =>
       factory.createRecordStorage({ name: "test", multitenant: false }, recordSpec()),
     ).toThrow(/closed/i);
@@ -415,14 +673,12 @@ describe("Postgres record storage", () => {
 
   it("prepares before acquiring the operation client for a pool of one", async () => {
     const storage = await recordStorage();
-    driver.query.mockImplementationOnce((sql, values) => {
-      driver.recordCall(sql, values);
-      expect(sql).toBe("BEGIN");
-      expect(driver.connect).toHaveBeenCalledTimes(2);
-      return Promise.resolve({ rowCount: 1, rows: [] });
-    });
-
     await storage.write(create(StringValueSchema, { value: "one" }));
+    const begin = driver.calls.findIndex(({ sql }) => sql === "BEGIN");
+    const insert = driver.calls.findIndex(({ sql }) => sql.startsWith("INSERT INTO"));
+    expect(begin).toBeGreaterThan(-1);
+    expect(insert).toBeGreaterThan(begin);
+    expect(driver.connect).toHaveBeenCalledTimes(3);
   });
 
   it("rejects an immutable record when the existing payload differs", async () => {
@@ -797,7 +1053,7 @@ describe("Postgres record storage", () => {
     expect(query?.sql).not.toContain("LIMIT");
   });
 
-  it("keeps rewritten nested filters and aligns nullable numeric order with the evaluator", () => {
+  it("keeps rewritten nested filters and aligns nullable numeric order with the evaluator", async () => {
     const spec = new RecordSpec<number, StringValue>({
       recordType: StringValueSchema,
       idKind: "int32",
@@ -820,10 +1076,19 @@ describe("Postgres record storage", () => {
     const storage = new PostgresRecordStorage(
       { name: "numeric-records", multitenant: false },
       spec,
-      table,
-      { databaseName: "test", schema: "spine", acquire: () => driver.connect() as never },
+      table.tableName,
+      () => table,
+      {
+        resolve: () => Promise.resolve(),
+        track: (work) => work,
+        publicOpen: () => true,
+        databaseName: "test",
+        schema: "spine",
+        acquire: () => driver.connect() as never,
+      },
       () => undefined,
     );
+    await (storage as unknown as { bind(): Promise<void> }).bind();
     const compiler = storage as unknown as {
       planQuery(plan: NormalizedQueryPlan<number>): { sql: string; values: readonly unknown[] };
     };
@@ -864,7 +1129,7 @@ describe("Postgres record storage", () => {
     }
   });
 
-  it("does not push custom numeric SQL mappings for logical strings or string IDs", () => {
+  it("does not push custom numeric SQL mappings for logical strings or string IDs", async () => {
     const spec = recordSpec();
     const canonical = PostgresTableSpecs.resolvedPostgresTableSpec({
       schema: "spine",
@@ -877,17 +1142,26 @@ describe("Postgres record storage", () => {
     const storage = new PostgresRecordStorage(
       { name: "custom-numeric", multitenant: false },
       spec,
-      {
+      "custom_numeric",
+      () => ({
         ...canonical,
         columns: canonical.columns.map((column) =>
           column.name === "ID" || column.name === "value"
             ? { ...column, postgresType: "INT" }
             : column,
         ),
+      }),
+      {
+        resolve: () => Promise.resolve(),
+        track: (work) => work,
+        publicOpen: () => true,
+        databaseName: "test",
+        schema: "spine",
+        acquire: () => driver.connect() as never,
       },
-      { databaseName: "test", schema: "spine", acquire: () => driver.connect() as never },
       () => undefined,
     );
+    await (storage as unknown as { bind(): Promise<void> }).bind();
     const compiler = storage as unknown as {
       planQuery(plan: NormalizedQueryPlan<string>): { sql: string; values: readonly unknown[] };
     };

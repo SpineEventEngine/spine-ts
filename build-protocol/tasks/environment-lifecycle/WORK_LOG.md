@@ -5,7 +5,7 @@
 Started 2026-10-27 from freshly fetched official master
 `ff6c8669537a016c47f012150306500d3b52b5d1`. Branch `environment-lifecycle` is in
 `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
-Checkpoints `c0c312b57`, `6ccfc3efc`, `f8a663cbe`, `0974d7627` and `c03c9844b` were pushed to official
+Checkpoints `c0c312b57`, `6ccfc3efc`, `f8a663cbe`, `0974d7627`, `c03c9844b` and `6991951cc` were pushed to official
 `origin/environment-lifecycle`. They contain initial repository and EventStore
 retention, safe closure, repository query/history retention and shared AnyPacker with the accepted task specification. No PR has
 been created. Full-task acceptance remains pending.
@@ -548,3 +548,74 @@ batch. Final 309 storage, 353 repository-routing and 62 focused coverage tests
 pass with static gates. Targeted reliability confirms all four findings resolved;
 API/style clean and documentation accurate. Commit and immediately push this
 bounded slice. SQL/Datastore checkConnection and preparation are not yet claimed.
+
+M4a checkpoint 6991951cc pushed immediately to official origin/environment-lifecycle.
+M4b PostgreSQL offline binding begins from that commit, same explicit immutable
+Sol/medium implementer. High-risk public/lifecycle contract already frozen in
+D-0150/FACTORY_PREPARATION; no repeat architecture pass. Estimate 1-2 hours for
+SQL logical-handle binding, resolver/shared options, explicit remembered
+connection check, close coordination, focused/live tests, docs and independent
+review. Scope PostgreSQL source/tests/narrow docs plus deterministic API inventory
+if needed. No MySQL/Datastore/server edits or model-preparation implementation.
+
+Acceptance: unreachable correctly formed database options assemble offline;
+no resolver or connection at build or Storage creation; shared check touches no
+tenants and writes no data/DDL; temporary check pools end; first awaited tenant
+use coalesces async resolution, reads actual default schema, validates separation,
+clears failed attempts and drains admitted binding before factory close. Preserve
+existing table resolution and configured custom SQL; no database/schema creation,
+new pool limits, live binding remapping, cross-factory readiness or migration.
+Model creation versus read-only compatibility remains M4c; do not falsely claim
+checkConnection prevents model DDL. Native retired-layout/upgrade scans must not
+be expanded or used as new connection-diagnostic requirements.
+
+M4b caller scan found an external PostgreSQL builder use in the Agent recovery
+child harness selecting setTenantOptions without shared setOptions. Extend the
+same implementer's scope to that necessary caller propagation only; preserve
+current MySQL behavior until its parity slice. Do not infer shared settings from
+a tenant inside the factory or introduce a compatibility fallback. The harness
+is scheduled for removal in M7, but current API expectations must be explicit.
+Live PostgreSQL first-use EventStore query exposed SQL compilation before schema
+binding; corrected ordering now passes all 19 live tests. Remaining unit/static
+checks and review are pending.
+
+M4b narrow shared-reference clarification is included: checkConnection is a
+public factory override; the StoragePreparations registry is for model
+preparation. PostgreSQL now supplies the former before M4c supplies the latter,
+so the existing adjacent wording must distinguish them. No broader docs rewrite.
+
+M4b four-concern review completed; accepted corrections recorded REVIEW_LOG.
+Public record shutdown regression was red and now passes, with 78 focused tests.
+Concrete wrapper scan expands shutdown admission to Entity current/history and
+Agent history/execution methods; a private provider callback tracks whole calls
+without rejecting their later internal steps. Approximately fifteen wrapper
+entries are affected. Revised remaining estimate 0.5-0.8 hours including focused
+regressions/static checks and targeted reliability/style review. This is a proven
+same-provider shutdown defect, not a shared architecture or public API change.
+No new recovery feature is added; Agent execution removal remains milestone 7.
+
+While M4b correction runs, dispatch independent read-only tenant-input inventory
+as the existing orchestrator mechanical scanning function, mechanical_checks,
+with verified immutable explicit gpt-6-luna/low profile. Runtime introspection
+unavailable. Collect exact current TenantIndex creation/configuration/keep/read
+callers and public/direct/transport request entrypoints for M5; no design, code
+changes, tests or children. External tenant-admission-inventory.md only. Estimate
+0.1-0.2 hours, concurrent with the correction. This does not start a new writer.
+
+Read-only tenant inventory completed and accepted with the explicitly configured
+Luna/low scanning profile; no runtime self-introspection. External
+tenant-admission-inventory.md records current index creation/access, implicit
+Inbox keep calls and command/Event/query/subscription/direct/saved-dispatch
+entrypoints. No contains operation or membership checks currently exist; current
+service checks only validate tenancy shape/mode. M5 must remove implicit keep
+and cover effective-index admission, including subscription-ID registry discovery.
+No source changes or tests were made by this scan.
+
+M4b offline PostgreSQL factory/resolver and explicit shared connection check
+accepted after four-concern review and one expanded shutdown correction batch.
+Current evidence:106unit/103focusedcoverage/6liveaudit plus parent1liveAgentexecution;
+static/docs/build and full formatting/diff pass. Targeted reliability/style clean;
+API/docs corrected deterministically. Full record and Entity/Agent wrapper calls
+now drain across factory shutdown. Commit authored paths and push immediately;
+exclude generation-only manifests. Next: M4c factory-local physical preparation,
+read-only compatibility and shared readiness, per D0150.

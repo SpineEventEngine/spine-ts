@@ -49,7 +49,11 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
       .build();
+    const existing = AgentHistoryStorageFactories.create(factory, scope);
     await factory.close();
+    await expect(
+      existing.read({ entityId: "ticket-a", view: { kind: "full" }, count: 1, maxBytes: 1024 }),
+    ).rejects.toThrow(/closed/i);
     expect(() => AgentHistoryStorageFactories.create(factory, scope)).toThrow(
       "StorageFactory is closed.",
     );
@@ -62,6 +66,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
         .setOptions({ url: required(url) })
         .build();
       const tenants = await PostgresStorageFactory.newBuilder()
+        .setOptions({ url: required(url) })
         .setTenantOptions([
           {
             tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),

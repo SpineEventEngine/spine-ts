@@ -569,8 +569,8 @@ async function nativeFactory(stringifiers) {
     if (!url) throw new Error("PostgreSQL recovery needs SPINE_TS_POSTGRESQL_URL.");
     const builder = PostgresStorageFactory.newBuilder();
     const options = { url, schema: process.env.SPINE_TS_POSTGRESQL_SCHEMA };
+    builder.setOptions(options);
     if (tenantResponse) builder.setTenantOptions([{ tenantId: recoveryTenant, options }]);
-    else builder.setOptions(options);
     return builder.setStringifierRegistry(stringifiers).build();
   }
   if (provider === "mysql") {

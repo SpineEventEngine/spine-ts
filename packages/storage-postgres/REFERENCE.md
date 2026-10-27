@@ -6,7 +6,7 @@ agents.
 ## Public entry point
 
 Import `PostgresStorageFactory`, `PostgresStorageFactoryBuilder`,
-`PostgresStorageFactoryOptions`, `PostgresTenantStorageOptions`,
+`PostgresStorageFactoryOptions`, `PostgresTenantStorageOptions`, `PostgresTenantResolver`,
 `PostgresEntityStorageHandle`, `PostgresTableSpec`,
 `PostgresCreateOperation`, `PostgresCreateOperationFactory`, and
 `PostgresColumnSpec` from the package root. Provider errors are
@@ -16,19 +16,22 @@ Import `PostgresStorageFactory`, `PostgresStorageFactoryBuilder`,
 
 ## Configuration
 
-`PostgresStorageFactory.newBuilder().setOptions(options).build()` configures a
-single database and schema. `setTenantOptions(entries)` configures one database
-and pool per complete generated `TenantId`; every operation selects its tenant
-pool before table, metadata, transaction, lock, or data work. Options include a
+`PostgresStorageFactory.newBuilder().setOptions(options).build()` assembles a
+logical factory without connecting. Shared `setOptions()` is required;
+`setTenantOptions(entries)` or `setTenantResolver(resolver)` additionally selects
+one database per complete generated `TenantId`. The two tenant selection modes
+cannot be combined. A resolver may return options asynchronously; concurrent
+first uses of one tenant share resolution, failed attempts may retry, and a
+successful binding stays fixed for this factory. Options include a
 PostgreSQL URL, pool maximum, connection timeout, TLS CA/certificate/key,
 server-certificate verification, and optional schema name. URLs must include a
 database and cannot bypass the explicit options model with fragments or driver
-parameters. The factory proves configured connections during build and
-sanitizes provider errors.
+parameters. `checkConnection()` checks only the shared destination using
+read-only SQL; it does not resolve tenants, create tables, or check a model.
 
 PostgreSQL creates tables but not databases or schemas. A missing schema is a
-configuration error. Without an explicit schema, `current_schema()` is resolved
-once while building the target and the validated result is qualified into every
+configuration error on `checkConnection()` or first use. Without an explicit schema, `current_schema()`
+is resolved from the server on first use and the validated result qualifies every
 table and metadata statement.
 
 ## Physical layout and queries

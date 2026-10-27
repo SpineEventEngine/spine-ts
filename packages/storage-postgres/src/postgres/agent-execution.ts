@@ -45,7 +45,11 @@ import {
 import type { PoolClient } from "pg";
 
 import { AgentHistoryHash } from "./agent-history.js";
-import { PostgresRecordStorage, type PostgresRecordExecutor } from "./record-storage.js";
+import {
+  PostgresRecordStorage,
+  type OnPublicOperation,
+  type PostgresRecordExecutor,
+} from "./record-storage.js";
 import { PostgresEntityCommitStorage } from "./entity-commit.js";
 
 /**
@@ -82,6 +86,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
    * @param history Immutable Agent conversation, System and domain entries.
    * @param current Existing Entity current records used for no-op version checks.
    * @param commits Opens the existing conditional Entity commit coordinator.
+   * @param onAdmit Admits complete public Agent execution operations.
    */
   constructor(
     private readonly input: AgentExecutionStorageInput<I, S>,
@@ -90,6 +95,7 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
     private readonly history: PostgresRecordStorage<string, AgentHistoryRecord>,
     private readonly current: PostgresRecordStorage<I, EntityRecord>,
     private readonly commits: () => PostgresEntityCommitStorage<I, S>,
+    private readonly onAdmit: OnPublicOperation,
   ) {}
 
   /**
@@ -98,7 +104,16 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
    * @param accepted Complete source signal and selected bindings.
    * @returns Detached stored invocation.
    */
-  async admit(accepted: AgentAcceptedInvocation): Promise<AgentExecutionRecord> {
+  admit(accepted: AgentAcceptedInvocation): Promise<AgentExecutionRecord> {
+    return this.onAdmit(() => this.admitAccepted(accepted));
+  }
+
+  /**
+   * Stores an admitted Agent invocation.
+   * @param accepted Complete source signal and selected bindings.
+   * @returns Detached stored invocation.
+   */
+  private async admitAccepted(accepted: AgentAcceptedInvocation): Promise<AgentExecutionRecord> {
     this.requireOpen();
     const rows = await this.ready();
     const key = AgentExecutionValues.requiredKey(accepted.key, this.input.stateType);
@@ -130,7 +145,16 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
    * @param request Complete continuation and page count.
    * @returns Detached records and continuation state.
    */
-  async pending(request: AgentPendingRead): Promise<AgentPendingPage> {
+  pending(request: AgentPendingRead): Promise<AgentPendingPage> {
+    return this.onAdmit(() => this.pendingAdmitted(request));
+  }
+
+  /**
+   * Reads an admitted pending Agent page.
+   * @param request Complete continuation and page count.
+   * @returns Detached records and continuation state.
+   */
+  private async pendingAdmitted(request: AgentPendingRead): Promise<AgentPendingPage> {
     this.requireOpen();
     const rows = await this.ready();
     if (!Number.isSafeInteger(request.count) || request.count < 1)
@@ -192,7 +216,16 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
    * @param key Original source and Agent instance identity.
    * @returns Detached record if present.
    */
-  async read(key: AgentInvocationKey): Promise<AgentExecutionRecord | undefined> {
+  read(key: AgentInvocationKey): Promise<AgentExecutionRecord | undefined> {
+    return this.onAdmit(() => this.readAdmitted(key));
+  }
+
+  /**
+   * Reads an admitted Agent invocation.
+   * @param key Original source and Agent instance identity.
+   * @returns Detached record if present.
+   */
+  private async readAdmitted(key: AgentInvocationKey): Promise<AgentExecutionRecord | undefined> {
     this.requireOpen();
     const rows = await this.ready();
     AgentExecutionValues.requiredKey(key, this.input.stateType);
@@ -210,7 +243,22 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
    * @param expiresAt Requested future expiry.
    * @returns Claimed record and current preferences, when eligible.
    */
-  async claim(
+  claim(
+    key: AgentInvocationKey,
+    token: string,
+    expiresAt: Timestamp,
+  ): Promise<AgentExecutionClaim | undefined> {
+    return this.onAdmit(() => this.claimAdmitted(key, token, expiresAt));
+  }
+
+  /**
+   * Acquires an admitted Agent invocation.
+   * @param key Original source and Agent instance identity.
+   * @param token New exclusive token.
+   * @param expiresAt Requested future expiry.
+   * @returns Claimed record and preferences, when eligible.
+   */
+  private async claimAdmitted(
     key: AgentInvocationKey,
     token: string,
     expiresAt: Timestamp,
@@ -303,7 +351,22 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
    * @param expiresAt Requested later expiry.
    * @returns Whether renewal succeeded.
    */
-  async renew(key: AgentInvocationKey, token: string, expiresAt: Timestamp): Promise<boolean> {
+  renew(key: AgentInvocationKey, token: string, expiresAt: Timestamp): Promise<boolean> {
+    return this.onAdmit(() => this.renewAdmitted(key, token, expiresAt));
+  }
+
+  /**
+   * Updates an admitted Agent claim.
+   * @param key Original source and Agent instance identity.
+   * @param token Current exclusive token.
+   * @param expiresAt Requested later expiry.
+   * @returns Whether renewal succeeded.
+   */
+  private async renewAdmitted(
+    key: AgentInvocationKey,
+    token: string,
+    expiresAt: Timestamp,
+  ): Promise<boolean> {
     this.requireOpen();
     const rows = await this.ready();
     return rows.head.transaction(async (client) => {
@@ -329,7 +392,16 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
    * @param input Exact read image, next execution record and history entries.
    * @returns Completion after fenced evidence is persisted.
    */
-  async update(input: AgentExecutionUpdate): Promise<void> {
+  update(input: AgentExecutionUpdate): Promise<void> {
+    return this.onAdmit(() => this.updateAdmitted(input));
+  }
+
+  /**
+   * Persists an admitted Agent execution update.
+   * @param input Exact read image, next execution record and history entries.
+   * @returns Completion after fenced evidence is persisted.
+   */
+  private async updateAdmitted(input: AgentExecutionUpdate): Promise<void> {
     this.requireOpen();
     const rows = await this.ready();
     await rows.head.transaction(async (client) => {
@@ -360,7 +432,16 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
    * @param input Complete conditional transition.
    * @returns Completion after conditional Entity and evidence commit.
    */
-  async complete(input: AgentExecutionComplete<I, S>): Promise<void> {
+  complete(input: AgentExecutionComplete<I, S>): Promise<void> {
+    return this.onAdmit(() => this.completeAdmitted(input));
+  }
+
+  /**
+   * Completes an admitted Agent execution.
+   * @param input Complete conditional transition.
+   * @returns Completion after conditional Entity and evidence commit.
+   */
+  private async completeAdmitted(input: AgentExecutionComplete<I, S>): Promise<void> {
     this.requireOpen();
     const rows = await this.ready();
     const coordinator = input.entityCommit === undefined ? undefined : this.commits();
@@ -478,7 +559,24 @@ export class PostgresAgentExecution<I, S extends Message> implements AgentExecut
    * @param signals Original accepted output IDs.
    * @returns Completion after original output IDs are marked delivered.
    */
-  async markDelivered(
+  markDelivered(
+    key: AgentInvocationKey,
+    token: string,
+    expectedRecordBytes: Uint8Array,
+    signals: readonly CommandId[],
+  ): Promise<void> {
+    return this.onAdmit(() => this.markDeliveredAdmitted(key, token, expectedRecordBytes, signals));
+  }
+
+  /**
+   * Marks delivery in an admitted Agent execution.
+   * @param key Original source and Agent instance identity.
+   * @param token Current exclusive claim token.
+   * @param expectedRecordBytes Exact previous record bytes.
+   * @param signals Original accepted output IDs.
+   * @returns Completion after persisted output status is updated.
+   */
+  private async markDeliveredAdmitted(
     key: AgentInvocationKey,
     token: string,
     expectedRecordBytes: Uint8Array,

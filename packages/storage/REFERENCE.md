@@ -28,8 +28,8 @@ also await admitted commits before releasing retained records. Ordinary
 `StorageFactory.checkConnection()` is a public read-only diagnostic for the
 configured shared destination. The base factory rejects unsupported checks and
 closed factories reject them. The memory factory succeeds locally while open;
-this does not admit a tenant or create records. Provider adapters opt in through
-the provider-only `StoragePreparations` registry. Its `prepareRecord`,
+this does not admit a tenant or create records. For model preparation, provider
+adapters register through the provider-only `StoragePreparations` registry. Its `prepareRecord`,
 `prepareEntity`, and `prepareAgentHistory` methods accept declarative definitions
 and a `"create"` or `"check"` mode without constructing Storage. Memory validates
 record-family layouts and the Agent audit tenant boundary and state type locally. An unregistered provider

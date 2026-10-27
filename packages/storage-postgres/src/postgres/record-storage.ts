@@ -44,9 +44,41 @@ import { PostgresTableInitializer } from "./table-initializer.js";
 const maximumNormalizedPlanBinds = 1_000;
 
 /**
+ * Admits one complete public provider operation before application callbacks run.
+ * @internal
+ * @typeParam T The operation result.
+ * @param work The admitted operation.
+ * @returns The operation outcome.
+ */
+export type OnPublicOperation = <T>(work: () => Promise<T>) => Promise<T>;
+
+/**
  * Manages PostgreSQL clients for one record-family handle.
  */
 export interface PostgresRecordLifecycle {
+  /**
+   * Resolves the selected database and its server-selected schema.
+   *
+   * @returns Completion after binding.
+   */
+  resolve(): Promise<void>;
+
+  /**
+   * Records one admitted asynchronous operation through factory close.
+   *
+   * @typeParam T The operation result.
+   * @param work The admitted operation promise.
+   * @returns The same operation outcome.
+   */
+  track<T>(work: Promise<T>): Promise<T>;
+
+  /**
+   * Checks the factory fence for public record operations.
+   *
+   * @returns Whether a new public operation may start.
+   */
+  publicOpen(): boolean;
+
   /**
    * Names the selected database for advisory coordination.
    */
@@ -189,14 +221,19 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
 
   readonly #columns: ColumnMapping<PostgresParameter>;
 
-  readonly #initializer: PostgresTableInitializer;
+  #initializer: PostgresTableInitializer | undefined;
+
+  #binding: Promise<void> | undefined;
+
+  #table: PostgresTableSpec<I, R> | undefined;
 
   /**
    * Creates a PostgreSQL record-family handle.
    *
    * @param context Identifies the storage boundary for this handle.
    * @param spec Defines the record type, ID type, and declared columns.
-   * @param table Supplies the resolved physical table layout.
+   * @param tableNameValue Supplies the locally resolved physical table name.
+   * @param onSchema Builds the physical layout after schema resolution.
    * @param lifecycle Acquires clients for the selected database and schema.
    * @param onClose Removes this handle from the factory's live set.
    * @param create Optionally supplies custom create-table SQL.
@@ -205,21 +242,26 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   constructor(
     context: StorageContext,
     spec: RecordSpec<I, R>,
-    private readonly table: PostgresTableSpec<I, R>,
+    private readonly tableNameValue: string,
+    private readonly onSchema: (schema: string) => PostgresTableSpec<I, R>,
     private readonly lifecycle: PostgresRecordLifecycle,
     private readonly onClose: () => void,
-    create?: () => string,
+    private readonly create?: (table: PostgresTableSpec<I, R>) => string,
     stringifiers: StringifierRegistry = new StringifierRegistry(),
   ) {
     super(context, spec);
     this.#idColumn = new PostgresIdColumn(spec.idType, stringifiers);
     this.#columns = new PostgresColumnMapping(stringifiers);
-    this.#initializer = new PostgresTableInitializer(
-      lifecycle,
-      table.schema,
-      table as never,
-      create,
-    );
+  }
+
+  /**
+   * Returns the bound layout after preparation.
+   *
+   * @returns The resolved physical layout.
+   */
+  private get table(): PostgresTableSpec<I, R> {
+    if (this.#table === undefined) throw new Error("PostgreSQL record table is not bound.");
+    return this.#table;
   }
 
   /**
@@ -228,7 +270,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns The physical table name without its schema.
    */
   get tableName(): string {
-    return this.table.tableName;
+    return this.tableNameValue;
   }
 
   /**
@@ -237,7 +279,49 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns A promise that resolves after compatible initialization.
    */
   prepare(): Promise<void> {
-    return this.#initializer.prepare();
+    return this.admit(() => this.prepareInternal());
+  }
+
+  /**
+   * Prepares an already admitted operation, including after the factory fence.
+   *
+   * @returns Completion after table preparation.
+   */
+  private prepareInternal(): Promise<void> {
+    return this.lifecycle.track(Promise.resolve().then(() => this.prepareBound()));
+  }
+
+  /**
+   * Binds the destination and prepares its physical table.
+   *
+   * @returns Completion after physical table preparation.
+   */
+  private async prepareBound(): Promise<void> {
+    this.#binding ??= this.bind().catch((error: unknown) => {
+      this.#binding = undefined;
+      throw error;
+    });
+    await this.#binding;
+    if (this.#initializer === undefined) throw new Error("PostgreSQL table is not bound.");
+    await this.#initializer.prepare();
+  }
+
+  /**
+   * Resolves the database before constructing the schema-bound initializer.
+   *
+   * @returns Completion after the initializer is available.
+   */
+  private async bind(): Promise<void> {
+    await this.lifecycle.resolve();
+    const table = this.onSchema(this.lifecycle.schema);
+    this.#table = table;
+    const create = this.create;
+    this.#initializer = new PostgresTableInitializer(
+      this.lifecycle,
+      table.schema,
+      table as never,
+      create === undefined ? undefined : () => create(table),
+    );
   }
 
   /**
@@ -276,15 +360,119 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
+   * Registers a complete public operation before invoking record callbacks.
+   *
+   * @typeParam T The operation result.
+   * @param work Performs the public record operation.
+   * @returns The complete admitted outcome.
+   */
+  private admit<T>(work: () => Promise<T>): Promise<T> {
+    if (!this.isOpen() || !this.lifecycle.publicOpen())
+      return Promise.reject(new Error("PostgreSQL record storage is closed."));
+    const { promise, resolve, reject } = Promise.withResolvers<T>();
+    void this.lifecycle.track(promise);
+    try {
+      void work().then(resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+    return promise;
+  }
+
+  /**
+   * Deletes one public record under the factory admission fence.
+   * @inheritdoc
+   */
+  override delete(id: I): Promise<boolean> {
+    return this.admit(() => super.delete(id));
+  }
+
+  /**
+   * Reads one public record under the factory admission fence.
+   * @inheritdoc
+   */
+  override read(id: I): Promise<R | undefined> {
+    return this.admit(() => super.read(id));
+  }
+
+  /**
+   * Indexes public records under the factory admission fence.
+   * @inheritdoc
+   */
+  override index(query: RecordQuery<I> = {}): Promise<readonly I[]> {
+    return this.admit(() => super.index(query));
+  }
+
+  /**
+   * Queries public records under the factory admission fence.
+   * @inheritdoc
+   */
+  override query(query: RecordQuery<I> = {}): Promise<readonly R[]> {
+    return this.admit(() => super.query(query));
+  }
+
+  /**
+   * Queries public record entries under the factory admission fence.
+   * @inheritdoc
+   */
+  override queryEntries(query: RecordQuery<I> = {}): Promise<readonly RecordEntry<I, R>[]> {
+    return this.admit(() => super.queryEntries(query));
+  }
+
+  /**
+   * Queries a normalized plan under the factory admission fence.
+   * @inheritdoc
+   */
+  override queryPlan(plan: NormalizedQueryPlan<I>): Promise<readonly R[]> {
+    return this.admit(async () =>
+      (await super.queryPlanEntries(plan)).map((entry) => entry.record),
+    );
+  }
+
+  /**
+   * Queries normalized entries under the factory admission fence.
+   * @inheritdoc
+   */
+  override queryPlanEntries(plan: NormalizedQueryPlan<I>): Promise<readonly RecordEntry<I, R>[]> {
+    return this.admit(() => super.queryPlanEntries(plan));
+  }
+
+  /**
+   * Writes a public record under the factory admission fence.
+   * @inheritdoc
+   */
+  override write(record: R): Promise<void> {
+    return this.admit(() => super.write(record));
+  }
+
+  /**
+   * Compares and sets a public record under the factory admission fence.
+   * @inheritdoc
+   */
+  override compareAndSet(id: I, expected: R | undefined, next: R | undefined): Promise<boolean> {
+    return this.admit(() => super.compareAndSet(id, expected, next));
+  }
+
+  /**
+   * Writes a public batch under the factory admission fence.
+   * @inheritdoc
+   */
+  override writeAll(records: Iterable<R>): Promise<void> {
+    return this.admit(() => super.writeAll(records));
+  }
+
+  /**
    * Writes an immutable record or confirms an identical existing payload.
    *
    * @param record Provides the immutable record to store.
    * @returns A promise that resolves when the payload is stored or confirmed.
    */
-  async writeImmutable(record: R): Promise<void> {
-    await this.using((client) => this.appendImmutableOn(client, record)).catch((error: unknown) => {
-      throw operationError(error);
-    });
+  writeImmutable(record: R): Promise<void> {
+    return this.admit(() => this.using((client) => this.appendImmutableOn(client, record))).catch(
+      (error: unknown) => {
+        throw operationError(error);
+      },
+    );
   }
 
   /**
@@ -294,7 +482,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @returns A promise that rejects when the stored payload differs.
    */
   async assertImmutable(record: R): Promise<void> {
-    const existing = await this.read(this.recordSpec.idValueIn(record));
+    const existing = await this.admit(() => super.read(this.recordSpec.idValueIn(record)));
     if (existing === undefined || this.same(existing, record)) return;
     throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
   }
@@ -329,8 +517,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    */
   protected async queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
     if (query.ids?.length === 0) return [];
-    const compiled = this.recordQuery(query);
-    return this.using((client) => this.entries(client, compiled));
+    return this.using((client) => this.entries(client, this.recordQuery(query)));
   }
 
   /**
@@ -354,8 +541,27 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   protected override async queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
-    const compiled = this.planQuery(plan);
-    return this.using((client) => this.entries(client, compiled));
+    this.validatePlan(plan);
+    return this.using((client) => this.entries(client, this.planQuery(plan)));
+  }
+
+  /**
+   * Checks plan columns and bind count before connecting to PostgreSQL.
+   *
+   * @param plan The normalized query definition.
+   */
+  private validatePlan(plan: NormalizedQueryPlan<I>): void {
+    for (const item of plan.order ?? []) this.column(item.column);
+    const visit = (predicate: NormalizedQueryPredicate<I>): void => {
+      if (predicate.kind === "comparison") this.column(predicate.column);
+      if (predicate.kind === "all" || predicate.kind === "either")
+        for (const child of predicate.predicates) visit(child);
+    };
+    if (plan.predicate !== undefined) visit(plan.predicate);
+    if (!plan.exhaustive && this.predicateBindCount(plan.predicate) >= maximumNormalizedPlanBinds)
+      throw new PostgresStorageOperationError(
+        "PostgreSQL normalized query exceeds the 1000-parameter bind budget.",
+      );
   }
 
   /**
@@ -490,8 +696,19 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @param work Performs the client work.
    * @returns The value returned by the work.
    */
-  private async using<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
-    await this.prepare();
+  private using<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    return this.lifecycle.track(this.usePrepared(work));
+  }
+
+  /**
+   * Executes one prepared record operation on a released client.
+   *
+   * @typeParam T The operation result.
+   * @param work Performs the client operation.
+   * @returns The operation result.
+   */
+  private async usePrepared<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    await this.prepareInternal();
     const client = await this.lifecycle.acquire();
     let discard = false;
     try {
@@ -513,8 +730,19 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @param work Operations to run on the acquired client.
    * @returns Result after commit.
    */
-  private async transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
-    await this.prepare();
+  private transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    return this.lifecycle.track(this.transactionPrepared(work));
+  }
+
+  /**
+   * Executes one prepared Agent transaction on a released client.
+   *
+   * @typeParam T The transaction result.
+   * @param work Performs work on the transaction client.
+   * @returns The committed result.
+   */
+  private async transactionPrepared<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    await this.prepareInternal();
     const client = await this.lifecycle.acquire();
     let releaseFailure: Error | undefined;
     try {

@@ -201,6 +201,7 @@ describe("PostgreSQL Agent execution provider boundary", () => {
       { historyExecutor: () => executor("agent_history"), close } as never,
       { historyExecutor: () => currentRow, close } as never,
       commits as never,
+      <T>(work: () => Promise<T>) => work(),
     );
     try {
       const page = await storage.pending({

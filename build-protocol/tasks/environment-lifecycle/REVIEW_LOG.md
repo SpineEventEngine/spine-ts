@@ -401,3 +401,90 @@ no extra review. All four concerns accepted with explicit immutable expected
 profiles and runtime metadata limitation recorded. No source changes after
 current evidence. Commit/push shared contract and memory slice; full release
 and persistent-provider preparation remain pending.
+
+## M4b PostgreSQL offline binding review
+
+Frozen baseline 6991951cc to current authored diff. Preflight passes 158 unit,
+19 live PostgreSQL and 73 focused coverage tests; build/tooling, static and narrow
+documentation checks pass. External postgres-offline-evidence.md records exact
+commands and the limitation of focused coverage thresholds. Model preparation
+remains M4c. No production edits while the review wave runs.
+
+Reuse verified explicitly dispatched immutable profiles: provider_reliability,
+performance_reliability_reviewer, gpt-6-sol/medium; provider_style,
+style_maintainability_reviewer, gpt-6-sol/medium; repository_api_review,
+typescript_api_docs_reviewer, gpt-6-sol/medium; provider_documentation,
+documentation_reviewer, gpt-6-luna/medium. Desktop supports explicit profiles;
+runtime self-introspection is unavailable. Technical lanes first, documentation
+as capacity frees. All four concerns are collected before a correction batch to
+the existing implementer. Estimate 0.3-0.6 hours including bounded corrections.
+Reviewers may write external evidence only; no source changes or child agents.
+
+Parent independently parsed current focused LCOV against added executable lines:
+PostgreSQL factory 102/108 hit, record storage 33/43 hit. Unhit factory paths
+include impossible shared-options fallback, unbound assertions and reservation
+failure/collision paths; unhit record paths include Agent transaction wrappers
+covered by the separate live run but not this narrow LCOV. This is changed-line
+inspection, not a global coverage claim. Reliability review is checking the
+public-record admission fence during an already pending factory close; admitted
+private commit work must still drain. No correction before the complete wave.
+
+M4b all concern outcomes collected: API accepts signatures/callers with stale
+Builder.build return TSDoc; documentation requests that missing shared schemas
+can be discovered by checkConnection as well as first use; style has no blocking
+findings, with a narrow on-prefix callback rename accepted alongside edits.
+Reliability confirms P1: public record operations remain admissible after the
+factory fence, and tracking inner SQL attempts misses accepted writeAll/CAS
+continuations. Fix both parts together: reject newly started public work while
+retaining every accepted operation through all steps and private commit work.
+P2: a temporary check pool's cleanup failure replaces the primary connection/
+schema error; preserve both safely while attempting cleanup. Add focused tests
+for close during multi-step work, new public work during close, and simultaneous
+probe/cleanup failure. No invented lifecycle framework or new public binding API.
+
+One correction batch to the same explicit immutable Sol/medium implementer,
+estimate 0.2-0.4 hours including focused regression tests and static checks.
+Targeted reliability confirmation follows; other concerns need deterministic
+comment/wording verification only. Final reliability report may refine these
+confirmed findings without reopening the complete wave.
+
+M4b correction exposes a directly related admission gap in public higher-level
+PostgreSQL Entity/Agent history wrappers: their private historyExecutor using/
+transaction continuations bypass the new public RecordStorage gate, and wrapper
+open flags remain true during factory drain. Do not accept this as a completed
+factory shutdown guarantee. Extend the same correction to actual wrapper public
+entries, with retained whole-operation promises before caller callbacks. Private
+already accepted continuation must still work. Keep the mechanism provider-local
+and narrowly reused from M4b; no shared public API or generic lifecycle framework.
+Estimate additional 0.2-0.4 hours for wrappers, focused tests and confirmation.
+Same implementer remains responsible for affected PostgreSQL files. Targeted
+reliability review must cover these paths too; scheduled Agent recovery removal
+is not permission to preserve a current shutdown race.
+
+M4b correction runtime/tests frozen after 106 affected unit tests, 103 focused
+coverage tests and 6 live PostgreSQL Agent-history tests passed. Build/tooling,
+ESLint, cleanup, TSDoc and generated documentation gates pass. Parent corrected
+its work-log formatting; remaining full format/diff checks run before commit.
+Reliability and style are substantively affected by provider-local wrapper
+admission and need targeted confirmation. Reuse the verified immutable explicit
+Sol/medium profiles provider_reliability and provider_style. Full TASK ledger and
+external postgres-offline-correction-review.md define the bounded scope. No
+further source edits until both return; no test reruns by reviewers. API/docs
+changes remain deterministic with unchanged public contracts. Estimate 0.2-0.3
+hours including any final bounded correction and commit/push. Actual runtime
+metadata is not introspectable; explicit original dispatches remain the evidence.
+
+M4b accepted: targeted reliability confirms public record/full-wrapper admission,
+continued accepted work, late private Agent coordinator cleanup and preserved dual
+check failures. No P0-P2 remains. Targeted style is clean; previous API/docs
+wording corrections are verified. Both reviews used their recorded explicit
+immutable Sol/medium profiles. Source ordering proves late Agent completion;
+focused coordinator test uses a private seam, not complete end-to-end shutdown.
+Parent reran the changed live Agent-execution suite: 1/1 passed. Prior live audit
+6/6 and initial live19 remain recorded separately. Full formatting and diff pass.
+
+Parent inspected fresh narrow LCOV changed executable lines: factory121/133,
+record51/57, Entity-history22/25; Agent audit0/3 and execution0/9 are outside the
+three-suite coverage run, covered by separate focused/live tests. This is not a
+global coverage claim. Final release coverage remains mandatory. No blocker for
+this bounded checkpoint; M4c will use the provider lifecycle now established.

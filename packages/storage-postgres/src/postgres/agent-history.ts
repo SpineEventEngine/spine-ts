@@ -25,7 +25,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 
-import { PostgresRecordStorage } from "./record-storage.js";
+import { PostgresRecordStorage, type OnPublicOperation } from "./record-storage.js";
 
 /**
  * Hashes complete identities into bounded physical IDs and indexed scope keys.
@@ -65,10 +65,12 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
    *
    * @param input Repository and complete tenant scope.
    * @param records Native record-family storage.
+   * @param onAdmit Admits complete public Agent-history operations.
    */
   constructor(
     private readonly input: AgentHistoryStorageInput<Id>,
     private readonly records: PostgresRecordStorage<string, AgentHistoryRecord>,
+    private readonly onAdmit: OnPublicOperation,
   ) {}
 
   /**
@@ -78,7 +80,17 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @param entry Complete history entry.
    * @returns Completion after immutable storage confirms the entry.
    */
-  async append(entityId: Id, entry: AgentHistoryEntry): Promise<void> {
+  append(entityId: Id, entry: AgentHistoryEntry): Promise<void> {
+    return this.onAdmit(() => this.appendAdmitted(entityId, entry));
+  }
+
+  /**
+   * Writes admitted Agent history.
+   * @param entityId Typed Agent identifier.
+   * @param entry Complete history entry.
+   * @returns Completion after immutable storage confirms the entry.
+   */
+  private async appendAdmitted(entityId: Id, entry: AgentHistoryEntry): Promise<void> {
     this.requireOpen();
     await this.ready();
     await this.records.writeImmutable(
@@ -92,7 +104,16 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @param request Typed Agent, view, continuation, and response limits.
    * @returns Original entries and continuation status.
    */
-  async read(request: AgentHistoryRead<Id>): Promise<AgentHistoryPage> {
+  read(request: AgentHistoryRead<Id>): Promise<AgentHistoryPage> {
+    return this.onAdmit(() => this.readAdmitted(request));
+  }
+
+  /**
+   * Reads an admitted Agent-history page.
+   * @param request Typed Agent view and continuation limits.
+   * @returns Original entries and continuation status.
+   */
+  private async readAdmitted(request: AgentHistoryRead<Id>): Promise<AgentHistoryPage> {
     this.requireOpen();
     await this.ready();
     const agentKey = this.key(request.entityId);

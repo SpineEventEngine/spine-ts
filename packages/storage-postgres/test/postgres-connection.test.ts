@@ -13,7 +13,8 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { TenantIdSchema } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import { RecordSpec } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -41,10 +42,52 @@ const driver = vi.hoisted(() => {
 vi.mock("pg", () => ({ Pool: driver.Pool, types: { setTypeParser: driver.setTypeParser } }));
 
 import { PostgresStorageFactory } from "../src/index.js";
+import { providerEntityInput } from "../../storage/test/entity/agent-execution-provider-fixtures.js";
 
 describe("PostgresStorageFactory connection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("builds and creates a logical record handle without opening a connection", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine" })
+      .build();
+    const handle = factory.createRecordStorage(
+      { name: "Tasks", multitenant: false },
+      new RecordSpec({
+        recordType: EventSchema,
+        idSchema: EventIdSchema,
+        extractId: (event) => {
+          if (event.id === undefined) throw new Error("Expected Event.id");
+          return event.id;
+        },
+      }),
+    );
+    expect(driver.Pool).not.toHaveBeenCalled();
+    expect(driver.connect).not.toHaveBeenCalled();
+    handle.close();
+    await factory.close();
+  });
+
+  it("keeps an admitted Agent coordinator independent of the public close snapshot", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine" })
+      .build();
+    const internal = factory as unknown as {
+      createEntityCommitStorage(
+        input: ReturnType<typeof providerEntityInput>,
+        admitted: boolean,
+      ): {
+        close(): Promise<void>;
+      };
+    };
+    const coordinator = internal.createEntityCommitStorage(providerEntityInput(), true);
+    const closeCoordinator = vi.spyOn(coordinator, "close");
+    await factory.close();
+    expect(closeCoordinator).not.toHaveBeenCalled();
+    await coordinator.close();
+    expect(closeCoordinator).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -68,12 +111,15 @@ describe("PostgresStorageFactory connection", () => {
         .setOptions({ url: "postgresql://db.example/spine", schema: "bad-name" })
         .build(),
     ).rejects.toThrow(/schema/i);
-    await expect(PostgresStorageFactory.newBuilder().setTenantOptions([]).build()).rejects.toThrow(
-      /requires tenants/i,
-    );
+    await expect(
+      PostgresStorageFactory.newBuilder()
+        .setOptions({ url: "postgresql://db.example/spine" })
+        .setTenantOptions([])
+        .build(),
+    ).rejects.toThrow(/requires tenants/i);
   });
 
-  it("rejects missing or mixed single-tenant and multitenant configuration", async () => {
+  it("requires shared options and rejects both tenant-selection modes", async () => {
     await expect(PostgresStorageFactory.newBuilder().build()).rejects.toThrow(
       /options are required/i,
     );
@@ -83,8 +129,9 @@ describe("PostgresStorageFactory connection", () => {
         .setTenantOptions([
           { tenantId: tenant("one"), options: { url: "postgresql://db.example/one" } },
         ])
+        .setTenantResolver(() => ({ url: "postgresql://db.example/two" }))
         .build(),
-    ).rejects.toThrow(/either single-tenant or multitenant/i);
+    ).rejects.toThrow(/either tenant options or a tenant resolver/i);
   });
 
   it.each([
@@ -106,7 +153,7 @@ describe("PostgresStorageFactory connection", () => {
     expect(driver.Pool).not.toHaveBeenCalled();
   });
 
-  it("uses the server current schema and rejects unavailable or retired layouts", async () => {
+  it("checks the server current schema without probing retired layouts", async () => {
     driver.query.mockImplementation((sql: string) => {
       if (sql.includes("current_schema")) return Promise.resolve({ rows: [{ schema: "spine" }] });
       if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
@@ -117,6 +164,7 @@ describe("PostgresStorageFactory connection", () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: "postgresql://db.example/spine" })
       .build();
+    await factory.checkConnection();
     await factory.close();
 
     expect(driver.query.mock.calls.some(([sql]) => sql.includes("current_schema"))).toBe(true);
@@ -124,11 +172,11 @@ describe("PostgresStorageFactory connection", () => {
     driver.query.mockImplementation((sql: string) =>
       Promise.resolve({ rowCount: sql.includes("schemata") ? 0 : 0, rows: [] }),
     );
-    await expect(
-      PostgresStorageFactory.newBuilder()
-        .setOptions({ url: "postgresql://db.example/spine", schema: "missing" })
-        .build(),
-    ).rejects.toThrow(/schema does not exist/i);
+    const missing = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "missing" })
+      .build();
+    await expect(missing.checkConnection()).rejects.toThrow(/schema does not exist/i);
+    await missing.close();
 
     driver.query.mockImplementation((sql: string) => {
       if (sql.includes("schemata")) return Promise.resolve({ rowCount: 1, rows: [] });
@@ -136,11 +184,14 @@ describe("PostgresStorageFactory connection", () => {
         return Promise.resolve({ rowCount: 1, rows: [] });
       return Promise.resolve({ rowCount: 0, rows: [] });
     });
-    await expect(
-      PostgresStorageFactory.newBuilder()
-        .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
-        .build(),
-    ).rejects.toThrow(/retired storage layout/i);
+    const retired = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    await expect(retired.checkConnection()).resolves.toBeUndefined();
+    expect(
+      driver.query.mock.calls.some(([sql]) => sql.includes("information_schema.columns")),
+    ).toBe(false);
+    await retired.close();
   });
 
   it("rejects an absent or invalid server current schema", async () => {
@@ -149,11 +200,11 @@ describe("PostgresStorageFactory connection", () => {
       return Promise.resolve({ rowCount: 0, rows: [] });
     });
 
-    await expect(
-      PostgresStorageFactory.newBuilder()
-        .setOptions({ url: "postgresql://db.example/spine" })
-        .build(),
-    ).rejects.toThrow(/schema is invalid/i);
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine" })
+      .build();
+    await expect(factory.checkConnection()).rejects.toThrow(/schema is invalid/i);
+    await factory.close();
   });
 
   it("lists configured tenants and rejects an unknown retained tenant", async () => {
@@ -163,6 +214,7 @@ describe("PostgresStorageFactory connection", () => {
     const first = tenant("one");
     const second = tenant("two");
     const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
       .setTenantOptions([
         { tenantId: first, options: { url: "postgresql://db.example/one", schema: "spine" } },
         { tenantId: second, options: { url: "postgresql://db.example/two", schema: "spine" } },
@@ -207,11 +259,61 @@ describe("PostgresStorageFactory connection", () => {
     await factory.close();
   });
 
+  it("does not enumerate or resolve a dynamic tenant during shared checks", async () => {
+    driver.query.mockImplementation((sql: string) =>
+      Promise.resolve({ rowCount: sql.includes("schemata") ? 1 : 0, rows: [] }),
+    );
+    const resolve = vi.fn(() => ({ url: "postgresql://db.example/tenant" }));
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .setTenantResolver(resolve)
+      .build();
+    await factory.checkConnection();
+    await expect(factory.tenantCatalog().all()).resolves.toEqual([]);
+    await expect(
+      factory.tenantCatalog().keep(TenantBoundary.from(tenant("dynamic"))),
+    ).resolves.toBeUndefined();
+    expect(resolve).not.toHaveBeenCalled();
+    await factory.close();
+  });
+
+  it("drains an admitted shared check before factory close settles", async () => {
+    let admit: ((client: Awaited<ReturnType<typeof driver.connect>>) => void) | undefined;
+    let entered: (() => void) | undefined;
+    const connecting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    driver.connect.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          admit = resolve;
+          entered?.();
+        }),
+    );
+    driver.query.mockImplementation((sql: string) =>
+      Promise.resolve({ rowCount: sql.includes("schemata") ? 1 : 0, rows: [] }),
+    );
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .build();
+    const checking = factory.checkConnection();
+    await connecting;
+    const closing = factory.close();
+    expect(driver.end).not.toHaveBeenCalled();
+    if (admit === undefined) throw new Error("Expected gated PostgreSQL connection.");
+    admit({ query: driver.query, release: driver.release });
+    await checking;
+    await closing;
+    expect(driver.end).toHaveBeenCalledOnce();
+    await expect(factory.checkConnection()).rejects.toThrow(/closed/i);
+  });
+
   it("rejects duplicate tenants and normalized physical database targets", async () => {
     const one = tenant("one");
     const two = tenant("two");
     await expect(
       PostgresStorageFactory.newBuilder()
+        .setOptions({ url: "postgresql://db.example/shared" })
         .setTenantOptions([
           { tenantId: one, options: { url: "postgresql://db.example/one" } },
           { tenantId: one, options: { url: "postgresql://db.example/two" } },
@@ -220,6 +322,7 @@ describe("PostgresStorageFactory connection", () => {
     ).rejects.toThrow(/duplicate tenant/i);
     await expect(
       PostgresStorageFactory.newBuilder()
+        .setOptions({ url: "postgresql://db.example/shared" })
         .setTenantOptions([
           { tenantId: one, options: { url: "postgresql://db.example/shared" } },
           { tenantId: two, options: { url: "postgresql://DB.EXAMPLE:5432/SHARED" } },
@@ -233,49 +336,60 @@ describe("PostgresStorageFactory connection", () => {
       new Error("postgresql://user:secret@db.example/spine SQL"),
     );
 
-    await expect(
-      PostgresStorageFactory.newBuilder()
-        .setOptions({ url: "postgresql://user:secret@db.example/spine" })
-        .build(),
-    ).rejects.toThrow("Unable to connect to PostgreSQL.");
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://user:secret@db.example/spine" })
+      .build();
+    await expect(factory.checkConnection()).rejects.toThrow("Unable to connect to PostgreSQL.");
+    await factory.close();
   });
 
-  it("closes every created pool after a later pool fails its probe", async () => {
+  it("reports both a failed connection probe and failed temporary-pool cleanup", async () => {
+    driver.connect.mockRejectedValueOnce(new Error("secret connection failure"));
+    driver.end.mockRejectedValueOnce(new Error("secret cleanup failure"));
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine" })
+      .build();
+    const result = await Promise.allSettled([factory.checkConnection()]);
+    if (result[0].status !== "rejected") throw new Error("Expected failed connection check.");
+    const failure = result[0].reason as AggregateError;
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect(failure.errors.map((error: Error) => error.message)).toEqual([
+      "Unable to connect to PostgreSQL.",
+      "Unable to close PostgreSQL check pool.",
+    ]);
+    await factory.close();
+  });
+
+  it("reports temporary-pool cleanup failure after a successful probe", async () => {
+    driver.end.mockRejectedValueOnce(new Error("secret cleanup failure"));
+    driver.query.mockResolvedValue({ rowCount: 1, rows: [] });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    await expect(factory.checkConnection()).rejects.toThrow(
+      "Unable to close PostgreSQL check pool.",
+    );
+    await factory.close();
+  });
+
+  it("closes a temporary pool when its explicit check fails", async () => {
     const first = {
       connect: vi.fn(() => Promise.resolve({ query: driver.query, release: driver.release })),
-      end: vi.fn(() => Promise.resolve()),
-    };
-    const second = {
-      connect: vi.fn(() => Promise.reject(new Error("secret driver error"))),
       end: vi.fn(() => Promise.resolve()),
     };
     driver.Pool.mockImplementationOnce(function Pool() {
       return first;
     });
-    driver.Pool.mockImplementationOnce(function Pool() {
-      return second;
-    });
     driver.query.mockImplementation((sql: string) =>
       Promise.resolve({ rowCount: sql.includes("schemata") ? 1 : 0, rows: [] }),
     );
 
-    await expect(
-      PostgresStorageFactory.newBuilder()
-        .setTenantOptions([
-          {
-            tenantId: tenant("one"),
-            options: { url: "postgresql://db.example/one", schema: "spine" },
-          },
-          {
-            tenantId: tenant("two"),
-            options: { url: "postgresql://db.example/two", schema: "spine" },
-          },
-        ])
-        .build(),
-    ).rejects.toThrow("Unable to connect to PostgreSQL.");
-
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/one", schema: "spine" })
+      .build();
+    await expect(factory.checkConnection()).resolves.toBeUndefined();
     expect(first.end).toHaveBeenCalledOnce();
-    expect(second.end).toHaveBeenCalledOnce();
+    await factory.close();
   });
 
   it("proves an explicit-schema pool and releases its probe before idempotent close", async () => {
@@ -292,6 +406,7 @@ describe("PostgresStorageFactory connection", () => {
         tls: { rejectUnauthorized: false },
       })
       .build();
+    await factory.checkConnection();
     await factory.close();
     await factory.close();
     await Promise.resolve();

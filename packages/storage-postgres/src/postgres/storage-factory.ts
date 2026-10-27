@@ -44,7 +44,11 @@ import {
 import { Pool, type PoolConfig, type PoolClient } from "pg";
 
 import { PostgresStorageConfigurationError, PostgresStorageConnectionError } from "./errors.js";
-import { PostgresRecordStorage, type PostgresRecordLifecycle } from "./record-storage.js";
+import {
+  PostgresRecordStorage,
+  type OnPublicOperation,
+  type PostgresRecordLifecycle,
+} from "./record-storage.js";
 import { PostgresEntityStorage } from "./entity-history.js";
 import { PostgresAgentHistory, AgentHistoryHash } from "./agent-history.js";
 import { PostgresAgentExecution } from "./agent-execution.js";
@@ -123,6 +127,16 @@ export interface PostgresTenantStorageOptions {
    */
   readonly options: PostgresStorageFactoryOptions;
 }
+
+/**
+ * Resolves connection options for one complete generated tenant.
+ *
+ * @param tenantId The complete generated tenant identifier.
+ * @returns Configured options or their asynchronous result.
+ */
+export type PostgresTenantResolver = (
+  tenantId: TenantId,
+) => PostgresStorageFactoryOptions | Promise<PostgresStorageFactoryOptions>;
 
 /**
  * Describes one resolved PostgreSQL record-family table.
@@ -251,6 +265,14 @@ export interface PostgresStorageFactoryBuilder {
   setTenantOptions(entries: readonly PostgresTenantStorageOptions[]): this;
 
   /**
+   * Sets an application directory for tenant database settings.
+   *
+   * @param resolver Resolves one complete tenant identifier.
+   * @returns This builder.
+   */
+  setTenantResolver(resolver: PostgresTenantResolver): this;
+
+  /**
    * Sets custom reversible message stringifiers used by IDs and columns.
    *
    * @param registry The schema-bound stringifier registry.
@@ -295,7 +317,7 @@ export interface PostgresStorageFactoryBuilder {
   /**
    * Builds a PostgreSQL storage factory.
    *
-   * @returns The initialized factory.
+   * @returns A logical factory without a connection or schema probe.
    */
   build(): Promise<PostgresStorageFactory>;
 }
@@ -308,7 +330,19 @@ export class PostgresStorageFactory extends StorageFactory {
 
   readonly #commits = new Set<PostgresEntityCommitStorage<unknown, Message>>();
 
-  readonly #databases: ReadonlyMap<string | symbol, PostgresDatabase>;
+  readonly #databases = new Map<string | symbol, PostgresDatabase>();
+
+  readonly #pending = new Map<string | symbol, Promise<PostgresDatabase>>();
+
+  readonly #work = new Set<Promise<unknown>>();
+
+  readonly #configs: ReadonlyMap<string | symbol, PostgresDatabaseConfig>;
+
+  readonly #families = new Map<string, string | symbol>();
+
+  readonly #tenantTargets = new Map<string, string | symbol>();
+
+  #sharedCheck: Promise<void> | undefined;
 
   readonly #catalog: TenantCatalog;
 
@@ -318,22 +352,39 @@ export class PostgresStorageFactory extends StorageFactory {
   #closed: Promise<void> | undefined;
 
   /**
-   * Creates a connected factory from validated database resources.
+   * Creates a logical factory from locally validated settings.
    *
-   * @param databases Supply the configured tenant databases.
+   * @param configs Supply the configured database settings.
+   * @param tenantResolver Optionally resolves additional tenant settings.
    * @param resolver Resolves record families to physical table names.
    * @param operation Optionally creates custom table SQL.
    * @param stringifiers Convert message IDs and columns reversibly.
    */
   private constructor(
-    databases: readonly PostgresDatabase[],
+    configs: readonly PostgresDatabaseConfig[],
+    private readonly tenantResolver: PostgresTenantResolver | undefined,
     private readonly resolver: PostgresTableResolver,
     private readonly operation: PostgresCreateOperationFactory | undefined,
     private readonly stringifiers: StringifierRegistry,
   ) {
     super();
-    this.#databases = new Map(databases.map((database) => [database.boundary.key, database]));
-    this.#catalog = new PostgresTenantCatalog(databases.map(({ boundary }) => boundary));
+    this.#configs = new Map(configs.map((config) => [config.boundary.key, config]));
+    for (const config of configs)
+      if (!config.boundary.single) this.#tenantTargets.set(config.target, config.boundary.key);
+    const tenants = configs.filter(({ boundary }) => !boundary.single);
+    this.#catalog = new PostgresTenantCatalog(
+      tenants.length || tenantResolver !== undefined
+        ? tenants.map(({ boundary }) => boundary)
+        : [TenantBoundary.single],
+      tenantResolver !== undefined,
+    );
+    this.registerPorts();
+  }
+
+  /**
+   * Registers the built-in Entity and Agent provider ports.
+   */
+  private registerPorts(): void {
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
@@ -347,6 +398,7 @@ export class PostgresStorageFactory extends StorageFactory {
             AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
             AgentHistoryRecords.group,
           ),
+          (work) => this.admitPublic(work),
         );
       },
     });
@@ -387,7 +439,8 @@ export class PostgresStorageFactory extends StorageFactory {
         AgentHistoryRecords.group,
       ),
       this.createPostgresRecordStorage(context, input.entity.recordSpec),
-      () => this.createEntityCommitStorage(input.entity),
+      () => this.createEntityCommitStorage(input.entity, true),
+      (work) => this.admitPublic(work),
     );
   }
 
@@ -397,8 +450,9 @@ export class PostgresStorageFactory extends StorageFactory {
    * @returns A new builder.
    */
   static newBuilder(): PostgresStorageFactoryBuilder {
-    return new Builder((entries, resolver, operation, stringifiers) =>
-      PostgresStorageFactory.connect(entries, resolver, operation, stringifiers),
+    return new Builder(
+      (entries, tenantResolver, resolver, operation, stringifiers) =>
+        new PostgresStorageFactory(entries, tenantResolver, resolver, operation, stringifiers),
     );
   }
 
@@ -409,6 +463,82 @@ export class PostgresStorageFactory extends StorageFactory {
    */
   tenantCatalog(): TenantCatalog {
     return this.#catalog;
+  }
+
+  /**
+   * Checks the shared destination without creating tables or retaining a pool.
+   *
+   * @returns Completion after a read-only schema check.
+   */
+  override checkConnection(): Promise<void> {
+    if (!this.isOpen()) return Promise.reject(new Error("StorageFactory is closed."));
+    if (this.#sharedCheck !== undefined) return this.#sharedCheck;
+    const shared = this.#configs.get(TenantBoundary.single.key);
+    if (shared === undefined)
+      return Promise.reject(new Error("Shared PostgreSQL options are missing."));
+    this.#sharedCheck = Promise.resolve()
+      .then(() => this.checkShared(shared))
+      .catch((error: unknown) => {
+        this.#sharedCheck = undefined;
+        throw error;
+      });
+    return this.#sharedCheck;
+  }
+
+  /**
+   * Checks the shared schema using an existing or temporary pool.
+   *
+   * @param config The shared connection settings.
+   * @returns Completion after the read-only probe.
+   */
+  private async checkShared(config: PostgresDatabaseConfig): Promise<void> {
+    const existing = this.#databases.get(config.boundary.key);
+    const pool = existing?.pool ?? new Pool(config.poolOptions);
+    let failure: Error | undefined;
+    try {
+      const client = await pool.connect();
+      try {
+        await PostgresSchemas.resolve(client, config.schema);
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      failure =
+        error instanceof PostgresStorageConfigurationError
+          ? error
+          : new PostgresStorageConnectionError("Unable to connect to PostgreSQL.", {
+              cause: error,
+            });
+    }
+    if (existing !== undefined) {
+      if (failure !== undefined) throw failure;
+      return;
+    }
+    await this.closeCheckedPool(pool, failure);
+  }
+
+  /**
+   * Closes a temporary check pool without replacing a failed probe.
+   *
+   * @param pool The temporary pool to dispose.
+   * @param failure The classified probe failure, if any.
+   * @returns Completion after disposal or a preserved failure.
+   */
+  private async closeCheckedPool(pool: Pool, failure: Error | undefined): Promise<void> {
+    try {
+      await pool.end();
+    } catch (error) {
+      const cleanup = new PostgresStorageConnectionError("Unable to close PostgreSQL check pool.", {
+        cause: error,
+      });
+      if (failure !== undefined)
+        throw new AggregateError(
+          [failure, cleanup],
+          "PostgreSQL connection check and cleanup failed.",
+        );
+      throw cleanup;
+    }
+    if (failure !== undefined) throw failure;
   }
 
   /**
@@ -438,7 +568,7 @@ export class PostgresStorageFactory extends StorageFactory {
     recordSpec: RecordSpec<I, R>,
     group?: StorageGroup,
   ): RecordStorage<I, R> {
-    return this.createPostgresRecordStorage(context, recordSpec, group);
+    return this.createPostgresRecordStorage(context, recordSpec, group, true, true);
   }
 
   /**
@@ -451,40 +581,67 @@ export class PostgresStorageFactory extends StorageFactory {
    * @param group Optionally separates records sharing a source type.
    * @returns The live PostgreSQL record handle.
    * @param tracked Whether the factory tracks this public handle.
+   * @param publicHandle Whether factory closure fences new work on this handle.
    */
   private createPostgresRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     group?: StorageGroup,
     tracked = true,
+    publicHandle = false,
   ): PostgresRecordStorage<I, R> {
-    const database = this.database(context);
+    const boundary = this.database(context);
     const table = this.resolver.resolve(
       recordSpec.sourceType.typeName,
       group?.name,
       undefined,
       recordSpec.recordType.typeName,
     );
-    const spec = PostgresTableSpecs.resolvedPostgresTableSpec({
-      schema: database.schema,
-      tableName: table.tableName,
+    const operation = this.operation;
+    const handle = new PostgresRecordStorage(
+      context,
+      recordSpec,
+      table.tableName,
+      (schema) => this.tableSpec(boundary, table.tableName, schema, recordSpec, group),
+      this.connections(boundary, publicHandle),
+      () => this.#handles.delete(handle),
+      operation === undefined ? undefined : (resolved) => operation(resolved).sql,
+      this.stringifiers,
+    );
+    if (tracked) this.#handles.add(handle);
+    return handle;
+  }
+
+  /**
+   * Builds a schema-bound layout after checking physical scope separation.
+   *
+   * @typeParam I The record ID type.
+   * @typeParam R The stored record type.
+   * @param boundary The captured tenant scope.
+   * @param tableName The locally selected table name.
+   * @param schema The server-selected schema.
+   * @param recordSpec The declared record family.
+   * @param group The optional group.
+   * @returns The resolved physical layout.
+   */
+  private tableSpec<I, R extends Message>(
+    boundary: TenantBoundary,
+    tableName: string,
+    schema: string,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): PostgresTableSpec<I, R> {
+    const table = PostgresTableSpecs.resolvedPostgresTableSpec({
+      schema,
+      tableName,
       sourceType: recordSpec.sourceType,
       recordType: recordSpec.recordType,
       idType: recordSpec.idType,
       ...(group === undefined ? {} : { groupName: group.name }),
       declaredColumns: recordSpec.columns,
     });
-    const handle = new PostgresRecordStorage(
-      context,
-      recordSpec,
-      spec,
-      this.connections(database),
-      () => this.#handles.delete(handle),
-      this.operation === undefined ? undefined : createOperation(this.operation, spec),
-      this.stringifiers,
-    );
-    if (tracked) this.#handles.add(handle);
-    return handle;
+    this.assertFamily(boundary, tableName, schema);
+    return table;
   }
 
   /**
@@ -505,6 +662,7 @@ export class PostgresStorageFactory extends StorageFactory {
       this.createPostgresRecordStorage(input.context, input.recordSpec),
       (spec, group) => this.createPostgresRecordStorage(input.context, spec, group),
       () => this.#handles.delete(registration.handle),
+      (work) => this.admitPublic(work),
     );
     registration.handle = handle;
     this.#handles.add(handle);
@@ -517,12 +675,14 @@ export class PostgresStorageFactory extends StorageFactory {
    * @typeParam I The Entity identifier type.
    * @typeParam S The Entity state message type.
    * @param input Supplies the Entity storage configuration.
+   * @param admitted Allows a previously admitted Agent operation to open its private commit port.
    * @returns A factory-managed Entity commit handle.
    */
   private createEntityCommitStorage<I, S extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityStorageInput<I, S>,
+    admitted = false,
   ): PostgresEntityCommitStorage<I, S> {
-    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    if (!admitted && !this.isOpen()) throw new Error("StorageFactory is closed.");
     const registration = {} as { handle: PostgresEntityCommitStorage<I, S> };
     const handle = new PostgresEntityCommitStorage(
       input,
@@ -531,7 +691,7 @@ export class PostgresStorageFactory extends StorageFactory {
         this.#commits.delete(registration.handle as PostgresEntityCommitStorage<unknown, Message>),
     );
     registration.handle = handle;
-    this.#commits.add(handle as PostgresEntityCommitStorage<unknown, Message>);
+    if (!admitted) this.#commits.add(handle as PostgresEntityCommitStorage<unknown, Message>);
     return handle;
   }
 
@@ -545,6 +705,7 @@ export class PostgresStorageFactory extends StorageFactory {
     const errors: unknown[] = [];
     for (const result of await Promise.allSettled(commits))
       if (result.status === "rejected") errors.push(result.reason);
+    await Promise.allSettled([...this.#work, ...this.#pending.values(), this.#sharedCheck]);
     for (const handle of [...this.#handles]) {
       try {
         handle.close();
@@ -566,32 +727,6 @@ export class PostgresStorageFactory extends StorageFactory {
   }
 
   /**
-   * Connects every configured database before exposing a factory.
-   *
-   * @param entries Supply validated database configurations.
-   * @param resolver Resolves physical table names.
-   * @param operation Optionally creates custom table SQL.
-   * @param stringifiers Convert message values reversibly.
-   * @returns The connected factory.
-   */
-  private static async connect(
-    entries: readonly PostgresDatabaseConfig[],
-    resolver = new PostgresTableResolver(),
-    operation?: PostgresCreateOperationFactory,
-    stringifiers = new StringifierRegistry(),
-  ): Promise<PostgresStorageFactory> {
-    const connected: PostgresDatabase[] = [];
-    try {
-      for (const entry of entries) connected.push(await PostgresStorageFactory.prove(entry));
-      return new PostgresStorageFactory(connected, resolver, operation, stringifiers);
-    } catch (error) {
-      await Promise.all(connected.map(({ pool }) => pool.end().catch(() => undefined)));
-      if (error instanceof PostgresStorageConfigurationError) throw error;
-      throw new PostgresStorageConnectionError("Unable to connect to PostgreSQL.");
-    }
-  }
-
-  /**
    * Opens one pool and proves its selected schema is usable.
    *
    * @param entry Supplies one database configuration.
@@ -604,7 +739,13 @@ export class PostgresStorageFactory extends StorageFactory {
       try {
         const schema = await PostgresSchemas.resolve(client, entry.schema);
         await PostgresSchemas.assertUsable(client, schema);
-        return { boundary: entry.boundary, pool, schema, databaseName: entry.databaseName };
+        return {
+          boundary: entry.boundary,
+          pool,
+          schema,
+          target: entry.target,
+          databaseName: entry.databaseName,
+        };
       } finally {
         client.release();
       }
@@ -615,15 +756,15 @@ export class PostgresStorageFactory extends StorageFactory {
   }
 
   /**
-   * Finds the configured database for a storage context.
+   * Captures a configured or resolvable tenant boundary.
    *
    * @param context Identifies the tenant boundary.
-   * @returns The matching database resource.
+   * @returns The validated boundary.
    */
-  private database(context: StorageContext): PostgresDatabase {
+  private database(context: StorageContext): TenantBoundary {
     const boundary = TenantBoundary.of(context);
-    const database = this.#databases.get(boundary.key);
-    if (database !== undefined) return database;
+    if (this.#configs.has(boundary.key) || (!boundary.single && this.tenantResolver !== undefined))
+      return boundary;
     throw new PostgresStorageConfigurationError(
       boundary.single
         ? "PostgreSQL storage is configured for multiple tenants."
@@ -634,15 +775,144 @@ export class PostgresStorageFactory extends StorageFactory {
   /**
    * Exposes record-lifecycle operations for one database resource.
    *
-   * @param database Supplies the connected database.
+   * @param boundary Identifies the captured tenant scope.
+   * @param publicHandle Whether the factory fence rejects new record calls.
    * @returns Its package-local record lifecycle.
    */
-  private connections(database: PostgresDatabase): PostgresRecordLifecycle {
-    return {
-      databaseName: database.databaseName,
-      schema: database.schema,
-      acquire: () => database.pool.connect(),
+  private connections(boundary: TenantBoundary, publicHandle: boolean): PostgresRecordLifecycle {
+    const database = (): PostgresDatabase => {
+      const resolved = this.#databases.get(boundary.key);
+      if (resolved === undefined) throw new Error("PostgreSQL database is not bound.");
+      return resolved;
     };
+    return {
+      resolve: () => this.resolveDatabase(boundary).then(() => undefined),
+      track: (work) => this.track(work),
+      publicOpen: () => !publicHandle || this.isOpen(),
+      get databaseName() {
+        return database().databaseName;
+      },
+      get schema() {
+        return database().schema;
+      },
+      acquire: () => database().pool.connect(),
+    };
+  }
+
+  /**
+   * Records an admitted provider operation until it settles.
+   *
+   * @typeParam T The operation result.
+   * @param work The admitted promise.
+   * @returns The original operation outcome.
+   */
+  private track<T>(work: Promise<T>): Promise<T> {
+    this.#work.add(work);
+    void work.then(
+      () => this.#work.delete(work),
+      () => this.#work.delete(work),
+    );
+    return work;
+  }
+
+  /**
+   * Admits a complete public wrapper operation before invoking application callbacks.
+   *
+   * @typeParam T The operation result.
+   * @param work The public operation to run.
+   * @returns The complete admitted outcome.
+   */
+  private admitPublic: OnPublicOperation = <T>(work: () => Promise<T>): Promise<T> => {
+    if (!this.isOpen()) return Promise.reject(new Error("StorageFactory is closed."));
+    const { promise, resolve, reject } = Promise.withResolvers<T>();
+    void this.track(promise);
+    try {
+      void work().then(resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+    return promise;
+  };
+
+  /**
+   * Resolves one physical destination once, retrying failed attempts.
+   *
+   * @param boundary The captured tenant scope.
+   * @returns The retained database resource.
+   */
+  private resolveDatabase(boundary: TenantBoundary): Promise<PostgresDatabase> {
+    const ready = this.#databases.get(boundary.key);
+    if (ready !== undefined) return Promise.resolve(ready);
+    const pending = this.#pending.get(boundary.key);
+    if (pending !== undefined) return pending;
+    const attempt = Promise.resolve()
+      .then(() => this.bindDatabase(boundary))
+      .then((database) => {
+        this.#databases.set(boundary.key, database);
+        return database;
+      })
+      .finally(() => this.#pending.delete(boundary.key));
+    this.#pending.set(boundary.key, attempt);
+    return attempt;
+  }
+
+  /**
+   * Resolves settings and proves the selected database without retaining failures.
+   *
+   * @param boundary The captured tenant scope.
+   * @returns The connected database resource.
+   */
+  private async bindDatabase(boundary: TenantBoundary): Promise<PostgresDatabase> {
+    let config = this.#configs.get(boundary.key);
+    if (config === undefined) {
+      if (boundary.tenantId === undefined || this.tenantResolver === undefined)
+        throw new PostgresStorageConfigurationError("PostgreSQL tenant is not configured.");
+      const options = await this.tenantResolver(boundary.tenantId);
+      config = PostgresConfigurations.parse(boundary, options);
+    }
+    const reserved = this.reserveTenantTarget(config);
+    try {
+      return await PostgresStorageFactory.prove(config);
+    } catch (error) {
+      if (reserved) this.#tenantTargets.delete(config.target);
+      if (error instanceof PostgresStorageConfigurationError) throw error;
+      throw new PostgresStorageConnectionError("Unable to connect to PostgreSQL.");
+    }
+  }
+
+  /**
+   * Records one physical tenant database before the first connection awaits.
+   *
+   * @param config The resolved tenant settings.
+   * @returns Whether this attempt added the reservation.
+   */
+  private reserveTenantTarget(config: PostgresDatabaseConfig): boolean {
+    if (config.boundary.single) return false;
+    const prior = this.#tenantTargets.get(config.target);
+    if (prior !== undefined && prior !== config.boundary.key)
+      throw new PostgresStorageConfigurationError(
+        "PostgreSQL tenants must use distinct physical databases.",
+      );
+    if (prior !== undefined) return false;
+    this.#tenantTargets.set(config.target, config.boundary.key);
+    return true;
+  }
+
+  /**
+   * Rejects shared and tenant records mapped to one unpartitioned table.
+   *
+   * @param boundary The selected storage scope.
+   * @param tableName The physical table name.
+   * @param schema The resolved server schema.
+   */
+  private assertFamily(boundary: TenantBoundary, tableName: string, schema: string): void {
+    const database = this.#databases.get(boundary.key);
+    if (database === undefined) throw new Error("PostgreSQL database is not bound.");
+    const key = `${database.target}\0${schema}\0${tableName}`;
+    const prior = this.#families.get(key);
+    if (prior !== undefined && prior !== boundary.key)
+      throw new PostgresStorageConfigurationError("Shared and tenant PostgreSQL tables collide.");
+    this.#families.set(key, boundary.key);
   }
 }
 
@@ -653,6 +923,8 @@ class Builder implements PostgresStorageFactoryBuilder {
   #options: PostgresStorageFactoryOptions | undefined;
 
   #tenantOptions: readonly PostgresTenantStorageOptions[] | undefined;
+
+  #tenantResolver: PostgresTenantResolver | undefined;
 
   #operationFactory: PostgresCreateOperationFactory | undefined;
 
@@ -685,6 +957,17 @@ class Builder implements PostgresStorageFactoryBuilder {
       tenantId,
       options: { ...options, ...(options.tls === undefined ? {} : { tls: { ...options.tls } }) },
     }));
+    return this;
+  }
+
+  /**
+   * Registers a tenant settings directory without querying it during build.
+   *
+   * @param resolver Resolves one generated tenant identifier.
+   * @returns This builder.
+   */
+  setTenantResolver(resolver: PostgresTenantResolver): this {
+    this.#tenantResolver = resolver;
     return this;
   }
 
@@ -755,37 +1038,48 @@ class Builder implements PostgresStorageFactoryBuilder {
   }
 
   /**
-   * Creates a builder with its factory connection function.
+   * Creates a builder with its local factory construction function.
    *
-   * @param connect Connects validated database configurations.
+   * @param assemble Constructs a logical factory.
    */
   constructor(
-    private readonly connect: (
+    private readonly assemble: (
       entries: readonly PostgresDatabaseConfig[],
+      tenantResolver: PostgresTenantResolver | undefined,
       resolver: PostgresTableResolver,
       operation: PostgresCreateOperationFactory | undefined,
       stringifiers: StringifierRegistry,
-    ) => Promise<PostgresStorageFactory>,
+    ) => PostgresStorageFactory,
   ) {}
 
   /**
-   * Validates the selected mode and connects a factory.
+   * Validates static settings and assembles a logical factory.
    *
-   * @returns The connected PostgreSQL storage factory.
+   * @returns The logical PostgreSQL storage factory without opening a connection.
    */
   build(): Promise<PostgresStorageFactory> {
     try {
-      if (this.#options === undefined && this.#tenantOptions === undefined)
+      if (this.#options === undefined)
         throw new PostgresStorageConfigurationError("PostgreSQL storage options are required.");
-      if (this.#options !== undefined && this.#tenantOptions !== undefined)
+      if (this.#tenantOptions !== undefined && this.#tenantResolver !== undefined)
         throw new PostgresStorageConfigurationError(
-          "Configure either single-tenant or multitenant PostgreSQL storage, not both.",
+          "Configure either tenant options or a tenant resolver, not both.",
         );
-      const entries =
-        this.#options === undefined
-          ? PostgresConfigurations.multitenant(this.#tenantOptions ?? [])
-          : [PostgresConfigurations.single(this.#options)];
-      return this.connect(entries, this.#resolver, this.#operationFactory, this.#stringifiers);
+      const entries = [
+        PostgresConfigurations.single(this.#options),
+        ...(this.#tenantOptions === undefined
+          ? []
+          : PostgresConfigurations.multitenant(this.#tenantOptions)),
+      ];
+      return Promise.resolve(
+        this.assemble(
+          entries,
+          this.#tenantResolver,
+          this.#resolver,
+          this.#operationFactory,
+          this.#stringifiers,
+        ),
+      );
     } catch (error) {
       return Promise.reject(
         error instanceof Error
@@ -804,6 +1098,7 @@ interface PostgresDatabase {
   readonly pool: Pool;
   readonly schema: string;
   readonly databaseName: string;
+  readonly target: string;
 }
 
 /**
@@ -826,9 +1121,13 @@ class PostgresTenantCatalog implements TenantCatalog {
   /**
    * Creates a catalog from configured tenant boundaries.
    *
-   * @param boundaries Supply the configured boundaries.
+   * @param boundaries Supply the enumerable configured boundaries.
+   * @param dynamic Whether application resolution accepts non-enumerable tenants.
    */
-  constructor(private readonly boundaries: readonly TenantBoundary[]) {}
+  constructor(
+    private readonly boundaries: readonly TenantBoundary[],
+    private readonly dynamic: boolean,
+  ) {}
 
   /**
    * Returns every configured boundary.
@@ -874,7 +1173,10 @@ class PostgresTenantCatalog implements TenantCatalog {
    * @returns A promise that resolves when the boundary is configured.
    */
   keep(boundary: TenantBoundary): Promise<void> {
-    if (!this.boundaries.some(({ key }) => key === boundary.key)) {
+    if (
+      !this.boundaries.some(({ key }) => key === boundary.key) &&
+      !(this.dynamic && !boundary.single)
+    ) {
       return Promise.reject(
         new PostgresStorageConfigurationError("PostgreSQL tenant is not configured."),
       );
@@ -1069,22 +1371,6 @@ const PostgresConfigurations = Object.freeze({
     return value === undefined || (Number.isInteger(value) && value > 0);
   },
 });
-
-/**
- * Adapts a public create-table operation to the record handle callback.
- *
- * @typeParam I The storage identifier type.
- * @typeParam R The stored Protobuf record type.
- * @param operation Creates a public operation for a resolved table.
- * @param table Supplies the resolved table specification.
- * @returns A callback that returns the operation SQL.
- */
-function createOperation<I, R extends Message>(
-  operation: PostgresCreateOperationFactory,
-  table: PostgresTableSpec<I, R>,
-): () => string {
-  return () => operation(table).sql;
-}
 
 /**
  * Resolves and validates schemas used by connected pools.
