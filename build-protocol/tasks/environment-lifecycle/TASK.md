@@ -8,8 +8,8 @@ Branch: `environment-lifecycle`. Baseline: freshly fetched official
 `origin/master` at `ff6c8669537a016c47f012150306500d3b52b5d1`.
 Worktree: `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
 The accepted [proposal](PROPOSAL.md) includes the complete Agent recovery-removal
-task. Implementation is pending. Existing behavior descriptions in the proposal
-refer to the baseline; proposed APIs become supported only after implementation.
+task. Implementation is in progress; the first repository retention checkpoint
+is pushed. Existing behavior descriptions in the proposal refer to the baseline; proposed APIs become supported only after implementation.
 
 ## Human-Imposed Requirements Ledger
 
@@ -57,14 +57,16 @@ Focused behavior tests precede runtime changes. Cheap preflight precedes
 specialist review and expensive gates. Use the release profile after convergence
 because shared runtime is affected. Every canonical review concern applies to
 the full task: maintainability, documentation, TypeScript/API and reliability.
-Final release-readiness security review remains required. No checks or reviews
-are claimed complete yet. Raw command outputs and dispatch evidence are kept
-outside version control in `/tmp/spine-environment-lifecycle-20261027`.
+Final release-readiness security review remains required. Baseline build and
+tooling typechecks, baseline tests and focused retention checks passed. Bounded
+reviews are recorded in REVIEW_LOG.md; full-task review and release verification
+remain pending. WORK_LOG.md records the current evidence. Raw command outputs
+and dispatch evidence are kept outside version control in `/tmp/spine-environment-lifecycle-20261027`.
 
 ## Remaining work
 
-Freeze bounded implementation milestones against current sources, then implement,
-verify and review each. Update public documentation and examples as interfaces
+The ordered milestones are frozen in MILESTONES.md. Continue implementing,
+verifying and reviewing each. Update public documentation and examples as interfaces
 stabilize. Run release checks, select an unused common workspace version, push
 every feature commit immediately, and report exact remote state. Do not create
 or merge a pull request without explicit human instruction.

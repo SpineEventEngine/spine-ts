@@ -153,8 +153,8 @@ live("MySQL-family record layout", () => {
         }
       }
     } finally {
-      first.close();
-      second.close();
+      await first.close();
+      await second.close();
     }
   });
 
@@ -477,7 +477,7 @@ live("MySQL-family record layout", () => {
         );
       }
     } finally {
-      eventStore.close();
+      await eventStore.close();
       eventRecords.close();
       commits.close();
       await pool.end();
@@ -614,7 +614,7 @@ live("MySQL-family record layout", () => {
     } finally {
       for (const table of tables) await pool.query(`ALTER TABLE \`${table}\` ENGINE=InnoDB`);
       eventRecords.close();
-      eventStore.close();
+      await eventStore.close();
       currentOnlyCommits.close();
       commits.close();
       await pool.end();
@@ -830,7 +830,7 @@ live("MySQL-family record layout", () => {
         left.events.map((event) => Buffer.from(toBinary(EventSchema, event))),
       );
     } finally {
-      eventStore.close();
+      await eventStore.close();
       first.close();
       second.close();
       await pool.end();

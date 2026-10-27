@@ -88,6 +88,10 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type {
+  AgentExecutionStorage,
+  AgentExecutionStorageInput,
+  AgentHistoryStorage,
+  AgentHistoryStorageInput,
   EntityStorageConformance,
   EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
@@ -2859,7 +2863,7 @@ describe("repository signal routing", () => {
       await expect(storage.readCurrent("factory-id")).resolves.toBeUndefined();
       await expect(events.read()).resolves.toEqual([]);
     } finally {
-      events.close();
+      await events.close();
       await context.close();
     }
   });
@@ -3232,7 +3236,7 @@ describe("repository signal routing", () => {
       expect(publishedEvents[0]?.id?.value).toMatch(UUID_PATTERN);
       expect("storedEventDispatchFailures" in context).toBe(false);
     } finally {
-      eventStore.close();
+      await eventStore.close();
       await context.close();
     }
   });
@@ -8728,6 +8732,94 @@ describe("repository signal routing", () => {
     expect(factory.entityCloses).toBe(factory.entityOpens);
   });
 
+  it("reports commit acquisition and Entity cleanup failures together", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+    factory.failCommitOnce = true;
+    factory.failEntityClose = true;
+
+    const failure = await dispatcher
+      .dispatch(createProjectCreated("retained-dual-failure", "dual-failure"))
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors.map((error: Error) => error.message)).toEqual([
+      "commit acquisition failed",
+      "Entity close failed",
+    ]);
+    factory.failEntityClose = false;
+    await context.close();
+    expect(factory.entityCloses).toBe(factory.entityOpens);
+  });
+
+  it("attempts Entity close after commit and Entity close both fail", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
+    await dispatcher.dispatch(createProjectCreated("retained-close-both", "close-both"));
+    factory.failCommitClose = true;
+    factory.failEntityClose = true;
+
+    const failure = await context.close().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors.map((error: Error) => error.message)).toEqual(
+      expect.arrayContaining(["commit close failed", "Entity close failed"]),
+    );
+    expect(factory.entityCloses).toBe(factory.entityOpens);
+  });
+
+  it("preserves Agent port acquisition failure when history cleanup also fails", async () => {
+    const factory = new RetainedEntityStorageFactory();
+    const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-port-failure" });
+    const repository = createGuardedSupportAgentRepository(agentId, false);
+    const context = BoundedContext.singleTenant("SupportGuard")
+      .add(repository)
+      .withStorageFactory(factory)
+      .withAi(
+        AiRegistry.create({
+          defaultModels: {},
+          invocationLimits: {
+            operations: 1,
+            modelRequests: 1,
+            toolCalls: 0,
+            recordedReads: 0,
+            deadlineMs: 1_000,
+            totalInputBytes: 4_000,
+            totalOutputBytes: 4_000,
+            maxRecoveryBytes: 32_000,
+          },
+          concurrentOperations: 1,
+          queuedOperations: 0,
+        }),
+      )
+      .persistSystemEvents()
+      .build();
+    factory.failAgentExecutionOnce = true;
+    factory.failAgentHistoryClose = true;
+
+    const failure = await Promise.resolve()
+      .then(() => repositoryAccess.pendingAcceptedAgents(repository, undefined, undefined, 1))
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors.map((error: Error) => error.message)).toEqual([
+      "Agent execution acquisition failed",
+      "Agent history close failed",
+    ]);
+    expect(factory.agentHistoryCloses).toBe(1);
+    expect(factory.entityCloses).toBe(factory.entityOpens);
+    await context.close();
+  });
+
   it("bounds delivery lanes while delivered Inbox rows suppress a duplicate after lane eviction", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -9269,7 +9361,7 @@ describe("repository signal routing", () => {
       expect(received).toEqual([]);
     } finally {
       await context.close();
-      stored.close();
+      await stored.close();
     }
   });
 
@@ -9313,7 +9405,7 @@ describe("repository signal routing", () => {
       ).toHaveLength(0);
       expect(RoutingProcessManager.commandCalls).toBe(1);
     } finally {
-      stored.close();
+      await stored.close();
     }
   });
 
@@ -15281,6 +15373,33 @@ class RetainedEntityStorageFactory extends InMemoryStorageFactory {
   commitCreations = 0;
   failCommitOnce = false;
   failCommitClose = false;
+  failEntityClose = false;
+  failAgentExecutionOnce = false;
+  failAgentHistoryClose = false;
+  agentHistoryCloses = 0;
+
+  protected override createAgentHistoryStorage<Id>(
+    input: AgentHistoryStorageInput<Id>,
+  ): AgentHistoryStorage<Id> {
+    const history = super.createAgentHistoryStorage(input);
+    const close = history.close.bind(history);
+    vi.spyOn(history, "close").mockImplementation(() => {
+      this.agentHistoryCloses++;
+      close();
+      if (this.failAgentHistoryClose) throw new Error("Agent history close failed");
+    });
+    return history;
+  }
+
+  protected override createAgentExecutionStorage<I, S extends Message>(
+    input: AgentExecutionStorageInput<I, S>,
+  ): AgentExecutionStorage<I, S> {
+    if (this.failAgentExecutionOnce) {
+      this.failAgentExecutionOnce = false;
+      throw new Error("Agent execution acquisition failed");
+    }
+    return super.createAgentExecutionStorage(input);
+  }
 
   protected override createEntityCommitStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
@@ -15308,6 +15427,7 @@ class RetainedEntityStorageFactory extends InMemoryStorageFactory {
       close: () => {
         this.entityCloses++;
         storage.close();
+        if (this.failEntityClose) throw new Error("Entity close failed");
       },
     };
   }

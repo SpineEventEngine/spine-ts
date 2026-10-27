@@ -1,75 +1,89 @@
-# Environment lifecycle implementation
+# Environment lifecycle work state
 
-## Current state
+## Current checkpoint
 
-Started 2026-10-27 from official master ff6c866 on `environment-lifecycle`.
-Dependencies installed with the frozen lockfile; Node 24.18.0, pnpm 11.9.0.
-Proto generation and baseline build typecheck passed. Focused baseline tests passed: 50 tests in three files (Inbox records,
-shard sessions, repository history cache). Generation refreshes tracked generationId stamps from UUIDs to
-content hashes; these baseline-only differences are separated from feature work.
+Started 2026-10-27 from freshly fetched official master
+`ff6c8669537a016c47f012150306500d3b52b5d1`. Branch `environment-lifecycle` is in
+`/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
+Checkpoint `c0c312b57` was pushed to official `origin/environment-lifecycle`.
+It contains the initial repository Entity-storage retention fix and accepted task
+specification. It is not final acceptance. No PR has been created.
 
-Architecture assignment: existing requirements_splitter application_architecture,
-explicit immutable gpt-6-astra/high from its original dispatch, reused for one
-implementation-boundary pass. Runtime introspection is unavailable. Scope:
-sequence the accepted task and bound the first Storage-retention milestone.
-No child delegation. No implementation or review result has been accepted yet.
+Implementation follows [MILESTONES.md](MILESTONES.md). The current patch combines
+repository retained-composite acquisition cleanup and EventStore retention. The
+first complete review wave found one accepted P1: immediate EventStore close could
+interrupt an admitted batch. Its correction passed independent preflight and affected re-review; see
+REVIEW_LOG.md.
 
-No external dependency is needed for retention. Existing Storage interfaces and
-JVM-style instance fields provide the required lifecycle. Full release verification
-is reserved for the converged runtime task; focused checks run between milestones.
+## Accepted implementation decisions
 
-First bounded implementation assignment: existing implementer role,
-`gpt-6-sol` / `medium` explicitly selected. Scope: repository retained Entity
-storage lookup before construction, plus focused behavior tests and relevant
-TSDoc. Only repository.ts and repository test files may be changed initially.
-Inbox/shard lifetime changes await the architecture shutdown outline. Acceptance:
-repeated and concurrent repository use creates one successful store per tenant
-and model; failure leaves creation retryable; repository close releases retained
-resources; existing state/history behavior remains. Runtime metadata is unavailable
-unless surfaced by the child; configured dispatch fields are the acceptance evidence.
+- Repository cache lookup precedes construction; failed partial acquisition closes
+  resources already opened and preserves acquisition plus cleanup errors.
+- EventStore retains record storage per complete tenant identity and fixed group.
+- Normal EventStore close returns a promise, fences new physical storage groups,
+  drains admitted batch/check/query groups and attempts every retained close.
+  Provider-only eventStoreAccess.closeIdle supports synchronous construction
+  failure only with no active storage work. Normal callers await close; constructor cleanup uses the guard.
+- The acceptThenAppend callback gap is outside physical storage work, preserving
+  its close-then-reject behavior without introducing a self-deadlock.
+- Agent recovery removal precedes shared saved-work scanning. Retained Inbox/shard
+  stores must land with the complete Delivery shutdown chain.
+- Remaining retention includes repository reads/history/duplicate checks and
+  per-commit inner record handles in all four providers. Existing attempt-all
+  cleanup gaps in clearRuntime/history-switch remain for the next repository slice.
 
-Architecture first-slice result accepted under confirmed configured Astra/high;
-no separate runtime metadata exposed. Repository cache lookup and partial resource
-cleanup can land independently. EventStore retention follows using its existing
-close lifecycle. Inbox/shard retention must be implemented with Delivery lifetime
-and shutdown, since per-signal Delivery construction currently has no close chain.
+## Verification evidence
 
-Baseline tooling typecheck, documentation audience checks and git diff checks passed.
-The first implementation slice is producing focused red/green regression evidence;
-its independent review remains pending. Generated stamp refreshes are not part of
-that slice and will not be staged with its source changes.
+Node 24.18.0 and pnpm 11.9.0; frozen dependency installation succeeded.
+Baseline Proto generation, build/tooling typechecks and 50 focused tests passed.
+Before review, the combined retention patch passed 386 tests across repository
+routing, history cache and EventStore. Source/tooling typechecks, ESLint, cleanup,
+TSDoc, formatting, documentation audience and diff checks passed. Exact focused
+LCOV covered every changed executable line and branch; this was not a global
+coverage claim. A truncated first coverage extraction was corrected before use.
 
-The sole architecture pass is complete and accepted. The configured existing
-requirements_splitter confirmed gpt-6-astra/high; runtime introspection unavailable.
-MILESTONES.md records the ordered execution plan. Agent recovery removal is a
-hard prerequisite for new shared saved-work scanning. Inbox/shard retention must
-land with the full shared Delivery close chain; EventStore retention can proceed
-using its existing explicit lifecycle.
+The close-race regression failed against immediate closure. The correction's
+523-test run across five suites, storage/server/MySQL typechecks, lint, cleanup,
+TSDoc and formatting passed. Independent preflight confirmed those results and all changed EventStore
+branches. Two existing Agent integration tests exercised the testing utility.
+The accepted API correction moved idle cleanup behind the provider seam; 534
+focused tests and all narrow checks passed afterward, and API review confirmed
+the public declaration excludes it. Four normal test cleanup calls await close. Final release and live
+provider checks have not run. Baseline generation refreshes tracked generationId
+stamps; those unrelated stamp changes were excluded from the checkpoint.
+Raw outputs and detailed assignment evidence are outside version control under
+`/tmp/spine-environment-lifecycle-20261027`.
 
-Repository slice authoring completed: implementer storage_retention, explicit
-configured gpt-6-sol/medium confirmed; actual runtime metadata unavailable. Changes
-are limited to repository.ts and repository-routing.test.ts. Reported evidence:
-334 focused tests and server typecheck/ESLint/cleanup/TSDoc/format passed. Primary
-inspected the diff. Acceptance awaits mechanical changed-branch coverage and review.
+## Assignment evidence
 
-Mechanical pre-review assignment: orchestrator-dispatched function,
-gpt-6-luna/low explicitly selected, no new project role. Inspect the frozen two-file
-slice, run cheap preflight and changed-line/branch coverage; record outputs outside
-version control. No source edits or child delegation.
+| Existing role or dispatched function | Agent                    | Explicit configured profile | Scope                                                                               |
+| ------------------------------------ | ------------------------ | --------------------------- | ----------------------------------------------------------------------------------- |
+| requirements_splitter                | application_architecture | gpt-6-astra / high          | Frozen milestone sequence; bounded follow-up for demonstrated close contract defect |
+| implementer                          | storage_retention        | gpt-6-sol / medium          | Current retention patches, focused tests and accepted corrections                   |
+| Mechanical/scanning function         | mechanical_checks        | gpt-6-luna / low            | Independent preflight/LCOV and provider handle inventory                            |
 
-EventStore retention is assigned next to the same implementer, immutable explicit
-gpt-6-sol/medium. Scope: packages/storage/src/event/event-store.ts and its event
-store tests only. The repository diff remains frozen for read-only checks. These
-small retention patches form one coherent review package; no review findings will
-be corrected before the complete review wave. Acceptance: one RecordStorage per
-captured tenant/group, no per-operation close, retry failed creation, close every
-retained store once even on failure, reject use after close, keep factory open.
+Model and reasoning were explicit in original dispatches and immutable on reuse.
+Each agent confirmed its configured profile; runtime introspection is unavailable.
+Specialist assignments and dispositions are recorded in REVIEW_LOG.md. No child
+delegation occurred. Source inspection used the JVM runtime notes and local
+`core-jvm` Repository.storage()/close(), InboxStorage, EventBus and delegated
+storage close. No dependency or generic infrastructure was added.
 
-Independent repository preflight passed: 334 routing tests, changed-file format,
-ESLint, server typecheck and diff checks. Mechanical function gpt-6-luna/low
-confirmed configured profile; no runtime metadata available. Its first coverage
-summary was rejected because extraction truncated the wrong LCOV section. Exact
-section parsing corrected the report: cache reuse and common cleanup are covered;
-Agent-port acquisition rollback and multiple-error aggregation need behavior tests.
-The misspelled requested history-cache path did not run; do not count it as evidence.
-These mechanical gaps were returned to the existing implementer before review.
+## Next actions
+
+Commit and push the accepted EventStore retention and drain correction. Continue repository/query/history retention and provider
+preparation in the frozen order. Keep narrow API docs current; finish broad
+examples after interfaces stabilize. Run the full release and security gates at
+convergence, choose the required unused common workspace version, and verify
+remote state. No existing-data migration, PR creation or master write is authorized.
+
+## Next repository slice preparation
+
+Read-only implementation analysis exposed a concrete close-contract blocker:
+clearRuntime and the public administrative state-history switch are synchronous,
+while direct query/history reads can be in flight outside bus drains. Retaining
+their storage requires defining when those handles close. The existing
+requirements_splitter (explicit immutable gpt-6-astra/high) receives only this
+bounded blocker and the unchanged-state Process Manager EventStore cleanup path;
+it must preserve current administration semantics and avoid a new framework-wide
+lifecycle abstraction. No implementation of this slice has started.

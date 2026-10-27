@@ -17,6 +17,7 @@ import { AnyMessages, Validate, type MessageSchema } from "@spine-event-engine/c
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import * as AgentInteraction from "@spine-event-engine/proto/agent";
 import type { EventStore } from "@spine-event-engine/storage";
+import { eventStoreAccess } from "@spine-event-engine/storage/provider";
 import type { ILogLayer } from "loglayer";
 
 import {
@@ -334,14 +335,13 @@ export class EventBus {
   }
 
   /**
-   * Stops accepting new event work, drains accepted work, and closes an owned event store.
+   * Stops accepting new event work, drains accepted work, and closes its event store.
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
-   * Runtime and event-store close hooks are both attempted; failures reject as
-   * an `AggregateError`.
+   * Runtime and event-store close hooks are both awaited; failures reject as
+   * an `AggregateError` after both cleanup attempts.
    *
    * @returns A promise that settles after the event bus closes.
-   *
    */
   close(): Promise<void> {
     this.#closed ??= this.#closeOnce();
@@ -357,9 +357,7 @@ export class EventBus {
     this.#clearSubscribers();
     const eventStore = this.#eventStore;
     if (eventStore !== undefined) {
-      await EventBus.#closePart(() => {
-        eventStore.close();
-      }, errors);
+      await EventBus.#closePart(() => eventStore.close(), errors);
     }
 
     if (errors.length > 0) {
@@ -370,7 +368,7 @@ export class EventBus {
   #abortClose(): void {
     this.#beginClose();
     try {
-      this.#eventStore?.close();
+      if (this.#eventStore !== undefined) eventStoreAccess.closeIdle(this.#eventStore);
     } finally {
       // spine-log-boundary: server.event_bus_close_runtime
       void this.#started.then(() => this.#runtime.close()).catch(() => undefined);

@@ -4404,7 +4404,7 @@ class ProcessManagerExecutionSupport {
       try {
         await store.appendAll(producedEvents);
       } finally {
-        store.close();
+        await store.close();
       }
       await this.#appendAgentEvents(loaded, producedEvents);
       return true;
@@ -10810,7 +10810,7 @@ const RepositoryStorage = {
       });
       return { agentHistory, agentExecution };
     } catch (error) {
-      agentHistory.close();
+      this.closePorts([agentHistory], error);
       throw error;
     }
   },

@@ -51,6 +51,7 @@ import {
   AgentExecutionStorageFactories,
   AgentHistoryStorageFactories,
   TenantBoundary,
+  eventStoreAccess,
 } from "@spine-event-engine/storage/provider";
 
 /**
@@ -2682,11 +2683,12 @@ const ContextParts = Object.freeze({
     ContextParts.attemptCleanup(() => {
       if (resources.systemEventBus !== undefined)
         eventBusAccess.abortClose(resources.systemEventBus);
-      else resources.systemEventStore?.close();
+      else if (resources.systemEventStore !== undefined)
+        eventStoreAccess.closeIdle(resources.systemEventStore);
     }, errors);
     ContextParts.attemptCleanup(() => {
       if (resources.eventBus !== undefined) eventBusAccess.abortClose(resources.eventBus);
-      else resources.eventStore?.close();
+      else if (resources.eventStore !== undefined) eventStoreAccess.closeIdle(resources.eventStore);
     }, errors);
   },
 
@@ -4155,7 +4157,7 @@ const ContextParts = Object.freeze({
         ],
       });
     } finally {
-      eventStore.close();
+      await eventStore.close();
     }
   },
 

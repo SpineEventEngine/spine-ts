@@ -229,6 +229,14 @@ runs its callback, then inserts with an atomic absent-slot condition. Competing
 callbacks may both run and may each have effects, but at most one Event is stored.
 The framework EventBus dispatches only after strict insertion succeeds.
 
+An `EventStore` retains its RecordStorage objects for reuse by the corresponding
+tenants. Always await `eventStore.close()` before closing its factory. Closing
+rejects new storage operations, waits for an already admitted query or insertion
+batch to settle, and then closes every retained store. It leaves the factory open;
+cleanup failures reject the close promise. Repeated calls return the same outcome.
+The callback in `acceptThenAppend()` runs between storage operations: closing from
+that callback completes, and the later insertion rejects because the store is closed.
+
 History ports are lazy. When a history is disabled, the in-memory provider does
 not open or allocate its grouped records. Current Entity loading always uses
 the current record, never retained history. Event history is diagnostic data,

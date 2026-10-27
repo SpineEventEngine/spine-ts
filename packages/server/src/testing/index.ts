@@ -222,6 +222,6 @@ export async function readSystemEvents(
       return event === undefined ? [] : [event];
     });
   } finally {
-    store.close();
+    await store.close();
   }
 }

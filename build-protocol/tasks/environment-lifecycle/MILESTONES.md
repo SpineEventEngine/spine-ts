@@ -8,7 +8,9 @@ a time; independent checks and relevant reviews may run concurrently. See the
 1. **Retained Storage:** repository cache lookup before construction and partial
    acquisition/attempt-all cleanup; EventStore retention per captured tenant;
    retained repository query/history storage with request facades remaining
-   short-lived. Repeated use creates no throwaway storage; failure can retry;
+   short-lived. Include Agent history readers, Process Manager duplicate-history
+   reads and provider wrappers that recreate inner RecordStorage on each operation.
+   Repeated use creates no throwaway storage; failure can retry;
    shutdown releases all acquired stores. Inbox retention waits for milestone 6.
 2. **Factory preparation:** shared contracts and memory first, then bounded
    PostgreSQL, MySQL/MariaDB and Datastore slices. Offline factory build, explicit

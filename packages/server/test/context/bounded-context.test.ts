@@ -48,7 +48,7 @@ import {
   StorageFactory,
 } from "@spine-event-engine/storage";
 import { InboxMessageSchema } from "@spine-event-engine/proto/delivery";
-import type { EntityRecordStorage } from "@spine-event-engine/storage/provider";
+import { eventStoreAccess, type EntityRecordStorage } from "@spine-event-engine/storage/provider";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -2300,6 +2300,42 @@ describe("BoundedContext assembly", () => {
     }
     expect(failure).toBe(primary);
     expect(storageFactory.creationsFor(EventSchema.typeName)).toHaveLength(0);
+  });
+
+  it("reports dispatcher registration and synchronous EventStore cleanup failures together", () => {
+    const primary = new Error("dispatcher registration failed");
+    const cleanup = new Error("idle EventStore cleanup failed");
+    const close = vi.spyOn(eventStoreAccess, "closeIdle").mockImplementationOnce(() => {
+      throw cleanup;
+    });
+    let schemaReads = 0;
+    const dispatcher: EventDispatcher = {
+      messageSchemas: () => {
+        schemaReads++;
+        if (schemaReads > 2) throw primary;
+        return [EntityLog.EntityStateChangedSchema];
+      },
+      dispatch: () => Promise.resolve(),
+    };
+
+    try {
+      let failure: unknown;
+      try {
+        BoundedContext.singleTenant("Tasks")
+          .persistSystemEvents()
+          .withStorageFactory(new InMemoryStorageFactory())
+          .addEventDispatcher(dispatcher)
+          .build();
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual(
+        expect.arrayContaining([primary, cleanup]),
+      );
+    } finally {
+      close.mockRestore();
+    }
   });
 
   it("builds without preparing storage for every registered repository", () => {
