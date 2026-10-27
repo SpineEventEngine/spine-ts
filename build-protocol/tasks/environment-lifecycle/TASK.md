@@ -8,9 +8,13 @@ Branch: `environment-lifecycle`. Baseline: freshly fetched official
 `origin/master` at `ff6c8669537a016c47f012150306500d3b52b5d1`.
 Worktree: `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
 The accepted [proposal](PROPOSAL.md) includes the complete Agent recovery-removal
-task. Implementation is in progress; initial repository and EventStore retention
-checkpoints are pushed. Repository query/history retention and shared AnyPacker
-implementation are independently reviewed; provider lifecycle work follows. Existing behavior descriptions in the proposal refer to the baseline; proposed APIs become supported only after implementation.
+task. Implementation is in progress. Repository/EventStore retention, shared AnyPacker,
+provider commit-storage retention and awaitable shutdown are reviewed and pushed.
+Shared preparation contracts and the memory implementation are complete, as is
+PostgreSQL offline assembly and tenant resolution. PostgreSQL physical structure
+preparation is underway; the remaining milestones follow MILESTONES.md. Existing
+behavior descriptions in the proposal refer to the baseline; proposed APIs become
+supported only after implementation.
 
 ## Human-Imposed Requirements Ledger
 

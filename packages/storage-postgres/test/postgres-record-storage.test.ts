@@ -82,6 +82,7 @@ const driver = vi.hoisted(() => {
 vi.mock("pg", () => ({ Pool: driver.Pool }));
 
 import { PostgresStorageFactory } from "../src/index.js";
+import { StoragePreparations } from "@spine-event-engine/storage/provider";
 import { PostgresClientDisposal, PostgresTransactionErrors } from "../src/postgres/errors.js";
 import { PostgresRecordStorage } from "../src/postgres/record-storage.js";
 import { PostgresTableSpecs } from "../src/postgres/table-spec.js";
@@ -181,6 +182,218 @@ describe("Postgres record storage", () => {
     expect(write?.sql).toContain("VALUES ($1, $2, $3)");
     expect(write?.values?.[0]).toBe("one");
     expect(write?.values?.[1]).toBeInstanceOf(Uint8Array);
+  });
+
+  it("checks a physical family without DDL and reuses its readiness on first write", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const context = { name: "test", multitenant: false } as const;
+    const spec = recordSpec();
+    await StoragePreparations.for(factory).prepareRecord(context, spec, undefined, "check");
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(false);
+    expect(driver.Pool).toHaveBeenCalledTimes(2);
+    expect(driver.end).toHaveBeenCalledTimes(2);
+    const storage = factory.createRecordStorage(context, spec);
+    await storage.write(create(StringValueSchema, { value: "first" }));
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(false);
+    expect(driver.Pool).toHaveBeenCalledTimes(3);
+    expect(driver.end).toHaveBeenCalledTimes(2);
+    await factory.close();
+    expect(driver.end).toHaveBeenCalledTimes(3);
+  });
+
+  it("prepares equivalent reordered columns without invoking record callbacks", async () => {
+    const extract = vi.fn((record: StringValue) => record.value);
+    const first = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: extract,
+      columns: valueColumns(),
+    });
+    const reordered = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: extract,
+      columns: [...valueColumns()].reverse(),
+    });
+    const custom = vi.fn(() => ({ sql: "CREATE TABLE custom ()" }));
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .useOperationFactory(custom)
+      .build();
+    const context = { name: "same-family", multitenant: false } as const;
+    const preparation = StoragePreparations.for(factory);
+    await preparation.prepareRecord(context, first, undefined, "check");
+    await preparation.prepareRecord(context, reordered, undefined, "create");
+    expect(extract).not.toHaveBeenCalled();
+    expect(custom).not.toHaveBeenCalled();
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(false);
+    await factory.close();
+  });
+
+  it("rejects an incompatible declaration without discarding a compatible family", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const context = { name: "same-family", multitenant: false } as const;
+    const preparation = StoragePreparations.for(factory);
+    await preparation.prepareRecord(context, recordSpec(), undefined, "check");
+    const changed = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record: StringValue) => record.value,
+      columns: [new RecordColumn("value", ColumnTypes.scalar(ScalarType.INT32), () => 1)],
+    });
+    await expect(preparation.prepareRecord(context, changed, undefined, "create")).rejects.toThrow(
+      /conflict/i,
+    );
+    await preparation.prepareRecord(context, recordSpec(), undefined, "create");
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(false);
+    await factory.close();
+  });
+
+  it("retries failed read-only checking with creation after the missing table appears", async () => {
+    let present = false;
+    driver.query.mockImplementation((sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.startsWith("CREATE TABLE")) present = true;
+      if (sql.includes("schemata")) return Promise.resolve({ rows: [], rowCount: 1 });
+      if (sql.includes("columns WHERE"))
+        return Promise.resolve({
+          rows: present
+            ? [
+                {
+                  column_name: "ID",
+                  data_type: "character varying",
+                  character_maximum_length: 512,
+                  is_nullable: "NO",
+                  column_default: null,
+                },
+                {
+                  column_name: "bytes",
+                  data_type: "bytea",
+                  is_nullable: "NO",
+                  column_default: null,
+                },
+                {
+                  column_name: "value",
+                  data_type: "text",
+                  is_nullable: "YES",
+                  column_default: null,
+                },
+              ]
+            : [],
+        });
+      if (sql.includes("PRIMARY KEY"))
+        return Promise.resolve({
+          rows: present ? [{ column_name: "ID", ordinal_position: 1 }] : [],
+        });
+      return Promise.resolve({ rows: [] });
+    });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "retry", multitenant: false } as const;
+    await expect(
+      preparation.prepareRecord(context, recordSpec(), undefined, "check"),
+    ).rejects.toThrow(/incompatible/i);
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(false);
+    await preparation.prepareRecord(context, recordSpec(), undefined, "create");
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(true);
+    await factory.close();
+  });
+
+  it("drains an admitted check and rejects new preparation after the close fence", async () => {
+    const started = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const ordinary = driver.query.getMockImplementation();
+    if (ordinary === undefined) throw new Error("Expected PostgreSQL query fixture.");
+    driver.query.mockImplementation(async (sql, values) => {
+      if (sql.includes("columns WHERE")) {
+        started.resolve(undefined);
+        await release.promise;
+      }
+      return ordinary(sql, values);
+    });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "drain-check", multitenant: false } as const;
+    const checking = preparation.prepareRecord(context, recordSpec(), undefined, "check");
+    await started.promise;
+    const endedBeforeRelease = driver.end.mock.calls.length;
+    const closing = factory.close();
+    await expect(
+      preparation.prepareRecord(context, recordSpec(), undefined, "check"),
+    ).rejects.toThrow(/closed/i);
+    expect(driver.end).toHaveBeenCalledTimes(endedBeforeRelease);
+    release.resolve(undefined);
+    await checking;
+    await closing;
+    expect(driver.end.mock.calls.length).toBeGreaterThan(endedBeforeRelease);
+  });
+
+  it("does not escalate a pending failed check into creation", async () => {
+    const started = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let present = false;
+    driver.query.mockImplementation(async (sql, values) => {
+      driver.recordCall(sql, values);
+      if (sql.includes("schemata")) return { rows: [], rowCount: 1 };
+      if (sql.startsWith("CREATE TABLE")) present = true;
+      if (sql.includes("columns WHERE")) {
+        if (!present) {
+          started.resolve(undefined);
+          await release.promise;
+        }
+        return {
+          rows: present
+            ? [
+                {
+                  column_name: "ID",
+                  data_type: "character varying",
+                  character_maximum_length: 512,
+                  is_nullable: "NO",
+                  column_default: null,
+                },
+                {
+                  column_name: "bytes",
+                  data_type: "bytea",
+                  is_nullable: "NO",
+                  column_default: null,
+                },
+                {
+                  column_name: "value",
+                  data_type: "text",
+                  is_nullable: "YES",
+                  column_default: null,
+                },
+              ]
+            : [],
+        };
+      }
+      if (sql.includes("PRIMARY KEY"))
+        return { rows: present ? [{ column_name: "ID", ordinal_position: 1 }] : [] };
+      return { rows: [] };
+    });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "pending-check", multitenant: false } as const;
+    const check = preparation.prepareRecord(context, recordSpec(), undefined, "check");
+    await started.promise;
+    const createPending = preparation.prepareRecord(context, recordSpec(), undefined, "create");
+    release.resolve(undefined);
+    const outcomes = await Promise.allSettled([check, createPending]);
+    expect(outcomes.map(({ status }) => status)).toEqual(["rejected", "rejected"]);
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(false);
+    await preparation.prepareRecord(context, recordSpec(), undefined, "create");
+    expect(driver.calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(true);
+    await factory.close();
   });
 
   it("passes each resolved schema to custom table creation", async () => {
@@ -1081,6 +1294,7 @@ describe("Postgres record storage", () => {
       {
         resolve: () => Promise.resolve(),
         track: (work) => work,
+        prepare: () => Promise.resolve(),
         publicOpen: () => true,
         databaseName: "test",
         schema: "spine",
@@ -1154,6 +1368,7 @@ describe("Postgres record storage", () => {
       {
         resolve: () => Promise.resolve(),
         track: (work) => work,
+        prepare: () => Promise.resolve(),
         publicOpen: () => true,
         databaseName: "test",
         schema: "spine",

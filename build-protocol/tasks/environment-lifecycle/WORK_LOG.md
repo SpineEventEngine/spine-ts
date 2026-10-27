@@ -619,3 +619,64 @@ API/docs corrected deterministically. Full record and Entity/Agent wrapper calls
 now drain across factory shutdown. Commit authored paths and push immediately;
 exclude generation-only manifests. Next: M4c factory-local physical preparation,
 read-only compatibility and shared readiness, per D0150.
+
+M4b checkpoint b7ef85b29 pushed immediately to official origin/environment-lifecycle.
+M4c PostgreSQL physical preparation begins from that commit. Existing implementer
+storage_retention resumes with verified explicit immutable gpt-6-sol/medium;
+metadata introspection unavailable. This high-risk provider readiness contract
+is already frozen by D0150/FACTORY_PREPARATION; no repeat architecture pass.
+Estimate1-2hours for explicit create/check port, factory-shared successful and
+pending evidence, temporary preparation connections, actual history/index needs,
+focused/live tests, narrow docs and independent review. No server/TenantIndex,
+MySQL/Datastore, recovery preparation, provisioning or existing-data migration.
+Detailed external assignment postgres-preparation-brief.md supplements the full
+human ledger and accepted design. Preserve M4b full-operation shutdown guarantees.
+
+M4c source inspection confirms a baseline PostgreSQL destination probe still scans
+all schema columns for retired _scope/_revision markers. This is upgrade-layout
+detection unrelated to connection or the requested physical family and conflicts
+with the accepted exclusion of upgrade scans. Remove that legacy-only probe and
+its obsolete expectation while splitting preparation; validate actual requested
+layouts only. Apply the same rule to MySQL's corresponding retired-layout guard
+in its parity slice. No existing-data conversion, migration or compatibility
+wrapper is added. Unrelated application tables must not fail a connection check.
+
+Independent M4e prerequisite: existing documentation/API-verification function
+provider_documentation, explicit immutable gpt-6-luna/medium, will inspect the
+installed Datastore SDK and primary documentation to identify a real read-only
+shared connection probe. No cloud/emulator mutation or source edits. Accepted
+native guarantee is already settled; no new design or indexes/provisioning.
+Use metadata access without fake application records/full namespace scan/new
+arbitrary limits. External datastore-connection-probe.md records exact version,
+API semantics and proposed call. Estimate0.1-0.2hours concurrent with M4c. Runtime
+self-introspection unavailable; explicit configured profile is retained.
+
+Datastore API verification returned installed SDK10.1.1 and emulator evidence,
+but its recommended invented SpineStorageConnectionProbe kind is rejected: the
+accepted contract excludes fake application/sentinel records even when the lookup
+writes nothing. Same Luna/medium context must finish the native metadata option,
+with exact shared-scope namespace semantics and necessary read permissions.
+No architecture change or runtime implementation follows the rejected suggestion.
+Native namespace metadata query was reportedly supported in local emulator;
+confirm primary API documentation and no full scan/arbitrary limit. No cloud calls
+or source edits occurred; the temporary emulator was reported stopped.
+
+Revised Datastore API verification accepted as prerequisite evidence: SDK10.1.1
+supports keys-only native **namespace** metadata query constrained to an exact
+key range, without arbitrary scan limits or fake application identity. Shared
+scope follows client.namespace in current single-tenant record construction;
+NamespaceAssignments applies to named tenants. Namespace metadata requires
+namespaces.get/list permissions and does not certify entity read/write/index
+capabilities. External datastore-connection-probe.md records primary sources and
+reused emulator proof. Implement/test in M4e; no runtime code changed now.
+Explicit immutable Luna/medium function confirmed; introspection unavailable.
+
+M4c PostgreSQL structure preparation accepted.172unit+coverage/20live tests and
+build/tooling/static/docs passed; four-concern review found no blocking runtime or
+API issue. Type-only audit-cache cleanup and precise pool-lifetime wording pass
+focused3audit/typecheck/static checks. Factory readiness is shared by explicit
+check/create and normal use; successful checks suppress DDL, failures retry,
+temporary preparation resources close, and real Entity/audit requirements are
+covered. Commit and push this checkpoint. MySQL parity follows in two bounded
+slices: offline connection lifecycle, then physical preparation. This follows the
+same accepted D0150 design and avoids mixing their independent review concerns.

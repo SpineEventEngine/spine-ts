@@ -24,8 +24,11 @@ import {
   type AgentHistoryStorageInput,
 } from "@spine-event-engine/storage/provider";
 import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
+import type { StoragePreparationMode } from "@spine-event-engine/storage/provider";
+import type { PoolClient } from "pg";
 
 import { PostgresRecordStorage, type OnPublicOperation } from "./record-storage.js";
+import { PostgresStorageOperationError } from "./errors.js";
 
 /**
  * Hashes complete identities into bounded physical IDs and indexed scope keys.
@@ -66,11 +69,13 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @param input Repository and complete tenant scope.
    * @param records Native record-family storage.
    * @param onAdmit Admits complete public Agent-history operations.
+   * @param onPrepare Optionally uses factory-shared index readiness.
    */
   constructor(
     private readonly input: AgentHistoryStorageInput<Id>,
     private readonly records: PostgresRecordStorage<string, AgentHistoryRecord>,
     private readonly onAdmit: OnPublicOperation,
+    private readonly onPrepare?: (mode: StoragePreparationMode) => Promise<void>,
   ) {}
 
   /**
@@ -142,7 +147,10 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @returns Shared preparation promise for this handle.
    */
   private ready(): Promise<void> {
-    return (this.#ready ??= this.initialize());
+    return (this.#ready ??= this.initialize().catch((error: unknown) => {
+      this.#ready = undefined;
+      throw error;
+    }));
   }
 
   /**
@@ -153,65 +161,20 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
   private async initialize(): Promise<void> {
     const executor = this.records.historyExecutor();
     await executor.prepare();
+    if (this.onPrepare !== undefined) {
+      try {
+        await this.onPrepare("create");
+      } catch (error) {
+        throw new PostgresStorageOperationError("PostgreSQL record operation failed.", {
+          cause: error,
+        });
+      }
+      return;
+    }
     await executor.using(async (client) => {
       const table = executor.table();
-      await this.ensureIndex(
-        client,
-        table,
-        "agent_history_full",
-        'scope_digest, order_key COLLATE "C"',
-      );
-      await this.ensureIndex(
-        client,
-        table,
-        "agent_history_category",
-        'scope_digest, category, order_key COLLATE "C"',
-      );
-      await this.ensureIndex(
-        client,
-        table,
-        "agent_history_conversation",
-        'scope_digest, conversation_digest, order_key COLLATE "C"',
-      );
+      await PostgresAgentIndexes.prepare(client, table, "create");
     });
-  }
-
-  /**
-   * Rejects an existing same-name index with incomplete columns or collation.
-   *
-   * @param client Acquired PostgreSQL client.
-   * @param table Validated physical table name.
-   * @param name Fixed required index name.
-   * @param columns Required complete binary-order columns.
-   * @returns Completion after the index definition is checked.
-   */
-  private async ensureIndex(
-    client: import("pg").PoolClient,
-    table: string,
-    name: string,
-    columns: string,
-  ): Promise<void> {
-    await client.query(`CREATE INDEX IF NOT EXISTS "${name}" ON ${table} (${columns})`);
-    const result = await client.query<{
-      definition: string;
-      indisvalid: boolean;
-      indisready: boolean;
-    }>(
-      "SELECT pg_get_indexdef(i.indexrelid) AS definition, i.indisvalid, i.indisready " +
-        "FROM pg_index i " +
-        "JOIN pg_class c ON c.oid=i.indexrelid WHERE i.indrelid=to_regclass($1) AND c.relname=$2",
-      [table, name],
-    );
-    const index = result.rows[0];
-    const definition = index?.definition ?? "";
-    if (
-      !index?.indisvalid ||
-      !index.indisready ||
-      !definition.includes(" USING btree ") ||
-      !definition.includes(`(${columns})`) ||
-      definition.includes(" WHERE ")
-    )
-      throw new Error("PostgreSQL Agent history index is incompatible.");
   }
 
   /**
@@ -307,3 +270,66 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
     if (!this.#open) throw new Error("Agent history storage handle is closed.");
   }
 }
+
+/**
+ * Verifies the fixed Agent audit indexes without changing a checked database.
+ */
+export const PostgresAgentIndexes = {
+  /**
+   * Prepares each required Agent audit index.
+   *
+   * @param client Acquired client.
+   * @param table Qualified audit table.
+   * @param mode Preparation mode.
+   * @returns Completion after all three indexes match.
+   */
+  async prepare(client: PoolClient, table: string, mode: StoragePreparationMode): Promise<void> {
+    for (const [name, columns] of [
+      ["agent_history_full", 'scope_digest, order_key COLLATE "C"'],
+      ["agent_history_category", 'scope_digest, category, order_key COLLATE "C"'],
+      ["agent_history_conversation", 'scope_digest, conversation_digest, order_key COLLATE "C"'],
+    ] as const)
+      await this.ensure(client, table, name, columns, mode);
+  },
+
+  /**
+   * Validates one fixed index and creates it only in create mode.
+   *
+   * @param client Acquired client.
+   * @param table Qualified audit table.
+   * @param name Fixed index name.
+   * @param columns Required columns.
+   * @param mode Preparation mode.
+   * @returns Completion after exact index validation.
+   */
+  async ensure(
+    client: PoolClient,
+    table: string,
+    name: string,
+    columns: string,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    if (mode === "create")
+      await client.query(`CREATE INDEX IF NOT EXISTS "${name}" ON ${table} (${columns})`);
+    const result = await client.query<{
+      definition: string;
+      indisvalid: boolean;
+      indisready: boolean;
+    }>(
+      "SELECT pg_get_indexdef(i.indexrelid) AS definition, i.indisvalid, i.indisready " +
+        "FROM pg_index i " +
+        "JOIN pg_class c ON c.oid=i.indexrelid WHERE i.indrelid=to_regclass($1) AND c.relname=$2",
+      [table, name],
+    );
+    const index = result.rows[0];
+    const definition = index?.definition ?? "";
+    if (
+      !index?.indisvalid ||
+      !index.indisready ||
+      !definition.includes(" USING btree ") ||
+      !definition.includes(`(${columns})`) ||
+      definition.includes(" WHERE ")
+    )
+      throw new Error("PostgreSQL Agent history index is incompatible.");
+  },
+};

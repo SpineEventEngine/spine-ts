@@ -40,21 +40,32 @@ import {
   EntityCommitStorageFactories,
   AgentHistoryStorageFactories,
   AgentExecutionStorageFactories,
+  StoragePreparations,
+  stateHistorySpec,
+  eventHistorySpec,
+  type EntityStoragePreparationInput,
+  type StoragePreparationMode,
 } from "@spine-event-engine/storage/provider";
+import type { AgentHistoryStorageInput } from "@spine-event-engine/storage/provider";
 import { Pool, type PoolConfig, type PoolClient } from "pg";
 
-import { PostgresStorageConfigurationError, PostgresStorageConnectionError } from "./errors.js";
+import {
+  PostgresStorageConfigurationError,
+  PostgresStorageConnectionError,
+  PostgresStorageSchemaError,
+} from "./errors.js";
 import {
   PostgresRecordStorage,
   type OnPublicOperation,
   type PostgresRecordLifecycle,
 } from "./record-storage.js";
 import { PostgresEntityStorage } from "./entity-history.js";
-import { PostgresAgentHistory, AgentHistoryHash } from "./agent-history.js";
+import { PostgresAgentHistory, AgentHistoryHash, PostgresAgentIndexes } from "./agent-history.js";
 import { PostgresAgentExecution } from "./agent-execution.js";
 import { PostgresEntityCommitStorage } from "./entity-commit.js";
 import { PostgresTableResolver } from "./table-resolver.js";
 import { PostgresTableSpecs } from "./table-spec.js";
+import { PostgresTableInitializer } from "./table-initializer.js";
 import type { PostgresDdlType } from "./data-type.js";
 
 /**
@@ -342,6 +353,14 @@ export class PostgresStorageFactory extends StorageFactory {
 
   readonly #tenantTargets = new Map<string, string | symbol>();
 
+  readonly #tables = new Map<string | symbol, Map<string, PostgresPreparedTable>>();
+
+  readonly #audits = new Map<string | symbol, Map<string, PostgresPreparedAudit>>();
+
+  readonly #bindings = new Map<string | symbol, PostgresBoundDatabase>();
+
+  readonly #bindingPending = new Map<string | symbol, Promise<PostgresBoundDatabase>>();
+
   #sharedCheck: Promise<void> | undefined;
 
   readonly #catalog: TenantCatalog;
@@ -385,26 +404,255 @@ export class PostgresStorageFactory extends StorageFactory {
    * Registers the built-in Entity and Agent provider ports.
    */
   private registerPorts(): void {
+    StoragePreparations.register(this, {
+      prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
+      prepareEntity: (input, mode) => this.prepareEntity(input, mode),
+      prepareAgentHistory: (input, mode) => this.prepareAgentHistory(input, mode),
+    });
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
     AgentHistoryStorageFactories.register(this, {
       createAgentHistoryStorage: (input) => {
         if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+        const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
         return new PostgresAgentHistory(
           input,
-          this.createPostgresRecordStorage(
-            input.context,
-            AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
-            AgentHistoryRecords.group,
-          ),
+          this.createPostgresRecordStorage(input.context, spec, AgentHistoryRecords.group),
           (work) => this.admitPublic(work),
+          (mode) => this.prepareAudit(input.context, spec, mode),
         );
       },
     });
     AgentExecutionStorageFactories.register(this, {
       createAgentExecutionStorage: (input) => this.createAgentExecutionStorage(input),
     });
+  }
+
+  /**
+   * Admits declarative preparation of one ordinary record family.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record type.
+   * @param context Captured storage boundary.
+   * @param spec The physical record definition.
+   * @param group Optional physical group.
+   * @param mode Creation or read-only checking.
+   * @returns Completion after compatible preparation.
+   */
+  private prepareRecord<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group: StorageGroup | undefined,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admitPublic(() => this.prepareRecordAdmitted(context, spec, group, mode));
+  }
+
+  /**
+   * Prepares a record family within an existing admission.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record type.
+   * @param context Captured storage boundary.
+   * @param spec The physical record definition.
+   * @param group Optional physical group.
+   * @param mode Creation or read-only checking.
+   * @returns Completion after compatible preparation.
+   */
+  private async prepareRecordAdmitted<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group: StorageGroup | undefined,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    const boundary = this.database(context);
+    const name = this.resolver.resolve(
+      spec.sourceType.typeName,
+      group?.name,
+      undefined,
+      spec.recordType.typeName,
+    ).tableName;
+    const binding = await this.resolveBinding(boundary);
+    const table = this.tableSpec(boundary, name, binding.schema, spec, group);
+    const create = this.operation;
+    await this.prepareTable(
+      boundary,
+      table as never,
+      mode,
+      create === undefined ? undefined : () => create(table).sql,
+    );
+  }
+
+  /**
+   * Prepares current Entity and enabled history families from declarations.
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param input The declarative Entity requirements.
+   * @param mode Creation or read-only checking.
+   * @returns Completion after all requested families are compatible.
+   */
+  private prepareEntity<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admitPublic(async () => {
+      if (!this.sameEntityColumns(input))
+        throw new PostgresStorageConfigurationError(
+          "Entity query columns differ from current records.",
+        );
+      await this.prepareRecordAdmitted(input.context, input.recordSpec, undefined, mode);
+      if (input.stateHistory) {
+        const history = stateHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, history.spec, history.group, mode);
+      }
+      if (input.eventHistory) {
+        const history = eventHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, history.spec, history.group, mode);
+      }
+    });
+  }
+
+  /**
+   * Compares actual current Entity columns with declared query columns.
+   * @typeParam I Entity identifier type.
+   * @typeParam S Entity state type.
+   * @param input The declarative Entity requirements.
+   * @returns Whether physical column declarations agree.
+   */
+  private sameEntityColumns<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+  ): boolean {
+    const signature = (columns: typeof input.columns) =>
+      JSON.stringify(
+        columns
+          .map((column) => [column.name, PostgresTableSpecs.postgresColumnType(column.type)])
+          .sort(([a], [b]) => String(a).localeCompare(String(b))),
+      );
+    return signature(input.columns) === signature(input.recordSpec.columns);
+  }
+
+  /**
+   * Prepares the mandatory Agent audit record family and indexes.
+   * @typeParam I Agent identifier type.
+   * @param input Agent state type and complete tenant scope.
+   * @param mode Creation or read-only checking.
+   * @returns Completion after table and index compatibility.
+   */
+  private prepareAgentHistory<I>(
+    input: AgentHistoryStorageInput<I>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admitPublic(async () => {
+      TenantBoundary.of(input.context);
+      if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
+      const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
+      await this.prepareRecordAdmitted(input.context, spec, AgentHistoryRecords.group, mode);
+      await this.prepareAudit(input.context, spec, mode);
+    });
+  }
+
+  /**
+   * Prepares the three fixed Agent audit indexes for one physical table.
+   *
+   * @typeParam I Agent identifier type.
+   * @typeParam R Audit record type.
+   * @param context Captured Agent tenant scope.
+   * @param spec Audit record declaration.
+   * @param mode Creation or read-only check.
+   * @returns Completion after all indexes match.
+   */
+  private async prepareAudit<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    const boundary = this.database(context);
+    const binding = await this.resolveBinding(boundary);
+    const name = this.resolver.resolve(
+      spec.sourceType.typeName,
+      AgentHistoryRecords.group.name,
+      undefined,
+      spec.recordType.typeName,
+    ).tableName;
+    const key = `${binding.schema}\0${name}`;
+    const entries = this.#audits.get(boundary.key) ?? new Map<string, PostgresPreparedAudit>();
+    this.#audits.set(boundary.key, entries);
+    const current = entries.get(key);
+    if (current?.ready) return;
+    if (current?.pending !== undefined) return current.pending;
+    return this.startAudit(entries, key, boundary, binding, name, mode);
+  }
+
+  /**
+   * Starts one Agent index attempt and removes failed evidence for retry.
+   *
+   * @param entries Audit readiness for the captured boundary.
+   * @param key Physical audit table identity.
+   * @param boundary Captured Agent tenant scope.
+   * @param binding Resolved destination.
+   * @param name Physical audit table name.
+   * @param mode Creation or read-only check.
+   * @returns Completion after index compatibility.
+   */
+  private startAudit(
+    entries: Map<string, PostgresPreparedAudit>,
+    key: string,
+    boundary: TenantBoundary,
+    binding: PostgresBoundDatabase,
+    name: string,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    const entry: PostgresPreparedAudit = { ready: false, pending: undefined };
+    entries.set(key, entry);
+    entry.pending = this.attemptAudit(boundary, binding, name, mode)
+      .then(
+        () => {
+          entry.ready = true;
+        },
+        (error: unknown) => {
+          entries.delete(key);
+          throw error;
+        },
+      )
+      .finally(() => {
+        entry.pending = undefined;
+      });
+    return entry.pending;
+  }
+
+  /**
+   * Verifies or creates the Agent audit indexes with a released temporary pool when needed.
+   *
+   * @param boundary Captured Agent tenant scope.
+   * @param binding Resolved destination and schema.
+   * @param table Physical audit table name.
+   * @param mode Creation or read-only check.
+   * @returns Completion including temporary pool cleanup.
+   */
+  private async attemptAudit(
+    boundary: TenantBoundary,
+    binding: PostgresBoundDatabase,
+    table: string,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    const runtime = this.#databases.get(boundary.key);
+    const pool = runtime?.pool ?? new Pool(binding.config.poolOptions);
+    const qualified = `"${binding.schema.replaceAll('"', '""')}"."${table.replaceAll('"', '""')}"`;
+    let failure: Error | undefined;
+    try {
+      const client = await pool.connect();
+      try {
+        await PostgresAgentIndexes.prepare(client, qualified, mode);
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      failure =
+        error instanceof Error
+          ? error
+          : new Error("Agent index preparation failed.", { cause: error });
+    }
+    if (runtime === undefined) await this.closeCheckedPool(pool, failure);
+    else if (failure !== undefined) throw failure;
   }
 
   /**
@@ -738,13 +986,13 @@ export class PostgresStorageFactory extends StorageFactory {
       const client = await pool.connect();
       try {
         const schema = await PostgresSchemas.resolve(client, entry.schema);
-        await PostgresSchemas.assertUsable(client, schema);
         return {
           boundary: entry.boundary,
           pool,
           schema,
           target: entry.target,
           databaseName: entry.databaseName,
+          config: entry,
         };
       } finally {
         client.release();
@@ -788,6 +1036,7 @@ export class PostgresStorageFactory extends StorageFactory {
     return {
       resolve: () => this.resolveDatabase(boundary).then(() => undefined),
       track: (work) => this.track(work),
+      prepare: (table, customCreate) => this.prepareTable(boundary, table, "create", customCreate),
       publicOpen: () => !publicHandle || this.isOpen(),
       get databaseName() {
         return database().databaseName;
@@ -813,6 +1062,138 @@ export class PostgresStorageFactory extends StorageFactory {
       () => this.#work.delete(work),
     );
     return work;
+  }
+
+  /**
+   * Prepares one canonical physical table requirement across handles and explicit preparation.
+   *
+   * @param boundary Captured storage boundary.
+   * @param table Canonical physical table layout.
+   * @param mode Creation or read-only compatibility checking.
+   * @param customCreate Optional custom create SQL producer.
+   * @returns Completion after compatible physical readiness.
+   */
+  private prepareTable(
+    boundary: TenantBoundary,
+    table: PostgresTableSpec<unknown, never>,
+    mode: StoragePreparationMode,
+    customCreate?: () => string,
+  ): Promise<void> {
+    const tables = this.#tables.get(boundary.key) ?? new Map<string, PostgresPreparedTable>();
+    this.#tables.set(boundary.key, tables);
+    const key = `${table.schema}\0${table.tableName}`;
+    const signature = this.tableSignature(table);
+    const current = tables.get(key);
+    if (current !== undefined && current.signature !== signature)
+      return Promise.reject(
+        new PostgresStorageSchemaError("PostgreSQL table definition conflicts."),
+      );
+    if (current?.ready) return Promise.resolve();
+    if (current?.pending !== undefined) return current.pending;
+    return this.startTable(tables, key, signature, boundary, table, mode, customCreate);
+  }
+
+  /**
+   * Starts one table attempt and removes failed evidence for retry.
+   *
+   * @param tables Readiness for the captured boundary.
+   * @param key Physical table identity.
+   * @param signature Canonical layout signature.
+   * @param boundary Captured storage boundary.
+   * @param table Canonical physical layout.
+   * @param mode Creation or read-only check.
+   * @param customCreate Optional create SQL producer.
+   * @returns Completion after table compatibility.
+   */
+  private startTable(
+    tables: Map<string, PostgresPreparedTable>,
+    key: string,
+    signature: string,
+    boundary: TenantBoundary,
+    table: PostgresTableSpec<unknown, never>,
+    mode: StoragePreparationMode,
+    customCreate?: () => string,
+  ): Promise<void> {
+    const entry: PostgresPreparedTable = { signature, ready: false, pending: undefined };
+    tables.set(key, entry);
+    const attempt = Promise.resolve().then(() =>
+      this.attemptTable(boundary, table, mode, customCreate),
+    );
+    entry.pending = attempt
+      .then(
+        () => {
+          entry.ready = true;
+        },
+        (error: unknown) => {
+          tables.delete(key);
+          throw error;
+        },
+      )
+      .finally(() => {
+        entry.pending = undefined;
+      });
+    return entry.pending;
+  }
+
+  /**
+   * Captures the exact structural declarations for one physical table.
+   * @param table Canonical physical table layout.
+   * @returns Stable structural signature independent of column input order.
+   */
+  private tableSignature(table: PostgresTableSpec<unknown, never>): string {
+    const idType = table.idType as string | GenMessage<Message>;
+    return JSON.stringify([
+      table.sourceType.typeName,
+      table.recordType.typeName,
+      typeof idType === "string" ? idType : idType.typeName,
+      table.groupName ?? null,
+      table.primaryKey,
+      [...table.columns]
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((column) => [
+          column.name,
+          column.postgresType,
+          column.nullable,
+          column.defaultSql ?? null,
+        ]),
+    ]);
+  }
+
+  /**
+   * Prepares one physical table requirement with a released temporary or retained runtime pool.
+   *
+   * @param boundary Captured storage boundary.
+   * @param table Canonical physical table layout.
+   * @param mode Creation or read-only compatibility checking.
+   * @param customCreate Optional custom create SQL producer.
+   * @returns Completion after physical compatibility and cleanup.
+   */
+  private async attemptTable(
+    boundary: TenantBoundary,
+    table: PostgresTableSpec<unknown, never>,
+    mode: StoragePreparationMode,
+    customCreate?: () => string,
+  ): Promise<void> {
+    const runtime = this.#databases.get(boundary.key);
+    const bound = this.#bindings.get(boundary.key);
+    if (bound === undefined) throw new Error("PostgreSQL database is not bound.");
+    const pool = runtime?.pool ?? new Pool(bound.config.poolOptions);
+    let failure: Error | undefined;
+    try {
+      await new PostgresTableInitializer(
+        { acquire: () => pool.connect(), lockIdentity: bound.config.target },
+        table.schema,
+        table,
+        customCreate,
+      ).prepare(mode);
+    } catch (error) {
+      failure =
+        error instanceof Error
+          ? error
+          : new Error("PostgreSQL preparation failed.", { cause: error });
+    }
+    if (runtime === undefined) await this.closeCheckedPool(pool, failure);
+    else if (failure !== undefined) throw failure;
   }
 
   /**
@@ -857,27 +1238,114 @@ export class PostgresStorageFactory extends StorageFactory {
   }
 
   /**
+   * Resolves a destination for explicit preparation without retaining a pool.
+   * @param boundary Captured storage boundary.
+   * @returns Proven connection settings and server-selected schema.
+   */
+  private resolveBinding(boundary: TenantBoundary): Promise<PostgresBoundDatabase> {
+    const runtime = this.#databases.get(boundary.key);
+    if (runtime !== undefined)
+      return Promise.resolve({ config: runtime.config, schema: runtime.schema });
+    const bound = this.#bindings.get(boundary.key);
+    if (bound !== undefined) return Promise.resolve(bound);
+    const runtimePending = this.#pending.get(boundary.key);
+    if (runtimePending !== undefined)
+      return runtimePending.then((database) => ({
+        config: database.config,
+        schema: database.schema,
+      }));
+    const pending = this.#bindingPending.get(boundary.key);
+    if (pending !== undefined) return pending;
+    const attempt = this.bindTemporary(boundary)
+      .then((result) => {
+        this.#bindings.set(boundary.key, result);
+        return result;
+      })
+      .finally(() => this.#bindingPending.delete(boundary.key));
+    this.#bindingPending.set(boundary.key, attempt);
+    return attempt;
+  }
+
+  /**
+   * Checks one destination using a temporary pool and releases it on all paths.
+   *
+   * @param boundary Captured storage boundary.
+   * @returns Stable connection settings and schema after cleanup succeeds.
+   */
+  private async bindTemporary(boundary: TenantBoundary): Promise<PostgresBoundDatabase> {
+    const config = await this.configFor(boundary);
+    const reserved = this.reserveTenantTarget(config);
+    const pool = new Pool(config.poolOptions);
+    let schema: string | undefined;
+    let failure: Error | undefined;
+    try {
+      const client = await pool.connect();
+      try {
+        schema = await PostgresSchemas.resolve(client, config.schema);
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      failure =
+        error instanceof PostgresStorageConfigurationError
+          ? error
+          : new PostgresStorageConnectionError("Unable to connect to PostgreSQL.", {
+              cause: error,
+            });
+    }
+    try {
+      await this.closeCheckedPool(pool, failure);
+    } catch (error) {
+      if (reserved) this.#tenantTargets.delete(config.target);
+      throw error;
+    }
+    if (schema === undefined) throw new Error("PostgreSQL schema was not resolved.");
+    return { config, schema };
+  }
+
+  /**
    * Resolves settings and proves the selected database without retaining failures.
    *
    * @param boundary The captured tenant scope.
    * @returns The connected database resource.
    */
   private async bindDatabase(boundary: TenantBoundary): Promise<PostgresDatabase> {
-    let config = this.#configs.get(boundary.key);
-    if (config === undefined) {
-      if (boundary.tenantId === undefined || this.tenantResolver === undefined)
-        throw new PostgresStorageConfigurationError("PostgreSQL tenant is not configured.");
-      const options = await this.tenantResolver(boundary.tenantId);
-      config = PostgresConfigurations.parse(boundary, options);
-    }
+    const bound =
+      this.#bindings.get(boundary.key) ?? (await this.#bindingPending.get(boundary.key));
+    if (bound !== undefined)
+      return {
+        boundary,
+        pool: new Pool(bound.config.poolOptions),
+        schema: bound.schema,
+        target: bound.config.target,
+        databaseName: bound.config.databaseName,
+        config: bound.config,
+      };
+    const config = await this.configFor(boundary);
     const reserved = this.reserveTenantTarget(config);
     try {
-      return await PostgresStorageFactory.prove(config);
+      const database = await PostgresStorageFactory.prove(config);
+      this.#bindings.set(boundary.key, { config, schema: database.schema });
+      return database;
     } catch (error) {
       if (reserved) this.#tenantTargets.delete(config.target);
       if (error instanceof PostgresStorageConfigurationError) throw error;
       throw new PostgresStorageConnectionError("Unable to connect to PostgreSQL.");
     }
+  }
+
+  /**
+   * Reads configured or application-resolved settings for one captured tenant.
+   * @param boundary Captured storage boundary.
+   * @returns Validated database settings.
+   */
+  private async configFor(boundary: TenantBoundary): Promise<PostgresDatabaseConfig> {
+    const fixed = this.#configs.get(boundary.key);
+    if (fixed !== undefined) return fixed;
+    if (boundary.tenantId === undefined || this.tenantResolver === undefined)
+      throw new PostgresStorageConfigurationError("PostgreSQL tenant is not configured.");
+    const options = await this.tenantResolver(boundary.tenantId);
+    return PostgresConfigurations.parse(boundary, options);
   }
 
   /**
@@ -906,9 +1374,10 @@ export class PostgresStorageFactory extends StorageFactory {
    * @param schema The resolved server schema.
    */
   private assertFamily(boundary: TenantBoundary, tableName: string, schema: string): void {
-    const database = this.#databases.get(boundary.key);
-    if (database === undefined) throw new Error("PostgreSQL database is not bound.");
-    const key = `${database.target}\0${schema}\0${tableName}`;
+    const target =
+      this.#databases.get(boundary.key)?.target ?? this.#bindings.get(boundary.key)?.config.target;
+    if (target === undefined) throw new Error("PostgreSQL database is not bound.");
+    const key = `${target}\0${schema}\0${tableName}`;
     const prior = this.#families.get(key);
     if (prior !== undefined && prior !== boundary.key)
       throw new PostgresStorageConfigurationError("Shared and tenant PostgreSQL tables collide.");
@@ -1099,7 +1568,30 @@ interface PostgresDatabase {
   readonly schema: string;
   readonly databaseName: string;
   readonly target: string;
+  readonly config: PostgresDatabaseConfig;
 }
+
+/**
+ * Remembers a proven destination without retaining its temporary pool.
+ */
+interface PostgresBoundDatabase {
+  readonly config: PostgresDatabaseConfig;
+  readonly schema: string;
+}
+
+/**
+ * Records physical-family readiness for one canonical table definition.
+ */
+interface PostgresPreparedTable {
+  readonly signature: string;
+  ready: boolean;
+  pending: Promise<void> | undefined;
+}
+
+/**
+ * Remembers Agent audit index readiness without a variable layout signature.
+ */
+type PostgresPreparedAudit = Omit<PostgresPreparedTable, "signature">;
 
 /**
  * Contains validated settings used to open one database pool.
@@ -1409,25 +1901,5 @@ const PostgresSchemas = Object.freeze({
       throw new PostgresStorageConfigurationError("PostgreSQL schema is invalid.");
     }
     return schema;
-  },
-
-  /**
-   * Rejects schemas that contain the retired storage layout.
-   *
-   * @param client Provides a connected client.
-   * @param schema Names the selected schema.
-   * @returns A promise that resolves when the schema is usable.
-   */
-  async assertUsable(client: PoolClient, schema: string): Promise<void> {
-    const result = await client.query(
-      "SELECT 1 FROM information_schema.columns WHERE table_schema = $1 " +
-        "AND LOWER(column_name) IN ('_scope', '_revision') LIMIT 1",
-      [schema],
-    );
-    if ((result.rowCount ?? 0) > 0) {
-      throw new PostgresStorageConfigurationError(
-        "The configured database contains the retired storage layout.",
-      );
-    }
   },
 });

@@ -28,6 +28,15 @@ server-certificate verification, and optional schema name. URLs must include a
 database and cannot bypass the explicit options model with fragments or driver
 parameters. `checkConnection()` checks only the shared destination using
 read-only SQL; it does not resolve tenants, create tables, or check a model.
+Provider integrations can use `StoragePreparations.for(factory)` to create or
+check a declared Record, Entity current/enabled history, or surviving Agent
+audit family. Check mode inspects the selected tenant's actual schema, table,
+and required audit indexes without DDL or custom creation SQL. A successful
+compatible preparation is reused by later handles and operations in this
+factory. Explicit preparation uses and releases a temporary pool when no runtime
+pool exists; otherwise it reuses the retained runtime pool. Failed requirements
+can be retried without discarding
+earlier compatible families.
 
 PostgreSQL creates tables but not databases or schemas. A missing schema is a
 configuration error on `checkConnection()` or first use. Without an explicit schema, `current_schema()`

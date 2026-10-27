@@ -25,7 +25,7 @@ import {
   occurredAt,
   scope,
 } from "../../storage/test/entity/agent-history-fixtures.js";
-import { PostgresAgentHistory } from "../src/postgres/agent-history.js";
+import { PostgresAgentHistory, PostgresAgentIndexes } from "../src/postgres/agent-history.js";
 
 const indexes = {
   agent_history_full: 'scope_digest, order_key COLLATE "C"',
@@ -39,6 +39,26 @@ function entry(record: AgentHistoryRecord) {
 }
 
 describe("PostgreSQL Agent history provider boundary", () => {
+  it("checks all mandatory audit indexes without creating them", async () => {
+    const query = vi.fn((_sql: string, values?: [string, keyof typeof indexes]) =>
+      Promise.resolve({
+        rows:
+          values === undefined
+            ? []
+            : [
+                {
+                  definition: `CREATE INDEX ${values[1]} ON audit USING btree (${indexes[values[1]]})`,
+                  indisvalid: true,
+                  indisready: true,
+                },
+              ],
+      }),
+    );
+    await PostgresAgentIndexes.prepare({ query } as never, '"spine"."audit"', "check");
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls.every(([sql]) => sql.startsWith("SELECT"))).toBe(true);
+  });
+
   it("returns scoped original entries through indexed category and conversation pages", async () => {
     const stored = new Map<string, AgentHistoryRecord>();
     const query = vi.fn((_client: unknown, sql: string, values: (string | number)[]) => {
@@ -200,6 +220,7 @@ describe("PostgreSQL Agent history provider boundary", () => {
   });
 
   it("rejects an index that is present but unavailable for reads", async () => {
+    let valid = false;
     const client = {
       query: vi.fn((_sql: string, values?: [string, keyof typeof indexes]) =>
         Promise.resolve({
@@ -209,7 +230,7 @@ describe("PostgreSQL Agent history provider boundary", () => {
               : [
                   {
                     definition: `CREATE INDEX ${values[1]} ON test USING btree (${indexes[values[1]]})`,
-                    indisvalid: false,
+                    indisvalid: valid,
                     indisready: true,
                   },
                 ],
@@ -225,6 +246,7 @@ describe("PostgreSQL Agent history provider boundary", () => {
       scope,
       {
         historyExecutor: () => executor,
+        writeImmutable: vi.fn(() => Promise.resolve()),
         close: vi.fn(),
       } as never,
       <T>(work: () => Promise<T>) => work(),
@@ -232,6 +254,10 @@ describe("PostgreSQL Agent history provider boundary", () => {
     await expect(
       history.read({ entityId: "ticket-a", view: { kind: "full" }, count: 1, maxBytes: 10_000 }),
     ).rejects.toThrow(/index is incompatible/i);
+    valid = true;
+    await expect(
+      history.append("ticket-a", event("after-retry", occurredAt(4n), false)),
+    ).resolves.toBeUndefined();
     history.close();
   });
 });

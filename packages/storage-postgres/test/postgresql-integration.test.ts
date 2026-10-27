@@ -34,6 +34,8 @@ import {
 } from "@spine-event-engine/storage";
 import {
   EntityCommitStorageFactories,
+  AgentHistoryStorageFactories,
+  StoragePreparations,
   eventHistorySpec,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
@@ -54,6 +56,11 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { entityStorage } from "./postgres-entity-seam.js";
+import {
+  scope as agentScope,
+  event as agentEvent,
+  occurredAt,
+} from "../../storage/test/entity/agent-history-fixtures.js";
 
 import { PostgresStorageFactory, type PostgresTableSpec } from "../src/index.js";
 
@@ -82,6 +89,51 @@ describe("PostgreSQL live storage acceptance", () => {
 
   afterAll(async () => {
     await factory.close();
+  });
+
+  it("checks a physical family read-only and prepares the surviving Agent audit indexes", async () => {
+    const preparation = StoragePreparations.for(factory);
+    const scope = context("preparation");
+    const group = new StorageGroup(`pg_prep_${run}`);
+    const spec = new RecordSpec({
+      recordType: EventSchema,
+      idSchema: EventIdSchema,
+      extractId: (value: Event) => {
+        if (value.id === undefined) throw new Error("Event ID is required.");
+        return value.id;
+      },
+    });
+    await expect(preparation.prepareRecord(scope, spec, group, "check")).rejects.toThrow();
+    await preparation.prepareRecord(scope, spec, group, "create");
+    await preparation.prepareRecord(scope, spec, group, "check");
+    const records = factory.createRecordStorage(scope, spec, group);
+    try {
+      const stored = event(`prepared-${run}`, "task");
+      if (stored.id === undefined) throw new Error("Event ID is required.");
+      await records.write(stored);
+      await expect(records.read(stored.id)).resolves.toEqual(stored);
+    } finally {
+      records.close();
+    }
+    await preparation.prepareAgentHistory(agentScope, "create");
+    await preparation.prepareAgentHistory(agentScope, "check");
+    const entity = entityInput(context("prepared_entity"));
+    await preparation.prepareEntity(entity, "create");
+    await preparation.prepareEntity(entity, "check");
+    const history = AgentHistoryStorageFactories.create(factory, agentScope);
+    try {
+      const entry = agentEvent(`prepared-${run}`, occurredAt(1_789_000_011n), false);
+      await history.append(`ticket-${run}`, entry);
+      const page = await history.read({
+        entityId: `ticket-${run}`,
+        view: { kind: "full" },
+        count: 2,
+        maxBytes: 100_000,
+      });
+      expect(page.entries).toEqual([entry]);
+    } finally {
+      history.close();
+    }
   });
 
   it("keeps an immutable EventStore prefix and admits the same complete Events on retry", async () => {

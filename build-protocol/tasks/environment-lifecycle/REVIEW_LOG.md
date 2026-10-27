@@ -488,3 +488,52 @@ record51/57, Entity-history22/25; Agent audit0/3 and execution0/9 are outside th
 three-suite coverage run, covered by separate focused/live tests. This is not a
 global coverage claim. Final release coverage remains mandatory. No blocker for
 this bounded checkpoint; M4c will use the provider lifecycle now established.
+
+## M4c PostgreSQL physical preparation review
+
+Baseline b7ef85b29. Scope: existing provider-only preparation port, pure real
+record/Entity/history definitions, shared physical compatibility/pending state,
+temporary explicit-preparation connections, stateless mode-aware initializer,
+Agent audit/index checks, retry/coalescing/close behavior, narrow docs and tests.
+Retired-layout upgrade scan removed per human exclusion; no data migration.
+Reported preflight172unit+coverage/20live PostgreSQL, generated build/tooling,
+docs API/audience/snippets, ESLint/TSDoc/cleanup/diff pass. Final freeze/evidence
+required before dispatch. External postgres-preparation-review-context.md and
+postgres-preparation-evidence.md define exact review scope/evidence.
+
+Four-concern wave, existing explicitly configured immutable profiles:
+provider_reliability/performance_reliability_reviewer gpt-6-sol/medium;
+provider_style/style_maintainability_reviewer gpt-6-sol/medium;
+repository_api_review/typescript_api_docs_reviewer gpt-6-sol/medium;
+provider_documentation/documentation_reviewer gpt-6-luna/medium. Runtime metadata
+introspection unavailable. Three technical lanes first; documentation follows as
+capacity frees. No reviewer edits/build reruns/children; external reports allowed.
+Collect all findings before a single batch to the existing implementer. Estimate
+0.3-0.6hours including bounded corrections, focused confirmation and checkpoint.
+
+M4c full review wave collected. Reliability and API: no P0-P2 findings. Style:
+no blocking findings; accept the narrow P3 removal of unused audit-entry signature
+(the fixed version string is never compared). Documentation: clarify both prose
+locations that explicit preparation reuses an existing runtime pool, otherwise
+opens/releases a temporary pool. One deterministic correction batch to existing
+Sol/medium implementer, estimate0.1-0.2hours including relevant checks and commit.
+No runtime algorithm/public contract change; no reopened review lane needed for
+this type-only field/prose cleanup after mechanical verification.
+
+Fresh changed-line LCOV inspection: factory89/150, record3/3, initializer8/9,
+audit17/21. Entity and factory audit readiness branches primarily run in separate
+live tests, not scoped unit coverage. Reliability explicitly inspected temporary
+binding cleanup/reservation retry and audit failure invalidation; no concrete
+race found. Same-handle audit facade retry is tested; deeper injected temporary
+pool cleanup/audit-index failures remain optional coverage strengthening, not a
+claim made by current test evidence. Final global release coverage is pending.
+All reviewers matched expected immutable explicit profiles; introspection remains
+unavailable. No source edits occurred during the review wave.
+
+M4c accepted after complete four-concern review and deterministic corrections.
+API/reliability clean; style's unused audit signature removed; docs now explain
+runtime-pool reuse versus temporary fallback. Typecheck and3audit tests plus docs,
+lint, TSDoc, cleanup, formatting and diff pass after correction. No runtime
+algorithm/public contract changed, so no repeated review or broad matrix needed.
+All concern dispositions accepted, with scoped coverage limits retained above.
+Commit/push authored paths; full release/security and later integration remain.

@@ -39,7 +39,6 @@ import {
 import { PostgresIdColumn } from "./id-column.js";
 import type { PostgresParameter } from "./parameter.js";
 import type { PostgresTableSpec } from "./storage-factory.js";
-import { PostgresTableInitializer } from "./table-initializer.js";
 
 const maximumNormalizedPlanBinds = 1_000;
 
@@ -62,6 +61,15 @@ export interface PostgresRecordLifecycle {
    * @returns Completion after binding.
    */
   resolve(): Promise<void>;
+
+  /**
+   * Prepares factory-shared physical readiness for the resolved table.
+   *
+   * @param table The canonical physical table definition.
+   * @param customCreate Optional custom create SQL producer.
+   * @returns Completion after creation or remembered compatible readiness.
+   */
+  prepare(table: PostgresTableSpec<unknown, never>, customCreate?: () => string): Promise<void>;
 
   /**
    * Records one admitted asynchronous operation through factory close.
@@ -221,8 +229,6 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
 
   readonly #columns: ColumnMapping<PostgresParameter>;
 
-  #initializer: PostgresTableInitializer | undefined;
-
   #binding: Promise<void> | undefined;
 
   #table: PostgresTableSpec<I, R> | undefined;
@@ -302,8 +308,11 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       throw error;
     });
     await this.#binding;
-    if (this.#initializer === undefined) throw new Error("PostgreSQL table is not bound.");
-    await this.#initializer.prepare();
+    const create = this.create;
+    await this.lifecycle.prepare(
+      this.table as never,
+      create === undefined ? undefined : () => create(this.table),
+    );
   }
 
   /**
@@ -315,13 +324,6 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     await this.lifecycle.resolve();
     const table = this.onSchema(this.lifecycle.schema);
     this.#table = table;
-    const create = this.create;
-    this.#initializer = new PostgresTableInitializer(
-      this.lifecycle,
-      table.schema,
-      table as never,
-      create === undefined ? undefined : () => create(table),
-    );
   }
 
   /**

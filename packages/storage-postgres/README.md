@@ -70,7 +70,14 @@ families do not map to the same physical table.
 ## Lifecycle and operations
 
 Tables are initialized lazily and checked against the expected PostgreSQL
-layout. Each acquired client is released; history maintenance applies deletion
+layout. Provider integrations can prepare declared record, Entity current and
+enabled history, and Agent audit families through
+`StoragePreparations.for(factory)`. Creation verifies the resulting layout;
+check mode only inspects existing tables and audit indexes, and a compatible
+check avoids later creation SQL for the same family. Explicit preparation uses
+and releases a temporary pool when no runtime pool exists; otherwise it reuses
+the retained runtime pool. Each acquired
+client is released; history maintenance applies deletion
 pages independently. Await `factory.close()` when the application stops; it is
 idempotent, drains admitted work and pools, and reports cleanup failures. A
 closed factory cannot create new handles or check a connection.
