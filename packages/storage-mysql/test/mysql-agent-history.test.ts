@@ -23,6 +23,7 @@ import {
   AgentHistoryConformance,
   AgentHistoryKeys,
   AgentHistoryStorageFactories,
+  StoragePreparations,
 } from "@spine-event-engine/storage/provider";
 import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 
@@ -158,6 +159,55 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       await reopened.close();
       await pool.query(`DROP TABLE IF EXISTS \`${table}\``);
       await pool.end();
+    }
+  }, 120_000);
+
+  it("retries preparation on the same Agent history handle after a failed create callback", async () => {
+    const table = `agent_retry_${randomUUID().replaceAll("-", "")}`;
+    const builder = () =>
+      MysqlStorageFactory.newBuilder()
+        .setOptions({ url: required(url) })
+        .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table);
+    const seed = await builder().build();
+    try {
+      const records = seed.createRecordStorage(
+        scope.context,
+        AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+        AgentHistoryRecords.group,
+      );
+      await records.read("absent");
+      records.close();
+      await expect(
+        StoragePreparations.for(seed).prepareAgentHistory(scope, "check"),
+      ).rejects.toThrow(/index is missing/i);
+    } finally {
+      await seed.close();
+    }
+    let fail = true;
+    const factory = await builder()
+      .useOperationFactory(() => {
+        if (fail) {
+          fail = false;
+          throw new Error("preparation callback failed");
+        }
+        return { sql: "SELECT 1" };
+      })
+      .build();
+    const history = AgentHistoryStorageFactories.create(factory, scope);
+    try {
+      const page = {
+        entityId: "ticket",
+        view: { kind: "full" } as const,
+        count: 1,
+        maxBytes: 1000,
+      };
+      await expect(history.read(page)).rejects.toMatchObject({
+        cause: { message: "preparation callback failed" },
+      });
+      await expect(history.read(page)).resolves.toMatchObject({ entries: [] });
+    } finally {
+      history.close();
+      await factory.close();
     }
   }, 120_000);
 

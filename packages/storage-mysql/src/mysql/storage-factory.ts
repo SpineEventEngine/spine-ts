@@ -26,10 +26,16 @@ import {
 import {
   TenantBoundary,
   TenantCatalogReads,
+  StoragePreparations,
+  stateHistorySpec,
+  eventHistorySpec,
   type TenantCatalog,
   type TenantCatalogCursor,
   type TenantCatalogPage,
   type TenantCatalogRead,
+  type StoragePreparationMode,
+  type EntityStoragePreparationInput,
+  type AgentHistoryStorageInput,
 } from "@spine-event-engine/storage/provider";
 import { AgentExecutionRecords, AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 import {
@@ -50,14 +56,18 @@ import {
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
-import { MysqlRecordStorage, type MysqlRecordLifecycle } from "./record-storage.js";
+import {
+  MysqlRecordStorage,
+  MysqlTableInitializer,
+  type MysqlRecordLifecycle,
+} from "./record-storage.js";
 import { MysqlTableResolver } from "./table-resolver.js";
 import { MysqlEntityStorage } from "./entity-history.js";
-import { MysqlAgentHistory, AgentHistoryHash } from "./agent-history.js";
+import { MysqlAgentHistory, AgentHistoryHash, AgentHistoryIndexes } from "./agent-history.js";
 import { MysqlAgentExecution } from "./agent-execution.js";
 import { MysqlAgentTransaction } from "./agent-transaction.js";
 import { resolvedMysqlTableSpec, type MysqlTableSpec } from "./table-spec.js";
-import { MysqlStorageOperationError, mysqlError } from "./errors.js";
+import { MysqlStorageOperationError, MysqlStorageSchemaError, mysqlError } from "./errors.js";
 
 export type { MysqlColumnSpec, MysqlTableSpec } from "./table-spec.js";
 
@@ -410,6 +420,12 @@ export class MysqlStorageFactory extends StorageFactory {
 
   readonly #families = new Map<string, string | symbol>();
 
+  readonly #prepared = new Map<string | symbol, Map<string, MysqlPreparedRequirement>>();
+
+  readonly #bindings = new Map<string | symbol, MysqlDatabaseConfig>();
+
+  readonly #bindingPending = new Map<string | symbol, Promise<MysqlDatabaseConfig>>();
+
   #sharedCheck: Promise<void> | undefined;
 
   readonly #catalog: TenantCatalog;
@@ -448,6 +464,11 @@ export class MysqlStorageFactory extends StorageFactory {
     );
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
+    });
+    StoragePreparations.register(this, {
+      prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
+      prepareEntity: (input, mode) => this.prepareEntity(input, mode),
+      prepareAgentHistory: (input, mode) => this.prepareAgentHistory(input, mode),
     });
     this.registerAgentHistory();
     this.registerAgentExecution();
@@ -693,23 +714,15 @@ export class MysqlStorageFactory extends StorageFactory {
     tracked = true,
     publicHandle = false,
   ): MysqlRecordStorage<I, R> {
-    const source = spec.sourceType.typeName;
-    const table = this.#resolver.resolve(source, group?.name, undefined, spec.recordType.typeName);
-    const tableSpec = resolvedMysqlTableSpec({
-      tableName: table.tableName,
-      sourceType: spec.sourceType,
-      recordType: spec.recordType,
-      idType: spec.idType,
-      ...(group === undefined ? {} : { groupName: group.name }),
-      declaredColumns: spec.columns,
-    });
+    const tableSpec = this.tableSpec(spec, group);
+    const table = { tableName: tableSpec.tableName };
     const operation = this.createOperation;
     const create = operation === undefined ? undefined : () => operation(tableSpec).sql;
     const handle = new MysqlRecordStorage(
       context,
       spec,
       table,
-      this.connections(boundary, table.tableName),
+      this.connections(boundary, tableSpec),
       () => this.#handles.delete(handle),
       create,
       tableSpec,
@@ -718,6 +731,146 @@ export class MysqlStorageFactory extends StorageFactory {
     );
     if (tracked) this.#handles.add(handle);
     return handle;
+  }
+
+  /**
+   * Resolves the physical declaration shared by ordinary use and preparation.
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record type.
+   * @param spec Record declaration.
+   * @param group Optional physical group.
+   * @returns Canonical MySQL table declaration.
+   */
+  private tableSpec<I, R extends Message>(
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): MysqlTableSpec<I, R> {
+    const name = this.#resolver.resolve(
+      spec.sourceType.typeName,
+      group?.name,
+      undefined,
+      spec.recordType.typeName,
+    ).tableName;
+    return resolvedMysqlTableSpec({
+      tableName: name,
+      sourceType: spec.sourceType,
+      recordType: spec.recordType,
+      idType: spec.idType,
+      declaredColumns: spec.columns,
+      ...(group === undefined ? {} : { groupName: group.name }),
+    });
+  }
+
+  /**
+   * Admits explicit record preparation through factory closure.
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record type.
+   * @param context Complete storage scope.
+   * @param spec Record declaration.
+   * @param group Optional physical group.
+   * @param mode Creation or read-only inspection.
+   * @returns Completion after physical compatibility.
+   */
+  private prepareRecord<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group: StorageGroup | undefined,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admitPublic(() => this.prepareRecordAdmitted(context, spec, group, mode));
+  }
+
+  /**
+   * Prepares a record within an existing admitted operation.
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record type.
+   * @param context Complete storage scope.
+   * @param spec Record declaration.
+   * @param group Optional physical group.
+   * @param mode Creation or read-only inspection.
+   * @returns Completion after physical compatibility.
+   */
+  private prepareRecordAdmitted<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group: StorageGroup | undefined,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.prepareTable(this.database(context), this.tableSpec(spec, group), mode);
+  }
+
+  /**
+   * Prepares current Entity storage and enabled history families.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Entity state type.
+   * @param input Declarative Entity requirements.
+   * @param mode Creation or read-only inspection.
+   * @returns Completion after all enabled families are compatible.
+   */
+  private prepareEntity<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admitPublic(async () => {
+      if (!this.sameEntityColumns(input))
+        throw new MysqlStorageSchemaError("Entity query columns differ from current records.");
+      await this.prepareRecordAdmitted(input.context, input.recordSpec, undefined, mode);
+      if (input.stateHistory) {
+        const history = stateHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, history.spec, history.group, mode);
+      }
+      if (input.eventHistory) {
+        const history = eventHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, history.spec, history.group, mode);
+      }
+    });
+  }
+
+  /**
+   * Compares actual query columns with the current record declaration.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Entity state type.
+   * @param input Declarative Entity requirements.
+   * @returns Whether column names and physical types match.
+   */
+  private sameEntityColumns<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+  ): boolean {
+    const signature = (columns: typeof input.columns) =>
+      JSON.stringify(
+        columns
+          .map((column) => [
+            column.name,
+            column.type.kind === "message"
+              ? column.type.message.typeName
+              : JSON.stringify(column.type),
+          ])
+          .sort(([a], [b]) => String(a).localeCompare(String(b))),
+      );
+    return signature(input.columns) === signature(input.recordSpec.columns);
+  }
+
+  /**
+   * Prepares the surviving Agent audit table and fixed native indexes.
+   * @typeParam I Typed Agent identifier.
+   * @param input Agent scope and state type.
+   * @param mode Creation or read-only inspection.
+   * @returns Completion after all audit structures are compatible.
+   */
+  private prepareAgentHistory<I>(
+    input: AgentHistoryStorageInput<I>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admitPublic(async () => {
+      TenantBoundary.of(input.context);
+      if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
+      const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
+      await this.prepareRecordAdmitted(input.context, spec, AgentHistoryRecords.group, mode);
+      const boundary = this.database(input.context);
+      const table = this.tableSpec(spec, AgentHistoryRecords.group);
+      for (const [name, columns] of AgentHistoryIndexes)
+        await this.prepareAuditIndex(boundary, table, name, columns, mode);
+    });
   }
 
   /**
@@ -786,22 +939,231 @@ export class MysqlStorageFactory extends StorageFactory {
    * Creates the connection lifecycle for one tenant database.
    *
    * @param boundary Captured tenant database selection.
-   * @param tableName Resolved family name for collision checks.
+   * @param table Optional physical family for preparation and collision checks.
    * @returns The connection acquisition and release operations.
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record message.
    */
-  private connections(boundary: TenantBoundary, tableName?: string): MysqlRecordLifecycle {
+  private connections<I, R extends Message>(
+    boundary: TenantBoundary,
+    table?: MysqlTableSpec<I, R>,
+  ): MysqlRecordLifecycle {
     return {
       acquire: async () => {
         const database = await this.resolveDatabase(boundary);
-        if (tableName !== undefined) this.assertFamily(boundary, tableName, database.target);
+        if (table !== undefined) this.assertFamily(boundary, table.tableName, database.target);
         return database.pool.getConnection();
       },
+      ...(table === undefined
+        ? {}
+        : {
+            prepare: async () => {
+              await this.resolveDatabase(boundary);
+              await this.prepareTable(boundary, table, "create");
+            },
+            prepareIndex: (name: string, columns: readonly string[]) =>
+              this.resolveDatabase(boundary).then(() =>
+                this.prepareAuditIndex(boundary, table, name, columns, "create"),
+              ),
+          }),
       track: (work) => this.track(work),
       publicOpen: () => this.isOpen(),
       release: (connection: PoolConnection) => {
         connection.release();
       },
     };
+  }
+
+  /**
+   * Prepares one compatible physical requirement across handles and explicit preparation.
+   *
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record message.
+   * @param boundary Captured tenant scope.
+   * @param table Canonical physical declaration.
+   * @param mode Creation or read-only check.
+   * @returns Shared readiness or a retryable failure.
+   */
+  private prepareTable<I, R extends Message>(
+    boundary: TenantBoundary,
+    table: MysqlTableSpec<I, R>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    const create = this.createOperation;
+    return this.prepareRequirement(boundary, table.tableName, this.tableSignature(table), () =>
+      this.attemptPreparation(boundary, table.tableName, (connection) =>
+        new MysqlTableInitializer(
+          { tableName: table.tableName },
+          table,
+          create === undefined ? undefined : () => create(table).sql,
+        ).prepare(connection, mode),
+      ),
+    );
+  }
+
+  /**
+   * Prepares one complete Agent audit index requirement.
+   *
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record message.
+   * @param boundary Captured tenant scope.
+   * @param table Canonical audit table declaration.
+   * @param name Fixed native index name.
+   * @param columns Ordered index columns.
+   * @param mode Creation or read-only check.
+   * @returns Shared readiness or retryable failure.
+   */
+  private prepareAuditIndex<I, R extends Message>(
+    boundary: TenantBoundary,
+    table: MysqlTableSpec<I, R>,
+    name: string,
+    columns: readonly string[],
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.prepareRequirement(
+      boundary,
+      `${table.tableName}\0${name}`,
+      JSON.stringify(columns),
+      () =>
+        this.attemptPreparation(boundary, table.tableName, (connection) =>
+          new MysqlTableInitializer({ tableName: table.tableName }, table).ensureHistoryIndex(
+            connection,
+            name,
+            columns,
+            mode,
+          ),
+        ),
+    );
+  }
+
+  /**
+   * Records pending work and successful physical evidence.
+   *
+   * @param boundary Captured tenant scope.
+   * @param key Physical table or index identity.
+   * @param signature Complete requirement declaration.
+   * @param run One physical attempt.
+   * @returns Shared completion.
+   */
+  private prepareRequirement(
+    boundary: TenantBoundary,
+    key: string,
+    signature: string,
+    run: () => Promise<void>,
+  ): Promise<void> {
+    const entries = this.#prepared.get(boundary.key) ?? new Map<string, MysqlPreparedRequirement>();
+    this.#prepared.set(boundary.key, entries);
+    const prior = entries.get(key);
+    if (prior !== undefined && prior.signature !== signature)
+      return Promise.reject(new MysqlStorageSchemaError("MySQL table definition conflicts."));
+    if (prior?.ready) return Promise.resolve();
+    if (prior?.pending !== undefined) return prior.pending;
+    const entry: MysqlPreparedRequirement = { signature, ready: false, pending: undefined };
+    entries.set(key, entry);
+    entry.pending = Promise.resolve()
+      .then(run)
+      .then(
+        () => {
+          entry.ready = true;
+        },
+        (error: unknown) => {
+          entries.delete(key);
+          throw error;
+        },
+      )
+      .finally(() => {
+        entry.pending = undefined;
+      });
+    return entry.pending;
+  }
+
+  /**
+   * Captures physical columns independently of declaration ordering.
+   *
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored record message.
+   * @param table Canonical physical table declaration.
+   * @returns Stable structural signature.
+   */
+  private tableSignature<I, R extends Message>(table: MysqlTableSpec<I, R>): string {
+    const id = table.idType as string | GenMessage<Message>;
+    return JSON.stringify([
+      table.sourceType.typeName,
+      table.recordType.typeName,
+      typeof id === "string" ? id : id.typeName,
+      table.groupName ?? null,
+      table.primaryKey,
+      [...table.columns]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((column) => [
+          column.name,
+          column.mysqlType,
+          column.nullable,
+          column.defaultSql ?? null,
+        ]),
+    ]);
+  }
+
+  /**
+   * Acquires an existing runtime pool or a released temporary pool for one attempt.
+   *
+   * @param boundary Captured tenant scope.
+   * @param tableName Physical family name for collision checks.
+   * @param work Physical inspection or creation on one connection.
+   * @returns Completion including temporary cleanup.
+   */
+  private async attemptPreparation(
+    boundary: TenantBoundary,
+    tableName: string,
+    work: (connection: PoolConnection) => Promise<void>,
+  ): Promise<void> {
+    const binding = await this.resolveBinding(boundary);
+    const runtime = this.#databases.get(boundary.key);
+    const pool = runtime?.pool ?? createPool(binding.poolOptions);
+    let failure: Error | undefined;
+    try {
+      await this.performPreparation(pool, boundary, tableName, binding.target, work);
+    } catch (error) {
+      failure =
+        error instanceof Error ? error : new Error("MySQL preparation failed.", { cause: error });
+    }
+    if (runtime === undefined) await this.closeCheckedPool(pool, failure);
+    else if (failure !== undefined) throw failure;
+  }
+
+  /**
+   * Performs one physical requirement on a released connection.
+   * @param pool Bound or temporary pool.
+   * @param boundary Captured tenant scope.
+   * @param tableName Physical table identity.
+   * @param target Validated destination identity.
+   * @param work Physical inspection or creation.
+   * @returns Completion after releasing the connection.
+   */
+  private async performPreparation(
+    pool: Pool,
+    boundary: TenantBoundary,
+    tableName: string,
+    target: string,
+    work: (connection: PoolConnection) => Promise<void>,
+  ): Promise<void> {
+    const connection = await pool.getConnection().catch((error: unknown) => {
+      throw new MysqlStorageConnectionError("Unable to connect to MySQL.", { cause: error });
+    });
+    try {
+      this.assertFamily(boundary, tableName, target);
+      try {
+        await work(connection);
+      } catch (error) {
+        throw mysqlError(
+          MysqlStorageSchemaError,
+          "MySQL record-family schema is incompatible.",
+          error,
+        );
+      }
+    } finally {
+      connection.release();
+    }
   }
 
   /**
@@ -877,6 +1239,61 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
+   * Resolves one proven destination for preparation without retaining a pool.
+   * @param boundary Captured tenant scope.
+   * @returns Stable settings after a read-only connection probe.
+   */
+  private resolveBinding(boundary: TenantBoundary): Promise<MysqlDatabaseConfig> {
+    const runtime = this.#databases.get(boundary.key);
+    if (runtime !== undefined) return Promise.resolve(runtime.config);
+    const bound = this.#bindings.get(boundary.key);
+    if (bound !== undefined) return Promise.resolve(bound);
+    const runtimePending = this.#pending.get(boundary.key);
+    if (runtimePending !== undefined) return runtimePending.then((database) => database.config);
+    const pending = this.#bindingPending.get(boundary.key);
+    if (pending !== undefined) return pending;
+    const attempt = this.bindTemporary(boundary)
+      .then((config) => {
+        this.#bindings.set(boundary.key, config);
+        return config;
+      })
+      .finally(() => this.#bindingPending.delete(boundary.key));
+    this.#bindingPending.set(boundary.key, attempt);
+    return attempt;
+  }
+
+  /**
+   * Checks one selected destination and releases its temporary pool.
+   * @param boundary Captured tenant scope.
+   * @returns Proven settings after cleanup succeeds.
+   */
+  private async bindTemporary(boundary: TenantBoundary): Promise<MysqlDatabaseConfig> {
+    const config = await this.configFor(boundary);
+    const reserved = this.reserveTenantTarget(config);
+    let pool: Pool | undefined;
+    let failure: Error | undefined;
+    try {
+      pool = createPool(config.poolOptions);
+      const connection = await pool.getConnection();
+      try {
+        await connection.query("SELECT 1");
+      } finally {
+        connection.release();
+      }
+    } catch (error) {
+      failure = new MysqlStorageConnectionError("Unable to connect to MySQL.", { cause: error });
+    }
+    try {
+      if (pool !== undefined) await this.closeCheckedPool(pool, failure);
+      else if (failure !== undefined) throw failure;
+    } catch (error) {
+      if (reserved) this.#tenantTargets.delete(config.target);
+      throw error;
+    }
+    return config;
+  }
+
+  /**
    * Reads configured or application-resolved settings for a captured tenant.
    *
    * @param boundary Captured tenant boundary.
@@ -897,6 +1314,16 @@ export class MysqlStorageFactory extends StorageFactory {
    * @returns The retained database and pool.
    */
   private async bindDatabase(boundary: TenantBoundary): Promise<MysqlDatabase> {
+    const bound =
+      this.#bindings.get(boundary.key) ?? (await this.#bindingPending.get(boundary.key));
+    if (bound !== undefined)
+      return {
+        boundary,
+        pool: createPool(bound.poolOptions),
+        databaseName: bound.databaseName,
+        target: bound.target,
+        config: bound,
+      };
     const config = await this.configFor(boundary);
     const reserved = this.reserveTenantTarget(config);
     let pool: Pool | undefined;
@@ -908,7 +1335,8 @@ export class MysqlStorageFactory extends StorageFactory {
       } finally {
         connection.release();
       }
-      return { boundary, pool, databaseName: config.databaseName, target: config.target };
+      this.#bindings.set(boundary.key, config);
+      return { boundary, pool, databaseName: config.databaseName, target: config.target, config };
     } catch (error) {
       if (reserved) this.#tenantTargets.delete(config.target);
       const failure = new MysqlStorageConnectionError("Unable to connect to MySQL.", {
@@ -1134,6 +1562,7 @@ interface MysqlDatabase {
   readonly databaseName: string;
   readonly target: string;
   readonly pool: Pool;
+  readonly config: MysqlDatabaseConfig;
 }
 
 interface MysqlDatabaseConfig {
@@ -1141,6 +1570,15 @@ interface MysqlDatabaseConfig {
   readonly databaseName: string;
   readonly poolOptions: Parameters<typeof createPool>[0];
   readonly target: string;
+}
+
+/**
+ * Caches only a successful physical proof or one pending attempt.
+ */
+interface MysqlPreparedRequirement {
+  readonly signature: string;
+  ready: boolean;
+  pending: Promise<void> | undefined;
 }
 
 const MysqlConfigurations = Object.freeze({

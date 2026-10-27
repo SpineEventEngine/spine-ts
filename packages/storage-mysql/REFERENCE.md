@@ -25,6 +25,12 @@ concurrent first uses share that binding, while a failed binding can retry.
 `checkConnection()` probes only the shared database with `SELECT 1`, performs
 no schema checks or DDL, and releases a temporary pool unless runtime work
 already bound one. Successful checks are remembered; failed checks can retry.
+The provider-only `StoragePreparations` port accepts declared Record, current
+Entity and enabled history, or surviving Agent audit requirements. Its `check`
+mode reads physical metadata without creating tables or indexes. Its `create`
+mode creates missing structures and verifies their complete layout. Both modes
+reuse a bound runtime pool or release temporary pools, and compatible results
+are shared with later ordinary use. A failed attempt remains retryable.
 `setStringifierRegistry(registry)` configures reversible mappings for
 message-valued IDs and ordinary message columns; the builder snapshots the
 registry so later caller changes do not alter stored or queried values.
@@ -35,7 +41,8 @@ types IDs only. Filter names and values are runtime inputs: MySQL checks the
 name against the declared columns and maps each value through the corresponding
 descriptor/column mapping, rather than accepting an application-constructed
 provider string.
-Per-family tables are created and verified lazily on first use. Options support
+Without explicit preparation, per-family tables are created and verified lazily
+on first use. Options support
 `connectionLimit`, `connectTimeoutMs`, and TLS material. Failure to validate
 configuration throws `MysqlStorageConfigurationError`; inaccessible connections
 are reported as `MysqlStorageConnectionError`; an

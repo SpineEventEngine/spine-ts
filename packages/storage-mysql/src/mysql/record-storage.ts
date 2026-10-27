@@ -44,6 +44,7 @@ import {
 } from "./errors.js";
 import { MysqlColumnMapping } from "./column-mapping.js";
 import { MysqlIdColumn } from "./id-column.js";
+import type { StoragePreparationMode } from "@spine-event-engine/storage/provider";
 
 const maximumNormalizedPlanBinds = 1_000;
 
@@ -91,6 +92,22 @@ export interface MysqlRecordLifecycle {
    * @returns Whether the factory accepts new public record work.
    */
   publicOpen?(): boolean;
+
+  /**
+   * Prepares the declared table before acquiring an operation connection.
+   *
+   * @returns Completion after shared physical readiness.
+   */
+  prepare?(): Promise<void>;
+
+  /**
+   * Prepares a required complete history index across handles.
+   *
+   * @param name Fixed index name.
+   * @param columns Ordered complete index columns.
+   * @returns Completion after compatibility.
+   */
+  prepareIndex?(name: string, columns: readonly string[]): Promise<void>;
 }
 
 /**
@@ -133,7 +150,8 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @returns Resolves after table creation and inspection complete.
    */
   async prepare(): Promise<void> {
-    await this.using(() => Promise.resolve());
+    if (this.lifecycle.prepare !== undefined) await this.lifecycle.prepare();
+    else await this.using(() => Promise.resolve());
   }
 
   /**
@@ -162,66 +180,15 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @returns Completion after the native index definition is checked.
    */
   async ensureHistoryIndex(name: string, columns: readonly string[]): Promise<void> {
-    await this.using(async (connection) => {
-      const existing = await this.historyIndex(connection, name);
-      if (existing.length !== 0) {
-        this.assertHistoryIndex(existing, columns);
-        return;
-      }
-      if (!/^[a-z_]+$/u.test(name) || columns.some((column) => !/^[a-z_]+$/u.test(column)))
-        throw new MysqlStorageSchemaError("MySQL Agent history index name is invalid.");
-      const quoted = columns.map((column) => `\`${column}\``).join(", ");
-      try {
-        await connection.query(`CREATE INDEX \`${name}\` ON \`${this.tableName}\` (${quoted})`);
-      } catch (error) {
-        if ((error as { code?: string }).code !== "ER_DUP_KEYNAME") throw error;
-      }
-      this.assertHistoryIndex(await this.historyIndex(connection, name), columns);
-    });
-  }
-
-  /**
-   * Reads complete physical index metadata for one fixed history index.
-   *
-   * @param connection Active MySQL connection.
-   * @param name Fixed required index name.
-   * @returns Ordered native index components.
-   */
-  private async historyIndex(
-    connection: import("mysql2/promise").PoolConnection,
-    name: string,
-  ): Promise<readonly IndexRow[]> {
-    const [rows] = await connection.query<IndexRow[]>(
-      "SELECT index_name AS index_name, non_unique AS non_unique, " +
-        "column_name AS column_name, seq_in_index AS seq_in_index, " +
-        "sub_part AS sub_part, collation AS collation, index_type AS index_type " +
-        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
-        "AND index_name=? ORDER BY seq_in_index",
-      [this.tableName, name],
+    if (this.lifecycle.prepareIndex !== undefined)
+      return this.lifecycle.prepareIndex(name, columns);
+    await this.using((connection) =>
+      new MysqlTableInitializer(
+        this.table,
+        this.tableSpec,
+        this.createOperation,
+      ).ensureHistoryIndex(connection, name, columns, "create"),
     );
-    return rows;
-  }
-
-  /**
-   * Rejects prefixes, wrong order, or a different native index.
-   *
-   * @param rows Ordered native index components.
-   * @param columns Required complete index columns.
-   */
-  private assertHistoryIndex(rows: readonly IndexRow[], columns: readonly string[]): void {
-    if (
-      rows.length !== columns.length ||
-      rows.some(
-        (row, index) =>
-          row.column_name !== columns[index] ||
-          Number(row.seq_in_index) !== index + 1 ||
-          row.sub_part !== null ||
-          Number(row.non_unique) !== 1 ||
-          row.collation !== "A" ||
-          row.index_type !== "BTREE",
-      )
-    )
-      throw new MysqlStorageSchemaError("MySQL Agent history index is incompatible.");
   }
 
   /**
@@ -679,6 +646,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     if (bound !== undefined) {
       return work(bound);
     }
+    if (this.lifecycle.prepare !== undefined) await this.lifecycle.prepare();
     const connection = await this.lifecycle.acquire();
     try {
       await this.ready(connection);
@@ -697,128 +665,18 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @returns Resolves when the table is ready.
    */
   private async ready(connection: import("mysql2/promise").PoolConnection): Promise<void> {
-    this.#ready ??= this.createAndInspect(connection).catch((error: unknown) => {
-      this.#ready = undefined;
-      throw mysqlError(
-        MysqlStorageSchemaError,
-        "MySQL record-family schema is incompatible.",
-        error,
-      );
-    });
+    if (this.lifecycle.prepare !== undefined) return;
+    this.#ready ??= new MysqlTableInitializer(this.table, this.tableSpec, this.createOperation)
+      .prepare(connection, "create")
+      .catch((error: unknown) => {
+        this.#ready = undefined;
+        throw mysqlError(
+          MysqlStorageSchemaError,
+          "MySQL record-family schema is incompatible.",
+          error,
+        );
+      });
     await this.#ready;
-  }
-
-  /**
-   * Creates the table when absent and verifies its stored schema.
-   *
-   * @param connection Provides the connection used for schema operations.
-   * @returns Resolves after schema verification.
-   */
-  private async createAndInspect(
-    connection: import("mysql2/promise").PoolConnection,
-  ): Promise<void> {
-    const columnsSql = this.tableSpec.columns.map(mysqlColumnDefinition).join(", ");
-    const primarySql = this.tableSpec.primaryKey.map((name) => `\`${name}\``).join(", ");
-    await connection.query(
-      this.createOperation?.() ??
-        `CREATE TABLE IF NOT EXISTS \`${this.table.tableName}\` ` +
-          `(${columnsSql}, PRIMARY KEY (${primarySql})) ENGINE=InnoDB`,
-    );
-    const [columns] = await connection.query<ColumnRow[]>(
-      "SELECT column_name AS column_name, column_type AS column_type, " +
-        "is_nullable AS is_nullable, column_default AS column_default, " +
-        "collation_name AS collation_name, extra AS extra " +
-        "FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?",
-      [this.table.tableName],
-    );
-    const expected = new Map(
-      this.tableSpec.columns.map((column) => [column.name.toLowerCase(), column]),
-    );
-    for (const column of this.tableSpec.columns) {
-      const actual = columns.find(
-        (candidate) => candidate.column_name.toLowerCase() === column.name.toLowerCase(),
-      );
-      if (actual === undefined)
-        throw new Error(`MySQL table ${this.table.tableName} lacks ${column.name}.`);
-      this.assertCompatibleColumn(column, actual);
-    }
-    for (const column of columns)
-      if (!expected.has(column.column_name.toLowerCase()))
-        throw new Error(
-          `MySQL table ${this.table.tableName} has incompatible extra column ${column.column_name}.`,
-        );
-    const [primary] = await connection.query<PrimaryKeyRow[]>(
-      "SELECT column_name AS column_name, seq_in_index AS seq_in_index " +
-        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
-        "AND index_name='PRIMARY' ORDER BY seq_in_index",
-      [this.table.tableName],
-    );
-    if (
-      columns.some((column) => column.column_type !== undefined) &&
-      (primary.length !== this.tableSpec.primaryKey.length ||
-        primary.some(
-          (column, index) =>
-            column.column_name.toLowerCase() !== this.tableSpec.primaryKey[index]?.toLowerCase(),
-        ))
-    )
-      throw new Error(`MySQL table ${this.table.tableName} has an incompatible primary key.`);
-    const [indexes] = await connection.query<IndexRow[]>(
-      "SELECT index_name AS index_name, non_unique AS non_unique, " +
-        "column_name AS column_name, seq_in_index AS seq_in_index " +
-        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
-        "ORDER BY index_name, seq_in_index",
-      [this.table.tableName],
-    );
-    for (const index of groupedIndexes(indexes))
-      if (
-        index.nonUnique === 0 &&
-        index.name.toLowerCase() !== "primary" &&
-        !this.tableSpec.primaryKey.every((name) =>
-          index.columns.some((column) => column.toLowerCase() === name.toLowerCase()),
-        )
-      )
-        throw new Error(
-          `MySQL table ${this.table.tableName} has incompatible unique index ${index.name}.`,
-        );
-    const [engines] = await connection.query<EngineRow[]>(
-      "SELECT engine AS engine FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?",
-      [this.table.tableName],
-    );
-    const engine = engines[0]?.engine;
-    if (engine !== undefined && !["innodb", "myisam", "aria"].includes(engine.toLowerCase()))
-      throw new Error(`MySQL table ${this.table.tableName} has unsupported engine ${engine}.`);
-  }
-
-  /**
-   * Verifies one physical column against the canonical table specification.
-   *
-   * @param expected Describes the required column.
-   * @param actual Describes the stored column.
-   */
-  private assertCompatibleColumn(
-    expected: MysqlTableSpec<I, R>["columns"][number],
-    actual: ColumnRow,
-  ): void {
-    if (!compatibleMysqlType(expected.mysqlType, actual.column_type))
-      throw new Error(
-        `MySQL table ${this.table.tableName} has an incompatible ${expected.name} type.`,
-      );
-    if (actual.is_nullable !== undefined && (actual.is_nullable === "YES") !== expected.nullable)
-      throw new Error(
-        `MySQL table ${this.table.tableName} has incompatible nullable ${expected.name}.`,
-      );
-    if (!sameDefault(expected.defaultSql, actual.column_default))
-      throw new Error(
-        `MySQL table ${this.table.tableName} has incompatible ${expected.name} default.`,
-      );
-    if (
-      isBinaryType(expected.mysqlType) &&
-      actual.collation_name !== undefined &&
-      actual.collation_name !== null
-    )
-      throw new Error(
-        `MySQL table ${this.table.tableName} has incompatible ${expected.name} collation.`,
-      );
   }
 
   /**
@@ -1457,6 +1315,274 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     if (column === undefined)
       throw new MysqlStorageOperationError(`MySQL query column is not declared: ${name}`);
     return ColumnMappings.value(this.#columnMapping, column.type, value);
+  }
+}
+
+/**
+ * Prepares one declared MySQL/MariaDB table without constructing Storage.
+ *
+ * @typeParam I Typed record identifier.
+ * @typeParam R Stored record message.
+ */
+export class MysqlTableInitializer<I, R extends Message> {
+  /**
+   * Binds the canonical physical table declaration.
+   *
+   * @param table Resolved table identity.
+   * @param spec Canonical physical layout.
+   * @param customCreate Optional custom create SQL.
+   */
+  constructor(
+    private readonly table: MysqlResolvedTable,
+    private readonly spec: MysqlTableSpec<I, R>,
+    private readonly customCreate?: () => string,
+  ) {}
+
+  /**
+   * Creates when requested and inspects the complete physical layout.
+   *
+   * @param connection Active preparation connection.
+   * @param mode Creation or read-only inspection.
+   * @returns Completion after compatibility is proven.
+   */
+  async prepare(
+    connection: import("mysql2/promise").PoolConnection,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    if (mode === "create") await connection.query(this.customCreate?.() ?? this.createSql());
+    const nativeMetadata = await this.inspectColumns(connection);
+    await this.inspectPrimary(connection, nativeMetadata);
+    await this.inspectUnique(connection);
+    await this.inspectEngine(connection);
+  }
+
+  /**
+   * Builds default table creation SQL.
+   *
+   * @returns Canonical create-if-absent SQL.
+   */
+  private createSql(): string {
+    const columns = this.spec.columns.map(mysqlColumnDefinition).join(", ");
+    const primary = this.spec.primaryKey.map((name) => `\`${name}\``).join(", ");
+    return (
+      `CREATE TABLE IF NOT EXISTS \`${this.table.tableName}\` ` +
+      `(${columns}, PRIMARY KEY (${primary})) ENGINE=InnoDB`
+    );
+  }
+
+  /**
+   * Inspects every declared physical column.
+   *
+   * @param connection Active preparation connection.
+   * @returns Whether native column metadata is available.
+   */
+  private async inspectColumns(
+    connection: import("mysql2/promise").PoolConnection,
+  ): Promise<boolean> {
+    const [columns] = await connection.query<ColumnRow[]>(
+      "SELECT column_name AS column_name, column_type AS column_type, " +
+        "is_nullable AS is_nullable, column_default AS column_default, " +
+        "collation_name AS collation_name, extra AS extra " +
+        "FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?",
+      [this.table.tableName],
+    );
+    const expected = new Map(
+      this.spec.columns.map((column) => [column.name.toLowerCase(), column]),
+    );
+    for (const column of this.spec.columns) {
+      const actual = columns.find(
+        (candidate) => candidate.column_name.toLowerCase() === column.name.toLowerCase(),
+      );
+      if (actual === undefined)
+        throw new Error(`MySQL table ${this.table.tableName} lacks ${column.name}.`);
+      this.assertCompatibleColumn(column, actual);
+    }
+    for (const column of columns)
+      if (!expected.has(column.column_name.toLowerCase()))
+        throw new Error(
+          `MySQL table ${this.table.tableName} has incompatible extra column ${column.column_name}.`,
+        );
+    return columns.some((column) => column.column_type !== undefined);
+  }
+
+  /**
+   * Inspects the declared primary key.
+   *
+   * @param connection Active preparation connection.
+   * @param nativeMetadata Whether this metadata source reports native types.
+   * @returns Completion after primary-key inspection.
+   */
+  private async inspectPrimary(
+    connection: import("mysql2/promise").PoolConnection,
+    nativeMetadata: boolean,
+  ): Promise<void> {
+    const [primary] = await connection.query<PrimaryKeyRow[]>(
+      "SELECT column_name AS column_name, seq_in_index AS seq_in_index " +
+        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
+        "AND index_name='PRIMARY' ORDER BY seq_in_index",
+      [this.table.tableName],
+    );
+    if (
+      nativeMetadata &&
+      (primary.length !== this.spec.primaryKey.length ||
+        primary.some(
+          (column, index) =>
+            column.column_name.toLowerCase() !== this.spec.primaryKey[index]?.toLowerCase(),
+        ))
+    )
+      throw new Error(`MySQL table ${this.table.tableName} has an incompatible primary key.`);
+  }
+
+  /**
+   * Rejects unrelated unique constraints on the family table.
+   *
+   * @param connection Active preparation connection.
+   * @returns Completion after unique-key inspection.
+   */
+  private async inspectUnique(connection: import("mysql2/promise").PoolConnection): Promise<void> {
+    const [indexes] = await connection.query<IndexRow[]>(
+      "SELECT index_name AS index_name, non_unique AS non_unique, " +
+        "column_name AS column_name, seq_in_index AS seq_in_index " +
+        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
+        "ORDER BY index_name, seq_in_index",
+      [this.table.tableName],
+    );
+    for (const index of groupedIndexes(indexes))
+      if (
+        index.nonUnique === 0 &&
+        index.name.toLowerCase() !== "primary" &&
+        !this.spec.primaryKey.every((name) =>
+          index.columns.some((column) => column.toLowerCase() === name.toLowerCase()),
+        )
+      )
+        throw new Error(
+          `MySQL table ${this.table.tableName} has incompatible unique index ${index.name}.`,
+        );
+  }
+
+  /**
+   * Checks the table engine supported by this provider.
+   *
+   * @param connection Active preparation connection.
+   * @returns Completion after engine inspection.
+   */
+  private async inspectEngine(connection: import("mysql2/promise").PoolConnection): Promise<void> {
+    const [engines] = await connection.query<EngineRow[]>(
+      "SELECT engine AS engine FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?",
+      [this.table.tableName],
+    );
+    const engine = engines[0]?.engine;
+    if (engine !== undefined && !["innodb", "myisam", "aria"].includes(engine.toLowerCase()))
+      throw new Error(`MySQL table ${this.table.tableName} has unsupported engine ${engine}.`);
+  }
+
+  /**
+   * Checks one declared column against native metadata.
+   *
+   * @param expected Canonical column.
+   * @param actual Native column metadata.
+   */
+  private assertCompatibleColumn(
+    expected: MysqlTableSpec<I, R>["columns"][number],
+    actual: ColumnRow,
+  ): void {
+    if (!compatibleMysqlType(expected.mysqlType, actual.column_type))
+      throw new Error(
+        `MySQL table ${this.table.tableName} has an incompatible ${expected.name} type.`,
+      );
+    if (actual.is_nullable !== undefined && (actual.is_nullable === "YES") !== expected.nullable)
+      throw new Error(
+        `MySQL table ${this.table.tableName} has incompatible nullable ${expected.name}.`,
+      );
+    if (!sameDefault(expected.defaultSql, actual.column_default))
+      throw new Error(
+        `MySQL table ${this.table.tableName} has incompatible ${expected.name} default.`,
+      );
+    if (
+      isBinaryType(expected.mysqlType) &&
+      actual.collation_name !== undefined &&
+      actual.collation_name !== null
+    )
+      throw new Error(
+        `MySQL table ${this.table.tableName} has incompatible ${expected.name} collation.`,
+      );
+  }
+
+  /**
+   * Creates or checks one complete native Agent history index.
+   *
+   * @param connection Active preparation connection.
+   * @param name Fixed provider index name.
+   * @param columns Ordered complete index columns.
+   * @param mode Creation or read-only inspection.
+   * @returns Completion after exact compatibility.
+   */
+  async ensureHistoryIndex(
+    connection: import("mysql2/promise").PoolConnection,
+    name: string,
+    columns: readonly string[],
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    const existing = await this.historyIndex(connection, name);
+    if (existing.length !== 0) {
+      this.assertHistoryIndex(existing, columns);
+      return;
+    }
+    if (mode === "check")
+      throw new MysqlStorageSchemaError("MySQL Agent history index is missing.");
+    if (!/^[a-z_]+$/u.test(name) || columns.some((column) => !/^[a-z_]+$/u.test(column)))
+      throw new MysqlStorageSchemaError("MySQL Agent history index name is invalid.");
+    const quoted = columns.map((column) => `\`${column}\``).join(", ");
+    try {
+      await connection.query(`CREATE INDEX \`${name}\` ON \`${this.table.tableName}\` (${quoted})`);
+    } catch (error) {
+      if ((error as { code?: string }).code !== "ER_DUP_KEYNAME") throw error;
+    }
+    this.assertHistoryIndex(await this.historyIndex(connection, name), columns);
+  }
+
+  /**
+   * Reads a fixed Agent audit index definition.
+   *
+   * @param connection Active preparation connection.
+   * @param name Fixed index name.
+   * @returns Ordered native index components.
+   */
+  private async historyIndex(
+    connection: import("mysql2/promise").PoolConnection,
+    name: string,
+  ): Promise<readonly IndexRow[]> {
+    const [rows] = await connection.query<IndexRow[]>(
+      "SELECT index_name AS index_name, non_unique AS non_unique, " +
+        "column_name AS column_name, seq_in_index AS seq_in_index, " +
+        "sub_part AS sub_part, collation AS collation, index_type AS index_type " +
+        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
+        "AND index_name=? ORDER BY seq_in_index",
+      [this.table.tableName, name],
+    );
+    return rows;
+  }
+
+  /**
+   * Checks the complete ordered native index definition.
+   *
+   * @param rows Ordered native components.
+   * @param columns Required complete columns.
+   */
+  private assertHistoryIndex(rows: readonly IndexRow[], columns: readonly string[]): void {
+    if (
+      rows.length !== columns.length ||
+      rows.some(
+        (row, index) =>
+          row.column_name !== columns[index] ||
+          Number(row.seq_in_index) !== index + 1 ||
+          row.sub_part !== null ||
+          Number(row.non_unique) !== 1 ||
+          row.collation !== "A" ||
+          row.index_type !== "BTREE",
+      )
+    )
+      throw new MysqlStorageSchemaError("MySQL Agent history index is incompatible.");
   }
 }
 

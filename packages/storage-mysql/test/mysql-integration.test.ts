@@ -40,7 +40,10 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
+import {
+  EntityCommitStorageFactories,
+  StoragePreparations,
+} from "@spine-event-engine/storage/provider";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
 import {
   ColumnTypes,
@@ -54,6 +57,8 @@ import { createPool } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { MysqlStorageFactory } from "../src/index.js";
+import { providerEntityInput } from "../../storage/test/entity/agent-execution-provider-fixtures.js";
+import { scope as agentScope } from "../../storage/test/entity/agent-history-fixtures.js";
 import {
   mysqlCurrentRecord,
   mysqlHistoryCounts,
@@ -90,6 +95,32 @@ live("MySQL-family record layout", () => {
   });
   afterAll(async () => {
     await factory.close();
+  });
+
+  it("checks then creates physical records, Entity history, and Agent audit indexes", async () => {
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: `mysql_prepare_${randomUUID()}`, multitenant: false } as const;
+    const group = new StorageGroup(`prep_${randomUUID().replaceAll("-", "")}`);
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (value: StringValue) => value.value,
+    });
+    await expect(preparation.prepareRecord(context, spec, group, "check")).rejects.toThrow();
+    await preparation.prepareRecord(context, spec, group, "create");
+    await preparation.prepareRecord(context, spec, group, "check");
+    const records = factory.createRecordStorage(context, spec, group);
+    try {
+      const value = create(StringValueSchema, { value: `prepared-${randomUUID()}` });
+      await records.write(value);
+      await expect(records.read(value.value)).resolves.toEqual(value);
+    } finally {
+      records.close();
+    }
+    await preparation.prepareEntity(providerEntityInput(), "create");
+    await preparation.prepareEntity(providerEntityInput(), "check");
+    await preparation.prepareAgentHistory(agentScope, "create");
+    await preparation.prepareAgentHistory(agentScope, "check");
   });
 
   it("keeps an immutable EventStore prefix and admits identical Events on retry", async () => {

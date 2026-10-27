@@ -12,8 +12,9 @@ task. Implementation is in progress. Repository/EventStore retention, shared Any
 provider commit-storage retention and awaitable shutdown are reviewed and pushed.
 Shared preparation contracts and the memory implementation are complete, as is
 PostgreSQL offline assembly, tenant resolution and physical structure preparation.
-MySQL/MariaDB offline connection lifecycle is reviewed and complete; physical
-structure preparation is next. Remaining milestones follow MILESTONES.md. Existing
+MySQL/MariaDB offline connection lifecycle and physical structure preparation are
+reviewed and complete. Datastore preparation is next; remaining milestones follow
+MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.
 

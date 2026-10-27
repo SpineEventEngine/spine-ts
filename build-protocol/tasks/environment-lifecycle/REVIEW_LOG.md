@@ -580,3 +580,43 @@ unit LCOV shows changed factory112/122, record32/33, Entity-history24/35 and Age
 wrappers14/14 executable lines covered before the final extra Agent-fence test;
 live behavior is recorded separately, not claimed as unit coverage. Commit/push
 this checkpoint; M4d2 and full-task release/security verification remain pending.
+
+## M4d2 MySQL/MariaDB physical preparation review
+
+Baseline6919af639. Frozen scope: provider port, pure real-family definitions,
+factory-shared physical readiness and destination binding, stateless table/index
+creation versus read-only checks, temporary resources, tests and narrow reference.
+Pre-freeze audit fixed sanitized errors and reproduced/fixed three resolver calls
+for concurrent different-family prep plus runtime use; now one shared destination.
+Final131 unit tests with fresh LCOV,23 live tests each on MySQL8.4/MariaDB11.4,
+build/tooling/static/docs checks pass. Changed executable unit lines: factory86/120,
+record/initializer50/74, Agent facade3/3; live tests separately exercise actual
+Entity/audit preparation. Exact external mysql-preparation-evidence.md and review
+context apply; global release coverage pending.
+
+Four concerns use existing explicit immutable profiles: provider_reliability,
+provider_style and repository_api_review gpt-6-sol/medium;
+provider_documentation gpt-6-luna/medium. Runtime introspection unavailable.
+No reviewer edits, test reruns or children. Three technical lanes first, docs as
+capacity frees. Collect complete wave before one correction batch. Estimate
+0.3-0.6hours for review, bounded corrections, confirmation and checkpoint push.
+
+M4d2 full wave collected. API, reliability and documentation are clean. Accept
+style P2: explicit factory preparation and normal Agent-history initialization
+duplicate the same three ordered index definitions. Consolidate into one
+MySQL-local declaration consumed by both paths; preserve names/order/columns.
+Same Sol/medium implementer receives one deterministic correction batch, estimate
+0.1-0.2hours including focused checks and checkpoint push. No runtime algorithm
+or public contract change intended; mechanical single-definition verification
+and focused tests suffice without reopening unrelated lanes. Reliability's
+additional combined binding/family-failure test is nonblocking; existing tests
+and source review cover the individual paths. All reviewer explicit profiles
+matched their assignments; introspection unavailable.
+
+M4d2 accepted. One MySQL-local AgentHistoryIndexes declaration now feeds normal
+initialization and explicit preparation, with identical names/ordered columns.
+Parent rg/diff inspection confirms the deterministic correction; focused29unit
+and2live tests, build/tooling/static/docs checks pass. No algorithm or root API
+change, so no repeated specialist wave. All four concerns accepted; no unresolved
+P0-P2. Commit/push checkpoint; full-task release/security and later milestones
+remain pending.

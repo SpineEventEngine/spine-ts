@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, ScalarType, type Message } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createPool } from "mysql2/promise";
 import { AnyPacker, Identifiers, StringifierRegistry } from "@spine-event-engine/core";
@@ -22,6 +22,7 @@ import {
   AgentExecutionStorageFactories,
   AgentHistoryStorageFactories,
   EntityCommitStorageFactories,
+  StoragePreparations,
 } from "@spine-event-engine/storage/provider";
 import {
   ColumnTypes,
@@ -35,7 +36,10 @@ import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
-import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
+import {
+  TaskSchema,
+  type Task,
+} from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import { providerEntityInput } from "../../storage/test/entity/agent-execution-provider-fixtures.js";
 import { scope } from "../../storage/test/entity/agent-history-fixtures.js";
 
@@ -52,6 +56,301 @@ vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 describe("MysqlStorageFactory builder contract", () => {
   beforeEach(() => {
     vi.mocked(createPool).mockReset();
+  });
+  it("checks a declared family without opening Storage, then reuses readiness without DDL", async () => {
+    const query = vi.fn(mysqlQuery);
+    const end = vi.fn(() => Promise.resolve());
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() =>
+        Promise.resolve({ query, execute: vi.fn(() => [[], []]), release: vi.fn() }),
+      ),
+      end,
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const extractId = vi.fn((record: import("@bufbuild/protobuf/wkt").StringValue) => record.value);
+    const spec = new RecordSpec({ recordType: StringValueSchema, idKind: "string", extractId });
+    await StoragePreparations.for(factory).prepareRecord(
+      { name: "records", multitenant: false },
+      spec,
+      undefined,
+      "check",
+    );
+    expect(extractId).not.toHaveBeenCalled();
+    expect(end).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls.map(([sql]) => sql)).not.toContainEqual(
+      expect.stringContaining("CREATE"),
+    );
+    const records = factory.createRecordStorage({ name: "records", multitenant: false }, spec);
+    await records.read("absent");
+    expect(query.mock.calls.map(([sql]) => sql)).not.toContainEqual(
+      expect.stringContaining("CREATE"),
+    );
+    records.close();
+    await factory.close();
+  });
+
+  it("does not escalate a pending read-only check and retries its missing table later", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let missing = true;
+    const sql: string[] = [];
+    const query = vi.fn(async (statement: string) => {
+      sql.push(statement);
+      if (statement.includes("information_schema.columns") && missing) {
+        entered.resolve(undefined);
+        await release.promise;
+        return [[], []];
+      }
+      return mysqlQuery(statement);
+    });
+    const end = vi.fn(() => Promise.resolve());
+    vi.mocked(createPool).mockImplementation(
+      () =>
+        ({
+          getConnection: vi.fn(() => Promise.resolve({ query, release: vi.fn() })),
+          end,
+        }) as never,
+    );
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "pending", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const checking = preparation.prepareRecord(context, spec, undefined, "check");
+    await entered.promise;
+    const creating = preparation.prepareRecord(context, spec, undefined, "create");
+    release.resolve(undefined);
+    await expect(checking).rejects.toMatchObject({
+      cause: { message: "MySQL table google_protobuf_StringValue lacks ID." },
+    });
+    await expect(creating).rejects.toThrow(/schema is incompatible/i);
+    expect(sql.some((statement) => statement.includes("CREATE"))).toBe(false);
+    missing = false;
+    await preparation.prepareRecord(context, spec, undefined, "create");
+    expect(sql.filter((statement) => statement.includes("CREATE"))).toHaveLength(1);
+    expect(end).toHaveBeenCalledTimes(3);
+    await factory.close();
+  });
+
+  it("drains admitted physical preparation before factory cleanup", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const end = vi.fn(() => Promise.resolve());
+    const query = vi.fn(async (statement: string) => {
+      if (statement.includes("information_schema.columns")) {
+        entered.resolve(undefined);
+        await release.promise;
+      }
+      return mysqlQuery(statement);
+    });
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve({ query, release: vi.fn() })),
+      end,
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "pending", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const pending = preparation.prepareRecord(context, spec, undefined, "check");
+    await entered.promise;
+    const closing = factory.close();
+    await expect(preparation.prepareRecord(context, spec, undefined, "check")).rejects.toThrow(
+      /closed/i,
+    );
+    expect(end).toHaveBeenCalledOnce();
+    release.resolve(undefined);
+    await pending;
+    await closing;
+    expect(end).toHaveBeenCalledTimes(2);
+  });
+
+  it("reuses equivalent reordered Task columns and rejects a conflicting declaration", async () => {
+    const query = vi.fn((statement: string) => {
+      if (statement.includes("information_schema.columns"))
+        return Promise.resolve([
+          [
+            { column_name: "ID", column_type: "varchar(512)", is_nullable: "NO" },
+            { column_name: "bytes", column_type: "blob", is_nullable: "NO" },
+            { column_name: "title", column_type: "text", is_nullable: "YES" },
+            { column_name: "completed", column_type: "tinyint(1)", is_nullable: "YES" },
+          ],
+          [],
+        ]);
+      return mysqlQuery(statement);
+    });
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve({ query, release: vi.fn() })),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const context = { name: "task", multitenant: false } as const;
+    const title = new RecordColumn(
+      "title",
+      ColumnTypes.scalar(ScalarType.STRING),
+      (task: Task) => task.title,
+    );
+    const completed = new RecordColumn(
+      "completed",
+      ColumnTypes.scalar(ScalarType.BOOL),
+      (task: Task) => task.completed,
+    );
+    const spec = (columns: readonly RecordColumn<Task>[]) =>
+      new RecordSpec({
+        recordType: TaskSchema,
+        idSchema: TaskIdSchema,
+        extractId: (task: Task) => {
+          if (task.id === undefined) throw new Error("Task ID is required.");
+          return task.id;
+        },
+        columns,
+      });
+    const preparation = StoragePreparations.for(factory);
+    await preparation.prepareRecord(context, spec([title, completed]), undefined, "check");
+    await preparation.prepareRecord(context, spec([completed, title]), undefined, "create");
+    await expect(
+      preparation.prepareRecord(context, spec([title]), undefined, "create"),
+    ).rejects.toThrow(/conflicts/i);
+    expect(query.mock.calls.some(([statement]) => statement.includes("CREATE"))).toBe(false);
+    await factory.close();
+  });
+
+  it("releases a temporary pool for each tenant without binding runtime pools", async () => {
+    const ends: ReturnType<typeof vi.fn>[] = [];
+    vi.mocked(createPool).mockImplementation(() => {
+      const end = vi.fn(() => Promise.resolve());
+      ends.push(end);
+      return {
+        getConnection: vi.fn(() =>
+          Promise.resolve({
+            query: vi.fn(mysqlQuery),
+            release: vi.fn(),
+          }),
+        ),
+        end,
+      } as never;
+    });
+    const tenantA = tenant("prepared-a");
+    const tenantB = tenant("prepared-b");
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
+      .setTenantOptions([
+        { tenantId: tenantA, options: { url: "mysql://db.example/tenant_a" } },
+        { tenantId: tenantB, options: { url: "mysql://db.example/tenant_b" } },
+      ])
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (value) => value.value,
+    });
+    await Promise.all(
+      [tenantA, tenantB].map((tenantId) =>
+        preparation.prepareRecord(
+          { name: "audit", multitenant: true, tenantId },
+          spec,
+          undefined,
+          "check",
+        ),
+      ),
+    );
+    expect(createPool).toHaveBeenCalledTimes(4);
+    expect(ends).toHaveLength(4);
+    for (const end of ends) expect(end).toHaveBeenCalledOnce();
+    await factory.close();
+    for (const end of ends) expect(end).toHaveBeenCalledOnce();
+  });
+
+  it("does not cache a physical proof when temporary pool cleanup fails", async () => {
+    const cleanup = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("temporary cleanup failed"))
+      .mockResolvedValue(undefined);
+    vi.mocked(createPool).mockImplementation(
+      () =>
+        ({
+          getConnection: vi.fn(() =>
+            Promise.resolve({ query: vi.fn(mysqlQuery), release: vi.fn() }),
+          ),
+          end: cleanup,
+        }) as never,
+    );
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/prepared" })
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "prepared", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (value) => value.value,
+    });
+    await expect(preparation.prepareRecord(context, spec, undefined, "check")).rejects.toThrow(
+      /pool cleanup/i,
+    );
+    await preparation.prepareRecord(context, spec, undefined, "check");
+    expect(cleanup).toHaveBeenCalledTimes(3);
+    await factory.close();
+  });
+
+  it("shares one deferred tenant destination across different preparation families and runtime use", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<{ url: string }>();
+    const resolver = vi.fn(() => {
+      entered.resolve(undefined);
+      return release.promise;
+    });
+    const selected: string[] = [];
+    vi.mocked(createPool).mockImplementation((options) => {
+      selected.push(String((options as { database?: string }).database));
+      return {
+        getConnection: vi.fn(() => Promise.resolve(mysqlConnection(vi.fn(mysqlQuery)))),
+        end: vi.fn(() => Promise.resolve()),
+      } as never;
+    });
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
+      .setTenantResolver(resolver)
+      .build();
+    const context = { name: "prepared", multitenant: true, tenantId: tenant("deferred") } as const;
+    const first = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (value) => value.value,
+    });
+    const second = new RecordSpec({
+      recordType: TimestampSchema,
+      idKind: "string",
+      extractId: (value) => String(value.seconds),
+    });
+    const preparation = StoragePreparations.for(factory);
+    const a = preparation.prepareRecord(context, first, undefined, "check");
+    const b = preparation.prepareRecord(context, second, undefined, "check");
+    const records = factory.createRecordStorage(context, first);
+    const reading = records.read("missing");
+    await entered.promise;
+    expect(resolver).toHaveBeenCalledOnce();
+    release.resolve({ url: "mysql://db.example/tenant_deferred" });
+    await Promise.all([a, b, reading]);
+    expect(resolver).toHaveBeenCalledOnce();
+    expect(selected.every((database) => database === "tenant_deferred")).toBe(true);
+    records.close();
+    await factory.close();
   });
   it("exposes the JVM-style builder without a static create alias", () => {
     const builder: MysqlStorageFactoryBuilder = MysqlStorageFactory.newBuilder();

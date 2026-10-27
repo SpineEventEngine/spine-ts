@@ -722,3 +722,62 @@ drains complete accepted Record/Entity/Agent operations. No migration scan or
 provisioning is added. Commit authored paths and push immediately; preserve
 generation-only manifests. Next M4d2 implements physical creation/compatibility
 using D0150 and the existing provider preparation port. Final release pending.
+
+M4d1 checkpoint6919af639 pushed immediately to official origin/environment-lifecycle.
+M4d2 MySQL/MariaDB physical preparation starts from this commit under accepted
+D0150; no architecture redesign. Existing implementer storage_retention uses its
+explicit immutable gpt-6-sol/medium profile, no children; introspection unavailable.
+Estimate1-2hours for provider-port registration, pure actual-family requirements,
+shared pending/successful evidence, read-only inspection versus creation, temporary
+connections, Entity history/audit indexes, focused/live tests on both task engines,
+narrow docs and independent review. External mysql-preparation-brief.md defines
+scope. No server/TenantIndex changes, recovery preparation or migration. Preserve
+complete-operation shutdown guarantees and generation-only manifest changes.
+
+M5 prerequisite extends the earlier tenant-admission inventory with native provider
+catalog semantics. Existing mechanical_checks scanning function, explicit immutable
+gpt-6-luna/low, reads all four catalog implementations and membership consumers;
+no design changes/source edits/tests/children. Estimate0.15-0.25hours alongside
+M4d2. Record exact all/page/keep behavior, caching and side effects, fixed/resolver
+enumeration and any existing direct membership lookup in external
+tenant-catalog-inventory.md. Introspection unavailable. This evidence will inform
+M5 without silently inheriting implicit registration or temporary TTL membership.
+
+M5 provider-catalog inventory accepted from explicit immutable Luna/low scanning
+function. External tenant-catalog-inventory.md records exact source anchors.
+Current API has no contains. Memory storage binding can populate native catalog;
+SQL dynamic keep accepts named tenants without resolver or enumerable membership;
+Datastore native discovery is supplemented by an expiring/capped early cache.
+These mechanisms cannot be silently treated as the new live membership contract.
+M5 must keep incoming admission before storage side effects, define honest native
+read/keep behavior and require application directory support where necessary;
+no hidden persisted registry or provisioning. This was read-only, not a design
+change or implementation acceptance. No tests or source edits occurred.
+
+M5 JVM guardrail: production TenantIndex, DefaultTenantStorage and TenantStorage
+in local core-jvm3429f5cd read after runtime research notes. Default index uses
+environment factory and a single-tenant real Tenant registry; keep reads/writes
+registration and all reads its index. This supports separate membership/database
+resolution but does not authorize hidden TS registry records, explicitly excluded
+by the accepted contract. Exact paths/impact recorded in external catalog inventory.
+No server implementation changed yet.
+
+M4d2 pre-freeze audit found a destination-resolution race: preparation calls
+configFor independently per physical family, while runtime binding has a separate
+pending map. Concurrent families or preparation/runtime first use can call the
+resolver twice and accept differing destinations for one tenant. Correct before
+review using shared pending/successful destination metadata, following accepted
+PostgreSQL binding coordination. Add a deferred-resolver regression across
+different families and explicit/runtime use; no new public contract. Same
+implementer receives this bounded correction, estimate0.2-0.4hours for proof,
+implementation and relevant verification. No repeated architecture pass needed.
+
+M4d2 physical MySQL/MariaDB preparation accepted after four-concern review and
+shared Agent-index declaration correction.131 scoped unit tests and23 live tests
+on each engine pass; final focused29unit/2live and static/docs/build checks pass
+after literal deduplication. Parent confirms one declaration and both consumers.
+Read-only checks, create/verify, pure actual requirements, shared family readiness,
+coordinated tenant binding and temporary cleanup are implemented. Source audit's
+resolver race was reproduced (three calls) and fixed (one) before review. No
+unresolved accepted findings; commit/push authored paths and preserve metadata.
+Next is Datastore native/custom preparation under the same D0150 contract.

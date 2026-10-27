@@ -44,6 +44,15 @@ export const AgentHistoryHash = {
 };
 
 /**
+ * Declares the complete native indexes required by MySQL Agent history.
+ */
+export const AgentHistoryIndexes = [
+  ["agent_history_full", ["scope_digest", "order_key"]],
+  ["agent_history_category", ["scope_digest", "category", "order_key"]],
+  ["agent_history_conversation", ["scope_digest", "conversation_digest", "order_key"]],
+] as const;
+
+/**
  * Stores Agent history in the shared MySQL immutable record family.
  *
  * @typeParam Id Typed Agent identifier.
@@ -149,7 +158,10 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @returns Shared preparation promise for this handle.
    */
   private ready(): Promise<void> {
-    return (this.#ready ??= this.initialize());
+    return (this.#ready ??= this.initialize().catch((error: unknown) => {
+      this.#ready = undefined;
+      throw error;
+    }));
   }
 
   /**
@@ -159,17 +171,8 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
    */
   private async initialize(): Promise<void> {
     await this.records.prepare();
-    await this.records.ensureHistoryIndex("agent_history_full", ["scope_digest", "order_key"]);
-    await this.records.ensureHistoryIndex("agent_history_category", [
-      "scope_digest",
-      "category",
-      "order_key",
-    ]);
-    await this.records.ensureHistoryIndex("agent_history_conversation", [
-      "scope_digest",
-      "conversation_digest",
-      "order_key",
-    ]);
+    for (const [name, columns] of AgentHistoryIndexes)
+      await this.records.ensureHistoryIndex(name, columns);
   }
 
   /**
