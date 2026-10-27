@@ -36,6 +36,7 @@ import { AiTestBackend, BlackBox } from "../src/index.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
+  EscalatedSupportReplyAgentStateSchema,
   type SupportReplyAgentId,
 } from "../test-fixtures/generated/support_agent_states_pb.js";
 import {
@@ -81,6 +82,33 @@ class CapacityAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentS
     if (!result.ok) throw new Error(`Unexpected scripted failure: ${result.failure.code}`);
     this.update((state) =>
       Object.assign(state, { id: this.id, proposedReply: result.value.reply }),
+    );
+    return create(SupportReplyProposedSchema, { agent: this.id, reply: result.value.reply });
+  }
+}
+
+class EscalatedCapacityAgent extends Agent<
+  SupportReplyAgentId,
+  typeof EscalatedSupportReplyAgentStateSchema
+> {
+  async draft(command: DraftSupportReply) {
+    if (!command.agent) throw new Error("Support Command requires an Agent ID.");
+    const result = await this.ai.invoke(model, {
+      call: "draft",
+      conversation: create(ConversationIdSchema, { value: `ticket-${command.agent.ticketNumber}` }),
+      input: create(SupportReplyFactsSchema, {
+        ticketNumber: command.agent.ticketNumber,
+        question: command.question,
+        ticketRevision: 1n,
+      }),
+    });
+    if (!result.ok) throw new Error(`Unexpected scripted failure: ${result.failure.code}`);
+    this.update((state) =>
+      Object.assign(state, {
+        id: this.id,
+        proposedReply: result.value.reply,
+        escalationCount: state.escalationCount + 1,
+      }),
     );
     return create(SupportReplyProposedSchema, { agent: this.id, reply: result.value.reply });
   }
@@ -157,6 +185,37 @@ function repository(entityType: typeof CapacityAgent = CapacityAgent) {
   });
 }
 
+function escalationRepository() {
+  return new Repository({
+    entityType: EscalatedCapacityAgent,
+    schema: EscalatedSupportReplyAgentStateSchema,
+    agentCodeRevision: "capacity-escalation-v1",
+    ai: { models: [model] },
+    handlers: new HandlerRegistryIngestor().ingest({
+      receivers: [
+        {
+          receiverKind: "entity",
+          receiverType: EscalatedCapacityAgent,
+          stateSchema: EscalatedSupportReplyAgentStateSchema,
+          handlers: [
+            {
+              kind: "command-assignment",
+              methodName: "draft",
+              input: { schema: DraftSupportReplySchema, origin: "domestic" },
+              outcomes: { returned: [SupportReplyProposedSchema], thrown: [] },
+              parameterCount: 1,
+            },
+          ],
+        },
+      ],
+    })[0] as EntityHandlersMetadata<
+      EscalatedCapacityAgent,
+      typeof EscalatedSupportReplyAgentStateSchema
+    >,
+    events: [SupportReplyProposedSchema],
+  });
+}
+
 function registry(
   backend: AiTestBackend,
   concurrent: number,
@@ -214,14 +273,16 @@ async function contextBox(
   name: string,
   ai: AiRegistry,
   entityType: typeof CapacityAgent = CapacityAgent,
+  escalated = false,
 ) {
   const storage = new CapacityStorage();
-  const context = BoundedContext.singleTenant(name)
+  const builder = BoundedContext.singleTenant(name)
     .withAi(ai)
     .persistSystemEvents()
-    .withStorageFactory(storage)
-    .add(repository(entityType))
-    .build();
+    .withStorageFactory(storage);
+  const context = await (
+    escalated ? builder.add(escalationRepository()) : builder.add(repository(entityType))
+  ).build();
   return { box: await BlackBox.from(context, { timeoutMs: 7_000 }), storage };
 }
 
@@ -255,7 +316,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
     responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply B" }));
     const { ai, observed } = registry(backend, 1, 1);
     const first = await contextBox("CapacityA", ai);
-    const second = await contextBox("CapacityB", ai);
+    const second = await contextBox("CapacityB", ai, CapacityAgent, true);
     try {
       expect((await post(first.box, "T-A")).kind).toBe("ok");
       await first.box.eventually(
@@ -417,7 +478,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
     responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply B" }));
     const { ai } = registry(backend, 1, 1);
     const first = await contextBox("CapacityCloseA", ai);
-    const second = await contextBox("CapacityCloseB", ai);
+    const second = await contextBox("CapacityCloseB", ai, CapacityAgent, true);
     try {
       expect((await post(first.box, "T-A")).kind).toBe("ok");
       await first.box.eventually(
@@ -455,7 +516,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
     };
     const { ai } = registry(backend, 1, 1, held);
     const first = await contextBox("CapacityIgnoredA", ai);
-    const second = await contextBox("CapacityIgnoredB", ai);
+    const second = await contextBox("CapacityIgnoredB", ai, CapacityAgent, true);
     try {
       expect((await post(first.box, "T-A")).kind).toBe("ok");
       await held.entered.promise;

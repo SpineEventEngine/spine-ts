@@ -147,7 +147,7 @@ describe("Wave 13 ThirdPartyContext", () => {
           return Promise.resolve();
         },
       })
-      .buildAsync();
+      .build();
     const context = await DirectSourceThirdPartyContext.singleTenant("DirectSourceTimestampSource");
     const before = Date.now();
     const precise = create(TimestampSchema, {
@@ -195,15 +195,17 @@ describe("Wave 13 ThirdPartyContext", () => {
           return Promise.resolve();
         },
       })
-      .buildAsync();
+      .build();
     const single = await DirectSourceThirdPartyContext.singleTenant("DirectSourceSingle");
     const multi = await DirectSourceThirdPartyContext.multitenant("DirectSourceMulti");
     const event = create(StringValueSchema, { value: "multitenant" });
     const user = create(UserIdSchema, { value: "actor" });
+    const tenantId = create(TenantIdSchema, { kind: { case: "value", value: "tenant" } });
     const tenantActor = create(ActorContextSchema, {
       actor: user,
-      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
+      tenantId,
     });
+    await receiver.tenantIndex.keep(tenantId);
     const actorWithoutTenant = create(ActorContextSchema, { actor: user });
     const missingTenantEvent = create(EventSchema, {
       id: create(EventIdSchema, { value: "missing-tenant" }),
@@ -230,7 +232,7 @@ describe("Wave 13 ThirdPartyContext", () => {
         messageSchemas: () => [StringValueSchema],
         dispatch: () => Promise.resolve(),
       })
-      .buildAsync();
+      .build();
 
     try {
       await expect(receiver.eventBus().post(missingTenantEvent)).rejects.toThrow(
@@ -341,7 +343,7 @@ describe("Wave 13 ThirdPartyContext", () => {
     const stateContext = await BoundedContext.singleTenant("Wave13ExternalState")
       .withGeneratedRegistryRoot(stateRegistry.root)
       .add(ExternalStateProjection)
-      .buildAsync();
+      .build();
     const received: Event[] = [];
     const singleReceiver = await BoundedContext.singleTenant("Wave13ThirdPartyReceiver")
       .addEventDispatcher({
@@ -352,14 +354,15 @@ describe("Wave 13 ThirdPartyContext", () => {
           return Promise.resolve();
         },
       })
-      .buildAsync();
+      .build();
     const imported = create(StringValueSchema, { value: "external" });
     const singleActor = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "actor" }),
     });
+    const multiTenantId = create(TenantIdSchema, { kind: { case: "value", value: "tenant" } });
     const multiActor = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "actor" }),
-      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
+      tenantId: multiTenantId,
     });
     const single = await ThirdPartyContext.singleTenant("Wave13ThirdPartySingle");
     const multi = await ThirdPartyContext.multitenant("Wave13ThirdPartyMulti");
@@ -382,7 +385,8 @@ describe("Wave 13 ThirdPartyContext", () => {
             return Promise.resolve();
           },
         })
-        .buildAsync();
+        .build();
+      await multiReceiver.tenantIndex.keep(multiTenantId);
       await multi.emittedEvent(imported, multiActor);
       expect(received).toHaveLength(3);
       expect(received.every((event) => event.context?.external === true)).toBe(true);

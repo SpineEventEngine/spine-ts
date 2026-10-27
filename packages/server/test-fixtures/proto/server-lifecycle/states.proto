@@ -22,3 +22,19 @@ message ServerStatus {
 
   string id = 1;
 }
+
+// Records server startup activity independently from the current ServerStatus view.
+message ServerStartupAuditState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1;
+  int32 start_count = 2;
+}
+
+// Records whether the server has completed its startup transition.
+message ServerReadinessState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1;
+  bool ready = 2;
+}

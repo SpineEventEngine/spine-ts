@@ -90,7 +90,7 @@ const managed = await ManagedServerApplication.run({
         .add(ExternalProjectProjection, {
           eventRouting: EventRouting.create().route(ProjectCreatedSchema, (event) => [event.id]),
         })
-        .buildAsync(),
+        .build(),
     );
     const thirdParty = await ThirdPartyContext.singleTenant("T0210ThirdParty");
     const running = await server.start();

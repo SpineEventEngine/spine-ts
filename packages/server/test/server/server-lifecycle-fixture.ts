@@ -51,11 +51,36 @@ import {
   type ServerStarted,
   ServerStartedSchema,
 } from "../../test-fixtures/generated/server-lifecycle/events_pb.js";
-import { ServerStatusSchema } from "../../test-fixtures/generated/server-lifecycle/states_pb.js";
+import {
+  ServerStatusSchema,
+  ServerStartupAuditStateSchema,
+  ServerReadinessStateSchema,
+} from "../../test-fixtures/generated/server-lifecycle/states_pb.js";
 
 class ServerStatusProjection extends Projection<string, typeof ServerStatusSchema> {
   onServerStarted(event: ServerStarted): void {
     void event;
+  }
+}
+
+class ServerStartupAuditProjection extends Projection<
+  string,
+  typeof ServerStartupAuditStateSchema
+> {
+  onServerStarted(event: ServerStarted): void {
+    this.update((draft) => {
+      draft.id = event.id;
+      draft.startCount += 1;
+    });
+  }
+}
+
+class ServerReadinessProjection extends Projection<string, typeof ServerReadinessStateSchema> {
+  onServerStarted(event: ServerStarted): void {
+    this.update((draft) => {
+      draft.id = event.id;
+      draft.ready = true;
+    });
   }
 }
 
@@ -65,6 +90,7 @@ export async function lifecycleFixture(
     readonly settings?: ServerEnvironmentSettings;
     readonly awaitFailure?: Error;
     readonly workers?: readonly HeldStartupWorker[];
+    readonly readinessBase?: boolean;
   } = {},
 ) {
   const events = options.events ?? [];
@@ -103,12 +129,45 @@ export async function lifecycleFixture(
         },
       ],
     },
+    {
+      receiverKind: "entity",
+      receiverType: ServerStartupAuditProjection,
+      stateSchema: ServerStartupAuditStateSchema,
+      handlers: [
+        {
+          kind: "event-subscription" as const,
+          methodName: "onServerStarted",
+          input: { schema: ServerStartedSchema, origin: "domestic" as const },
+          outcomes: { returned: [], thrown: [] },
+          parameterCount: 1 as const,
+        },
+      ],
+    },
+    {
+      receiverKind: "entity",
+      receiverType: ServerReadinessProjection,
+      stateSchema: ServerReadinessStateSchema,
+      handlers: [
+        {
+          kind: "event-subscription" as const,
+          methodName: "onServerStarted",
+          input: { schema: ServerStartedSchema, origin: "domestic" as const },
+          outcomes: { returned: [], thrown: [] },
+          parameterCount: 1 as const,
+        },
+      ],
+    },
   ]);
   const createBuilder = (name: string) =>
     BoundedContext.singleTenant(name)
       .withGeneratedRegistryRoot(registry.root)
       .add(ServerStatusProjection);
-  const createContext = (name: string) => createBuilder(name).buildAsync();
+  const createContext = (name: string) => createBuilder(name).build();
+  const createAuditBuilder = (name: string) =>
+    BoundedContext.singleTenant(name)
+      .withGeneratedRegistryRoot(registry.root)
+      .add(ServerStartupAuditProjection);
+  const createAuditContext = (name: string) => createAuditBuilder(name).build();
   const createMixedContext = (name: string) =>
     BoundedContext.singleTenant(name)
       .addCommandDispatcher({
@@ -144,7 +203,12 @@ export async function lifecycleFixture(
       }),
       message: AnyPacker.pack(ServerStartedSchema, create(ServerStartedSchema, { id, name: id })),
     });
-  const context = await createContext("Lifecycle");
+  const context = options.readinessBase
+    ? await BoundedContext.singleTenant("Lifecycle")
+        .withGeneratedRegistryRoot(registry.root)
+        .add(ServerReadinessProjection)
+        .build()
+    : await createContext("Lifecycle");
 
   return Object.freeze({
     context,
@@ -153,6 +217,8 @@ export async function lifecycleFixture(
     worker,
     createBuilder,
     createContext,
+    createAuditBuilder,
+    createAuditContext,
     createMixedContext,
     createEventContext,
     createEvent,

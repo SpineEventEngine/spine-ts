@@ -28,7 +28,7 @@ describe("Project process fixture", () => {
     const entries: string[] = [];
     const ids = projectWorkflowIds("fixture-test", 1);
     const blackBox = await BlackBox.from(
-      projectWorkflow("fixture-test", (entry) => {
+      await projectWorkflow("fixture-test", (entry) => {
         entries.push(entry.method);
       }),
     );
@@ -59,7 +59,7 @@ describe("Project process fixture", () => {
 
   it("derives distinct recipient IDs for two ProjectCreated Events", async () => {
     const entries: string[] = [];
-    const context = projectWorkflow("two-projects", (entry) => {
+    const context = await projectWorkflow("two-projects", (entry) => {
       entries.push(entry.correlation);
     });
     const first = projectWorkflowIds("fixture-pair", 1);

@@ -145,7 +145,7 @@ class NativeProcessManager extends ProcessManager<string, typeof NativeProcessMa
 
 describe("native service subscriptions", () => {
   it("acknowledges an attached idle subscription before any business update", async () => {
-    const context = BoundedContext.multitenant("NativeIdleAck")
+    const context = await BoundedContext.multitenant("NativeIdleAck")
       .add(
         new Repository({
           entityType: NativeAggregate,
@@ -157,6 +157,9 @@ describe("native service subscriptions", () => {
       .build();
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const subscription = await handlers.subscribe(
         createEntityTopic(NativeProjectStateSchema, "idle-ack"),
@@ -175,7 +178,7 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers an Aggregate commit through the registered command handler", async () => {
-    const context = BoundedContext.multitenant("NativeAggregate")
+    const context = await BoundedContext.multitenant("NativeAggregate")
       .add(
         new Repository({
           entityType: NativeAggregate,
@@ -187,6 +190,9 @@ describe("native service subscriptions", () => {
       .build();
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
@@ -211,7 +217,7 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers a Projection commit through the registered event handler", async () => {
-    const context = BoundedContext.multitenant("NativeProjection")
+    const context = await BoundedContext.multitenant("NativeProjection")
       .add(
         new Repository({
           entityType: NativeProjection,
@@ -226,6 +232,9 @@ describe("native service subscriptions", () => {
       .build();
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
@@ -251,9 +260,12 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers a Process Manager command commit through the registered command handler", async () => {
-    const context = createProcessManagerContext("NativeProcessManagerCommand");
+    const context = await createProcessManagerContext("NativeProcessManagerCommand");
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
@@ -278,9 +290,12 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers a Process Manager event commit through the registered event handler", async () => {
-    const context = createProcessManagerContext("NativeProcessManagerEvent");
+    const context = await createProcessManagerContext("NativeProcessManagerEvent");
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
@@ -377,7 +392,7 @@ function nativeProcessManagerHandlers(): EntityHandlersMetadata<
   >;
 }
 
-function createProcessManagerContext(name: string): BoundedContext {
+function createProcessManagerContext(name: string): Promise<BoundedContext> {
   return BoundedContext.multitenant(name)
     .add(
       new Repository({

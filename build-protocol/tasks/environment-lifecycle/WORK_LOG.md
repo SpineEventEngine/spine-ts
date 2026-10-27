@@ -5,14 +5,14 @@
 Started 2026-10-27 from freshly fetched official master
 `ff6c8669537a016c47f012150306500d3b52b5d1`. Branch `environment-lifecycle` is in
 `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
-Latest accepted checkpoint `abb145983` is pushed to official
+Latest accepted checkpoint `dd403c233` is pushed to official
 `origin/environment-lifecycle`. Repository/EventStore/query/history retention,
 shared AnyPacker, provider commit retention/shutdown, memory/SQL/Datastore
 preparation, and public live TenantIndex/native membership are complete.
-M5b tenant input checks and identifiable errors are verified and reviewed; the
-authored checkpoint is ready for commit/push. M6 strict state registration is next.
-Unconditional duplicate-state registration (including tests), Agent recovery
-removal, shared environment/Delivery, explicit/lazy initialization, subscription
+M5b tenant input checks and identifiable errors are verified, reviewed and pushed.
+M6 strict state registration and unified async build are verified and reviewed;
+its checkpoint publication follows. Agent recovery removal is next, followed by
+shared environment/Delivery, explicit/lazy initialization, subscription
 monitoring, environment tenant preparation and final integration follow in
 MILESTONES.md. No PR has been created. Full-task release/security/CI acceptance
 remains pending.
@@ -982,3 +982,96 @@ formatting and diff checks pass after the prose-only correction. Runtime/tests
 remain the reviewed frozen versions. No accepted P0–P2 remains. Commit the
 authored changes, immediately push official feature branch, then start M6.
 Generation-only manifests remain unstaged for final coordinated convergence.
+
+M5b dd403c233 pushed to official origin/environment-lifecycle. M6 dispatched to
+existing storage_retention implementer, explicit immutable gpt-6-sol/medium;
+baseline dd403c233, external duplicate-state brief and inventory. Sole production
+writer; parent records work state. No runtime metadata exposed. Acceptance and
+estimate above govern this slice.
+
+## M7 admission and live execution architecture clarification
+
+While M6 implementation proceeds, a bounded read-only architecture assignment
+resolves an actual high-risk delivery ambiguity before M7: existing Inbox replay
+persists Agent admission then wakes the scheduler, whereas Delivery acknowledges
+only after replay returns. Deleting scheduler/records and invoking handlers
+inline could replay accepted work after interruption, violating the human task.
+Inspect the smallest live-processing replacement, durable duplicate suppression,
+acknowledgement ordering and audit retention without a recovery queue or renewal
+protocol. This is a transaction/concurrency/public-storage trigger, not another
+whole-task design pass. Existing requirements splitter application_architecture
+uses explicit immutable gpt-6-astra/high; runtime metadata unavailable. Read-only,
+no children. Estimate 0.3–0.5 hours for source analysis and concrete implementation
+recommendations, concurrent with M6. External report agent-live-execution-plan.md;
+parent will accept decisions before production edits in M7.
+
+M6 demonstrated cleanup blocker and resolution D-0151: synchronous constructor
+rollback clears records and builder cleanup uses detached promises with swallowed
+errors. Advance the already-approved single asynchronous build() API from M9;
+await cleanup, remove buildAsync and migrate callers. No temporary public API.
+Parent inspected current registerAndStart/buildWith/failBuild and async integration
+cleanup before ruling. Existing sole Sol/medium implementer continues. Revised
+estimate 2.5–4 hours includes broader caller changes, tests, review and push.
+Initial source count:116 direct buildAsync uses; build appears in96 files across
+all builder types, so migration must be type-aware. Pre-consolidation checks:
+Bounded Context88/88, environment33/33; repository353/355, services123/126 and
+Process Manager29/45 expose invalid same-test duplicates/old server-start checks.
+These are intermediate results, not milestone acceptance.
+
+M7 bounded architecture result accepted as D-0152 and AGENT_LIVE_EXECUTION.md.
+Existing application_architecture requirements splitter used explicit immutable
+Astra/high; no exposed runtime metadata, no edits/checks/delegation. Parent read
+external agent-live-execution-plan.md and accepted its source-backed receipt,
+ordinary-session lifetime, active-target progress and conditional-commit decisions.
+The unchanged current follow-up seam is unsuitable; it releases session protection
+and is shard-wide. Receipt insertion is Agent acceptance, distinct from ordinary
+Inbox reception. No recovery or migration substitute is authorized. Implementation
+waits for M6. External shared-delivery-guardrail.md and context-preparation-source-notes.md
+also preserve parent source inspection for M8–M11; they add no public contract.
+
+2026-10-27 22:21 UTC M6 intermediate checkpoint: async build source/tooling
+compiled; Bounded Context/repository441 tests, environment33, services126 and
+Process Manager45 passed in focused reruns. Five additional corrected suites
+passed63 tests. Broader12-suite run earlier had44 failures/3 unhandled rejections
+from old synchronous assertions, missing explicit tenants and leaked contexts;
+correction remains in progress, not frozen. New deterministic tests preserve state
+reservations through pending cleanup and retain initiating plus registry-close
+errors. Concurrent lifecycle fixtures use a distinct ServerStartupAuditState
+Projection with start-count behavior; the original ServerStatus fixture remains
+for real storage-close coverage. Generation and remaining checks continue.
+
+M6 broader BlackBox checkpoint exposes two M7-dependent failures, observed after
+fixture correction (23/25 selected tests pass). Parent read exact tests:
+agent-ai-blackbox's saved-deadline termination is superseded recovery behavior;
+agent-capacity-blackbox's waiting signal using the preceding committed alternate
+model preference is required live behavior. Preserve that business regression
+through M7's live execution rewrite; do not classify it as recovery-only, skip it
+or weaken it. These failures are explicit remaining full-task limitations, not
+a claim that all affected tests pass. No separate recovery scheduler repair is
+authorized merely to make an interim checkpoint green. The final release gate
+must resolve both under the approved lifecycle.
+
+M6 frozen review checkpoint: fresh affected suite1,025/1,025 across23 files;
+build/tooling/ESLint/TSDoc/cleanup/copyright/format/docs/Proto/diff checks pass.
+Changed executable lines context48/50, environment36/38, third-party2/2. Exact
+external evidence is duplicate-state-implementation-evidence.md. Final isolated
+Agent rerun remains23/25 with the same explicitly deferred M7 cases. The Message
+Board mock-mode fixture now closes each actual context; focused9/9 passed.
+
+All four independent review lanes completed. API/docs clean; three P2 corrections
+accepted together: completed-context enumeration, awaited pre-context bus cleanup,
+and leaked API smoke-test contexts. Simplify duplicate build-counter wrapper in
+the same affected path. Same explicit immutable Sol/medium implementer continues;
+review log records all profiles and findings. No full-release claim. M7's bounded
+design review P1 is resolved in AGENT_LIVE_EXECUTION.md: preacceptance capacity or
+CAS errors must preserve pending input rather than default-acknowledge it.
+
+M6 accepted for checkpoint publication: targeted reliability confirms both fixes;
+API/docs clean, style corrections verified by parent. No unresolved accepted
+P0–P2 findings remain for this slice. Both regression tests failed before fixes;
+1,027 affected tests pass afterward. Current changed-line evidence and all
+mechanical checks are recorded in the external correction evidence. Author-only
+changes, including fixture Proto definitions and caller/docs updates, are included;
+generation fingerprints remain unstaged for final convergence. Commit and push to
+official feature branch, then continue M7. The two explicit Agent failures remain
+full-task work and prohibit a complete-release claim.

@@ -645,6 +645,7 @@ const expectedServerExports = [
   "BoundedContextBuilder",
   "BoundedContextName",
   "BoundedContextNameError",
+  "DuplicateEntityStateException",
   "BoundedContextSnapshot",
   "CommandBus",
   "Command",

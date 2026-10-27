@@ -170,7 +170,7 @@ export const SupportContext: Readonly<{
       })
       .add(SupportReview);
     if (storage !== undefined) builder.withStorageFactory(storage);
-    return builder.buildAsync();
+    return builder.build();
   },
 });
 

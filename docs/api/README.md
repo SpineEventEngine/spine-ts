@@ -292,7 +292,7 @@ mutation or storage. Aggregate command completion resolves after traceability
 event-journal append and latest persisted state write. Later produced-signal
 publication is contained by the internal publisher and does not extend the
 `BoundedContext` API. Generated entity-class assembly creates default repositories
-through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
+through `add(EntityClass).withGeneratedRegistryRoot(root).build()`. This
 implementation does not invoke query handlers, run durable delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported durable inbox
 handoffs are framework process-manager command replay, live
@@ -592,7 +592,7 @@ Standalone generated handlers extend one of `AbstractAssignee`,
 `AbstractCommander`, `AbstractEventReactor`, or `AbstractEventSubscriber`.
 Register an assignee with `addAssignee()`, a commander with
 `addCommandDispatcher()`, and reactors or subscribers with
-`addEventDispatcher()`, then call `buildAsync()` so the generated receiver
+`addEventDispatcher()`, then call `build()` so the generated receiver
 metadata can match the registered instance. Assignees consume Commands and
 produce Events; commanders may consume Commands, Events, or rejections and
 produce Commands; reactors consume Events or rejections and may produce Events;
@@ -755,15 +755,15 @@ generated registry assembly and framework materialization; it is not a
 public decorator form. `materializeDecoratedEntityHandlers()` remains a
 framework-only helper; application code must not call it.
 Ordinary generated assembly uses
-`await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).buildAsync()`.
+`await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).build()`.
 `withGeneratedRegistryRoot(root)` accepts a trusted compiled package/app root as
 a filesystem path, `URL`, or `file:` URL string. It rejects malformed URL
 strings, non-`file:` URL schemes, and `file:` aliases carrying query/hash
-suffixes, and it is required before `buildAsync()` can assemble entity classes
+suffixes, and it is required before `build()` can assemble entity classes
 from generated metadata. The builder loads the conventional generated registry
 module under that root, matches entity-class metadata, constructs default
-repositories, and keeps synchronous `build()` for explicit `add(repository)`
-assembly. The server registry exports
+repositories. The same asynchronous `build()` assembles explicit
+`add(repository)` registrations. The server registry exports
 include `HandlerMetadataRegistry`, `HandlerMetadataRegistryLookup`,
 `RegisteredHandlerMetadata`, and `HandlerMetadataRegistryError` for low-level
 lookup-only registration and duplicate-policy validation. These APIs are
@@ -897,7 +897,7 @@ const repository = new Repository({
   schema: CoordinationStateSchema,
   handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
 });
-const context = BoundedContext.singleTenant("Projects").add(repository).build();
+const context = await BoundedContext.singleTenant("Projects").add(repository).build();
 await context.commandBus().post(
   SignalEnvelopes.command({
     context: create(CommandContextSchema),
@@ -911,7 +911,7 @@ Its generated registry record declares `ApproveProjectSchema` under `input` and
 `ScheduleProjectSchema` as a normal returned outcome. Declared rejection
 schemas, when present, appear separately under `outcomes.thrown`. Application builds emit that record
 to `generated/handler/generated-handler-registry.js`; those applications use
-`buildAsync()` with their compiled package root before Command Bus posting.
+`build()` with their compiled package root before Command Bus posting.
 The public `@spine-event-engine/server/spi/handler-registry` subpath is the
 generated-registry data-contract SPI. Generated source writes unversioned
 receiver records and rejects retired registry shapes. Generated registry source
@@ -924,7 +924,7 @@ package-internal entry point.
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
 URLs for framework/tooling paths. Application package builds run registry
 generation after Protobuf-ES generation and before `tsc`; normal context
-assembly lets `buildAsync()` load the compiled registry module from the explicit
+assembly lets `build()` load the compiled registry module from the explicit
 trusted package output tree passed to `withGeneratedRegistryRoot(root)`.
 Repository execution calls generated two-argument command assignees, command
 substitutions, event subscribers, command reactions, and event reactors with generated

@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { TimeProvider } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema } from "@spine-event-engine/proto";
 
 import * as serverRoot from "../src/index.js";
@@ -137,7 +137,19 @@ class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof ProjectStateS
 }
 
 describe("@spine-event-engine/server", () => {
-  it("exports the descriptor-derived entity and handler metadata surface", () => {
+  const contexts: BoundedContext[] = [];
+
+  afterEach(async () => {
+    const closing = await Promise.allSettled(contexts.splice(0).map((context) => context.close()));
+    const failures = closing.flatMap((result): unknown[] =>
+      result.status === "rejected" ? [result.reason as unknown] : [],
+    );
+    if (failures.length > 0) throw new AggregateError(failures, "API smoke cleanup failed.");
+  });
+
+  it("exports the descriptor-derived entity and handler metadata surface", async () => {
+    const exportsContext = await BoundedContext.singleTenant("Exports").build();
+    contexts.push(exportsContext);
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
         "AbstractAssignee",
@@ -160,6 +172,7 @@ describe("@spine-event-engine/server", () => {
         "DeliveryStorageCorruptionError",
         "DeliverySupervisor",
         "DraftStateError",
+        "DuplicateEntityStateException",
         "EntityTransaction",
         "EntityTransactionStateError",
         "Environment",
@@ -210,6 +223,7 @@ describe("@spine-event-engine/server", () => {
         "TransactionalEntityScopeError",
         "React",
         "Subscribe",
+        "TenantUnknownError",
         "Throws",
         "Where",
         "acceptSignalIntake",
@@ -225,19 +239,11 @@ describe("@spine-event-engine/server", () => {
 
     expectTypeOf<BoundedContextName>().toEqualTypeOf<{ readonly value: string }>();
     expectTypeOf<TenantMode>().toEqualTypeOf<"single-tenant" | "multitenant">();
-    expectTypeOf(
-      BoundedContext.singleTenant("Exports").build().snapshot,
-    ).toEqualTypeOf<BoundedContextSnapshot>();
-    expectTypeOf(
-      BoundedContext.singleTenant("Exports").build().commandBus(),
-    ).toEqualTypeOf<CommandEndpoint>();
-    expectTypeOf(
-      BoundedContext.singleTenant("Exports").build().eventBus(),
-    ).toEqualTypeOf<EventEndpoint>();
-    expectTypeOf(BoundedContext.singleTenant("Exports").build().stand()).toEqualTypeOf<Stand>();
-    expectTypeOf(BoundedContext.singleTenant("Exports").build().catchUpReadSide()).toEqualTypeOf<
-      Promise<ReadCatchUpResult>
-    >();
+    expectTypeOf(exportsContext.snapshot).toEqualTypeOf<BoundedContextSnapshot>();
+    expectTypeOf(exportsContext.commandBus()).toEqualTypeOf<CommandEndpoint>();
+    expectTypeOf(exportsContext.eventBus()).toEqualTypeOf<EventEndpoint>();
+    expectTypeOf(exportsContext.stand()).toEqualTypeOf<Stand>();
+    expectTypeOf(exportsContext.catchUpReadSide()).toEqualTypeOf<Promise<ReadCatchUpResult>>();
     expectTypeOf<StandReadResult>().toExtend<{ readonly state: Message }>();
     expectTypeOf<StandSubscription>().toExtend<{ readonly closed: boolean }>();
     expectTypeOf<StandUpdate>().toExtend<{ readonly typeUrl: string; readonly id: unknown }>();
@@ -255,7 +261,7 @@ describe("@spine-event-engine/server", () => {
     expect(Environment.instance()).toBe(Environment.instance());
     expect(ServerEnvironment.when.bind(ServerEnvironment)).toBeTypeOf("function");
     expect(EnvironmentType.Local).toBe("local");
-    expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
+    expect(exportsContext.name.value).toBe("Exports");
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
     expect(new SignalMetadata()).toBeInstanceOf(SignalMetadata);
@@ -383,7 +389,7 @@ describe("@spine-event-engine/server", () => {
     >();
   });
 
-  it("assembles a bounded-context metadata and routing smoke slice from public APIs", () => {
+  it("assembles a bounded-context metadata and routing smoke slice from public APIs", async () => {
     expectTypeOf<typeof EntityHandlers>().toHaveProperty("define");
     expectTypeOf<typeof EntityHandlers>().not.toHaveProperty("isAuthentic");
     expectTypeOf<typeof EntityHandlers>().not.toHaveProperty("emittedSchemas");
@@ -398,7 +404,8 @@ describe("@spine-event-engine/server", () => {
       entityType: PublicRuntimeSmokeAggregate,
       schema: ProjectStateSchema,
     });
-    const context = BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository).build();
+    const context = await BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository).build();
+    contexts.push(context);
     const handlers = EntityHandlers.define(
       PublicRuntimeSmokeAggregate,
       ProjectStateSchema,
@@ -425,7 +432,6 @@ describe("@spine-event-engine/server", () => {
       "enqueue",
       "importBus",
       "storage",
-      "tenantIndex",
       "integrationBroker",
       "commandService",
       "queryService",
@@ -436,7 +442,7 @@ describe("@spine-event-engine/server", () => {
       "dispatch",
       "ack",
     ]) {
-      expect(member in context).toBe(false);
+      expect(member in context, member).toBe(false);
       expect(Object.hasOwn(context, member)).toBe(false);
     }
   });

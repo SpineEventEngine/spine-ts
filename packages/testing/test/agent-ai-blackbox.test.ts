@@ -361,7 +361,7 @@ async function configuredBox(
       }),
     );
   }
-  const context = builder.build();
+  const context = await builder.build();
   const blackBox = await BlackBox.from(context);
   return { blackBox, context, factory, repository };
 }
@@ -524,7 +524,7 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
     .registerTools(tools);
   const factory = new RecordingExecutionFactory();
   const repository = draftingRepository();
-  const context = BoundedContext.singleTenant("AiToolSupport")
+  const context = await BoundedContext.singleTenant("AiToolSupport")
     .withAi(registry)
     .persistSystemEvents()
     .withStorageFactory(factory)

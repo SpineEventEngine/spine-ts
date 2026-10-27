@@ -33,7 +33,7 @@ versioned registries are rejected and must be regenerated.
 Generated standalone handlers extend `AbstractAssignee`, `AbstractCommander`,
 `AbstractEventReactor`, or `AbstractEventSubscriber`. Register instances with
 `addAssignee()`, `addCommandDispatcher()`, or `addEventDispatcher()` as their
-role requires, then use `buildAsync()` to load generated receiver metadata and
+role requires, then use `build()` to load generated receiver metadata and
 match the exact constructor. Assignees consume Commands and produce Events;
 commanders consume Commands, Events, or rejections and produce Commands;
 reactors consume Events or rejections and may produce Events; subscribers
@@ -526,7 +526,7 @@ const repository = new Repository<typeof ApprovalCoordinator>({
   schema: CoordinationStateSchema,
   handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
 });
-const context = BoundedContext.singleTenant("Projects").add(repository).build();
+const context = await BoundedContext.singleTenant("Projects").add(repository).build();
 await context.commandBus().post(
   SignalEnvelopes.command({
     context: create(CommandContextSchema),
@@ -541,7 +541,7 @@ The generated record declares `ApproveProjectSchema` as the input and
 manual decorator materialization, constructs the output-bearing metadata.
 Application builds emit the record to
 `generated/handler/generated-handler-registry.js`; those applications use
-`buildAsync()` with their compiled package root.
+`build()` with their compiled package root.
 
 One `@Where({ eventField, equals })` equality filter may narrow an event- or
 rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type
@@ -564,8 +564,8 @@ context; `context.tenantIndex` and `ServerEnvironment.instance().tenantIndex`
 return the configured objects. Closing a context does not close either index.
 `withGeneratedRegistryRoot(root)` enables framework discovery of the generated
 handler registry for classes registered with `add(EntityClass)`;
-`buildAsync()` performs that discovery and assembly. `build()` remains for
-explicit `Repository` registration. A built context contains `CommandBus`,
+`build()` asynchronously performs that discovery and assembly, including
+explicit `Repository` registration. Await it before using the context. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 Trusted server-side code can call `context.getRepository(EntityClass)` to obtain
 the already registered repository for that exact constructor. The lookup does
@@ -1089,7 +1089,7 @@ use the public builder chain:
 ```ts
 import { BoundedContext, UniformAcrossAllShards } from "@spine-event-engine/server";
 
-const context = BoundedContext.singleTenant("Tasks")
+const context = await BoundedContext.singleTenant("Tasks")
   .withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))
   .build();
 ```

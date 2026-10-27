@@ -892,7 +892,7 @@ describe("@spine-event-engine/example-todo", () => {
         // Generated interface tokens cross the dynamic compiled-example boundary.
         eventRouting: firstRouting,
       })
-      .buildAsync();
+      .build();
     const listId = create(TaskListIdSchema, { value: "task-inbox-replay" });
     const event = SignalEnvelopes.event({
       context: create(EventContextSchema, {
@@ -965,7 +965,7 @@ describe("@spine-event-engine/example-todo", () => {
         // Generated interface tokens cross the dynamic compiled-example boundary.
         eventRouting: replayRouting,
       })
-      .buildAsync();
+      .build();
     const replayFixture = await createTodoBlackBox(replay);
     try {
       await replayFixture.eventually(
@@ -1643,7 +1643,7 @@ describe("@spine-event-engine/example-todo", () => {
       .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskAssigneeProjection, { eventRouting: routing })
-      .buildAsync();
+      .build();
     const fixture = await createTodoBlackBox(context);
     const scope = fixture.asGuest();
     const taskId = "task-rejected-routing";

@@ -14,7 +14,7 @@
 
 import * as http2 from "node:http2";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   BoundedContext,
@@ -223,6 +223,10 @@ describe("Server lifecycle integration", () => {
     await resetServerEnvironmentForTest();
     createHttp2Server.mockReset();
   });
+  afterEach(async () => {
+    for (const context of serverEnvironmentAccess.openContexts(ServerEnvironment.instance()))
+      await context.close();
+  });
 
   it("waits for attached startup recovery before opening the listener", async () => {
     const fixture = await lifecycleFixture();
@@ -341,7 +345,7 @@ describe("Server lifecycle integration", () => {
       first = await firstStart;
       expect(firstWorker.starts).toBe(1);
       expect(freshWorker.starts).toBe(0);
-      freshContext = await fixture.createContext("LifecycleFresh");
+      freshContext = await fixture.createAuditContext("LifecycleFresh");
       releaseRetirement = firstWorker.holdNextRetire();
       firstClose = first.close();
       void firstClose.catch(() => undefined);
@@ -491,7 +495,7 @@ describe("Server lifecycle integration", () => {
       context = await fixture
         .createBuilder("LifecycleActiveLastClose")
         .withStorageFactory(storageFactory)
-        .buildAsync();
+        .build();
       const trackedStorages = [...storageFactory.storages];
       expect(trackedStorages.length).toBeGreaterThan(0);
       const closeTrackedContext = context.close.bind(context);
@@ -618,7 +622,7 @@ describe("Server lifecycle integration", () => {
       context = await fixture
         .createBuilder("LifecycleUnsafeLastDetach")
         .withStorageFactory(storageFactory)
-        .buildAsync();
+        .build();
       const trackedStorages = [...storageFactory.storages];
       expect(trackedStorages.length).toBeGreaterThan(0);
       const closeTrackedContext = context.close.bind(context);
@@ -973,7 +977,7 @@ describe("Server lifecycle integration", () => {
         .start();
       const departingStorages = [...storageFactory.storages];
       sibling = await Server.atPort(0)
-        .add(fixture.createBuilder("LifecycleSharedSibling"))
+        .add(fixture.createAuditBuilder("LifecycleSharedSibling"))
         .addResource({ close: siblingResource })
         .start();
       const siblingStorages = storageFactory.storages.filter(
@@ -1025,9 +1029,9 @@ describe("Server lifecycle integration", () => {
     const sibling = await Server.atPort(0).add(fixture.context).start();
     const storageFactory = new LifecycleTrackingStorageFactory([]);
     const context = await fixture
-      .createBuilder("LifecycleUnsafeRunningDetach")
+      .createAuditBuilder("LifecycleUnsafeRunningDetach")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const resourceClose = vi.fn();
     let network: NetworkCloseProbe | undefined;
     createHttp2Server.mockImplementationOnce((httpServer) => {
@@ -1111,7 +1115,7 @@ describe("Server lifecycle integration", () => {
     });
     await fixture.context.close();
     const sibling = await Server.atPort(0)
-      .add(fixture.createBuilder("LifecycleEmptyAggregateSibling"))
+      .add(fixture.createAuditBuilder("LifecycleEmptyAggregateSibling"))
       .start();
     const siblingStorages = [...storageFactory.storages];
     const resourceClose = vi.fn();
@@ -1184,9 +1188,9 @@ describe("Server lifecycle integration", () => {
     const sibling = await Server.atPort(0).add(fixture.context).start();
     const storageFactory = new LifecycleTrackingStorageFactory([]);
     const context = await fixture
-      .createBuilder("LifecycleSafeRunningDetachFailure")
+      .createAuditBuilder("LifecycleSafeRunningDetachFailure")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const successfulResource = vi.fn();
     const retirementFailure = new Error("shared selected owner retirement failed after barrier");
     const resourceFailure = new Error("shared dependency close failed");
@@ -1264,9 +1268,9 @@ describe("Server lifecycle integration", () => {
     const sibling = await Server.atPort(0).add(fixture.context).start();
     const storageFactory = new LifecycleTrackingStorageFactory([]);
     const context = await fixture
-      .createBuilder("LifecycleRunningNetworkGate")
+      .createAuditBuilder("LifecycleRunningNetworkGate")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const resourceClose = vi.fn();
     const networkFailure = new Error("shared running network close failed");
     let network: NetworkCloseProbe | undefined;
@@ -1328,7 +1332,7 @@ describe("Server lifecycle integration", () => {
     const context = await fixture
       .createBuilder("LifecycleOwnedSafeStartup")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const closeBuiltContext = context.close.bind(context);
     const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
       this: BoundedContext,
@@ -1404,7 +1408,7 @@ describe("Server lifecycle integration", () => {
     const context = await fixture
       .createBuilder("LifecycleOwnedUnsafeStartup")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const builtStorageCount = storageFactory.storages.length;
     const closeBuiltContext = context.close.bind(context);
     const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
@@ -1532,7 +1536,7 @@ describe("Server lifecycle integration", () => {
     const context = await fixture
       .createBuilder("LifecycleOwnedPartialCleanup")
       .withStorageFactory(contextStorage)
-      .buildAsync();
+      .build();
     const closeBuiltContext = context.close.bind(context);
     let contextCloses = 0;
     const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
@@ -1621,7 +1625,7 @@ describe("Server lifecycle integration", () => {
       await starting.catch(() => undefined);
       await server.start().catch(() => undefined);
       await context.close().catch(() => undefined);
-      contextStorage.close();
+      await contextStorage.close();
       await resetServerEnvironmentForTest().catch(() => undefined);
       fixture.dispose();
     }
@@ -1711,7 +1715,7 @@ describe("Server lifecycle integration", () => {
     const context = await fixture
       .createBuilder("LifecycleUnsafeListenerCleanup")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const builtStorageCount = storageFactory.storages.length;
     const closeFixtureContext = context.close.bind(context);
     const closeContext = vi.spyOn(BoundedContext.prototype, "close").mockImplementation(function (
@@ -1801,9 +1805,9 @@ describe("Server lifecycle integration", () => {
     const sibling = await siblingStarting;
     const departingStorage = new LifecycleTrackingStorageFactory([]);
     const departingContext = await fixture
-      .createBuilder("LifecycleSharedListenerFailure")
+      .createAuditBuilder("LifecycleSharedListenerFailure")
       .withStorageFactory(departingStorage)
-      .buildAsync();
+      .build();
     const resourceClose = vi.fn();
     fixture.worker.failNextRetire(retirementFailure);
     const server = Server.atPort(sibling.port)
@@ -1873,7 +1877,7 @@ describe("Server lifecycle integration", () => {
     const context = await fixture
       .createBuilder("LifecycleNetworkCloseFailure")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const resourceClose = vi.fn();
     const server = Server.atPort(0).add(context).addResource({ close: resourceClose });
     const starting = server.start();
@@ -1917,7 +1921,7 @@ describe("Server lifecycle integration", () => {
   });
 
   it("uses ordinary detach after another server clears unsafe failed-start rollback", async () => {
-    const fixture = await lifecycleFixture();
+    const fixture = await lifecycleFixture({ readinessBase: true });
     fixture.worker.release();
     const sibling = await Server.atPort(0).add(fixture.context).start();
     const listenerFailure = Object.assign(new Error("cross-server listener bind failed"), {
@@ -1931,7 +1935,7 @@ describe("Server lifecycle integration", () => {
     const listenerContext = await fixture
       .createBuilder("LifecycleBlockedListenerDetach")
       .withStorageFactory(listenerStorage)
-      .buildAsync();
+      .build();
     const listenerResource = vi.fn();
     const listenerServer = Server.atPort(0)
       .add(listenerContext)
@@ -1943,9 +1947,9 @@ describe("Server lifecycle integration", () => {
     const rollbackFailure = new Error("cross-server attachment rollback remained unsafe");
     const rollbackStorage = new LifecycleTrackingStorageFactory([]);
     const rollbackContext = await fixture
-      .createBuilder("LifecycleBlockingFailedRollback")
+      .createAuditBuilder("LifecycleBlockingFailedRollback")
       .withStorageFactory(rollbackStorage)
-      .buildAsync();
+      .build();
     const rollbackResource = vi.fn();
     const rollbackServer = Server.atPort(0)
       .add(rollbackContext)
@@ -2028,7 +2032,7 @@ describe("Server lifecycle integration", () => {
   });
 
   it("keeps listener cleanup out of another server's failed-start retry", async () => {
-    const fixture = await lifecycleFixture();
+    const fixture = await lifecycleFixture({ readinessBase: true });
     fixture.worker.release();
     const sibling = await Server.atPort(0).add(fixture.context).start();
     const listenerRetirementFailure = new Error("isolated listener retirement failed");
@@ -2036,7 +2040,7 @@ describe("Server lifecycle integration", () => {
     const listenerContext = await fixture
       .createBuilder("LifecycleIsolatedListenerCleanup")
       .withStorageFactory(listenerStorage)
-      .buildAsync();
+      .build();
     const listenerResource = vi.fn();
     fixture.worker.failNextRetire(listenerRetirementFailure);
     const listenerServer = Server.atPort(sibling.port)
@@ -2050,9 +2054,9 @@ describe("Server lifecycle integration", () => {
     const rollbackRetryFailure = new Error("isolated rollback retry remained unsafe");
     const rollbackStorage = new LifecycleTrackingStorageFactory([]);
     const rollbackContext = await fixture
-      .createBuilder("LifecycleIsolatedFailedRollback")
+      .createAuditBuilder("LifecycleIsolatedFailedRollback")
       .withStorageFactory(rollbackStorage)
-      .buildAsync();
+      .build();
     const rollbackResource = vi.fn();
     const rollbackServer = Server.atPort(0)
       .add(rollbackContext)
@@ -2169,7 +2173,7 @@ describe("Server lifecycle integration", () => {
   });
 
   it("keeps a blocked attachment out of another server's failed-start retry", async () => {
-    const fixture = await lifecycleFixture();
+    const fixture = await lifecycleFixture({ readinessBase: true });
     fixture.worker.release();
     const sibling = await Server.atPort(0).add(fixture.context).start();
 
@@ -2180,7 +2184,7 @@ describe("Server lifecycle integration", () => {
     const ownerContext = await fixture
       .createBuilder("LifecycleAttachmentRollbackOwner")
       .withStorageFactory(ownerStorage)
-      .buildAsync();
+      .build();
     const ownerResource = vi.fn();
     const ownerServer = Server.atPort(0).add(ownerContext).addResource({ close: ownerResource });
     fixture.worker.rejectNextStart(ownerStartupFailure);
@@ -2190,9 +2194,9 @@ describe("Server lifecycle integration", () => {
 
     const blockedStorage = new LifecycleTrackingStorageFactory([]);
     const blockedContext = await fixture
-      .createBuilder("LifecycleBlockedAttachment")
+      .createAuditBuilder("LifecycleBlockedAttachment")
       .withStorageFactory(blockedStorage)
-      .buildAsync();
+      .build();
     const duplicateBlockedClose = new Error("blocked resource closed more than once");
     let blockedCloseCalls = 0;
     const blockedResource = vi.fn(() => {
@@ -2314,7 +2318,7 @@ describe("Server lifecycle integration", () => {
   });
 
   it("expires rollback authority before retrying a partial dependency close", async () => {
-    const fixture = await lifecycleFixture();
+    const fixture = await lifecycleFixture({ readinessBase: true });
     fixture.worker.release();
     const sibling = await Server.atPort(0).add(fixture.context).start();
 
@@ -2326,7 +2330,7 @@ describe("Server lifecycle integration", () => {
     const firstContext = await fixture
       .createBuilder("LifecycleExpiredRollbackAuthority")
       .withStorageFactory(firstStorage)
-      .buildAsync();
+      .build();
     let successfulResourceCloses = 0;
     const successfulResource = vi.fn(() => {
       successfulResourceCloses += 1;
@@ -2358,9 +2362,9 @@ describe("Server lifecycle integration", () => {
     const secondRetryFailure = new Error("new rollback owner retry remained unsafe");
     const secondStorage = new LifecycleTrackingStorageFactory([]);
     const secondContext = await fixture
-      .createBuilder("LifecycleNewRollbackOwner")
+      .createAuditBuilder("LifecycleNewRollbackOwner")
       .withStorageFactory(secondStorage)
-      .buildAsync();
+      .build();
     const secondResource = vi.fn();
     const secondServer = Server.atPort(0).add(secondContext).addResource({ close: secondResource });
     let secondStarting: Promise<unknown> | undefined;
@@ -2669,7 +2673,7 @@ describe("Server lifecycle integration", () => {
     const context = await fixture
       .createBuilder("LifecycleSafeFailedStart")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const builtStorageCount = storageFactory.storages.length;
     const closeContext = vi.spyOn(BoundedContext.prototype, "close");
     let successfulResourceCloses = 0;
@@ -2748,7 +2752,7 @@ describe("Server lifecycle integration", () => {
       const freshContext = await fixture
         .createBuilder("LifecycleAfterConsumedFailedStart")
         .withStorageFactory(storageFactory)
-        .buildAsync();
+        .build();
       fresh = await Server.atPort(0).add(freshContext).start();
       expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
       expect(firstWorker.starts).toBe(1);
@@ -2790,7 +2794,7 @@ describe("Server lifecycle integration", () => {
     const context = await fixture
       .createBuilder("LifecycleImmediateSafeTerminal")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const builtStorageCount = storageFactory.storages.length;
     const closeContext = vi.spyOn(BoundedContext.prototype, "close");
     let resourceCloses = 0;
@@ -2834,7 +2838,7 @@ describe("Server lifecycle integration", () => {
       const freshContext = await fixture
         .createBuilder("LifecycleAfterImmediateSafeTerminal")
         .withStorageFactory(storageFactory)
-        .buildAsync();
+        .build();
       fresh = await Server.atPort(0).add(freshContext).start();
       expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
       expect(firstWorker.starts).toBe(1);
@@ -2878,7 +2882,7 @@ describe("Server lifecycle integration", () => {
     const context = await fixture
       .createBuilder("LifecycleRetirementErrorTerminal")
       .withStorageFactory(storageFactory)
-      .buildAsync();
+      .build();
     const builtStorageCount = storageFactory.storages.length;
     const closeContext = vi.spyOn(BoundedContext.prototype, "close");
     let resourceCloses = 0;
@@ -2937,7 +2941,7 @@ describe("Server lifecycle integration", () => {
       const freshContext = await fixture
         .createBuilder("LifecycleAfterRetirementErrorTerminal")
         .withStorageFactory(storageFactory)
-        .buildAsync();
+        .build();
       fresh = await Server.atPort(0).add(freshContext).start();
       expect(storageFactory.storages.length).toBeGreaterThan(builtStorageCount);
       expect(firstWorker.starts).toBe(1);

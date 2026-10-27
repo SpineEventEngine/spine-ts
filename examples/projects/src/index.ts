@@ -886,10 +886,7 @@ export async function createProjectManagementContext(
     .add(ProjectAggregate)
     .add(TaskAggregate)
     .add(PersonAggregate);
-  return ProjectRegistration.processes(
-    ProjectRegistration.projections(builder),
-    weights,
-  ).buildAsync();
+  return ProjectRegistration.processes(ProjectRegistration.projections(builder), weights).build();
 }
 
 /**

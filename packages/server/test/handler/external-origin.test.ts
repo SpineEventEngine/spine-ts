@@ -41,7 +41,7 @@ describe("Wave 13 external receptor origin", () => {
     const context = await BoundedContext.singleTenant("Red03MixedOrigin")
       .withGeneratedRegistryRoot(registry.root)
       .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
-      .buildAsync();
+      .build();
     try {
       await context.eventBus().post(event(true));
       expect(Wave13OriginProjection.domesticContexts).toEqual([]);
@@ -57,7 +57,7 @@ describe("Wave 13 external receptor origin", () => {
     const context = await BoundedContext.singleTenant("Red04MixedOrigin")
       .withGeneratedRegistryRoot(registry.root)
       .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
-      .buildAsync();
+      .build();
     try {
       await context.eventBus().post(event(false));
       expect(Wave13OriginProjection.domesticContexts).toHaveLength(1);

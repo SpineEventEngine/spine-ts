@@ -210,6 +210,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.delivery = settings.delivery;
     this.tracerFactory = settings.tracerFactory;
     environmentLoggers.set(this, settings.logger);
+    environmentContexts.set(this, new EnvironmentContextRegistrations());
     this.#ownedCloseables = ServerEnvironmentValues.facilitiesToClose(settings);
     warnedVolatileRegistries.set(this, new WeakSet());
     this.#closeGroup = new RetryableCloseGroup(
@@ -354,8 +355,16 @@ export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<
         return current;
       }
       const resolved = resolvedEnvironment;
+      if (resolved !== undefined && EnvironmentContextRegistrations.forEnvironment(resolved).active) {
+        return Promise.reject(new Error("Cannot reset ServerEnvironment with active Bounded Contexts."));
+      }
       const reset = Promise.resolve()
-        .then(() => resolved?.close())
+        .then(() => {
+          if (resolved !== undefined && EnvironmentContextRegistrations.forEnvironment(resolved).active) {
+            throw new Error("Cannot reset ServerEnvironment with active Bounded Contexts.");
+          }
+          return resolved?.close();
+        })
         .then(() => {
           resolvedEnvironment = undefined;
           configuredSettings.clear();
@@ -370,6 +379,69 @@ export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<
   });
 
 interface ServerEnvironmentAccess {
+  /**
+   * Records a build before asynchronous model discovery.
+   *
+   * @param environment Resolved environment.
+   * @returns Callback that marks this build settled.
+   */
+  beginContextBuild(environment: ServerEnvironment): () => void;
+
+  /**
+   * Records a constructed context, including an empty one.
+   *
+   * @param environment Resolved environment.
+   * @param context Constructed context.
+   */
+  addContext(environment: ServerEnvironment, context: BoundedContext): void;
+
+  /**
+   * Marks a constructed context ready after integration opens.
+   *
+   * @param environment Resolved environment.
+   * @param context Ready context.
+   */
+  completeContext(environment: ServerEnvironment, context: BoundedContext): void;
+
+  /**
+   * Registers a state type and returns a conflicting domain context, if any.
+   *
+   * @param environment Resolved environment.
+   * @param context Context declaring the state.
+   * @param typeUrl Full Entity state type URL.
+   * @returns A conflicting context, if one exists.
+   */
+  reserveState(
+    environment: ServerEnvironment,
+    context: BoundedContext,
+    typeUrl: string,
+  ): BoundedContext | undefined;
+
+  /**
+   * Removes a context after its recipients have stopped.
+   *
+   * @param environment Resolved environment.
+   * @param context Closed context.
+   */
+  removeContext(environment: ServerEnvironment, context: BoundedContext): void;
+
+  /**
+   * Returns zero or one domain context names serving a state type.
+   *
+   * @param environment Resolved environment.
+   * @param typeUrl Full Entity state type URL.
+   * @returns Matching context names.
+   */
+  contextsServing(environment: ServerEnvironment, typeUrl: string): readonly string[];
+
+  /**
+   * Lists actual open contexts for explicit test cleanup and internal inspection.
+   *
+   * @param environment Resolved environment.
+   * @returns Current context references.
+   */
+  openContexts(environment: ServerEnvironment): readonly BoundedContext[];
+
   /**
    * Attaches a context delivery generation.
    *
@@ -498,6 +570,123 @@ const environmentLoggers = new WeakMap<ServerEnvironment, ILogLayer>();
 const deliveryOpeners = new WeakMap<ServerEnvironment, () => Promise<void>>();
 const testAttachmentsInstallable = new WeakSet<ServerEnvironment>();
 const warnedVolatileRegistries = new WeakMap<ServerEnvironment, WeakSet<BoundedContext>>();
+const environmentContexts = new WeakMap<ServerEnvironment, EnvironmentContextRegistrations>();
+
+/**
+ * Records live domain contexts separately from build-phase reservations.
+ */
+class EnvironmentContextRegistrations {
+  readonly #contexts = new Set<BoundedContext>();
+
+  readonly #completed = new Set<BoundedContext>();
+
+  readonly #states = new Map<string, BoundedContext>();
+
+  #builds = 0;
+
+  /**
+   * Finds the registrations attached to one resolved environment.
+   *
+   * @param environment Resolved environment.
+   * @returns Its context registrations.
+   */
+  static forEnvironment(environment: ServerEnvironment): EnvironmentContextRegistrations {
+    const contexts = environmentContexts.get(environment);
+    if (contexts === undefined)
+      throw new TypeError("Context registration requires an environment.");
+    return contexts;
+  }
+
+  /**
+   * Checks whether a full singleton reset would discard context state.
+   *
+   * @returns Whether a context or build remains active.
+   */
+  get active(): boolean {
+    return this.#builds > 0 || this.#contexts.size > 0;
+  }
+
+  /**
+   * Records a build until asynchronous assembly settles.
+   *
+   * @returns A callback that finishes this build exactly once.
+   */
+  beginBuild(): () => void {
+    this.#builds++;
+    let finished = false;
+    return () => {
+      if (finished) return;
+      finished = true;
+      this.#builds--;
+    };
+  }
+
+  /**
+   * Records an open or partly constructed context.
+   *
+   * @param context Context to track.
+   */
+  add(context: BoundedContext): void {
+    this.#contexts.add(context);
+  }
+
+  /**
+   * Marks a tracked context ready for public cleanup enumeration.
+   *
+   * @param context Context whose integration opened successfully.
+   */
+  complete(context: BoundedContext): void {
+    if (!this.#contexts.has(context)) throw new Error("Context completed after cleanup.");
+    this.#completed.add(context);
+  }
+
+  /**
+   * Registers one state type without overwriting a different context.
+   *
+   * @param context Context registering the state.
+   * @param typeUrl Full wire type URL of the state.
+   * @returns The conflicting context, if another context registered it.
+   */
+  reserve(context: BoundedContext, typeUrl: string): BoundedContext | undefined {
+    const prior = this.#states.get(typeUrl);
+    if (prior !== undefined) return prior === context ? undefined : prior;
+    this.#states.set(typeUrl, context);
+    return undefined;
+  }
+
+  /**
+   * Removes only registrations made by the selected context.
+   *
+   * @param context Context that completed shutdown.
+   */
+  remove(context: BoundedContext): void {
+    this.#contexts.delete(context);
+    this.#completed.delete(context);
+    for (const [typeUrl, registered] of this.#states) {
+      if (registered === context) this.#states.delete(typeUrl);
+    }
+  }
+
+  /**
+   * Lists the context currently serving a state type.
+   *
+   * @param typeUrl Full wire type URL of the state.
+   * @returns Zero or one context names.
+   */
+  serving(typeUrl: string): readonly string[] {
+    const context = this.#states.get(typeUrl);
+    return context === undefined ? [] : [context.name.value];
+  }
+
+  /**
+   * Returns completed context references without releasing them.
+   *
+   * @returns References to integrated open contexts.
+   */
+  openContexts(): readonly BoundedContext[] {
+    return [...this.#completed];
+  }
+}
 
 /**
  * Provides package-only environment delivery attachment access for server lifecycle owners.
@@ -505,6 +694,23 @@ const warnedVolatileRegistries = new WeakMap<ServerEnvironment, WeakSet<BoundedC
  * @internal
  */
 export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
+  beginContextBuild: (environment: ServerEnvironment) =>
+    EnvironmentContextRegistrations.forEnvironment(environment).beginBuild(),
+  addContext: (environment: ServerEnvironment, context: BoundedContext) => {
+    EnvironmentContextRegistrations.forEnvironment(environment).add(context);
+  },
+  completeContext: (environment: ServerEnvironment, context: BoundedContext) => {
+    EnvironmentContextRegistrations.forEnvironment(environment).complete(context);
+  },
+  reserveState: (environment: ServerEnvironment, context: BoundedContext, typeUrl: string) =>
+    EnvironmentContextRegistrations.forEnvironment(environment).reserve(context, typeUrl),
+  removeContext: (environment: ServerEnvironment, context: BoundedContext) => {
+    EnvironmentContextRegistrations.forEnvironment(environment).remove(context);
+  },
+  contextsServing: (environment: ServerEnvironment, typeUrl: string) =>
+    EnvironmentContextRegistrations.forEnvironment(environment).serving(typeUrl),
+  openContexts: (environment: ServerEnvironment) =>
+    EnvironmentContextRegistrations.forEnvironment(environment).openContexts(),
   attach(environment: ServerEnvironment, options: EnvironmentAttachOptions) {
     testAttachmentsInstallable.delete(environment);
     const attachments = environmentAttachments.get(environment);

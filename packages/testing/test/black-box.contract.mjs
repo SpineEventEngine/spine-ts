@@ -57,7 +57,7 @@ class ProjectOverview extends Projection {
 export function registerBlackBoxContract(test, testing) {
   const { BlackBox, BlackBoxClosedError, BlackBoxTimeoutError } = testing;
   test("posts a command then eventually sends a query and decodes its projection", async () => {
-    const blackBox = await BlackBox.from(projectContext());
+    const blackBox = await BlackBox.from(await projectContext());
     try {
       const scope = blackBox.asGuest();
       const posted = await scope.post(
@@ -91,7 +91,7 @@ export function registerBlackBoxContract(test, testing) {
   test("stamps a normal command's event and repository version with provider precision", async () => {
     const instant = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_456_789 });
     const previous = Time.setProvider({ currentTime: () => instant });
-    const blackBox = await BlackBox.from(projectContext());
+    const blackBox = await BlackBox.from(await projectContext());
     try {
       const posted = await blackBox
         .asGuest()
@@ -126,7 +126,7 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("activates a raw projection topic and decodes its update with the schema", async () => {
-    const blackBox = await BlackBox.from(projectContext());
+    const blackBox = await BlackBox.from(await projectContext());
     try {
       const scope = blackBox.asGuest();
       const subscription = await scope.createSubscription(
@@ -175,7 +175,7 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("releases explicitly canceled and returned raw subscriptions before BlackBox close", async () => {
-    const blackBox = await BlackBox.from(projectContext());
+    const blackBox = await BlackBox.from(await projectContext());
     try {
       const scope = blackBox.asGuest();
       const canceled = await scope.createSubscription(
@@ -218,7 +218,7 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("activates a raw event topic and decodes its update with the schema", async () => {
-    const blackBox = await BlackBox.from(projectEventContext());
+    const blackBox = await BlackBox.from(await projectEventContext());
     try {
       const scope = blackBox.asGuest();
       const events = await scope.createSubscription(topic(ProjectObservedSchema), {
@@ -257,7 +257,7 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("returns refused Command admission without a tracked observation stream", async () => {
-    const blackBox = await BlackBox.from(projectEventContext());
+    const blackBox = await BlackBox.from(await projectEventContext());
     try {
       const scope = blackBox.asGuest();
       const result = await scope.postAndSubscribe(
@@ -281,7 +281,7 @@ export function registerBlackBoxContract(test, testing) {
   test("returns the tracked accepted stream after its late-update callback cancels", async () => {
     const dispatchEntered = Promise.withResolvers();
     const releaseDispatch = Promise.withResolvers();
-    const context = BoundedContext.singleTenant("DeferredProjectAdmission")
+    const context = await BoundedContext.singleTenant("DeferredProjectAdmission")
       .addCommandDispatcher({
         messageSchemas: () => [CreateProjectSchema],
         dispatch: async () => {
@@ -358,7 +358,7 @@ export function registerBlackBoxContract(test, testing) {
     test(`releases a timeout-notified stream once when gated Command admission is ${outcome}`, async () => {
       const dispatchEntered = Promise.withResolvers();
       const releaseDispatch = Promise.withResolvers();
-      const context = BoundedContext.singleTenant(`DeferredProject-${outcome}`)
+      const context = await BoundedContext.singleTenant(`DeferredProject-${outcome}`)
         .addCommandDispatcher({
           messageSchemas: () => [CreateProjectSchema],
           dispatch: async () => {
@@ -454,7 +454,7 @@ export function registerBlackBoxContract(test, testing) {
     });
 
   test("keeps a schema-list Event group active across types and cancels it on BlackBox close", async () => {
-    const blackBox = await BlackBox.from(projectEventContext());
+    const blackBox = await BlackBox.from(await projectEventContext());
     try {
       const scope = blackBox.asGuest();
       const firstDelay = Promise.withResolvers();
@@ -489,8 +489,10 @@ export function registerBlackBoxContract(test, testing) {
         first.done ||
         first.value.kind !== "update" ||
         first.value.update.update.case !== "eventUpdates" ||
-        AnyPacker.tryUnpack(first.value.update.update.value.event[0]?.message, ProjectObservedSchema)
-          ?.id !== "observed"
+        AnyPacker.tryUnpack(
+          first.value.update.update.value.event[0]?.message,
+          ProjectObservedSchema,
+        )?.id !== "observed"
       ) {
         throw new Error("schema-list group missed its first Event type");
       }
@@ -504,8 +506,10 @@ export function registerBlackBoxContract(test, testing) {
         second.done ||
         second.value.kind !== "update" ||
         second.value.update.update.case !== "eventUpdates" ||
-        AnyPacker.tryUnpack(second.value.update.update.value.event[0]?.message, ProjectCreatedSchema)
-          ?.id !== "created"
+        AnyPacker.tryUnpack(
+          second.value.update.update.value.event[0]?.message,
+          ProjectCreatedSchema,
+        )?.id !== "created"
       ) {
         throw new Error("schema-list group did not continue for its second Event type");
       }
@@ -525,7 +529,7 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("cancels a late Event group through the timeout callback without repeat cleanup", async () => {
-    const blackBox = await BlackBox.from(projectEventContext());
+    const blackBox = await BlackBox.from(await projectEventContext());
     try {
       const canceled = Promise.withResolvers();
       const group = await blackBox.asGuest().createSubscription([ProjectObservedSchema], {
@@ -564,7 +568,7 @@ export function registerBlackBoxContract(test, testing) {
     const contexts = [];
     const tenant = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
     const zone = create(ZoneIdSchema, { value: "Europe/Lisbon" });
-    const blackBox = await BlackBox.from(capturingContext("Imported", contexts, true), {
+    const blackBox = await BlackBox.from(await capturingContext("Imported", contexts, true), {
       tenant,
       zoneId: zone,
     });
@@ -595,7 +599,7 @@ export function registerBlackBoxContract(test, testing) {
 
   test("posts an external event only to external handlers without capturing it as output", async () => {
     const contexts = [];
-    const blackBox = await BlackBox.from(externalCapturingContext("External", contexts), {
+    const blackBox = await BlackBox.from(await externalCapturingContext("External", contexts), {
       tenant: "tenant-a",
       zoneId: "Europe/Lisbon",
     });
@@ -626,7 +630,7 @@ export function registerBlackBoxContract(test, testing) {
 
   test("keeps concurrent guest and actor direct-event contexts isolated with one fixed tenant and zone", async () => {
     const contexts = [];
-    const blackBox = await BlackBox.from(capturingContext("Concurrent", contexts, true), {
+    const blackBox = await BlackBox.from(await capturingContext("Concurrent", contexts, true), {
       tenant: "tenant-a",
       zoneId: "Europe/Lisbon",
     });
@@ -660,7 +664,7 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("cancels an active eventual wait with the stable close error", async () => {
-    const blackBox = await BlackBox.from(BoundedContext.singleTenant("WaitClose").build());
+    const blackBox = await BlackBox.from(BoundedContext.singleTenant("WaitClose"));
     let reads = 0;
     const waiting = blackBox.eventually(
       () => {
@@ -680,7 +684,7 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("lets close win over an eventual read that resolves after close starts", async () => {
-    const blackBox = await BlackBox.from(BoundedContext.singleTenant("ReadClose").build());
+    const blackBox = await BlackBox.from(BoundedContext.singleTenant("ReadClose"));
     let resolveRead;
     const reading = blackBox.eventually(
       () =>
@@ -697,7 +701,7 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("rejects every captured scope operation after close before work begins", async () => {
-    const blackBox = await BlackBox.from(BoundedContext.singleTenant("ScopeClose").build());
+    const blackBox = await BlackBox.from(BoundedContext.singleTenant("ScopeClose"));
     const scope = blackBox.asGuest();
     await blackBox.close();
     await assertFailure(
@@ -724,14 +728,14 @@ export function registerBlackBoxContract(test, testing) {
   });
 
   test("owns one ephemeral public client/server session and closes idempotently", async () => {
-    const blackBox = await BlackBox.from(BoundedContext.singleTenant("Testing").build());
+    const blackBox = await BlackBox.from(BoundedContext.singleTenant("Testing"));
     if (blackBox.asGuest() === undefined) throw new Error("guest scope was not created");
     await Promise.all([blackBox.close(), blackBox.close()]);
     assertThrows(() => blackBox.asGuest(), "BlackBox is closed.");
   });
 
   test("rejects eventual waits with the stable timeout error", async () => {
-    const blackBox = await BlackBox.from(BoundedContext.singleTenant("Timeout").build());
+    const blackBox = await BlackBox.from(BoundedContext.singleTenant("Timeout"));
     try {
       await assertRejects(
         blackBox.eventually(
@@ -748,7 +752,7 @@ export function registerBlackBoxContract(test, testing) {
 
   test("times out eventual waits while occurrence time is fixed", async () => {
     const previous = Time.setProvider({ currentTime: () => create(TimestampSchema) });
-    const blackBox = await BlackBox.from(BoundedContext.singleTenant("FrozenClock").build());
+    const blackBox = await BlackBox.from(BoundedContext.singleTenant("FrozenClock"));
     try {
       await assertRejects(
         Promise.race([
@@ -773,19 +777,19 @@ export function registerBlackBoxContract(test, testing) {
     const invalid = [0, -1, 0.5, Number.NaN, Number.POSITIVE_INFINITY];
     for (const value of invalid) {
       await assertRejects(
-        BlackBox.from(BoundedContext.singleTenant(`Invalid-${String(value)}`).build(), {
+        BlackBox.from(BoundedContext.singleTenant(`Invalid-${String(value)}`), {
           timeoutMs: value,
         }),
         /timeoutMs must be a positive integer/,
       );
       await assertRejects(
-        BlackBox.from(BoundedContext.singleTenant(`Interval-${String(value)}`).build(), {
+        BlackBox.from(BoundedContext.singleTenant(`Interval-${String(value)}`), {
           intervalMs: value,
         }),
         /intervalMs must be a positive integer/,
       );
     }
-    const blackBox = await BlackBox.from(BoundedContext.singleTenant("ValidTiming").build());
+    const blackBox = await BlackBox.from(BoundedContext.singleTenant("ValidTiming"));
     try {
       await assertRejects(
         blackBox.eventually(
@@ -810,29 +814,29 @@ export function registerBlackBoxContract(test, testing) {
 
   test("validates tenant mode before opening a listener", async () => {
     await assertRejects(
-      BlackBox.from(BoundedContext.singleTenant("Single").build(), { tenant: "tenant" }),
+      BlackBox.from(BoundedContext.singleTenant("Single"), { tenant: "tenant" }),
       /single-tenant context rejects a tenant/,
     );
     await assertRejects(
-      BlackBox.from(BoundedContext.multitenant("Multi").build()),
+      BlackBox.from(BoundedContext.multitenant("Multi")),
       /multitenant context requires a tenant/,
     );
     await assertRejects(
-      BlackBox.from(BoundedContext.multitenant("EmptyStringTenant").build(), { tenant: "" }),
+      BlackBox.from(BoundedContext.multitenant("EmptyStringTenant"), { tenant: "" }),
       /tenant must not be empty/,
     );
     await assertRejects(
-      BlackBox.from(BoundedContext.multitenant("EmptyMessageTenant").build(), {
+      BlackBox.from(BoundedContext.multitenant("EmptyMessageTenant"), {
         tenant: create(TenantIdSchema),
       }),
       /tenant must not be empty/,
     );
     await assertRejects(
-      BlackBox.from(BoundedContext.singleTenant("EmptyStringZone").build(), { zoneId: "" }),
+      BlackBox.from(BoundedContext.singleTenant("EmptyStringZone"), { zoneId: "" }),
       /zoneId must not be empty/,
     );
     await assertRejects(
-      BlackBox.from(BoundedContext.singleTenant("EmptyMessageZone").build(), {
+      BlackBox.from(BoundedContext.singleTenant("EmptyMessageZone"), {
         zoneId: create(ZoneIdSchema),
       }),
       /zoneId must not be empty/,
@@ -847,9 +851,9 @@ export function registerBlackBoxContract(test, testing) {
     });
     const builder = {
       isMultitenant: () => true,
-      buildAsync: async () => {
+      build: async () => {
         await gate;
-        return capturingContext("Deferred", contexts, true);
+        return capturingContext("Deferred", contexts, true, ["before"]);
       },
     };
     const tenant = create(TenantIdSchema, { kind: { case: "value", value: "before" } });
@@ -894,7 +898,7 @@ export function registerBlackBoxContract(test, testing) {
     });
     const contexts = [];
     try {
-      const blackBox = await BlackBox.from(capturingContext("DefaultZone", contexts, false));
+      const blackBox = await BlackBox.from(await capturingContext("DefaultZone", contexts, false));
       try {
         await blackBox
           .asGuest()
@@ -970,11 +974,11 @@ function projectEventContext() {
     })
     .build();
 }
-function capturingContext(name, contexts, multitenant) {
+async function capturingContext(name, contexts, multitenant, tenants = ["tenant-a"]) {
   const builder = multitenant
     ? BoundedContext.multitenant(name)
     : BoundedContext.singleTenant(name);
-  return builder
+  const context = await builder
     .addEventDispatcher({
       messageSchemas: () => [ProjectObservedSchema],
       dispatch: (event) => {
@@ -983,9 +987,14 @@ function capturingContext(name, contexts, multitenant) {
       },
     })
     .build();
+  if (multitenant) {
+    for (const value of tenants)
+      await context.tenantIndex.keep(create(TenantIdSchema, { kind: { case: "value", value } }));
+  }
+  return context;
 }
-function externalCapturingContext(name, contexts) {
-  return BoundedContext.multitenant(name)
+async function externalCapturingContext(name, contexts) {
+  const context = await BoundedContext.multitenant(name)
     .addEventDispatcher({
       messageSchemas: () => [ProjectObservedSchema],
       externalEventSchemas: () => [ProjectObservedSchema],
@@ -995,6 +1004,10 @@ function externalCapturingContext(name, contexts) {
       },
     })
     .build();
+  await context.tenantIndex.keep(
+    create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+  );
+  return context;
 }
 function query(id) {
   return create(QuerySchema, {
@@ -1008,9 +1021,7 @@ function query(id) {
               case: "filters",
               value: create(TargetFiltersSchema, {
                 idFilter: {
-                  id: [
-                    AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id })),
-                  ],
+                  id: [AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
                 },
               }),
             },

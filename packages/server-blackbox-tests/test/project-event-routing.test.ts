@@ -393,7 +393,7 @@ function context(
   planning: PlanningId,
   staffing: StaffingId,
   deliveredRejections?: Event[],
-): BoundedContext {
+): Promise<BoundedContext> {
   const builder = BoundedContext.singleTenant("project event routing")
     .add(projectRepository())
     .add(planningRepository(routeTo(planning)))
@@ -509,7 +509,7 @@ function expectProjectWorkflowIds(
 describe("project workflow Event routing", () => {
   it("delivers a client and server-context Command through a command-substituting Process Manager", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
     try {
       await createProject(boundedContext, project);
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
@@ -538,7 +538,7 @@ describe("project workflow Event routing", () => {
 
   it("drains a command substitution's produced command when the context closes immediately", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
     Project.reset();
     await createProject(boundedContext, project);
     await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
@@ -550,7 +550,7 @@ describe("project workflow Event routing", () => {
   it("updates custom- and producer-ID-routed persisted Entity states", async () => {
     const { project, planning, staffing, portfolio } = ids();
     expectProjectWorkflowIds(project, planning, staffing, portfolio);
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
     try {
       await createProject(boundedContext, project);
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
@@ -596,7 +596,7 @@ describe("project workflow Event routing", () => {
   it("suppresses only the portfolio with an empty custom Event route", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const none = EventRouting.create<PortfolioId>().route(ProjectCreatedSchema, () => []);
-    const boundedContext = context(none, planning, staffing);
+    const boundedContext = await context(none, planning, staffing);
     try {
       await createProject(boundedContext, project);
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio, {
@@ -640,7 +640,7 @@ describe("project workflow Event routing", () => {
 
   it("reaches the same persisted states through the public BlackBox API", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
     const blackBox = await BlackBox.from(boundedContext);
     try {
       const scope = blackBox.asGuest();
@@ -741,7 +741,7 @@ describe("project workflow Event routing", () => {
 
   it("captures a committed Aggregate reactor Event once in production order", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const blackBox = await BlackBox.from(context(routeTo(portfolio), planning, staffing));
+    const blackBox = await BlackBox.from(await context(routeTo(portfolio), planning, staffing));
     try {
       const posted = await blackBox
         .asGuest()
@@ -778,7 +778,12 @@ describe("project workflow Event routing", () => {
   it("delivers an async domain rejection without capturing it as a committed event", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const deliveredRejections: Event[] = [];
-    const boundedContext = context(routeTo(portfolio), planning, staffing, deliveredRejections);
+    const boundedContext = await context(
+      routeTo(portfolio),
+      planning,
+      staffing,
+      deliveredRejections,
+    );
     const blackBox = await BlackBox.from(boundedContext);
     try {
       const scope = blackBox.asGuest();

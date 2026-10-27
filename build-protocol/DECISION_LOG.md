@@ -6601,7 +6601,8 @@ needed. All Any conversion in this helper uses the shared AnyPacker.
 
 ## D-0150: Offline factory assembly and provider preparation
 
-Date: 2026-10-27. Status: accepted bounded contract; implementation pending.
+Date: 2026-10-27. Status: implemented and independently reviewed across memory,
+PostgreSQL, MySQL/MariaDB and Datastore preparation slices.
 
 Keep synchronous Storage construction, with logical SQL handles resolving their
 physical destination inside awaited operations. SQL build performs local
@@ -6640,3 +6641,42 @@ The explicit Astra/high requirements splitter resolved the async/synchronous
 contract gap; the parent corrected an initially inconsistent Datastore proof
 claim in that same pass. No additional architecture pass is needed absent a
 material new contract or demonstrated blocker. No migration or provisioning.
+
+## D-0151: Await Bounded Context assembly and failed-build cleanup
+
+Date: 2026-10-27. Status: accepted; implementation in M6.
+
+The accepted environment lifecycle design already requires one asynchronous
+BoundedContextBuilder.build(). Move that API consolidation from M9 to M6 because
+the strict served-state registry exposed a concrete cleanup defect: synchronous
+construction throws while asynchronous Stand/registry cleanup runs detached, and
+later failures are swallowed. Releasing registrations then permits a replacement
+context while prior resources are still closing; retaining them without an
+awaitable failure leaves callers unable to observe completion.
+
+Use build(): Promise<BoundedContext> for explicit repositories and generated
+models alike. Await partial-context and resource cleanup before rejecting, retain
+the initiating error and additional cleanup errors, and keep build/cleanup records
+until actual settlement. Remove duplicate buildAsync; adapt caller await/rejection
+semantics across tests, examples and docs. No new public cleanup-status API or
+synchronous compatibility wrapper. Independent eager/lazy flags, storage
+preparation and subscription startup remain M9–M10. This advances an approved
+contract; it does not add an activation phase or change the human requirements.
+
+## D-0152: Inert Agent acceptance evidence and live execution
+
+Date: 2026-10-27. Status: accepted for M7 implementation.
+
+Remove Agent recovery while preserving irreversible acceptance across process
+interruption. Use an immutable insert-if-absent receipt through existing atomic
+RecordStorage; it contains identity evidence only and grants permission solely to
+the successful live caller. No saved execution, read/model replay, outgoing plan,
+status transition or pending-work scan remains.
+
+Internal live results remain under the ordinary Delivery shard session, with
+same-Agent serialization, independent Agent progress, normal session renewal and
+cancellation, and preserved conditional Entity-version writes. Do not reuse the
+current shard-wide after-drain follow-up map unchanged. This resolves source-proven
+acknowledgement, concurrency and persistence gaps without adding another Agent
+scheduler or public delivery policy. The complete bounded decision and test
+requirements are in [Agent live execution](tasks/environment-lifecycle/AGENT_LIVE_EXECUTION.md).

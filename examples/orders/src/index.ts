@@ -367,7 +367,7 @@ export async function createDatastoreOrdersContext(
     .add(SalesSkuIndexProjection)
     .add(OrderSalesManager)
     .add(SkuSalesManager)
-    .buildAsync();
+    .build();
 }
 
 /**

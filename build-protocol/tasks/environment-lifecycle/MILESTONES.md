@@ -32,7 +32,9 @@ a time; independent checks and relevant reviews may run concurrently. See the
    including tests and BlackBox; no disabling switch or test-profile exception.
    Preserve System exclusion, unique-destination lookup, registration rollback,
    attempt-all context cleanup and reset protection. Completed-context tracking
-   is separate from early reservations.
+   is separate from early reservations. D-0151 advances the approved single async
+   build API into this milestone so failed builds await cleanup; migrate callers
+   and remove buildAsync without introducing initialization flags yet.
 7. **Agent recovery removal:** fresh signals execute live without scheduler;
    remove replay, saved backlog and private outgoing obligations across runtime,
    storage, Proto, config and tests. Preserve active retries, state and all audit
@@ -45,7 +47,7 @@ a time; independent checks and relevant reviews may run concurrently. See the
    stops notification/scan producers, settles dispatch and shard release, closes
    created delivery storage, then factories. Closing one context leaves shared
    resources open. Supplied ports follow explicit cleanup delegation.
-9. **Bounded Context initialization:** asynchronous build with independent eager
+9. **Bounded Context initialization:** the asynchronous build from M6 gains independent eager
    flags, runtime preparation methods and first-input gating across every ingress.
    Failed lazy attempts reject requests and remain retryable; explicit startup
    failure stops environment intake. Install consumers behind the gate so Events

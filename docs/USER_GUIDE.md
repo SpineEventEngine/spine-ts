@@ -76,7 +76,7 @@ application uses `start()` and closes the server itself.
 ```ts
 import { BoundedContext } from "@spine-event-engine/server";
 
-const context = await BoundedContext.singleTenant("MessageBoard").buildAsync();
+const context = await BoundedContext.singleTenant("MessageBoard").build();
 await context.close();
 ```
 
@@ -262,8 +262,8 @@ const builder = BoundedContext.singleTenant("Assignments")
     onCreate: (options) => new TaskAssignment(options, weights),
   });
 
-// buildAsync() loads the generated handler registry for this application.
-const context = await builder.buildAsync();
+// build() loads the generated handler registry for this application.
+const context = await builder.build();
 await context.close();
 ```
 

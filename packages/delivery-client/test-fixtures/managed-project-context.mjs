@@ -90,7 +90,7 @@ export async function createManagedProjectContext(options = {}) {
     if (options.storageFactory !== undefined) {
       builder.withStorageFactory(options.storageFactory);
     }
-    return await builder.buildAsync();
+    return await builder.build();
   } finally {
     await registry.clear();
   }

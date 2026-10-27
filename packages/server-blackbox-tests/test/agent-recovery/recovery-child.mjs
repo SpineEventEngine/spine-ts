@@ -632,7 +632,7 @@ async function context(storage, backend) {
       .addEventDispatcher(draftReceiptObserver())
       .addEventDispatcher(draftObserver())
       .add(SupportDraftProjection, { eventRouting: projectionRouting })
-      .buildAsync();
+      .build();
   if (cutName === "tool-read")
     return BoundedContext.singleTenant(contextName)
       .withGeneratedRegistryRoot(new URL("../../dist/", import.meta.url))
@@ -648,7 +648,7 @@ async function context(storage, backend) {
         agentCodeRevision: "support-lookup-recovery-v1",
         ai: { models: [lookupRecoveryModel] },
       })
-      .buildAsync();
+      .build();
   if (cutName === "tool-write")
     return BoundedContext.singleTenant(contextName)
       .withGeneratedRegistryRoot(new URL("../../dist/", import.meta.url))
@@ -663,7 +663,7 @@ async function context(storage, backend) {
         agentCodeRevision: "support-escalation-recovery-v1",
         ai: { models: [escalationRecoveryModel] },
       })
-      .buildAsync();
+      .build();
   const builder = (
     tenantResponse
       ? BoundedContext.multitenant(contextName)
@@ -682,7 +682,7 @@ async function context(storage, backend) {
     ai: { models: [recoveryReplyModel] },
   });
   if (cutName === "fanout") builder.add(SupportDraftProjection);
-  return builder.buildAsync();
+  return builder.build();
 }
 
 async function run() {

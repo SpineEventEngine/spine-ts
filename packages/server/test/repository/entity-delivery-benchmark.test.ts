@@ -125,7 +125,7 @@ async function measure(count: number, label: string): Promise<number> {
     handlers,
     eventRouting: EventRouting.create(RoutedQueue).route(ProjectCreatedSchema, () => ids),
   });
-  const context = BoundedContext.singleTenant(`DeliveryBenchmark${String(count)}`)
+  const context = await BoundedContext.singleTenant(`DeliveryBenchmark${String(count)}`)
     .add(repository)
     .withStorageFactory(new InMemoryStorageFactory())
     .build();

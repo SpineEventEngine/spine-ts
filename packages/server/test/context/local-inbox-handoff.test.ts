@@ -379,8 +379,8 @@ describe("DeliveryReadiness", () => {
     expect(routed.inbox).toBe(remote.inbox);
     expect(routed.shards).toBe(remote.shards);
 
-    localStorage.close();
-    remoteStorage.close();
+    await localStorage.close();
+    await remoteStorage.close();
   });
 
   it("fails a stalled transition finitely for arbitrary unconfigured scopes", async () => {

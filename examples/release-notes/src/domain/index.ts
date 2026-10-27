@@ -565,6 +565,6 @@ export const ReleaseNotesContext: Readonly<{
       })
       .add(ReleaseDraftProjection);
     if (storage !== undefined) builder.withStorageFactory(storage);
-    return builder.buildAsync();
+    return builder.build();
   },
 });

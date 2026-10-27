@@ -278,7 +278,7 @@ async function releaseSqlResources(options: {
 }): Promise<readonly unknown[]> {
   const failures: unknown[] = [];
   try {
-    options.factory?.close();
+    await options.factory?.close();
   } catch (error) {
     failures.push(error);
   }

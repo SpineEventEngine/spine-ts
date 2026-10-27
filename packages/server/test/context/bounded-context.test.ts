@@ -48,8 +48,8 @@ import {
   StorageFactory,
 } from "@spine-event-engine/storage";
 import { InboxMessageSchema } from "@spine-event-engine/proto/delivery";
-import { eventStoreAccess, type EntityRecordStorage } from "@spine-event-engine/storage/provider";
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { type EntityRecordStorage } from "@spine-event-engine/storage/provider";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   Aggregate,
@@ -60,10 +60,12 @@ import {
   BoundedContext,
   BoundedContextBuilder,
   BoundedContextNameError,
+  DuplicateEntityStateException,
   EventRouting,
   ProcessManager,
   Projection,
   Repository,
+  SingleProcessServerRuntime,
   UniformAcrossAllShards,
   type CommandEndpoint,
   type CommandDispatcher,
@@ -80,7 +82,11 @@ import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import type { InboxMessage } from "../../src/delivery/inbox.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
-import { ServerEnvironment } from "../../src/server/server-environment.js";
+import {
+  ServerEnvironment,
+  ServerEnvironmentLifecycle,
+} from "../../src/server/server-environment.js";
+import { IntegrationBroker } from "../../src/integration/integration-broker.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Stand } from "../../src/stand/stand.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
@@ -101,6 +107,11 @@ import {
   ProcessManagerStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
 import { tenant } from "../tenant-fixture.js";
+
+afterEach(async () => {
+  const environment = ServerEnvironment.instance();
+  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
+});
 
 interface InternalSystemPairing {
   readonly domain: {
@@ -437,7 +448,7 @@ describe("BoundedContext assembly", () => {
           return new ConfiguredTaskAssignment(options, " via client");
         },
       })
-      .buildAsync();
+      .build();
 
     try {
       await context
@@ -454,8 +465,8 @@ describe("BoundedContext assembly", () => {
       await context.close();
     }
   });
-  it("does not expose a logger before package-private installation", () => {
-    const context = BoundedContext.singleTenant("Logger").build();
+  it("does not expose a logger before package-private installation", async () => {
+    const context = await BoundedContext.singleTenant("Logger").build();
 
     expect(() => boundedContextAccess.loggerFor(context)).toThrow(
       "Context logger requires a built BoundedContext instance.",
@@ -463,7 +474,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("rejects private delivery transition validation through its promise", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     let transition: Promise<void> | undefined;
 
     expect(() => {
@@ -482,9 +493,9 @@ describe("BoundedContext assembly", () => {
     );
   });
 
-  it("builds single-tenant and multitenant contexts with names and tenant mode", () => {
-    const singleTenant = BoundedContext.singleTenant("Tasks").build();
-    const multitenant = BoundedContext.multitenant("Customers").build();
+  it("builds single-tenant and multitenant contexts with names and tenant mode", async () => {
+    const singleTenant = await BoundedContext.singleTenant("Tasks").build();
+    const multitenant = await BoundedContext.multitenant("Customers").build();
 
     expect(singleTenant.name.value).toBe("Tasks");
     expect(singleTenant.tenantMode).toBe("single-tenant");
@@ -497,9 +508,9 @@ describe("BoundedContext assembly", () => {
     expect(multitenant.spec.multitenant).toBe(true);
   });
 
-  it("derives internal system pairing metadata for built domain contexts", () => {
-    const singleTenant = BoundedContext.singleTenant("Tasks").build();
-    const multitenant = BoundedContext.multitenant("Customers").build();
+  it("derives internal system pairing metadata for built domain contexts", async () => {
+    const singleTenant = await BoundedContext.singleTenant("Tasks").build();
+    const multitenant = await BoundedContext.multitenant("Customers").build();
 
     const singlePairing = internalSystemPairing(singleTenant);
     const multitenantPairing = internalSystemPairing(multitenant);
@@ -517,15 +528,15 @@ describe("BoundedContext assembly", () => {
     expect(multitenantPairing.system.storesEvents).toBe(false);
   });
 
-  it("persists only paired system events when explicitly enabled", () => {
-    const context = BoundedContext.singleTenant("AuditedTasks").persistSystemEvents().build();
+  it("persists only paired system events when explicitly enabled", async () => {
+    const context = await BoundedContext.singleTenant("AuditedTasks").persistSystemEvents().build();
 
     expect(internalSystemPairing(context).system.storesEvents).toBe(true);
   });
 
   it("defers event record storage until an event operation selects its tenant", async () => {
     const storageFactory = new ObservingStorageFactory([]);
-    const context = BoundedContext.singleTenant("AcquisitionOrder")
+    const context = await BoundedContext.singleTenant("AcquisitionOrder")
       .withStorageFactory(storageFactory)
       .persistSystemEvents()
       .build();
@@ -537,7 +548,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("does not register a synthetic tenant for a single-tenant context", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const tenantIndex = internalTenantIndex(context);
 
     expect(context.tenantMode).toBe("single-tenant");
@@ -546,7 +557,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("keeps the shared index usable after context close", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const tenantIndex = internalTenantIndex(context);
 
     await context.close();
@@ -558,7 +569,7 @@ describe("BoundedContext assembly", () => {
   it("stores multitenant index entries through the configured storage factory", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const selectedIndex = TenantIndexes.fromFactory(storageFactory);
-    const first = BoundedContext.multitenant("Customers")
+    const first = await BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
       .withTenantIndex(selectedIndex)
       .build();
@@ -572,7 +583,7 @@ describe("BoundedContext assembly", () => {
 
     await expect(firstIndex.all()).resolves.toEqual([tenant("tenant-a"), tenant("tenant-b")]);
 
-    const recovered = BoundedContext.multitenant("Customers")
+    const recovered = await BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
       .withTenantIndex(selectedIndex)
       .build();
@@ -584,8 +595,10 @@ describe("BoundedContext assembly", () => {
   it("describes actual delivery storage and tenant startup scopes through internal access", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const selectedIndex = TenantIndexes.fromFactory(storageFactory);
-    const single = BoundedContext.singleTenant("Tasks").withStorageFactory(storageFactory).build();
-    const multitenant = BoundedContext.multitenant("Customers")
+    const single = await BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .build();
+    const multitenant = await BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
       .withTenantIndex(selectedIndex)
       .build();
@@ -646,7 +659,7 @@ describe("BoundedContext assembly", () => {
       .withGeneratedRegistryRoot(registryRoot)
       .add(GeneratedTaskProcessManager)
       .add(TaskProjection)
-      .buildAsync();
+      .build();
 
     expect(internalDeliveryDescriptor(context).endpoints()).toEqual([
       {
@@ -716,7 +729,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("CustomRouting")
         .withGeneratedRegistryRoot(registryRoot)
         .add(TaskProjection, { eventRouting })
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow(
       'unregistered exact route for "spine.server.testing.handlerregistry.ReviewTaskAssigned"',
     );
@@ -752,7 +765,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("StandaloneExact")
         .withGeneratedRegistryRoot(registryRoot)
         .addAssignee(new OtherStandaloneAssignee())
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow(
       "Generated standalone receiver StandaloneAssignee has no explicitly registered instance",
     );
@@ -775,7 +788,7 @@ describe("BoundedContext assembly", () => {
         .withGeneratedRegistryRoot(registryRoot)
         .addAssignee(instance)
         .addAssignee(instance)
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow("Standalone receiver StandaloneAssignee is registered more than once");
   });
 
@@ -802,7 +815,7 @@ describe("BoundedContext assembly", () => {
       .withGeneratedRegistryRoot(registryRoot)
       .addAssignee(assignee)
       .addCommandDispatcher(commander)
-      .buildAsync();
+      .build();
 
     try {
       await context.commandBus().post(createAggregateCommand("standalone-assignee"));
@@ -835,7 +848,7 @@ describe("BoundedContext assembly", () => {
         .withGeneratedRegistryRoot(registryRoot)
         .addAssignee(new StandaloneAssignee())
         .addCommandDispatcher(new CollidingStandaloneCommander())
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow("Standalone command receptors conflict");
   });
 
@@ -862,7 +875,7 @@ describe("BoundedContext assembly", () => {
       .withGeneratedRegistryRoot(registryRoot)
       .addEventDispatcher(reactor)
       .addEventDispatcher(subscriber)
-      .buildAsync();
+      .build();
     try {
       await context.eventBus().post(createReviewTaskAssigned("standalone-event"));
       expect(reactor.calls).toBe(1);
@@ -905,7 +918,7 @@ describe("BoundedContext assembly", () => {
           events.push(event.id?.value ?? "missing");
         }),
       )
-      .buildAsync();
+      .build();
 
     try {
       await context.commandBus().post(createScheduleReviewTask("standalone-command"));
@@ -942,7 +955,7 @@ describe("BoundedContext assembly", () => {
           names.push(message.name);
         }),
       )
-      .buildAsync();
+      .build();
 
     try {
       await context.commandBus().post(createScheduleReviewTask("standalone-command"));
@@ -972,7 +985,7 @@ describe("BoundedContext assembly", () => {
           commands.push(command.id?.uuid ?? "missing");
         }),
       )
-      .buildAsync();
+      .build();
 
     await context.commandBus().post(createScheduleReviewTask("closing-command"));
     await context.close();
@@ -1006,7 +1019,7 @@ describe("BoundedContext assembly", () => {
           delivered.push(message?.id ?? "missing");
         }),
       )
-      .buildAsync();
+      .build();
     const observeUnhandled = (reason: unknown) => unhandled.push(reason);
     process.on("unhandledRejection", observeUnhandled);
     try {
@@ -1071,7 +1084,7 @@ describe("BoundedContext assembly", () => {
           messageSchemas: () => [AssignReviewTaskSchema],
           dispatch: () => Promise.resolve(),
         })
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow();
   });
 
@@ -1095,7 +1108,7 @@ describe("BoundedContext assembly", () => {
       .withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))
       .withGeneratedRegistryRoot(registryRoot)
       .add(GeneratedTaskProcessManager)
-      .buildAsync();
+      .build();
 
     expect(internalDeliveryDescriptor(context).endpoints()).toEqual([
       ...[0, 1, 2].map((index) => ({
@@ -1134,7 +1147,7 @@ describe("BoundedContext assembly", () => {
       })
       .withGeneratedRegistryRoot(registryRoot)
       .add(GeneratedTaskProcessManager)
-      .buildAsync();
+      .build();
 
     try {
       await context.commandBus().post(createAggregateCommand("strategy-clone", "original-id"));
@@ -1165,7 +1178,7 @@ describe("BoundedContext assembly", () => {
       .withGeneratedRegistryRoot(registry.root)
       .add(ReplayTaskAggregate)
       .add(ReplayTaskProcessManager)
-      .buildAsync();
+      .build();
     try {
       const descriptor = internalDeliveryDescriptor(context);
       const aggregateType = TypeUrls.derive(ProjectStateSchema);
@@ -1247,7 +1260,7 @@ describe("BoundedContext assembly", () => {
       .withGeneratedRegistryRoot(registry.root)
       .add(ReplayTaskAggregate)
       .add(ReplayTaskProcessManager)
-      .buildAsync();
+      .build();
 
     try {
       const descriptor = internalDeliveryDescriptor(context);
@@ -1314,7 +1327,7 @@ describe("BoundedContext assembly", () => {
         .withDeliveryStrategy(strategy)
         .withGeneratedRegistryRoot(registry.root)
         .add(ReplayTaskProcessManager)
-        .buildAsync();
+        .build();
       const firstDescriptor = internalDeliveryDescriptor(first);
       const targetTypeUrl = TypeUrls.derive(ProcessManagerStateSchema);
       const rows: InboxMessage[] = [];
@@ -1354,7 +1367,7 @@ describe("BoundedContext assembly", () => {
         .withDeliveryStrategy(strategy)
         .withGeneratedRegistryRoot(registry.root)
         .add(ReplayTaskProcessManager)
-        .buildAsync();
+        .build();
       const recoveryContext = requireRecoveryContext(recovered);
       const descriptor = internalDeliveryDescriptor(recoveryContext);
       expect(descriptor.endpoints()).toEqual(
@@ -1427,7 +1440,7 @@ describe("BoundedContext assembly", () => {
         .withGeneratedRegistryRoot(firstRegistry.root)
         .add(FreshRecoveryProcessManager)
         .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
-        .buildAsync();
+        .build();
 
       storageFactory.failNextInboxQuery();
       await expect(
@@ -1461,7 +1474,7 @@ describe("BoundedContext assembly", () => {
         .withGeneratedRegistryRoot(recoveryRegistry.root)
         .add(FreshRecoveryProcessManager)
         .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
-        .buildAsync();
+        .build();
       const descriptor = internalDeliveryDescriptor(recovered);
 
       await expect(descriptor.startupScopes()).resolves.toEqual([{ tenantId }]);
@@ -1497,7 +1510,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("rejects blank multitenant index entries", async () => {
-    const context = BoundedContext.multitenant("Customers").build();
+    const context = await BoundedContext.multitenant("Customers").build();
     const tenantIndex = internalTenantIndex(context);
 
     await expect(tenantIndex.keep(tenant(" \t "))).rejects.toThrow(/non-empty/);
@@ -1505,7 +1518,7 @@ describe("BoundedContext assembly", () => {
 
   it("keeps tenant discovery in the factory catalog without a TenantId record family", async () => {
     const storageFactory = new ObservingStorageFactory([]);
-    const customers = BoundedContext.multitenant("Customers")
+    const customers = await BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
       .withTenantIndex(TenantIndexes.fromFactory(storageFactory))
       .build();
@@ -1521,8 +1534,8 @@ describe("BoundedContext assembly", () => {
     ).toBe(false);
   });
 
-  it("exposes stable commandBus() and eventBus() endpoints from the built context", () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+  it("exposes stable commandBus() and eventBus() endpoints from the built context", async () => {
+    const context = await BoundedContext.singleTenant("Tasks").build();
 
     expectTypeOf(context.commandBus()).toEqualTypeOf<CommandEndpoint>();
     expectTypeOf(context.eventBus()).toEqualTypeOf<EventEndpoint>();
@@ -1541,7 +1554,7 @@ describe("BoundedContext assembly", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     const stand = context.stand();
 
     expect(stand).toBe(context.stand());
@@ -1568,7 +1581,9 @@ describe("BoundedContext assembly", () => {
     const dispatcher = createCommandDispatcher([AssignReviewTaskSchema], (command) => {
       observed.push(command.id?.uuid ?? "missing");
     });
-    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
 
     await context.commandBus().post(createProjectionCommand("command-1"));
 
@@ -1579,7 +1594,7 @@ describe("BoundedContext assembly", () => {
     const index = TenantIndexes.fromFactory({} as StorageFactory);
     const commands: string[] = [];
     const events: string[] = [];
-    const context = BoundedContext.multitenant("Tasks")
+    const context = await BoundedContext.multitenant("Tasks")
       .withTenantIndex(index)
       .addCommandDispatcher(
         createCommandDispatcher([AssignReviewTaskSchema], (command) => {
@@ -1627,7 +1642,7 @@ describe("BoundedContext assembly", () => {
     const index = TenantIndexes.fromFactory({} as StorageFactory);
     const lookup = vi.spyOn(index, "contains").mockRejectedValue(new Error("unexpected lookup"));
     const observed: string[] = [];
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withTenantIndex(index)
       .addCommandDispatcher(
         createCommandDispatcher([AssignReviewTaskSchema], (command) => {
@@ -1643,7 +1658,7 @@ describe("BoundedContext assembly", () => {
 
   it("does not register command dispatchers removed before build", async () => {
     const dispatcher = createCommandDispatcher([AssignReviewTaskSchema], () => undefined);
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .addCommandDispatcher(dispatcher)
       .removeCommandDispatcher(dispatcher)
       .build();
@@ -1658,19 +1673,23 @@ describe("BoundedContext assembly", () => {
     const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
       observed.push(event.id?.value ?? "missing");
     });
-    const context = BoundedContext.singleTenant("Tasks").addEventDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addEventDispatcher(dispatcher)
+      .build();
 
     await context.eventBus().post(createProjectionEvent("event-1"));
 
     expect(observed).toEqual(["event-1"]);
   });
 
-  it("does not expose internal event types accepted by framework dispatchers", () => {
+  it("does not expose internal event types accepted by framework dispatchers", async () => {
     const dispatcher = createEventDispatcher(
       [EventSchema, ReviewTaskAssignedSchema],
       () => undefined,
     );
-    const context = BoundedContext.singleTenant("Tasks").addEventDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addEventDispatcher(dispatcher)
+      .build();
 
     expect(context.eventBus().acceptedEventTypes()).toEqual([
       TypeUrls.derive(ReviewTaskAssignedSchema),
@@ -1692,7 +1711,7 @@ describe("BoundedContext assembly", () => {
     const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
       observed.push(event.id?.value ?? "missing");
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .addEventDispatcher(dispatcher)
       .removeEventDispatcher(dispatcher)
       .build();
@@ -1710,7 +1729,7 @@ describe("BoundedContext assembly", () => {
     const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
       observed.push(`dispatch:${event.id?.value ?? "missing"}`);
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .addEventDispatcher(dispatcher)
       .build();
@@ -1720,7 +1739,7 @@ describe("BoundedContext assembly", () => {
     expect(observed).toEqual(["store:event-3", "dispatch:event-3"]);
   });
 
-  it("rejects event dispatcher classification before acquiring event storage", () => {
+  it("rejects event dispatcher classification before acquiring event storage", async () => {
     const storageFactory = new ObservingStorageFactory([]);
     const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], () => undefined);
     const brokenDispatcher = {
@@ -1730,18 +1749,18 @@ describe("BoundedContext assembly", () => {
       dispatch: (event: Event): Promise<void> => Promise.resolve(void event),
     } satisfies EventDispatcher;
 
-    expect(() =>
+    await expect(
       BoundedContext.singleTenant("Tasks")
         .withStorageFactory(storageFactory)
         .addEventDispatcher(dispatcher)
         .addEventDispatcher(brokenDispatcher)
         .build(),
-    ).toThrow("Cannot read event schemas.");
+    ).rejects.toThrow("Cannot read event schemas.");
 
     expect(storageFactory.storages).toHaveLength(0);
   });
 
-  it("does not acquire an event store before dispatcher classification fails", () => {
+  it("does not acquire an event store before dispatcher classification fails", async () => {
     const storageFactory = new ObservingStorageFactory([], [1]);
     const brokenDispatcher = {
       messageSchemas: () => {
@@ -1752,7 +1771,7 @@ describe("BoundedContext assembly", () => {
 
     let thrown: unknown;
     try {
-      BoundedContext.singleTenant("Tasks")
+      await BoundedContext.singleTenant("Tasks")
         .withStorageFactory(storageFactory)
         .addEventDispatcher(brokenDispatcher)
         .build();
@@ -1764,13 +1783,13 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.storages).toHaveLength(0);
   });
 
-  it("registers repositories added to the builder with the built context", () => {
+  it("registers repositories added to the builder with the built context", async () => {
     const storageFactory = new ObservingStorageFactory([]);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(repository)
       .build();
@@ -1789,7 +1808,7 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toHaveLength(0);
   });
 
-  it("builds generated repositories from entity classes with buildAsync", async () => {
+  it("builds generated repositories from entity classes with build", async () => {
     const registryRoot = createGeneratedRegistryRoot([
       {
         entityType: GeneratedTaskAggregate,
@@ -1822,7 +1841,7 @@ describe("BoundedContext assembly", () => {
       .withGeneratedRegistryRoot(registryRoot)
       .add(GeneratedTaskAggregate)
       .add(TaskProjection)
-      .buildAsync();
+      .build();
 
     expect(context.registeredRepositories().map((repository) => repository.entityType)).toEqual([
       GeneratedTaskAggregate,
@@ -1837,7 +1856,7 @@ describe("BoundedContext assembly", () => {
     );
   });
 
-  it("executes a generated process-manager repository assembled through buildAsync", async () => {
+  it("executes a generated process-manager repository assembled through build", async () => {
     const observed: Event[] = [];
     const registryRoot = createGeneratedRegistryRoot([
       {
@@ -1862,7 +1881,7 @@ describe("BoundedContext assembly", () => {
           observed.push(event);
         }),
       )
-      .buildAsync();
+      .build();
 
     await expect(
       context.commandBus().post(
@@ -1924,7 +1943,7 @@ describe("BoundedContext assembly", () => {
       .withGeneratedRegistryRoot(registryRoot)
       .withStorageFactory(storageFactory)
       .add(GeneratedTaskProcessManager)
-      .buildAsync();
+      .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
 
     expect(context.eventBus().acceptedEventTypes()).toEqual([
@@ -1957,7 +1976,7 @@ describe("BoundedContext assembly", () => {
 
   it("requires an explicit generated registry root for entity-class assembly", async () => {
     await expect(
-      BoundedContext.singleTenant("Tasks").add(GeneratedTaskAggregate).buildAsync(),
+      BoundedContext.singleTenant("Tasks").add(GeneratedTaskAggregate).build(),
     ).rejects.toThrow("requires withGeneratedRegistryRoot(root)");
   });
 
@@ -1974,7 +1993,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot(registryRoot.href)
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).resolves.toBeInstanceOf(BoundedContext);
   });
 
@@ -1991,7 +2010,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot(registryRoot)
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).resolves.toBeInstanceOf(BoundedContext);
   });
 
@@ -2000,7 +2019,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot("file://%")
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow('Generated registry root "file://%" is not a valid URL.');
   });
 
@@ -2009,7 +2028,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot("https://example.com/generated")
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow("must use the file: URL scheme");
   });
 
@@ -2029,7 +2048,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot(aliasedRoot)
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow("must not include a query or hash");
 
     aliasedRoot.search = "";
@@ -2039,7 +2058,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot(aliasedRoot)
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow("must not include a query or hash");
   });
 
@@ -2061,7 +2080,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot(pathToFileURL(root))
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow("must resolve within the configured generated registry root");
   });
 
@@ -2078,7 +2097,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot(fixture.root)
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).resolves.toBeInstanceOf(BoundedContext);
 
     rmSync(fixture.registryPath);
@@ -2087,7 +2106,7 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot(fixture.root)
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow("must exist and be readable");
   });
 
@@ -2098,33 +2117,30 @@ describe("BoundedContext assembly", () => {
       BoundedContext.singleTenant("Tasks")
         .withGeneratedRegistryRoot(registryRoot)
         .add(GeneratedTaskAggregate)
-        .buildAsync(),
+        .build(),
     ).rejects.toThrow("Generated handler registry is missing metadata for GeneratedTaskAggregate.");
   });
 
-  it("fails clearly when sync build sees entity-class generated assembly", () => {
-    expect(() => BoundedContext.singleTenant("Tasks").add(GeneratedTaskAggregate).build()).toThrow(
-      "Use buildAsync().",
-    );
-  });
-
-  it("does not register repositories removed before build", () => {
+  it("does not register repositories removed before build", async () => {
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).remove(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .remove(repository)
+      .build();
 
     expect(context.registeredRepositories()).toEqual([]);
   });
 
-  it("keeps repeated add of the same repository idempotent for one built context", () => {
+  it("keeps repeated add of the same repository idempotent for one built context", async () => {
     const storageFactory = new ObservingStorageFactory([]);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(repository)
       .add(repository)
@@ -2136,27 +2152,209 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toHaveLength(0);
   });
 
-  it("rejects registering one repository instance with two built contexts", () => {
+  it("rejects registering one repository instance with two built contexts", async () => {
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
 
-    BoundedContext.singleTenant("Tasks").add(repository).build();
+    await BoundedContext.singleTenant("Tasks").add(repository).build();
 
-    expect(() => BoundedContext.singleTenant("Customers").add(repository).build()).toThrow(
+    await expect(BoundedContext.singleTenant("Customers").add(repository).build()).rejects.toThrow(
       "already registered with Bounded Context",
     );
   });
 
-  it("does not open repository storage during registration", () => {
+  it("rejects the same Entity state in distinct open contexts even with equal names", async () => {
+    const first = await BoundedContext.singleTenant("Tasks")
+      .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
+      .build();
+    const environment = ServerEnvironment.instance();
+    const stateType = TypeUrls.derive(ProjectStateSchema);
+    expect(serverEnvironmentAccess.contextsServing(environment, stateType)).toEqual(["Tasks"]);
+    try {
+      await expect(
+        BoundedContext.singleTenant("Tasks")
+          .add(new Repository({ entityType: DuplicateTaskAggregate, schema: ProjectStateSchema }))
+          .build(),
+      ).rejects.toThrow(DuplicateEntityStateException);
+    } finally {
+      await first.close();
+    }
+    expect(serverEnvironmentAccess.contextsServing(environment, stateType)).toEqual([]);
+    const next = await BoundedContext.singleTenant("Tasks")
+      .add(new Repository({ entityType: DuplicateTaskAggregate, schema: ProjectStateSchema }))
+      .build();
+    await next.close();
+  });
+
+  it("holds the state reservation until asynchronous context cleanup settles", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const registry = new ObservingSubscriptionRegistry();
+    const closeRegistry = registry.close.bind(registry);
+    vi.spyOn(registry, "close").mockImplementation(async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      await closeRegistry();
+    });
+    const first = await BoundedContext.singleTenant("First")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
+      .build();
+    const closing = first.close();
+    await entered.promise;
+    await expect(
+      BoundedContext.singleTenant("Second")
+        .add(new Repository({ entityType: DuplicateTaskAggregate, schema: ProjectStateSchema }))
+        .build(),
+    ).rejects.toThrow(DuplicateEntityStateException);
+    release.resolve(undefined);
+    await closing;
+    const next = await BoundedContext.singleTenant("Second")
+      .add(new Repository({ entityType: DuplicateTaskAggregate, schema: ProjectStateSchema }))
+      .build();
+    await next.close();
+  });
+
+  it("excludes gated integration until ready while retaining reservation and reset guards", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const open: unknown = Reflect.get(IntegrationBroker.prototype, "open");
+    if (typeof open !== "function") throw new Error("Expected integration open method.");
+    const spy = vi.spyOn(IntegrationBroker.prototype, "open").mockImplementation(async function (
+      this: IntegrationBroker,
+    ) {
+      entered.resolve(undefined);
+      await release.promise;
+      await Reflect.apply(open, this, []);
+    });
+    const environment = ServerEnvironment.instance();
+    const before = serverEnvironmentAccess.openContexts(environment);
+    try {
+      const building = BoundedContext.singleTenant("GatedReady")
+        .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
+        .build();
+      await entered.promise;
+      expect(serverEnvironmentAccess.openContexts(environment)).toEqual(before);
+      await expect(ServerEnvironmentLifecycle.resetForTest()).rejects.toThrow(
+        "active Bounded Contexts",
+      );
+      await expect(
+        BoundedContext.singleTenant("CompetingReady")
+          .add(new Repository({ entityType: DuplicateTaskAggregate, schema: ProjectStateSchema }))
+          .build(),
+      ).rejects.toThrow(DuplicateEntityStateException);
+      release.resolve(undefined);
+      const context = await building;
+      expect(serverEnvironmentAccess.openContexts(environment)).toContain(context);
+      await context.close();
+      expect(serverEnvironmentAccess.openContexts(environment)).toEqual(before);
+    } finally {
+      release.resolve(undefined);
+      spy.mockRestore();
+    }
+  });
+
+  it("waits for failed pre-context bus shutdown and retains its cleanup error", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const cleanup = new Error("bus close failed");
+    const close: unknown = Reflect.get(SingleProcessServerRuntime.prototype, "close");
+    if (typeof close !== "function") throw new Error("Expected runtime close method.");
+    let gated = false;
+    const spy = vi
+      .spyOn(SingleProcessServerRuntime.prototype, "close")
+      .mockImplementation(async function (this: SingleProcessServerRuntime) {
+        if (!gated) {
+          gated = true;
+          entered.resolve(undefined);
+          await release.promise;
+          await Reflect.apply(close, this, []);
+          throw cleanup;
+        }
+        await Reflect.apply(close, this, []);
+      });
+    const instance = new StandaloneAssignee();
+    const root = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        StandaloneAssignee,
+        "command-assignment",
+        "assign",
+        AssignReviewTaskSchema,
+        [ReviewTaskAssignedSchema],
+      ),
+    ]);
+    try {
+      let settled = false;
+      const result = BoundedContext.singleTenant("BusCleanup")
+        .withGeneratedRegistryRoot(root)
+        .addAssignee(instance)
+        .addAssignee(instance)
+        .build()
+        .then(
+          () => {
+            settled = true;
+            return undefined;
+          },
+          (error: unknown) => {
+            settled = true;
+            return error;
+          },
+        );
+      await entered.promise;
+      expect(settled).toBe(false);
+      await expect(ServerEnvironmentLifecycle.resetForTest()).rejects.toThrow(
+        "active Bounded Contexts",
+      );
+      release.resolve(undefined);
+      const failure = await result;
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toContain(cleanup);
+    } finally {
+      release.resolve(undefined);
+      spy.mockRestore();
+    }
+  });
+
+  it("preserves registration and asynchronous cleanup failures", async () => {
+    const first = await BoundedContext.singleTenant("First")
+      .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
+      .build();
+    const registry = new ObservingSubscriptionRegistry();
+    const cleanup = new Error("registry close failed");
+    vi.spyOn(registry, "close").mockRejectedValueOnce(cleanup);
+    try {
+      let failure: unknown;
+      try {
+        await BoundedContext.singleTenant("Second")
+          .withSubscriptionRegistry(registry)
+          .add(new Repository({ entityType: DuplicateTaskAggregate, schema: ProjectStateSchema }))
+          .build();
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(AggregateError);
+      const causes = (failure as AggregateError).errors.flatMap((error: unknown): unknown[] =>
+        error instanceof AggregateError ? (error.errors as unknown[]) : [error],
+      );
+      expect(causes).toContain(cleanup);
+      expect(causes.some((error: unknown) => error instanceof DuplicateEntityStateException)).toBe(
+        true,
+      );
+    } finally {
+      await first.close();
+    }
+  });
+
+  it("does not open repository storage during registration", async () => {
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
     const storageFactory = new ObservingStorageFactory([]);
 
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(repository)
       .build();
@@ -2168,18 +2366,14 @@ describe("BoundedContext assembly", () => {
   it("returns only this context's exact registered repository without opening storage", async () => {
     const storageFactory = new ObservingStorageFactory([]);
     const repository = new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(repository)
-      .build();
-    const other = BoundedContext.singleTenant("Other")
-      .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
       .build();
     expectTypeOf(context.getRepository(TaskAggregate)).toEqualTypeOf<
       Repository<typeof TaskAggregate>
     >();
     expect(context.getRepository(TaskAggregate)).toBe(repository);
-    expect(context.getRepository(TaskAggregate)).not.toBe(other.getRepository(TaskAggregate));
     const SameName = class TaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {};
     expect(() => context.getRepository(SameName)).toThrow(/not registered/);
     expect(() => context.getRepository(DuplicateTaskAggregate)).toThrow(/not registered/);
@@ -2187,6 +2381,10 @@ describe("BoundedContext assembly", () => {
     const closing = context.close();
     expect(() => context.getRepository(TaskAggregate)).toThrow(/closing|closed/);
     await closing;
+    const other = await BoundedContext.singleTenant("Other")
+      .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
+      .build();
+    expect(repository).not.toBe(other.getRepository(TaskAggregate));
     await other.close();
   });
 
@@ -2197,12 +2395,12 @@ describe("BoundedContext assembly", () => {
     const context = await BoundedContext.singleTenant("Tasks")
       .withGeneratedRegistryRoot(registryRoot)
       .add(GeneratedTaskAggregate)
-      .buildAsync();
+      .build();
     expect(context.getRepository(GeneratedTaskAggregate).entityType).toBe(GeneratedTaskAggregate);
     await context.close();
   });
 
-  it("rejects duplicate repository entity or state identities when building", () => {
+  it("rejects duplicate repository entity or state identities when building", async () => {
     const firstTaskRepository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
@@ -2216,19 +2414,21 @@ describe("BoundedContext assembly", () => {
       schema: ProjectStateSchema,
     });
 
-    expect(() =>
+    await expect(
       BoundedContext.singleTenant("Tasks")
         .add(firstTaskRepository)
         .add(secondTaskRepository)
         .build(),
-    ).toThrow(`Repository entity type "TaskAggregate" is already registered.`);
+    ).rejects.toThrow(`Repository entity type "TaskAggregate" is already registered.`);
 
-    expect(() =>
+    await expect(
       BoundedContext.singleTenant("Tasks")
         .add(firstTaskRepository)
         .add(duplicateStateRepository)
         .build(),
-    ).toThrow(`Repository state type "${ProjectStateSchema.typeName}" is already registered.`);
+    ).rejects.toThrow(
+      `Repository state type "${ProjectStateSchema.typeName}" is already registered.`,
+    );
   });
 
   it("rejects structural repository lookalikes before registration", () => {
@@ -2251,7 +2451,7 @@ describe("BoundedContext assembly", () => {
     );
   });
 
-  it("uses captured repository metadata instead of virtual getters for registration", () => {
+  it("uses captured repository metadata instead of virtual getters for registration", async () => {
     const projectionMetadata = new Repository({
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
@@ -2281,7 +2481,7 @@ describe("BoundedContext assembly", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(spoofingRepository)
       .add(projectionRepository)
@@ -2297,7 +2497,7 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toHaveLength(0);
   });
 
-  it("defers repository provider failures until an operation selects storage", () => {
+  it("defers repository provider failures until an operation selects storage", async () => {
     const storageFactory = new FailingStorageFactory(6, ProjectOverviewStateSchema.typeName);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
@@ -2308,7 +2508,7 @@ describe("BoundedContext assembly", () => {
       schema: ProjectOverviewStateSchema,
     });
 
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(aggregateRepository)
       .add(projectionRepository)
@@ -2319,7 +2519,7 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.creationsFor(ProjectOverviewStateSchema.typeName)).toHaveLength(0);
   });
 
-  it("aborts retained domain and System buses when dispatcher registration throws", () => {
+  it("aborts retained domain and System buses when dispatcher registration throws", async () => {
     for (const schema of [ProjectOverviewStateSchema, EntityLog.EntityStateChangedSchema]) {
       const storageFactory = new ObservingStorageFactory([]);
       let schemaReads = 0;
@@ -2332,17 +2532,17 @@ describe("BoundedContext assembly", () => {
         dispatch: () => Promise.resolve(),
       };
 
-      expect(() =>
+      await expect(
         BoundedContext.singleTenant("Tasks")
           .withStorageFactory(storageFactory)
           .addEventDispatcher(dispatcher)
           .build(),
-      ).toThrow(`Registration failed for ${schema.typeName}.`);
+      ).rejects.toThrow(`Registration failed for ${schema.typeName}.`);
       expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
     }
   });
 
-  it("preserves a dispatcher registration failure without opening System event storage", () => {
+  it("preserves a dispatcher registration failure without opening System event storage", async () => {
     const storageFactory = new ObservingStorageFactory([], [1]);
     const primary = new Error("System dispatcher registration failed.");
     let schemaReads = 0;
@@ -2357,7 +2557,7 @@ describe("BoundedContext assembly", () => {
 
     let failure: unknown;
     try {
-      BoundedContext.singleTenant("Tasks")
+      await BoundedContext.singleTenant("Tasks")
         .persistSystemEvents()
         .withStorageFactory(storageFactory)
         .addEventDispatcher(dispatcher)
@@ -2369,10 +2569,15 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.creationsFor(EventSchema.typeName)).toHaveLength(0);
   });
 
-  it("reports dispatcher registration and synchronous EventStore cleanup failures together", () => {
+  it("reports dispatcher registration and awaited EventStore cleanup failures together", async () => {
     const primary = new Error("dispatcher registration failed");
-    const cleanup = new Error("idle EventStore cleanup failed");
-    const close = vi.spyOn(eventStoreAccess, "closeIdle").mockImplementationOnce(() => {
+    const cleanup = new Error("EventStore cleanup failed");
+    const closeStore: unknown = Reflect.get(EventStore.prototype, "close");
+    if (typeof closeStore !== "function") throw new Error("Expected EventStore close method.");
+    const close = vi.spyOn(EventStore.prototype, "close").mockImplementationOnce(async function (
+      this: EventStore,
+    ) {
+      await Reflect.apply(closeStore, this, []);
       throw cleanup;
     });
     let schemaReads = 0;
@@ -2388,7 +2593,7 @@ describe("BoundedContext assembly", () => {
     try {
       let failure: unknown;
       try {
-        BoundedContext.singleTenant("Tasks")
+        await BoundedContext.singleTenant("Tasks")
           .persistSystemEvents()
           .withStorageFactory(new InMemoryStorageFactory())
           .addEventDispatcher(dispatcher)
@@ -2397,15 +2602,16 @@ describe("BoundedContext assembly", () => {
         failure = error;
       }
       expect(failure).toBeInstanceOf(AggregateError);
-      expect((failure as AggregateError).errors).toEqual(
-        expect.arrayContaining([primary, cleanup]),
+      const errors = (failure as AggregateError).errors.flatMap((error: unknown): unknown[] =>
+        error instanceof AggregateError ? (error.errors as unknown[]) : [error],
       );
+      expect(errors).toEqual(expect.arrayContaining([primary, cleanup]));
     } finally {
       close.mockRestore();
     }
   });
 
-  it("builds without preparing storage for every registered repository", () => {
+  it("builds without preparing storage for every registered repository", async () => {
     const storageFactory = new FailingStorageFactory(7, ProcessManagerStateSchema.typeName, [5]);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
@@ -2420,7 +2626,7 @@ describe("BoundedContext assembly", () => {
       schema: ProcessManagerStateSchema,
     });
 
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(aggregateRepository)
       .add(projectionRepository)
@@ -2451,7 +2657,7 @@ describe("BoundedContext assembly", () => {
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
-    const context = BoundedContext.multitenant("Tasks")
+    const context = await BoundedContext.multitenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(repository)
       .build();
@@ -2477,7 +2683,7 @@ describe("BoundedContext assembly", () => {
       schema: ProjectStateSchema,
     });
 
-    const context = BoundedContext.multitenant("Tasks")
+    const context = await BoundedContext.multitenant("Tasks")
       .withStorageFactory(storageFactory)
       .withTenantIndex(TenantIndexes.fromFactory(storageFactory))
       .add(repository)
@@ -2495,17 +2701,17 @@ describe("BoundedContext assembly", () => {
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
-    const existing = BoundedContext.singleTenant("Existing").add(repository).build();
+    const existing = await BoundedContext.singleTenant("Existing").add(repository).build();
     const builder = BoundedContext.singleTenant("Tasks")
       .withSubscriptionRegistry(registry)
       .add(repository);
 
     try {
-      expect(() => builder.build()).toThrow("already registered with Bounded Context");
+      await expect(builder.build()).rejects.toThrow("already registered with Bounded Context");
       expect(registry.closeCalls).toBe(1);
 
       builder.remove(repository);
-      const rebuilt = builder.build();
+      const rebuilt = await builder.build();
       expect(boundedContextAccess.subscriptionRegistry(rebuilt)).not.toBe(registry);
       await rebuilt.close();
     } finally {
@@ -2515,7 +2721,7 @@ describe("BoundedContext assembly", () => {
 
   it("starts one Stand registry reconciliation after repository registration", async () => {
     const registry = new ObservingSubscriptionRegistry();
-    const context = BoundedContext.singleTenant("StandReconciliation")
+    const context = await BoundedContext.singleTenant("StandReconciliation")
       .withSubscriptionRegistry(registry)
       .build();
 
@@ -2531,7 +2737,7 @@ describe("BoundedContext assembly", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(repository)
       .build();
@@ -2576,7 +2782,7 @@ describe("BoundedContext assembly", () => {
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(repository)
       .build();
@@ -2608,7 +2814,7 @@ describe("BoundedContext assembly", () => {
     vi.useFakeTimers();
     const release = Promise.withResolvers<undefined>();
     const closeStand = vi.spyOn(Stand.prototype, "close").mockImplementation(() => release.promise);
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     try {
       const close = context.close();
       await vi.advanceTimersByTimeAsync(5_001);
@@ -2637,7 +2843,7 @@ describe("BoundedContext assembly", () => {
       await Promise.resolve();
       throw new Error("Stand close failed.");
     });
-    const context = BoundedContext.multitenant("Tasks")
+    const context = await BoundedContext.multitenant("Tasks")
       .withStorageFactory(storageFactory)
       .withSubscriptionRegistry(registry)
       .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
@@ -2713,7 +2919,7 @@ describe("BoundedContext assembly", () => {
       order.push(`${role} Stand close`);
       return Promise.reject(role === "domain" ? domainHandleFailure : systemHandleFailure);
     });
-    const context = BoundedContext.multitenant("Tasks")
+    const context = await BoundedContext.multitenant("Tasks")
       .withStorageFactory(storageFactory)
       .withSubscriptionRegistry(registry)
       .addCommandDispatcher(commandDispatcher)
@@ -2780,8 +2986,8 @@ describe("BoundedContext assembly", () => {
     }
   });
 
-  it("does not expose repository, delivery, gRPC, or transport APIs on BoundedContext", () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+  it("does not expose repository, delivery, gRPC, or transport APIs on BoundedContext", async () => {
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const forbiddenMembers = [
       "repositories",
       "register",

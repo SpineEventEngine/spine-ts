@@ -64,11 +64,19 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("rejects full reset during an empty context build and while its context remains open", async () => {
+    const building = BoundedContext.singleTenant("EmptyPending").build();
+    await expect(resetServerEnvironmentForTest()).rejects.toThrow("active Bounded Contexts");
+    const context = await building;
+    await expect(resetServerEnvironmentForTest()).rejects.toThrow("active Bounded Contexts");
+    await context.close();
+    await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
+  });
   it("uses transient membership when a custom storage factory has no catalog", async () => {
     const factory = new CataloglessStorageFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
     const environment = ServerEnvironment.instance();
-    const context = BoundedContext.singleTenant("CataloglessTasks").build();
+    const context = await BoundedContext.singleTenant("CataloglessTasks").build();
     expect(context.tenantIndex).toBe(environment.tenantIndex);
     await environment.tenantIndex.keep(tenant("known"));
     await expect(context.tenantIndex.contains(tenant("known"))).resolves.toBe(true);
@@ -79,8 +87,10 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const billing = tenantIndex();
     ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: company });
     const environment = ServerEnvironment.instance();
-    const orders = BoundedContext.multitenant("IndexOrders").build();
-    const invoices = BoundedContext.multitenant("IndexInvoices").withTenantIndex(billing).build();
+    const orders = await BoundedContext.multitenant("IndexOrders").build();
+    const invoices = await BoundedContext.multitenant("IndexInvoices")
+      .withTenantIndex(billing)
+      .build();
     expect(environment.tenantIndex).toBe(company);
     expect(orders.tenantIndex).toBe(company);
     expect(invoices.tenantIndex).toBe(billing);
@@ -112,14 +122,14 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const createdSubscribers = vi.spyOn(InMemoryTransportFactory.prototype, "createSubscriber");
     const close = vi.spyOn(InMemoryTransportFactory.prototype, "close");
     const received: unknown[] = [];
-    const consumer = BoundedContext.singleTenant("DefaultChannelConsumer")
+    const consumer = await BoundedContext.singleTenant("DefaultChannelConsumer")
       .addEventDispatcher({
         messageSchemas: () => [StringValueSchema],
         externalEventSchemas: () => [StringValueSchema],
         dispatch: (event: unknown) => Promise.resolve(received.push(event)).then(() => undefined),
       })
       .build();
-    const producer = BoundedContext.singleTenant("DefaultChannelProducer")
+    const producer = await BoundedContext.singleTenant("DefaultChannelProducer")
       .addEventDispatcher({
         messageSchemas: () => [StringValueSchema],
         dispatch: () => Promise.resolve(),
@@ -362,7 +372,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       ...{ logger: logger as unknown as ILogLayer },
     });
     const production = ServerEnvironment.instance();
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
       .build();
 
@@ -395,7 +405,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
-    const context = BoundedContext.singleTenant(`secret-context-${"x".repeat(257)}`)
+    const context = await BoundedContext.singleTenant(`secret-context-${"x".repeat(257)}`)
       .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
       .build();
 
@@ -421,7 +431,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
       .build();
 
@@ -450,7 +460,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
-    const context = BoundedContext.singleTenant("PersistentTasks")
+    const context = await BoundedContext.singleTenant("PersistentTasks")
       .withSubscriptionRegistry({ persistent: true, close: () => Promise.resolve() } as never)
       .build();
 
@@ -478,7 +488,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
       .build();
     const server = new Server({ contexts: [context], port: 0 });

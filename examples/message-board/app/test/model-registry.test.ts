@@ -109,6 +109,18 @@ describe("MessageBoard Projection backend", () => {
       return this;
     });
     const atPort = vi.spyOn(Server, "atPort").mockReturnValue({ add, run, start } as never);
+    const created: BoundedContext[] = [];
+    const actualCreateContext = application.createContext.bind(application);
+    const createContext = vi
+      .spyOn(application, "createContext")
+      .mockImplementation(async (...args) => {
+        const context = await actualCreateContext(...args);
+        created.push(context);
+        return context;
+      });
+    const closeCreated = async () => {
+      await created.pop()?.close();
+    };
     const storage = new InMemoryStorageFactory();
     try {
       browserHost.open.mockResolvedValueOnce({ baseUrl: "http://started" });
@@ -121,13 +133,17 @@ describe("MessageBoard Projection backend", () => {
       await expect(application.start({ host: "127.0.0.2", port: 1 })).resolves.toEqual({
         baseUrl: "http://started",
       });
+      await closeCreated();
       await expect(application.run()).resolves.toEqual({ baseUrl: "http://running" });
+      await closeCreated();
       await expect(application.runApplication({ port: 2 }, storage)).resolves.toEqual({
         baseUrl: "http://running",
       });
+      await closeCreated();
       await expect(
         application.runCombined({ port: 3, webOrigin: "https://board.example.com" }, storage),
       ).resolves.toEqual({ baseUrl: "http://running" });
+      await closeCreated();
 
       expect(atPort).toHaveBeenCalledTimes(4);
       expect(start).toHaveBeenCalledOnce();
@@ -135,7 +151,11 @@ describe("MessageBoard Projection backend", () => {
       expect(add).toHaveBeenCalledTimes(4);
     } finally {
       atPort.mockRestore();
-      storage.close();
+      createContext.mockRestore();
+      await closeResources([
+        ...created.map((context) => () => context.close()),
+        () => storage.close(),
+      ]);
     }
   });
 

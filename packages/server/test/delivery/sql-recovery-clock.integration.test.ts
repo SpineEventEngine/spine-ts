@@ -308,7 +308,7 @@ async function withSqlInbox(
   }
   const cleanupFailures: unknown[] = [];
   try {
-    factory?.close();
+    await factory?.close();
   } catch (error) {
     cleanupFailures.push(error);
   }

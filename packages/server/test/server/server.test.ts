@@ -244,7 +244,7 @@ describe("Server", () => {
   });
 
   it("exposes subscription registry facts only for framework-owned running servers", async () => {
-    const context = BoundedContext.singleTenant("RegistryFacts").build();
+    const context = await BoundedContext.singleTenant("RegistryFacts").build();
     const running = await Server.atPort(0).add(context).start();
 
     try {
@@ -272,7 +272,7 @@ describe("Server", () => {
     };
     const logger = { child: vi.fn(() => child) };
     ServerEnvironment.when(EnvironmentType.Local).use({ logger: logger as unknown as ILogLayer });
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const server = await Server.atPort(0).add(context).start();
     expect(logger.child).toHaveBeenCalledTimes(1);
     expect(
@@ -2901,7 +2901,7 @@ describe("Server", () => {
   });
 
   it("destroys non-draining HTTP/2 streams and still closes owned resources", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const closed: string[] = [];
     const server = await Server.atPort(0)
       .add(context)
@@ -3014,7 +3014,7 @@ describe("Server", () => {
   });
 
   it("closes built bounded contexts and rejects later context work", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const server = await Server.atPort(0).add(context).start();
 
     await server.close();

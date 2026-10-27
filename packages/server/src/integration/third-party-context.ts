@@ -59,7 +59,7 @@ export class ThirdPartyContext {
    * @returns Resolves to an open single-tenant context.
    */
   static async singleTenant(name: string): Promise<ThirdPartyContext> {
-    return new ThirdPartyContext(await BoundedContext.singleTenant(name).buildAsync(), false);
+    return new ThirdPartyContext(await BoundedContext.singleTenant(name).build(), false);
   }
 
   /**
@@ -69,7 +69,7 @@ export class ThirdPartyContext {
    * @returns Resolves to an open multitenant context.
    */
   static async multitenant(name: string): Promise<ThirdPartyContext> {
-    return new ThirdPartyContext(await BoundedContext.multitenant(name).buildAsync(), true);
+    return new ThirdPartyContext(await BoundedContext.multitenant(name).build(), true);
   }
 
   /* eslint-disable @typescript-eslint/unified-signatures --

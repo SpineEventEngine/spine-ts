@@ -683,7 +683,7 @@ export async function createTodoContext(options: TodoContextOptions = {}): Promi
   if (options.subscriptionRegistry !== undefined)
     builder.withSubscriptionRegistry(options.subscriptionRegistry);
   if (options.storageFactory !== undefined) builder.withStorageFactory(options.storageFactory);
-  return builder.buildAsync();
+  return builder.build();
 }
 
 const taskIds = {

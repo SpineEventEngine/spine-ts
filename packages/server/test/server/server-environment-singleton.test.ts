@@ -50,7 +50,7 @@ describe("ServerEnvironment singleton", () => {
       expect(environment.storageFactory).toBe(storageFactory);
 
       const running = await production.Server.atPort(0)
-        .add(production.BoundedContext.singleTenant("NoLegacyTransport").build())
+        .add(await production.BoundedContext.singleTenant("NoLegacyTransport").build())
         .start();
       await running.close();
     } finally {

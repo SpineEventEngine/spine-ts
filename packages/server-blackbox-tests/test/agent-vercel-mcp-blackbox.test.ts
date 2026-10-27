@@ -543,7 +543,7 @@ const supportBox = async (
     .withStorageFactory(new InMemoryStorageFactory())
     .add(repository)
     .build();
-  return { box: await BlackBox.from(context, { timeoutMs: 10_000 }), repository };
+  return { box: await BlackBox.from(await context, { timeoutMs: 10_000 }), repository };
 };
 
 describe("Agent with real Vercel Responses and MCP transports", () => {
@@ -853,7 +853,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
       .withStorageFactory(new InMemoryStorageFactory())
       .add(repository)
       .build();
-    const box = await BlackBox.from(context, { timeoutMs: 10_000 });
+    const box = await BlackBox.from(await context, { timeoutMs: 10_000 });
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     try {
       const posted = await box

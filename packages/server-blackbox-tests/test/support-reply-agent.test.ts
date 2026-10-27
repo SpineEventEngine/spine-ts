@@ -112,7 +112,7 @@ describe("support reply Agent", () => {
         agentCodeRevision: "support-reply-v1",
         ai: { models: [] },
       })
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       const result = await blackBox
@@ -147,7 +147,7 @@ describe("support reply Agent", () => {
           eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
         }),
       )
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -183,7 +183,7 @@ describe("support reply Agent", () => {
           events: [SupportReplyDraftedSchema],
         }),
       )
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -223,7 +223,7 @@ describe("support reply Agent", () => {
           eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
         }),
       )
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -271,7 +271,7 @@ describe("support reply Agent", () => {
     });
     const context = await generatedSupportContext("Support reply event", assignee)
       .add(repository)
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -348,7 +348,7 @@ describe("support reply Agent", () => {
           events: [SupportReplyDraftedSchema],
         }),
       )
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       const result = await blackBox
@@ -385,7 +385,7 @@ describe("support reply Agent", () => {
       handlers: agentHandlers,
       events: [SupportReplyDraftedSchema],
     });
-    const context = supportContext("Support history").add(repository).build();
+    const context = await supportContext("Support history").add(repository).build();
     const blackBox = await BlackBox.from(context);
     try {
       const result = await blackBox

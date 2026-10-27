@@ -51,7 +51,6 @@ import {
   AgentExecutionStorageFactories,
   AgentHistoryStorageFactories,
   TenantBoundary,
-  eventStoreAccess,
 } from "@spine-event-engine/storage/provider";
 
 /**
@@ -130,7 +129,7 @@ import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/deliv
 import { InboxTargets } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import { IntegrationBroker } from "../integration/integration-broker.js";
-import { ServerEnvironment } from "../server/server-environment.js";
+import { ServerEnvironment, serverEnvironmentAccess } from "../server/server-environment.js";
 import { SignalPublisher } from "../runtime/signal-publisher.js";
 import {
   StandaloneHandlerRuntime,
@@ -540,6 +539,45 @@ export class BoundedContextNameError extends Error {
   }
 }
 
+/**
+ * Rejects an Entity state type already served by another open domain context.
+ */
+export class DuplicateEntityStateException extends Error {
+  // prettier-ignore
+
+  /**
+   * Wire type URL of the conflicting Entity state.
+   */
+  readonly stateType: string;
+
+  /**
+   * Name of the context that already serves the state.
+   */
+  readonly registeredContext: string;
+
+  /**
+   * Name of the context attempting registration.
+   */
+  readonly conflictingContext: string;
+
+  /**
+   * Creates a duplicate-state registration error.
+   * @param stateType Entity state wire type URL.
+   * @param registeredContext Existing domain context name.
+   * @param conflictingContext New domain context name.
+   */
+  constructor(stateType: string, registeredContext: string, conflictingContext: string) {
+    super(
+      `Entity state "${stateType}" is already registered in "${registeredContext}"; ` +
+        `register it in only one open domain Bounded Context (attempted in "${conflictingContext}").`,
+    );
+    this.name = "DuplicateEntityStateException";
+    this.stateType = stateType;
+    this.registeredContext = registeredContext;
+    this.conflictingContext = conflictingContext;
+  }
+}
+
 interface FrameworkConstructionToken {
   readonly frameworkConstructionToken: true;
 }
@@ -859,6 +897,8 @@ interface ContextDeliveryParts {
 }
 
 let constructBoundedContext: ((input: BoundedContextAssembly) => BoundedContext) | undefined;
+let registerBoundedContext:
+  ((context: BoundedContext, repositories: readonly RepositoryView[]) => void) | undefined;
 let constructBoundedContextBuilder:
   | ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => BoundedContextBuilder)
   | undefined;
@@ -895,6 +935,8 @@ export class BoundedContext {
 
   readonly #storageFactory: StorageFactory;
 
+  readonly #environment: ServerEnvironment;
+
   readonly #ai: AiRegistry | undefined;
 
   readonly #stand: Stand;
@@ -914,6 +956,9 @@ export class BoundedContext {
    */
   static {
     constructBoundedContext = (input): BoundedContext => new BoundedContext(input);
+    registerBoundedContext = (context, repositories) => {
+      context.#registerAndStart(repositories);
+    };
   }
 
   /**
@@ -935,6 +980,7 @@ export class BoundedContext {
     this.#systemStand = input.systemStand;
     this.#subscriptionRuntime = input.subscriptionRuntime;
     this.#storageFactory = input.storageFactory;
+    this.#environment = ServerEnvironment.instance();
     this.#ai = input.ai;
     this.#installTenantAdmission(input.tenantIndex);
     this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(input.deliveryStrategy);
@@ -950,8 +996,7 @@ export class BoundedContext {
     this.#entityInbox = delivery.entityInbox;
     this.#projectionInbox = delivery.projectionInbox;
     this.#installReferences(input, delivery);
-    this.#registerAndStart(input.repositories);
-    this.#startAgentScheduler(delivery.tenantIndex);
+    serverEnvironmentAccess.addContext(this.#environment, this);
     Object.freeze(this);
   }
 
@@ -1126,20 +1171,9 @@ export class BoundedContext {
    * @param repositories Prepared repositories.
    */
   #registerAndStart(repositories: readonly RepositoryView[]): void {
-    try {
-      this.#registerRepositories(repositories);
-      this.#subscriptionRuntime.start();
-    } catch (error) {
-      try {
-        ContextParts.cleanupFailedContext(this);
-      } catch (cleanupError) {
-        throw new AggregateError(
-          [error, cleanupError],
-          "Bounded Context build failed, and metadata cleanup also failed.",
-        );
-      }
-      throw error;
-    }
+    this.#registerRepositories(repositories);
+    this.#subscriptionRuntime.start();
+    this.#startAgentScheduler(this.tenantIndex);
   }
 
   #registerRepositories(repositories: readonly RepositoryView[]): void {
@@ -1149,6 +1183,7 @@ export class BoundedContext {
       for (const preparedRepository of preparedRepositories) {
         ContextParts.rejectRegisteredRepository(preparedRepository.repository);
       }
+      this.#reserveStates(preparedRepositories);
       for (const preparedRepository of preparedRepositories) {
         this.#stand.register(preparedRepository.snapshot.stateSchema, {
           columns: ContextParts.repositoryColumns(preparedRepository.snapshot),
@@ -1165,6 +1200,20 @@ export class BoundedContext {
       }
     } catch (error) {
       this.#failRegistration(error, preparedRepositories);
+    }
+  }
+
+  /**
+   * Reserves Entity state types before registration mutates delivery targets.
+   *
+   * @param repositories Prepared repositories for this context.
+   */
+  #reserveStates(repositories: readonly PreparedRepository[]): void {
+    for (const repository of repositories) {
+      const stateType = TypeUrls.derive(repository.snapshot.stateSchema);
+      const prior = serverEnvironmentAccess.reserveState(this.#environment, this, stateType);
+      if (prior !== undefined)
+        throw new DuplicateEntityStateException(stateType, prior.name.value, this.name.value);
     }
   }
 
@@ -1222,7 +1271,10 @@ export class BoundedContext {
   }
 
   #failRegistration(error: unknown, preparedRepositories: readonly PreparedRepository[]): never {
-    const closeErrors = ContextParts.closePreparedRepositories(preparedRepositories);
+    const uncommitted = preparedRepositories.filter(
+      ({ repository }) => !this.#repositoryViews.has(repository),
+    );
+    const closeErrors = ContextParts.closePreparedRepositories(uncommitted);
     if (closeErrors.length > 0) {
       throw new AggregateError(
         [error, ...closeErrors],
@@ -1492,6 +1544,7 @@ export class BoundedContext {
     await this.#closePart(() => this.#systemStand.close(), errors);
     await this.#closePart(() => this.#subscriptionRuntime.finishClose(), errors);
     await this.#closeRepositories(errors);
+    serverEnvironmentAccess.removeContext(this.#environment, this);
     if (errors.length > 0) {
       this.#closed = undefined;
       throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
@@ -1746,6 +1799,7 @@ export type GeneratedRepositoryOptions<
  * Tracks resources that may require cleanup after context assembly fails.
  */
 interface ContextBuildResources {
+  context?: BoundedContext;
   registry?: StandSubscriptionRegistry;
   commandBus?: CommandBus;
   eventStore?: EventStore;
@@ -1961,7 +2015,7 @@ export class BoundedContextBuilder {
    *
    * @param dispatcher Raw command dispatcher, or an `AbstractCommander` instance.
    *   A standalone commander requires generated receiver metadata and therefore
-   *   this builder's `buildAsync()` path. It installs its Command and Event sides
+   *   this builder's `build()` path. It installs its Command and Event sides
    *   exactly once.
    *
    * @returns This builder for further configuration.
@@ -1990,7 +2044,7 @@ export class BoundedContextBuilder {
    * Adds an event dispatcher to the context being built.
    *
    * @param dispatcher Raw event dispatcher, or a standalone reactor/subscriber.
-   *   Standalone receivers require generated receiver metadata and `buildAsync()`.
+   *   Standalone receivers require generated receiver metadata and `build()`.
    *
    * @returns This builder for further configuration.
    */
@@ -2012,7 +2066,7 @@ export class BoundedContextBuilder {
    * Adds a generated standalone command assignee.
    *
    * The registered instance is matched by exact constructor to generated
-   * receiver metadata when `buildAsync()` assembles the context.
+   * receiver metadata when `build()` assembles the context.
    *
    * @param assignee Generated standalone assignee instance.
    * @returns This builder for further configuration.
@@ -2116,34 +2170,11 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Builds a context from explicitly added repositories and dispatchers.
+   * Builds a context after loading generated handlers and preparing runtime resources.
    *
-   * @returns Returns the built context.
+   * @returns The built context after assembly and integration are ready.
    */
-  build(): BoundedContext {
-    if (this.#standaloneInstances().length > 0) {
-      throw new Error("Standalone generated handlers require buildAsync().");
-    }
-    ContextParts.rejectSyncEntityAssembly(this.#entityTypes);
-    return this.#buildWith(
-      [...this.#repositories],
-      this.#storageFactory ?? new InMemoryStorageFactory(),
-      [],
-      this.#aiRegistry,
-    );
-  }
-
-  /**
-   * Builds a context after loading generated metadata for added entity classes
-   * and registered standalone handlers.
-   *
-   * Standalone assignees, commanders, reactors, and subscribers require this
-   * asynchronous path so their exact constructors can be matched to generated
-   * receiver metadata.
-   *
-   * @returns Resolves to the built context.
-   */
-  async buildAsync(): Promise<BoundedContext> {
+  build(): Promise<BoundedContext> {
     return this.#buildAsyncWith();
   }
 
@@ -2151,10 +2182,29 @@ export class BoundedContextBuilder {
     defaultStorageFactory?: StorageFactory,
     defaultAi?: AiRegistry,
   ): Promise<BoundedContext> {
+    const finishBuild = serverEnvironmentAccess.beginContextBuild(ServerEnvironment.instance());
+    try {
+      return await this.#buildAsyncReady(defaultStorageFactory, defaultAi);
+    } finally {
+      finishBuild();
+    }
+  }
+
+  /**
+   * Loads generated metadata and finishes one asynchronous context assembly.
+   *
+   * @param defaultStorageFactory Storage used when the builder has none.
+   * @param defaultAi AI registry used when the builder has none.
+   * @returns The integrated context.
+   */
+  async #buildAsyncReady(
+    defaultStorageFactory?: StorageFactory,
+    defaultAi?: AiRegistry,
+  ): Promise<BoundedContext> {
     const generated = await this.#loadGeneratedArtifacts([...this.#entityTypes]);
     const repositories = [...this.#repositories, ...generated.repositories];
 
-    const context = this.#buildWith(
+    const context = await this.#buildWithResources(
       repositories,
       this.#storageFactory ?? defaultStorageFactory ?? new InMemoryStorageFactory(),
       generated.standalone,
@@ -2162,6 +2212,7 @@ export class BoundedContextBuilder {
     );
     try {
       await ContextParts.integrationReady(context);
+      serverEnvironmentAccess.completeContext(ServerEnvironment.instance(), context);
     } catch (error) {
       try {
         await context.close();
@@ -2176,12 +2227,21 @@ export class BoundedContextBuilder {
     return context;
   }
 
-  #buildWith(
+  /**
+   * Assembles a context and cleans partial resources on failure.
+   *
+   * @param repositories Repositories selected for the context.
+   * @param storageFactory Storage factory for the context.
+   * @param standalone Generated standalone handler groups.
+   * @param ai Optional AI registry.
+   * @returns The assembled context.
+   */
+  async #buildWithResources(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
-    standalone: readonly GeneratedStandaloneHandlerGroup[] = [],
-    ai?: AiRegistry,
-  ): BoundedContext {
+    standalone: readonly GeneratedStandaloneHandlerGroup[],
+    ai: AiRegistry | undefined,
+  ): Promise<BoundedContext> {
     const resources: ContextBuildResources =
       this.#subscriptionRegistry === undefined ? {} : { registry: this.#subscriptionRegistry };
     this.#subscriptionRegistry = undefined;
@@ -2195,7 +2255,7 @@ export class BoundedContextBuilder {
         ai,
       );
     } catch (error) {
-      return this.#failBuild(resources, error);
+      return await this.#failBuild(resources, error);
     }
   }
 
@@ -2219,6 +2279,10 @@ export class BoundedContextBuilder {
     ]);
     const running = this.#buildRuntime(storageFactory, buses, resources);
     const context = this.#createContext(repositories, storageFactory, buses, running, ai);
+    resources.context = context;
+    if (registerBoundedContext === undefined)
+      throw new Error("Context registration is unavailable.");
+    registerBoundedContext(context, repositories);
     ContextParts.attachIntegration(
       context,
       buses.eventBus,
@@ -2450,25 +2514,28 @@ export class BoundedContextBuilder {
     );
   }
 
-  #failBuild(resources: ContextBuildResources, error: unknown): never {
+  async #failBuild(resources: ContextBuildResources, error: unknown): Promise<never> {
     const cleanupErrors: unknown[] = [];
-    ContextParts.attemptCleanup(() => resources.runtime?.abortClose(), cleanupErrors);
-    ContextParts.attemptCleanup(() => resources.publisher?.abortAssembly(), cleanupErrors);
-    if (resources.runtime === undefined) {
-      ContextParts.attemptCleanup(
-        () => void resources.registry?.close().catch(() => undefined),
-        cleanupErrors,
-      );
+    if (resources.context !== undefined) {
+      try {
+        await resources.context.close();
+      } catch (closeError) {
+        cleanupErrors.push(closeError);
+      }
+    } else {
+      ContextParts.attemptCleanup(() => resources.publisher?.abortAssembly(), cleanupErrors);
+      const registry = resources.runtime ?? resources.registry;
+      const closing = [registry, resources.stand, resources.systemStand];
+      for (const resource of closing) {
+        if (resource === undefined) continue;
+        try {
+          await resource.close();
+        } catch (closeError) {
+          cleanupErrors.push(closeError);
+        }
+      }
+      await ContextParts.cleanupBuildBuses(resources, cleanupErrors);
     }
-    ContextParts.attemptCleanup(
-      () => void resources.stand?.close().catch(() => undefined),
-      cleanupErrors,
-    );
-    ContextParts.attemptCleanup(
-      () => void resources.systemStand?.close().catch(() => undefined),
-      cleanupErrors,
-    );
-    ContextParts.cleanupBuildBuses(resources, cleanupErrors);
     if (cleanupErrors.length > 0) {
       throw new AggregateError(
         [error, ...cleanupErrors],
@@ -2767,21 +2834,23 @@ const ContextParts = Object.freeze({
    *
    * @param resources Partially created resources.
    * @param errors Collection receiving failures.
+   * @returns Completion after all created buses and stores close.
    */
-  cleanupBuildBuses(resources: ContextBuildResources, errors: unknown[]): void {
-    ContextParts.attemptCleanup(() => {
-      if (resources.commandBus !== undefined) commandBusAccess.abortClose(resources.commandBus);
-    }, errors);
-    ContextParts.attemptCleanup(() => {
-      if (resources.systemEventBus !== undefined)
-        eventBusAccess.abortClose(resources.systemEventBus);
-      else if (resources.systemEventStore !== undefined)
-        eventStoreAccess.closeIdle(resources.systemEventStore);
-    }, errors);
-    ContextParts.attemptCleanup(() => {
-      if (resources.eventBus !== undefined) eventBusAccess.abortClose(resources.eventBus);
-      else if (resources.eventStore !== undefined) eventStoreAccess.closeIdle(resources.eventStore);
-    }, errors);
+  async cleanupBuildBuses(resources: ContextBuildResources, errors: unknown[]): Promise<void> {
+    const closing: (() => Promise<void>)[] = [];
+    const { commandBus, systemEventBus, systemEventStore, eventBus, eventStore } = resources;
+    if (commandBus !== undefined) closing.push(() => commandBus.close());
+    if (systemEventBus !== undefined) closing.push(() => systemEventBus.close());
+    else if (systemEventStore !== undefined) closing.push(() => systemEventStore.close());
+    if (eventBus !== undefined) closing.push(() => eventBus.close());
+    else if (eventStore !== undefined) closing.push(() => eventStore.close());
+    for (const close of closing) {
+      try {
+        await close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
   },
 
   /**
@@ -3150,8 +3219,7 @@ const ContextParts = Object.freeze({
       },
     });
     const ready = broker.open();
-    // Synchronous build returns before readiness; retain the failure for the next
-    // observable operation without letting Node report an unhandled rejection.
+    // The builder awaits readiness; retain a rejection handler until it observes the result.
     void ready.catch(() => undefined);
     contextIntegrations.set(context, { broker, ready });
   },
@@ -3304,25 +3372,9 @@ const ContextParts = Object.freeze({
   requireEntityClass(entityType: unknown, operation: string): void {
     if (typeof entityType !== "function") {
       throw new TypeError(
-        `${operation} requires a Repository instance. Use an entity class only with buildAsync().`,
+        `${operation} requires a Repository instance. Use an entity class only with build().`,
       );
     }
-  },
-
-  /**
-   * Rejects synchronous assembly when classes need generated metadata.
-   *
-   * @param entityTypes Entity classes to assemble.
-   */
-  rejectSyncEntityAssembly(entityTypes: ReadonlySet<RepositoryEntityType>): void {
-    if (entityTypes.size === 0) {
-      return;
-    }
-
-    throw new Error(
-      "BoundedContextBuilder.build() cannot assemble entity classes from generated metadata. " +
-        "Use buildAsync().",
-    );
   },
 
   /**
@@ -3337,7 +3389,7 @@ const ContextParts = Object.freeze({
     }
 
     throw new Error(
-      "BoundedContextBuilder.buildAsync() requires withGeneratedRegistryRoot(root) " +
+      "BoundedContextBuilder.build() requires withGeneratedRegistryRoot(root) " +
         "when assembling entity classes from generated metadata.",
     );
   },
@@ -3839,15 +3891,6 @@ const ContextParts = Object.freeze({
     }
 
     return Object.freeze([...schemas.values()]);
-  },
-
-  /**
-   * Clears metadata for a failed context build without closing its shared index.
-   *
-   * @param context Context whose build failed.
-   */
-  cleanupFailedContext(context: BoundedContext): void {
-    ContextParts.clearContextMetadata(context);
   },
 
   /**

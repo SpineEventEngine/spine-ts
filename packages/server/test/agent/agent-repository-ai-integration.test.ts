@@ -278,7 +278,7 @@ describe("Agent repository source integration", () => {
     const authorizeSelection = vi.fn(() => allowSelection);
     const repository = draftingRepository({ authorizeSelection });
     const factory = new CapturingExecutionFactory();
-    const context = BoundedContext.singleTenant("SourceDrafting")
+    const context = await BoundedContext.singleTenant("SourceDrafting")
       .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -530,7 +530,7 @@ describe("Agent repository source integration", () => {
       allowedModels: { generation: [ref] },
     });
     const factory = new CapturingExecutionFactory();
-    const context = BoundedContext.singleTenant("LateSourceModel")
+    const context = await BoundedContext.singleTenant("LateSourceModel")
       .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)

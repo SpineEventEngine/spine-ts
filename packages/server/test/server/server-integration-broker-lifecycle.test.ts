@@ -36,10 +36,10 @@ describe("Wave 13 broker lifecycle", () => {
         externalEventSchemas: () => [StringValueSchema],
         dispatch: () => Promise.resolve(),
       })
-      .buildAsync();
+      .build();
     const second = await BoundedContext.singleTenant(
       `Wave13LifecycleB${crypto.randomUUID()}`,
-    ).buildAsync();
+    ).build();
     const environment = ServerEnvironment.instance() as unknown as {
       integrationChannelFactory: unknown;
     };

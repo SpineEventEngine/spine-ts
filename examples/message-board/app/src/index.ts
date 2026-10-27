@@ -220,7 +220,7 @@ export class MessageBoardApplication {
       .add(AnnouncementBoardProjection, { eventRouting: announcementRouting });
     if (deliveryStrategy !== undefined) builder.withDeliveryStrategy(deliveryStrategy);
     if (subscriptionRegistry !== undefined) builder.withSubscriptionRegistry(subscriptionRegistry);
-    return builder.buildAsync();
+    return builder.build();
   }
 
   /**

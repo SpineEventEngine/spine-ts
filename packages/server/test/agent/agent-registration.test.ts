@@ -459,7 +459,7 @@ describe("Agent registration readiness", () => {
   it("drains protected Agent history reads and rejects an old Agent after rebind", async () => {
     const factory = new GatedProtectedAgentHistoryFactory();
     const configured = waitingRepository();
-    const context = BoundedContext.singleTenant("ProtectedAgentHistory")
+    const context = await BoundedContext.singleTenant("ProtectedAgentHistory")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -488,7 +488,7 @@ describe("Agent registration readiness", () => {
     await closing;
     expect(factory.historyCloses).toBe(1);
     await context.close();
-    const rebound = BoundedContext.singleTenant("ProtectedAgentHistory")
+    const rebound = await BoundedContext.singleTenant("ProtectedAgentHistory")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -504,7 +504,7 @@ describe("Agent registration readiness", () => {
   it("closes Agent provider handles when public history or execution reads fail", async () => {
     const factory = new FailingAgentReadFactory();
     const configured = waitingRepository();
-    const context = BoundedContext.singleTenant("FailingAgentReads")
+    const context = await BoundedContext.singleTenant("FailingAgentReads")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -535,7 +535,7 @@ describe("Agent registration readiness", () => {
   it("shares retained Agent audit history across public and testing reads by tenant", async () => {
     const factory = new CountingAgentHistoryFactory();
     const configured = waitingRepository();
-    const context = BoundedContext.multitenant("SharedAgentHistory")
+    const context = await BoundedContext.multitenant("SharedAgentHistory")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -544,6 +544,8 @@ describe("Agent registration readiness", () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared-history" });
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-A" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-B" } });
+    await context.tenantIndex.keep(tenantA);
+    await context.tenantIndex.keep(tenantB);
     const before = factory.historyOpens;
     try {
       const reader = configured.agentHistory(id, { tenantId: tenantA });
@@ -576,7 +578,7 @@ describe("Agent registration readiness", () => {
   it("retries Agent audit-history creation after a failed first acquisition", async () => {
     const factory = new CountingAgentHistoryFactory();
     const configured = waitingRepository();
-    const context = BoundedContext.singleTenant("RetryAgentHistory")
+    const context = await BoundedContext.singleTenant("RetryAgentHistory")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -602,7 +604,7 @@ describe("Agent registration readiness", () => {
   it("isolates public Agent history by tenant and detaches returned entries", async () => {
     const factory = new InMemoryStorageFactory();
     const configured = waitingRepository();
-    const context = BoundedContext.multitenant("TenantAgentReads")
+    const context = await BoundedContext.multitenant("TenantAgentReads")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -611,6 +613,8 @@ describe("Agent registration readiness", () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared" });
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-A" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-B" } });
+    await context.tenantIndex.keep(tenantA);
+    await context.tenantIndex.keep(tenantB);
     const scope = { tenantId: tenantA };
     const reader = configured.agentHistory(id, scope);
     scope.tenantId = tenantB;
@@ -740,7 +744,7 @@ describe("Agent registration readiness", () => {
   it("pages more than 100 retained typed entries across every public history view", async () => {
     const factory = new InMemoryStorageFactory();
     const configured = waitingRepository();
-    const context = BoundedContext.singleTenant("PagedAgentReads")
+    const context = await BoundedContext.singleTenant("PagedAgentReads")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -904,7 +908,7 @@ describe("Agent registration readiness", () => {
     const factory = new RecordingExecutionFactory();
     factory.suppressSchedulerDiscovery = true;
     const configured = waitingRepository();
-    const context = BoundedContext.singleTenant("PublicAgentReads")
+    const context = await BoundedContext.singleTenant("PublicAgentReads")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -1026,7 +1030,7 @@ describe("Agent registration readiness", () => {
     WaitingSupportAgent.entered = entered;
     WaitingSupportAgent.invokeAfterWait = true;
     const configured = waitingRepository(true);
-    const context = BoundedContext.singleTenant("WaitingSupport")
+    const context = await BoundedContext.singleTenant("WaitingSupport")
       .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -1115,7 +1119,7 @@ describe("Agent registration readiness", () => {
       release = resolve;
     });
     const configured = waitingRepository();
-    const context = BoundedContext.singleTenant("LateHandlerResult")
+    const context = await BoundedContext.singleTenant("LateHandlerResult")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -1172,7 +1176,7 @@ describe("Agent registration readiness", () => {
     WaitingSupportAgent.gate = new Promise<void>((_resolve, reject) => {
       rejectLate = reject;
     });
-    const context = BoundedContext.singleTenant("WaitingShutdown")
+    const context = await BoundedContext.singleTenant("WaitingShutdown")
       .withAi(ai(undefined, 5_000))
       .persistSystemEvents()
       .withStorageFactory(new InMemoryStorageFactory())
@@ -1256,7 +1260,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-selection-v1",
       ai: { models: [proposal] },
     });
-    const context = BoundedContext.singleTenant("SelectedSupport")
+    const context = await BoundedContext.singleTenant("SelectedSupport")
       .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -1363,7 +1367,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-interrupted-selection-v1",
       ai: { models: [proposal] },
     });
-    const context = BoundedContext.singleTenant("InterruptedSelection")
+    const context = await BoundedContext.singleTenant("InterruptedSelection")
       .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -1449,7 +1453,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-read-budget-v1",
       ai: { models: [] },
     });
-    const context = BoundedContext.singleTenant("ReadBudgetProgress")
+    const context = await BoundedContext.singleTenant("ReadBudgetProgress")
       .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -1547,7 +1551,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-read-replay-v1",
       ai: { models: [] },
     });
-    const context = BoundedContext.singleTenant("ReadReplayProgress")
+    const context = await BoundedContext.singleTenant("ReadReplayProgress")
       .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -1640,7 +1644,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-transient-v1",
       ai: { models: [] },
     });
-    const context = BoundedContext.singleTenant("TransientAgentMutation")
+    const context = await BoundedContext.singleTenant("TransientAgentMutation")
       .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -1704,7 +1708,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-agent-v1",
       ai: { models: [] },
     });
-    const context = BoundedContext.singleTenant("ScheduledSupport")
+    const context = await BoundedContext.singleTenant("ScheduledSupport")
       .withAi(ai())
       .persistSystemEvents()
       .add(configured)
@@ -1739,13 +1743,13 @@ describe("Agent registration readiness", () => {
   });
 
   it("requires an AI registry and persisted System Events before Agent intake", async () => {
-    expect(() =>
+    await expect(
       BoundedContext.singleTenant("NoAi").persistSystemEvents().add(repository()).build(),
-    ).toThrow(/AI registry/);
-    expect(() =>
+    ).rejects.toThrow(/AI registry/);
+    await expect(
       BoundedContext.singleTenant("NoAudit").withAi(ai()).add(repository()).build(),
-    ).toThrow(/persisted System Events/);
-    const context = BoundedContext.singleTenant("Ready")
+    ).rejects.toThrow(/persisted System Events/);
+    const context = await BoundedContext.singleTenant("Ready")
       .withAi(ai())
       .persistSystemEvents()
       .add(repository())
@@ -1753,31 +1757,31 @@ describe("Agent registration readiness", () => {
     await context.close();
   });
 
-  it("rejects absent Agent code revision or repository capabilities", () => {
+  it("rejects absent Agent code revision or repository capabilities", async () => {
     const withoutCode = new Repository({
       entityType: SupportAgent,
       schema: SupportReplyAgentStateSchema,
       ai: { models: [] },
     });
-    expect(() =>
+    await expect(
       BoundedContext.singleTenant("NoCode")
         .withAi(ai())
         .persistSystemEvents()
         .add(withoutCode)
         .build(),
-    ).toThrow(/code revision/);
+    ).rejects.toThrow(/code revision/);
     const withoutCapabilities = new Repository({
       entityType: SupportAgent,
       schema: SupportReplyAgentStateSchema,
       agentCodeRevision: "support-agent-v1",
     });
-    expect(() =>
+    await expect(
       BoundedContext.singleTenant("NoCapabilities")
         .withAi(ai())
         .persistSystemEvents()
         .add(withoutCapabilities)
         .build(),
-    ).toThrow(/capabilities/);
+    ).rejects.toThrow(/capabilities/);
   });
 
   it("accepts a factory-created typed capability on an Agent repository", async () => {
@@ -1787,7 +1791,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-agent-v1",
       ai: { models: [proposal] },
     });
-    const context = BoundedContext.singleTenant("WithModel")
+    const context = await BoundedContext.singleTenant("WithModel")
       .withAi(ai())
       .persistSystemEvents()
       .add(configured)
@@ -1817,7 +1821,7 @@ describe("Agent registration readiness", () => {
       ),
       events: [SupportReplyDraftedSchema],
     });
-    const eventContext = BoundedContext.singleTenant("RawAgentEvent")
+    const eventContext = await BoundedContext.singleTenant("RawAgentEvent")
       .withAi(ai())
       .persistSystemEvents()
       .add(eventAgent)
@@ -1851,7 +1855,7 @@ describe("Agent registration readiness", () => {
         ],
       ),
     });
-    expect(() =>
+    await expect(
       BoundedContext.singleTenant("RawAgentCommand")
         .withAi(ai())
         .persistSystemEvents()
@@ -1861,8 +1865,8 @@ describe("Agent registration readiness", () => {
           dispatch: () => Promise.resolve(),
         })
         .build(),
-    ).toThrow(/durable.*dispatcher/i);
-    const unrelated = BoundedContext.singleTenant("UnrelatedRawEvent")
+    ).rejects.toThrow(/durable.*dispatcher/i);
+    const unrelated = await BoundedContext.singleTenant("UnrelatedRawEvent")
       .withAi(ai())
       .persistSystemEvents()
       .add(eventAgent)
@@ -1889,7 +1893,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-agent-v1",
       ai: { models: [] },
     });
-    const context = BoundedContext.singleTenant("AcceptedSupport")
+    const context = await BoundedContext.singleTenant("AcceptedSupport")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -1954,7 +1958,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-agent-v1",
       ai: { models: [] },
     });
-    const context = BoundedContext.singleTenant("CompletedSupport")
+    const context = await BoundedContext.singleTenant("CompletedSupport")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -2008,7 +2012,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-agent-v1",
       ai: { models: [] },
     });
-    const context = BoundedContext.singleTenant("ChangedSupport")
+    const context = await BoundedContext.singleTenant("ChangedSupport")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -2071,7 +2075,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-agent-v1",
       ai: { models: [] },
     });
-    const context = BoundedContext.singleTenant("EmittingSupport")
+    const context = await BoundedContext.singleTenant("EmittingSupport")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -2168,7 +2172,7 @@ describe("Agent registration readiness", () => {
     });
     let preferenceRecipients = 0;
     let domainRecipients = 0;
-    const context = BoundedContext.singleTenant("PreferenceRecipientFailure")
+    const context = await BoundedContext.singleTenant("PreferenceRecipientFailure")
       .withAi(registry)
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -2250,7 +2254,7 @@ describe("Agent registration readiness", () => {
       agentCodeRevision: "support-agent-v1",
       ai: { models: [] },
     });
-    const context = BoundedContext.singleTenant("FailedEventHandoff")
+    const context = await BoundedContext.singleTenant("FailedEventHandoff")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -2342,7 +2346,7 @@ describe("Agent registration readiness", () => {
       ai: { models: [] },
       events: [SupportReplyDraftedSchema],
     });
-    const context = BoundedContext.singleTenant("CommandingSupport")
+    const context = await BoundedContext.singleTenant("CommandingSupport")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)
@@ -2458,7 +2462,7 @@ describe("Agent registration readiness", () => {
       ai: { models: [] },
       events: [SupportReplyDraftedSchema],
     });
-    const context = BoundedContext.singleTenant("MultipleCommandFailures")
+    const context = await BoundedContext.singleTenant("MultipleCommandFailures")
       .withAi(ai())
       .persistSystemEvents()
       .withStorageFactory(factory)

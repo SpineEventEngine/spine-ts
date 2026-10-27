@@ -255,7 +255,7 @@ server's `close()` method. The command-line process keeps its listener until
 `Ctrl-C` stops it. Each start has fresh in-memory state.
 
 `createTodoContext()` adds `TaskAggregate` and `TaskListProjection`, then loads
-the compiled registry from the package root before `buildAsync()`. If the
+the compiled registry from the package root before `build()`. If the
 generated registry is missing or unreadable, context creation fails with its
 module path; rerun `pnpm typecheck:build` and retry. Application handlers keep
 their bare `@Assign` and `@Subscribe` decorators: they do not manually register

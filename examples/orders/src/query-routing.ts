@@ -96,6 +96,6 @@ export const OrderCardContext: Readonly<{
       .add(OrderAggregate)
       .add(SkuAggregate)
       .add(OrderCard, { eventRouting: routes })
-      .buildAsync();
+      .build();
   },
 });

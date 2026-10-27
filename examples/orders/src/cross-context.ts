@@ -83,13 +83,13 @@ export const OrderReviewContexts: Readonly<{
       .withGeneratedRegistryRoot(registryRoot)
       .add(SkuAggregate)
       .add(SkuCatalogProjection)
-      .buildAsync();
+      .build();
     const orders = await BoundedContext.singleTenant("Ordering")
       .withStorageFactory(storageFactory)
       .withGeneratedRegistryRoot(registryRoot)
       .add(OrderAggregate)
       .add(OrderReview)
-      .buildAsync();
+      .build();
     return { catalog, orders };
   },
 });

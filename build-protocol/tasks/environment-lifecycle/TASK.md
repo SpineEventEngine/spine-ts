@@ -16,8 +16,9 @@ MySQL/MariaDB offline connection lifecycle and physical structure preparation ar
 reviewed and complete. Datastore native/custom preparation is also reviewed and
 complete. Public live TenantIndex configuration and native membership are reviewed
 and complete. Tenant admission and identifiable errors are reviewed and complete.
-Unconditional duplicate-state registration is next; remaining milestones follow
-MILESTONES.md. Existing
+Unconditional duplicate-state registration and the unified asynchronous build API
+are verified and independently reviewed. Agent recovery removal is next; remaining
+milestones follow MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.
 

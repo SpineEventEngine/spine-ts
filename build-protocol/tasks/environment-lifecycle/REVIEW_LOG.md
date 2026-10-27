@@ -767,3 +767,92 @@ M5b accepted: parent verified the README qualification and external final
 evidence. Deterministic docs/format/diff checks pass; runtime and tests are
 unchanged. All four concern dispositions are complete, with no unresolved
 accepted P0–P2. Full-task release verification remains deferred until convergence.
+
+## M7 live-execution decision independent check
+
+While the sole implementer finishes M6 caller/fixture migration, existing
+provider_reliability performs a bounded read-only correctness check of D-0152
+and AGENT_LIVE_EXECUTION.md against the full original Agent task, the external
+agent-live-execution-plan.md and specific current source seams. Explicit immutable
+gpt-6-sol/medium profile; runtime metadata not exposed. No code edits, checks,
+child delegation or review of the unfrozen M6 code. Focus acceptance windows,
+ordinary session/concurrency, conditional commits, audit and original requirements.
+Estimate0.2–0.4hours including parent classification and bounded document correction.
+This is an independent decision check, not another architecture pass or a claim
+that M7 implementation exists. Parent will return any accepted findings to the
+existing architecture context as one batch before M7 implementation.
+
+M7 decision review complete: accept one P1. Current managed Inbox replay failures
+reach FailedReception, whose default marks input delivered; direct handoff can
+then report success. Pre-acceptance capacity deferral or receipt-CAS failure must
+use an internal non-acknowledging outcome instead. Leave capacity-blocked input
+pending, permit other targets and notify ordinary delivery when capacity frees;
+leave CAS-failed input pending and surface the original error. Include direct and
+supervised regression cases. Other assigned design guarantees are clean. Same
+explicit immutable Sol/medium profile confirmed, no runtime metadata exposed.
+Send this sole accepted finding to the existing Astra/high architecture context
+for a bounded plan correction; parent will update durable decision and verify it.
+No production M7 code exists, and this is not a second architecture pass.
+
+The same architecture context corrected the external plan; parent mirrored the
+required non-acknowledging outcomes and direct/supervised regressions into
+AGENT_LIVE_EXECUTION.md. Existing provider_reliability receives only this P1
+correction for targeted confirmation, with its same explicit immutable
+gpt-6-sol/medium profile. No new implementation or broad architecture review.
+
+Targeted confirmation resolves the P1 at design level: both documents preserve
+pending input, original errors, capacity-release notification and direct/supervised
+tests. All assigned decision concerns are clean. Runtime verification remains M7;
+no production implementation or test success is inferred from this review.
+
+## M6 unconditional state registration and async build review
+
+Baseline dd403c233. The sole implementer has completed mechanical checks: fresh
+build, tooling typecheck, ESLint, format, TSDoc, cleanup, copyright, generated docs,
+authored Proto lint/generated checks and diff check. Consolidated affected LCOV
+passes 1,025 tests in 23 suites. Parent reviewed the source/evidence; changed-line
+coverage is context48/50, environment36/38, ThirdPartyContext2/2. Two isolated Agent
+BlackBox timeouts remain explicitly pending M7, with no skipped/weakened assertions.
+They are recorded limitations, not a claim of full-task acceptance.
+
+All four concerns apply. Reuse provider_reliability, provider_style and
+repository_api_review with explicit immutable gpt-6-sol/medium profiles;
+provider_documentation uses explicit immutable gpt-6-luna/medium. Runtime metadata
+is unavailable. The initial three technical lanes run concurrently; documentation
+runs when capacity permits. Inputs: full TASK ledger, D-0151, PROPOSAL section3,
+external duplicate-state-review-context.md and frozen implementation evidence.
+No edits, tests or child delegation by reviewers. Collect a full wave before
+returning one accepted correction batch to the existing implementer. Estimate
+0.4–0.8 hours includes review, correction checks and checkpoint push. Release and
+final security review remain at whole-task convergence.
+
+M6 full wave collected. API and documentation are clean. Accept reliability P2s:
+completed-context enumeration currently includes partial construction, and the
+pre-context failed-build bus abort path starts ignored async close work. Separate
+completed contexts from early reservations/build protection, and await bus closure
+with original plus cleanup errors retained. Accept style P2: the root API smoke
+test leaks eight contexts; reuse/close them explicitly. Also accept the local P3
+simplification removing redundant nested build-counter bookkeeping while touching
+the same assembly path. The fixtures' domain meanings and three-participant tests
+are confirmed sound. All explicit immutable profiles match dispatch; runtime
+metadata is unavailable. Return one batch to the same Sol/medium implementer.
+Estimate0.4–0.7hours for correction, deterministic regressions/static checks and
+targeted reliability/style confirmation. Public API/docs contracts are unchanged;
+those lanes do not reopen absent a substantive change. No full release claim.
+
+M6 correction frozen. Both lifecycle regressions failed before correction and pass
+afterward. Fresh affected LCOV passes1,027/1,027 across23 suites; final focused
+context/index102/102. Tooling, ESLint, TSDoc, cleanup, format and diff pass. Changed
+lines context56/58, environment41/43, third-party2/2. Parent inspected explicit
+API smoke cleanup and redundant-counter removal, resolving style P2/P3 without
+reopening that lane for deterministic changes. Existing provider_reliability alone
+confirms the two substantive lifecycle fixes using its same explicit immutable
+Sol/medium profile. API/docs unchanged. Exact correction evidence is external
+duplicate-state-correction-evidence.md; no full-task release claim.
+
+M6 targeted reliability review confirms both fixes and reports no remaining
+confirmed P0–P2 in the affected paths. Same explicit immutable Sol/medium profile
+confirmed; no runtime metadata exposed. Parent confirms current coverage/evidence
+and explicit smoke-test cleanup. All four concern dispositions are complete.
+Checkpoint publication may proceed; full-task verification and the two M7-dependent
+Agent failures remain outstanding.

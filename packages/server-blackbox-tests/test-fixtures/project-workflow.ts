@@ -189,7 +189,7 @@ export function projectWorkflow(
   onEntry: (entry: ProjectHandlerEntry) => void | Promise<void>,
   storageFactory?: StorageFactory,
   shards = 1,
-): BoundedContext {
+): Promise<BoundedContext> {
   const recordEntry = onEntry;
 
   /**

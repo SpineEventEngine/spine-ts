@@ -29,7 +29,7 @@ this shape appropriate for tests and hosts that manage shutdown themselves.
 ```ts
 import { BoundedContext, Server } from "@spine-event-engine/server";
 
-const context = BoundedContext.singleTenant("Tasks").build();
+const context = await BoundedContext.singleTenant("Tasks").build();
 const running = await new Server({ contexts: [context], port: 0 }).start();
 try {
   // Native Command, Query, and Subscription services are now listening.
@@ -39,7 +39,7 @@ try {
 ```
 
 Add generated entities with `BoundedContext.add(...)` and use
-`buildAsync()` when framework-generated repository discovery is needed. A
+`build()` to assemble the context and load generated repositories when configured. A
 context is single-tenant or multitenant by construction; select that mode
 before registering application handlers and storage.
 
@@ -66,7 +66,7 @@ const builder = BoundedContext.singleTenant("Assignments")
   });
 ```
 
-Call `builder.buildAsync()` to assemble the context. The callback runs for each
+Await `builder.build()` to assemble the context. The callback runs for each
 fresh or restored Entity object, not just once per ID. It also works for
 Aggregates and Projections, including Projection rebuilds. Return a fresh
 instance synchronously and pass the supplied options unchanged. Application
