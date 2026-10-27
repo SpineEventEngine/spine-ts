@@ -17,7 +17,7 @@ reviewed and complete. Datastore native/custom preparation is also reviewed and
 complete. Public live TenantIndex configuration and native membership are reviewed
 and complete. Tenant admission and identifiable errors are reviewed and complete.
 Unconditional duplicate-state registration and the unified asynchronous build API
-are verified and independently reviewed. Agent recovery removal is next; remaining
+are verified, independently reviewed and pushed. Agent recovery removal is in progress; remaining
 milestones follow MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.

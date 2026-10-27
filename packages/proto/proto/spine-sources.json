@@ -419,6 +419,10 @@
   ],
   "ownedSources": [
     {
+      "localPath": "packages/proto/proto/spine/server/agent/acceptance_receipt.proto",
+      "sha256": "daa0f8e724849523cb539b9b6a7503aa8eab0de3f23d926d1aa9d117bd44f007"
+    },
+    {
       "localPath": "packages/proto/proto/spine/auth/authenticated_subscription.proto",
       "sha256": "b6436714f754e6d7c1a6bbd177c5a4f0b606d3c7c1adc4b86fa3c299210ffc76"
     },

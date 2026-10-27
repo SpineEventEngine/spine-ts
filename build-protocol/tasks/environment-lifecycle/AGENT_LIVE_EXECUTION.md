@@ -31,6 +31,56 @@ Existing inspected Agent interfaces do not provide a physical purge cascade; do
 not invent one here. A future physical purge must address older pending input
 before removing suppression evidence. Retained audit remains readable and inert.
 
+## Receipt record identity
+
+D-0153 addresses a demonstrated SQL identifier-size failure. Store the complete
+generated AgentAcceptanceKey as receipt evidence, using an ordinary string
+RecordSpec slot: `v1:` followed by the full lowercase SHA-256 hex digest of the
+UTF-8 compact JSON encoding of this ordered string tuple:
+
+```text
+[
+  "spine.server.agent.AgentAcceptanceKey/v1",
+  key.stateType,
+  key.recipientId.typeUrl,
+  standardBase64(key.recipientId.value),
+  key.source.case,
+  sourceIdValue,
+  key.action
+]
+```
+
+The source case is command or event; sourceIdValue is CommandId.uuid or
+EventId.value. Existing provider storage/tenant selection supplies the outer
+scope. Exact recipient URL and bytes participate; do not unpack/repack, normalize
+prefixes, use application stringifiers or hash object enumeration order. Unknown
+metadata on the outer key/source does not add identity fields. Opaque recipient
+bytes include their contained unknown fields. No equivalence across alternative
+wire encodings is promised; retain the validated packed target identity.
+
+Clone the complete input before the first await. Derive both slot and stored
+receipt from this captured identity, and use the same tuple for comparison.
+After CAS false, read the same slot and return false only for matching complete
+identity. Missing, malformed, different or unreadable evidence raises an admission
+error; never acknowledge it, overwrite evidence, select another slot or execute.
+CAS throwing still propagates its original error without a read-back success.
+Track duplicate verification within the admitted operation so close waits for it.
+
+A finite digest cannot prove collision-free availability. Full identity comparison
+makes a collision observable and preserves the no-repeat rule. There is no collision
+bucket, suffix allocator, repair job or extra size cap. The slot is67 ASCII characters;
+existing provider record-size and valid-identifier rules still apply to its body.
+This follows existing TS Agent history slots. Shared AnyPacker preservation remains
+required; no provider-native key or Any-decoding workaround is introduced.
+
+Test identity separation and mutation capture once in focused helper tests; use
+real independent provider handles for CAS/reopen and tenant separation. Preserve
+the long-ID PostgreSQL regression and verify MySQL's matching size constraint.
+Inspect exact stored Any URL/bytes, including an explicit custom prefix; retain
+shared Any/stringifier round-trip tests with their proper registry. Add a fixed
+encoding vector, conflict/missing/malformed/read-failure cases, uncertain CAS, and
+gated duplicate-read shutdown. Avoid repeating the full field matrix per provider.
+
 ## Live processing under ordinary Delivery
 
 Replace scheduler wake-up with an internal ephemeral live result passed to the

@@ -6680,3 +6680,32 @@ current shard-wide after-drain follow-up map unchanged. This resolves source-pro
 acknowledgement, concurrency and persistence gaps without adding another Agent
 scheduler or public delivery policy. The complete bounded decision and test
 requirements are in [Agent live execution](tasks/environment-lifecycle/AGENT_LIVE_EXECUTION.md).
+
+## D-0153: Compact Agent receipt slots retain complete typed identity
+
+Date: 2026-10-27. Status: accepted for M7a implementation.
+
+A live PostgreSQL regression proves that an otherwise valid generated Agent ID
+fits existing SQL512 at371 characters, while its compound receipt identity reaches 578. Correct TypeRegistry configuration resolves the separate initial fixture
+failure; it cannot resolve this physical key-size expansion. MySQL has the same
+bound. Do not widen every provider key or reduce valid Entity identifiers.
+
+Follow the existing AgentHistoryRecords bounded-slot/full-record convention:
+use a fixed internal string slot, v1: plus the complete SHA-256 digest of the
+specified identity tuple, and retain the complete typed AgentAcceptanceKey in the
+immutable receipt body. Exact Any URL and bytes remain unchanged. This changes only
+receipt lookup representation; it is not a workaround for decoding, a native-key
+fallback, or a custom application stringifier requirement. No migration exists.
+
+Only explicit CAS true grants live execution. After false, read and compare every
+identity component; equal suppresses, mismatch/missing/malformed/unreadable evidence
+errors without acknowledgement or alternative-key execution. CAS errors propagate
+unchanged without read-back permission. Capture identity before awaiting and drain
+the verification read on close. The stable encoding and tests are recorded in
+[Agent live execution](tasks/environment-lifecycle/AGENT_LIVE_EXECUTION.md).
+
+This bounded Astra/high clarification follows a demonstrated serialized-contract
+blocker, not a second whole-task architecture pass. Source evidence includes TS
+AgentHistoryRecords and SQL ID columns; JVM sharding hashes provide no Agent
+receipt precedent. No provider DDL, arbitrary new limit, collision bucket or
+execution recovery is introduced.

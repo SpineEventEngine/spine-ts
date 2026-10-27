@@ -856,3 +856,41 @@ confirmed; no runtime metadata exposed. Parent confirms current coverage/evidenc
 and explicit smoke-test cleanup. All four concern dispositions are complete.
 Checkpoint publication may proceed; full-task verification and the two M7-dependent
 Agent failures remain outstanding.
+
+## M7a inactive receipt review
+
+Baseline 7aee260f5. Frozen authored scope is acceptance_receipt.proto, its
+spine-sources.json checksum, agent-acceptance-receipts.ts and its focused test.
+Parent read final external implementation evidence and inspected changed LCOV:
+57/57 executable lines. Thirteen unit tests and five separately selected live
+provider tests pass; the default unit run explicitly skips the live selections.
+Build/tooling, lint, Proto, generated docs, format and diff checks pass. The helper
+is inactive; two known Agent failures remain for M7b and full release is pending.
+
+Reuse provider_reliability, provider_style and repository_api_review with their
+explicit immutable gpt-6-sol/medium dispatch profiles. Runtime metadata is not
+exposed. Review only each assigned concern from external
+agent-receipt-review-context.md and frozen implementation evidence. No edits,
+checks or child delegation. Collect all three lanes before one correction batch
+to the existing implementer. Estimate 0.4–0.7 hours for review, any bounded
+corrections/checks and checkpoint publication. Documentation concern is N/A as
+a separate lane: no public workflow or production activation changes; API review
+covers narrow TSDoc/Proto, and M7b will review all changed public recovery claims.
+Final security remains M13.
+
+M7a complete review wave: API and reliability clean. Accept style P2 for one
+missing malformed stored-evidence row in the existing lost-CAS test matrix.
+Production helper already rejects incomplete identity; add direct behavioral
+evidence without widening the suite. All three explicit immutable Sol/medium
+profiles match dispatch; runtime metadata is unavailable. Return this single
+batch to the existing implementer. Estimate 0.1–0.2 hours for test correction,
+focused checks and checkpoint push. Parent can verify this deterministic test-only
+correction; no substantive concern requires another review invocation.
+
+M7a accepted: parent inspected the malformed present-key regression and exact
+focused output (14 passed; five live cases intentionally separate). Test-only
+format, ESLint, tooling and diff checks pass. Production source is unchanged, so
+previous build-backed LCOV and five live provider results remain current. All
+three technical concerns are clean/resolved; separate documentation N/A remains
+justified above. No unresolved accepted P0–P2. M7b runtime integration and final
+security/release acceptance remain pending.

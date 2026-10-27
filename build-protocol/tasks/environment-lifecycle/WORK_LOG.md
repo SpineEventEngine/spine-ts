@@ -5,13 +5,13 @@
 Started 2026-10-27 from freshly fetched official master
 `ff6c8669537a016c47f012150306500d3b52b5d1`. Branch `environment-lifecycle` is in
 `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
-Latest accepted checkpoint `dd403c233` is pushed to official
+Latest accepted checkpoint `7aee260f5` is pushed to official
 `origin/environment-lifecycle`. Repository/EventStore/query/history retention,
 shared AnyPacker, provider commit retention/shutdown, memory/SQL/Datastore
 preparation, and public live TenantIndex/native membership are complete.
 M5b tenant input checks and identifiable errors are verified, reviewed and pushed.
-M6 strict state registration and unified async build are verified and reviewed;
-its checkpoint publication follows. Agent recovery removal is next, followed by
+M6 strict state registration and unified async build are verified, reviewed and
+pushed. M7 Agent recovery removal is in progress, followed by
 shared environment/Delivery, explicit/lazy initialization, subscription
 monitoring, environment tenant preparation and final integration follow in
 MILESTONES.md. No PR has been created. Full-task release/security/CI acceptance
@@ -1075,3 +1075,109 @@ changes, including fixture Proto definitions and caller/docs updates, are includ
 generation fingerprints remain unstaged for final convergence. Commit and push to
 official feature branch, then continue M7. The two explicit Agent failures remain
 full-task work and prohibit a complete-release claim.
+
+## M7 Agent recovery removal begins
+
+M6 checkpoint7aee260f5 pushed successfully to the official feature branch. Existing
+storage_retention implementer continues with explicit immutable gpt-6-sol/medium;
+actual runtime metadata unavailable, both fields explicit in original dispatch.
+One production writer, no children. Scope is the complete original removal task
+in PROPOSAL section14, accepted D-0152 and AGENT_LIVE_EXECUTION.md; the bounded
+architecture/reliability decision review is complete. No additional architecture
+pass is needed absent a material contract blocker.
+
+Whole M7 estimate6–10hours covers live execution and ordinary-session integration,
+removal of recovery contracts/providers/Proto/config, real interruption/concurrency
+proof, preservation of history/live corrections/preferences, docs, mechanical
+checks and review. First dependent M7a estimate1–2hours: smallest immutable
+acceptance receipt through existing atomic RecordStorage, retained helper lifetime,
+focused provider evidence and review. It remains inactive until production
+admission and scheduler removal switch together. External implementation brief:
+agent-receipt-implementation-brief.md; detailed accepted plan:
+agent-live-execution-plan.md. No new queue, status API, migration or database
+provisioning. Keep two observed Agent regressions explicit until live cutover.
+
+Source guardrail: existing server/JVM notes and bounded architecture source map
+remain applicable; no JVM Agent implementation is claimed. Existing storage CAS
+and provider conformance are reused instead of adding a common-infrastructure
+library or provider-specific execution store. Preserve independent history record
+schemas and model-selection contracts while deleting execution-only schemas.
+Mechanical checks precede concern-specific review; whole release remains deferred.
+
+M7 independent read-only documentation inventory: existing provider_documentation
+profile gpt-6-luna/medium, explicitly configured and immutable; runtime metadata
+unavailable. Scope only current agent/developer instructions and governing specs
+whose Agent recovery promises were not covered by the source inventory. Exclude
+historical task/review/decision records and copied original requirements. Produce
+exact paths/claims for the sole implementer; no edits, tests or child delegation.
+Estimate0.2–0.4hours including parent classification, concurrent with M7a. This is
+an orchestrator-dispatched documentation function, not a new role or review wave.
+
+M7 instruction inventory accepted from existing explicit immutable Luna/medium
+profile; metadata limitation recorded, no edits/checks/children. No additional
+current Agent recovery promises found in active AGENTS/.codex or governing specs.
+Ordinary Inbox/Delivery/subscription recovery text remains; copied original task
+stays verbatim. Package README/REFERENCE updates already mapped by the earlier
+source inventory remain required. Exact read-only evidence:
+agent-recovery-active-instructions.md. Implementation continues in M7a.
+
+M7a live-provider diagnosis: initial PostgreSQL receipt test omitted the configured
+TypeRegistry required by existing Proto JSON stringifiers for nested Any values.
+The implementer briefly tried a digest slot; parent rejected that workaround under
+the human AnyPacker instruction and it was reverted before acceptance. The five
+memory tests pass. Earlier six-test success with the digest is not accepted
+evidence for the final typed-key design. PostgresIdColumn uses the shared registry;
+AnyPacker's binary API does not itself supply Proto JSON schema discovery. Existing
+Todo and Inbox provider fixtures show the supported registry configuration.
+
+Continue with that configuration and the typed key, then measure a valid long
+Agent ID against the existing SQL512 identifier limit; receipt metadata must not
+create an undocumented smaller limit. Report an actual failing case before any
+identity redesign. Estimate0.2–0.4hours for this focused diagnosis/proof within M7a;
+no shared codec or public API change is accepted on conjecture.
+
+M7a demonstrated serialized-identifier blocker: with the correct TypeRegistry,
+a generated SupportReplyAgentId (ticket352 chars) stringifies to371 chars and
+fits existing SQL512, while its typed compound acceptance key becomes578 chars
+and fails live PostgreSQL CAS. MySQL has the same existing identifier bound.
+Exact evidence: agent-receipt-long-id-measured.log. The red domain-correct test
+remains; no digest/native-key workaround remains. Initial registry failure is now
+classified as fixture setup, independently from this proven new size restriction.
+
+Invoke existing application_architecture requirements splitter, explicit immutable
+gpt-6-astra/high, solely for this demonstrated public/serialized identity blocker.
+No whole M7 replanning, edits, tests or children. Determine smallest receipt ID
+representation that preserves complete typed identity, URL preservation and CAS
+semantics without reducing valid Entity ID sizes or imposing new limits. Respect
+the human ban on Any decoding/storage-key workarounds. Estimate0.3–0.5hours includes
+bounded source comparison, decision and implementer handoff. Main M7 production
+writer pauses only the dependent receipt-key choice; other read-only evidence may
+continue. No human approval is needed for a routine conforming choice.
+
+D-0153 accepted after parent reviewed agent-receipt-identity-decision.md. Existing
+requirements splitter used explicit immutable Astra/high, no exposed runtime
+metadata, source-only/no children. Existing TS history storage supplies compact
+slot/full-identity precedent. Adopt its fixed tuple/SHA-256 representation and full
+identity validation after lost CAS; exact schema/URL bytes remain in the receipt.
+No native-key workaround, key widening or user receipt-stringifier configuration.
+Parent persisted the exact encoding and error/test contract in AGENT_LIVE_EXECUTION.
+Helper semantic cases are tested once; live providers prove atomicity/reopen/tenant
+isolation without a duplicate full matrix. Same Sol/medium implementer resumes
+M7a. Original milestone estimate remains viable; no whole-wave replanning.
+
+M7a accepted for checkpoint: full typed immutable receipt evidence, fixed v1 slot,
+atomic first acceptance, full identity verification after lost CAS, retained
+handles and coordinated close are implemented but not called from production.
+Four authored Proto/helper/test/checksum files plus governing records are staged;
+tracked generation fingerprints remain for final convergence. Parent checked
+57/57 changed executable lines. Fourteen unit cases and five separate live
+PostgreSQL/MySQL/Datastore cases pass, including long SQL identifiers and tenant
+isolation. Static/generated checks pass. Three technical review lanes are clean
+after the one malformed-evidence test correction. All child profiles match their
+explicit immutable dispatch; runtime metadata is unavailable. No full-task claim.
+
+Next is M7b coherent live execution cutover and complete recovery removal, using
+AGENT_LIVE_EXECUTION and the external accepted plan. The same Sol/medium
+implementation context supplied the ordered extraction/admission/Delivery/removal
+outline; no new broad architecture pass is needed. Two recorded Agent failures
+remain required M7 dispositions.
