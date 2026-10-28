@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { create, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   BoundedContextNameSchema,
@@ -111,10 +111,7 @@ export class ThirdPartyContext {
     }
     const envelope = create(EventSchema, {
       id: create(EventIdSchema, { value: crypto.randomUUID() }),
-      message: {
-        typeUrl: this.#schema(typeName).typeUrl,
-        value: toBinary(this.#schema(typeName).schema, event as never),
-      },
+      message: AnyPacker.pack(this.#schema(typeName), event as never),
       context: create(EventContextSchema, {
         timestamp: actorContext.timestamp ?? create(TimestampSchema),
         origin: { case: "importContext", value: actorContext },
@@ -172,6 +169,6 @@ export class ThirdPartyContext {
   #schema(typeName: string) {
     const metadata = ServerEnvironment.instance().typeRegistry.findByFullName(typeName);
     if (metadata === undefined) throw new TypeError(`ThirdPartyContext does not know ${typeName}.`);
-    return { schema: metadata.schema, typeUrl: TypeUrls.derive(metadata.schema) };
+    return metadata.schema;
   }
 }

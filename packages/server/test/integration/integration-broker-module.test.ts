@@ -12,8 +12,8 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
@@ -1032,9 +1032,9 @@ describe("IntegrationBroker module", () => {
           TypeUrls.derive(ExternalEventsWantedSchema),
       )
       .map(({ message }) =>
-        fromBinary(
+        AnyPacker.unpack(
+          (message as { originalMessage: Any }).originalMessage,
           ExternalEventsWantedSchema,
-          (message as { originalMessage: { value: Uint8Array } }).originalMessage.value,
         ),
       );
     expect(wanted.at(-1)?.type).toEqual([]);
@@ -1079,24 +1079,21 @@ async function publishWanted(
   const publisher = await factory.createPublisher(
     create(ChannelIdSchema, { targetType: TypeUrls.derive(ExternalEventsWantedSchema) }),
   );
-  const id = create(AnySchema, {
-    typeUrl: TypeUrls.derive(StringValueSchema),
-    value: toBinary(StringValueSchema, create(StringValueSchema, { value: crypto.randomUUID() })),
-  });
+  const id = AnyPacker.pack(
+    StringValueSchema,
+    create(StringValueSchema, { value: crypto.randomUUID() }),
+  );
   try {
     await publisher.publish(
       id,
       create(ExternalMessageSchema, {
         id,
-        originalMessage: create(AnySchema, {
-          typeUrl: TypeUrls.derive(ExternalEventsWantedSchema),
-          value: toBinary(
-            ExternalEventsWantedSchema,
-            create(ExternalEventsWantedSchema, {
-              type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
-            }),
-          ),
-        }),
+        originalMessage: AnyPacker.pack(
+          ExternalEventsWantedSchema,
+          create(ExternalEventsWantedSchema, {
+            type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
+          }),
+        ),
         boundedContextName: create(BoundedContextNameSchema, { value: source }),
       }),
     );

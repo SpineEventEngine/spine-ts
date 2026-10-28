@@ -1436,3 +1436,44 @@ targeted confirmation clean; D1/D2/failure semantics confirmed by Luna review;
 reliability and maintainability clean from fullwave. All explicitconfigured
 profiles confirmed, runtime metadata unavailable. M11 accepted with defensive
 internalguard coverage limitation; final security/release remain M13.
+
+## M12 protocols and Any completion
+
+Base232420267; frozen source/test manifest m12-frozen-manifest.json, external
+evidence m12-protocol-implementation-evidence.md and m12-review-context.md.
+Focused220/220 before final auth metadata refinement; final affected auth/browser
+12/12 covers refinement. Additional Any136/136, managed7/7, selectedprocess1/1
+are overlapping/scoped proof, not global coverage. Changed runtime packing and
+header-removal lines hit; existing unsupported-operation guard unhit. Build,
+tooling, relevant static/docs and diff pass. Explicit implementer Sol/medium
+confirmed; runtime metadata unavailable. Source/test/docs frozen for full wave.
+
+Read-only existing reviewer concerns, explicit model/reasoning at dispatch; no
+edits/tests/builds/children. Estimate0.3–0.6hours including review/corrections/push.
+
+- performance_reliability_reviewer gpt-6-sol/medium: Any envelope preservation,
+  transport metadata/error propagation, network proof and cleanup.
+- typescript_api_docs_reviewer gpt-6-sol/medium: browser/native status/details,
+  application metadata preservation, ingress semantics and public claims.
+- style_maintainability_reviewer gpt-6-sol/medium: focused diff/test quality, valid
+  domain fixtures, raw-wire exception classification and minimal implementation.
+- documentation_reviewer gpt-6-luna/medium: narrow TSDoc and current claims only,
+  after capacity frees; broad current guidance remains M13.
+  Collect all concerns before one accepted correction batch. Final security M13.
+
+M12 complete wave collected: API/style/documentation clean; reliability soleP3
+accepted for new network test cleanup skipping later closes after a rejection.
+All21hashes matched each review. Explicit configured Sol/medium technical and
+Luna/medium docs confirmed; runtime metadata unavailable. Same writer receives
+single test-only correction: attempt all ordered closes, preserve/report errors,
+reuse existing helper if appropriate. Focused network test+lint/typecheck/format
+and source confirmation suffice; runtime/API/docs lanes stay accepted unchanged.
+Estimate0.1–0.2hours. No new cleanup framework or coverage-filling tests.
+
+M12 correction accepted: parent compared21frozenhashes; only new browser test
+changed. Local helper attempts allfour ordered closes and aggregates errors.
+Focused network1/1, targeted ESLint/provider-tests typecheck/format/diffpass.
+Initial inline throw lint diagnostic resolved by helper. This deterministic
+test-only correction does not reopen runtime/API/docs/style lanes. Allfour
+concerns accepted; security reserved finalM13. External correction evidence
+m12-review-correction-evidence.md. No global/native-provider coverage claim.

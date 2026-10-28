@@ -2081,6 +2081,34 @@ describe("SpineServices", () => {
     await context.close();
   });
 
+  it("sends structured unknown-tenant details on native subscription transport", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const registry = new InMemorySubscriptionRegistry();
+    const createSubscription = vi.spyOn(registry, "create");
+    const context = await BoundedContext.multitenant("NativeSubscriptionTenants")
+      .withTenantIndex(index)
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const server = await startServices(context);
+    try {
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: server.baseUrl }),
+      );
+      const error = await client.subscribe(createTopic("missing-native")).then(
+        () => undefined,
+        (failure: unknown) => failure,
+      );
+      expect(error).toBeInstanceOf(ConnectError);
+      expect((error as ConnectError).code).toBe(Code.NotFound);
+      expect((error as ConnectError).findDetails(ErrorSchema)[0]?.type).toBe("TENANT_UNKNOWN");
+      expect(createSubscription).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
   it("prepares a lazy context before creating a native subscription", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -198,6 +198,7 @@ describe("Wave 13 IntegrationBroker", () => {
   afterEach(async () => resetServerEnvironmentForTest());
   it("RED-01 delivers one requested domestic event once between two same-process contexts", async () => {
     await broker("one producer / one consumer delivery");
+    await ServerEnvironment.instance().completeSetup();
     const seen: unknown[] = [];
     const consumer = await BoundedContext.singleTenant("Red01Consumer")
       .addEventDispatcher(external([ReviewTaskAssignedSchema], seen))
@@ -217,6 +218,7 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("standalone external Event interest and imported delivery");
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+    await ServerEnvironment.instance().completeSetup();
     class ExternalSubscriber extends AbstractEventSubscriber {
       calls = 0;
       subscribe(): void {
@@ -260,6 +262,7 @@ describe("Wave 13 IntegrationBroker", () => {
   });
   it("RED-02 fans one producer event out to every requesting consumer", async () => {
     await broker("many-consumer complete-event fan-out");
+    await ServerEnvironment.instance().completeSetup();
     const first: unknown[] = [],
       second: unknown[] = [];
     const producer = await BoundedContext.singleTenant("Red02Producer")
@@ -281,6 +284,7 @@ describe("Wave 13 IntegrationBroker", () => {
   });
   it("RED-05 does not export an unrequested domestic event", async () => {
     await broker("wanted-type-only domestic publication");
+    await ServerEnvironment.instance().completeSetup();
     const seen: unknown[] = [];
     const consumer = await BoundedContext.singleTenant("Red05Consumer")
       .addEventDispatcher(external([ReviewTaskAssignedSchema], seen))
@@ -301,6 +305,7 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("origin-only loop prevention");
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+    await ServerEnvironment.instance().completeSetup();
     const a: unknown[] = [],
       b: unknown[] = [];
     const left = await BoundedContext.singleTenant("Red06A")
@@ -334,6 +339,7 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("first request and replacement");
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+    await ServerEnvironment.instance().completeSetup();
     const producer = await BoundedContext.singleTenant(`Red07${crypto.randomUUID()}`)
       .addEventDispatcher(domestic([ReviewTaskAssignedSchema, ReviewStartedSchema]))
       .build();
@@ -367,6 +373,7 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("per-origin wanted references");
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+    await ServerEnvironment.instance().completeSetup();
     const producer = await BoundedContext.singleTenant(`Red08${crypto.randomUUID()}`)
       .addEventDispatcher(domestic([ReviewTaskAssignedSchema]))
       .build();
@@ -394,6 +401,7 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("unchanged complete-set suppression");
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+    await ServerEnvironment.instance().completeSetup();
     const context = await BoundedContext.singleTenant(`Red10${crypto.randomUUID()}`)
       .addEventDispatcher(external([ReviewTaskAssignedSchema], []))
       .addEventDispatcher(external([ReviewTaskAssignedSchema], []))
@@ -426,6 +434,7 @@ describe("Wave 13 IntegrationBroker", () => {
   });
   it("RED-13 preserves per-producer order, complete Event bytes, and EventId", async () => {
     await broker("full Event identity and order");
+    await ServerEnvironment.instance().completeSetup();
     const seen: unknown[] = [];
     const c = await BoundedContext.singleTenant("Red13C")
       .addEventDispatcher(external([ReviewTaskAssignedSchema], seen))
@@ -469,6 +478,7 @@ describe("Wave 13 IntegrationBroker", () => {
   });
   it("RED-15 validates the existing tenant boundary and isolates imported tenants", async () => {
     await broker("tenant-aware imported intake");
+    await ServerEnvironment.instance().completeSetup();
     const registryRoot = createEntityGeneratedRegistryRoot([
       {
         entityType: ReviewTaskAssignedOriginProjection,
@@ -535,6 +545,7 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("normal EventBus import with system/self filtering");
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+    await ServerEnvironment.instance().completeSetup();
     const seen: unknown[] = [];
     const c = await BoundedContext.singleTenant("Red16C")
       .addEventDispatcher(external([ReviewTaskAssignedSchema], seen))
@@ -547,13 +558,10 @@ describe("Wave 13 IntegrationBroker", () => {
         id: create(EventIdSchema, { value: "red16-preserved" }),
         context: create(EventContextSchema, {
           timestamp: create(TimestampSchema, { seconds: 1_725_000_000n, nanos: 123_000_000 }),
-          producerId: {
-            typeUrl: TypeUrls.derive(StringValueSchema),
-            value: toBinary(
-              StringValueSchema,
-              create(StringValueSchema, { value: "red16-producer" }),
-            ),
-          },
+          producerId: AnyPacker.pack(
+            StringValueSchema,
+            create(StringValueSchema, { value: "red16-producer" }),
+          ),
           version: create(VersionSchema, {
             number: 7,
             timestamp: create(TimestampSchema, { seconds: 1_725_000_001n }),
@@ -593,6 +601,7 @@ async function assertWantedLifecycle(options: {
 }): Promise<void> {
   const factory = new RecordingTransportFactory();
   ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+  await ServerEnvironment.instance().completeSetup();
   const producer = await BoundedContext.singleTenant(`WantedProducer${crypto.randomUUID()}`)
     .addEventDispatcher(domestic([ReviewTaskAssignedSchema, ReviewStartedSchema]))
     .build();
@@ -647,6 +656,7 @@ async function assertWantedLifecycle(options: {
 async function assertFailedReplacementKeepsPriorWantedSet(): Promise<void> {
   const factory = new RecordingTransportFactory();
   ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+  await ServerEnvironment.instance().completeSetup();
   const producer = await BoundedContext.singleTenant(`RollbackProducer${crypto.randomUUID()}`)
     .addEventDispatcher(
       domestic([ReviewTaskAssignedSchema, ReviewStartedSchema, ReviewFollowUpScheduledSchema]),
@@ -704,7 +714,10 @@ function decodeWantedFrames(
         return [];
       return [
         {
-          message: fromBinary(ExternalEventsWantedSchema, frame.originalMessage.value),
+          message: AnyPacker.unpack(
+            create(AnySchema, frame.originalMessage),
+            ExternalEventsWantedSchema,
+          ),
           operationIndex,
         },
       ];
@@ -770,10 +783,7 @@ async function publishWanted(
     type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
   });
   const id = create(StringValueSchema, { value: crypto.randomUUID() });
-  const packedId = create(AnySchema, {
-    typeUrl: TypeUrls.derive(StringValueSchema),
-    value: toBinary(StringValueSchema, id),
-  });
+  const packedId = AnyPacker.pack(StringValueSchema, id);
   const publisher = await factory.createPublisher(
     create(ChannelIdSchema, {
       targetType: "type.spine.io/spine.server.integration.ExternalEventsWanted",
@@ -784,10 +794,7 @@ async function publishWanted(
       packedId,
       create(ExternalMessageSchema, {
         id: packedId,
-        originalMessage: create(AnySchema, {
-          typeUrl: "type.spine.io/spine.server.integration.ExternalEventsWanted",
-          value: toBinary(ExternalEventsWantedSchema, wanted),
-        }),
+        originalMessage: AnyPacker.pack(ExternalEventsWantedSchema, wanted),
         boundedContextName: create(BoundedContextNameSchema, { value: source }),
       }),
     );
@@ -801,10 +808,7 @@ async function publishExternalEvent(
   original: ReturnType<typeof event>,
   source: string,
 ): Promise<void> {
-  const packedId = create(AnySchema, {
-    typeUrl: TypeUrls.derive(EventIdSchema),
-    value: toBinary(EventIdSchema, required(original.id, "external event identity")),
-  });
+  const packedId = AnyPacker.pack(EventIdSchema, required(original.id, "external event identity"));
   const publisher = await factory.createPublisher(
     create(ChannelIdSchema, { targetType: TypeUrls.derive(ReviewTaskAssignedSchema) }),
   );
@@ -813,10 +817,7 @@ async function publishExternalEvent(
       packedId,
       create(ExternalMessageSchema, {
         id: packedId,
-        originalMessage: create(AnySchema, {
-          typeUrl: TypeUrls.derive(EventSchema),
-          value: toBinary(EventSchema, original),
-        }),
+        originalMessage: AnyPacker.pack(EventSchema, original),
         boundedContextName: create(BoundedContextNameSchema, { value: source }),
       }),
     );

@@ -12,13 +12,14 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { Time, TypeRegistry } from "@spine-event-engine/core";
+import { AnySchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, Time, TypeRegistry } from "@spine-event-engine/core";
+import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -113,10 +114,11 @@ describe("Wave 13 ThirdPartyContext", () => {
   it("publishes generated events through its direct-source broker and closes idempotently", async () => {
     await resetDirectSourceServerEnvironment();
     DirectSourceServerEnvironment.when(EnvironmentType.Local).use({
-      typeRegistry: new TypeRegistry([StringValueSchema]),
+      typeRegistry: new TypeRegistry([ReviewTaskAssignedSchema]),
     });
+    await DirectSourceServerEnvironment.instance().completeSetup();
     const context = await DirectSourceThirdPartyContext.singleTenant("DirectSourceThirdParty");
-    const event = create(StringValueSchema, { value: "direct-source" });
+    const event = reviewEvent("direct-source");
     const user = create(UserIdSchema, { value: "actor" });
 
     try {
@@ -135,13 +137,14 @@ describe("Wave 13 ThirdPartyContext", () => {
   it("copies a current UserId actor timestamp into the imported event context", async () => {
     await resetDirectSourceServerEnvironment();
     DirectSourceServerEnvironment.when(EnvironmentType.Local).use({
-      typeRegistry: new TypeRegistry([StringValueSchema]),
+      typeRegistry: new TypeRegistry([ReviewTaskAssignedSchema]),
     });
+    await DirectSourceServerEnvironment.instance().completeSetup();
     const received: Event[] = [];
     const receiver = await DirectSourceBoundedContext.singleTenant("DirectSourceTimestampReceiver")
       .addEventDispatcher({
-        messageSchemas: () => [StringValueSchema],
-        externalEventSchemas: () => [StringValueSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
+        externalEventSchemas: () => [ReviewTaskAssignedSchema],
         dispatch: (event: Event) => {
           received.push(event);
           return Promise.resolve();
@@ -158,7 +161,7 @@ describe("Wave 13 ThirdPartyContext", () => {
 
     try {
       await context.emittedEvent(
-        create(StringValueSchema, { value: "timestamp" }),
+        reviewEvent("timestamp"),
         create(UserIdSchema, { value: "actor" }),
       );
       await expect.poll(() => received.length).toBe(1);
@@ -183,13 +186,14 @@ describe("Wave 13 ThirdPartyContext", () => {
   it("routes direct-source multitenant imports and rejects unsupported actor and message forms", async () => {
     await resetDirectSourceServerEnvironment();
     DirectSourceServerEnvironment.when(EnvironmentType.Local).use({
-      typeRegistry: new TypeRegistry([StringValueSchema]),
+      typeRegistry: new TypeRegistry([ReviewTaskAssignedSchema]),
     });
+    await DirectSourceServerEnvironment.instance().completeSetup();
     const received: Event[] = [];
     const receiver = await DirectSourceBoundedContext.multitenant("DirectSourceReceiver")
       .addEventDispatcher({
-        messageSchemas: () => [StringValueSchema],
-        externalEventSchemas: () => [StringValueSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
+        externalEventSchemas: () => [ReviewTaskAssignedSchema],
         dispatch: (event: Event) => {
           received.push(event);
           return Promise.resolve();
@@ -198,7 +202,7 @@ describe("Wave 13 ThirdPartyContext", () => {
       .build();
     const single = await DirectSourceThirdPartyContext.singleTenant("DirectSourceSingle");
     const multi = await DirectSourceThirdPartyContext.multitenant("DirectSourceMulti");
-    const event = create(StringValueSchema, { value: "multitenant" });
+    const event = reviewEvent("multitenant");
     const user = create(UserIdSchema, { value: "actor" });
     const tenantId = create(TenantIdSchema, { kind: { case: "value", value: "tenant" } });
     const tenantActor = create(ActorContextSchema, {
@@ -209,18 +213,12 @@ describe("Wave 13 ThirdPartyContext", () => {
     const actorWithoutTenant = create(ActorContextSchema, { actor: user });
     const missingTenantEvent = create(EventSchema, {
       id: create(EventIdSchema, { value: "missing-tenant" }),
-      message: {
-        typeUrl: `type.googleapis.com/${StringValueSchema.typeName}`,
-        value: toBinary(StringValueSchema, event),
-      },
+      message: AnyPacker.pack(ReviewTaskAssignedSchema, event),
       context: create(EventContextSchema),
     });
     const tenantEvent = create(EventSchema, {
       id: create(EventIdSchema, { value: "single-tenant" }),
-      message: {
-        typeUrl: `type.googleapis.com/${StringValueSchema.typeName}`,
-        value: toBinary(StringValueSchema, event),
-      },
+      message: AnyPacker.pack(ReviewTaskAssignedSchema, event),
       context: create(EventContextSchema, {
         origin: { case: "importContext", value: tenantActor },
       }),
@@ -229,7 +227,7 @@ describe("Wave 13 ThirdPartyContext", () => {
       "DirectSourceSingleReceiver",
     )
       .addEventDispatcher({
-        messageSchemas: () => [StringValueSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
         dispatch: () => Promise.resolve(),
       })
       .build();
@@ -298,8 +296,9 @@ describe("Wave 13 ThirdPartyContext", () => {
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({
       integrationChannelFactory: factory,
-      typeRegistry: new TypeRegistry([StringValueSchema]),
+      typeRegistry: new TypeRegistry([ReviewTaskAssignedSchema]),
     });
+    await ServerEnvironment.instance().completeSetup();
     const stateRegistry = generatedStateRegistryRoot();
     const ingestor = new HandlerRegistryIngestor();
     expect(() => ingestor.ingest({ version: 2, entities: [] })).toThrow(/regenerate/u);
@@ -347,15 +346,15 @@ describe("Wave 13 ThirdPartyContext", () => {
     const received: Event[] = [];
     const singleReceiver = await BoundedContext.singleTenant("Wave13ThirdPartyReceiver")
       .addEventDispatcher({
-        messageSchemas: () => [StringValueSchema],
-        externalEventSchemas: () => [StringValueSchema],
+        messageSchemas: () => [ReviewTaskAssignedSchema],
+        externalEventSchemas: () => [ReviewTaskAssignedSchema],
         dispatch: (event: Event) => {
           received.push(event);
           return Promise.resolve();
         },
       })
       .build();
-    const imported = create(StringValueSchema, { value: "external" });
+    const imported = reviewEvent("external");
     const singleActor = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "actor" }),
     });
@@ -378,8 +377,8 @@ describe("Wave 13 ThirdPartyContext", () => {
       await singleReceiver.close();
       multiReceiver = await BoundedContext.multitenant("Wave13ThirdPartyMultiReceiver")
         .addEventDispatcher({
-          messageSchemas: () => [StringValueSchema],
-          externalEventSchemas: () => [StringValueSchema],
+          messageSchemas: () => [ReviewTaskAssignedSchema],
+          externalEventSchemas: () => [ReviewTaskAssignedSchema],
           dispatch: (event: Event) => {
             received.push(event);
             return Promise.resolve();
@@ -392,7 +391,7 @@ describe("Wave 13 ThirdPartyContext", () => {
       expect(received.every((event) => event.context?.external === true)).toBe(true);
       expect(
         received.map(
-          (event) => fromBinary(BoundedContextNameSchema, requiredProducerId(event)).value,
+          (event) => AnyPacker.unpack(requiredProducerId(event), BoundedContextNameSchema).value,
         ),
       ).toEqual(["Wave13ThirdPartySingle", "Wave13ThirdPartySingle", "Wave13ThirdPartyMulti"]);
       expect(single.isOpen()).toBe(true);
@@ -410,7 +409,7 @@ describe("Wave 13 ThirdPartyContext", () => {
           original.value === undefined
         )
           return [];
-        return [fromBinary(ExternalEventsWantedSchema, original.value)];
+        return [AnyPacker.unpack(create(AnySchema, original), ExternalEventsWantedSchema)];
       });
       const wantedTypes = wanted.flatMap((document) => document.type);
       expect(wantedTypes).not.toContainEqual(
@@ -423,8 +422,8 @@ describe("Wave 13 ThirdPartyContext", () => {
         multiReceiver?.close(),
         single.close(),
         multi.close(),
-        ServerEnvironment.instance().close(),
       ]);
+      await ServerEnvironment.instance().close();
       stateRegistry.clear();
     }
     expect(single.isOpen()).toBe(false);
@@ -438,8 +437,8 @@ function withoutOrigin(handler: GeneratedHandlerRecordInput): unknown {
   return { ...handler, input: withoutOrigin };
 }
 
-function requiredProducerId(event: Event): Uint8Array {
-  const value = event.context?.producerId?.value;
+function requiredProducerId(event: Event): Any {
+  const value = event.context?.producerId;
   if (value === undefined) throw new Error("Imported event is missing producer identity.");
   return value;
 }
@@ -470,3 +469,7 @@ const thirdPartyPublicContract = `
   void open;
   void close;
 `;
+
+function reviewEvent(id: string) {
+  return create(ReviewTaskAssignedSchema, { id, name: id });
+}

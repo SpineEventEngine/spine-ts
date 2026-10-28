@@ -12,8 +12,8 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
@@ -41,7 +41,7 @@ describe("external integration messages", () => {
     const frame = wrapExternalEvent(value, origin());
 
     expect(frame.id.typeUrl).toBe(TypeUrls.derive(EventIdSchema));
-    expect(fromBinary(EventIdSchema, frame.id.value)).toEqual(value.id);
+    expect(AnyPacker.unpack(frame.id, EventIdSchema)).toEqual(value.id);
     expect(unpackExternalEvent(frame)).toEqual(value);
   });
 
@@ -95,8 +95,8 @@ describe("external integration messages", () => {
     const online = wrapBoundedContextOnline(
       create(BoundedContextOnlineSchema, { context: origin() }),
     );
-    const wantedId = controlId(wanted.id.value);
-    const onlineId = controlId(online.id.value);
+    const wantedId = controlId(wanted.id);
+    const onlineId = controlId(online.id);
 
     expect(wanted.id.typeUrl).toBe(TypeUrls.derive(StringValueSchema));
     expect(online.id.typeUrl).toBe(TypeUrls.derive(StringValueSchema));
@@ -125,6 +125,6 @@ function origin() {
   return create(BoundedContextNameSchema, { value: "ExternalProducer" });
 }
 
-function controlId(value: Uint8Array): string {
-  return fromBinary(StringValueSchema, value).value;
+function controlId(value: Any): string {
+  return AnyPacker.unpack(value, StringValueSchema).value;
 }

@@ -24,7 +24,7 @@ import {
 } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
-import { EntityColumn, EntityQuery } from "../../src/index.js";
+import { AnyPacker, EntityColumn, EntityQuery } from "../../src/index.js";
 import { GeneratedEntityColumns, GeneratedEntityQueries } from "../../src/codegen/index.js";
 import {
   ProjectStatus,
@@ -527,7 +527,7 @@ describe("EntityQuery", () => {
     expect(
       fixed32?.value === undefined
         ? undefined
-        : fromBinary(UInt32ValueSchema, fixed32.value.value).value,
+        : AnyPacker.unpack(fixed32.value, UInt32ValueSchema).value,
     ).toBe(4_294_967_295);
   });
 

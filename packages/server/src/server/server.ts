@@ -272,7 +272,7 @@ export class Server {
   }
 
   /**
-   * Builds contexts, attaches delivery, and opens the listener for one start attempt.
+   * Builds contexts and opens the listener for one start attempt.
    *
    * @returns The running listener after lifecycle startup.
    */
@@ -841,9 +841,9 @@ class RunningHttp2Server implements RunningServer {
   }
 
   /**
-   * Starts listener-ready attachments after the native listener accepts connections.
+   * Starts listener lifecycles after the native listener accepts connections.
    *
-   * @returns Completes after all attachments start or their admitted rollback settles.
+   * @returns Completes after all listener lifecycles start or their rollback settles.
    */
   async startLifecycles(): Promise<void> {
     try {

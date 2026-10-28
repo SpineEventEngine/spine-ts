@@ -259,6 +259,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
 
   /**
    * Sends an admitted Post or Read envelope through its matching native descriptor.
+   * Removes the backend transport's media type from errors before a gateway serializes them.
    * @param request The admitted unary request envelope.
    * @returns The encoded native response.
    */
@@ -268,23 +269,35 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     readonly value: Uint8Array;
     readonly signal?: AbortSignal;
   }): Promise<Uint8Array> {
-    if (request.service === "spine.client.CommandService" && request.method === "Post")
-      return toBinary(
-        CommandService.method.post.output,
-        await createClient(CommandService, this.#transport).post(
-          fromBinary(CommandService.method.post.input, request.value),
-          ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
-        ),
-      );
-    if (request.service === "spine.client.QueryService" && request.method === "Read")
-      return toBinary(
-        QueryService.method.read.output,
-        await createClient(QueryService, this.#transport).read(
-          fromBinary(QueryService.method.read.input, request.value),
-          ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
-        ),
-      );
-    throw new ConnectError("unsupported native unary operation", Code.Unimplemented);
+    try {
+      if (request.service === "spine.client.CommandService" && request.method === "Post")
+        return toBinary(
+          CommandService.method.post.output,
+          await createClient(CommandService, this.#transport).post(
+            fromBinary(CommandService.method.post.input, request.value),
+            ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
+          ),
+        );
+      if (request.service === "spine.client.QueryService" && request.method === "Read")
+        return toBinary(
+          QueryService.method.read.output,
+          await createClient(QueryService, this.#transport).read(
+            fromBinary(QueryService.method.read.input, request.value),
+            ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
+          ),
+        );
+      throw new ConnectError("unsupported native unary operation", Code.Unimplemented);
+    } catch (error) {
+      if (error instanceof ConnectError)
+        for (const header of [
+          "content-type",
+          "grpc-status",
+          "grpc-message",
+          "grpc-status-details-bin",
+        ])
+          error.metadata.delete(header);
+      throw error;
+    }
   }
 
   /**

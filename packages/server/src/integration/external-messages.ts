@@ -14,7 +14,7 @@
 
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { Any } from "@bufbuild/protobuf/wkt";
-import { clone, create, toBinary } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   BoundedContextOnlineSchema,
@@ -43,8 +43,8 @@ export function wrapExternalEvent(
 ): WrappedExternalMessage {
   if (!event.id?.value) throw new Error("External Event requires an EventId.");
   return create(ExternalMessageSchema, {
-    id: { typeUrl: spineTypeUrl(EventIdSchema), value: toBinary(EventIdSchema, event.id) },
-    originalMessage: { typeUrl: spineTypeUrl(EventSchema), value: toBinary(EventSchema, event) },
+    id: AnyPacker.pack(EventIdSchema, event.id),
+    originalMessage: AnyPacker.pack(EventSchema, event),
     boundedContextName: origin,
   }) as WrappedExternalMessage;
 }
@@ -60,13 +60,7 @@ export function wrapExternalEventsWanted(
   wanted: ExternalEventsWanted,
   origin: BoundedContextName,
 ): WrappedExternalMessage {
-  return wrapControl(
-    {
-      typeUrl: spineTypeUrl(ExternalEventsWantedSchema),
-      value: toBinary(ExternalEventsWantedSchema, wanted),
-    },
-    origin,
-  );
+  return wrapControl(AnyPacker.pack(ExternalEventsWantedSchema, wanted), origin);
 }
 
 /**
@@ -76,13 +70,7 @@ export function wrapExternalEventsWanted(
  * @returns The external control frame.
  */
 export function wrapBoundedContextOnline(online: BoundedContextOnline): WrappedExternalMessage {
-  return wrapControl(
-    {
-      typeUrl: spineTypeUrl(BoundedContextOnlineSchema),
-      value: toBinary(BoundedContextOnlineSchema, online),
-    },
-    online.context,
-  );
+  return wrapControl(AnyPacker.pack(BoundedContextOnlineSchema, online), online.context);
 }
 
 /**
@@ -131,7 +119,7 @@ function wrapControl(
   if (!origin?.value) throw new Error("External control message requires an origin.");
   const id = create(StringValueSchema, { value: crypto.randomUUID() });
   return create(ExternalMessageSchema, {
-    id: { typeUrl: spineTypeUrl(StringValueSchema), value: toBinary(StringValueSchema, id) },
+    id: AnyPacker.pack(StringValueSchema, id),
     originalMessage,
     boundedContextName: origin,
   }) as WrappedExternalMessage;

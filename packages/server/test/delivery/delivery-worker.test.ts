@@ -16,8 +16,8 @@ import { Time } from "@spine-event-engine/core/time";
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/require-await */
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, Identifiers, TypeUrls } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
@@ -443,10 +443,7 @@ describe("Delivery direct worker", () => {
     void _firstId;
     void _duplicateId;
 
-    const signal = create(AnySchema, {
-      typeUrl: "type.spine.io/spine.core.Event",
-      value: toBinary(EventSchema, create(EventSchema)),
-    });
+    const signal = AnyPacker.pack(EventSchema, create(EventSchema));
     const firstWrite = await delivery.inbox.receive({
       ...firstInput,
       signal,

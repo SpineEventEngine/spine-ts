@@ -12,11 +12,12 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { AnyPacker } from "@spine-event-engine/core";
 
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
@@ -138,18 +139,12 @@ describe("direct InboxMessage storage", () => {
   it("round-trips command and event payloads while rejecting corrupt direct fields", () => {
     const command = {
       ...createMessage("command", "signal-command", 1n),
-      signal: create(AnySchema, {
-        typeUrl: "type.spine.io/spine.core.Command",
-        value: toBinary(CommandSchema, create(CommandSchema)),
-      }),
+      signal: AnyPacker.pack(CommandSchema, create(CommandSchema)),
       label: "HANDLE_COMMAND" as const,
     };
     const event = {
       ...createMessage("event", "signal-event", 2n),
-      signal: create(AnySchema, {
-        typeUrl: "type.spine.io/spine.core.Event",
-        value: toBinary(EventSchema, create(EventSchema)),
-      }),
+      signal: AnyPacker.pack(EventSchema, create(EventSchema)),
       label: "REACT_UPON_EVENT" as const,
     };
 

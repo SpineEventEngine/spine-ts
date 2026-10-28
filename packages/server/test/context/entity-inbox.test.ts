@@ -12,8 +12,8 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, timestampFromDate, type Any } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { timestampFromDate, type Any } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, Identifiers } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
 import {
@@ -1827,17 +1827,11 @@ function taskCommandInput(id: string): ReceiveInput {
 }
 
 function commandSignal() {
-  return create(AnySchema, {
-    typeUrl: "type.spine.io/spine.core.Command",
-    value: toBinary(CommandSchema, create(CommandSchema)),
-  });
+  return AnyPacker.pack(CommandSchema, create(CommandSchema));
 }
 
 function eventSignal() {
-  return create(AnySchema, {
-    typeUrl: "type.spine.io/spine.core.Event",
-    value: toBinary(EventSchema, create(EventSchema)),
-  });
+  return AnyPacker.pack(EventSchema, create(EventSchema));
 }
 
 function twoShardStrategy(): DeliveryStrategy {

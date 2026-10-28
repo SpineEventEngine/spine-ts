@@ -12,8 +12,8 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import { CommandSchema, EventContextSchema, EventSchema } from "@spine-event-engine/proto";
 import { ProjectCreatedSchema } from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
@@ -660,17 +660,11 @@ function projectionInput(targetTypeUrl: string, targetId: string) {
 }
 
 function eventSignal() {
-  return create(AnySchema, {
-    typeUrl: "type.spine.io/spine.core.Event",
-    value: toBinary(EventSchema, create(EventSchema)),
-  });
+  return AnyPacker.pack(EventSchema, create(EventSchema));
 }
 
 function commandSignal() {
-  return create(AnySchema, {
-    typeUrl: "type.spine.io/spine.core.Command",
-    value: toBinary(CommandSchema, create(CommandSchema)),
-  });
+  return AnyPacker.pack(CommandSchema, create(CommandSchema));
 }
 
 type ProjectionReceiveInput = Parameters<ProjectionInbox["receive"]>[1];

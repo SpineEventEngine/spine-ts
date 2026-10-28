@@ -3226,3 +3226,108 @@ test rerun. Four affected suites183/183, freshbuild/tooling/static/docs pass;
 scoped changedlines context40/41 andenvironment41/41, defensiveguard limit
 retained. Reliability/style clean; all4canonical concerns accepted. Final
 security/release M13. Commit and immediate origin push next. Approximately82%.
+
+M11 pushed as2324202673bc55dba9be713e9556ffeddd558c6d; exact origin branch
+SHA confirmed and worktree clean. Eleven of thirteen milestones accepted.
+
+M12 starts: high-risk protocol/serialization completion under frozen contracts.
+Estimate1.5–3hours includes representative real native/browser TENANT_UNKNOWN
+proof, Server startup audit, remaining ordinary AnyPacker adoption, focused
+checks, relevant specialist review and immediate feature push. Existing sole
+implementer /root/storage_retention reused with immutable explicitly configured
+gpt-6-sol/medium; runtime metadata unavailable. Desktop explicit profiles remain
+supported. No child delegation, commits or pushes; parent edits task records.
+Brief: /tmp/spine-environment-lifecycle-20261027/m12-protocol-implementation-brief.md.
+Acceptance: structured tenant errors survive actual transports without handler
+work; directory failures remain distinct; Server never initiates setup or injects
+facilities and does not eagerly initialize already-built lazy contexts; ordinary
+Any packing uses shared implementation, deliberate wire/malformed cases retained.
+Preserve Server builder convenience from D0070 unless an actual current contract
+requires removal; D0159 only forbids implicit environmental preparation.
+
+M13 independent mechanical preparation while M12 writer proceeds: orchestrator-
+dispatched read-only function, explicit gpt-6-luna/low. Estimate0.1–0.25hours
+for scripts-first inventory of final release gate, current workspace versions,
+version policy and release CI prerequisites. No tests/builds, source edits,
+network mutations or publication. This is preparation, not release verification.
+Report exact commands/evidence externally; final unused version rechecked before
+mutation. Runtime metadata unavailable; immutable explicit dispatch recorded.
+
+M13 release inventory accepted: explicit Luna/low dispatch confirmed, actual
+runtime metadata unavailable. All32workspace manifests snapshot.24; workspace:*
+internal pins; candidate availability deliberately not assumed. Mandatory cheap
+preflight/release scripts and exact-SHA Build PR trigger confirmed. External
+report m13-release-gate-inventory.md. No tests/builds/source mutations. Complete
+local work and final pushes before requesting PR authorization for remote CI.
+Prepared inactive m13-convergence-implementation-brief.md with current guidance,
+representative native API proof and missing Datastore raw-evidence follow-up.
+
+M13 source inventory found a concrete remaining mechanical correction: test-
+inventory and its stable-CI expectation retain three deleted provider Agent
+execution test paths. Existing inventory test checks file existence. Queued
+removal of obsolete entries with focused inventory proof in M13 brief; no new
+production defect inferred. Existing interruption/non-resumption tests remain
+valid despite historical recovery path names. M12 work continues independently.
+
+M12 checkpoint: integration AnyPacker suites8/8 pass after explicit setup/cleanup
+fixture corrections. Actual native subscription gRPC unknown-tenant test passes
+NotFound + structured TENANT_UNKNOWN with zero registry creation. Browser real
+client/gateway case currently fails before backend with404/Unimplemented; writer
+is diagnosing fixture/path versus forwarding, no production defect yet asserted.
+No acceptance/percentage increment before full checks and review.
+
+M12 browser red identifies concrete protocol defect: backend gRPC TENANT_UNKNOWN
+ConnectError carries application/grpc+proto metadata into gateway Connect JSON
+HTTP404 response. Client.forConnect rejects mismatched media type as Unimplemented
+and loses NotFound/details. Existing writer correcting protocol-owned response
+metadata forwarding narrowly; actual network red/green proof required. This
+activates API/protocol review in addition to reliability/style and narrow docs
+disposition. No new transport design needed under existing frozen requirement.
+
+M12 browser regression red-to-green1/1 after auth package rebuild. Forwarded
+backend gRPC content-type removed; same ConnectError code/details retained.
+Writer audits adjacent calls and remaining ordinary Any helpers before broad
+affected checks/freeze. No full release claim or milestone acceptance yet.
+
+M13 inventory correction: parent found shallow manifest scan/breakdown omitted
+workspace globs. Same explicit Luna/low function reran exact pnpm-workspace.yaml
+globs plusroot; external report now lists35manifests (root+25packageglob matches
+including3test-fixtures+9examples), allsnapshot.24. Prior32count is invalid and
+superseded. No worktree mutations/tests/builds. Final bump must cover35matches.
+
+M12 protocol focused checks native/browser each1/1green. Affected broker suite
+initial14failures were pre-setup fixtures, corrected to explicit setup and15/15
+green. Generated-build affected8-suite batch209/210passed; sole old broker
+lifecycle setup-order fixture corrected and focused1/1green. These overlapping
+counts are diagnostic checkpoints, not summed final evidence. Final full affected
+checks/coverage/static and independent review still pending.
+
+M12 remaining server normal Any helpers converted;5focused suites136/136pass
+and server/blackbox buildpass. Managed delivery2suites7/7pass; other affected
+build/tooling and lint/docs checks pass. Final refreshedchecks/evidence pending.
+Transport raw frame disposition (no core dependency, low-level wire fixture)
+explicitly flagged for review rather than silently excluded.
+
+M12 auth metadata regression additionally proves same ConnectError identity and
+x-application-trace preservation while native transport headers are removed.
+Auth+realbrowser build-backed coverage12/12green. Final static refresh/frozen
+packet pending. Announced review/integration estimate0.3–0.6hours including all
+relevant concern reviews, correction if needed and immediate feature push.
+
+M12 frozen: explicitSol/medium confirmed; runtime metadata unavailable. Parent
+created exact source/test hashes excluding mutable taskrecords. Evidence and
+review inputs external. Focused build/static/docs/checks pass; global coverage
+and finalrelease pending. Independent4concern wave begins, no source changes
+until collected. Reviewed counts/coverage limitations recorded in REVIEW_LOG.
+
+M12 fourconcern review complete. API/style/docs clean; reliability P3network
+test failurecleanup accepted. All21hashes confirmed. SameSol/medium writer
+corrects only cleanup with focusedproof; estimate0.1–0.2hours. No runtime/API
+changes requested; deterministic correction need not reopen unaffected lanes.
+
+M12 accepted after fullwave and test-onlycleanup correction. Parent hashcheck
+confirms20unchanged reviewedfiles and1correctedtest; helper source inspected,
+focusedchecks pass. Real browser/native structured tenant errors and ordinary
+Any adoption complete. No unresolved M12finding. Commit/immediatepush next;
+approximately90percent implementation,12of13milestones accepted. M13 final
+docs/nativeevidence/security/release/version/remoteCI still required.

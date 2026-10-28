@@ -20,10 +20,10 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { create, fromBinary } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
-import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AdminService,
   InboxService,
@@ -185,7 +185,7 @@ function externalState(update: SubscriptionUpdate): { id: string; name: string }
   const state = update.update.value.update[0]?.kind;
   if (state?.case !== "state") return undefined;
   if (state.value.typeUrl !== TypeUrls.derive(ProjectOverviewStateSchema)) return undefined;
-  const decoded = fromBinary(ProjectOverviewStateSchema, state.value.value);
+  const decoded = AnyPacker.unpack(state.value, ProjectOverviewStateSchema);
   return { id: decoded.id, name: decoded.name };
 }
 
