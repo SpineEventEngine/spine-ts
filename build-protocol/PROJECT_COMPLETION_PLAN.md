@@ -18,7 +18,13 @@ Current work: [Shared environment and storage lifecycle](tasks/environment-lifec
 on `environment-lifecycle`, based on freshly fetched official master `ff6c866`.
 Storage retention is first. The accepted proposal includes dynamic TenantIndex,
 shared Delivery, explicit and lazy preparation, JVM PR 1698 and complete Agent
-recovery removal. No migration work is authorized. Implementation is in progress.
+recovery removal. No migration work is authorized. Implementation, independent
+reviews and full release verification are complete at `00295e669`: 6,258 Vitest
+tests and 39 Node tests passed; all unchanged coverage thresholds passed. The
+Delivery validation regression and scheduled security dependency findings are
+fixed. Version `2.0.0-snapshot.25` is committed for all workspace manifests.
+Final exact-SHA Security CI and remote state are recorded in the final handoff
+following the evidence update. No pull request or master mutation is authorized.
 
 Previous work: [SQL delivery and subscription reliability](tasks/sql-delivery-reliability/TASK.md)
 on `sql-delivery-subscription-reliability` in

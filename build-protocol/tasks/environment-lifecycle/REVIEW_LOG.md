@@ -2690,3 +2690,18 @@ review accepts existing helpers/promise gates/fake clock, no new fixture framewo
 API/domain docs/security remain unchanged; relevant reliability concern is now
 accepted. All final slice findings resolved. Final release/global coverage and
 exact-final-SHA Security CI still required; subset evidence is not acceptance.
+
+### M60 final acceptance
+
+Full release verification passed at00295e669213dbf7531dddc62426fc68ef26976d:
+6258 Vitest tests pass,14skip;39 Node tests pass; all four unchanged coverage
+thresholds pass (branches20686/22984,90.00%). Build, generated, static,
+documentation and release-readiness gates pass. Prior style, documentation,
+TypeScript/API and reliability dispositions remain accepted; all accepted
+findings are resolved. Broad final security review plus M52–M53 SQL security
+delta remain accepted; subsequent changes are reviewed tests and task records.
+This final evidence-only update changes no behavior, contract or user guide;
+parent mechanical formatting/audience/diff checks suffice without reopening
+specialist lanes or repeating the full suite. Exact-final-SHA Security workflow
+result and remote synchronization are recorded in the final handoff/external
+evidence after this update is pushed.

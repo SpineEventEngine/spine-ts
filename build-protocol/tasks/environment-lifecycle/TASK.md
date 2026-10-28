@@ -8,7 +8,7 @@ Branch: `environment-lifecycle`. Baseline: freshly fetched official
 `origin/master` at `ff6c8669537a016c47f012150306500d3b52b5d1`.
 Worktree: `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
 The accepted [proposal](PROPOSAL.md) includes the complete Agent recovery-removal
-task. Implementation is in progress. Repository/EventStore retention, shared AnyPacker,
+task. Implementation and required local release verification are complete. Repository/EventStore retention, shared AnyPacker,
 provider commit-storage retention and awaitable shutdown are reviewed and pushed.
 Shared preparation contracts and the memory implementation are complete, as is
 PostgreSQL offline assembly, tenant resolution and physical structure preparation.
@@ -30,26 +30,24 @@ preparation APIs are verified, independently reviewed and pushed. Protocol integ
 and remaining AnyPacker adoption are verified, independently reviewed and pushed.
 Final documentation, native evidence, specialist review and security review
 are accepted. The version-only commit for all 35 workspace manifests is pushed.
-Full-suite regression corrections are implemented, reviewed and pushed. The latest
-full diagnostic run (M54 at cfc835d8b) passed 6,254 tests, skipped 14 and failed
-one example test at its one-second polling deadline, in 114.46 seconds. Branch
-coverage was 89.96% (20,677/22,984), nine outcomes short of 90%; the other three
-coverage measures passed. The example now waits on actual provider arrival and
-passes its focused tests; its independently reviewed correction is pushed at
-ec13f04fc. Subsequent focused lifecycle/query tests are under final review;
-their matching coverage keys are diagnostic evidence, not a replacement for the
-mandatory full release run. This replaces M43 and earlier measurements.
-M20 fixture isolation and M21 adapter recovery removal are verified and reviewed.
-Focused coverage work continues; final release acceptance remains pending.
-Exact-final-SHA remote CI remains pending. On 2026-10-28 the human additionally
-requested remediation of all findings from the scheduled Security workflow,
-including run 40632154594. Its dependency audit reports 31 vulnerabilities;
-remediation is implemented and independently reviewed, and both local audits
-report zero known vulnerabilities. Feature-branch Security CI passed at 89e6faafa;
-it will be refreshed on the final pushed revision. Full release/global coverage
-remain required before final acceptance. Remaining milestones follow MILESTONES.md. Existing
-behavior descriptions in the proposal refer to the baseline; proposed APIs become
-supported only after implementation.
+Full-suite regression corrections and focused behavior coverage are complete and
+independently reviewed. The final full release run (M60 at
+`00295e669213dbf7531dddc62426fc68ef26976d`) passed in 373 seconds with all original
+gates and thresholds unchanged: 6,258 Vitest tests passed, 14 skipped, and all
+39 Node tests passed. Coverage passed for statements (93.55%), branches (90.00%,
+20,686/22,984), functions (95.64%), and lines (95.37%). This supersedes M54 and
+earlier diagnostic measurements. Build, tooling, lint, generated-code,
+documentation and release-readiness checks passed in the same run.
+
+All accepted specialist findings are resolved. The scheduled Security workflow's
+31 dependency vulnerabilities have been remediated and independently reviewed;
+both local audits report zero known vulnerabilities. Feature-branch Security CI
+passed at `89e6faafa`. After pushing this final evidence-only update, refresh that
+workflow on the exact final branch SHA and record its result in the final handoff
+and external evidence, avoiding a self-referential record-only commit. No further
+implementation, coverage or local release work remains. The historical behavior
+descriptions in the proposal refer to the baseline; current supported behavior
+is documented in the updated framework guides and API documentation.
 
 ## Added Delivery validation regression
 
@@ -135,19 +133,18 @@ the full task: maintainability, documentation, TypeScript/API and reliability.
 The lifecycle and dependency security reviews are accepted. Both dependency
 audits are clean, and the feature-branch Security workflow passed at 89e6faafa. Baseline build and
 tooling typechecks, baseline tests and focused retention checks passed. Bounded
-reviews are recorded in REVIEW_LOG.md; release verification and exact-final-SHA
-CI remain pending. WORK_LOG.md records the current evidence. Raw command outputs
+reviews are recorded in REVIEW_LOG.md; release verification passed at M60.
+Exact-final-SHA Security CI is the remaining handoff check. WORK_LOG.md records the current evidence. Raw command outputs
 and dispatch evidence are kept outside version control in `/tmp/spine-environment-lifecycle-20261027`.
 
 ## Remaining work
 
-The ordered milestones are frozen in MILESTONES.md. Implementation and review
-are accepted for the completed slices. The scheduled security findings are fixed
-and reviewed. The Node runner and sequential Agent test corrections are accepted.
-Complete focused behavior coverage, review and mandatory cheap preflight, then
-pass the full release checks, refresh Security CI on the final pushed SHA, and
-report exact remote state. The common unused version has been committed separately. Do not create
-or merge a pull request without explicit human instruction.
+Implementation, coverage, native provider checks, specialist reviews, security
+corrections and the mandatory full release checks are accepted. Push this final
+evidence update, refresh Security CI on its exact SHA, and report the verified
+remote state. The common unused version `2.0.0-snapshot.25` was committed
+separately for all 35 workspace manifests in `ac64c730a`. Do not create or merge
+a pull request without explicit human instruction.
 
 ## JVM source guardrail
 

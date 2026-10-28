@@ -5220,3 +5220,29 @@ Preserve full log, stop on first failure and report it. Desktop supports explici
 profiles; runtime self-introspection unavailable. Estimate0.25–0.5h includes full
 build/static/docs/coverage/Node checks and final Security CI after evidence push.
 No PR or master action authorized.
+
+### M60 final release acceptance
+
+2026-10-28: Frozen code/test SHA00295e669213dbf7531dddc62426fc68ef26976d passes
+one complete `pnpm verify:release` run, exit0,373s. Native provider environment
+variables were unset for the canonical suite; previously accepted native checks
+remain separate evidence.395 Vitest files pass,2skip;6258 tests pass,14skip;
+110.92s Vitest duration. All39 Node tests pass in6.28s. Coverage: statements
+34527/36907 (93.55%),branches20686/22984 (90.00%),functions8883/9287 (95.64%),
+lines31347/32868 (95.37%). All original90% thresholds unchanged and passed.
+Proto generation, build, tooling types, ESLint, cleanup/TSDoc/copyright/time,
+formatting, API/audience/snippet docs, Proto lint/current generated cleanliness,
+logging containment, production dependency and release-readiness checks pass.
+
+Mechanical function m54_coverage_measurement used its explicit immutable
+Luna/low profile, no children or edits; runtime introspection unavailable.
+Raw log, final LCOV and summary: external evidence directory files
+m60-verify-release.log,m60-final-lcov.info,m60-verify-release-summary.txt.
+Worktree clean after verification. Snapshot.25 remains unused in registry.
+All review findings resolved; no further tests or full release repetition for
+this evidence-only update. Parent performs Markdown formatting, audience and
+diff checks, commits and immediately pushes the final records, then dispatches
+Security on the exact final SHA. Record final remote/CI result externally and in
+the human handoff rather than creating a self-referential evidence commit.
+Next milestone: human review of the completed feature branch. No PR/master
+mutation authorized. Remaining work is final push and Security CI only.
