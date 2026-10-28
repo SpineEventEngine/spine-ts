@@ -2441,6 +2441,49 @@ describe("BoundedContext assembly", () => {
     }
   });
 
+  it("skips single-tenant siblings for an explicit tenant and includes them in default preparation", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    await index.keep(tenant("selected"));
+    const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
+    const multitenant = await BoundedContext.multitenant("SelectedTenant")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+    const single = await BoundedContext.singleTenant("SingleSibling")
+      .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
+      .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+    const environment = ServerEnvironment.instance();
+    try {
+      await environment.checkStructureCompatibility(tenant("selected"));
+      expect(
+        prepareEntity.mock.calls.map(([input, mode]) => ({
+          context: input.context.name,
+          tenantId: input.context.tenantId,
+          mode,
+        })),
+      ).toEqual([{ context: "SelectedTenant", tenantId: tenant("selected"), mode: "check" }]);
+      prepareEntity.mockClear();
+      await environment.createStorageStructures();
+      expect(
+        prepareEntity.mock.calls
+          .map(([input, mode]) => ({
+            context: input.context.name,
+            tenantId: input.context.tenantId,
+            mode,
+          }))
+          .sort((left, right) => left.context.localeCompare(right.context)),
+      ).toEqual([
+        { context: "SelectedTenant", tenantId: tenant("selected"), mode: "create" },
+        { context: "SingleSibling", tenantId: undefined, mode: "create" },
+      ]);
+    } finally {
+      await multitenant.close();
+      await single.close();
+    }
+  });
+
   it("joins a pending read-only check without escalating it to creation", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);

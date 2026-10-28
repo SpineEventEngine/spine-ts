@@ -1642,6 +1642,7 @@ describe("MysqlRecordStorage", () => {
     expect(query?.sql).toContain("`created_seconds` >= ?");
     expect(query?.sql).not.toContain("LIMIT");
     expect(query?.values).toEqual([false, 2n]);
+    await expect(storage.index()).resolves.toEqual(["a", "b", "c", "d"]);
   });
 
   it("uses a conditional insert without session locks", async () => {

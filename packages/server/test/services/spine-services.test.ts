@@ -121,6 +121,7 @@ import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { TransitionValidationError } from "../../src/repository/command-errors.js";
 import { spineServicesAccess } from "../../src/services/spine-services.js";
+import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
 import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
@@ -2284,6 +2285,83 @@ describe("SpineServices", () => {
     } finally {
       release.resolve(undefined);
       await Promise.allSettled([cancellation, closing]);
+    }
+  });
+
+  it("coalesces cancellation while a native subscription observer is still attaching", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("AttachingSubscriptionCancel")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const snapshot = registry.snapshot.bind(registry);
+    const snapshotEntered = Promise.withResolvers<undefined>();
+    const releaseSnapshot = Promise.withResolvers<undefined>();
+    vi.spyOn(registry, "snapshot").mockImplementation(async () => {
+      snapshotEntered.resolve(undefined);
+      await releaseSnapshot.promise;
+      return snapshot();
+    });
+    const consume: SubscriptionRuntime["consume"] = Reflect.get(
+      SubscriptionRuntime.prototype,
+      "consume",
+    );
+    const attached = Promise.withResolvers<Awaited<ReturnType<typeof consume>>>();
+    const consumeSpy = vi
+      .spyOn(SubscriptionRuntime.prototype, "consume")
+      .mockImplementation(function (this: SubscriptionRuntime, ...args) {
+        return Reflect.apply(consume, this, args).then(
+          (handle: Awaited<ReturnType<typeof consume>>) => {
+            attached.resolve(handle);
+            return handle;
+          },
+        );
+      });
+    const deleteRecord = registry.delete.bind(registry);
+    const deleteEntered = Promise.withResolvers<undefined>();
+    const releaseDelete = Promise.withResolvers<undefined>();
+    const deletion = vi.spyOn(registry, "delete").mockImplementation(async (id) => {
+      deleteEntered.resolve(undefined);
+      await releaseDelete.promise;
+      return deleteRecord(id);
+    });
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const activation = iterator.next();
+    let firstCancel: Promise<unknown> | undefined;
+    let secondCancel: Promise<unknown> | undefined;
+    try {
+      await snapshotEntered.promise;
+      firstCancel = Promise.resolve(handlers.cancel(subscription));
+      secondCancel = Promise.resolve(handlers.cancel(subscription));
+      await deleteEntered.promise;
+      releaseDelete.resolve(undefined);
+      for (const response of await Promise.all([firstCancel, secondCancel])) {
+        expect(response).toMatchObject({ status: { status: { case: "ok" } } });
+      }
+      expect(deletion).toHaveBeenCalledOnce();
+      releaseSnapshot.resolve(undefined);
+      const first = await activation;
+      expect((await attached.promise).closed).toBe(true);
+      if (!first.done) {
+        expect(first.value.response?.status?.status.case).toBe("ok");
+      }
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("late", "Late"),
+      );
+      await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+      expect(deletion).toHaveBeenCalledOnce();
+    } finally {
+      releaseDelete.resolve(undefined);
+      releaseSnapshot.resolve(undefined);
+      consumeSpy.mockRestore();
+      await Promise.allSettled([activation, firstCancel, secondCancel]);
+      await iterator.return?.();
+      await context.close();
     }
   });
 

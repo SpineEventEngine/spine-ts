@@ -2654,3 +2654,39 @@ style review clean. Seven tests/tooling/lint/format pass. No production, public
 API, domain fixture, documentation or security change; those lanes N/A. Evidence
 m55-reliability-review.md and m55 logs outside Git. Runtime introspection unavailable;
 configured explicit implementer/reviewer Sol/medium profiles accepted.
+
+### M56/M57 lifecycle test review
+
+Original explicit Sol/medium reliability lane; runtime introspection unavailable.
+Frozen hashes match both reports. M57 clean: fake clock steps through failed scan
+and failed watch restart, no premature work/watch, successful one-run delivery,
+finally closes/restores timers. Parent style accepts removal of real30ms wait.
+M56 mixed-tenant scope assertions and distinct Entity states clean. Accept two
+P2 subscription-test findings: secondLookup also resolves during activation, and
+closed iterator/late post do not prove consumer unsubscribe. Same implementer
+receives one correction batch, no runtime defect established. Parent style agrees.
+API/docs/security unchanged; test fidelity/reliability is the substantive lane.
+Evidence m56-reliability-review.md and m57-reliability-review.md outside Git.
+
+M58 parent micro assertion review accepted: each existing SQL Task query test now
+also calls public index() and checks original IDs a,b,c,d from the same truthful
+RecordSpec/records. Two assertion lines, no new tests/fixture/schema/API. Both real
+provider wrappers execute; driver still supplies rows without claiming SQL-engine
+filter proof. 134 tests pass; same22984 M54 keys show3 new outcomes (MySQL265/910,
+PostgreSQL390). ESLint/format/diff pass. Full tooling will include these assertions
+in the next M56/M59 check and release gate. Reliability/API/style disposition is
+this bounded exact-result inspection; documentation/security unchanged. External
+evidence m58-index-coverage.log, m58-coverage-gain.json, lint/format logs.
+
+M56 targeted re-review clean, both P2 findings resolved. Original explicit
+Sol/medium reviewer profile confirmed; final service hash and 125 passing tests
+in m56-review evidence. M59 final reliability review accepts shared scan/one run;
+its one P2 duplicate-timer assertion gap is corrected exactly with pending timer
+count two at5ms. Parent verifies exact assertion and final hash
+4d481066d35d7b7ec095c5b95462c0766e47271391221f4d70ef81785829f4a7.
+Full54 tests/lint/format/diff pass; no new substantive review concern or source
+change. Deterministic correction does not reopen lane. Parent maintainability
+review accepts existing helpers/promise gates/fake clock, no new fixture framework.
+API/domain docs/security remain unchanged; relevant reliability concern is now
+accepted. All final slice findings resolved. Final release/global coverage and
+exact-final-SHA Security CI still required; subset evidence is not acceptance.

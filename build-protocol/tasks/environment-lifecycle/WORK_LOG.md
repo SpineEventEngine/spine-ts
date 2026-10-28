@@ -5126,3 +5126,97 @@ M55 accepted after clean independent reliability and parent style review. Seven
 final tests and static checks pass. Commit/push test correction and records while
 M56 writes only its separate two server test files. Format/generated cleanliness
 passed at cfc835d8b; no generated output changed since.
+
+M57 next standard test-only packet selected independently: extend existing
+DeliverySupervisor recovery tests with failed periodic scan then successful
+undispatched-shard discovery, and failed watch-restart recovery then successful
+retry. Use fake timers instead of existing real30ms wait, assert actual one-run
+work delivery and watcher continuity. Also, if naturally expressible in the same
+retry test, hold the later periodic snapshot across the watch retry deadline to
+prove both timers share one recovery and do not duplicate a scan/run. This is a
+real overlap of the two existing mechanisms, no private access or new mechanism.
+Expected2–3 outcomes, measured later. Same sole explicit Sol/medium implementer
+will handle delivery-supervisor.test.ts after M56; existing reviewer/parent.
+No runtime change. Estimate within current0.5–1h correction wave.
+
+M56/M57 complete review wave:259+53 tests andstatic pass; exact M54 branch keys
+unchanged, combined+5 outcomes (20682/22984 projected, four short). M57 independent
+reliability clean; M56 mixed-tenant case clean, two accepted subscription-test
+fidelity findings: gate resolves during activation rather than second cancellation,
+and closed stream does not prove late consumer unsubscribe. Return one correction
+batch to same explicit Sol/medium implementer, service test only. Make the gate
+identify the second cancel with no scheduling guess; directly assert late returned
+consumer closed/unsubscribed before context shutdown via existing runtime seam.
+No production fix established. Re-run affected checks and re-review only this
+substantively strengthened test. Existing wave estimate still applies.
+
+M58 parent micro test extension: two existing SQL Task query tests gain one
+assertion each that public index() returns the four original logical Task IDs.
+Both provider index wrappers are wholly unhit in M54. Reuse existing real provider
+classes, declared RecordSpec and genuine Task records; no new test, fixture,
+production change or filter matrix. Bounded mechanically verifiable assertion
+extension (two lines/two files), estimate0.05–0.1h for affected testfiles/scoped
+coverage and parent review. Disjoint from implementer's M56service-test correction.
+Inherited M53 SQL query/native caveats remain; this assertion proves index result
+mapping with existing supplied rows, not execution of SQL by the fake driver.
+
+M59 standard Delivery timer-overlap test planned after M56 correction: verify a
+periodic successful recovery while a failed-watch retry timer already exists
+cannot create a second watch timer, and simultaneous watch/periodic recovery
+triggers join one pending scan. This is a real combination of the two existing
+public supervisor mechanisms and protects against reconnect/scan multiplication.
+Use fake clock recovery5ms/watch10ms in fixture only, first two watches fail then
+third stays open. At5ms periodic recovery starts second failed watch while first
+retry timer still pending; at10ms hold third releaseExpired callback so the second
+trigger must join it, then release and discover one pending shard/run once.
+Assert exact release/snapshot/watch/run counts and close/restore in finally.
+No new production interval, private-state access, arbitrary sleeps or change in
+Delivery semantics. Expected2 relevant outcomes (555 coalescing,644 duplicate
+watch-timer guard), confirm with same-key LCOV. Same sole explicit Sol/medium
+implementer, focused reliability review after checks. Estimated0.1–0.3h including
+implementation, deterministic verification and review. Scope remains test-only.
+
+M56 correction accepted by targeted independent reliability re-review: premature
+lookup gate and setImmediate removed; both cancellations capture the active record
+before awaiting, held deletion exposes exact coalescing, real late consumer's
+closed property asserted before context shutdown.125 final service tests/static
+pass. No runtime defect. See m56-re-review.md.
+
+M59 frozen:54 full Delivery tests pass, tooling/lint/format/diff pass; independent
+reliability review checks only new overlap case (prior M57 accepted). M58 also
+passes134 tests andstatic; current tooling includes those assertions. Same22984
+branch keys across M54/M56/M57/M58/M59 yield projected20687/22984, one covered
+outcome above the90%minimum20686. This is combined diagnostic evidence only;
+mandatory full release still must pass independently.
+
+Mechanical evidence limitation: implementer's scoped coverage commands used
+command-line zero thresholds, without editing repository config. Those exit0
+statuses establish test completion/LCOV measurement, not global coverage gates.
+Exact raw counts/identical keys remain usable for selection; no redundant rerun
+for exit-status semantics. Parent M58 subset preserved thresholds and exited1 as
+expected despite134 passing tests. All following coverage and final release runs
+must use untouched90% thresholds. No lower threshold is accepted for readiness.
+Snapshot.25 server version remains absent from the official registry on current
+check. Native and production security evidence unchanged by these test additions.
+
+M59 final independent review accepts coalescing/one run but finds missing proof
+of duplicate-timer prevention: a wrongly added timer would fire at15ms, after test
+stops. Accept exact deterministic correction: assert pending fake timers at5ms
+are exactly two (one periodic plus one existing watch retry). Same explicit
+Sol/medium implementer adds assertion and reruns54-test file/lint/format/diff.
+No new behavior/source/fixtures; same LCOV proof remains applicable, no extra
+coverage run needed. Parent verifies exact requested correction; deterministic
+assertion correction does not reopen specialist lane. Estimate under0.1h.
+
+M56–M59 accepted after complete review and corrections. Current cheap preflight:
+all affected tests, complete tooling TypeScript, changed-file ESLint/format/diff
+pass; unchanged runtime cleanup/TSDoc/logging/dependency checks and generated
+cleanliness from M54 remain current. Task Markdown formatting and audience check
+renewed. No production/Proto/dependency change since accepted SQL/runtime security
+reviews. Commit/push frozen tests and records, then run M60 verify:release once
+with all original gates/coverage90 intact. Mechanical verification function uses
+explicit gpt-6-luna/low, Standard speed, no children or source/config edits/retries.
+Preserve full log, stop on first failure and report it. Desktop supports explicit
+profiles; runtime self-introspection unavailable. Estimate0.25–0.5h includes full
+build/static/docs/coverage/Node checks and final Security CI after evidence push.
+No PR or master action authorized.
