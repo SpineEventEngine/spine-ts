@@ -14,6 +14,8 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 
+import type { ServerEnvironment } from "../server/server-environment.js";
+
 /**
  * Deterministic lifecycle states for the single-process server runtime kernel.
  *
@@ -273,6 +275,23 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
 
 interface RuntimeAccess {
   /**
+   * Returns whether this async scope executes work admitted by this environment's context buses.
+   * @param environment Exact environment containing the target context.
+   * @returns True until the admitted callback settles.
+   */
+  isRunningAdmittedWork(environment: ServerEnvironment): boolean;
+
+  /**
+   * Binds a framework context bus to its captured environment.
+   * @param runtime Private runtime of the context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindFrameworkEnvironment(
+    runtime: SingleProcessServerRuntime,
+    environment: ServerEnvironment,
+  ): void;
+
+  /**
    * Queues a trusted follow-up during graceful drain.
    * @param runtime Target queue.
    * @param work Framework callback.
@@ -293,6 +312,7 @@ const followUpEnqueuers = new WeakMap<
   (work: ServerRuntimeWork) => Promise<void>
 >();
 const runtimeDrainers = new WeakMap<SingleProcessServerRuntime, () => Promise<void>>();
+const frameworkEnvironments = new WeakMap<SingleProcessServerRuntime, ServerEnvironment>();
 
 /**
  * Provides package-owned authority for framework follow-up work.
@@ -300,6 +320,28 @@ const runtimeDrainers = new WeakMap<SingleProcessServerRuntime, () => Promise<vo
  * @internal
  */
 export const runtimeAccess: RuntimeAccess = Object.freeze({
+  /**
+   * Returns active framework bus work for the exact captured environment.
+   * @param environment Exact environment containing the target context.
+   * @returns True until the admitted callback settles.
+   */
+  isRunningAdmittedWork(environment: ServerEnvironment): boolean {
+    const frame = runtimeWork.getStore();
+    return frame?.active === true && frameworkEnvironments.get(frame.runtime) === environment;
+  },
+
+  /**
+   * Records the exact environment for a private framework bus runtime.
+   * @param runtime Private runtime of the context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindFrameworkEnvironment(
+    runtime: SingleProcessServerRuntime,
+    environment: ServerEnvironment,
+  ): void {
+    frameworkEnvironments.set(runtime, environment);
+  },
+
   enqueueFollowUp(runtime: SingleProcessServerRuntime, work: ServerRuntimeWork): Promise<void> {
     const enqueueFollowUp = followUpEnqueuers.get(runtime);
 

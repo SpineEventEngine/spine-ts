@@ -25,11 +25,13 @@ import {
   ServerRuntimeStateError,
   SingleProcessServerRuntime,
 } from "../runtime/runtime.js";
+import type { ServerEnvironment } from "../server/server-environment.js";
 import { EventDispatcherRegistry } from "./event-dispatcher-registry.js";
 import type { EventDispatcher } from "./event-dispatcher.js";
 import { emitServerError } from "../server/server-log.js";
 
 const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
+const eventBusRuntimes = new WeakMap<EventBus, SingleProcessServerRuntime>();
 const storedFollowUpDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const followUpPosters = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 
@@ -92,6 +94,13 @@ interface AcceptedEventDispatcher {
 
 interface EventBusAccess {
   // prettier-ignore
+
+  /**
+   * Binds this context bus's private runtime to its captured environment.
+   * @param eventBus Framework context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindEnvironment(eventBus: EventBus, environment: ServerEnvironment): void;
 
   /**
    * Sets receiving-context admission before Event storage or dispatch.
@@ -279,6 +288,7 @@ export class EventBus {
 
     this.#eventStore = ownedStore === forgettingBus ? undefined : ownedStore;
     this.#started = this.#runtime.start();
+    eventBusRuntimes.set(this, this.#runtime);
     storedDispatchers.set(this, (event) => this.#postStored(event));
     storedFollowUpDispatchers.set(this, (event) => this.#postStoredFollowUp(event));
     followUpPosters.set(this, (event) => this.#postFollowUp(event));
@@ -760,6 +770,18 @@ interface EventSubscriberRecord {
  * @internal
  */
 export const eventBusAccess: EventBusAccess = Object.freeze({
+  /**
+   * Binds the private queue to its framework context's captured environment.
+   * @param eventBus Framework context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindEnvironment(eventBus: EventBus, environment: ServerEnvironment): void {
+    const runtime = eventBusRuntimes.get(eventBus);
+    if (runtime === undefined)
+      throw new TypeError("Framework binding requires an EventBus instance.");
+    runtimeAccess.bindFrameworkEnvironment(runtime, environment);
+  },
+
   /**
    * Sets the context's live Event tenant check.
    *

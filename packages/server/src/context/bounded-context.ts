@@ -109,6 +109,7 @@ import {
   type EntityHandlersMetadata,
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
+import { runtimeAccess } from "../runtime/runtime.js";
 import { Stand, standAccess } from "../stand/stand.js";
 import { SubscriptionRuntime, subscriptionRuntimeAccess } from "../stand/subscription-runtime.js";
 import {
@@ -1078,6 +1079,9 @@ export class BoundedContext {
    */
   #installTenantAdmission(): void {
     explicitPreparations.set(this, (mode, ids) => this.#prepareExplicitLocal(mode, ids));
+    commandBusAccess.bindEnvironment(this.#commandBus, this.#environment);
+    eventBusAccess.bindEnvironment(this.#eventBus, this.#environment);
+    eventBusAccess.bindEnvironment(this.#systemEventBus, this.#environment);
     commandBusAccess.setAdmission(this.#commandBus, (command) =>
       this.#admitTenant(command.context?.actorContext?.tenantId),
     );
@@ -1086,7 +1090,8 @@ export class BoundedContext {
     );
     standAccess.setAdmission(this.#stand, (tenantId) => this.#admitTenant(tenantId));
     standAccess.setPublicAdmission(this.#stand, () => {
-      if (closingContexts.has(this)) throw new Error("Bounded Context is closing.");
+      if (closingContexts.has(this) && !runtimeAccess.isRunningAdmittedWork(this.#environment))
+        throw new Error("Bounded Context is closing.");
     });
   }
 

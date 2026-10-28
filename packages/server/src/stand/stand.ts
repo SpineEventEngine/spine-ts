@@ -1090,6 +1090,7 @@ export class Stand {
    * @returns Completion callback for the tracked read.
    */
   #beginPublicOperation(): () => void {
+    this.#requireOpen();
     standPublicAdmissions.get(this)?.();
     return this.#beginOperation();
   }

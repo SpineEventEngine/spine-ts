@@ -21,6 +21,7 @@ import {
   ServerRuntimeStateError,
   SingleProcessServerRuntime,
 } from "../runtime/runtime.js";
+import type { ServerEnvironment } from "../server/server-environment.js";
 import { CommandValidationError } from "./command-errors.js";
 import { ImplicitRequiredIds } from "../entity/implicit-required-id.js";
 import { CommandDispatcherRegistry } from "./command-dispatcher-registry.js";
@@ -33,9 +34,17 @@ const commandBusDrainers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusCloseFinishers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusAborters = new WeakMap<CommandBus, () => void>();
 const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
+const commandBusRuntimes = new WeakMap<CommandBus, SingleProcessServerRuntime>();
 const commandAdmissions = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
 
 interface CommandBusAccess {
+  /**
+   * Binds this context bus's private runtime to its captured environment.
+   * @param commandBus Framework context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindEnvironment(commandBus: CommandBus, environment: ServerEnvironment): void;
+
   /**
    * Sets receiving-context admission before command dispatch.
    *
@@ -129,6 +138,7 @@ export class CommandBus {
    */
   constructor(dispatchers: Iterable<CommandDispatcher> = []) {
     this.#started = this.#runtime.start();
+    commandBusRuntimes.set(this, this.#runtime);
     internalCommandPosters.set(this, (command) => this.#postInternal(command));
     commandFollowUpPosters.set(this, (command) => this.#postInternalFollowUp(command));
     commandBusCloseStarters.set(this, () => {
@@ -302,6 +312,18 @@ export class CommandBus {
  * @internal
  */
 export const commandBusAccess: CommandBusAccess = Object.freeze({
+  /**
+   * Binds the private queue to its framework context's captured environment.
+   * @param commandBus Framework context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindEnvironment(commandBus: CommandBus, environment: ServerEnvironment): void {
+    const runtime = commandBusRuntimes.get(commandBus);
+    if (runtime === undefined)
+      throw new TypeError("Framework binding requires a CommandBus instance.");
+    runtimeAccess.bindFrameworkEnvironment(runtime, environment);
+  },
+
   /**
    * Sets the context's live Command tenant check.
    *

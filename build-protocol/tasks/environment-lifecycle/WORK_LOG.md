@@ -3595,3 +3595,20 @@ m13-regression-slice-b-evidence.md. No production runtime contract changed.
 Checkpoint and push, then proceed C using the existing runtimeWork active frame
 rather than a new async scope or public API. The frame already expires on
 handler settlement; preserve that safeguard and test escaped callbacks.
+
+C1 review correction design accepted within the existing drain contract: reuse
+RuntimeWorkFrame.active and a private WeakMap binding each framework bus runtime
+to the exact captured environment. Closing Stand admission requires both active
+work and matching environment; unrelated public runtimes have no binding. No
+new async scope, public API, token protocol or lifecycle mode. Closed Stand check
+still runs first; settled frames stay inactive. The new unrelated-runtime tests
+reproduce the defect in both close orders before the correction. Existing
+reviewers will verify the completed correction and environment association.
+
+C1 shutdown runtime fix accepted after red/green, 57/57 affected tests, static
+checks, scoped changed-line coverage and clean reliability/API confirmation.
+Checkpoint only its seven frozen paths plus parent records. Independent C2
+project-routing fixture may be edited concurrently by the same implementer;
+exclude it from this checkpoint. It supplies required actor context, actor and
+timestamp to Commands rather than weakening dispatch validation. No other
+runtime writes overlap the reviewed C1 slice.

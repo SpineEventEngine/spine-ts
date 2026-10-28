@@ -53,6 +53,7 @@ import {
   EventRouting,
   HandlerRegistryIngestor,
   Server,
+  SingleProcessServerRuntime,
 } from "../../src/index.js";
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
@@ -1076,6 +1077,8 @@ describe("Process Manager querying", () => {
       const server = Server.atPort(0);
       for (const context of contexts) server.add(context);
       const running = await server.start();
+      const unrelatedRuntime = new SingleProcessServerRuntime();
+      await unrelatedRuntime.start();
       let began!: () => void;
       const sourceClosing = new Promise<void>((resolve) => {
         began = resolve;
@@ -1096,6 +1099,14 @@ describe("Process Manager querying", () => {
         const closing = running.close();
         await sourceClosing;
         expect(() => projects.stand().stateTypes()).not.toThrow();
+        await expect(projects.stand().readAllVersioned(ProjectOverviewStateSchema)).rejects.toThrow(
+          "Bounded Context is closing.",
+        );
+        await expect(
+          unrelatedRuntime.enqueue(async () => {
+            await projects.stand().readAllVersioned(ProjectOverviewStateSchema);
+          }),
+        ).rejects.toThrow("Bounded Context is closing.");
         release();
         expect(await posting).toBeUndefined();
         await closing;
@@ -1106,6 +1117,7 @@ describe("Process Manager querying", () => {
         closePhase.onBegin = undefined;
         release();
         await running.close();
+        await unrelatedRuntime.close();
       }
     },
   );

@@ -1607,3 +1607,48 @@ stage exclusion retains authored checks and has red/green proof; fixture changes
 retain current public contracts. All relevant dispositions are accepted. C will
 receive targeted reliability review after its executable correction and focused
 checks, including immediate fresh-input rejection and expired handler scope.
+
+### Full-suite correction C1: admitted reads during shutdown
+
+Five-path runtime/test slice frozen after 57/57 affected tests, generated build,
+tooling typecheck, lint/TSDoc/cleanup/format/diff, and scoped changed-line coverage.
+Evidence m13-shutdown-slice-evidence.md and m13-shutdown-coverage/lcov.info.
+Existing performance/reliability reviewer and TypeScript/API reviewer each use
+explicit immutable gpt-6-sol / medium profiles. Read-only, no tests/builds/edits
+or nested agents; verify frozen hashes. Reliability covers active-handler scope,
+settlement, fresh-input fence and context drain order. API covers package-private
+access, terminal errors, TSDoc and unchanged public lifecycle. Parent's style
+inspection is confined to the small accessor/guard diff and deterministic checks;
+no new abstractions or broad documentation claims. Security re-review is N/A:
+this internal in-process handler scope does not change tenant/authentication
+admission; verify that assumption in the technical lanes. Full human ledger and
+D-0162/D-0163 apply. Runtime metadata is unavailable; configured profiles recorded.
+
+C1 full targeted review wave collected: both reliability and API reviewers
+confirm one P1. Any active public SingleProcessServerRuntime callback currently
+passes the closing Stand exception, including an unrelated runtime. Original
+drain and closed-error issues are fixed, but the exception must be narrower.
+All five frozen hashes matched; both explicit Sol/medium profiles confirmed,
+runtime metadata unavailable. One deduplicated correction batch returns to the
+existing implementer: preserve legitimate framework-handler follow-up and reject
+fresh reads from unrelated public runtimes during close. Add a focused behavior
+regression; retain settlement and fresh external read coverage. No tenant/auth
+bypass was found. Re-review the affected reliability/API concerns after checks.
+
+C1 P1 correction frozen across seven paths. The unrelated public-runtime
+regression is red before and green after the exact-environment binding; complete
+affected suites pass 57/57. Build, tooling, lint/TSDoc/cleanup/format/diff and fresh
+scoped coverage pass. Evidence m13-shutdown-correction-evidence.md, frozen hashes
+m13-shutdown-correction-manifest.sha256. Return only the changed concern to the
+same explicit Sol/medium reliability and API reviewers. No full-wave restart;
+public/serialized contracts unchanged. Parent records excluded from hashes.
+
+C1 targeted correction accepted by both existing Sol/medium reviewers; all seven
+frozen hashes match. Active callback plus exact captured environment admits only
+framework bus work; unrelated public runtime cannot bypass the closing fence.
+Scope expires on settlement, closed Stand is checked first, and tenant admission
+is unchanged. Weak-map binding adds no resources or context registrations. No
+remaining findings. Explicit profiles confirmed, runtime metadata unavailable.
+Parent style inspection confirms private access follows existing bus helpers and
+introduces no public abstraction. Current narrow TSDoc is accurate; no broader
+documentation change is needed for restoring the accepted drain guarantee.

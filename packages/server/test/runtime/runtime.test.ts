@@ -23,6 +23,7 @@ import {
   type ServerRuntimeState,
   type ServerRuntimeWork,
 } from "../../src/runtime/runtime.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
 
 describe("SingleProcessServerRuntime", () => {
   it("starts and closes with deterministic lifecycle states", async () => {
@@ -226,6 +227,24 @@ describe("SingleProcessServerRuntime", () => {
     await followUpCompletion;
 
     expect(observed).toEqual(["outer", "follow-up"]);
+  });
+
+  it("ends admitted-work authority when a detached async callback outlives its work", async () => {
+    const runtime = new SingleProcessServerRuntime();
+    const environment = ServerEnvironment.instance();
+    runtimeAccess.bindFrameworkEnvironment(runtime, environment);
+    const escaped = Promise.withResolvers<undefined>();
+    let later!: Promise<boolean>;
+    await runtime.start();
+
+    await runtime.enqueue(() => {
+      expect(runtimeAccess.isRunningAdmittedWork(environment)).toBe(true);
+      later = escaped.promise.then(() => runtimeAccess.isRunningAdmittedWork(environment));
+    });
+    escaped.resolve(undefined);
+
+    await expect(later).resolves.toBe(false);
+    await runtime.close();
   });
 
   it("drains follow-up work appended while close is already draining", async () => {
