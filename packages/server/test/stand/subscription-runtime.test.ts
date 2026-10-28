@@ -85,6 +85,30 @@ describe("SubscriptionRuntime", () => {
     await runtime.close();
   });
 
+  it("shares one pending first pass across concurrent starts", async () => {
+    const registry = new GatedSnapshotRegistry();
+    const snapshot = vi.spyOn(registry, "snapshot");
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      registry,
+    );
+    const first = runtime.start();
+    const second = runtime.start();
+    try {
+      expect(second).toBe(first);
+      await registry.snapshotCaptured;
+      expect(snapshot).toHaveBeenCalledOnce();
+      registry.releaseSnapshot();
+      await Promise.all([first, second]);
+    } finally {
+      registry.releaseSnapshot();
+      await runtime.close();
+    }
+  });
+
   it("owns one explicit reconciliation lifecycle", () => {
     expect(SubscriptionRuntime).toBeTypeOf("function");
   });
@@ -183,6 +207,66 @@ describe("SubscriptionRuntime", () => {
     }
   });
 
+  it("keeps an active Event observer usable through a failed periodic pass", async () => {
+    vi.useFakeTimers();
+    const storageFactory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "MonitorObserver", multitenant: false },
+      storageFactory,
+    });
+    const bus = new EventBus(
+      new EventStore({ name: "MonitorObserver", multitenant: false }, storageFactory),
+    );
+    eventBusAccess.registerSchemas(bus, [TaskCreatedSchema]);
+    const registry = new InMemorySubscriptionRegistry();
+    const id = create(SubscriptionIdSchema, { value: "monitor-event" });
+    await registry.create(
+      create(SubscriptionSchema, {
+        id,
+        topic: create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "monitor-topic" }),
+          target: create(TargetSchema, {
+            type: TypeUrls.derive(TaskCreatedSchema),
+            criterion: { case: "includeAll", value: true },
+          }),
+        }),
+      }),
+    );
+    await registry.activate(id);
+    const runtime = new SubscriptionRuntime(stand, stand, bus, bus, registry);
+    const delivered = vi.fn();
+    try {
+      await runtime.start();
+      const consumer = await runtime.consume(id.value, delivered);
+      const snapshot = vi.spyOn(registry, "snapshot").mockRejectedValueOnce(new Error("temporary"));
+      await vi.advanceTimersByTimeAsync(10_000);
+      await bus.post(
+        create(EventSchema, {
+          id: create(EventIdSchema, { value: "monitor-event-1" }),
+          context: create(EventContextSchema),
+          message: AnyPacker.pack(
+            TaskCreatedSchema,
+            create(TaskCreatedSchema, {
+              id: create(TaskIdSchema, { value: "monitor-task-1" }),
+              title: "First task",
+              taskListId: create(TaskListIdSchema, { value: "monitor-list" }),
+            }),
+          ),
+        }),
+      );
+      expect(delivered).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(snapshot).toHaveBeenCalledTimes(2);
+      expect(delivered).toHaveBeenCalledOnce();
+      consumer.unsubscribe();
+    } finally {
+      await runtime.close();
+      await bus.close();
+      await stand.close();
+      vi.useRealTimers();
+    }
+  });
+
   it("coalesces timer reconciliation while the current registry cycle is pending", async () => {
     vi.useFakeTimers();
     const registry = new GatedCleanupRegistry();
@@ -210,6 +294,38 @@ describe("SubscriptionRuntime", () => {
       expect(warn).toHaveBeenCalledOnce();
       await runtime.close();
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drains a held periodic pass and cancels future timer work on close", async () => {
+    vi.useFakeTimers();
+    const registry = new GatedCleanupRegistry();
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      registry,
+    );
+    try {
+      await runtime.start();
+      await vi.advanceTimersByTimeAsync(10_000);
+      await registry.cleanupStarted;
+      const closing = runtime.close();
+      let settled = false;
+      void closing.then(() => {
+        settled = true;
+      });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      registry.releaseCleanup();
+      await closing;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(registry.cleanupCalls).toBe(2);
+    } finally {
+      registry.releaseCleanup();
+      await runtime.close();
       vi.useRealTimers();
     }
   });
@@ -271,17 +387,29 @@ describe("SubscriptionRuntime", () => {
       {} as never,
       registry,
     );
-    subscriptionRuntimeAccess.installLogger(runtime, logger as never);
+    subscriptionRuntimeAccess.installLogger(runtime, logger as never, "MonitorContext");
     expect(runtime.registry()).toBe(registry);
     await expect(runtime.start()).rejects.toThrow("snapshot failed");
     await runtime.start();
-    vi.spyOn(registry, "snapshot").mockRejectedValueOnce(new Error("later snapshot failed"));
+    const snapshot = vi.spyOn(registry, "snapshot");
+    snapshot.mockRejectedValueOnce(
+      Object.assign(new Error("private registry detail"), {
+        name: "SnapshotFailure",
+        code: "REGISTRY_UNAVAILABLE",
+      }),
+    );
     await vi.advanceTimersByTimeAsync(10_000);
     expect(warn).toHaveBeenCalledOnce();
     expect(logger.withMetadata).toHaveBeenNthCalledWith(1, {
+      contextName: "MonitorContext",
       operation: "subscription.reconcile",
       reasonCode: "failed",
+      errorName: "SnapshotFailure",
+      errorCode: "REGISTRY_UNAVAILABLE",
     });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(snapshot).toHaveBeenCalledTimes(4);
+    expect(warn).toHaveBeenCalledOnce();
     await runtime.close();
     vi.useRealTimers();
   });

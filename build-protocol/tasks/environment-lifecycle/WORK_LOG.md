@@ -3014,3 +3014,84 @@ Changed-line coverage context130/134, services25/25; defensive guard/rollback
 limits and non-isolated pre-page proof remain recorded externally. All four
 canonical review concerns resolved; security and release remain M13. Commit and
 immediately push this accepted snapshot, then continue M10.
+
+M9 integrated as c8e22b678146f48f4af51d2417314262f2e167c3 and immediately
+pushed to official origin/environment-lifecycle; exact remote SHA verified.
+Clean worktree before M10 records. Overall estimate approximately70%,9/13
+accepted milestones; remaining scopes differ in size.
+
+M10 starts: bounded subscription monitoring continuation of high-risk lifecycle
+wave. Estimate1–2hours including implementation, focused behavior coverage, cheap
+checks, relevant independent review, corrections and push. Accepted architecture
+unchanged; no new planning pass. Existing implementer storage_retention retains
+sole production/test writing responsibility, original explicit gpt-6-sol/medium
+profile; runtime metadata unavailable. No children/commits/pushes. Parent edits
+records only. Brief: /tmp/spine-environment-lifecycle-20261027/
+m10-monitor-implementation-brief.md and current map. Acceptance: later failure
+WARN includes useful cause/context; next scheduled attempt recovers; unaffected
+observers remain usable; no overlap/restart after close; concurrent initial start
+coalesces; lazy initial failure rejects only request and can retry. Preserve M9
+shutdown/admission contracts and existing interval, with no recovery substitutes.
+Focused regression and changed-line coverage precede review; final release M13.
+
+While M10 writer works, dispatch independent read-only M12 protocol inventory
+to existing mechanical_checks function, original explicit gpt-6-luna/low.
+Identify current TENANT_UNKNOWN coverage across native gRPC, browser Connect,
+gateway and client/coordinator ingress, and existing Server setup responsibilities.
+Return exact source/test paths and uncovered claims, no fixes/tests/builds/children.
+This prepares bounded M12 work without overlapping production writes.
+
+M11 handoff clarification during parent source inspection: authoritative
+FACTORY_PREPARATION.md explicitly requires pending check/create callers share
+the same result, including failure; a later create call may retry. The prior
+external brief suggested a waiting creator should get an independent creation
+attempt, contradicting that accepted table. Corrected external handoff before
+M11 dispatch. Mode-agnostic coalescing alone is not a defect; preserve read-only
+permissions, failure clearing and provider-authoritative readiness. No public
+contract or accepted architecture changes; no extra planning pass needed.
+
+M12 read-only map accepted from original explicit Luna/low function; runtime
+metadata unavailable, no source edits/tests. Native command/query already prove
+structured unknown-tenant status over real gRPC. Subscription service evidence is
+direct-handler; client subscription evidence mocks transport. Browser gateway
+forwarding needs representative real integration proof. Server/BrowserServer
+separation is already implemented. External M12 brief records this bounded scope
+and residual Any adoption; implementation remains pending M11.
+
+M10 writer checkpoint: useful WARN cause/context red-to-green; focused tests
+pass for concurrent initial start, lazy first Event failure/retry before handler,
+held periodic pass close, and actual Event observer delivery through failure.
+Existing cadence/tail retained. Full affected suites/static/coverage pending;
+no acceptance or review yet.
+
+M10 pre-freeze parent inspection flagged global arbitrary errorMessage allowance
+as inconsistent with existing bounded errorName/errorCode logging approach and
+secret-omission tests. Writer asked to check policy and retain safe useful
+context/cause facts. This is implementation convergence before review, not a
+partial reviewer batch or early security lane.
+
+M10 preliminary affected suite133/133 passed before final logging refinement.
+Writer retains existing bounded errorName/errorCode/context fields and removes
+new raw-message allowance. Full format found only an extra trailing blank line
+in parent-controlled FATAL_INITIALIZATION.md; parent mechanically removed it,
+no semantic change. Final evidence must include resulting checks and logging test.
+
+M10 final focused checks: fresh build,3suites139/139, changed production lines
+context1/1 andsubscription runtime9/9,tooling,ESLint,TSDoc,cleanup,format,diff
+pass. Bounded errorName/errorCode retained; no arbitrary-message allowance.
+Generated documentation checks and final freeze pending.
+
+M11 current registration clarification: registerBoundedContext is called only by
+builder #assembleContext; no public late repository/model registration API exists.
+External brief clarified conditional earlier late-model wording: preserve captured
+complete requirements and newly completed contexts, without adding unsupported
+public lifecycle merely for a test. Actual source must govern final disposition.
+
+M10 accepted: fresh generated build,3suites139/139 and all changed production
+lines covered (context1/1,runtime9/9); tooling,ESLint,TSDoc,cleanup,format,
+generated docs,diff pass. Independent reliability and documentation reviews
+clean,7/7 final frozen hashes match. Both explicit profiles confirmed; runtime
+metadata unavailable. Narrow diagnostic propagation preserves existing timer,
+coalescing and close machinery; no unsafe errorMessage field. API/style N/A
+reasons recorded in review log; final security/release remain M13. Commit and
+immediate push next, then M11. Overall progress approximately75%.

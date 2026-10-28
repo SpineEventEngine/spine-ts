@@ -174,6 +174,10 @@ subscription registry, so `startSubscriptionMonitoring: true` prepares that
 registry even when `createStorageStructures: false`; it does not prepare all
 tenant Entity families. An eager required preparation or initial monitoring
 failure stops accepting new input and triggers attempt-all cleanup.
+After a successful first pass, a failed periodic reconciliation logs a WARN
+with the context name and bounded error name or code, leaves unaffected observers active,
+and retries on the existing ten-second schedule. Closing the context cancels
+the timer and drains an admitted pass before detaching observers.
 
 `storageFactory` supplies records and events to every context. `typeRegistry` is the complete
 application schema universe used by `ThirdPartyContext` to encode outgoing

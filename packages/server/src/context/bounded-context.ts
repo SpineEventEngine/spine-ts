@@ -1897,7 +1897,7 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     if (runtime === undefined) {
       throw new TypeError("Context logger requires a built BoundedContext instance.");
     }
-    subscriptionRuntimeAccess.installLogger(runtime, logger);
+    subscriptionRuntimeAccess.installLogger(runtime, logger, context.name.value);
   },
 
   loggerFor(context: BoundedContext): ILogLayer {

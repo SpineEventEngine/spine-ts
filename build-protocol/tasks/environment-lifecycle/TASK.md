@@ -21,8 +21,9 @@ are verified, independently reviewed and pushed. Immutable Agent acceptance rece
 conditional live Agent persistence and complete runtime recovery removal are reviewed and pushed.
 Shared environment setup and Delivery consolidation are reviewed and complete,
 including context-specific shutdown and retained shared dispatch lifetimes.
-Bounded Context eager/lazy initialization is verified and independently reviewed.
-Subscription monitoring is next. Remaining milestones follow
+Bounded Context eager/lazy initialization is reviewed and pushed.
+Subscription monitoring is verified and independently reviewed. Explicit context
+and environment preparation APIs are next. Remaining milestones follow
 MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.

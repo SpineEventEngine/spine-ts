@@ -2385,6 +2385,31 @@ describe("BoundedContext assembly", () => {
     }
   });
 
+  it("retries the first lazy monitor failure before dispatching a later Event", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const registry = new InMemorySubscriptionRegistry();
+    const failure = new Error("first subscription snapshot failed");
+    const snapshot = vi.spyOn(registry, "snapshot").mockRejectedValueOnce(failure);
+    const dispatched = vi.fn();
+    const context = await BoundedContext.singleTenant("LazyMonitorRetry")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], dispatched))
+      .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+    try {
+      await expect(
+        context.eventBus().post(createProjectionEvent("first-monitor-event")),
+      ).rejects.toBe(failure);
+      expect(dispatched).not.toHaveBeenCalled();
+      await context.eventBus().post(createProjectionEvent("second-monitor-event"));
+      expect(dispatched).toHaveBeenCalledOnce();
+      expect(snapshot).toHaveBeenCalledTimes(2);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("rejects an invalid imported Event before lazy provider preparation", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
