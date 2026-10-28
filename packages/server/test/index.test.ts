@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { TimeProvider } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema } from "@spine-event-engine/proto";
 
 import * as serverRoot from "../src/index.js";
@@ -91,6 +91,7 @@ import {
   type SignalMetadataOptions,
   SingleProcessServerRuntime,
 } from "../src/index.js";
+import { ServerTests } from "../src/testing/index.js";
 import {
   type CreateProject,
   CreateProjectSchema,
@@ -139,11 +140,18 @@ class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof ProjectStateS
 describe("@spine-event-engine/server", () => {
   const contexts: BoundedContext[] = [];
 
+  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+
   afterEach(async () => {
     const closing = await Promise.allSettled(contexts.splice(0).map((context) => context.close()));
     const failures = closing.flatMap((result): unknown[] =>
       result.status === "rejected" ? [result.reason as unknown] : [],
     );
+    const reset = await ServerTests.resetEnvironment().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    if (reset !== undefined) failures.push(reset);
     if (failures.length > 0) throw new AggregateError(failures, "API smoke cleanup failed.");
   });
 

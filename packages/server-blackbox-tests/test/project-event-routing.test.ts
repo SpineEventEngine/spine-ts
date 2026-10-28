@@ -33,9 +33,11 @@ import {
   ProcessManager,
   Projection,
   Repository,
+  ServerEnvironment,
 } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { BlackBox } from "@spine-event-engine/testing";
 import {
@@ -507,6 +509,8 @@ function expectProjectWorkflowIds(
 }
 
 describe("project workflow Event routing", () => {
+  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+  afterEach(async () => ServerTests.resetEnvironment());
   it("delivers a client and server-context Command through a command-substituting Process Manager", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const boundedContext = await context(routeTo(portfolio), planning, staffing);

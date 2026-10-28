@@ -12,9 +12,14 @@
  * the License.
  */
 
-import { test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
+import { ServerEnvironment } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 
 import * as testing from "../src/index.js";
 import { registerBlackBoxContract } from "./black-box.contract.mjs";
+
+beforeEach(async () => ServerEnvironment.instance().completeSetup());
+afterEach(async () => ServerTests.resetEnvironment());
 
 registerBlackBoxContract(test, testing);

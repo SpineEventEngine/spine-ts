@@ -20,7 +20,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 import {
@@ -31,6 +31,7 @@ import {
 import { AnyPacker } from "@spine-event-engine/core";
 import type { Topic } from "@spine-event-engine/proto/client";
 import { BoundedContext } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 
 import {
   EditReleaseNotesSchema,
@@ -55,6 +56,8 @@ type SubscriptionForwarder = (
   topicOrSchemas: Topic | readonly GenMessage<Message>[],
   options: CreateSubscriptionOptions,
 ) => Promise<Subscription>;
+
+afterEach(async () => ServerTests.resetEnvironment());
 
 const delayRejectionDelivery = () => {
   const client = Client.usingTransport(

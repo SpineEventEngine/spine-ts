@@ -36,13 +36,17 @@ import {
 import { CommandService } from "@spine-event-engine/proto/client";
 import { QueryService } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
-import { describe, expect, it, vi } from "vitest";
+import { ServerEnvironment } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { projectManagementLoadLevels, runProjectManagementLoad } from "../src/load-runner.js";
 import { LatencyDistribution } from "../src/internal/latency-distribution.js";
 import { ProjectSummarySchema } from "../generated/spine/examples/projects/read_models_pb.js";
 
 describe("project-management load runner", () => {
+  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+  afterEach(async () => ServerTests.resetEnvironment());
   it("calculates exact nearest-rank percentiles for varied and empty values", () => {
     expect(LatencyDistribution.from([20, 1, 50, 10, 5, 100, 2, 3, 4, 6])).toEqual({
       p50Ms: 5,

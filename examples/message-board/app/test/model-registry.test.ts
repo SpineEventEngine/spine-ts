@@ -52,8 +52,9 @@ import {
   type Query,
 } from "@spine-event-engine/proto/client";
 import { BoundedContext, Server } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const browserHost = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn() }));
 
@@ -68,6 +69,8 @@ import { MessageBoardApplication, BoardMessageAggregate, typeRegistry } from "..
 
 describe("MessageBoard Projection backend", () => {
   const application = new MessageBoardApplication();
+
+  afterEach(async () => ServerTests.resetEnvironment());
 
   it("decodes every MessageBoard model value from the single model package", () => {
     const user = create(UserIdSchema, { value: "ada" });
@@ -120,8 +123,10 @@ describe("MessageBoard Projection backend", () => {
       });
     const closeCreated = async () => {
       await created.pop()?.close();
+      await ServerTests.resetEnvironment();
     };
     const storage = new InMemoryStorageFactory();
+    const combinedStorage = new InMemoryStorageFactory();
     try {
       browserHost.open.mockResolvedValueOnce({ baseUrl: "http://started" });
       browserHost.run.mockImplementationOnce(
@@ -141,7 +146,10 @@ describe("MessageBoard Projection backend", () => {
       });
       await closeCreated();
       await expect(
-        application.runCombined({ port: 3, webOrigin: "https://board.example.com" }, storage),
+        application.runCombined(
+          { port: 3, webOrigin: "https://board.example.com" },
+          combinedStorage,
+        ),
       ).resolves.toEqual({ baseUrl: "http://running" });
       await closeCreated();
 
@@ -155,6 +163,7 @@ describe("MessageBoard Projection backend", () => {
       await closeResources([
         ...created.map((context) => () => context.close()),
         () => storage.close(),
+        () => combinedStorage.close(),
       ]);
     }
   });

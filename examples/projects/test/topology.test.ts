@@ -24,11 +24,12 @@ import { QueryIdSchema, QuerySchema } from "@spine-event-engine/proto/client";
 import { QueryService } from "@spine-event-engine/proto/client";
 import { TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
-import { SignalMetadata } from "@spine-event-engine/server";
+import { ServerEnvironment, SignalMetadata } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CreateProjectSchema } from "../generated/spine/examples/projects/commands_pb.js";
 import { ProjectSummarySchema } from "../generated/spine/examples/projects/read_models_pb.js";
@@ -42,6 +43,8 @@ import { TaskSchema } from "../generated/spine/examples/projects/entities_pb.js"
 const metadata = new SignalMetadata();
 
 describe("project-management load example", () => {
+  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+  afterEach(async () => ServerTests.resetEnvironment());
   it("passes one shared weight service to restored TaskAssignment instances", async () => {
     const { createProjectManagementContext } = await import("../dist/src/index.js");
     let weightCalls = 0;

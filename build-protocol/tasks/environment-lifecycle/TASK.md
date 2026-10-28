@@ -27,7 +27,8 @@ preparation APIs are verified, independently reviewed and pushed. Protocol integ
 and remaining AnyPacker adoption are verified, independently reviewed and pushed.
 Final documentation, native evidence, specialist review and security review
 are accepted. The version-only commit for all 35 workspace manifests is pushed.
-Final release verification is in progress;
+The first full-suite execution exposed regression failures; bounded corrections
+and final release verification are in progress;
 exact-SHA remote CI remains pending. Remaining milestones follow
 MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
@@ -93,8 +94,8 @@ and dispatch evidence are kept outside version control in `/tmp/spine-environmen
 ## Remaining work
 
 The ordered milestones are frozen in MILESTONES.md. Implementation and review
-are accepted. Complete the mandatory preflight and release checks, resolve any
-confirmed failures, push every feature commit immediately, and report exact
+are accepted for the completed slices. Resolve the full-suite regression failures,
+complete the mandatory preflight and release checks, push every feature commit immediately, and report exact
 remote state. The common unused version has been committed separately. Do not create
 or merge a pull request without explicit human instruction.
 

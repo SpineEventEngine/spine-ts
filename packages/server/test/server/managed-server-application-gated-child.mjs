@@ -1,6 +1,7 @@
-import { ManagedServerApplication, Server } from "../../dist/index.js";
+import { ManagedServerApplication, Server, ServerEnvironment } from "../../dist/index.js";
 import { setTimeout } from "node:timers";
 
+await ServerEnvironment.instance().completeSetup();
 await ManagedServerApplication.run({
   processCount: 1,
   port: 50_051,

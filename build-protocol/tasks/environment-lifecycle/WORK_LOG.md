@@ -3542,3 +3542,47 @@ Push the correction, then reuse the explicit Luna/low mechanical function for
 the entire cheap preflight (including logging containment and all remaining
 cheap policy checks) before release attempt 3. Earlier full attempts never
 reached global tests or coverage. Do not infer a full-suite result from them.
+
+Release attempt 3 reached the full suite after every static/policy gate passed.
+Result: 401 files (373 passed, 24 failed, 4 skipped); 6,249 tests (6,126 passed,
+107 failed, 16 skipped), 293.48 seconds. No global coverage table was emitted.
+The exact scripts-first inventory is m13-final-verification-report-retry3.md and
+raw output m13-verify-release-retry3.log in the external evidence directory.
+Current progress estimate revised to approximately 93 percent pending regression
+corrections. Estimate 1.5–3 hours for classification, bounded fixes, focused
+verification, relevant review and final release; revise for demonstrated risks.
+
+Assign the complete failure batch to the existing explicit gpt-6-sol / medium
+implementer. Start with fixture/example startup and reset changes, stale public
+inventories and provider doubles. Preserve explicit setup, unconditional state
+uniqueness, live TenantIndex admission and all accepted lifecycle contracts.
+Investigate remaining shutdown/delivery/Agent failures rather than changing
+assertions to fit current behavior. Classify runtime defects separately; request
+architecture help only for demonstrated ambiguity. One production writer;
+no nested agents. Parent handles logs, commits and pushes. Focused corrections
+must converge before another complete preflight and release attempt. No full
+suite is authorized as a diagnostic loop.
+
+Full-batch triage accepted: slice A updates explicit setup and cleanup in
+fixtures/examples/managed child startup; slice B updates stale inventories,
+module mocks, provider doubles and tool fixtures; slice C investigates shutdown,
+Delivery and live Agent journal behavior with focused reproductions. Freeze and
+verify each coherent slice before parent checkpoint. Production application code
+must not reset the singleton simply to accommodate repeated tests; use explicit
+fixture isolation. Do not alter runtime expectations without verifying the
+accepted guarantee. No additional architecture pass is justified yet.
+
+While slice A proceeds, reuse the explicitly configured gpt-6-luna / low
+mechanical function for read-only extraction of full failure blocks for slices
+B/C from the existing release log. No tests/builds/source investigation or edits;
+provide exact stdout/stderr and stack paths, including missing-message blocks.
+This independent evidence extraction does not duplicate implementation work.
+Actual runtime metadata remains unavailable; immutable configured profile applies.
+
+Slice A accepted as a bounded fixture/application setup checkpoint, not full
+regression convergence. Parent inspected all changes and strengthened fresh
+configured resource cleanup proof; focused test and lint pass. Evidence is
+m13-regression-slice-a-evidence.md. Runtime source remains unchanged; Projects
+application explicitly completes environment setup. All original failure
+records remain available. Continue automatically with slice B after push, then
+slice C runtime investigation. The final full release result remains failed.

@@ -26,10 +26,12 @@ import {
   type EntityHandlersMetadata,
   HandlerRegistryIngestor,
   Repository,
+  ServerEnvironment,
 } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { BlackBox } from "@spine-event-engine/testing";
 import { readAgentHistory } from "@spine-event-engine/server/testing";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { generatedHandlerRegistry } from "../dist/generated/handler/generated-handler-registry.js";
 import {
@@ -104,6 +106,8 @@ function generatedSupportContext(
 }
 
 describe("support reply Agent", () => {
+  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+  afterEach(async () => ServerTests.resetEnvironment());
   it("registers authored handlers through generated Bounded Context discovery", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-48" });
     const context = await generatedSupportContext("Support reply generated")

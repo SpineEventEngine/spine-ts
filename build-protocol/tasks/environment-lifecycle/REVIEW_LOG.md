@@ -1548,3 +1548,22 @@ joins an already reported cleanup outcome; malformed warning metadata cannot
 prevent the later safe WARN. Checker 5/5 and runtime 44/44 pass, with relevant
 lint, typecheck, format and diff checks. This deterministic correction preserves
 all accepted specialist/security dispositions; no review lane is reopened.
+
+### Full-suite correction slice A
+
+Existing explicit Sol/medium implementation profile confirmed; runtime metadata
+unavailable. Parent inspected the complete 14-path fixture/application diff.
+It adds explicit setup and test reset, updates the active-context reset contract,
+and initializes both managed child fixtures. The sole application change calls
+completeSetup before constructing the Projects context. No shared runtime or
+public API contract changes. Parent required the fresh configured cleanup delegate
+to be verified by a close spy, replacing a weak presence check; focused case 1/1
+and lint pass after correction. Existing technical/API/documentation/security
+reviews remain accepted: these are deterministic callers of their reviewed API;
+no new semantics or human-facing claims require reopening those lanes.
+Focused evidence: 40 server/testing cases, 17 project/order cases, 7 singleton,
+7 Studio, 7 support-Agent cases, and 2 selected managed child cases pass. The
+Message Board suite passed 9/9. Counts are scoped and may overlap other runs.
+Studio passed alone; a combined run timed out. Project produced-signal workflow
+and broader managed lifecycle failures remain unresolved and are not accepted
+as passing. They proceed in slice C. No global convergence claim.
