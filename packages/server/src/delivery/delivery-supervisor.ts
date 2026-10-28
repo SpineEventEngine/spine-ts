@@ -459,8 +459,8 @@ export class DeliverySupervisor {
     } catch (error) {
       releaseError = error;
     }
-    if (releaseError !== undefined) throw DeliverySupervisor.#releaseError(releaseError);
     if (this.#active.size > 0) await this.whenIdle();
+    if (releaseError !== undefined) throw DeliverySupervisor.#releaseError(releaseError);
     this.#closed = true;
     deliverySupervisorLoggers.delete(this);
     if (timedOut) throw new DeliveryShutdownTimeoutError();

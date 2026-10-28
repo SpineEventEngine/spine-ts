@@ -1925,8 +1925,11 @@ describe("Server", () => {
     const running = await server.run();
 
     await running.close();
+    await expect(server.run()).rejects.toThrow("ServerEnvironment is closed.");
+    await resetServerEnvironmentForTest();
+    await ServerEnvironment.instance().completeSetup();
 
-    const restarted = await server.run();
+    const restarted = await Server.atPort(0).run();
     expect(restarted).not.toBe(running);
     await restarted.close();
   });

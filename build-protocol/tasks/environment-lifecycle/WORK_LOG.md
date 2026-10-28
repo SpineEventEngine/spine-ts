@@ -3612,3 +3612,59 @@ project-routing fixture may be edited concurrently by the same implementer;
 exclude it from this checkpoint. It supplies required actor context, actor and
 timestamp to Commands rather than weakening dispatch validation. No other
 runtime writes overlap the reviewed C1 slice.
+
+C2 has a demonstrated delivery cycle: a Process Manager Event handler awaits its
+produced Command, while both need the same active shared Inbox shard. The parent
+Event row cannot finish, later recipients stall, and context close waits. Proposed
+reuse of EntityInboxFollowUp may change acknowledgement versus outgoing Command
+publication order. This is a concrete concurrency/durability ambiguity and
+justifies one bounded architecture revisit under the protocol (estimate 0.2–0.4
+hours including design check and implementation handoff). Preserve ordinary
+Aggregate/PM/Projection delivery behavior and avoid a new queue or recovery policy.
+Existing requirements-splitting/architecture function uses explicit gpt-6-astra /
+high; no nested agents. Runtime correction waits for the narrow conclusion;
+valid fixture correction and red evidence remain. Actual runtime metadata is
+unavailable; configured profile must be verified before acceptance.
+
+Independent C3 Delivery close regression reproduced: a zero-grace release error
+is thrown before whenIdle waits for active runs, so callers observe rejection
+while admitted work/cleanup still settles. Existing TSDoc and D-0162 require
+that active work remains retained through cleanup. Authorize the bounded ordering
+correction: retain the release error, wait for active settlement, then report
+that error without changing grace periods or adding timers. Focused red/green,
+close-path checks and reliability review required. Keep this separate from C2
+produced-Command architecture work. Existing Sol/medium implementer continues.
+
+C2 architecture ruling accepted as D-0164. Existing explicit Astra/high
+requirements-splitter confirmed its profile and source-backed scope; runtime
+metadata unavailable. Register PM Event-produced Commands with the existing
+tracked publisher after commit, in handler order, without awaiting descendant
+handling inside the occupied shard. Keep replay signatures and existing
+substitution behavior. No new queue/persistence-only mode or atomic durability
+claim. Full report m13-produced-command-architecture.md remains external.
+Implementer receives the concrete focused test requirements and ordinary
+Sol/medium implementation resumes after C3 freeze.
+
+Human scope addition (2026-10-28): after completing the current lifecycle work,
+address all findings behind the scheduled failing GitHub security workflow.
+Provided run: https://github.com/SpineEventEngine/spine-ts/actions/runs/40632154594.
+Inspect that run read-only now and retain concrete findings; implement the security
+follow-on after current runtime convergence. Do not drop either scope, suppress
+security checks, change failure thresholds or create/merge a PR without explicit
+authorization. Security review is explicitly requested for this added work.
+
+C3 accepted after independent reliability review and frozen-hash confirmation.
+The existing 52 supervisor tests pass, including deterministic red/green for
+release failure while active work settles. Commit the one-line ordering change
+with the managed-server fixture correction: a closed environment cannot be
+reused; a fresh test environment requires a fresh builder. That fixture's focused
+test and static checks pass. No runtime restart contract changes. C2 remains
+uncommitted under the existing implementer.
+
+Security run evidence retrieved from job 122630779963: audit:release fails with
+31 vulnerabilities (12 high, 15 moderate, 4 low). The complete job log is retained
+in /tmp/spine-environment-lifecycle-20261027/security-job-122630779963.log.
+Updated remaining estimate: 2–4 hours for regression convergence, dependency
+remediation, focused review and full release verification; package compatibility
+is the principal uncertainty. Current completion estimate remains approximately
+93 percent, with security remediation additionally required.

@@ -1652,3 +1652,23 @@ remaining findings. Explicit profiles confirmed, runtime metadata unavailable.
 Parent style inspection confirms private access follows existing bus helpers and
 introduces no public abstraction. Current narrow TSDoc is accurate; no broader
 documentation change is needed for restoring the accepted drain guarantee.
+
+### Full-suite correction C3: Delivery active-run settlement
+
+One-file two-line ordering correction frozen after deterministic red/green,
+52/52 supervisor tests, generated build, lint/format/diff and changed-line/branch
+coverage. Existing performance/reliability reviewer uses explicit immutable
+Sol/medium for targeted read-only review, no tests/builds/edits/children. Scope:
+retain release timeout/error while awaiting entered active work, preserve retry,
+cleanup and error reporting. API, documentation and security dispositions remain
+accepted because signature, documented lifetime and admission policies are
+unchanged; this restores the existing D-0162 shutdown order. Parent checks style.
+Evidence m13-delivery-supervisor-correction-evidence.md. Runtime metadata unavailable.
+
+C3 reliability review is clean; exact frozen hash confirmed by reviewer and
+parent. Existing explicit Sol/medium profile confirmed; runtime metadata remains
+unavailable. Entered runs settle before retained release failure is reported,
+and release retry semantics remain unchanged. Parent style review accepts the
+two-line reorder. Managed-server fixture correction is deterministic under
+D-0159: reject reuse of a closed environment and build against an explicitly
+prepared fresh test environment. No additional specialist lane is warranted.
