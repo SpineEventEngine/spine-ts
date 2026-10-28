@@ -352,7 +352,6 @@ describe("AiTestBackend", () => {
         deadlineMs: 1000,
         totalInputBytes: 5000,
         totalOutputBytes: 5000,
-        maxRecoveryBytes: 5000,
       },
       concurrentOperations: 1,
       queuedOperations: 0,

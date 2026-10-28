@@ -14,6 +14,7 @@
 
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   clone,
   create,
@@ -36,6 +37,7 @@ import {
   ActorContextSchema,
   EventIdSchema,
   EventSchema,
+  MessageIdSchema,
   UserIdSchema,
   VersionSchema,
   type EventId,
@@ -43,8 +45,10 @@ import {
 import { TargetSchema, TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import {
   AgentHistoryEntrySchema,
+  AgentInvocationTerminatedSchema,
   ConversationIdSchema,
   ConversationRecordSchema,
+  type AgentHistoryEntry,
 } from "@spine-event-engine/proto/agent";
 import { file_spine_core_event as coreEventFile } from "@spine-event-engine/proto/generated/spine/core/event_pb.js";
 import { file_spine_core_command as coreCommandFile } from "@spine-event-engine/proto/generated/spine/core/command_pb.js";
@@ -52,12 +56,7 @@ import { file_spine_system_server_entity_log_events as entityEventsFile } from "
 import { file_spine_ts_agent_history as agentHistoryFile } from "@spine-event-engine/proto/generated/spine/ts/agent/history_pb.js";
 import { file_spine_ts_agent_interaction_events as interactionEventsFile } from "@spine-event-engine/proto/generated/spine/ts/agent/interaction_events_pb.js";
 import { file_spine_ts_agent_content as agentContentFile } from "@spine-event-engine/proto/generated/spine/ts/agent/content_pb.js";
-import {
-  SignalMetadata,
-  SpineServices,
-  type AgentExecutionStatus,
-  type AgentHistoryReader,
-} from "@spine-event-engine/server";
+import { SignalMetadata, SpineServices, type AgentHistoryReader } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 import {
@@ -73,11 +72,16 @@ import {
   ReleaseGenerationCanceledSchema,
   ReleaseGenerationCancelIgnoredSchema as CancelIgnoredSchema,
   ReleaseGenerationRequestedSchema,
+  ReleaseGenerationFailedSchema,
+  ReleaseNotesProposedSchema,
   ReleaseNotesExportPreparedSchema as ExportPreparedSchema,
 } from "../../generated/spine/examples/releasenotes/events_pb.js";
 import { file_spine_examples_releasenotes_types as releaseTypesFile } from "../../generated/spine/examples/releasenotes/types_pb.js";
 import { ReleaseGenerationInputsConflictSchema as GenerationInputsConflictSchema } from "../../generated/spine/examples/releasenotes/rejections_pb.js";
-import { ReleaseDraftStateSchema } from "../../generated/spine/examples/releasenotes/states_pb.js";
+import {
+  ReleaseDraftStateSchema,
+  ReleaseNotesAgentStateSchema as AgentStateSchema,
+} from "../../generated/spine/examples/releasenotes/states_pb.js";
 import {
   GitCommitIdSchema,
   ReleaseChangeSchema,
@@ -297,6 +301,8 @@ interface GenerationAdmission {
   sourceEventId?: EventId;
   rejection?: "inputs-conflict";
 }
+
+type GenerationTerminalEvidence = "completed" | "terminated";
 
 const Admission = {
   /**
@@ -1491,14 +1497,14 @@ export class ReleaseStudio {
   }
 
   /**
-   * Reads Aggregate acceptance, correlated rejection, and exact Agent execution status.
+   * Reads Aggregate acceptance, correlated rejection, and exact terminal evidence.
    *
    * @param generation Generation retained before its Command was posted.
-   * @returns Receipt, rejection, and Agent phase when its source Event is known.
+   * @returns Receipt, rejection, and observed terminal evidence when available.
    */
   async generationObservation(generation: string): Promise<{
     receipt: boolean;
-    phase: AgentExecutionStatus | undefined;
+    phase: GenerationTerminalEvidence | undefined;
     rejection?: "inputs-conflict";
   }> {
     const admission = this.admissions.get(generation);
@@ -1511,22 +1517,144 @@ export class ReleaseStudio {
   }
 
   /**
-   * Reads the exact Agent execution phase for an accepted generation Event.
-   * Missing records and accepted-but-unobserved events remain nonterminal.
+   * Reads exact typed Agent history for committed output or pre-handler denial.
+   * Missing source identity or a history without terminal evidence stays unknown.
    *
    * @param generation Generation identifier returned after Command acceptance.
-   * @returns Recorded phase, or undefined while the source Event is unknown.
+   * @returns Observed terminal evidence, or undefined while it is unknown.
    */
-  async generationPhase(generation: string): Promise<AgentExecutionStatus | undefined> {
+  async generationPhase(generation: string): Promise<GenerationTerminalEvidence | undefined> {
     const admission = this.admissions.get(generation);
     if (!admission?.sourceEventId) return undefined;
-    return this.context
+    const read = this.context
       .getRepository(ReleaseNotesAgent)
-      .agentExecution(
+      .agentHistory(create(ReleaseDraftIdSchema, { value: admission.draftId }), {});
+    let cursor: MessageShape<typeof AgentHistoryCursorSchema> | undefined;
+    do {
+      const page = await read.fullHistory({ pageSize: 40, ...(cursor ? { cursor } : {}) });
+      for (const entry of page.items) {
+        const evidence = this.terminalEvidence(entry, admission);
+        if (evidence) return evidence;
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+    return undefined;
+  }
+
+  /**
+   * Determines only original committed Agent output or definite model-use denial.
+   *
+   * @param admission Captured accepted generation or delivery admission.
+   * @param entry One retained history entry.
+   * @returns The exact committed output or denial phase, if this fact matches.
+   */
+  private terminalEvidence(
+    entry: AgentHistoryEntry,
+    admission: GenerationAdmission,
+  ): GenerationTerminalEvidence | undefined {
+    if (entry.item.case === "domainEvent" && this.matchesOutput(entry.item.value, admission))
+      return "completed";
+    if (entry.item.case === "systemEvent" && this.matchesDenial(entry.item.value, admission))
+      return "terminated";
+    return undefined;
+  }
+
+  /**
+   * Checks the immediate original source, producer, and actor of a retained fact.
+   *
+   * @param admission Captured accepted generation or delivery admission.
+   * @param event Original typed Event envelope.
+   * @returns Whether source, producer, and actor match the accepted generation.
+   */
+  private matchesSource(
+    event: MessageShape<typeof EventSchema>,
+    admission: GenerationAdmission,
+  ): boolean {
+    const origin = event.context?.origin;
+    if (origin?.case !== "pastMessage") return false;
+    const ref = origin.value.message;
+    const expected = admission.sourceEventId;
+    const producer = event.context?.producerId;
+    return (
+      expected !== undefined &&
+      ref?.typeUrl === TypeUrls.derive(ReleaseGenerationRequestedSchema) &&
+      AnyPacker.tryUnpack(ref.id, EventIdSchema)?.value === expected.value &&
+      producer !== undefined &&
+      equals(
+        AnySchema,
+        producer,
+        AnyPacker.pack(
+          ReleaseDraftIdSchema,
+          create(ReleaseDraftIdSchema, { value: admission.draftId }),
+        ),
+      ) &&
+      (admission.actor === undefined ||
+        (origin.value.actorContext !== undefined &&
+          equals(ActorContextSchema, origin.value.actorContext, admission.actor)))
+    );
+  }
+
+  /**
+   * Matches an Agent's final domain result to one historical generation image.
+   *
+   * @param admission Captured accepted generation or delivery admission.
+   * @param event Original typed Event envelope.
+   * @returns Whether the Event is final output for the accepted generation.
+   */
+  private matchesOutput(
+    event: MessageShape<typeof EventSchema>,
+    admission: GenerationAdmission,
+  ): boolean {
+    if (!event.message || !this.matchesSource(event, admission)) return false;
+    const value =
+      AnyPacker.tryUnpack(event.message, ReleaseNotesProposedSchema) ??
+      AnyPacker.tryUnpack(event.message, ReleaseGenerationFailedSchema);
+    return (
+      value?.id?.value === admission.draftId &&
+      value.generation?.value === admission.command.generation?.value &&
+      value.inputVersion !== undefined &&
+      admission.command.expectedVersion !== undefined &&
+      equals(VersionSchema, value.inputVersion, admission.command.expectedVersion)
+    );
+  }
+
+  /**
+   * Accepts only the exact pre-handler authorization denial System fact.
+   *
+   * @param admission Captured accepted generation or delivery admission.
+   * @param event Original typed Event envelope.
+   * @returns Whether the System fact is the exact pre-handler model-use denial.
+   */
+  private matchesDenial(
+    event: MessageShape<typeof EventSchema>,
+    admission: GenerationAdmission,
+  ): boolean {
+    if (!event.message || !this.matchesSource(event, admission)) return false;
+    const value = AnyPacker.tryUnpack(event.message, AgentInvocationTerminatedSchema);
+    const sourceId = admission.sourceEventId;
+    if (
+      !value ||
+      !sourceId ||
+      value.reason !== "MODEL_USE_DENIED" ||
+      value.unresolvedAttempts.length ||
+      value.unresolvedToolCalls.length
+    )
+      return false;
+    const agent = create(MessageIdSchema, {
+      id: AnyPacker.pack(
+        ReleaseDraftIdSchema,
         create(ReleaseDraftIdSchema, { value: admission.draftId }),
-        admission.sourceEventId,
-        {},
-      );
+      ),
+      typeUrl: TypeUrls.derive(AgentStateSchema),
+    });
+    const source = value.sourceSignal;
+    return (
+      value.agent !== undefined &&
+      source !== undefined &&
+      equals(MessageIdSchema, value.agent, agent) &&
+      source.typeUrl === TypeUrls.derive(ReleaseGenerationRequestedSchema) &&
+      AnyPacker.tryUnpack(source.id, EventIdSchema)?.value === sourceId.value
+    );
   }
 
   /**

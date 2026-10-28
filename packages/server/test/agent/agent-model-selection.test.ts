@@ -13,6 +13,7 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type AiScope } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
 import { AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
@@ -26,11 +27,11 @@ import {
   UserIdSchema,
   InternetDomainSchema,
 } from "@spine-event-engine/proto";
-import * as Records from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { AiModelKind, ModelPreferenceSchema } from "@spine-event-engine/proto/agent";
 import { ModelRefSchema } from "@spine-event-engine/proto/agent";
 import { describe, expect, it, vi } from "vitest";
 import { AgentModelSelection } from "../../src/agent/agent-model-selection.js";
+import { SignalMetadata } from "../../src/runtime/signal-metadata.js";
 import { ProjectStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 import { AssignReviewTaskSchema } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
@@ -93,13 +94,14 @@ function supportScope() {
       create(DraftSupportReplySchema, { agent: id, question: "Where is my order?" }),
     ),
   });
-  return AgentModelSelection.scope(
-    create(Records.AgentAcceptedInvocationSchema, {
+  return AgentModelSelection.scopeLive(
+    {
       recipientId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
-      actor: create(ActorContextSchema),
-      signal: { case: "command", value: command },
-    }),
+      stateType: SupportReplyAgentStateSchema.typeName,
+      source: { case: "command", value: command },
+    },
     SupportReplyAgentStateSchema,
+    new SignalMetadata(),
   );
 }
 
@@ -122,7 +124,6 @@ function selectionRegistry(
       deadlineMs: 1_000,
       totalInputBytes: 4_000,
       totalOutputBytes: 4_000,
-      maxRecoveryBytes: 8_000,
     },
     concurrentOperations: 1,
     queuedOperations: 0,
@@ -154,6 +155,46 @@ function selectionRegistry(
 }
 
 describe("Agent model authorization scope", () => {
+  it("selects a live model from the original typed signal and committed preference", async () => {
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-live-selection" });
+    const command = create(CommandSchema, {
+      id: { uuid: "live-selection-command" },
+      message: AnyPacker.pack(
+        DraftSupportReplySchema,
+        create(DraftSupportReplySchema, { agent: id, question: "Status?" }),
+      ),
+      context: { actorContext: create(ActorContextSchema) },
+    });
+    const scope = AgentModelSelection.scopeLive(
+      {
+        source: { case: "command", value: command },
+        recipientId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
+        stateType: SupportReplyAgentStateSchema.typeName,
+      },
+      SupportReplyAgentStateSchema,
+      new SignalMetadata(),
+    );
+    const { registry, preferred } = selectionRegistry(() => true);
+    const selected = await AgentModelSelection.selectLiveKind(
+      registry,
+      { models: [proposal] },
+      scope,
+      [
+        create(ModelPreferenceSchema, {
+          kind: AiModelKind.GENERATION,
+          selection: { case: "model", value: preferred },
+        }),
+      ],
+      new AbortController().signal,
+      Time.currentTimeMillis() + 1_000,
+      "generation",
+      command.message,
+    );
+    expect(scope.source.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
+    expect(scope.agent.typeUrl).toBe(TypeUrls.derive(SupportReplyAgentStateSchema));
+    expect(selected.model).toEqual(preferred);
+    expect(selected.connection.model?.value).toBe("preferred");
+  });
   it("awaits an unbounded hook until cancellation when no deadline is configured", async () => {
     const controller = new AbortController();
     const timeout = vi.spyOn(globalThis, "setTimeout");
@@ -170,7 +211,7 @@ describe("Agent model authorization scope", () => {
   it("uses the accepted support Command and claim-time preference before authorizing a deployment", async () => {
     const authorized = vi.fn(() => true);
     const { registry, preferred } = selectionRegistry(authorized);
-    const selected = await AgentModelSelection.select(
+    const selected = await AgentModelSelection.selectLiveKind(
       registry,
       { models: [proposal] },
       supportScope(),
@@ -182,10 +223,11 @@ describe("Agent model authorization scope", () => {
       ],
       new AbortController().signal,
       Time.currentTimeMillis() + 1_000,
+      "generation",
+      AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
     );
-    expect(selected).toHaveLength(1);
-    expect(selected[0]?.model).toEqual(preferred);
-    expect(selected[0]?.connection?.model?.value).toBe("preferred");
+    expect(selected.model).toEqual(preferred);
+    expect(selected.connection.model?.value).toBe("preferred");
     expect(authorized).toHaveBeenCalledExactlyOnceWith("preferred");
   });
 
@@ -193,15 +235,17 @@ describe("Agent model authorization scope", () => {
     const authorized = vi.fn(() => false);
     const { registry } = selectionRegistry(authorized);
     await expect(
-      AgentModelSelection.select(
+      AgentModelSelection.selectLiveKind(
         registry,
         { models: [proposal] },
         supportScope(),
         [],
         new AbortController().signal,
         Time.currentTimeMillis() + 1_000,
+        "generation",
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
       ),
-    ).rejects.toMatchObject({ name: "AgentExecutionFault", reason: "MODEL_USE_DENIED" });
+    ).rejects.toMatchObject({ name: "AgentLiveFault", reason: "MODEL_USE_DENIED" });
     expect(authorized).toHaveBeenCalledOnce();
   });
 
@@ -224,16 +268,27 @@ describe("Agent model authorization scope", () => {
         execute: () => Promise.reject(new Error("Selection must not dispatch a model request.")),
       }),
     );
-    const selected = await AgentModelSelection.select(
-      registry,
-      {
-        models: [proposal, routing],
-        defaultModels: { generation: preferred, decision: decisionRef },
-      },
-      supportScope(),
-      [],
-      new AbortController().signal,
-      Time.currentTimeMillis() + 1_000,
+    const options = {
+      models: [proposal, routing],
+      defaultModels: { generation: preferred, decision: decisionRef },
+    };
+    const scope = supportScope();
+    const signal = new AbortController().signal;
+    const deadline = Time.currentTimeMillis() + 1_000;
+    const source = AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema));
+    const selected = await Promise.all(
+      ["generation", "decision"].map((kind) =>
+        AgentModelSelection.selectLiveKind(
+          registry,
+          options,
+          scope,
+          [],
+          signal,
+          deadline,
+          kind as "generation" | "decision",
+          source,
+        ),
+      ),
     );
     expect(selected.map((item) => item.kind)).toEqual([
       AiModelKind.GENERATION,
@@ -246,13 +301,15 @@ describe("Agent model authorization scope", () => {
     const authorized = vi.fn(() => true);
     const { registry } = selectionRegistry(authorized);
     await expect(
-      AgentModelSelection.select(
+      AgentModelSelection.selectLiveKind(
         registry,
         { models: [proposal] },
         supportScope(),
         [],
         new AbortController().signal,
         Time.currentTimeMillis() - 1,
+        "generation",
+        AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
       ),
     ).rejects.toThrow("expired");
     expect(authorized).not.toHaveBeenCalled();
@@ -262,13 +319,15 @@ describe("Agent model authorization scope", () => {
     const authorized = vi.fn(() => true);
     const controller = new AbortController();
     const { registry } = selectionRegistry(authorized, () => new Promise<void>(() => undefined));
-    const pending = AgentModelSelection.select(
+    const pending = AgentModelSelection.selectLiveKind(
       registry,
       { models: [proposal] },
       supportScope(),
       [],
       controller.signal,
       Time.currentTimeMillis() + 1_000,
+      "generation",
+      AnyPacker.pack(DraftSupportReplySchema, create(DraftSupportReplySchema)),
     );
     controller.abort();
     await expect(pending).rejects.toThrow("cancelled");
@@ -283,7 +342,7 @@ describe("Agent model authorization scope", () => {
     );
     let received: typeof source | undefined;
     const returned = ModelRef.of("support-preferred", "v1");
-    const selected = await AgentModelSelection.selectKind(
+    const selected = await AgentModelSelection.selectLiveKind(
       registry,
       {
         models: [proposal],
@@ -345,7 +404,7 @@ describe("Agent model authorization scope", () => {
       sourceId: value.source.id?.typeUrl,
     });
     const acceptedFacts = facts(scope);
-    const selected = await AgentModelSelection.selectKind(
+    const selected = await AgentModelSelection.selectLiveKind(
       registry,
       {
         models: [proposal],
@@ -390,7 +449,7 @@ describe("Agent model authorization scope", () => {
     const { registry, preferred } = selectionRegistry(() => true, resolveIdentity);
     const authorizeSelection = vi.fn(() => false);
     await expect(
-      AgentModelSelection.selectKind(
+      AgentModelSelection.selectLiveKind(
         registry,
         { models: [proposal], resolveModel: () => preferred, authorizeSelection },
         supportScope(),
@@ -414,7 +473,7 @@ describe("Agent model authorization scope", () => {
       release = resolve;
     });
     await expect(
-      AgentModelSelection.selectKind(
+      AgentModelSelection.selectLiveKind(
         registry,
         { models: [proposal], resolveModel: () => result, authorizeSelection },
         supportScope(),
@@ -437,7 +496,7 @@ describe("Agent model authorization scope", () => {
     const resolveModel = vi.fn(() => preferred);
     controller.abort();
     await expect(
-      AgentModelSelection.selectKind(
+      AgentModelSelection.selectLiveKind(
         registry,
         { models: [proposal], resolveModel },
         supportScope(),
@@ -461,7 +520,7 @@ describe("Agent model authorization scope", () => {
     });
     const resolveModel = vi.fn(() => pendingResult);
     const controller = new AbortController();
-    const pending = AgentModelSelection.selectKind(
+    const pending = AgentModelSelection.selectLiveKind(
       registry,
       { models: [proposal], resolveModel, authorizeSelection: authorized },
       supportScope(),
@@ -482,7 +541,7 @@ describe("Agent model authorization scope", () => {
 
   it("keeps normal precedence when the source resolver returns no model", async () => {
     const { registry, primary } = selectionRegistry(() => true);
-    const selected = await AgentModelSelection.selectKind(
+    const selected = await AgentModelSelection.selectLiveKind(
       registry,
       { models: [proposal], resolveModel: () => undefined },
       supportScope(),
@@ -500,7 +559,7 @@ describe("Agent model authorization scope", () => {
     const resolveIdentity = vi.fn();
     const { registry, primary, preferred } = selectionRegistry(() => true, resolveIdentity);
     await expect(
-      AgentModelSelection.selectKind(
+      AgentModelSelection.selectLiveKind(
         registry,
         {
           models: [proposal],
@@ -525,7 +584,7 @@ describe("Agent model authorization scope", () => {
     const resolveIdentity = vi.fn();
     const { registry } = selectionRegistry(() => true, resolveIdentity);
     await expect(
-      AgentModelSelection.selectKind(
+      AgentModelSelection.selectLiveKind(
         registry,
         {
           models: [proposal],
@@ -552,7 +611,7 @@ describe("Agent model authorization scope", () => {
     const control = new AbortController().signal;
     const deadline = Time.currentTimeMillis() + 1000;
     await expect(
-      AgentModelSelection.selectKind(
+      AgentModelSelection.selectLiveKind(
         registry,
         options,
         supportScope(),
@@ -564,7 +623,7 @@ describe("Agent model authorization scope", () => {
     ).rejects.toThrow("source payload");
     expect(resolveModel).not.toHaveBeenCalled();
     await expect(
-      AgentModelSelection.selectKind(
+      AgentModelSelection.selectLiveKind(
         registry,
         options,
         supportScope(),
@@ -605,7 +664,6 @@ describe("Agent model authorization scope", () => {
       ProjectIdSchema,
       create(ProjectIdSchema, { value: "project-1" }),
     );
-    const actor = create(ActorContextSchema);
     const command = create(CommandSchema, {
       id: { uuid: "command-1" },
       message: AnyPacker.pack(
@@ -620,68 +678,48 @@ describe("Agent model authorization scope", () => {
         create(ReviewTaskAssignedSchema, { id: "project-1" }),
       ),
     });
-    const accepted = (signal: "command" | "event") =>
-      create(Records.AgentAcceptedInvocationSchema, {
-        recipientId,
-        actor,
-        signal:
-          signal === "command"
-            ? { case: "command", value: clone(CommandSchema, command) }
-            : { case: "event", value: clone(EventSchema, event) },
-      });
-    expect(AgentModelSelection.scope(accepted("command"), ProjectStateSchema).source.typeUrl).toBe(
-      TypeUrls.derive(AssignReviewTaskSchema),
-    );
-    expect(AgentModelSelection.scope(accepted("event"), ProjectStateSchema).source.typeUrl).toBe(
-      TypeUrls.derive(ReviewTaskAssignedSchema),
-    );
+    const accepted = (signal: "command" | "event") => ({
+      recipientId: clone(AnySchema, recipientId),
+      stateType: ProjectStateSchema.typeName,
+      source:
+        signal === "command"
+          ? { case: "command" as const, value: clone(CommandSchema, command) }
+          : { case: "event" as const, value: clone(EventSchema, event) },
+    });
+    const scope = (signal: Parameters<typeof AgentModelSelection.scopeLive>[0]) =>
+      AgentModelSelection.scopeLive(signal, ProjectStateSchema, new SignalMetadata());
+    expect(scope(accepted("command")).source.typeUrl).toBe(TypeUrls.derive(AssignReviewTaskSchema));
+    expect(scope(accepted("event")).source.typeUrl).toBe(TypeUrls.derive(ReviewTaskAssignedSchema));
     const rejection = accepted("event");
-    if (rejection.signal.case !== "event") throw new Error("Expected Event signal.");
-    rejection.signal.value.context = create(EventContextSchema, {
+    if (rejection.source.case !== "event") throw new Error("Expected Event signal.");
+    rejection.source.value.context = create(EventContextSchema, {
       rejection: create(RejectionEventContextSchema, { command }),
     });
-    expect(AgentModelSelection.scope(rejection, ProjectStateSchema).source.typeUrl).toBe(
-      TypeUrls.derive(ReviewTaskAssignedSchema),
-    );
+    expect(scope(rejection).source.typeUrl).toBe(TypeUrls.derive(ReviewTaskAssignedSchema));
     const incomplete = accepted("command");
-    if (incomplete.signal.case !== "command") throw new Error("Expected Command signal.");
-    incomplete.signal.value.message = undefined;
-    expect(() => AgentModelSelection.scope(incomplete, ProjectStateSchema)).toThrow("payload type");
+    if (incomplete.source.case !== "command") throw new Error("Expected Command signal.");
+    incomplete.source.value.message = undefined;
+    expect(() => scope(incomplete)).toThrow("payload type");
     const missingRecipient = accepted("command");
-    missingRecipient.recipientId = undefined;
-    expect(() => AgentModelSelection.scope(missingRecipient, ProjectStateSchema)).toThrow(
-      "typed recipient",
-    );
-    const missingSignal = create(Records.AgentAcceptedInvocationSchema, { recipientId, actor });
-    expect(() => AgentModelSelection.scope(missingSignal, ProjectStateSchema)).toThrow(
-      "original source signal",
-    );
+    missingRecipient.recipientId.typeUrl = " ";
+    expect(() => scope(missingRecipient)).toThrow("typed state and recipient");
+    const wrongState = { ...accepted("command"), stateType: "other.state" };
+    expect(() => scope(wrongState)).toThrow("typed state and recipient");
     const missingCommandId = accepted("command");
-    if (missingCommandId.signal.case !== "command") throw new Error("Expected Command signal.");
-    missingCommandId.signal.value.id = undefined;
-    expect(() => AgentModelSelection.scope(missingCommandId, ProjectStateSchema)).toThrow(
-      "source ID",
-    );
+    if (missingCommandId.source.case !== "command") throw new Error("Expected Command signal.");
+    missingCommandId.source.value.id = undefined;
+    expect(() => scope(missingCommandId)).toThrow("source ID");
     const missingEventId = accepted("event");
-    if (missingEventId.signal.case !== "event") throw new Error("Expected Event signal.");
-    missingEventId.signal.value.id = undefined;
-    expect(() => AgentModelSelection.scope(missingEventId, ProjectStateSchema)).toThrow(
-      "source ID",
-    );
-    const missingActor = accepted("command");
-    missingActor.actor = undefined;
-    expect(() => AgentModelSelection.scope(missingActor, ProjectStateSchema)).toThrow(
-      "accepted actor",
-    );
+    if (missingEventId.source.case !== "event") throw new Error("Expected Event signal.");
+    missingEventId.source.value.id = undefined;
+    expect(() => scope(missingEventId)).toThrow("source ID");
     const blankPayloadType = accepted("event");
     if (
-      blankPayloadType.signal.case !== "event" ||
-      blankPayloadType.signal.value.message === undefined
+      blankPayloadType.source.case !== "event" ||
+      blankPayloadType.source.value.message === undefined
     )
       throw new Error("Expected Event payload.");
-    blankPayloadType.signal.value.message.typeUrl = " ";
-    expect(() => AgentModelSelection.scope(blankPayloadType, ProjectStateSchema)).toThrow(
-      "payload type",
-    );
+    blankPayloadType.source.value.message.typeUrl = " ";
+    expect(() => scope(blankPayloadType)).toThrow("payload type");
   });
 });

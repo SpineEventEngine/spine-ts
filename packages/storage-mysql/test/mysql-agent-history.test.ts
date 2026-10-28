@@ -162,6 +162,35 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
     }
   }, 120_000);
 
+  it("rolls back an immutable audit group when its later row conflicts", async () => {
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: required(url) })
+      .build();
+    const run = randomUUID();
+    const input = { ...scope, id: { key: (id: string) => `${run}:${id}` } };
+    const history = AgentHistoryStorageFactories.create(factory, input);
+    const first = event("batch-first", occurredAt(1_789_100_001n), false);
+    const original = conversation("batch-conflict", "dialog", occurredAt(1_789_100_002n));
+    const conflicting = response("batch-conflict", "dialog", occurredAt(1_789_100_002n));
+    try {
+      await history.append("ticket", original);
+      await expect(history.appendAll("ticket", [first, conflicting])).rejects.toThrow();
+      const page = await history.read({
+        entityId: "ticket",
+        view: { kind: "full" },
+        count: 4,
+        maxBytes: 10000,
+      });
+      expect(page.entries.map((entry) => AgentHistoryKeys.fromEntry(entry).recordId)).toEqual([
+        "batch-conflict",
+      ]);
+      await history.appendAll("ticket", [original]);
+    } finally {
+      history.close();
+      await factory.close();
+    }
+  }, 120_000);
+
   it("retries preparation on the same Agent history handle after a failed create callback", async () => {
     const table = `agent_retry_${randomUUID().replaceAll("-", "")}`;
     const builder = () =>

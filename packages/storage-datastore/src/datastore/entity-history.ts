@@ -52,7 +52,7 @@ import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { DatastoreRecordStorage, type DatastorePageCursor } from "./record-storage.js";
 import { AgentHistoryHash } from "./agent-history.js";
-import { first, isAborted, validateTransactionRows, type NativeRow } from "./agent-execution.js";
+import { NativeTransactions, type NativeRow } from "./transaction-rows.js";
 import type { Datastore } from "@google-cloud/datastore";
 
 /**
@@ -516,13 +516,13 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
         await tx.run();
         const staged: NativeRow[] = [];
         await this.agentLocked(tx, staged, rows, id, version, expected, next, mutation, history);
-        validateTransactionRows(staged);
+        NativeTransactions.validateRows(staged);
         for (const row of staged) tx.save(row);
         await tx.commit();
         return;
       } catch (error) {
         await tx.rollback().catch(() => undefined);
-        if (attempt < 2 && isAborted(error)) continue;
+        if (attempt < 2 && NativeTransactions.isAborted(error)) continue;
         throw error;
       }
     }
@@ -616,7 +616,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     storage: DatastoreRecordStorage<Id, R>,
     id: Id,
   ): Promise<R | undefined> {
-    const raw = first(
+    const raw = NativeTransactions.first(
       (await tx.get(storage.transactionKey(id), { wrapNumbers: true })) as unknown,
     ) as Record<string | symbol, unknown> | undefined;
     return raw === undefined ? undefined : storage.decodeTransactionEntity(raw);
@@ -638,7 +638,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     storage: DatastoreRecordStorage<Id, R>,
     record: R,
   ): Promise<void> {
-    const raw = first(
+    const raw = NativeTransactions.first(
       (await tx.get(storage.transactionEntity(record).key, { wrapNumbers: true })) as unknown,
     ) as Record<string | symbol, unknown> | undefined;
     if (raw === undefined) staged.push(storage.transactionEntity(record));

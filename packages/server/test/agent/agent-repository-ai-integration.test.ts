@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, equals, isMessage } from "@bufbuild/protobuf";
+import { create, equals, isMessage } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type AiScope } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
@@ -31,37 +31,24 @@ import {
 } from "@spine-event-engine/proto/agent";
 import {
   ActorContextSchema,
+  CommandIdSchema,
   CommandContextSchema,
   UserIdSchema,
   EventSchema,
-  CommandSchema,
 } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import type {
-  AgentExecutionStorage,
-  AgentExecutionStorageInput,
-} from "@spine-event-engine/storage/provider";
-import {
-  AgentAcceptedInvocationSchema,
-  AgentCodeRevisionSchema,
-  AgentInvocationStatus,
-  type AgentExecutionRecord,
-  type AgentInvocationKey,
-} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
-import type { Message } from "@bufbuild/protobuf";
 import { describe, expect, it, vi } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import { HandlerRegistryIngestor } from "../../src/handler/generated-handler-registry.js";
 import type { EntityHandlersMetadata } from "../../src/handler/handler-metadata.js";
-import { Repository, repositoryAccess } from "../../src/repository/repository.js";
+import { Repository } from "../../src/repository/repository.js";
 import type { RepositoryAiOptions } from "../../src/repository/repository.js";
 import {
   observeProducedSignals,
   readAgentHistoryPage,
   readSystemEvents,
 } from "../../src/testing/index.js";
-import { createMessage } from "../delivery/inbox-message-fixture.js";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
@@ -70,6 +57,8 @@ import {
 import {
   DraftSupportReplySchema,
   type DraftSupportReply,
+  ReviewSupportReplySchema,
+  type ReviewSupportReply,
 } from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 import { SupportReplyDraftedSchema } from "../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
 import {
@@ -100,13 +89,8 @@ const alternateRef = ModelRef.of("source-support-alternate", "v1");
 class DraftingAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
   static historyCount = 0;
   static stateHistoryCount = 0;
-  static interruptBeforeModel = false;
 
   async draft(command: DraftSupportReply) {
-    if (command.question === "Resume saved" && DraftingAgent.interruptBeforeModel) {
-      DraftingAgent.interruptBeforeModel = false;
-      throw new Error("Interrupted after selection persistence.");
-    }
     if (command.question === "Reset selection") {
       this.ai.select(AiModelKind.GENERATION, undefined);
       return;
@@ -142,11 +126,59 @@ class DraftingAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentS
   }
 }
 
+class FollowupAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
+  static gate: { entered: () => void; release: Promise<undefined> } | undefined;
+
+  substitute(command: DraftSupportReply): ReviewSupportReply {
+    return create(ReviewSupportReplySchema, { agent: command.agent });
+  }
+
+  async review(command: ReviewSupportReply) {
+    FollowupAgent.gate?.entered();
+    await FollowupAgent.gate?.release;
+    this.update((state) => Object.assign(state, { id: this.id, proposedReply: "Reviewed" }));
+    return create(SupportReplyDraftedSchema, { agent: command.agent, reply: "Reviewed" });
+  }
+}
+
+function followupRepository() {
+  return new Repository({
+    entityType: FollowupAgent,
+    schema: SupportReplyAgentStateSchema,
+    ai: { models: [] },
+    handlers: new HandlerRegistryIngestor().ingest({
+      receivers: [
+        {
+          receiverKind: "entity",
+          receiverType: FollowupAgent,
+          stateSchema: SupportReplyAgentStateSchema,
+          handlers: [
+            {
+              kind: "command-substitution",
+              methodName: "substitute",
+              input: { schema: DraftSupportReplySchema, origin: "domestic" },
+              outcomes: { returned: [ReviewSupportReplySchema], thrown: [] },
+              parameterCount: 1,
+            },
+            {
+              kind: "command-assignment",
+              methodName: "review",
+              input: { schema: ReviewSupportReplySchema, origin: "domestic" },
+              outcomes: { returned: [SupportReplyDraftedSchema], thrown: [] },
+              parameterCount: 1,
+            },
+          ],
+        },
+      ],
+    })[0] as EntityHandlersMetadata<FollowupAgent, typeof SupportReplyAgentStateSchema>,
+    events: [SupportReplyDraftedSchema],
+  });
+}
+
 function draftingRepository(aiOptions: Partial<RepositoryAiOptions> = {}) {
   return new Repository({
     entityType: DraftingAgent,
     schema: SupportReplyAgentStateSchema,
-    agentCodeRevision: "source-drafting-v1",
     stateHistory: true,
     ai: { models: [proposal], ...aiOptions },
     handlers: new HandlerRegistryIngestor().ingest({
@@ -171,37 +203,13 @@ function draftingRepository(aiOptions: Partial<RepositoryAiOptions> = {}) {
   });
 }
 
-class CapturingExecutionFactory extends InMemoryStorageFactory {
-  key?: AgentInvocationKey;
-  corruptNextRevision = false;
-  readAccepted?: (key: AgentInvocationKey) => Promise<AgentExecutionRecord | undefined>;
-
-  protected override createAgentExecutionStorage<I, S extends Message>(
-    input: AgentExecutionStorageInput<I, S>,
-  ): AgentExecutionStorage<I, S> {
-    const storage = super.createAgentExecutionStorage(input);
-    const admit = storage.admit.bind(storage);
-    storage.admit = async (accepted) => {
-      const saved = clone(AgentAcceptedInvocationSchema, accepted);
-      if (this.corruptNextRevision) {
-        this.corruptNextRevision = false;
-        saved.codeRevision = create(AgentCodeRevisionSchema, { value: "retired-agent-code" });
-      }
-      const result = await admit(saved);
-      if (accepted.key !== undefined) this.key = accepted.key;
-      return result;
-    };
-    this.readAccepted ??= (key) => storage.read(key);
-    return storage;
-  }
-}
-
 describe("Agent repository source integration", () => {
   it("commits a model reply and retains original Agent/System audit copies", async () => {
     const ref = ModelRef.of("source-support", "v1");
     const response = create(ProposedSupportReplySchema, { replyText: "We can help." });
     const physical = vi.fn(() => response);
     const alternatePhysical = vi.fn(() => response);
+    let allowModelUse = true;
     const registry = AiRegistry.create({
       defaultModels: { generation: ref },
       invocationLimits: {
@@ -212,7 +220,6 @@ describe("Agent repository source integration", () => {
         deadlineMs: 2_000,
         totalInputBytes: 4_000,
         totalOutputBytes: 4_000,
-        maxRecoveryBytes: 128_000,
       },
       concurrentOperations: 1,
       queuedOperations: 1,
@@ -229,7 +236,7 @@ describe("Agent repository source integration", () => {
             endpoint: "local",
             model: selected === ref ? "draft-v1" : "draft-v2",
           }),
-          authorizeUse: () => true,
+          authorizeUse: () => allowModelUse,
           connect: (_scope, identity) => ({ model: {}, identity }),
           execute: async (execution) => {
             if (!isMessage(execution.input, SupportTicketFactsSchema))
@@ -277,7 +284,7 @@ describe("Agent repository source integration", () => {
     let allowSelection = true;
     const authorizeSelection = vi.fn(() => allowSelection);
     const repository = draftingRepository({ authorizeSelection });
-    const factory = new CapturingExecutionFactory();
+    const factory = new InMemoryStorageFactory();
     const context = await BoundedContext.singleTenant("SourceDrafting")
       .withAi(registry)
       .persistSystemEvents()
@@ -302,18 +309,16 @@ describe("Agent repository source integration", () => {
           }),
         }),
       });
-      await repositoryAccess.entityInboxTarget(repository)?.replay({
-        ...createMessage("source-failed-model", failed.id?.uuid ?? "", 1n),
-        inboxId: {
-          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
-          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
-        },
-        signal: AnyPacker.pack(CommandSchema, failed),
-        label: "HANDLE_COMMAND",
-        status: "TO_DELIVER",
+      await context.commandBus().post(failed);
+      await vi.waitFor(async () => {
+        expect(
+          (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items.some(
+            (entry) =>
+              entry.item.case === "systemEvent" &&
+              entry.item.value.message?.typeUrl === TypeUrls.derive(AgentAiOperationFailedSchema),
+          ),
+        ).toBe(true);
       });
-      if (factory.key === undefined) throw new Error("Expected failed Agent admission.");
-      await repositoryAccess.runAcceptedAgent(repository, undefined, factory.key);
       expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
       expect(produced).toEqual([]);
       expect(
@@ -332,17 +337,10 @@ describe("Agent repository source integration", () => {
           }),
         }),
       });
-      await repositoryAccess.entityInboxTarget(repository)?.replay({
-        ...createMessage("source-model", command.id?.uuid ?? "", 2n),
-        inboxId: {
-          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
-          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
-        },
-        signal: AnyPacker.pack(CommandSchema, command),
-        label: "HANDLE_COMMAND",
-        status: "TO_DELIVER",
+      await context.commandBus().post(command);
+      await vi.waitFor(() => {
+        expect(physical).toHaveBeenCalledTimes(1);
       });
-      await repositoryAccess.runAcceptedAgent(repository, undefined, factory.key);
       expect(physical).toHaveBeenCalledTimes(1);
       await vi.waitFor(
         async () => {
@@ -387,7 +385,7 @@ describe("Agent repository source integration", () => {
         },
         { timeout: 10_000 },
       );
-      const runNext = async (question: string, suffix: string, version: bigint) => {
+      const runNext = async (question: string) => {
         const next = SignalEnvelopes.command({
           schema: DraftSupportReplySchema,
           message: create(DraftSupportReplySchema, { agent: id, question }),
@@ -397,23 +395,13 @@ describe("Agent repository source integration", () => {
             }),
           }),
         });
-        await repositoryAccess.entityInboxTarget(repository)?.replay({
-          ...createMessage(suffix, next.id?.uuid ?? "", version),
-          inboxId: {
-            targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
-            targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
-          },
-          signal: AnyPacker.pack(CommandSchema, next),
-          label: "HANDLE_COMMAND",
-          status: "TO_DELIVER",
-        });
-        const key = factory.key;
-        if (key === undefined) throw new Error("Expected durable Agent admission.");
-        await repositoryAccess.runAcceptedAgent(repository, undefined, key);
-        return key;
+        await context.commandBus().post(next);
+        return next;
       };
-      await runNext("Prefer alternate", "source-select", 4n);
-      expect(physical).toHaveBeenCalledTimes(2);
+      await runNext("Prefer alternate");
+      await vi.waitFor(() => {
+        expect(physical).toHaveBeenCalledTimes(2);
+      });
       expect(alternatePhysical).not.toHaveBeenCalled();
       expect(
         (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items.some(
@@ -422,8 +410,10 @@ describe("Agent repository source integration", () => {
             entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelSelectionChangedSchema),
         ),
       ).toBe(true);
-      await runNext("Inspect history", "source-history", 5n);
-      expect(alternatePhysical).toHaveBeenCalledTimes(1);
+      await runNext("Inspect history");
+      await vi.waitFor(() => {
+        expect(alternatePhysical).toHaveBeenCalledTimes(1);
+      });
       expect(DraftingAgent.historyCount).toBeGreaterThan(0);
       expect(DraftingAgent.stateHistoryCount).toBe(1);
       expect(
@@ -432,42 +422,32 @@ describe("Agent repository source integration", () => {
       await vi.waitFor(() => {
         expect(produced).toHaveLength(3);
       });
-      factory.corruptNextRevision = true;
-      const outdated = await runNext("Outdated source", "source-outdated", 6n);
-      expect((await factory.readAccepted?.(outdated))?.status).toBe(
-        AgentInvocationStatus.AGENT_INVOCATION_TERMINATED,
-      );
-      expect(physical).toHaveBeenCalledTimes(2);
-      expect(alternatePhysical).toHaveBeenCalledTimes(1);
-      const terminated = (
-        await readAgentHistoryPage(context, repository, id, { pageSize: 50 })
-      ).items.flatMap((entry) =>
-        entry.item.case === "systemEvent" &&
-        entry.item.value.message?.typeUrl === TypeUrls.derive(AgentInvocationTerminatedSchema)
-          ? [entry.item.value]
-          : [],
-      );
-      expect(terminated).toHaveLength(1);
-      const terminatedMessage = terminated[0]?.message;
-      if (terminatedMessage === undefined) throw new Error("Expected termination payload.");
-      expect(AnyPacker.tryUnpack(terminatedMessage, AgentInvocationTerminatedSchema)?.reason).toBe(
-        "REVISION_CHANGED",
-      );
-      await runNext("Continue after revision failure", "source-after-outdated", 7n);
-      expect(alternatePhysical).toHaveBeenCalledTimes(2);
-      await runNext("Reset selection", "source-reset", 8n);
-      expect(authorizeSelection).toHaveBeenLastCalledWith(
-        expect.anything(),
-        undefined,
-        expect.anything(),
-      );
-      const checked = authorizeSelection.mock.calls.length;
-      await runNext("Reset selection", "source-reset-noop", 9n);
-      expect(authorizeSelection).toHaveBeenCalledTimes(checked);
-      await runNext("After reset", "source-after-reset", 10n);
-      expect(physical).toHaveBeenCalledTimes(3);
-      await runNext("Prefer alternate", "source-reselect", 11n);
-      expect(physical).toHaveBeenCalledTimes(4);
+      await runNext("Reset selection");
+      await vi.waitFor(() => {
+        expect(authorizeSelection).toHaveBeenLastCalledWith(
+          expect.anything(),
+          undefined,
+          expect.anything(),
+        );
+      });
+      await vi.waitFor(async () => {
+        expect(
+          (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items.filter(
+            (entry) =>
+              entry.item.case === "systemEvent" &&
+              entry.item.value.message?.typeUrl ===
+                TypeUrls.derive(AgentModelSelectionChangedSchema),
+          ).length,
+        ).toBeGreaterThan(1);
+      });
+      await runNext("After reset");
+      await vi.waitFor(() => {
+        expect(physical).toHaveBeenCalledTimes(3);
+      });
+      await runNext("Prefer alternate");
+      await vi.waitFor(() => {
+        expect(physical).toHaveBeenCalledTimes(4);
+      });
       const selectionChanges = (
         await readAgentHistoryPage(context, repository, id, { pageSize: 50 })
       ).items.filter(
@@ -476,13 +456,14 @@ describe("Agent repository source integration", () => {
           entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelSelectionChangedSchema),
       ).length;
       allowSelection = false;
-      await expect(runNext("Reset selection", "source-denied-reset", 12n)).rejects.toThrow(
-        "unauthorized",
-      );
-      const denied = factory.key;
-      expect((await factory.readAccepted?.(denied))?.status).not.toBe(
-        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED,
-      );
+      await runNext("Reset selection");
+      await vi.waitFor(() => {
+        expect(authorizeSelection).toHaveBeenLastCalledWith(
+          expect.anything(),
+          undefined,
+          expect.anything(),
+        );
+      });
       expect(physical).toHaveBeenCalledTimes(4);
       expect(
         (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items.filter(
@@ -491,6 +472,31 @@ describe("Agent repository source integration", () => {
             entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelSelectionChangedSchema),
         ),
       ).toHaveLength(selectionChanges);
+      allowModelUse = false;
+      const deniedCommand = await runNext("Model use denied");
+      await vi.waitFor(async () => {
+        const denied = (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items
+          .flatMap((entry) => (entry.item.case === "systemEvent" ? [entry.item.value] : []))
+          .filter(
+            (event) => event.message?.typeUrl === TypeUrls.derive(AgentInvocationTerminatedSchema),
+          );
+        expect(denied).toHaveLength(1);
+        const event = denied[0];
+        if (event?.message === undefined || event.id === undefined)
+          throw new Error("Expected one typed Agent denial event.");
+        const fact = AnyPacker.unpack(event.message, AgentInvocationTerminatedSchema);
+        expect(fact.reason).toBe("MODEL_USE_DENIED");
+        expect(fact.sourceSignal?.typeUrl).toBe(TypeUrls.derive(DraftSupportReplySchema));
+        const sourceId = fact.sourceSignal?.id;
+        if (sourceId === undefined) throw new Error("Expected the denied source Command ID.");
+        expect(AnyPacker.unpack(sourceId, CommandIdSchema).uuid).toBe(deniedCommand.id?.uuid);
+        expect(await readSystemEvents(context, [event.id])).toEqual(denied);
+      });
+      expect(physical).toHaveBeenCalledTimes(4);
+      expect(alternatePhysical).toHaveBeenCalledTimes(1);
+      expect(
+        (await context.stand().readVersioned(SupportReplyAgentStateSchema, id))?.version?.number,
+      ).toBe(1);
     } finally {
       observation.close();
       await context.close();
@@ -498,8 +504,6 @@ describe("Agent repository source integration", () => {
   }, 20_000);
 
   it("selects a late registered deployment from the accepted payload without a default or subscriber", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    DraftingAgent.interruptBeforeModel = true;
     const ref = ModelRef.of("late-source-model", "v1");
     const resolved = vi.fn((kind: "generation" | "decision", scope: AiScope, source: Any) => {
       expect(kind).toBe("generation");
@@ -519,7 +523,6 @@ describe("Agent repository source integration", () => {
         deadlineMs: 120000,
         totalInputBytes: 4000,
         totalOutputBytes: 4000,
-        maxRecoveryBytes: 128000,
       },
       concurrentOperations: 1,
       queuedOperations: 0,
@@ -529,7 +532,7 @@ describe("Agent repository source integration", () => {
       authorizeSelection: authorized,
       allowedModels: { generation: [ref] },
     });
-    const factory = new CapturingExecutionFactory();
+    const factory = new InMemoryStorageFactory();
     const context = await BoundedContext.singleTenant("LateSourceModel")
       .withAi(registry)
       .persistSystemEvents()
@@ -586,39 +589,104 @@ describe("Agent repository source integration", () => {
         message: create(DraftSupportReplySchema, { agent: id, question: "Resume saved" }),
         context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
       });
-      await repositoryAccess.entityInboxTarget(repository)?.replay({
-        ...createMessage("late-source", command.id?.uuid ?? "", 1n),
-        inboxId: {
-          targetId: AnyPacker.pack(SupportReplyAgentIdSchema, id),
-          targetTypeUrl: TypeUrls.derive(SupportReplyAgentStateSchema),
-        },
-        signal: AnyPacker.pack(CommandSchema, command),
-        label: "HANDLE_COMMAND",
-        status: "TO_DELIVER",
+      await context.commandBus().post(command);
+      await vi.waitFor(() => {
+        expect(physical).toHaveBeenCalledOnce();
       });
-      if (factory.key === undefined) throw new Error("Expected accepted Agent work.");
-      await expect(
-        repositoryAccess.runAcceptedAgent(repository, undefined, factory.key),
-      ).rejects.toThrow("Interrupted after selection persistence");
-      expect(resolved).toHaveBeenCalledOnce();
-      expect(physical).not.toHaveBeenCalled();
-      expect((await factory.readAccepted?.(factory.key))?.started?.models[0]?.model).toEqual(ref);
-      vi.setSystemTime(new Date(Date.now() + 31_000));
-      await repositoryAccess.runAcceptedAgent(repository, undefined, factory.key);
-      expect(physical).toHaveBeenCalledOnce();
+      await vi.waitFor(async () => {
+        expect((await context.stand().read(SupportReplyAgentStateSchema, id))?.proposedReply).toBe(
+          "Late model worked.",
+        );
+      });
       expect(resolved).toHaveBeenCalledOnce();
       expect(authorized).toHaveBeenCalledOnce();
-      expect((await factory.readAccepted?.(factory.key))?.started?.models[0]?.model).toEqual(ref);
-      await repositoryAccess.runAcceptedAgent(repository, undefined, factory.key);
-      expect(resolved).toHaveBeenCalledOnce();
-      expect(physical).toHaveBeenCalledOnce();
-      expect((await context.stand().read(SupportReplyAgentStateSchema, id))?.proposedReply).toBe(
-        "Late model worked.",
-      );
     } finally {
-      DraftingAgent.interruptBeforeModel = false;
       await context.close();
-      vi.useRealTimers();
     }
   });
+
+  it("delivers a no-op Agent's outgoing Command to the same Agent", async () => {
+    const ai = AiRegistry.create({
+      defaultModels: {},
+      concurrentOperations: 1,
+      queuedOperations: 1,
+    });
+    const context = await BoundedContext.singleTenant("SelfFollowupCommand")
+      .withAi(ai)
+      .persistSystemEvents()
+      .withStorageFactory(new InMemoryStorageFactory())
+      .add(followupRepository())
+      .build();
+    const outputs: string[] = [];
+    const observer = observeProducedSignals(context, {
+      onCommand: (command) => outputs.push(command.message?.typeUrl ?? ""),
+      onEvent: (event) => outputs.push(event.message?.typeUrl ?? ""),
+    });
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-followup" });
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question: "Start" }),
+          context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
+        }),
+      );
+      await vi.waitFor(async () => {
+        expect((await context.stand().read(SupportReplyAgentStateSchema, id))?.proposedReply).toBe(
+          "Reviewed",
+        );
+      });
+      expect(outputs).toContain(TypeUrls.derive(ReviewSupportReplySchema));
+      expect(outputs).toContain(TypeUrls.derive(SupportReplyDraftedSchema));
+    } finally {
+      observer.close();
+      await context.close();
+    }
+  }, 15_000);
+
+  it("drains a handed-off same-Agent Command handler before closing", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    FollowupAgent.gate = {
+      entered: () => {
+        entered.resolve(undefined);
+      },
+      release: release.promise,
+    };
+    const ai = AiRegistry.create({
+      defaultModels: {},
+      concurrentOperations: 1,
+      queuedOperations: 1,
+    });
+    const context = await BoundedContext.singleTenant("SelfFollowupClose")
+      .withAi(ai)
+      .persistSystemEvents()
+      .withStorageFactory(new InMemoryStorageFactory())
+      .add(followupRepository())
+      .build();
+    try {
+      const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-close" });
+      await context.commandBus().post(
+        SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question: "Start" }),
+          context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
+        }),
+      );
+      await entered.promise;
+      let closed = false;
+      const closing = context.close().then(() => {
+        closed = true;
+      });
+      await Promise.resolve();
+      expect(closed).toBe(false);
+      release.resolve(undefined);
+      await closing;
+      expect(closed).toBe(true);
+    } finally {
+      release.resolve(undefined);
+      FollowupAgent.gate = undefined;
+      await context.close();
+    }
+  }, 15_000);
 });

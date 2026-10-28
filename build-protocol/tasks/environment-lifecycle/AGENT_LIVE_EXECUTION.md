@@ -240,6 +240,78 @@ and status APIs without deleting necessary audit schemas or inventing startup
 termination Events. This is history preservation, with no migration or recovery
 compatibility wrapper.
 
+## Live inputs and intermediate audit (D-0156)
+
+Every message/enum in execution_record.proto is removed with the coherent cutover.
+No definition moves to a replacement Proto. The genuine interaction Events,
+AgentOperationRef, history envelopes/records and model/content messages remain.
+Historical audit message definitions remain readable, including
+AgentInvocationTerminated; startup never fabricates such Events.
+
+Use minimal internal TypeScript inputs: original Command/Event source, exact
+recipient Any and state type; selected AiModelKind, ModelRef and connection;
+operation ID and conversation ID. Create and validate the existing AgentOperationRef
+once for the live operation. Do not recreate an execution journal, saved-input/result
+union or record/update-transform abstraction in TypeScript. Detach values passed
+to application selectors; preserve state, source, producer, model and operation
+identity validation and original causal Event context through AnyPacker.
+
+A running invocation has configured limits, deadline sampled at actual handler
+start, and live operation/model-request/tool/read/input-byte counters. Preserve
+exact byte arithmetic, active correction attempts and per-handler call-name
+uniqueness. Remove maxRecoveryBytes and recovery revision comparisons. Keep
+recordedReads as the existing live query/history-read ceiling. Keep outstanding
+physical-response byte reservations locally, reserve before sends without an await
+between check and reservation, and retain full charges for unknown outcomes in
+that live invocation. Parallel MCP callbacks cannot spend the same credit twice.
+Preserve allowed tool/server/effect validation and never resend an uncertain write
+merely because restart recovery was removed. No map is rebuilt from history.
+
+Live reads still validate, count, sequence and drain actual results. Remove saved
+request/result pages, snapshot Proto and replay matching. Use actual history/state
+encodings for existing byte accounting. Existing AiValidationIssue supports local
+correction inputs without the removed AgentValidationIssue Proto. Actual model,
+capability, validation and mapping revisions may identify configured behavior and
+audit facts; code/schema/policy resume compatibility revisions are deleted.
+
+Intermediate interaction audit previously wrote conversation rows plus a System
+row atomically through execution storage. Preserve that guarantee with the existing
+provider history capability:
+
+```ts
+interface AgentHistoryCapacity {
+  readonly historyRecordBytes?: number;
+  readonly transactionPayloadBytes?: number;
+}
+
+// Additional members of the existing provider handle.
+interface AgentHistoryStorage<Id> {
+  readonly capacity: AgentHistoryCapacity;
+  appendAll(entityId: Id, entries: readonly AgentHistoryEntry[]): Promise<void>;
+}
+```
+
+An empty batch is a no-op. Capture before awaiting; validate immutable duplicates
+within the batch and against storage. Commit the entire group and its indexes or
+none, using native SQL/Datastore transactions or the shared memory history queue.
+Preserve native size limits, complete typed identity, ordering, pagination and
+handle close/drain behavior. Move only surviving history capacity fields from the
+removed execution capability. Preflight uses the full encoded AgentHistoryRecord,
+including scope, key and envelope, without replacement execution-sizing schemas.
+
+Create one original System Event, save it with the related conversation rows,
+then publish that same Event. Publication is outside the history transaction;
+its failure remains observable and does not rerun the handler. Audit.save takes
+payload plus optional history rows, with no execution-record mutation callback.
+Final Entity/preferences/completion audit remains the separate D-0154 commitAgent.
+Never use it to append intermediate audit or change preferences prematurely.
+
+Focused evidence includes second-row conflict with no prefix, exact-repeat groups,
+retained audit after publication failure, current model validation and causality,
+concurrent output-credit reservation, uncertain tool sends, fresh live reads and
+cancellation. No provider matrix solely for coverage, migration or replacement
+recovery mechanism is introduced.
+
 ## Evidence required
 
 Use deterministic interruption barriers and separate provider handles/processes:
@@ -258,3 +330,20 @@ remove scheduler execution together, so both mechanisms never execute the same
 accepted input. Then delete recovery-only storage/contracts and update narrow docs.
 M8 subsequently consolidates shared environment Delivery; it must not re-enable
 any old Agent execution or scan.
+
+## Delivery lifetime refinement (D-0157)
+
+The reproduced gated direct-post failure requires separate exact-message
+acknowledgement and full tracked shard completion. The accepted
+[Delivery lifetime decision](AGENT_DELIVERY_LIFETIME.md) gives the internal
+contracts, actual retained dispatcher, wake/capacity/session/close integration,
+ordinary error preservation and focused evidence. It refines D-0152; it does not
+introduce an Agent scheduler, persisted queue, or recovery.
+
+## Definite live denial and example evidence (D-0158)
+
+Preserve the existing factual termination audit for a typed pre-handler model-use
+denial. The [completion audit decision](AGENT_COMPLETION_AUDIT.md) gives the narrow
+catch, current-session/error guarantees and source-correlated example history
+reader. It adds no execution status, startup synthesis or recovery. Aggregate
+cancellation alone is never proof that live model work has ended.

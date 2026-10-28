@@ -6761,3 +6761,78 @@ INFO reports only completed factory initialization and later actual context
 channel setup, never all future channels or permissions. This concrete TS API
 fulfills the human's explicit setup requirement; it is not claimed as a JVM API.
 No optional duck-typed success, generic lifecycle manager or synthetic probe.
+
+## D-0156: Live Agent inputs and atomic interaction audit
+
+Date: 2026-10-28. Status: accepted for M7b implementation.
+
+Delete every message and enum in execution_record.proto; none requires relocation.
+Existing interaction/history/model/content wire messages are independent. Replace
+TS helper parameters with minimal internal live inputs, selected model and operation
+identity, plus local budgets and active correction/tool/read data. Do not recreate
+a journal-shaped TS record or record/update-transform facade. Preserve validation,
+exact Any identity, configured live limits, cancellation and unsafe-write retry
+protection. Remove recovery bytes, revision compatibility, replay and saved reads.
+
+Preserve the existing atomic conversation-plus-System audit group before System
+publication using provider-only AgentHistoryStorage.appendAll(entityId, entries).
+Add AgentHistoryCapacity with surviving historyRecordBytes/transactionPayloadBytes
+only, and extract full encoded history-row sizing. Capture and validate the group,
+keep immutable repeats harmless, and reject conflicts without a written prefix.
+Use existing native transactions or memory history queue; preserve index updates,
+ordering/pagination and admitted close semantics. Keep final conditional commitAgent
+separate; intermediate audit must not create preferences or mutate Entity state.
+No replacement Proto, migration, persisted execution queue, recovery compatibility
+wrapper, or generic transaction framework. Detailed live constraints are in
+[Agent live execution](tasks/environment-lifecycle/AGENT_LIVE_EXECUTION.md).
+
+## D-0157: Agent acknowledgement and tracked Delivery completion
+
+Date: 2026-10-28. Status: accepted for M7b implementation.
+
+A reproduced gated BlackBox test showed local posting awaits the terminal shard
+drain even after Agent acknowledgement. Separate exact-message acknowledgement
+from complete shard-run settlement. Keep public Delivery.run/drain, supervisor
+idle/close and readiness transfer terminal. An internal retained run exposes
+completed/wake/stop; exact-message observers settle only their real outcome.
+Agent closure starts after successful ack and remains tracked under its shard
+session; ack failure discards it. Preserve ordinary endpoint/monitor/follow-up
+error policy, preacceptance failure identity and pending rows. No fabricated
+DRAINED result or fire-and-forget error suppression.
+
+Advance only actual core Delivery retention from M8 through existing shared
+readiness selection and complete context Entity/projection dispatcher. Retain
+active runs there, not in a second scheduler. Active and newly eligible work
+wakes through existing Delivery notifications, including capacity release with
+no active local run. Coalesce hints/generations, avoid lost wake and same-target
+reordering; no payload backlog, polling or new arbitrary timer.
+
+Keep ordinary configured session renewal serialized with validation/release and
+apply the current-session guard to all live effects. Loss remains final; never
+reacquire to continue accepted work. Normal idle does not abort a live handler.
+Close fences new work, cancels/wakes and awaits full runs before releasing stores;
+report cleanup failures. Ordinary outgoing Commands enter existing bus tracking
+without awaiting their originating shard's full drain. No saved Agent output list.
+Detailed mechanics and evidence are in the task's
+[Delivery lifetime decision](tasks/environment-lifecycle/AGENT_DELIVERY_LIFETIME.md).
+
+## D-0158: Definite live denial and example completion evidence
+
+Date: 2026-10-28. Status: accepted for M7b implementation.
+
+Release-notes used removed execution status for account safety. Preserve actual
+pre-handler MODEL_USE_DENIED as the existing AgentInvocationTerminated System
+Event, guarded and appended through retained history before original publication.
+Catch only the typed denial around initial model selection; do not invent domain
+failure, dispatch, success, or interruption evidence. Preserve original failure
+and audit/publication errors. No startup writer or execution record/status API.
+
+Example-local completion derives from typed, fully source-correlated paged Agent
+domain output history or that definite denial. Canceled Aggregate state, missing
+history and uncertain work remain nonterminal for account safety. Completed Agent
+history does not imply the Aggregate applied output: render this distinction,
+retain authoritative domain state, allow ordinary refresh, and release indefinite
+UI busy waits without releasing trusted account locks on unknown work. Existing
+Wait/Stop-and-close remains available; no app recovery mechanism or new limits.
+Detailed scope, error windows and focused evidence are in
+[completion audit](tasks/environment-lifecycle/AGENT_COMPLETION_AUDIT.md).

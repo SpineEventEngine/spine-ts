@@ -44,15 +44,13 @@ import {
   MessageIdSchema,
   ActorContextSchema,
   TenantIdSchema,
+  type MessageId,
   type TenantId,
 } from "@spine-event-engine/proto";
-import {
-  AgentSelectedModelSchema,
-  type AgentAcceptedInvocation,
-  type AgentSelectedModel,
-} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type { RepositoryAiOptions } from "../repository/repository.js";
-import { AgentExecutionFault } from "./agent-execution-fault.js";
+import type { SignalMetadata } from "../runtime/signal-metadata.js";
+import { AgentLiveFault } from "./agent-live-fault.js";
+import type { AgentLiveInvocation, AgentLiveModel } from "./agent-live-inputs.js";
 
 /**
  * Copies every accepted-scope identity before passing it to an application callback.
@@ -72,51 +70,33 @@ const copyScope = (scope: AiScope): AiScope => ({
 
 interface AgentModelSelectionAccess {
   /**
-   * Builds the authorization scope from immutable accepted signal facts.
-   *
-   * @param accepted Accepted original signal and recipient.
+   * Creates one live authorization scope directly from its original signal.
+   * @param invocation Original typed source and Agent recipient.
    * @param state Generated Agent state descriptor.
-   * @param tenantId Delivery tenant, or undefined for a single-tenant Bounded Context.
-   * @returns Typed actor, Agent, tenant, and source scope.
+   * @param metadata Causal Event actor extraction.
+   * @param tenantId Selected delivery tenant, if any.
+   * @returns Detached source, actor, Agent, and tenant scope.
    */
-  scope(accepted: AgentAcceptedInvocation, state: MessageSchema, tenantId?: TenantId): AiScope;
+  scopeLive(
+    invocation: AgentLiveInvocation,
+    state: MessageSchema,
+    metadata: SignalMetadata,
+    tenantId?: TenantId,
+  ): AiScope;
 
   /**
-   * Returns each model kind required by the repository's capabilities.
-   *
-   * @param registry Effective deployment registry.
-   * @param repository Repository models and selection policy.
-   * @param scope Authenticated accepted-invocation scope.
-   * @param preferences Claim-time per-instance selections.
-   * @param signal Cancellation signal for this execution.
-   * @param deadlineEpochMs Absolute invocation deadline.
-   * @param sourceMessage Detached original accepted payload when selection is required.
-   * @returns Selected, authorized deployments by available kind.
+   * Finds an authorized live deployment without an execution-record message.
+   * @param registry Effective AI registry.
+   * @param repository Repository policy and capabilities.
+   * @param scope Original authorization scope.
+   * @param preferences Current committed instance preferences.
+   * @param signal Invocation cancellation.
+   * @param deadlineEpochMs Actual live deadline.
+   * @param kind Generation or decision kind.
+   * @param sourceMessage Original source payload for selection hooks.
+   * @returns Validated selected model and connection.
    */
-  select(
-    registry: AiRegistry,
-    repository: RepositoryAiOptions,
-    scope: AiScope,
-    preferences: readonly ModelPreference[],
-    signal: AbortSignal,
-    deadlineEpochMs: number | undefined,
-    sourceMessage?: Any,
-  ): Promise<readonly AgentSelectedModel[]>;
-
-  /**
-   * Resolves one kind through instance, repository, and Bounded Context precedence.
-   *
-   * @param registry Effective deployment registry.
-   * @param repository Repository models and selection policy.
-   * @param scope Authenticated accepted-invocation scope.
-   * @param preferences Claim-time per-instance selections.
-   * @param signal Cancellation signal for this execution.
-   * @param deadlineEpochMs Absolute invocation deadline.
-   * @param kind Generation or decision kind to resolve.
-   * @param sourceMessage Detached original accepted payload when selection is required.
-   * @returns Authorized deployment and nonsecret connection identity.
-   */
-  selectKind(
+  selectLiveKind(
     registry: AiRegistry,
     repository: RepositoryAiOptions,
     scope: AiScope,
@@ -125,7 +105,7 @@ interface AgentModelSelectionAccess {
     deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
-  ): Promise<AgentSelectedModel>;
+  ): Promise<AgentLiveModel>;
 
   /**
    * Resolves and copies one explicit model from the accepted payload.
@@ -224,7 +204,7 @@ interface AgentModelSelectionAccess {
     scope: AiScope,
     signal: AbortSignal,
     deadlineEpochMs: number | undefined,
-  ): Promise<NonNullable<AgentSelectedModel["connection"]>>;
+  ): Promise<AgentLiveModel["connection"]>;
 
   /**
    * Converts a deployment role to its generated enum value.
@@ -272,102 +252,73 @@ const selectionHookDeadline = (
 };
 
 /**
+ * Packs the original typed signal ID with its exact payload type.
+ */
+const AgentLiveSource = Object.freeze({
+  /**
+   * Packs the original Command or Event ID and payload type URL.
+   * @param payloadType Exact declared signal payload type URL.
+   * @param source Original Command or Event carrying its typed ID.
+   * @returns Message ID with the original typed source ID.
+   */
+  create(source: AgentLiveInvocation["source"], payloadType: string): MessageId {
+    if (source.case === "command") {
+      if (source.value.id === undefined) throw new TypeError("Agent Command ID is missing.");
+      return create(MessageIdSchema, {
+        id: AnyPacker.pack(CommandIdSchema, source.value.id),
+        typeUrl: payloadType,
+      });
+    }
+    if (source.value.id === undefined) throw new TypeError("Agent Event ID is missing.");
+    return create(MessageIdSchema, {
+      id: AnyPacker.pack(EventIdSchema, source.value.id),
+      typeUrl: payloadType,
+    });
+  },
+});
+
+/**
  * Selects and authenticates each available model kind at execution start.
  */
 export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   /**
-   * Constructs the accepted actor, tenant, Agent and source authorization scope.
-   *
-   * @param accepted Original accepted signal and typed recipient.
-   * @param state Generated Agent state descriptor.
-   * @param tenantId Delivery tenant, if this Bounded Context is tenant-scoped.
-   * @returns Scope passed to identity and authorization callbacks.
+   * Derives live actor and typed source identity without persisted acceptance facts.
    */
-  scope(accepted: AgentAcceptedInvocation, state: MessageSchema, tenantId?: TenantId): AiScope {
-    const recipient = accepted.recipientId;
-    if (recipient === undefined) throw new Error("Agent selection requires the typed recipient.");
-    const signal = accepted.signal;
-    if (signal.case !== "command" && signal.case !== "event")
-      throw new Error("Agent selection requires its original source signal.");
-    const sourceId =
-      signal.case === "command"
-        ? signal.value.id === undefined
-          ? undefined
-          : AnyPacker.pack(CommandIdSchema, signal.value.id)
-        : signal.value.id === undefined
-          ? undefined
-          : AnyPacker.pack(EventIdSchema, signal.value.id);
-    if (sourceId === undefined) throw new Error("Agent selection requires the source ID.");
-    const payloadType = signal.value.message?.typeUrl;
-    if (payloadType === undefined || payloadType.trim().length === 0)
-      throw new Error("Agent selection requires the source payload type.");
-    const actor = accepted.actor;
-    if (actor === undefined) throw new Error("Agent selection requires the accepted actor.");
+  scopeLive(
+    invocation: AgentLiveInvocation,
+    state: MessageSchema,
+    metadata: SignalMetadata,
+    tenantId?: TenantId,
+  ): AiScope {
+    if (invocation.stateType !== state.typeName || !invocation.recipientId.typeUrl.trim())
+      throw new TypeError("Agent selection requires its typed state and recipient.");
+    const source = invocation.source;
+    const id = source.value.id;
+    const payloadType = source.value.message?.typeUrl;
+    if (id === undefined || !payloadType?.trim())
+      throw new TypeError("Agent selection requires the source ID and payload type.");
+    const actor =
+      source.case === "command"
+        ? source.value.context?.actorContext
+        : metadata.originFromEvent(source.value).actorContext;
     return {
-      actor,
-      tenant: tenantId === undefined ? { kind: "single-tenant" } : { kind: "tenant", id: tenantId },
-      agent: create(MessageIdSchema, { id: recipient, typeUrl: TypeUrls.derive(state) }),
-      source: create(MessageIdSchema, {
-        id: sourceId,
-        typeUrl: payloadType,
+      actor: actor === undefined ? create(ActorContextSchema) : clone(ActorContextSchema, actor),
+      tenant:
+        tenantId === undefined
+          ? { kind: "single-tenant" }
+          : { kind: "tenant", id: clone(TenantIdSchema, tenantId) },
+      agent: create(MessageIdSchema, {
+        id: clone(AnySchema, invocation.recipientId),
+        typeUrl: TypeUrls.derive(state),
       }),
+      source: AgentLiveSource.create(source, payloadType),
     };
   },
 
   /**
-   * Resolves, authorizes and records one selected deployment for each available kind.
-   *
-   * @param registry Effective deployment registry.
-   * @param repository Repository models and selection policy.
-   * @param scope Authenticated accepted-invocation scope.
-   * @param preferences Claim-time per-instance selections.
-   * @param signal Cancellation signal for this execution.
-   * @param deadlineEpochMs Absolute invocation deadline.
-   * @param sourceMessage Detached original accepted payload when selection is required.
-   * @returns Selected deployments for kinds used by the repository.
+   * Selects a registered backend and its checked connection for one live kind.
    */
-  async select(
-    registry: AiRegistry,
-    repository: RepositoryAiOptions,
-    scope: AiScope,
-    preferences: readonly ModelPreference[],
-    signal: AbortSignal,
-    deadlineEpochMs: number | undefined,
-    sourceMessage?: Any,
-  ): Promise<readonly AgentSelectedModel[]> {
-    const selected: AgentSelectedModel[] = [];
-    for (const kind of ["generation", "decision"] as const) {
-      if (!repository.models.some((model) => model.definition.kind === kind)) continue;
-      selected.push(
-        await this.selectKind(
-          registry,
-          repository,
-          scope,
-          preferences,
-          signal,
-          deadlineEpochMs,
-          kind,
-          sourceMessage,
-        ),
-      );
-    }
-    return selected;
-  },
-
-  /**
-   * Resolves a deployment through normal precedence and checks authenticated identity.
-   *
-   * @param registry Effective deployment registry.
-   * @param repository Repository models and selection policy.
-   * @param scope Authenticated accepted-invocation scope.
-   * @param preferences Claim-time per-instance selections.
-   * @param signal Cancellation signal for this execution.
-   * @param deadlineEpochMs Absolute invocation deadline.
-   * @param kind Generation or decision kind to select.
-   * @param sourceMessage Detached original accepted payload when selection is required.
-   * @returns Chosen deployment and validated connection identity.
-   */
-  async selectKind(
+  async selectLiveKind(
     registry: AiRegistry,
     repository: RepositoryAiOptions,
     scope: AiScope,
@@ -376,7 +327,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     deadlineEpochMs: number | undefined,
     kind: "generation" | "decision",
     sourceMessage?: Any,
-  ): Promise<AgentSelectedModel> {
+  ): Promise<AgentLiveModel> {
     const registration = await this.deployment(
       registry,
       repository,
@@ -393,11 +344,13 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       signal,
       deadlineEpochMs,
     );
-    return create(AgentSelectedModelSchema, {
-      kind: this.kind(kind),
-      model: registration.ref,
+    const model = clone(ModelRefSchema, registration.ref);
+    Validate.check(ModelRefSchema, model);
+    return {
+      kind: kind === "generation" ? AiModelKind.GENERATION : AiModelKind.DECISION,
+      model,
       connection,
-    });
+    };
   },
 
   /**
@@ -594,7 +547,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
     scope: AiScope,
     signal: AbortSignal,
     deadlineEpochMs: number | undefined,
-  ): Promise<NonNullable<AgentSelectedModel["connection"]>> {
+  ): Promise<AgentLiveModel["connection"]> {
     if (signal.aborted) throw new Error("Agent model selection cancelled.");
     if (deadlineEpochMs !== undefined && deadlineEpochMs <= Time.currentTimeMillis())
       throw new Error("Agent model selection expired.");
@@ -613,7 +566,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
       deadlineEpochMs,
     );
     if (!allowed)
-      throw new AgentExecutionFault("MODEL_USE_DENIED", "Selected Agent model use was denied.");
+      throw new AgentLiveFault("MODEL_USE_DENIED", "Selected Agent model use was denied.");
     const connection = create(AiConnectionIdentitySchema, {
       provider: create(AiProviderNameSchema, { value: identity.provider }),
       account: create(AiAccountIdentitySchema, { value: identity.account }),

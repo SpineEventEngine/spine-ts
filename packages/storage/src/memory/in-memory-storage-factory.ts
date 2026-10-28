@@ -47,12 +47,6 @@ import {
 } from "../internal/storage-preparation.js";
 import type { AgentHistoryStorage, AgentHistoryStorageInput } from "../entity/agent-history.js";
 import { MemoryAgentHistory } from "./in-memory-agent-history.js";
-import { AgentExecutionStorageFactories } from "../internal/agent-execution.js";
-import type {
-  AgentExecutionStorage,
-  AgentExecutionStorageInput,
-} from "../entity/agent-execution.js";
-import { MemoryAgentExecution } from "./in-memory-agent-execution.js";
 
 /**
  * In-memory factory for record storages and framework delegates such as the event store.
@@ -80,9 +74,6 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     this.#catalog = new MemoryTenantCatalog(backend);
     AgentHistoryStorageFactories.register(this, {
       createAgentHistoryStorage: (input) => this.createAgentHistoryStorage(input),
-    });
-    AgentExecutionStorageFactories.register(this, {
-      createAgentExecutionStorage: (input) => this.createAgentExecutionStorage(input),
     });
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
@@ -376,21 +367,6 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     if (input.stateType.trim().length === 0) throw new TypeError("Agent state type is required.");
     return MemoryAgentHistory.open(this.#backend, input);
-  }
-
-  /**
-   * Acquires a durable Agent execution handle against this shared memory backend.
-   *
-   * @typeParam I Typed Agent identifier.
-   * @typeParam S Generated Agent state.
-   * @param input Agent repository and Entity layout.
-   * @returns Independently closeable execution handle.
-   */
-  protected createAgentExecutionStorage<I, S extends Message>(
-    input: AgentExecutionStorageInput<I, S>,
-  ): AgentExecutionStorage<I, S> {
-    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
-    return MemoryAgentExecution.open(this.#backend, this, input);
   }
 
   /**

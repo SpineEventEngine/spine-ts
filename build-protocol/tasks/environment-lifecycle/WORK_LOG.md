@@ -1322,3 +1322,604 @@ runtime failure is waived and no full release/security claim is made. Stage only
 authored reviewed paths, source Proto checksum and parent task records; defer
 generation fingerprints to final convergence. Commit/push checkpoint, then continue
 same implementation context with coherent admission/Delivery/scheduler removal.
+
+M7b1 checkpoint8ec09c183 pushed successfully to official origin/environment-lifecycle.
+
+M7b live-runtime dispatch resumes the existing storage_retention sole implementer,
+explicit immutable gpt-6-sol/medium; runtime metadata unavailable. Estimate3–5hours
+for coherent receipt admission and ordinary Delivery live execution, deleting all
+scheduler/replay/recovery contracts/providers/config, preserving audit/preferences/
+normal corrections, focused interruption/concurrency evidence, affected docs and
+review. The now-accepted provider primitive is the persistence path. Exact brief:
+external agent-live-cutover-implementation-brief.md, accepted full live plan and
+AGENT_LIVE_EXECUTION D0152–D0154. No new architecture pass absent demonstrated
+material blocker. No edits to parent records, children, commit or push by child.
+Source fixture helpers used by surviving tests must move appropriately rather than
+be removed with recovery-only tests. Two recorded Agent failures require resolution
+or replacement according to the approved semantics, never weakening assertions.
+All remaining M8–M13 work continues after this milestone; no whole-task acceptance.
+
+M7b demonstrated schema/live-type blocker: current AgentInteractionAudit and
+AgentInteractionEvents consume AgentAcceptedInvocation, AgentNamedOperation,
+AgentSelectedModel and AgentExecutionRecord from execution_record.proto; model/
+tool/read/budget/session code also uses the recovery journal as mutable live data.
+Parent read audit/event helpers and Proto declarations. Public interaction_events
+already defines independent retained AgentOperationRef and System Event payloads;
+imports of recovery helper types in TS alone do not prove those types must remain
+serialized. Existing application_architecture requirements splitter receives a
+bounded read-only decision using explicit immutable gpt-6-astra/high, runtime
+metadata unavailable. Determine minimal in-memory inputs/counters versus truly
+retained wire types, exact deletions and audit preservation. No broad replan,
+source edits/checks/children. Estimate0.2–0.4hours for decision and handoff; same
+implementer continues independent reference classification. No migration or
+execution-compatibility schema accepted. Dependent extraction awaits exact seam.
+
+Parent consolidated existing M5b and M12 integration evidence in external
+server-protocol-integration-brief.md while M7b runs. No new design or source/test
+change: current typed TenantUnknownError/service mapping and client retry behavior
+already exist; older inventory absence claims must not drive duplicate work. The
+brief carries final startup/forwarding/readiness/AnyPacker/example integration
+requirements for use after M8–M11. Existing audits were reused, not delegated again.
+
+M7b source refinement: both implementer and requirements splitter confirm genuine
+audit Proto definitions are independent of execution_record.proto; TS construction
+parameters caused the apparent dependency. No wire relocation or migration is
+needed. Splitter is narrowing plain live types and an actual intermediate history
+batch obligation, while implementer proceeds independent capacity reservation
+red/green evidence (6/6). No production receipt/Delivery cutover is claimed yet.
+
+M7b estimate revised promptly to6–10hours remaining for live runtime, removal,
+focused evidence, documentation and review. Source-based reason: AgentExecutionRunner
+alone is roughly1700lines; AI/read/MCP helpers share recovery persistence image
+types, and capacity BlackBox infrastructure subclasses the execution provider being
+deleted. This is a demonstrated larger coherent cutover surface, not permission
+to retain old execution schemas or reduce behavior tests. Same sole implementer
+continues. Bounded proof checkpoints stay internal until admission/Delivery and
+scheduler replacement are coherent. M8–M13 are additional remaining task work.
+
+D-0156 accepted after parent read full external agent-live-types-decision.md.
+Existing requirements splitter explicit immutable Astra/high profile confirmed;
+no runtime introspection, source edits, checks or children. Root recorded minimal
+live inputs, removal of every execution_record definition, preserved live controls
+and necessary atomic intermediate history batch contract in DECISION_LOG and
+AGENT_LIVE_EXECUTION. The genuine additional provider method preserves an existing
+atomic audit group; no replacement Proto or journal abstraction. Same implementer
+continues the coherent cutover using the exact decision. Relevant provider batch
+proof joins M7b mechanical/review scope; final commitAgent remains separate.
+
+M7b internal proof checkpoints (not freeze/acceptance): capacity reservation7/7
+and server typecheck; memory history batch4/4; native PostgreSQL/MySQL/Datastore
+second-row conflict rollback, with Datastore captured-input and factory-close
+barriers. Combined provider-history run15live tests passed, tenant-specific cases
+skipped because A/B URLs were not supplied; those skips are not counted as proof.
+Four-provider typecheck passed. Plain live inputs/event helper2/2 and live audit2/2
+passed; the latter proves one atomic history group and publication only afterward,
+with same original System Event. Server typecheck and focused ESLint passed for
+that substep. Temporary parallel helpers exist only during the uncommitted rewrite;
+superseded helpers will be deleted before coherent freeze. Receipt/Delivery runtime
+switch, recovery deletion, complete behavior evidence and review remain pending.
+
+M7b bounded read-only scanning dispatch: existing mechanical_checks function,
+explicit immutable gpt-6-luna/low profile from original dispatch; runtime metadata
+unavailable. Locate ordinary Delivery notification/wake seam for capacity-deferred
+Agent input when another shard holds capacity and local live set is empty. Return
+exact source references and demonstrated behavior only; no design, edits, tests or
+children. Estimate0.1–0.2hours. Sole Sol/medium implementer continues receipt/runner
+integration independently. Required same-Agent alternate preference test remains
+a reproduced baseline failure and must pass unchanged after the live switch.
+
+Parent consolidated already-accepted M9–M11 requirements and existing source notes
+in external context-initialization-implementation-brief.md while M7b remains active.
+No production/design change or new architecture dispatch; this is the subsequent
+implementation handoff covering independent flags, common readiness, per-context
+monitor first success vs later failures, and paged effective-index preparation.
+
+M7b bounded scan completed and accepted under immutable explicit Luna/low profile;
+runtime metadata unavailable. Existing DeliverySupervisor.notify(shard) is reachable
+through environment notify(scope)/EnvironmentAttachment, but no capacity-release
+bridge exists. Inbox readiness fires only on new WRITTEN receipt; a deferred row
+remains pending, and empty local liveAgents permits DRAINED. Old scheduler wake is
+not an ordinary Delivery wake. Exact source references relayed to same implementer
+for direct existing notification integration plus focused cross-shard deferral proof.
+No source/test edits by scan function. Latest implementation checkpoint: Delivery
+fencing6/6 and cleanup rules pass; AgentLiveRunner typechecks but is not wired yet.
+No coherent runtime freeze or whole-Agent acceptance is claimed.
+
+M7b demonstrated live Delivery lifecycle blocker: receipt wiring makes C=2 BlackBox
+time out before releasing its model gate. LocalEntityInbox awaits a drain whose
+DeliveryDrain.run waits live Agents and then releases the shard; original posting
+therefore waits handler completion despite earlier Inbox ack. Parent read current
+DeliveryDrain.run/readPages/release/startAgent and confirmed session lifetime is
+tied to terminal drain. Existing requirements splitter application_architecture,
+explicit immutable gpt-6-astra/high, receives a bounded read-only decision on early
+ack result vs tracked live drain/session, busy wake/renew/close and same-shard output.
+Runtime metadata unavailable. Estimate0.3–0.6hours; no broad replan or substitute
+persisted queue/scheduler. Same implementer continues independent business fixes.
+
+M7b independent runner checkpoint: server typecheck, focused lint and cleanup
+checks pass for handler cancellation/deadline limits, normal declared Command
+rejection with staged preferences discarded, and narrower repository invocation
+limits without recovery bytes. These remain WIP until live integration tests pass.
+Bounded Delivery lifecycle architecture decision is pending; no code acceptance.
+
+M7b basic live BlackBox proof now passes1/1: original named scripted handler emits
+expected domain Event, calls backend once, and public readAgentHistory returns
+paired GenerationRequest/Response plus original System Events. Obsolete journal
+assertions were replaced with public history checks; no receipt-encoding coupling.
+Architecture interim preserves terminal Delivery.drain/run, considering a narrow
+internal tracked-run handle and exact Agent acknowledgement channel. Parent asked
+for minimal reusable retention rather than disposable pre-M8 infrastructure. Final
+contract and gated concurrency proof still pending.
+
+M7b invalid-model-output BlackBox proof passes1/1 with domain failure Event, one
+backend call, retained AgentAiOperationFailed details/attempt references and public
+history/System consistency. Broader tooling typecheck initially found WIP fixture
+shape/new history-port mismatches; implementer corrected them without contract
+change. Tooling typecheck now passes; five affected server suites21/21 (live AI,
+interaction Events, reads, Delivery fencing and Agent history). Architecture
+interim favors actual core Delivery retention advanced narrowly from M8, rather
+than a disposable second manager; final contracts remain pending.
+
+D-0157 accepted after parent read complete source-grounded decision. Existing
+requirements splitter explicit immutable Astra/high confirmed; runtime metadata
+unavailable, no source edits/tests/children. Parent recorded durable full decision
+in AGENT_DELIVERY_LIFETIME and DECISION_LOG before dependent implementation.
+Advance only real Delivery retention from M8; separate exact-message outcome from
+full tracked drain, preserve normal error/follow-up semantics, wire active/capacity
+wakes, ordinary session maintenance/guards and full shutdown. Estimate1.5–3hours
+for this substep's implementation/focused proof within current6–10hour Agent
+estimate; full coherent M7 review remains after cutover/removal. Same sole
+storage_retention Sol/medium implementer continues, no new writer/architecture wave.
+
+M7b post-extraction checkpoint: production server build, focused ESLint and cleanup
+pass; live public-history BlackBox2/2 and model-selection/Delivery fencing25/25
+pass. D0157 final contract sent to same implementer, dependent work resumed.
+Parent updated external review/M8 handoff to reference durable decision and avoid
+reimplementing advanced Delivery retention in M8.
+
+D0157 first red/green proof: focused gated direct Agent post initially timed out
+while its handler gate remained held (1failed,6skipped). After separating exact
+message outcome, that regression passes and shard release remains pending until
+handler completion. Full fencing suite currently5/7; two assertions still refer
+to old terminal direct.run rather than explicit deferred/failed direct.outcome.
+Same implementer is updating those internal-contract assertions, then continuing
+retained active-run wake/session work. No complete D0157 or M7 acceptance yet.
+
+D0157 checkpoint: exact-message split fencing7/7 and server build pass. Broader
+Delivery-worker58/60 initially left two legacy internal result-shape assertions.
+Gated C=2 now reaches both model requests before gate release after fixing the
+short-page wait to observe wake generations as well as live settlement. Remaining
+C=2 assertions read obsolete execution journal and are being converted to public
+behavior. Same-Agent preference, empty-scan/release races and cross-shard/no-active
+capacity wake remain required; no final concurrency acceptance yet.
+
+D0157 gated C=2 and required waiting-same-Agent alternate preference BlackBox
+now pass with public behavior assertions. Delivery fencing8/8 and direct worker
+60/60 pass. New C=1/Q=0 cross-context no-active-run capacity-release test passes
+using availability subscription and coalesced readiness route hints/routed notify.
+Distinct Escalated Agent state preserves unconditional duplicate-state rejection.
+Parent requested focused direct-mode wake proof if the routed case does not cover
+it. Session authority/full-run shutdown and coherent deletion remain active.
+
+D0157 direct proof: deferred durable row is resumed via retained readiness notify
+without optional onReady; close after post acknowledgement waits entered Agent
+work and shard release. Fencing10/10, local handoff16/16, capacity8/8, C2/same-Agent
+BlackBox pass. Controlled-clock lease test proves renewal before issued60second
+expiry with validation/renew/release serialized on current session. Full accepted
+closure now carries current-session guard; gated loss test passes and affected
+AI/audit/read/Delivery18/18 pass. Ordinary policy, transition and same-shard output
+still being checked before full recovery deletion and milestone review.
+
+D0157 static fixes pass formatting, callable limit, scoped ESLint and server build.
+Separating capacity deferral from hard-failure blocks exposed one deterministic
+short-page timeout (96/97); live completion now wakes the retained drain and clears
+only capacity blocks. Rerun97/97 passes. Implementer confirmed bounded remaining
+proof: wake barriers at empty/acquire/release, transition/release failure, exact
+ordinary error/follow-up behavior, same-shard output, persistent interruption.
+Already proved: early ack/full retention, C2/late arrival, no-active direct capacity
+wake/no optional observer, same-target order/preferences, close, lease renewal and
+sticky authority loss. Parent directed finishing only missing accepted cases then
+recovery deletion, avoiding an expanding or repeatedly reverified substep.
+
+M7b requested bounded harness scan: existing mechanical_checks function, explicit
+immutable gpt-6-luna/low, runtime metadata unavailable. Read-only exact persistent
+subprocess/interruption fixture seams for ack then forced exit, reopen same store,
+no Agent replay, fresh signal and retained public audit. Reuse existing inventory;
+no broad rediscovery/design, edits, test execution or children. Estimate0.1–0.2hours.
+Same sole implementer continues remaining D0157 races and recovery removal.
+
+M7b harness scan accepted: explicit immutable Luna/low matches original dispatch;
+runtime metadata unavailable, no edits/tests/children. Exact source map is external
+agent-interruption-harness.md. Existing response-saved/recovery-child fork/IPC/
+SIGKILL/scoped SQL/public-history infrastructure is reusable; old update barrier
+and replay assertions are obsolete. Infrastructure config/exclusion and exact
+provider env relayed to implementer, including PG spine_env_test. Accepted-before-
+handler and response-saved interruption both remain required, no arbitrary sleeps.
+
+D0157 additional red/green proofs: post during shard release previously executed
+in successor but reported unacknowledged; exact-row observer now transfers and
+focused test passes. Close during pending pickup previously permitted dispatch;
+post-pickup close recheck releases without dispatch, gated test passes. Broader
+focused validation and coherent recovery deletion remain in progress.
+
+M7b scheduler removed; server typecheck passed. Full capacity BlackBox initially
+1/9 passed: first cross-context timeout left CapacityA open and caused later strict
+duplicate-state failures. Isolated investigation confirms a genuine runtime defect,
+not just stale assertions: promoted second queued Agent loses its session guard
+before completion. Same implementer is tracing release/cancellation and scoped
+authority within D0157; no new architecture pass, bypass, weakened assertion or
+provider-removal acceptance. Parent highlighted AsyncLocalStorage promotion-scope
+inheritance as an unverified hypothesis to distinguish from actual second-session
+release. Temporary diagnostics must be removed before freeze.
+
+Queued cross-context session regression resolved: capacity promotion invoked the
+waiting callback from the previous Agent's async scope, carrying its released
+commit guard. Installing withDeliveryCommitFence inside the promoted callback
+restores the correct current-session guard. Isolated test and server build pass;
+temporary diagnostics removed. Parent read live runner tenant handling and confirmed
+explicit captured tenant passed to admission/storage load; no evidence of wrong
+storage tenant in that path. Remaining scoped-callback checks stay bounded.
+
+M7b removal advances: BoundedContext has no scheduler startup/close; roughly1700line
+old AgentExecutionRunner removed, retaining only supported output/handler functions.
+Server production build/typecheck passes after execution/status APIs and
+agentCodeRevision options removed. Tooling currently fails on legacy consumers
+(runAcceptedAgent, agentExecution, pendingAcceptedAgents and revisions), not yet
+a clean milestone. Migrated capacity BlackBox now6/6, covering C2, cross-context
+Q0/Q1, same-Agent preference and close drain through supported live APIs. Obsolete
+durable-overflow/deadline-record assertions removed. Other tests/examples, provider
+contracts, recovery helpers/Proto/config/docs and persistent interruption proof
+remain active; no freeze/review or completion claim.
+
+M7b support-reply7/7 and capacity6/6 passed after runner import/helper cleanup;
+production build and focused lint passed, other legacy tooling consumers remain.
+Repeated deterministic partial-page regression then exposed a real lost-wake gap:
+first Agent settlement could wake before the deferred outcome installed its target
+block. Generation changes across dispatch and across page scans now request the
+needed rescan after deferral. Isolated red evidence retained, no timeout increase
+or assertion weakening. Fencing+capacity20/20, server typecheck and focused lint
+pass after correction; temporary diagnostics removed. Recovery deletion continues.
+
+M7b recovery consumer cleanup: removed two repository-routing tests/fixture port
+specific to deleted execution storage; retained tenant audit membership test1/1.
+Tooling diagnostics narrowed to legacy Agent registration/repository integration
+suites. Live READ/MODEL/TOOL fault type detached from recovery fault; server build
+and focused26/26 pass. Deleted12 disconnected recovery-only server modules and
+11 obsolete unit suites, removing stale necessity entries. New live AI/MCP/audit/
+read/budget suite13/13, server typecheck and cleanup pass. Genuine audit Proto
+preserved. Provider execution contracts/files, remaining tests/docs and required
+interruption/ordinary-output evidence remain; no coherent freeze.
+
+Parent documentation formatting dispatch: existing mechanical_checks function,
+explicit immutable Luna/low (runtime metadata unavailable), bounded to DECISION_LOG,
+AGENT_LIVE_EXECUTION and AGENT_DELIVERY_LIFETIME. Run Prettier on those three
+parent-maintained records and diff whitespace check; no implementation/test edits
+or children. Estimateunder0.1hours while sole implementer continues provider
+removal. Parent does not edit these three files during formatting.
+
+Parent record formatting accepted: explicit immutable Luna/low confirmed; runtime
+metadata unavailable. Prettier reports all three requested decision/live-contract
+documents unchanged, exit0; scoped git diff --check exit0. No source/test edits,
+children or material findings. This is formatting evidence only, not runtime review.
+
+M7b concrete provider removal checkpoint: execution-storage factory registration/
+SPI and26 provider execution files/tests deleted; surviving declarations moved to
+agent-live-fixtures. MySQL old layout and Datastore helper narrowed. Saved-dispatch
+transport/facade removed. Final stale production execution_record import removed.
+Before latest import cleanup, source typecheck,49 storage and45 dispatch tests
+passed; latest source still awaiting verification. Tooling failures now in legacy
+Agent registration/repository integration and model-selection scope/select tests.
+Parent explicitly retained live model validation/auth/actor/tenant behavior and
+subprocess interruption infrastructure while obsolete API assertions are replaced.
+Proto deletion follows preserving live behavior; no freeze or complete-green claim.
+
+M7b current proof: combined provider/server production typecheck passes; migrated
+original Command/Event model-selection19/19 and live AI integration2/2 pass. MySQL
+builder obsolete execution-port assertion removed while history-close remains.
+Tooling still contains legacy test consumers. First MCP-cleanup BlackBox timeout
+is being isolated; later duplicate-state failures are teardown cascades, not
+independent production diagnoses. Parent requested failure-safe established
+context/BlackBox teardown in migrated suites, preserving strict registration and
+not using reset to hide production leaks. No new architecture blocker established.
+
+M7b demonstrated example/live-audit contract gap: release-notes StudioService
+generationPhase reads deleted Repository.agentExecution; pre-handler model denial
+previously produced a saved terminated result that unlocked account selection.
+Current live runner selects before dispatch audit/handler, so denial leaves domain
+requested with no correlated terminal fact. Parent read StudioService, account
+lock test, flow cancel/wait and Aggregate generation state. Canceled domain state
+is not proof Agent work ended; synthesizing completed from it would unlock while
+work may still run. Existing ts/agent/interaction_events.proto retains genuine
+AgentInvocationTerminated (reason/source/Agent/timestamp) independent of recovery.
+
+Bounded existing application_architecture requirements-splitter dispatch, explicit
+immutable Astra/high; runtime metadata unavailable. Decide minimal honest example
+completion/lock semantics and preservation of real live failure audit, without
+recovery status API/wrapper, new serialized execution status, startup synthesis,
+replay or application recovery example. Estimate0.3–0.5hours. Same implementer
+continues independent Proto/test/subprocess work. Parent's preliminary source
+analysis0.1–0.3hours found this material lifecycle/audit ambiguity; no policy guessed.
+
+M7b native interruption evidence now passes PG2/2, MySQL2/2 and Datastore emulator
+2/2 for accepted-before-handler and response-saved SIGKILL cuts. Second process
+reads retained audit and no old state/output/model work; fresh signal completes
+one new model call and adds audit. Initial fresh-post timeout was legitimate
+persisted default30second shard lease surviving killed process versus10second
+test observation. Existing Time.setProvider advances second-process clock beyond
+that actual lease; no sleeps/timeouts increased or concurrency bypass. This is
+real provider/reopen proof, not in-memory simulation. Proto/example cleanup and
+remaining ordinary-output/transition checks still precede freeze/review.
+
+D-0158 accepted after parent read full bounded decision. Existing requirements
+splitter explicit immutable Astra/high profile confirmed; runtime metadata
+unavailable, no edits/tests/children. Durable AGENT_COMPLETION_AUDIT and DECISION_LOG
+record exact semantics before implementation. Same sole Sol/medium implementer
+receives guarded typed pre-handler denial audit and example-local source-correlated
+terminal evidence/UI distinction; no generic status facade or fabricated result.
+Estimate1–2hours for correction and focused framework/example tests, including
+account lock, canceled live work, pagination and committed-output/publication gap.
+This is additional concrete example adoption work within remaining Agent milestone.
+
+Recovery maxRecoveryBytes removed from AI contracts/registry and14 test/example
+configs; focused35/35 AI registry/MCP/backend tests pass. Authored execution_record
+Proto/export removed; proto generation source/style/frozen checks pass. Ignored
+stale generated/dist source-map remnants remain for deliberate output cleanup,
+not source compatibility. Native interruption proof remains6/6 as recorded.
+
+Release-agent end-to-end one-provider-call failure traced to real model-facing
+tool aliases: Responses records tool_0 while trusted adapter invokes configured
+MCP name after alias mapping; exact proposal validator compared unlike names.
+Bounded correction carries exact providerToolName metadata while dispatch still
+uses configured allowlisted server/tool and exact call ID/args. Parent inspected
+source and noted AiToolInvocation is exported adapter SPI, not private; narrow
+TSDoc/API review required. Omitted alias means tool was advertised under configured
+name, never guessed or ID-only matching. This preserves D0156 validation policy;
+no new architecture subsystem or serialized record. Focused rejection/regression
+proof required before acceptance; current timeout is not waived.
+
+M7b D0158 verification checkpoint: Studio flow35/35 and example typecheck pass;
+audit failure-window unit5/5 and server typecheck pass. Actual pre-handler model-use
+denial integration proves one retained/published typed termination Event, no model
+execution and no Entity version advance. An earlier assertion used post-handler
+selection authorization and was replaced, not treated as a runtime defect. Unknown
+signout returns a notice without credentials change or infinite polling. Writing
+view preserves authoritative requested draft while terminal output awaits application.
+These are focused results, not full final acceptance. Sole implementer estimates
+1–2hours until coherent review freeze, including D0157 window mapping, D0158 exact
+source/paging evidence, docs, fresh checks/coverage and rewritten evidence.
+
+Parent dispatches existing mechanical_checks read-only function (immutable explicit
+Luna/low; runtime metadata unavailable) for bounded current active-documentation
+residual scan after execution-record deletion. Scan current human and agent-facing
+instructions/examples/API docs only; distinguish ordinary delivery recovery and
+historical/verbatim task records. Output external concise file, no edits/tests or
+children. This is evidence gathering, not documentation reviewer disposition. Sole
+implementer continues all production/test/doc changes; no overlapping writer.
+
+M7b current verification: Studio service + Release Agent8/8, live audit + actual
+source integration6/6 pass. Denial retains original Command ID/type and remains
+distinct after a later successful generation; model counts/Entity version unchanged
+for denial. Source-related focused evidence accepted, complete freeze still pending.
+
+Active-doc residual scan accepted from existing mechanical_checks Luna/low immutable
+explicit dispatch; runtime metadata unavailable, no children/source edits/tests.
+External agent-active-doc-residuals.md identifies current recovery deadline claims,
+provider accepted-work/restart language, Datastore execution tables/obligations and
+repository recovery-revision TSDoc. Point-in-time scan while writer changes docs;
+returned to same implementer for current-source verification/correction. Historical
+and verbatim human task records excluded. This is not specialist review acceptance.
+
+Parent prepared external shared-environment-review-context.md from already accepted
+M8 handoff, source guardrail and D0155/D0157. No new architecture/API decision or
+production changes; inactive until M7 acceptance and M8 coherent freeze. Distinct
+review concerns separate M8 required shared facilities from later M9–M11 timing/
+preparation; prevent rediscovery and accidental duplicate Delivery tracking.
+
+M7b D0157 evidence correction: same-Agent Event reaction/capacity7/7 passes but
+parent explicitly rejected treating it as outgoing Command proof. Required separate
+same-Agent typed outgoing Command test is red: first no-op turn emits
+DraftSupportReply but no second model call/result at existing7second observation.
+Same implementer traces ordinary command handoff/active run, preserving red test;
+no timeout extension or weakened assertion. Review remains pending coherent fix.
+Parent read normal SignalPublisher tracking and context close ordering; review must
+include handed-off Command drain when Delivery closes, not only live handler drain.
+
+Correction to preceding Command diagnosis: implementer traced the new fixture to
+an assignment handler whose declared outputs are Events. Its DraftSupportReply
+was wrapped as an Event, so timeout does not prove a runtime Command defect.
+Invalid fixture removed, replacement uses genuine Command substitution and distinct
+ReviewSupportReply assignment. Parent promptly corrected human-facing diagnosis;
+previous red retained as fixture classification, not evidence of framework failure.
+The separate outgoing Command requirement and close-order review concern remain.
+
+M7b valid outgoing Command proof now passes1/1 plus server typecheck: no-state-change
+command-substitution returns ReviewSupportReply; same-Agent command-assignment
+produces SupportReplyDrafted through ordinary delivery. Invalid assignment fixture
+removed. Shutdown ordering is investigated separately; normal-flow success is not
+close proof. Parent exact removed-symbol authored-source scan found only unused
+SignalPublisher.recordAcceptedSaved; no callers, returned to same implementer for
+removal, preserving normal tracked publication.
+
+Parent documentation formatting before M7b preflight: existing mechanical_checks
+Luna/low explicit immutable profile; runtime metadata unavailable. Restrict writes
+to parent-maintained DECISION_LOG, AGENT_LIVE_EXECUTION, AGENT_DELIVERY_LIFETIME,
+AGENT_COMPLETION_AUDIT and WORK_LOG, then scoped whitespace check. No production,
+tests, implementation docs or children. Parent pauses edits to these paths until
+completion. Covered by current1–2hour pre-review estimate, formatting under0.1hour.
+
+M7b parent-record formatting completed under explicit immutable Luna/low profile;
+runtime metadata unavailable. Prettier0 formatted AGENT_COMPLETION_AUDIT only,
+otherfourunchanged; exactfivepath diffcheck0. No unexpected issues or other edits.
+
+M7b D0158 denial failure preservation10/10 and server typecheck pass: saveDenial
+preserves original denial plus append/publication failure in AggregateError;
+cancellation beforeappend writesnothing, append failure doesn't publish, publication
+failure retains committed fact. No fullreviewclaim. Same-Agent genuine Command
+close test passes after secondhandlerentered, but parent requires separate earlier
+queued ordinary publication window beforetargetdispatch; writer investigating.
+
+M7b demonstrated queued ordinary Command close defect: close begins at publication
+observation before target dispatch; current readiness-close-before-drain ordering
+prevents the accepted Command from reaching the handler, and reopen has no reviewed
+state. Same implementer tests bounded initial accepted-bus/publisher drain while
+Delivery remains available, followed by Delivery close and final drain. D0157
+already requires preservation of handed-off ordinary Commands; no new architecture
+pass needed. Preserve synchronous external intake fencing, canceled Agent/session
+checks, attempt-all cleanup and reservations until actual cleanup. This is a real
+runtime defect distinct from the earlier invalid assignment fixture.
+
+Queued Command close investigation continues: context drain-order change alone
+leaves regression red. SignalPublisher calls observation before adding publication
+to its in-flight set, allowing reentrant close to see no admitted work. Same writer
+moves observation after tracking and reruns red-to-green/lifecycle checks. No
+acceptance or broadened close guarantee inferred before actual test result.
+
+Correction to queued Command diagnosis: dispatch trace reaches CommandBus with no
+publication error; Delivery.close deliberately cancels Agent work. An Agent receipt
+may already be accepted before its handler starts, in which case absent state and
+no execution after reopen are REQUIRED. Initial queued test incorrectly expected
+completion/replay; it cannot establish lost delivery. Parent restated exact pending
+ordinary Inbox versus accepted Agent receipt distinction. Same writer removes that
+assertion and proves reentrant close with an ordinary standalone-produced Command
+(or Aggregate/PM target) instead. Keep only order changes supported by valid ordinary
+behavior evidence; revert speculative reorder if unnecessary. Gated entered-Agent
+close tracking remains independently valid. Never wake receipt-accepted Agent work
+as a substitute for the deleted recovery.
+
+M7b genuine ordinary-Entity close regression established: old readiness-first close
+leaves produced AssignReviewTask without committed ProjectState on reopen; draining
+accepted work before Delivery close commits state before close returns, no wake
+required. This is separate from canceled Agent no-replay. Focused bounded-context92
+plus Agent integration4 tests pass96/96. Broader Delivery fencing/run-control/
+capacity pass, but entity-inbox18/40 fail, including old mocked Delivery instances
+with missing real factory identity and replay/count assumptions. These are current
+M7b scope (not waived as baseline), even when preceding latest close patch. Same
+writer classifies deterministic mock versus behavior defects, preserves ordinary
+contracts, and must finish current affected suites before freeze/review.
+
+M7b Inbox classification checkpoint: failures reduced18 to6 of40. Five mocked
+Delivery objects lacked context/factory identity required for retained routing;
+seven assertions expected physical cleanup at exact-message completion and now
+await the actual terminal whenIdle. Remaining batch sibling replay, routed transfer,
+backlog dispatcher configuration, primitive rejection and reacquisition cases are
+still checked against ordinary behavior contracts. No acceptance from reduced count;
+current suite must pass without replacing behavioral requirements with incidental
+new implementation expectations.
+
+M7b affected lifecycle checkpoint: EntityInbox40/40; combined context, Inbox,
+Delivery fencing/run-control, Agent integration and capacity161/161. Server/testing
+TypeScript and focused ESLint pass. Remaining Inbox tests were contract fixture/
+completion-timing corrections, no additional EntityInbox/Delivery production fix:
+routed worker readiness retains pending input, direct fallback processes eligible
+backlog, first failed batch row remains while sibling succeeds, primitive cause is
+preserved, terminal release precedes reacquisition. Parent requested explicit native
+MariaDB appendAll evidence and exact remaining D0157/D0158 case mapping. Same
+implementer runs bounded native check and fresh preflight; release gate still deferred.
+
+M7b native MariaDB appendAll rollback passes against task port62899:1passed,
+6unselected. Three remaining focused proof windows identified: readiness transition
+after early Agent acknowledgement, release failure visible during active close, and
+Studio exact-source denial beyond first history page. Release inspection finds that
+normal drain returns FAILED but retained close/whenIdle discards that terminal status;
+writer adds gated regression and bounded reporting while preserving normal stop,
+contention and per-row policy and awaiting every release. Parent rewrote external
+review context to remove superseded diagnostic claims; historical classification
+corrections remain here. Review remains pending final mechanical convergence.
+
+M7b three named gaps now have focused passing evidence: readiness transition waits
+for acknowledged Agent work and actual release; readiness.close surfaces original
+active release error (Delivery fencing16/16); Studio finds exact pre-handler denial
+beyond page1 after unrelated later generation (1/1, reader page size1). No further
+architecture blocker. Same writer completes fresh static checks and final changed-
+production coverage/evidence before freeze; independent review still pending.
+
+M7b deterministic preflight: tooling TypeScript, cleanup rules, API inventory,
+audience and executable snippets pass after bounded removed-contract corrections.
+TSDoc checker reports about860 changed-code diagnostics after baseline filtering,
+including block openers, summaries and parameter/return documentation. This is a
+real pre-review workload, not waived by226 passing tests. Parent estimates added
+0.5–1.5hours for systematic precise comment correction and checking. Same writer
+classifies scripts-first, mechanically fixes safe block form, and writes actual
+parameter/return semantics without filler or recovery claims. Comment-only changes
+do not require repeating unchanged expensive behavior suites. Fresh coverage and
+final evidence remain prerequisites to review. No new architecture scope.
+
+Parent prepared external context-initialization-review-context.md from accepted
+M9–M11 proposal, covering four concern-specific review sections without changing
+contracts or beginning implementation. Shared environment review context is also
+ready. These reduce rediscovery once M7 is accepted and later slices freeze.
+
+TSDoc classification/update: most diagnostics concentrate in live AI runtime,
+Repository, Delivery, live MCP controls and Delivery builder. Structural block/
+spacing diagnostics cleared; missing parameter tags327→58 and returns123→24.
+Provisional mechanically drafted returns are being audited for exact semantics;
+no generic wording is accepted merely because the checker accepts it. Same writer
+reports remaining documentation/check work about1–2hours, no new runtime issue or
+behavior edits. Parent keeps review pending precise comments and current preflight.
+
+TSDoc correction checkpoint: current remaining diagnostics152 after structural,
+type-parameter and precise return/summary edits. Remaining categories reported as
+58 parameters,24 returns,53 missing summaries and17 verb-led summaries. Earlier
+241 count preceded the latest verb corrections; it is not a second current result.
+Runtime remains unchanged since226/226. Review will cover reliability, API,
+maintainability and documentation after final comments/preflight/coverage converge.
+
+M7b TSDoc enforcement now passes with zero diagnostics. Final comment-only changes
+leave runtime unchanged. Same writer finishes formatting/static/docs and fresh
+changed-production coverage/evidence. Parent recorded pending four-concern review
+assignment and0.5–1hour estimate before dispatch; final evidence still required.
+
+M7b frozen evidence read by parent: baseline8ec09c183; 15 suites624/624 plus44/44
+post-LCOV test-callback checks; full cheap/static/docs/Proto gates pass. Production
+positions match m7b-combined-coverage/lcov.info. Changed server executable coverage
+1136/1254, with named remaining defensive/error paths; native batch/interruption
+and separate example checks are reported separately, not a full native matrix.
+All three final D0157/D0158 windows map to named tests. Earlier PM negative backlog
+assertion corrected to full-shard delivery while preserving store-before-handler.
+
+Parent dispatches existing mechanical_checks function, explicit immutable Luna/low
+(runtime metadata unavailable), to extend existing changed-LCOV calculation across
+all changed package and example production source and record a frozen file hash
+inventory externally. No source edits, tests, new coverage run or children. This
+cheap metadata step (under0.1hour) completes review-input coverage scope; no global
+threshold change or full release claim. Source writer is frozen for review.
+
+M7b independent wave completed with eight accepted grouped corrections. Three
+Delivery timing/cleanup errors require focused regressions; export inventory,
+active recovery wording and unused helper corrections complete the batch.
+Review assignments used explicitly configured profiles as recorded. Same sole
+implementer resumes; no parallel writer. Full final release remains deferred to
+M13. Estimated correction/review/checkpoint work0.5–1hour.
+
+During the bounded correction, reuse mechanical_checks as read-only residual
+inventory function, explicit immutable `gpt-6-luna` / `low`. Scan current active
+Agent API/docs/source for recovery-only contracts beyond the accepted correction
+paths; distinguish historical task records, ordinary Inbox/subscription recovery,
+and mandatory audit from removed execution continuation. No edits/tests/children.
+This supplements the proven missed public comments/references; it is not another
+full review. Hash refresh waits until corrected source is frozen.
+
+M7b correction progress: implementer reports three deterministic Delivery
+regressions red then green3/3; provider API fixture5/5, real reserve/run capacity8/8,
+history/read11/11 and server/storage typecheck green. Parent inspected removal of
+replay terminology, current export fixture, recovery-only indexes and reference
+claims. Generation/static checks and targeted reliability review still pending.
+Parent requested consistent reporting for an unconfirmed (false) release during
+pending pickup, matching existing active-drain semantics; no historical error cache.
+
+M7b Agent live runtime accepted. All four review concerns converged, four new
+Delivery regression cases have red/green proof, current affected104/104 and final
+Delivery80/80 pass, full cheap build/static/docs/Proto gates pass. Native interruption
+and immutable audit batch evidence remains current. Original Agent removal task
+preserved verbatim; no recovery scheduler/status/storage/serialized backlog remains.
+Source inventory and provider scripts checked. Parent's final reference wording
+clarifies that Inbox capacity waiting precedes Agent acceptance. Commit/push this
+coherent slice; M8 shared environment/Delivery starts next. Whole task remains
+in progress, no release-readiness claim.
+
+Final staging exposed whitespace in previously untracked live source/test files
+that unstaged git diff --check had not inspected. Parent removes only trailing
+spaces in agent-live-audit.ts/agent-live-mcp-controls.ts and final blank line in
+agent-live-fixtures.ts. No executable changes or review reopening; staged diff
+and scoped formatting checks are required before checkpoint commit. Future cheap
+preflight must inspect newly added files explicitly.

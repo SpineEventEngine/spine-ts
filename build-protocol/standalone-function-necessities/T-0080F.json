@@ -1513,60 +1513,6 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/repository/repository.ts",
-    "kind": "function-declaration",
-    "identity": "addMillis()#1",
-    "name": "addMillis",
-    "disposition": "necessity",
-    "reason": "TypeScript Time boundary: addMillis supplies claim renewal and invocation deadlines with nanosecond-preserving Timestamp addition without sampling a second clock."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-admission.ts",
-    "kind": "function-declaration",
-    "identity": "signalKey()#1",
-    "name": "signalKey",
-    "disposition": "necessity",
-    "reason": "TypeScript accepted-signal boundary: signalKey retains the original Command or Event ID and its domain discriminator before Inbox acknowledgement."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-admission.ts",
-    "kind": "function-declaration",
-    "identity": "binding()#1",
-    "name": "binding",
-    "disposition": "necessity",
-    "reason": "TypeScript generated-handler boundary: binding converts selected handler metadata into the exact durable ordinal, kind, origin and filter compared on replay."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-admission.ts",
-    "kind": "function-declaration",
-    "identity": "nonblank()#1",
-    "name": "nonblank",
-    "disposition": "necessity",
-    "reason": "TypeScript admission validation boundary: nonblank rejects missing state, Agent key and revision strings before a durable accepted record is formed."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-revisions.ts",
-    "kind": "function-declaration",
-    "identity": "policyShape()#1",
-    "name": "policyShape",
-    "disposition": "necessity",
-    "reason": "TypeScript revision boundary: policyShape selects serializable registry and repository policy while callback implementations remain covered by the explicit code revision."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-revisions.ts",
-    "kind": "function-declaration",
-    "identity": "mcpPolicies()#1",
-    "name": "mcpPolicies",
-    "disposition": "necessity",
-    "reason": "TypeScript MCP revision boundary: mcpPolicies hashes fixed server transport and tool policy without executing scoped credential callbacks."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/server/src/testing/index.ts",
     "kind": "function-declaration",
     "identity": "agentHistoryView()#1",

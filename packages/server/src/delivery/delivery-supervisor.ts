@@ -388,7 +388,12 @@ export class DeliverySupervisor {
   #admit(shard: ShardIndex, observed: boolean): void {
     if (!this.#started || this.#closing || this.#closed) return;
     const key = DeliverySupervisor.#shardKey(shard);
-    if (this.#active.has(key) || this.#active.size >= this.#concurrency) {
+    if (this.#active.has(key)) {
+      this.#runs.wake(shard);
+      this.#queue(key, shard, observed);
+      return;
+    }
+    if (this.#active.size >= this.#concurrency) {
       this.#queue(key, shard, observed);
       return;
     }

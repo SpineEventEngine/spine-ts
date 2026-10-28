@@ -28,7 +28,6 @@ import {
 import type { GeneratedStandaloneHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import { EventDispatcherRegistry } from "../../src/bus/event-dispatcher-registry.js";
-import { SavedDispatcherBindings } from "../../src/bus/saved-dispatcher-binding.js";
 import {
   ProjectStateSchema,
   type ProjectState,
@@ -636,7 +635,7 @@ describe("StandaloneHandlerRuntime", () => {
     expect(receiver.calls).toEqual(["selected", "fallback"]);
   });
 
-  it("rebinds a saved standalone Command to its generated assignee", async () => {
+  it("dispatches a standalone Command rejection through its generated assignee", async () => {
     const receiver = new RejectingAssignee();
     const published: Event[] = [];
     const group: GeneratedStandaloneHandlerGroup = {
@@ -665,13 +664,8 @@ describe("StandaloneHandlerRuntime", () => {
       },
     ]).commandDispatcher();
     if (dispatcher === undefined) throw new Error("Expected standalone Command dispatcher.");
-    const binding = SavedDispatcherBindings.forCommand(dispatcher);
-    if (binding === undefined) throw new Error("Expected saved standalone Command binding.");
     const command = reviewAssignmentCommand("saved-command");
-    const target = await binding.prepare(command);
-    await (
-      await binding.bind(command, target)
-    )();
+    await dispatcher.dispatch(command);
     expect(published).toHaveLength(1);
     expect(published[0]?.context?.rejection?.command?.id?.uuid).toBe("saved-command");
   });

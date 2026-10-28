@@ -13,12 +13,17 @@
  */
 
 import { createHash } from "node:crypto";
+import { clone } from "@bufbuild/protobuf";
 import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import {
+  AgentHistoryRecordSchema,
+  type AgentHistoryRecord,
+} from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import {
   AgentHistoryKeys,
   AgentHistoryPages,
   type AgentHistoryPage,
+  type AgentHistoryCapacity,
   type AgentHistoryRead,
   type AgentHistoryStorage,
   type AgentHistoryStorageInput,
@@ -52,14 +57,17 @@ export const AgentHistoryHash = {
  */
 export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
   /**
+   * Native PostgreSQL Agent history capacity declaration.
+   */
+  readonly capacity: AgentHistoryCapacity = Object.freeze({});
+
+  /**
    * Records whether this handle accepts calls.
    */
   #open = true;
 
   /**
-
    * Reuses one table and index preparation promise.
-
    */
   #ready: Promise<void> | undefined;
 
@@ -86,21 +94,41 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @returns Completion after immutable storage confirms the entry.
    */
   append(entityId: Id, entry: AgentHistoryEntry): Promise<void> {
-    return this.onAdmit(() => this.appendAdmitted(entityId, entry));
+    return this.appendAll(entityId, [entry]);
   }
 
   /**
-   * Writes admitted Agent history.
+   * Writes atomically writes one captured immutable Agent audit group.
    * @param entityId Typed Agent identifier.
-   * @param entry Complete history entry.
-   * @returns Completion after immutable storage confirms the entry.
+   * @param entries Complete history rows.
+   * @returns Completion after the group commits.
    */
-  private async appendAdmitted(entityId: Id, entry: AgentHistoryEntry): Promise<void> {
+  appendAll(entityId: Id, entries: readonly AgentHistoryEntry[]): Promise<void> {
+    return this.onAdmit(() => this.appendAllAdmitted(entityId, entries));
+  }
+
+  /**
+   * Writes an admitted immutable group on one rollback-capable transaction.
+   *
+   * @param entityId Typed Entity identifier.
+   * @param entries Complete immutable history group.
+   * @returns Completion after the complete immutable audit group commits atomically.
+   */
+  private async appendAllAdmitted(
+    entityId: Id,
+    entries: readonly AgentHistoryEntry[],
+  ): Promise<void> {
     this.requireOpen();
-    await this.ready();
-    await this.records.writeImmutable(
-      AgentHistoryRecords.record(this.input.stateType, this.key(entityId), entry),
+    const key = this.key(entityId);
+    const records = entries.map((entry) =>
+      clone(AgentHistoryRecordSchema, AgentHistoryRecords.record(this.input.stateType, key, entry)),
     );
+    if (records.length === 0) return;
+    await this.ready();
+    const executor = this.records.historyExecutor();
+    await executor.transaction(async (client) => {
+      for (const record of records) await executor.appendImmutable(client, record);
+    });
   }
 
   /**
@@ -131,9 +159,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
-
    * Closes this handle without deleting stored records.
-
    */
   close(): void {
     if (!this.#open) return;
@@ -262,9 +288,7 @@ export class PostgresAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
-
    * Rejects calls after this handle closes.
-
    */
   private requireOpen(): void {
     if (!this.#open) throw new Error("Agent history storage handle is closed.");

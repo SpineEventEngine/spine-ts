@@ -22,7 +22,7 @@ import {
   AgentHistoryStorageFactories,
   AgentHistoryRecords,
 } from "@spine-event-engine/storage/provider";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   conversation,
@@ -96,6 +96,100 @@ describe.runIf(emulatorHost !== undefined)("Datastore Agent history", () => {
       history.close();
     } finally {
       await reopened.close();
+    }
+  }, 120_000);
+
+  it("rolls back a captured audit group when its later row conflicts", async () => {
+    const client = new Datastore({ projectId: `spine-agent-batch-${randomUUID()}` });
+    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const input = { ...scope, stateType: `${scope.stateType}.batch.${randomUUID()}` };
+    const history = AgentHistoryStorageFactories.create(factory, input);
+    const first = event("batch-first", occurredAt(1_789_200_001n), false);
+    const original = conversation("batch-conflict", "dialog", occurredAt(1_789_200_002n));
+    const conflicting = response("batch-conflict", "dialog", occurredAt(1_789_200_002n));
+    try {
+      await history.append("ticket", original);
+      await expect(history.appendAll("ticket", [first, conflicting])).rejects.toThrow();
+      const page = await history.read({
+        entityId: "ticket",
+        view: { kind: "full" },
+        count: 4,
+        maxBytes: 10000,
+      });
+      expect(page.entries.map((entry) => AgentHistoryKeys.fromEntry(entry).recordId)).toEqual([
+        "batch-conflict",
+      ]);
+      await history.appendAll("ticket", [original]);
+    } finally {
+      history.close();
+      await factory.close();
+    }
+  }, 120_000);
+
+  it("drains an admitted audit group before factory close releases its handle", async () => {
+    const client = new Datastore({ projectId: `spine-agent-drain-${randomUUID()}` });
+    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const history = AgentHistoryStorageFactories.create(factory, scope);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const transaction = client.transaction();
+    const run = transaction.run.bind(transaction);
+    vi.spyOn(client, "transaction").mockReturnValueOnce(transaction);
+    // Native Transaction.run is typed void even though the SDK returns a promise.
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    vi.spyOn(transaction, "run").mockImplementation(async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      return run();
+    });
+    const entry = event(`drain-${randomUUID()}`, occurredAt(1_789_200_003n), false);
+    try {
+      const batch = history.appendAll("ticket", [entry]);
+      await entered.promise;
+      let closed = false;
+      const closing = factory.close().then(() => {
+        closed = true;
+      });
+      await Promise.resolve();
+      expect(closed).toBe(false);
+      await expect(history.appendAll("ticket", [entry])).rejects.toThrow(
+        "StorageFactory is closed.",
+      );
+      release.resolve(undefined);
+      await batch;
+      await closing;
+      expect(closed).toBe(true);
+    } finally {
+      release.resolve(undefined);
+      history.close();
+      await factory.close();
+    }
+  }, 120_000);
+
+  it("captures audit identity before the caller can mutate an admitted entry", async () => {
+    const client = new Datastore({ projectId: `spine-agent-snapshot-${randomUUID()}` });
+    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const history = AgentHistoryStorageFactories.create(factory, scope);
+    const originalId = `captured-${randomUUID()}`;
+    const entry = event(originalId, occurredAt(1_789_200_004n), false);
+    try {
+      const pending = history.appendAll("ticket", [entry]);
+      if (entry.item.case !== "domainEvent" || entry.item.value.id === undefined)
+        throw new Error("Expected domain Event fixture.");
+      entry.item.value.id.value = `mutated-${randomUUID()}`;
+      await pending;
+      const page = await history.read({
+        entityId: "ticket",
+        view: { kind: "full" },
+        count: 1,
+        maxBytes: 10000,
+      });
+      expect(page.entries.map((value) => AgentHistoryKeys.fromEntry(value).recordId)).toEqual([
+        originalId,
+      ]);
+    } finally {
+      history.close();
+      await factory.close();
     }
   }, 120_000);
 

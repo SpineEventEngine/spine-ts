@@ -19,7 +19,6 @@ import { AnyPacker, Identifiers, StringifierRegistry } from "@spine-event-engine
 import { EventSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
-  AgentExecutionStorageFactories,
   AgentHistoryStorageFactories,
   EntityCommitStorageFactories,
   StoragePreparations,
@@ -41,7 +40,6 @@ import {
   TaskSchema,
   type Task,
 } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
-import { providerEntityInput } from "../../storage/test/entity/agent-execution-provider-fixtures.js";
 import { scope } from "../../storage/test/entity/agent-history-fixtures.js";
 
 import {
@@ -690,21 +688,16 @@ describe("MysqlStorageFactory builder contract", () => {
     await factory.close();
   });
 
-  it("fences escaped Agent history and execution calls when the factory closes", async () => {
+  it("fences escaped Agent history calls when the factory closes", async () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: "mysql://db.example/agent" })
       .build();
     const history = AgentHistoryStorageFactories.create(factory, scope);
-    const execution = AgentExecutionStorageFactories.create(factory, {
-      entity: providerEntityInput(),
-      stateType: "spine.server.testing.SupportReplyAgentState",
-    });
     expect(createPool).not.toHaveBeenCalled();
     await factory.close();
     await expect(
       history.read({ entityId: "agent-1", view: { kind: "full" }, count: 1, maxBytes: 1024 }),
     ).rejects.toThrow(/closed/i);
-    await expect(execution.pending({ count: 1 })).rejects.toThrow(/closed/i);
     expect(createPool).not.toHaveBeenCalled();
   });
 

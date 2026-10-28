@@ -963,3 +963,105 @@ runtime failure is waived and no full release/security claim is made. Stage only
 authored reviewed paths, source Proto checksum and parent task records; defer
 generation fingerprints to final convergence. Commit/push checkpoint, then continue
 same implementation context with coherent admission/Delivery/scheduler removal.
+
+## M7b live runtime cutover review preparation
+
+Review waits for final frozen mechanical evidence and changed-production coverage.
+Expected base is8ec09c183. External agent-live-runtime-review-context.md gives distinct
+reliability, API, maintainability and documentation concerns, with full durable
+D0152–D0158 decisions and original human Agent-removal task in PROPOSAL section14.
+All four concerns apply; final security remains M13. Estimate0.5–1hour for review,
+one bounded correction batch, affected checks and pushed checkpoint. No release
+profile or full-task acceptance is implied.
+
+Reserve existing provider_reliability, repository_api_review and provider_style
+reviewer contexts, each explicitly configured gpt-6-sol/medium, and existing
+provider_documentation, gpt-6-luna/medium. If a previous context is no longer
+available, dispatch the same configured repository reviewer role afresh with both
+model and reasoning explicit and record that replacement. Runtime introspection
+is unavailable. Three technical concerns may run concurrently; documentation uses
+the next free slot. No reviewer source edits, test reruns or children. Collect the
+complete wave before returning one accepted batch to the same sole implementer.
+Dispatch acceptance requires matching explicit immutable profiles; missing runtime
+self-introspection alone does not invalidate results.
+
+### M7b frozen review dispatch
+
+The previous reviewer contexts are unavailable in the Desktop agent inventory.
+Dispatch replacement instances of the existing performance/reliability,
+TypeScript/API documentation, and style/maintainability roles with explicit
+`gpt-6-sol` / `medium`; documentation follows with explicit `gpt-6-luna` /
+`medium` when capacity permits. Each receives its distinct concern from the frozen
+review context and evidence. Desktop exposes explicit profile dispatch; independent
+runtime self-introspection is unavailable. No source changes, tests, or delegation
+by reviewers. All findings are collected before the implementer receives one batch.
+
+M7b full frozen review wave collected. Explicit dispatch profiles confirmed:
+performance/reliability, TypeScript/API and style/maintainability used
+`gpt-6-sol` / `medium`; documentation used `gpt-6-luna` / `medium`.
+Runtime self-introspection unavailable; immutable configured profiles match.
+Accepted reliability findings: final-scan microtask wake can be lost; active
+whenIdle/readiness transition hides release failure; close during pending pickup
+hides subsequent release failure. Parent inspected exact implementation paths.
+Accepted API findings: export-inventory test still expects removed execution
+contracts; retained Proto comments promise recovery. Accepted style findings:
+AgentHistoryJournal still describes saved replay and unused trySubmit only serves
+obsolete tests. Accepted documentation findings: AI and Vercel references still
+promise recovery. No finding is waived. One final correction batch is external
+m7b-review-corrections.md. Return to same sole implementer, Sol/medium.
+Estimate0.5–1hour for corrections, focused red/green and cheap checks, affected
+reliability re-review, deterministic API/style/docs inspection, and pushed
+checkpoint. Reopen another lane only if correction changes its substantive contract.
+
+Scripts-first residual inventory found two deterministic removal omissions beyond
+the reviewer wave: Datastore index.yaml still declares execution/head indexes;
+three provider package test scripts still name deleted execution tests. Parent
+inspected both and accepted their removal/update to surviving live persistence
+coverage. Shared Agent history indexes remain. No migration or new public API.
+Add to active correction before freeze; the existing reviewers need no duplicate
+scan. Mechanical function explicit immutable Luna/low confirmed, metadata unavailable.
+
+M7b correction interim evidence: four Delivery regression cases (including parent
+unconfirmed-release variant) failed before changes and pass afterward. Fresh
+build-backed six-suite selection104/104; corrected Delivery changed executable
+coverage248/253, capacity29/30. Proto regeneration/style/frozen descriptor checks
+pass. Final static/docs proof and frozen correction report pending; do not accept
+the slice yet. Targeted reliability confirmation uses the same explicit immutable
+Sol/medium reviewer after freeze. Deterministic comment/export/helper removals do
+not reopen unchanged API/style/documentation contracts.
+
+M7b corrected source frozen. Parent read complete m7b-review-correction-evidence.md:
+fresh generated build, six affected suites104/104, final Delivery80/80, tooling,
+full ESLint, cleanup, TSDoc, format, docs, Proto lint/current, copyright and diff
+all pass. Delivery changed executable coverage249/254; scoped threshold overrides
+are measurement only, final release policy unchanged. Dispatch same immutable
+explicit Sol/medium reliability reviewer for only original three findings plus
+unconfirmed/non-Error release consistency. Parent inspected deterministic
+API-inventory, history interceptor, capacity shortcut, Proto/reference wording,
+index and package-script corrections; no public/serialized field changes reopen
+API/style/docs lanes. Source remains frozen until review completes.
+
+Mechanical freeze refresh uses same explicit immutable Luna/low function. Include
+all authored manifests/checksums and tracked generation fingerprints, plus deleted
+paths explicitly; exclude only mutable parent logs and ignored output. Verify
+provider test path lists and retained history indexes without rerunning tests.
+Runtime metadata unavailable; explicit original dispatch profiles remain recorded.
+
+M7b accepted after targeted reliability confirmation: terminal scan decision and
+wake fence are synchronous; active idle wait/transition preserves release errors;
+pending-pickup close reports thrown, non-Error and unconfirmed releases. Reviewer
+found no substantive introduced defect. Explicit immutable Sol/medium profile
+confirmed. All four canonical concerns now resolved/clean; security and full
+release remain M13. Mechanical Luna/low refreshed complete191path inventory
+(139existing hashes,52deletions), excluding only3mutable parentlogs; provider
+script paths exist and recovery-only indexes are gone. Parent clarifies one
+remaining ambiguous AI-reference phrase from 'accepted signals' to 'signals wait
+in the Inbox', matching pre-Agent-acceptance capacity deferral. This is a
+recorded deterministic wording correction, no runtime contract change.
+
+Accepted evidence: current104/104 affected suites and80/80 Delivery, earlier624/624
+plus44/44 focused live/Studio checks, native interruption2/2 each PG/MySQL/Datastore,
+atomic appendAll native PG/MySQL/MariaDB/Datastore and memory evidence as scoped in
+handoff. Counts overlap and are not summed. No remaining accepted high-risk finding.
+Stage reviewed source/tests/docs/Proto/manifests and task records, commit and push
+checkpoint, then proceed automatically to M8. No PR/master/publication operation.

@@ -33,13 +33,11 @@ import {
   type StoragePreparationMode,
 } from "@spine-event-engine/storage/provider";
 import {
-  AgentExecutionRecords,
   AgentHistoryRecords,
   AgentModelPreferences,
   eventHistorySpec,
   stateHistorySpec,
 } from "@spine-event-engine/storage/provider";
-import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
 import type {
   EntityCommitStorage,
   EntityEventHistoryPort,
@@ -49,9 +47,6 @@ import type {
 } from "@spine-event-engine/storage/provider";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
-import { AgentExecutionStorageFactories } from "@spine-event-engine/storage/provider";
-import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import type { Event } from "@spine-event-engine/proto";
 
 import {
   DatastoreEntityCommitStorage,
@@ -61,9 +56,6 @@ import {
 import { DatastoreRecordStorage } from "./record-storage.js";
 import { DatastoreIdColumn } from "./id-column.js";
 import { DatastoreAgentHistory, AgentHistoryHash } from "./agent-history.js";
-import { DatastoreAgentExecution } from "./agent-execution.js";
-import type { DatastoreExecutionRows } from "./agent-execution.js";
-import type { AgentExecutionStorageInput } from "@spine-event-engine/storage/provider";
 import {
   DefaultNamespaceConverter,
   NamespaceAssignments,
@@ -500,7 +492,6 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
     this.registerAgentHistory();
-    this.registerAgentExecution();
   }
 
   /**
@@ -546,6 +537,26 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     void pending.finally(() => this.#work.delete(pending)).catch(() => undefined);
     return pending;
   }
+
+  /**
+   * Tracks a history batch before synchronously capturing caller-supplied values.
+   * @param operation Complete immutable audit group.
+   * @returns The admitted group outcome.
+   */
+  private admitHistory = (operation: () => Promise<void>): Promise<void> => {
+    if (!this.isOpen()) return Promise.reject(new Error("StorageFactory is closed."));
+    const { promise, resolve, reject } = Promise.withResolvers<undefined>();
+    this.#work.add(promise);
+    void promise.finally(() => this.#work.delete(promise)).catch(() => undefined);
+    try {
+      void operation().then(() => {
+        resolve(undefined);
+      }, reject);
+    } catch (error) {
+      reject(error);
+    }
+    return promise;
+  };
 
   /**
    * Prepares a declared record family without opening a storage handle.
@@ -881,132 +892,10 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
         return new DatastoreAgentHistory(
           input,
           this.openNative(input.context, spec, AgentHistoryRecords.group, "spine_agent_history"),
+          this.admitHistory,
         );
       },
     });
-  }
-
-  /**
-   * Registers the native transactional Agent execution capability.
-   */
-  private registerAgentExecution(): void {
-    AgentExecutionStorageFactories.register(this, {
-      createAgentExecutionStorage: (input) => this.createAgentExecution(input),
-    });
-  }
-
-  /**
-   * Acquires one Agent execution handle after factory lifecycle validation.
-   *
-   * @param input Requested fenced execution change.
-   * @returns Tenant-scoped Agent execution storage handle.
-   * @typeParam I Typed entity identifier.
-   * @typeParam S Generated Entity state.
-   */
-  private createAgentExecution<I, S extends Message>(
-    input: AgentExecutionStorageInput<I, S>,
-  ): DatastoreAgentExecution<I, S> {
-    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
-    return new DatastoreAgentExecution(input, this.executionRows(input));
-  }
-
-  /**
-   * Acquires the fixed execution kinds and existing Entity record families.
-   *
-   * @param input Requested fenced execution change.
-   * @returns Tenant-scoped native record handles.
-   * @typeParam I Typed entity identifier.
-   * @typeParam S Generated Entity state.
-   */
-  private executionRows<I, S extends Message>(
-    input: AgentExecutionStorageInput<I, S>,
-  ): DatastoreExecutionRows<I> {
-    const context = input.entity.context;
-    const digest = (value: string) => AgentHistoryHash.value(value);
-    return {
-      invocation: this.executionRecord(
-        context,
-        AgentExecutionRecords.invocationSpec(digest),
-        AgentExecutionRecords.invocationGroup,
-        "spine_agent_execution",
-      ),
-      head: this.executionRecord(
-        context,
-        AgentExecutionRecords.headSpec(digest),
-        AgentExecutionRecords.headGroup,
-        "spine_agent_execution_head",
-      ),
-      history: this.executionRecord(
-        context,
-        AgentHistoryRecords.spec(digest),
-        AgentHistoryRecords.group,
-        "spine_agent_history",
-      ),
-      current: this.executionRecord(context, input.entity.recordSpec),
-      ...this.optionalExecutionRows(input),
-      events: this.executionRecord(context, eventStoreRecordSpec),
-    };
-  }
-
-  /**
-   * Acquires optional existing Entity state and diagnostic record families.
-   *
-   * @param input Typed Agent repository and history configuration.
-   * @returns Optional native state and diagnostic handles.
-   * @typeParam I Typed Agent identifier.
-   * @typeParam S Generated Agent state.
-   */
-  private optionalExecutionRows<I, S extends Message>(
-    input: AgentExecutionStorageInput<I, S>,
-  ): Pick<DatastoreExecutionRows<I>, "states" | "diagnostics"> {
-    const context = input.entity.context;
-    const state = input.entity.stateHistory
-      ? stateHistorySpec(input.entity.stateSchema)
-      : undefined;
-    const diagnostic = input.entity.eventHistory
-      ? eventHistorySpec(input.entity.stateSchema)
-      : undefined;
-    return {
-      ...(state === undefined
-        ? {}
-        : {
-            states: this.executionRecord(
-              context,
-              state.spec,
-              state.group,
-            ) as unknown as DatastoreRecordStorage<unknown, EntityRecord>,
-          }),
-      ...(diagnostic === undefined
-        ? {}
-        : {
-            diagnostics: this.executionRecord(
-              context,
-              diagnostic.spec,
-              diagnostic.group,
-            ) as unknown as DatastoreRecordStorage<unknown, Event>,
-          }),
-    };
-  }
-
-  /**
-   * Finds one native kind through the existing record layout.
-   *
-   * @param context Captured event storage context.
-   * @param fixedKind Fixed native Datastore kind.
-   * @param group Fixed storage group.
-   * @param spec Typed record layout.
-   * @returns Typed native record handle.
-   * @typeParam I Typed entity identifier.
-   * @typeParam R Typed persisted record.
-   */
-  private executionRecord<I, R extends Message>(
-    context: StorageContext,
-    spec: RecordSpec<I, R>,
-    group?: StorageGroup,
-    fixedKind?: string,
-  ): DatastoreRecordStorage<I, R> {
-    const kind = fixedKind ?? this.resolve(spec, group, false).layout?.kind;
-    return this.openNative(context, spec, group, kind);
   }
 
   /**

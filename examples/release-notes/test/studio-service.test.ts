@@ -49,6 +49,7 @@ import { GitReleaseComparison } from "../dist/src/trusted/git-release.js";
 import { PlanModelSelection } from "../src/trusted/plan-model-selection.js";
 import { StudioAccountGate } from "../src/trusted/studio-account-gate.js";
 import { StudioWindowClose } from "../src/trusted/studio-window-close.js";
+import { ReleaseNotesAgent } from "../dist/src/domain/index.js";
 
 type SubscriptionForwarder = (
   topicOrSchemas: Topic | readonly GenMessage<Message>[],
@@ -722,7 +723,11 @@ it("binds an accepted generation to its model and committed Git evidence through
       expect((await studio.cancelGeneration(draft.id, fresh)).generationStatus).toBe("canceled");
       expect(await studio.repeatGeneration(fresh)).toBe(fresh);
       expect((await studio.readDraft(draft.id)).generationStatus).toBe("canceled");
+      expect(await studio.selectionLocked()).toBe(true);
       releaseFresh.resolve(undefined);
+      await expect.poll(() => studio.generationPhase(fresh), { timeout: 10_000 }).toBe("completed");
+      expect((await studio.readDraft(draft.id)).generationStatus).toBe("canceled");
+      expect(await studio.selectionLocked()).toBe(false);
     } finally {
       prototype.post = originalPost;
     }
@@ -1137,6 +1142,28 @@ it("releases account selection after a credential denial is saved for the accept
       next = await studio.generationPhase(later);
     }
     expect(next).toBe("completed");
+    const context = Reflect.get(studio, "context") as BoundedContext;
+    const repository = context.getRepository(ReleaseNotesAgent);
+    const originalReader = repository.agentHistory.bind(repository);
+    let pages = 0;
+    const paging = vi.spyOn(repository, "agentHistory").mockImplementation((id, scope) => {
+      const reader = originalReader(id, scope);
+      return {
+        fullHistory: (request) => {
+          pages++;
+          return reader.fullHistory({ ...request, pageSize: 1 });
+        },
+        conversationHistory: (request) => reader.conversationHistory(request),
+        systemEventHistory: (request) => reader.systemEventHistory(request),
+        domainEventHistory: (request) => reader.domainEventHistory(request),
+      };
+    });
+    try {
+      expect(await studio.generationPhase(generation)).toBe("terminated");
+      expect(pages).toBeGreaterThan(1);
+    } finally {
+      paging.mockRestore();
+    }
     expect((await studio.readDraft(draft.id)).generationStatus).toBe("staged");
     expect(useChecks).toBe(3);
     expect(requests).toBe(2);

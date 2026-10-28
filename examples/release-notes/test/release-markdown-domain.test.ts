@@ -85,7 +85,6 @@ const contextForTest = async () => {
       deadlineMs: 30_000,
       totalInputBytes: 64_000,
       totalOutputBytes: 64_000,
-      maxRecoveryBytes: 256_000,
     },
     concurrentOperations: 1,
     queuedOperations: 0,

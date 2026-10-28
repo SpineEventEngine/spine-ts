@@ -44,7 +44,6 @@ import {
   type AgentHistoryStorageInput,
 } from "@spine-event-engine/storage/provider";
 import {
-  AgentExecutionRecords,
   AgentHistoryRecords,
   AgentModelPreferences,
   type PreferencesRecord,
@@ -57,10 +56,6 @@ import {
   type EntityCommitStorage,
 } from "@spine-event-engine/storage/provider";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
-import {
-  AgentExecutionStorageFactories,
-  type AgentExecutionStorageInput,
-} from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
 import type { Event, TenantId } from "@spine-event-engine/proto";
@@ -77,7 +72,6 @@ import {
 import { MysqlTableResolver } from "./table-resolver.js";
 import { MysqlEntityStorage } from "./entity-history.js";
 import { MysqlAgentHistory, AgentHistoryHash, AgentHistoryIndexes } from "./agent-history.js";
-import { MysqlAgentExecution } from "./agent-execution.js";
 import { MysqlAgentTransaction } from "./agent-transaction.js";
 import { resolvedMysqlTableSpec, type MysqlTableSpec } from "./table-spec.js";
 import { MysqlStorageOperationError, MysqlStorageSchemaError, mysqlError } from "./errors.js";
@@ -489,7 +483,6 @@ export class MysqlStorageFactory extends StorageFactory {
       prepareAgentCommit: (input, mode) => this.prepareAgentCommit(input, mode),
     });
     this.registerAgentHistory();
-    this.registerAgentExecution();
   }
 
   /**
@@ -499,70 +492,20 @@ export class MysqlStorageFactory extends StorageFactory {
     AgentHistoryStorageFactories.register(this, {
       createAgentHistoryStorage: (input) => {
         if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+        const boundary = this.database(input.context);
         return new MysqlAgentHistory(
           input,
           this.createMysqlRecordStorage(
             input.context,
             AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
             AgentHistoryRecords.group,
+            boundary,
           ),
           this.admitPublic,
+          new MysqlAgentTransaction(this.connections(boundary)),
         );
       },
     });
-  }
-
-  /**
-   * Registers durable Agent execution over the selected tenant database.
-   */
-  private registerAgentExecution(): void {
-    AgentExecutionStorageFactories.register(this, {
-      createAgentExecutionStorage: (input) => this.createAgentExecution(input),
-    });
-  }
-
-  /**
-   * Acquires all record families required by fenced Agent completion.
-   *
-   * @param input Requested fenced execution change.
-   * @returns Tenant-scoped Agent execution storage handle.
-   * @typeParam I Typed entity identifier.
-   * @typeParam S Generated Entity state.
-   */
-  private createAgentExecution<I, S extends Message>(
-    input: AgentExecutionStorageInput<I, S>,
-  ): MysqlAgentExecution<I, S> {
-    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
-    const boundary = this.database(input.entity.context);
-    const context = input.entity.context;
-    const digest = (value: string) => AgentHistoryHash.value(value);
-    return new MysqlAgentExecution(
-      input,
-      {
-        invocation: this.createMysqlRecordStorage(
-          context,
-          AgentExecutionRecords.invocationSpec(digest),
-          AgentExecutionRecords.invocationGroup,
-          boundary,
-        ),
-        head: this.createMysqlRecordStorage(
-          context,
-          AgentExecutionRecords.headSpec(digest),
-          AgentExecutionRecords.headGroup,
-          boundary,
-        ),
-        history: this.createMysqlRecordStorage(
-          context,
-          AgentHistoryRecords.spec(digest),
-          AgentHistoryRecords.group,
-          boundary,
-        ),
-        entity: this.createEntityStorage(input.entity),
-        events: this.createMysqlRecordStorage(context, eventStoreRecordSpec, undefined, boundary),
-      },
-      new MysqlAgentTransaction(this.connections(boundary)),
-      this.admitPublic,
-    );
   }
 
   /**

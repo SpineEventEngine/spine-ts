@@ -13,13 +13,14 @@
  */
 
 import { createHash } from "node:crypto";
-import { toBinary } from "@bufbuild/protobuf";
+import { clone, toBinary } from "@bufbuild/protobuf";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import {
   AgentHistoryKeys,
   AgentHistoryPages,
+  type AgentHistoryCapacity,
   type AgentHistoryPage,
   type AgentHistoryRead,
   type AgentHistoryStorage,
@@ -55,6 +56,14 @@ export const AgentHistoryHash = {
  */
 export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
   /**
+   * Native Datastore Agent history transaction capacity declaration.
+   */
+  readonly capacity: AgentHistoryCapacity = Object.freeze({
+    historyRecordBytes: 1_000_000,
+    transactionPayloadBytes: 9 * 1024 * 1024,
+  });
+
+  /**
    * Records whether this handle accepts calls.
    */
   #open = true;
@@ -64,11 +73,117 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
    *
    * @param input Repository and complete tenant scope.
    * @param records Native record-family storage.
+   * @param onAdmit Tracks a complete public batch through factory shutdown.
    */
   constructor(
     private readonly input: AgentHistoryStorageInput<Id>,
     private readonly records: DatastoreRecordStorage<string, AgentHistoryRecord>,
+    private readonly onAdmit: (work: () => Promise<void>) => Promise<void> = (work) => work(),
   ) {}
+
+  /**
+   * Writes atomically appends one captured immutable audit group.
+   * @param entityId Typed Agent identifier.
+   * @param entries Original Agent audit entries.
+   * @returns Completion after all rows commit or the group rolls back.
+   */
+  appendAll(entityId: Id, entries: readonly AgentHistoryEntry[]): Promise<void> {
+    return this.onAdmit(() => this.appendAllAdmitted(entityId, entries));
+  }
+
+  /**
+   * Performs an admitted native transaction for the complete audit group.
+   *
+   * @param entityId Typed Entity identifier.
+   * @param entries Complete immutable history group.
+   * @returns Completion after the complete immutable audit group commits atomically.
+   */
+  private async appendAllAdmitted(
+    entityId: Id,
+    entries: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    this.requireOpen();
+    const key = this.key(entityId);
+    const unique = new Map<string, AgentHistoryRecord>();
+    for (const entry of entries) {
+      if (AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry)).length > 1500)
+        throw new RangeError(
+          "Agent history ordering key exceeds the Datastore indexed-value limit.",
+        );
+      const record = clone(
+        AgentHistoryRecordSchema,
+        AgentHistoryRecords.record(this.input.stateType, key, entry),
+      );
+      if (toBinary(AgentHistoryRecordSchema, record).length > 1_000_000)
+        throw new RangeError("Agent history record exceeds the Datastore entity limit.");
+      const slot = AgentHistoryRecords.slot(record);
+      const prior = unique.get(slot);
+      if (prior !== undefined && !this.sameRecord(prior, record))
+        throw new Error("Datastore Agent history record ID conflicts with immutable content.");
+      unique.set(slot, record);
+    }
+    if (unique.size === 0) return;
+    await this.commitGroup([...unique.values()]);
+  }
+
+  /**
+   * Checks immutable rows and stages missing rows in one native transaction.
+   *
+   * @param records Complete persisted record group.
+   * @returns Completion after immutable rows commit in one native transaction.
+   */
+  private async commitGroup(records: readonly AgentHistoryRecord[]): Promise<void> {
+    const rows = records.map((record) => this.records.transactionEntity(record));
+    this.validateNativeGroup(rows);
+    const tx = this.records.transaction();
+    try {
+      await tx.run();
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index];
+        const record = records[index];
+        if (row === undefined || record === undefined) throw new Error("Missing Agent audit row.");
+        const value = await tx.get(row.key, { wrapNumbers: true });
+        const raw = (Array.isArray(value) ? value[0] : value) as
+          Record<string | symbol, unknown> | undefined;
+        if (raw === undefined) tx.save(row);
+        else if (!this.records.matchesTransactionEntity(raw, record))
+          throw new Error("Datastore Agent history record ID conflicts with immutable content.");
+      }
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * Checks native entity-group and serialized payload limits before writing.
+   *
+   * @param rows Complete provider rows for this operation.
+   */
+  private validateNativeGroup(
+    rows: readonly ReturnType<
+      DatastoreRecordStorage<string, AgentHistoryRecord>["transactionEntity"]
+    >[],
+  ): void {
+    if (rows.length > 25)
+      throw new RangeError(
+        "Agent history group exceeds the Datastore transaction entity-group limit.",
+      );
+    const bytes = rows.reduce(
+      (sum, row) =>
+        sum +
+        Buffer.byteLength(
+          JSON.stringify(row.data, (_key, value: unknown) =>
+            value instanceof Uint8Array ? Buffer.from(value).toString("base64") : value,
+          ),
+          "utf8",
+        ),
+      0,
+    );
+    if (bytes > 9 * 1024 * 1024)
+      throw new RangeError("Agent history group exceeds the Datastore transaction payload limit.");
+  }
 
   /**
    * Writes one original entry or confirms byte-identical content.
@@ -107,9 +222,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
-
    * Closes this handle without deleting stored records.
-
    */
   close(): void {
     if (!this.#open) return;
@@ -227,9 +340,7 @@ export class DatastoreAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
-
    * Rejects calls after this handle closes.
-
    */
   private requireOpen(): void {
     if (!this.#open) throw new Error("Agent history storage handle is closed.");

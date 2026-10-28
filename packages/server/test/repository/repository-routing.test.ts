@@ -89,10 +89,6 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type {
-  AgentExecutionStorage,
-  AgentExecutionStorageInput,
-  AgentHistoryStorage,
-  AgentHistoryStorageInput,
   EntityStorageConformance,
   EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
@@ -8514,7 +8510,7 @@ describe("repository signal routing", () => {
     const delivered = await delivery.inbox.read(ShardIndex.single(), {
       statuses: ["DELIVERED"],
     });
-    expect(delivered).not.toContainEqual(
+    expect(delivered).toContainEqual(
       expect.objectContaining({
         signalId: "event-older",
         label: "REACT_UPON_EVENT",
@@ -8828,7 +8824,6 @@ describe("repository signal routing", () => {
             deadlineMs: 1_000,
             totalInputBytes: 4_000,
             totalOutputBytes: 4_000,
-            maxRecoveryBytes: 32_000,
           },
           concurrentOperations: 1,
           queuedOperations: 0,
@@ -9213,92 +9208,6 @@ describe("repository signal routing", () => {
     },
   );
 
-  it("preserves Agent port acquisition failure when history cleanup also fails", async () => {
-    const factory = new RetainedEntityStorageFactory();
-    const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-port-failure" });
-    const repository = createGuardedSupportAgentRepository(agentId, false);
-    const context = await BoundedContext.singleTenant("SupportGuard")
-      .add(repository)
-      .withStorageFactory(factory)
-      .withAi(
-        AiRegistry.create({
-          defaultModels: {},
-          invocationLimits: {
-            operations: 1,
-            modelRequests: 1,
-            toolCalls: 0,
-            recordedReads: 0,
-            deadlineMs: 1_000,
-            totalInputBytes: 4_000,
-            totalOutputBytes: 4_000,
-            maxRecoveryBytes: 32_000,
-          },
-          concurrentOperations: 1,
-          queuedOperations: 0,
-        }),
-      )
-      .persistSystemEvents()
-      .build();
-    factory.failAgentExecutionOnce = true;
-    factory.failAgentHistoryClose = true;
-
-    const failure = await Promise.resolve()
-      .then(() => repositoryAccess.pendingAcceptedAgents(repository, undefined, undefined, 1))
-      .catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure as AggregateError).errors.map((error: Error) => error.message)).toEqual([
-      "Agent execution acquisition failed",
-      "Agent history close failed",
-    ]);
-    expect(factory.agentHistoryCloses).toBe(1);
-    expect(factory.entityCloses).toBe(factory.entityOpens);
-    await context.close();
-  });
-
-  it("keeps shared Agent audit history after execution-port acquisition fails", async () => {
-    const factory = new RetainedEntityStorageFactory();
-    const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared-port-failure" });
-    const repository = createGuardedSupportAgentRepository(agentId, false);
-    const context = await BoundedContext.singleTenant("SupportSharedGuard")
-      .add(repository)
-      .withStorageFactory(factory)
-      .withAi(
-        AiRegistry.create({
-          defaultModels: {},
-          invocationLimits: {
-            operations: 1,
-            modelRequests: 1,
-            toolCalls: 0,
-            recordedReads: 0,
-            deadlineMs: 1_000,
-            totalInputBytes: 4_000,
-            totalOutputBytes: 4_000,
-            maxRecoveryBytes: 32_000,
-          },
-          concurrentOperations: 1,
-          queuedOperations: 0,
-        }),
-      )
-      .persistSystemEvents()
-      .build();
-    await repositoryAccess.agentHistory(repository, agentId, { kind: "full" }, { count: 1 });
-    factory.failAgentExecutionOnce = true;
-    await expect(
-      Promise.resolve().then(() =>
-        repositoryAccess.pendingAcceptedAgents(repository, undefined, undefined, 1),
-      ),
-    ).rejects.toThrow("Agent execution acquisition failed");
-    expect(factory.agentHistoryCloses).toBe(0);
-    await expect(
-      repositoryAccess.agentHistory(repository, agentId, { kind: "full" }, { count: 1 }),
-    ).resolves.toMatchObject({ entries: [] });
-    await expect(
-      repositoryAccess.pendingAcceptedAgents(repository, undefined, undefined, 1),
-    ).resolves.toBeDefined();
-    await context.close();
-    expect(factory.agentHistoryCloses).toBe(1);
-  });
-
   it("checks current tenant membership before direct Agent audit history reads", async () => {
     const index = TenantIndexes.fromFactory(new InMemoryStorageFactory());
     const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-tenant-history" });
@@ -9317,7 +9226,6 @@ describe("repository signal routing", () => {
             deadlineMs: 1_000,
             totalInputBytes: 4_000,
             totalOutputBytes: 4_000,
-            maxRecoveryBytes: 32_000,
           },
           concurrentOperations: 1,
           queuedOperations: 0,
@@ -14909,7 +14817,6 @@ function createGuardedSupportAgentRepository(
     entityType: GuardedSupportAgent,
     schema: SupportReplyAgentStateSchema,
     handlers,
-    agentCodeRevision: "guarded-support-v1",
     ai: { models: [] },
     events: [SupportReplyDraftedSchema],
     eventRouting: EventRouting.create<SupportReplyAgentId>().route(
@@ -15994,33 +15901,6 @@ class RetainedEntityStorageFactory extends InMemoryStorageFactory {
   failCommitClose = false;
   failCommitCloseSynchronously = false;
   failEntityClose = false;
-  failAgentExecutionOnce = false;
-  failAgentHistoryClose = false;
-  agentHistoryCloses = 0;
-
-  protected override createAgentHistoryStorage<Id>(
-    input: AgentHistoryStorageInput<Id>,
-  ): AgentHistoryStorage<Id> {
-    const history = super.createAgentHistoryStorage(input);
-    const close = history.close.bind(history);
-    vi.spyOn(history, "close").mockImplementation(() => {
-      this.agentHistoryCloses++;
-      close();
-      if (this.failAgentHistoryClose) throw new Error("Agent history close failed");
-    });
-    return history;
-  }
-
-  protected override createAgentExecutionStorage<I, S extends Message>(
-    input: AgentExecutionStorageInput<I, S>,
-  ): AgentExecutionStorage<I, S> {
-    if (this.failAgentExecutionOnce) {
-      this.failAgentExecutionOnce = false;
-      throw new Error("Agent execution acquisition failed");
-    }
-    return super.createAgentExecutionStorage(input);
-  }
-
   protected override createEntityCommitStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): EntityCommitStorage {

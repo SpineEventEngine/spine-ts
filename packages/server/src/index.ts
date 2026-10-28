@@ -252,7 +252,6 @@ export { EventRouting, type EventRoute } from "./repository/event-routing.js";
 export { StateUpdateRouting, type StateUpdateRoute } from "./repository/state-update-routing.js";
 
 export {
-  type AgentExecutionStatus,
   type AgentHistoryReader,
   type AgentReadScope,
   type ConcreteRepositoryEntityType,

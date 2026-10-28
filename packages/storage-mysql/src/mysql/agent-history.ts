@@ -13,11 +13,16 @@
  */
 
 import { createHash } from "node:crypto";
+import { clone, toBinary } from "@bufbuild/protobuf";
 import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
-import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+import {
+  AgentHistoryRecordSchema,
+  type AgentHistoryRecord,
+} from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import {
   AgentHistoryKeys,
   AgentHistoryPages,
+  type AgentHistoryCapacity,
   type AgentHistoryPage,
   type AgentHistoryRead,
   type AgentHistoryStorage,
@@ -26,6 +31,7 @@ import {
 import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 
 import { MysqlRecordStorage, type OnPublicOperation } from "./record-storage.js";
+import { MysqlAgentTransaction } from "./agent-transaction.js";
 import { AgentHistoryIndexBytes } from "./table-spec.js";
 
 /**
@@ -59,14 +65,17 @@ export const AgentHistoryIndexes = [
  */
 export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
   /**
+   * Maximum immutable Agent history record bytes supported by MySQL.
+   */
+  readonly capacity: AgentHistoryCapacity = Object.freeze({ historyRecordBytes: 65_535 });
+
+  /**
    * Records whether this handle accepts calls.
    */
   #open = true;
 
   /**
-
    * Reuses one table and index preparation promise.
-
    */
   #ready: Promise<void> | undefined;
 
@@ -76,12 +85,62 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
    * @param input Repository and complete tenant scope.
    * @param records Native record-family storage.
    * @param onAdmit Admits complete public history operations.
+   * @param transaction Coordinates native immutable audit groups.
    */
   constructor(
     private readonly input: AgentHistoryStorageInput<Id>,
     private readonly records: MysqlRecordStorage<string, AgentHistoryRecord>,
     private readonly onAdmit: OnPublicOperation = (work) => work(),
+    private readonly transaction?: MysqlAgentTransaction | undefined,
   ) {}
+
+  /**
+   * Writes atomically writes captured immutable rows in the selected tenant database.
+   * @param entityId Typed Agent identifier.
+   * @param entries Complete Agent audit group.
+   * @returns Completion after the native transaction commits.
+   */
+  appendAll(entityId: Id, entries: readonly AgentHistoryEntry[]): Promise<void> {
+    return this.onAdmit(() => this.appendAllAdmitted(entityId, entries));
+  }
+
+  /**
+   * Performs one admitted Agent audit group on a native connection.
+   *
+   * @param entityId Typed Entity identifier.
+   * @param entries Complete immutable history group.
+   * @returns Completion after the complete immutable audit group commits atomically.
+   */
+  private async appendAllAdmitted(
+    entityId: Id,
+    entries: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    this.requireOpen();
+    const key = this.key(entityId);
+    const rows = entries.map((entry) => {
+      if (
+        AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry)).length >
+        AgentHistoryIndexBytes
+      )
+        throw new RangeError("Agent history ordering key exceeds the MySQL index capacity.");
+      const row = clone(
+        AgentHistoryRecordSchema,
+        AgentHistoryRecords.record(this.input.stateType, key, entry),
+      );
+      if (toBinary(AgentHistoryRecordSchema, row).length > 65_535)
+        throw new RangeError("Agent history record exceeds the MySQL row capacity.");
+      return row;
+    });
+    if (rows.length === 0) return;
+    if (this.transaction === undefined)
+      throw new Error("MySQL Agent history transaction is unavailable.");
+    await this.ready();
+    await this.transaction.commit([this.records.tableName], (connection) =>
+      this.records.withConnection(connection, async () => {
+        for (const row of rows) await this.records.writeImmutable(row);
+      }),
+    );
+  }
 
   /**
    * Writes one original entry or confirms byte-identical content.
@@ -142,9 +201,7 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
-
    * Closes this handle without deleting stored records.
-
    */
   close(): void {
     if (!this.#open) return;
@@ -263,9 +320,7 @@ export class MysqlAgentHistory<Id> implements AgentHistoryStorage<Id> {
   }
 
   /**
-
    * Rejects calls after this handle closes.
-
    */
   private requireOpen(): void {
     if (!this.#open) throw new Error("Agent history storage handle is closed.");

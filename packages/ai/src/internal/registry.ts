@@ -75,9 +75,6 @@ const copyInvocationLimits = (limits: AiInvocationLimits): AiInvocationLimits =>
     ...(limits.totalOutputBytes === undefined
       ? {}
       : { totalOutputBytes: positiveInteger(limits.totalOutputBytes, "totalOutputBytes") }),
-    ...(limits.maxRecoveryBytes === undefined
-      ? {}
-      : { maxRecoveryBytes: positiveInteger(limits.maxRecoveryBytes, "maxRecoveryBytes") }),
   });
 };
 

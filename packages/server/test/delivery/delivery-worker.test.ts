@@ -488,7 +488,7 @@ describe("Delivery direct worker", () => {
       delivery.drainMessage(target, () => {
         seen += 1;
       }),
-    ).resolves.toMatchObject({ acknowledged: true, run: { delivered: 1 } });
+    ).resolves.toMatchObject({ acknowledged: true, outcome: { kind: "acknowledged" } });
     expect(seen).toBe(1);
   });
 
@@ -510,7 +510,7 @@ describe("Delivery direct worker", () => {
 
     await expect(delivery.drainMessage(duplicate, () => undefined)).resolves.toMatchObject({
       acknowledged: true,
-      run: { accepted: 0, delivered: 0, failed: 0 },
+      outcome: { kind: "acknowledged" },
     });
   });
 

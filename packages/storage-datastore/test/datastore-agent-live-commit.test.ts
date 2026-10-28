@@ -38,7 +38,7 @@ import {
   type SupportReplyAgentState,
   SupportReplyAgentStateSchema,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
-import { entityInput } from "../../storage/test/entity/agent-execution-fixtures.js";
+import { entityInput } from "../../storage/test/entity/agent-live-fixtures.js";
 import { conversation } from "../../storage/test/entity/agent-history-fixtures.js";
 import { DatastoreStorageFactory } from "../src/index.js";
 
@@ -57,8 +57,9 @@ describe.skipIf(url === undefined)("Datastore live Agent conditional persistence
       SupportReplyAgentState
     >;
     try {
-      await expect(StoragePreparations.for(factory).prepareAgentCommit(layout, "create"))
-        .rejects.toThrow(/does not support native Agent transactions/i);
+      await expect(
+        StoragePreparations.for(factory).prepareAgentCommit(layout, "create"),
+      ).rejects.toThrow(/does not support native Agent transactions/i);
     } finally {
       await factory.close();
     }

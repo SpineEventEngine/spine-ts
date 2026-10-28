@@ -167,30 +167,15 @@ misordered, or otherwise incompatible same-name indexes reject when the handle
 opens. Pages use bounded native SQL chunks and sum serialized entry bytes; a
 fetched chunk can be larger than the returned byte budget.
 
-## Agent execution
+## Agent live persistence
 
-Agent execution conformance is exercised with MySQL 5.7 and 8.4, and MariaDB 11.4.
-
-Agent repositories require InnoDB. The execution handle rejects a nontransactional
-engine before accepting Agent work; the existing engine choices for other Entity
-families are unchanged. Execution and per-instance pending records use complete
-binary ordering keys and validated composite indexes.
-
-One connection transaction checks the claim and initial Entity Version, then
-writes state, mandatory history, preferences and outgoing Command obligations. Emitted
-domain Events enter immutable Agent history and are handed to the normal EventBus
-after completion without a saved delivery phase. Connection
-binding is scoped to that asynchronous operation. Encoded execution,
-per-instance, and Agent history records must each fit the 65,535-byte BLOB limit. The runtime must
-check its response reservation against the provider limits before inference.
-Reopening a factory can read the saved work. No transaction remains open during
-a model request.
-
-`MysqlStorageSchemaError` reports incompatible layouts,
-`MysqlStorageDataError` reports stored bytes that cannot be decoded, and
-`MysqlStorageOperationError` reports sanitized bounds, query, collision, and
-driver-operation failures. Custom creation uses `useOperationFactory()`; its
-resolved `MysqlTableSpec` has the same native column types and family-specific
-naming as default DDL. A grouped family uses its explicit grouped override or
-grouped default; an ungrouped family uses its explicit record override or
-ungrouped default. An ungrouped override never aliases a grouped family.
+The live Agent path is exercised on MySQL and MariaDB. Agent repositories
+require transactional InnoDB tables for atomic Agent commits. The handle
+rejects a nontransactional engine before accepting Agent work; other Entity
+families retain their configured engine behavior. `appendAll()` commits an
+immutable Agent history group in one transaction. `commitAgent()` compares
+the exact Entity image and model preferences, then writes accepted state,
+preference, and history changes atomically. A no-op or preference-only turn
+can leave the Entity Version unchanged. The separate typed receipt records
+admission, not executable work for replay. Connection binding is scoped to an
+asynchronous operation; no transaction stays open during a model request.

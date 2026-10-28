@@ -33,10 +33,6 @@ import {
   type TenantId,
 } from "@spine-event-engine/proto";
 import { SPI_type, internal_all, internal_type } from "@spine-event-engine/proto";
-// prettier-ignore
-import type {
-  AgentSavedDispatchPlan,
-} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import {
   ColumnTypes,
   EventStore,
@@ -47,11 +43,7 @@ import {
   type StorageFactory,
   type StorageMode,
 } from "@spine-event-engine/storage";
-import {
-  AgentExecutionStorageFactories,
-  AgentHistoryStorageFactories,
-  TenantBoundary,
-} from "@spine-event-engine/storage/provider";
+import { AgentHistoryStorageFactories, TenantBoundary } from "@spine-event-engine/storage/provider";
 
 /**
  * Storage family shared by paired System Event publication and trusted reads.
@@ -79,9 +71,11 @@ import { LocalEntityInbox } from "./entity-inbox.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
 import { TenantAdmissions } from "./tenant-unknown-error.js";
 import type { TenantIndex } from "./tenant-index.js";
-import { EffectiveTenants } from "./effective-tenant.js";
-import { AgentScheduler, type AgentScanScope } from "../agent/agent-scheduler.js";
-import { AgentExecutionCapacity } from "../agent/agent-execution-capacity.js";
+import {
+  AgentExecutionCapacity,
+  type AgentCapacityReservation,
+} from "../agent/agent-execution-capacity.js";
+import { AgentAcceptanceReceipts } from "../agent/agent-acceptance-receipts.js";
 import {
   Repository,
   repositoryAccess,
@@ -126,7 +120,7 @@ import {
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
-import { InboxTargets } from "../delivery/inbox.js";
+import { InboxTargets, type InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import { IntegrationBroker } from "../integration/integration-broker.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../server/server-environment.js";
@@ -251,29 +245,24 @@ interface RepositoryRegistration {
   readonly publishAgentEvent: (event: Event) => Promise<void>;
 
   /**
-   * Validates and freezes the normal Command recipient before transport.
-   */
-  readonly prepareSavedCommand: (command: Command) => Promise<AgentSavedDispatchPlan>;
-
-  /**
-   * Accepts the original Command and frozen recipient through the normal bus.
-   */
-  readonly publishSavedCommand: (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>;
-
-  /**
    * Hands an Agent System Event to the paired context publisher with contained dispatch failures.
    */
   readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
 
   /**
-   * Notifies package testing after a saved outgoing Command is acknowledged.
+   * Retained atomic admission evidence for live Agent delivery.
    */
-  readonly recordAcceptedSaved: (signal: Command) => void;
+  readonly agentReceipts: AgentAcceptanceReceipts;
 
   /**
-   * Wakes indexed Agent work discovery after an accepted Inbox handoff.
+   * Reserves local serialized Agent capacity before a receipt is written.
    */
-  readonly wakeAcceptedAgent: (repository: RepositoryView, tenantId: TenantId | undefined) => void;
+  readonly reserveAgent: (key: string, signal: AbortSignal) => AgentCapacityReservation | undefined;
+
+  /**
+   * Retains a capacity-deferred shard hint for the next available slot.
+   */
+  readonly deferAgent: (message: InboxMessage, tenantId: TenantId | undefined) => void;
 
   /**
    * Stand that stores read-side state for this context.
@@ -929,6 +918,10 @@ export class BoundedContext {
 
   readonly #deliveryStrategy: DeliveryStrategy;
 
+  readonly #deliveryReadiness: DeliveryReadiness;
+
+  #stopAgentAvailability: (() => void) | undefined;
+
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
 
   readonly #repositoryViews = new Set<RepositoryView>();
@@ -945,9 +938,7 @@ export class BoundedContext {
 
   readonly #subscriptionRuntime: SubscriptionRuntime;
 
-  #agentScheduler: AgentScheduler | undefined;
-
-  readonly #agentErrors: unknown[] = [];
+  readonly #agentReceipts: AgentAcceptanceReceipts;
 
   #closed: Promise<void> | undefined;
 
@@ -980,6 +971,7 @@ export class BoundedContext {
     this.#systemStand = input.systemStand;
     this.#subscriptionRuntime = input.subscriptionRuntime;
     this.#storageFactory = input.storageFactory;
+    this.#agentReceipts = new AgentAcceptanceReceipts(input.storageFactory);
     this.#environment = ServerEnvironment.instance();
     this.#ai = input.ai;
     this.#installTenantAdmission(input.tenantIndex);
@@ -993,6 +985,7 @@ export class BoundedContext {
       post: (event: Event) => ContextParts.postContextEvent(this, event),
     });
     const delivery = this.#createDelivery(input.tenantIndex);
+    this.#deliveryReadiness = delivery.deliveryReadiness;
     this.#entityInbox = delivery.entityInbox;
     this.#projectionInbox = delivery.projectionInbox;
     this.#installReferences(input, delivery);
@@ -1041,62 +1034,6 @@ export class BoundedContext {
   }
 
   /**
-   * Starts bounded indexed discovery for registered Agent repositories.
-   */
-  #startAgentScheduler(tenantIndex: TenantIndex): void {
-    if (this.#ai === undefined) return;
-    const repositories = [...this.#repositoryViews].filter(
-      (entry) => entry.entityFamily === "agent",
-    );
-    if (repositories.length === 0) return;
-    this.#agentScheduler = new AgentScheduler(
-      {
-        repositories: repositories.length,
-        page: (after, signal) =>
-          tenantIndex.page({
-            count: 16,
-            signal,
-            ...(after === undefined ? {} : { after }),
-          }),
-        scope: (id, index) => {
-          const repository = repositories[index];
-          if (repository === undefined) throw new Error("Agent repository scope is unavailable.");
-          return this.#agentScope(repository, this.tenantMode === "single-tenant" ? undefined : id);
-        },
-      },
-      AgentExecutionCapacity.for(this.#ai),
-      (error) => {
-        if (this.#agentErrors.length < 32) this.#agentErrors.push(error);
-      },
-    );
-    this.#agentScheduler.start();
-  }
-
-  /**
-   * Builds one scan scope from an accepted handoff or a catalog sweep.
-   *
-   * @param repository Registered Agent repository.
-   * @param tenantId Accepted tenant, absent only in a single-tenant Bounded Context.
-   * @returns The matching indexed provider scan scope.
-   */
-  #agentScope(repository: RepositoryView, tenantId: TenantId | undefined): AgentScanScope {
-    const effective = EffectiveTenants.current(
-      this.#snapshot.tenantMode === "multitenant",
-      tenantId,
-    );
-    return {
-      id: JSON.stringify([
-        this.#snapshot.name.value,
-        String(TenantBoundary.from(effective).key),
-        repository.stateFullTypeName,
-      ]),
-      pending: (after, count) =>
-        repositoryAccess.pendingAcceptedAgents(repository, tenantId, after, count),
-      run: (key, signal) => repositoryAccess.runAcceptedAgent(repository, tenantId, key, signal),
-    };
-  }
-
-  /**
    * Creates tenant-aware Inboxes and their shared readiness signal.
    *
    * @param tenantIndex Effective membership index for this context.
@@ -1104,6 +1041,10 @@ export class BoundedContext {
    */
   #createDelivery(tenantIndex: TenantIndex): ContextDeliveryParts {
     const deliveryReadiness = new DeliveryReadiness();
+    if (this.#ai !== undefined)
+      this.#stopAgentAvailability = AgentExecutionCapacity.for(this.#ai).onAvailable(() => {
+        deliveryReadiness.retryDeferred();
+      });
     const onAdmit = (tenantId: TenantId) =>
       TenantAdmissions.require(
         tenantIndex,
@@ -1121,6 +1062,11 @@ export class BoundedContext {
       this.#snapshot.name.value,
       deliveryReadiness,
       onAdmit,
+    );
+    deliveryReadiness.configureDirect((message, tenantId) =>
+      message.label === "UPDATE_SUBSCRIBER"
+        ? projectionInbox.replay(message, tenantId)
+        : entityInbox.replay(message, tenantId),
     );
     return { deliveryReadiness, tenantIndex, entityInbox, projectionInbox };
   }
@@ -1173,7 +1119,6 @@ export class BoundedContext {
   #registerAndStart(repositories: readonly RepositoryView[]): void {
     this.#registerRepositories(repositories);
     this.#subscriptionRuntime.start();
-    this.#startAgentScheduler(this.tenantIndex);
   }
 
   #registerRepositories(repositories: readonly RepositoryView[]): void {
@@ -1233,10 +1178,19 @@ export class BoundedContext {
   }
 
   /**
+   * Reserves shared-registry capacity before Agent receipt admission.
+   */
+  #reserveAgent(key: string, signal: AbortSignal): AgentCapacityReservation | undefined {
+    return this.#ai === undefined
+      ? undefined
+      : AgentExecutionCapacity.for(this.#ai).reserve(key, signal);
+  }
+
+  /**
    * Builds callbacks shared by every repository prepared for this Bounded Context.
    */
   #repositoryRegistration(): RepositoryRegistration {
-    const registration: RepositoryRegistration = {
+    return {
       name: ContextParts.cloneName(this.#snapshot.name),
       storageContext: ContextParts.createStorageMode(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
@@ -1252,22 +1206,35 @@ export class BoundedContext {
       registerSystemEventSchema: (schema) => {
         eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
       },
-      publishAgentEvent: (event) =>
-        event.context?.rejection === undefined
-          ? this.#publisher.publishEvent(event)
-          : this.#publisher.publishRejectionEvent(event),
-      prepareSavedCommand: (command) => commandBusAccess.prepareSaved(this.#commandBus, command),
-      publishSavedCommand: (command, plan) =>
-        commandBusAccess.postSavedFollowUp(this.#commandBus, command, plan),
+      publishAgentEvent: (event) => this.#publishAgentEvent(event),
       publishAgentSystemEvent: (event) => this.#publisher.publishSystemEvent(event),
-      recordAcceptedSaved: (signal) => {
-        this.#publisher.recordAcceptedSaved(signal);
-      },
-      wakeAcceptedAgent: (repository, tenantId) => {
-        this.#agentScheduler?.wake(this.#agentScope(repository, tenantId));
+      agentReceipts: this.#agentReceipts,
+      reserveAgent: (key, signal) => this.#reserveAgent(key, signal),
+      deferAgent: (message, tenantId) => {
+        this.#deferAgent(message, tenantId);
       },
     };
-    return registration;
+  }
+
+  /**
+   * Publishes an Agent event on its selected ordinary or rejection bus.
+   */
+  #publishAgentEvent(event: Event): Promise<void> {
+    return event.context?.rejection === undefined
+      ? this.#publisher.publishEvent(event)
+      : this.#publisher.publishRejectionEvent(event);
+  }
+
+  /**
+   * Records a deferred Agent shard for the next available capacity slot.
+   */
+  #deferAgent(message: InboxMessage, tenantId: TenantId | undefined): void {
+    this.#deliveryReadiness.defer({
+      label: message.label,
+      targetTypeUrl: message.inboxId.targetTypeUrl,
+      shard: message.shard,
+      ...(tenantId === undefined ? {} : { tenantId }),
+    });
   }
 
   #failRegistration(error: unknown, preparedRepositories: readonly PreparedRepository[]): never {
@@ -1500,7 +1467,6 @@ export class BoundedContext {
    */
   #beginClose(): void {
     closingContexts.add(this);
-    this.#agentScheduler?.stop();
     this.#publisher.beginClose();
     commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
@@ -1537,8 +1503,22 @@ export class BoundedContext {
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
-    await this.#closePart(() => this.#agentScheduler?.close(), errors);
+    this.#stopAgentAvailability?.();
+    this.#stopAgentAvailability = undefined;
+
     await this.#closePart(() => this.#drainWork(), errors);
+    await this.#closePart(() => this.#deliveryReadiness.close(), errors);
+    await this.#closePart(
+      () =>
+        ContextParts.drainContextWork(
+          this.#commandBus,
+          this.#eventBus,
+          this.#systemEventBus,
+          this.#publisher,
+        ),
+      errors,
+    );
+    await this.#closePart(() => this.#agentReceipts.close(), errors);
     await this.#closeBuses(errors);
     await this.#closePart(() => this.#stand.close(), errors);
     await this.#closePart(() => this.#systemStand.close(), errors);
@@ -1783,12 +1763,7 @@ export type GeneratedRepositoryOptions<
 > = Readonly<
   Pick<
     RepositoryOptions<EntityType>,
-    | "commandRouting"
-    | "eventRouting"
-    | "stateUpdateRouting"
-    | "stringifierRegistry"
-    | "agentCodeRevision"
-    | "ai"
+    "commandRouting" | "eventRouting" | "stateUpdateRouting" | "stringifierRegistry" | "ai"
   >
 > &
   (RepositoryOptions<EntityType> extends { readonly onCreate: infer Callback }
@@ -2315,36 +2290,12 @@ export class BoundedContextBuilder {
       throw new TypeError("Agent registration requires persisted System Events.");
     if (!AgentHistoryStorageFactories.supports(storageFactory))
       throw new TypeError("Agent registration requires indexed history storage.");
-    if (!AgentExecutionStorageFactories.supports(storageFactory))
-      throw new TypeError("Agent registration requires durable execution storage.");
-    this.#checkAgentOutputBindings(agents);
     for (const repository of agents) {
       const config = repositoryAccess.agentConfiguration(repository);
-      if (config.codeRevision === undefined || config.codeRevision.trim() === "")
-        throw new TypeError("Agent registration requires a code revision.");
       if (config.ai === undefined)
         throw new TypeError("Agent registration requires repository capabilities.");
       if (config.ai.models.some((model) => !isAiModel(model)))
         throw new TypeError("Agent repository capabilities must be factory-created models.");
-    }
-  }
-
-  /**
-   * Rejects Agent outcomes whose raw matching dispatcher cannot bind a saved plan.
-   */
-  #checkAgentOutputBindings(agents: readonly RepositoryView[]): void {
-    const rawCommands = new Set(
-      [...this.#commandDispatchers].flatMap((dispatcher) =>
-        dispatcher.messageSchemas().map((schema) => TypeUrls.derive(schema)),
-      ),
-    );
-    for (const repository of agents) {
-      if (
-        repositoryAccess
-          .producedCommandSchemas(repository)
-          .some((schema) => rawCommands.has(TypeUrls.derive(schema)))
-      )
-        throw new TypeError("Agent Command output requires a durable dispatcher binding.");
     }
   }
 
@@ -4138,11 +4089,10 @@ const ContextParts = Object.freeze({
       registerEventSchema: registration.registerEventSchema,
       registerSystemEventSchema: registration.registerSystemEventSchema,
       publishAgentEvent: registration.publishAgentEvent,
-      prepareSavedCommand: registration.prepareSavedCommand,
-      publishSavedCommand: registration.publishSavedCommand,
       publishAgentSystemEvent: registration.publishAgentSystemEvent,
-      recordAcceptedSaved: registration.recordAcceptedSaved,
-      wakeAcceptedAgent: registration.wakeAcceptedAgent,
+      agentReceipts: registration.agentReceipts,
+      reserveAgent: registration.reserveAgent,
+      deferAgent: registration.deferAgent,
     });
   },
 

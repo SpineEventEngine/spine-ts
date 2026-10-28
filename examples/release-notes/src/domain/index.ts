@@ -557,7 +557,6 @@ export const ReleaseNotesContext: Readonly<{
       .persistSystemEvents()
       .add(ReleaseDraft)
       .add(ReleaseNotesAgent, {
-        agentCodeRevision: "release-notes-draft-v1",
         ai: {
           models: [draftReleaseNotes],
           ...(options.resolveModel === undefined ? {} : { resolveModel: options.resolveModel }),

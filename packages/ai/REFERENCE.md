@@ -38,10 +38,10 @@ inspect `failure.code`, `retryableByNewSignal`, and `diagnosticId`. Both results
 carry the operation ID. A technical handler defect can still fail the handler;
 `AiResult` is not a catch-all for arbitrary application exceptions.
 
-The runtime saves the named operation, prepared requests and received results.
-Recovery reuses recorded results and rejects changed input or configuration for
-an existing call. A fresh accepted signal can make a new model request and may
-receive different words. The framework does not promise repeatable fresh model
+The runtime retains the named operation, prepared requests, and received results
+for the running invocation and writes genuine audit records. An interrupted
+invocation does not resume; a fresh accepted signal can make a new model request
+and may receive different words. The framework does not promise repeatable fresh model
 output or know whether every model assertion is true.
 
 `this.ai.select(kind, model)` records an instance preference for later signals.
@@ -92,7 +92,7 @@ Registry invocation settings may additionally limit work shared by all selected
 handlers of one signal, including recorded reads. Omitting a setting does not
 substitute a framework default. Cancellation remains available without a deadline.
 
-Recovery retains measured usage and any configured deadline. Completed exchanges
+The live turn measures usage and enforces any configured deadline. Completed exchanges
 record their received byte counts. When a configured shared output ceiling applies,
 the runtime reserves the remaining allowance before dispatch; if a response ends
 without a complete byte count, that reservation remains charged. Without an output
@@ -111,9 +111,8 @@ Bounded Contexts that share one `AiRegistry` object also share any configured
 execution capacity within that process. `concurrentOperations` can limit active
 Agent executions; `queuedOperations` can limit additional work waiting in memory
 for a slot. Both settings are optional. If capacity is configured and full, further
-accepted signals remain in durable storage until a slot becomes available. Waiting
-before execution does not consume a configured execution deadline. Recovery keeps
-the deadline of an execution that already started. Separate registries and
+signals wait in the Inbox until a slot becomes available. Waiting
+before execution does not consume a configured execution deadline. An interrupted turn does not resume or retain its deadline for a later signal. Separate registries and
 processes do not share these settings.
 
 `Mcp.server()` validates an explicitly configured tool server. A generation

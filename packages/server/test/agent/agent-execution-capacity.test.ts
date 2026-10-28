@@ -27,7 +27,6 @@ function registry(concurrentOperations: number, queuedOperations: number) {
       deadlineMs: 1_000,
       totalInputBytes: 1_000,
       totalOutputBytes: 1_000,
-      maxRecoveryBytes: 4_000,
     },
     concurrentOperations,
     queuedOperations,
@@ -35,18 +34,82 @@ function registry(concurrentOperations: number, queuedOperations: number) {
 }
 
 describe("shared Agent execution capacity", () => {
+  it("signals availability after a held Agent releases its slot", async () => {
+    const capacity = AgentExecutionCapacity.for(registry(1, 0));
+    const released = Promise.withResolvers<undefined>();
+    const observed: string[] = [];
+    const stop = capacity.onAvailable((key) => {
+      observed.push(key);
+    });
+    const held = capacity.reserve("agent-a", new AbortController().signal);
+    expect(capacity.reserve("agent-b", new AbortController().signal)).toBeUndefined();
+    const work = held?.run(() => released.promise);
+    released.resolve(undefined);
+    await work;
+    expect(observed).toEqual(["agent-a"]);
+    expect(capacity.reserve("agent-b", new AbortController().signal)).toBeDefined();
+    stop();
+  });
+  it("reserves before receipt without starting and releases a failed admission", async () => {
+    const capacity = AgentExecutionCapacity.for(registry(1, 0));
+    let started = 0;
+    const first = capacity.reserve("first", new AbortController().signal);
+    expect(first).toBeDefined();
+    expect(capacity.reserve("overflow", new AbortController().signal)).toBeUndefined();
+    expect(started).toBe(0);
+    first?.release();
+    const replacement = capacity.reserve("replacement", new AbortController().signal);
+    expect(replacement).toBeDefined();
+    await replacement?.run(() => {
+      started += 1;
+      return Promise.resolve();
+    });
+    expect(started).toBe(1);
+    expect(capacity.reserve("after-run", new AbortController().signal)).toBeDefined();
+  });
+
+  it("does not consume an active slot for a same-Agent turn before it starts", async () => {
+    const capacity = AgentExecutionCapacity.for(registry(1, 1));
+    const first = capacity.reserve("first", new AbortController().signal);
+    const waiting = capacity.reserve("same-Agent waiting", new AbortController().signal);
+    expect(first).toBeDefined();
+    expect(waiting).toBeDefined();
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const active = first?.run(() => blocked);
+    let started = false;
+    await Promise.resolve();
+    expect(started).toBe(false);
+    release();
+    await active;
+    expect(started).toBe(false);
+    const second = waiting?.run(() => {
+      started = true;
+      return Promise.resolve();
+    });
+    await second;
+    expect(started).toBe(true);
+  });
+
+  it("frees a reserved slot when cancellation precedes acknowledgement", () => {
+    const capacity = AgentExecutionCapacity.for(registry(1, 0));
+    const abort = new AbortController();
+    const reserved = capacity.reserve("cancelled", abort.signal);
+    expect(reserved).toBeDefined();
+    abort.abort();
+    expect(capacity.reserve("next", new AbortController().signal)).toBeDefined();
+    expect(() => reserved?.run(() => Promise.resolve())).toThrow(/no longer available/);
+  });
   it("starts independent work without an application concurrency ceiling", async () => {
     const capacity = AgentExecutionCapacity.for(AiRegistry.create({ defaultModels: {} }));
     const releases: (() => void)[] = [];
     let started = 0;
     const submit = (key: string) =>
-      capacity.trySubmit({
-        key,
-        signal: new AbortController().signal,
-        run: () => {
-          started += 1;
-          return new Promise<void>((resolve) => releases.push(resolve));
-        },
+      capacity.reserve(key, new AbortController().signal)?.run(() => {
+        started += 1;
+        return new Promise<void>((resolve) => releases.push(resolve));
       });
     const first = submit("first");
     const second = submit("second");
@@ -60,25 +123,17 @@ describe("shared Agent execution capacity", () => {
     const cancelled = new AbortController();
     cancelled.abort();
     expect(
-      capacity.trySubmit({
-        key: "cancelled-before-admission",
-        signal: cancelled.signal,
-        run: () => Promise.reject(new Error("Cancelled request ran.")),
-      }),
+      capacity
+        .reserve("cancelled-before-admission", cancelled.signal)
+        ?.run(() => Promise.reject(new Error("Cancelled request ran."))),
     ).toBeUndefined();
     const failure = new Error("Provider claim failed.");
-    const failed = capacity.trySubmit({
-      key: "failed-claim",
-      signal: new AbortController().signal,
-      run: () => Promise.reject(failure),
-    });
+    const failed = capacity
+      .reserve("failed-claim", new AbortController().signal)
+      ?.run(() => Promise.reject(failure));
     await expect(failed).rejects.toBe(failure);
     await expect(
-      capacity.trySubmit({
-        key: "after-failure",
-        signal: new AbortController().signal,
-        run: () => Promise.resolve(),
-      }),
+      capacity.reserve("after-failure", new AbortController().signal)?.run(() => Promise.resolve()),
     ).resolves.toBeUndefined();
   });
 
@@ -92,38 +147,30 @@ describe("shared Agent execution capacity", () => {
     const blocked = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const active = firstContext.trySubmit({
-      key: "context-A:signal-1",
-      signal: new AbortController().signal,
-      run: async () => {
+    const active = firstContext
+      .reserve("context-A:signal-1", new AbortController().signal)
+      ?.run(async () => {
         order.push("A-start");
         await blocked;
         order.push("A-end");
-      },
-    });
-    const waiting = secondContext.trySubmit({
-      key: "context-B:signal-1",
-      signal: new AbortController().signal,
-      run: () => {
+      });
+    const waiting = secondContext
+      .reserve("context-B:signal-1", new AbortController().signal)
+      ?.run(() => {
         order.push("B-start");
         return Promise.resolve();
-      },
-    });
+      });
     expect(active).toBeDefined();
     expect(waiting).toBeDefined();
     expect(
-      secondContext.trySubmit({
-        key: "context-C:overflow",
-        signal: new AbortController().signal,
-        run: () => Promise.resolve(),
-      }),
+      secondContext
+        .reserve("context-C:overflow", new AbortController().signal)
+        ?.run(() => Promise.resolve()),
     ).toBeUndefined();
     expect(
-      firstContext.trySubmit({
-        key: "context-B:signal-1",
-        signal: new AbortController().signal,
-        run: () => Promise.resolve(),
-      }),
+      firstContext
+        .reserve("context-B:signal-1", new AbortController().signal)
+        ?.run(() => Promise.resolve()),
     ).toBeUndefined();
     await Promise.resolve();
     expect(order).toEqual(["A-start"]);
@@ -140,17 +187,9 @@ describe("shared Agent execution capacity", () => {
     const blocked = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const active = capacity.trySubmit({
-      key: "active",
-      signal: new AbortController().signal,
-      run: () => blocked,
-    });
+    const active = capacity.reserve("active", new AbortController().signal)?.run(() => blocked);
     expect(
-      capacity.trySubmit({
-        key: "overflow",
-        signal: new AbortController().signal,
-        run: () => Promise.resolve(),
-      }),
+      capacity.reserve("overflow", new AbortController().signal)?.run(() => Promise.resolve()),
     ).toBeUndefined();
     if (release === undefined) throw new Error("Expected active gate.");
     release();
@@ -160,26 +199,16 @@ describe("shared Agent execution capacity", () => {
     const held = new Promise<void>((resolve) => {
       releaseSecond = resolve;
     });
-    const running = queue.trySubmit({
-      key: "running",
-      signal: new AbortController().signal,
-      run: () => held,
-    });
+    const running = queue.reserve("running", new AbortController().signal)?.run(() => held);
     const cancelled = new AbortController();
-    const waiting = queue.trySubmit({
-      key: "waiting",
-      signal: cancelled.signal,
-      run: () => {
-        throw new Error("Cancelled descriptor must not run.");
-      },
+    const waiting = queue.reserve("waiting", cancelled.signal)?.run(() => {
+      throw new Error("Cancelled descriptor must not run.");
     });
     cancelled.abort();
     await waiting;
-    const replacement = queue.trySubmit({
-      key: "replacement",
-      signal: new AbortController().signal,
-      run: () => Promise.resolve(),
-    });
+    const replacement = queue
+      .reserve("replacement", new AbortController().signal)
+      ?.run(() => Promise.resolve());
     expect(replacement).toBeDefined();
     if (releaseSecond === undefined) throw new Error("Expected second active gate.");
     releaseSecond();

@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { SignalEnvelopes } from "@spine-event-engine/core";
-import { CommandContextSchema, CommandIdSchema, type CommandId } from "@spine-event-engine/proto";
+import { CommandContextSchema } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -135,7 +135,7 @@ class PlainEntityClass {
 }
 
 describe("repository identity", () => {
-  it("rejects Agent history and execution reads on a non-Agent repository", async () => {
+  it("rejects Agent history reads on a non-Agent repository", () => {
     const aggregate = new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema });
     const compileOnly = () => {
       const projection = new Repository({
@@ -148,28 +148,18 @@ describe("repository identity", () => {
       });
       // @ts-expect-error Aggregate repositories cannot request Agent history.
       aggregate.agentHistory("task-1", {});
-      // @ts-expect-error Aggregate repositories cannot request Agent execution.
-      void aggregate.agentExecution("task-1", create(CommandIdSchema, { uuid: "source" }), {});
       // @ts-expect-error Projection repositories cannot request Agent history.
       projection.agentHistory("task-1", {});
-      // @ts-expect-error Projection repositories cannot request Agent execution.
-      void projection.agentExecution("task-1", create(CommandIdSchema, { uuid: "source" }), {});
       // @ts-expect-error Process Manager repositories cannot request Agent history.
       processManager.agentHistory("task-1", {});
-      // @ts-expect-error Process Manager repositories cannot request Agent execution.
-      void processManager.agentExecution("task-1", create(CommandIdSchema, { uuid: "source" }), {});
     };
     void compileOnly;
     const unchecked = aggregate as unknown as {
       agentHistory(id: string, scope: object): unknown;
-      agentExecution(id: string, source: CommandId, scope: object): Promise<unknown>;
     };
     expect(() => unchecked.agentHistory("task-1", {})).toThrow(
       "Agent read requires an Agent repository",
     );
-    await expect(
-      unchecked.agentExecution("task-1", create(CommandIdSchema, { uuid: "source" }), {}),
-    ).rejects.toThrow("Agent read requires an Agent repository");
   });
 
   it("accepts an Agent repository backed by the canonical ENTITY kind", () => {

@@ -12,11 +12,10 @@
  * the License.
  */
 
-import { create, type Message } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
 import { AiModel, AiRegistry, ModelRef } from "@spine-event-engine/ai";
 import { backendDefinition, createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
-import { AnyPacker, Time } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { AiModelKind, ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import {
   Agent,
@@ -26,11 +25,6 @@ import {
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import type {
-  AgentExecutionStorage,
-  AgentExecutionStorageInput,
-} from "@spine-event-engine/storage/provider";
-import type * as Records from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
 import { AiTestBackend, BlackBox } from "../src/index.js";
 import {
@@ -43,7 +37,10 @@ import {
   DraftSupportReplySchema,
   type DraftSupportReply,
 } from "../test-fixtures/generated/support_agent_commands_pb.js";
-import { SupportReplyProposedSchema } from "../test-fixtures/generated/support_agent_events_pb.js";
+import {
+  SupportReplyProposedSchema,
+  type SupportReplyProposed,
+} from "../test-fixtures/generated/support_agent_events_pb.js";
 import {
   ProposedSupportReplySchema,
   SupportReplyFactsSchema,
@@ -124,44 +121,24 @@ class PreferenceCapacityAgent extends CapacityAgent {
   }
 }
 
-class CapacityStorage extends InMemoryStorageFactory {
-  readonly reads = new Map<string, () => Promise<Records.AgentExecutionRecord | undefined>>();
-  readonly accepted: (() => Promise<Records.AgentExecutionRecord | undefined>)[] = [];
-  completed = 0;
+class SelfReactingCapacityAgent extends CapacityAgent {
+  static reactions = 0;
 
-  protected override createAgentExecutionStorage<I, S extends Message>(
-    input: AgentExecutionStorageInput<I, S>,
-  ): AgentExecutionStorage<I, S> {
-    const storage = super.createAgentExecutionStorage(input);
-    const admit = storage.admit.bind(storage);
-    const complete = storage.complete.bind(storage);
-    storage.complete = async (completion) => {
-      await complete(completion);
-      this.completed++;
-    };
-    storage.admit = async (accepted) => {
-      const record = await admit(accepted);
-      const key = accepted.key;
-      const id = accepted.recipientId
-        ? AnyPacker.tryUnpack(accepted.recipientId, SupportReplyAgentIdSchema)
-        : undefined;
-      if (key) this.accepted.push(() => storage.read(key));
-      if (key && id) this.reads.set(id.ticketNumber, () => storage.read(key));
-      return record;
-    };
-    return storage;
+  override async draft(command: DraftSupportReply) {
+    return super.draft(command);
   }
 
-  read(ticketNumber: string): Promise<Records.AgentExecutionRecord | undefined> {
-    return this.reads.get(ticketNumber)?.() ?? Promise.resolve(undefined);
+  react(proposed: SupportReplyProposed): void {
+    if (proposed.agent?.ticketNumber !== this.id.ticketNumber)
+      throw new Error("Follow-up Event reached a different Agent ID.");
+    SelfReactingCapacityAgent.reactions++;
   }
 }
 
-function repository(entityType: typeof CapacityAgent = CapacityAgent) {
+function repository(entityType: typeof CapacityAgent = CapacityAgent, selfReact = false) {
   return new Repository({
     entityType,
     schema: SupportReplyAgentStateSchema,
-    agentCodeRevision: "capacity-v1",
     ai: { models: [model] },
     handlers: new HandlerRegistryIngestor().ingest({
       receivers: [
@@ -177,6 +154,17 @@ function repository(entityType: typeof CapacityAgent = CapacityAgent) {
               outcomes: { returned: [SupportReplyProposedSchema], thrown: [] },
               parameterCount: 1,
             },
+            ...(selfReact
+              ? [
+                  {
+                    kind: "event-reaction" as const,
+                    methodName: "react",
+                    input: { schema: SupportReplyProposedSchema, origin: "domestic" as const },
+                    outcomes: { returned: [], thrown: [] },
+                    parameterCount: 1,
+                  },
+                ]
+              : []),
           ],
         },
       ],
@@ -189,7 +177,6 @@ function escalationRepository() {
   return new Repository({
     entityType: EscalatedCapacityAgent,
     schema: EscalatedSupportReplyAgentStateSchema,
-    agentCodeRevision: "capacity-escalation-v1",
     ai: { models: [model] },
     handlers: new HandlerRegistryIngestor().ingest({
       receivers: [
@@ -261,7 +248,6 @@ function registry(
       deadlineMs: 5_000,
       totalInputBytes: 8_000,
       totalOutputBytes: 8_000,
-      maxRecoveryBytes: 24_000,
     },
     concurrentOperations: concurrent,
     queuedOperations: queued,
@@ -274,16 +260,17 @@ async function contextBox(
   ai: AiRegistry,
   entityType: typeof CapacityAgent = CapacityAgent,
   escalated = false,
+  selfReact = false,
 ) {
-  const storage = new CapacityStorage();
+  const storage = new InMemoryStorageFactory();
   const builder = BoundedContext.singleTenant(name)
     .withAi(ai)
     .persistSystemEvents()
     .withStorageFactory(storage);
   const context = await (
-    escalated ? builder.add(escalationRepository()) : builder.add(repository(entityType))
+    escalated ? builder.add(escalationRepository()) : builder.add(repository(entityType, selfReact))
   ).build();
-  return { box: await BlackBox.from(context, { timeoutMs: 7_000 }), storage };
+  return { box: await BlackBox.from(context, { timeoutMs: 7_000 }) };
 }
 
 async function post(
@@ -305,6 +292,35 @@ async function produced(box: BlackBox, count: number) {
 }
 
 describe("shared Agent registry capacity through BlackBox", () => {
+  it("wakes a deferred shard after another context frees the only active slot", async () => {
+    const backend = AiTestBackend.create({
+      ref: ModelRef.of("capacity-cross-context", "v1"),
+      kind: "generation",
+    });
+    const responses = backend.forModel(model);
+    const gate = responses.delay();
+    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply A" }));
+    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply B" }));
+    const { ai } = registry(backend, 1, 0);
+    const first = await contextBox("CapacityWakeA", ai);
+    const second = await contextBox("CapacityWakeB", ai, CapacityAgent, true);
+    try {
+      expect((await post(first.box, "T-A")).kind).toBe("ok");
+      await first.box.eventually(
+        () => backend.requests(),
+        (requests) => requests.length === 1,
+      );
+      expect((await post(second.box, "T-B")).kind).toBe("ok");
+      expect(backend.requests()).toHaveLength(1);
+      gate.release();
+      await produced(first.box, 1);
+      await produced(second.box, 1);
+      expect(backend.requests()).toHaveLength(2);
+    } finally {
+      gate.release();
+      await Promise.all([first.box.close(), second.box.close()]);
+    }
+  });
   it("keeps a second Bounded Context admitted but unstarted until one active slot releases", async () => {
     const backend = AiTestBackend.create({
       ref: ModelRef.of("capacity-scripted", "v1"),
@@ -327,12 +343,6 @@ describe("shared Agent registry capacity through BlackBox", () => {
       expect(whileFirstBlocked.identities).toBeGreaterThan(0);
       expect(whileFirstBlocked.authorizations).toBeGreaterThan(0);
       expect((await post(second.box, "T-B")).kind).toBe("ok");
-      await second.box.eventually(
-        () => second.storage.read("T-B"),
-        (record) => !!record,
-      );
-      expect((await second.storage.read("T-B"))?.started).toBeUndefined();
-      expect((await second.storage.read("T-B"))?.claimToken).toBe("");
       expect(backend.requests()).toHaveLength(1);
       expect(observed).toEqual(whileFirstBlocked);
       expect(second.box.assertEvents()).toEqual([]);
@@ -347,41 +357,6 @@ describe("shared Agent registry capacity through BlackBox", () => {
     }
   });
 
-  it.each([0, 1])("revisits durable overflow with C=1 and Q=%i", async (queued) => {
-    const backend = AiTestBackend.create({
-      ref: ModelRef.of(`capacity-overflow-${String(queued)}`, "v1"),
-      kind: "generation",
-    });
-    const responses = backend.forModel(model);
-    const gate = responses.delay();
-    for (const ticket of ["T-A", "T-B", "T-C"])
-      responses.respondWith(create(ProposedSupportReplySchema, { reply: `Reply ${ticket}` }));
-    const { ai } = registry(backend, 1, queued);
-    const { box, storage } = await contextBox(`CapacityOverflow${String(queued)}`, ai);
-    try {
-      expect((await post(box, "T-A")).kind).toBe("ok");
-      await box.eventually(
-        () => backend.requests(),
-        (requests) => requests.length === 1,
-      );
-      for (const ticket of ["T-B", "T-C"]) expect((await post(box, ticket)).kind).toBe("ok");
-      await box.eventually(
-        () => storage.read("T-C"),
-        (record) => !!record,
-      );
-      expect((await storage.read("T-B"))?.started).toBeUndefined();
-      expect((await storage.read("T-C"))?.started).toBeUndefined();
-      expect(backend.requests()).toHaveLength(1);
-      gate.release();
-      await produced(box, 3);
-      expect(backend.requests()).toHaveLength(3);
-      backend.assertSatisfied();
-    } finally {
-      gate.release();
-      await box.close();
-    }
-  });
-
   it("starts two independent Agent IDs in the default single delivery shard with C=2", async () => {
     const backend = AiTestBackend.create({
       ref: ModelRef.of("capacity-parallel", "v1"),
@@ -393,7 +368,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
     const secondGate = responses.delay();
     responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply B" }));
     const { ai } = registry(backend, 2, 0);
-    const { box, storage } = await contextBox("CapacityParallel", ai);
+    const { box } = await contextBox("CapacityParallel", ai);
     try {
       expect((await post(box, "T-A")).kind).toBe("ok");
       expect((await post(box, "T-B")).kind).toBe("ok");
@@ -401,8 +376,6 @@ describe("shared Agent registry capacity through BlackBox", () => {
         () => backend.requests(),
         (requests) => requests.length === 2,
       );
-      expect((await storage.read("T-A"))?.started).toBeDefined();
-      expect((await storage.read("T-B"))?.started).toBeDefined();
       expect(box.assertEvents()).toEqual([]);
       firstGate.release();
       secondGate.release();
@@ -414,58 +387,6 @@ describe("shared Agent registry capacity through BlackBox", () => {
       await box.close();
     }
   });
-
-  it("starts a queued signal's deadline when promoted after Time advances", async () => {
-    let offsetMillis = 0;
-    let previous: ReturnType<typeof Time.setProvider> | undefined;
-    const backend = AiTestBackend.create({
-      ref: ModelRef.of("capacity-deadline", "v1"),
-      kind: "generation",
-    });
-    const responses = backend.forModel(model);
-    const gate = responses.delay();
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply A" }));
-    responses.respondWith(create(ProposedSupportReplySchema, { reply: "Reply B" }));
-    const { ai } = registry(backend, 1, 1);
-    const { box, storage } = await contextBox("CapacityDeadline", ai);
-    try {
-      expect((await post(box, "T-A")).kind).toBe("ok");
-      await box.eventually(
-        () => backend.requests(),
-        (requests) => requests.length === 1,
-      );
-      previous = Time.setProvider({
-        currentTime: () => {
-          const currentMillis = Date.now() + offsetMillis;
-          return create(TimestampSchema, {
-            seconds: BigInt(Math.trunc(currentMillis / 1_000)),
-            nanos: (currentMillis % 1_000) * 1_000_000,
-          });
-        },
-      });
-      expect((await post(box, "T-B")).kind).toBe("ok");
-      await box.eventually(
-        () => storage.read("T-B"),
-        (record) => !!record,
-      );
-      expect((await storage.read("T-B"))?.started).toBeUndefined();
-      offsetMillis = 2_000;
-      const promotedAt = Time.currentTimeMillis();
-      gate.release();
-      await produced(box, 2);
-      const started = (await storage.read("T-B"))?.started;
-      const deadline = started?.deadline;
-      if (!deadline) throw new Error("Expected promoted invocation deadline.");
-      expect(
-        Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000),
-      ).toBeGreaterThanOrEqual(promotedAt + 5_000);
-      backend.assertSatisfied();
-    } finally {
-      gate.release();
-      await box.close();
-      if (previous) Time.setProvider(previous);
-    }
-  }, 15_000);
 
   it("closing one Bounded Context leaves a second Bounded Context's queued work runnable", async () => {
     const backend = AiTestBackend.create({
@@ -486,11 +407,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
         (requests) => requests.length === 1,
       );
       expect((await post(second.box, "T-B")).kind).toBe("ok");
-      await second.box.eventually(
-        () => second.storage.read("T-B"),
-        (record) => !!record,
-      );
-      expect((await second.storage.read("T-B"))?.started).toBeUndefined();
+      expect(second.box.assertEvents()).toEqual([]);
       await first.box.close();
       gate.release();
       await produced(second.box, 1);
@@ -501,7 +418,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
     }
   }, 15_000);
 
-  it("bounds an ignored model callback on A close without committing its late result", async () => {
+  it("drains a held callback on close while another context continues", async () => {
     const backend = AiTestBackend.create({
       ref: ModelRef.of("capacity-ignored-callback", "v1"),
       kind: "generation",
@@ -522,17 +439,17 @@ describe("shared Agent registry capacity through BlackBox", () => {
       await held.entered.promise;
       expect(first.box.assertEvents()).toEqual([]);
       expect((await post(second.box, "T-B")).kind).toBe("ok");
-      await second.box.eventually(
-        () => second.storage.read("T-B"),
-        (record) => !!record,
-      );
-      expect((await second.storage.read("T-B"))?.started).toBeUndefined();
-      await first.box.close();
+      expect(second.box.assertEvents()).toEqual([]);
+      let closed = false;
+      const closing = first.box.close().then(() => {
+        closed = true;
+      });
+      await Promise.resolve();
+      expect(closed).toBe(false);
       held.release.resolve(undefined);
       await held.returned.promise;
+      await closing;
       await produced(second.box, 1);
-      expect(first.storage.completed).toBe(0);
-      expect(second.storage.completed).toBe(1);
       expect(backend.requests()).toHaveLength(2);
     } finally {
       held.release.resolve(undefined);
@@ -554,7 +471,7 @@ describe("shared Agent registry capacity through BlackBox", () => {
       .respondWith(create(ProposedSupportReplySchema, { reply: "Alternate reply" }));
     const { ai: primaryRegistry } = registry(primary, 1, 1);
     const ai = primaryRegistry.register(alternate.registration);
-    const { box, storage } = await contextBox("CapacityPreference", ai, PreferenceCapacityAgent);
+    const { box } = await contextBox("CapacityPreference", ai, PreferenceCapacityAgent);
     try {
       expect((await post(box, "T-P", "Prefer alternate")).kind).toBe("ok");
       await box.eventually(
@@ -563,16 +480,9 @@ describe("shared Agent registry capacity through BlackBox", () => {
       );
       expect(alternate.requests()).toHaveLength(0);
       expect((await post(box, "T-P", "After preference")).kind).toBe("ok");
-      await box.eventually(
-        () => storage.accepted.length,
-        (count) => count === 2,
-      );
-      const waiting = await storage.accepted[1]?.();
-      expect(waiting?.started).toBeUndefined();
       expect(primary.requests()).toHaveLength(1);
       expect(alternate.requests()).toHaveLength(0);
       gate.release();
-      // A completed catalog traversal may revisit this waiting signal on the next five-second sweep.
       const events = await produced(box, 2);
       expect(
         events.map((event) =>
@@ -583,12 +493,38 @@ describe("shared Agent registry capacity through BlackBox", () => {
       ).toEqual(["Original reply", "Alternate reply"]);
       expect(primary.requests()).toHaveLength(1);
       expect(alternate.requests()).toHaveLength(1);
-      const firstSaved = await storage.accepted[0]?.();
-      expect(firstSaved?.completion?.preferences[0]?.selection.case).toBe("model");
       primary.assertSatisfied();
       alternate.assertSatisfied();
     } finally {
       gate.release();
+      await box.close();
+    }
+  }, 15_000);
+
+  it("delivers an Agent's output back to the same Agent on the active shard", async () => {
+    const backend = AiTestBackend.create({
+      ref: ModelRef.of("capacity-self-followup", "v1"),
+      kind: "generation",
+    });
+    backend.forModel(model).respondWith(create(ProposedSupportReplySchema, { reply: "Follow up" }));
+    const { ai } = registry(backend, 1, 1);
+    SelfReactingCapacityAgent.reactions = 0;
+    const { box } = await contextBox(
+      "CapacitySelfFollowup",
+      ai,
+      SelfReactingCapacityAgent,
+      false,
+      true,
+    );
+    try {
+      expect((await post(box, "T-self")).kind).toBe("ok");
+      await produced(box, 1);
+      await box.eventually(
+        () => SelfReactingCapacityAgent.reactions,
+        (count) => count === 1,
+      );
+      expect(backend.requests()).toHaveLength(1);
+    } finally {
       await box.close();
     }
   }, 15_000);

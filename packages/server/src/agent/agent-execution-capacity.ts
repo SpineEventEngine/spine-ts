@@ -15,13 +15,28 @@
 import type { AiRegistry } from "@spine-event-engine/ai";
 import { registryOptions } from "@spine-event-engine/ai/spi/runtime";
 
-interface CapacityRequest {
-  readonly key: string;
-  readonly signal: AbortSignal;
-  readonly run: () => Promise<void>;
+/**
+ * A local slot retained before an Agent receipt is accepted.
+ */
+export interface AgentCapacityReservation {
+  /**
+   * Starts work after Inbox acknowledgement and the Agent turn become available.
+   *
+   * @param onRun Callback to run after capacity admission.
+   * @returns Completion after admitted Agent work finishes.
+   */
+  run(onRun: () => Promise<void>): Promise<void>;
+
+  /**
+   * Clears a slot when receipt or acknowledgement admission does not complete.
+   */
+  release(): void;
 }
 
-interface RetainedRequest extends CapacityRequest {
+interface RetainedRequest {
+  readonly key: string;
+  readonly signal: AbortSignal;
+  run?: () => Promise<void>;
   readonly completion: PromiseWithResolvers<undefined>;
   readonly onAbort: () => void;
   started: boolean;
@@ -39,6 +54,10 @@ export class AgentExecutionCapacity {
   readonly #active = new Set<RetainedRequest>();
 
   readonly #waiting: RetainedRequest[] = [];
+
+  readonly #listeners = new Set<(key: string) => void>();
+
+  #availabilityGeneration = 0;
 
   /**
    * Creates a registry gate with optional active and resident waiting limits.
@@ -90,16 +109,40 @@ export class AgentExecutionCapacity {
   }
 
   /**
-   * Tries to retain one descriptor; overflow remains in durable storage.
+   * Observes released Agent identities and available registry capacity.
    *
-   * @param request Keyed work hint and cancellation signal from one Bounded Context.
-   * @returns Completion of retained work, or undefined when admission is declined.
+   * @param onAvailable Callback invoked when capacity becomes available.
+   * @returns A callback that removes this capacity listener.
    */
-  trySubmit(request: CapacityRequest): Promise<void> | undefined {
-    if (request.signal.aborted || this.#entries.has(request.key) || this.full()) return undefined;
+  onAvailable(onAvailable: (key: string) => void): () => void {
+    this.#listeners.add(onAvailable);
+    return () => {
+      this.#listeners.delete(onAvailable);
+    };
+  }
+
+  /**
+   * Captures the current release generation for gap-free rechecking.
+   *
+   * @returns The current release generation for gap-free rechecking.
+   */
+  availabilityGeneration(): number {
+    return this.#availabilityGeneration;
+  }
+
+  /**
+   * Acquires bounded resident capacity before a durable Agent receipt attempt.
+   *
+   * @param key Physical or logical identity key.
+   * @param signal Signal or cancellation signal for this operation.
+   * @returns A capacity reservation or undefined when admission is unavailable.
+   */
+  reserve(key: string, signal: AbortSignal): AgentCapacityReservation | undefined {
+    if (signal.aborted || this.#entries.has(key) || this.full()) return undefined;
     const completion = Promise.withResolvers<undefined>();
     const entry: RetainedRequest = {
-      ...request,
+      key,
+      signal,
       completion,
       started: false,
       settled: false,
@@ -109,20 +152,37 @@ export class AgentExecutionCapacity {
     };
     this.#entries.set(entry.key, entry);
     entry.signal.addEventListener("abort", entry.onAbort, { once: true });
-    if (this.concurrent === undefined || this.#active.size < this.concurrent) this.#start(entry);
+    if (this.concurrent === undefined || this.#active.size < this.concurrent)
+      this.#active.add(entry);
     else this.#waiting.push(entry);
-    return completion.promise;
+    return {
+      run: (onRun) => this.#run(entry, onRun),
+      release: () => {
+        this.#cancelWaiting(entry);
+      },
+    };
+  }
+
+  /**
+   * Starts a reserved descriptor only when it has an active slot.
+   */
+  #run(entry: RetainedRequest, onRun: () => Promise<void>): Promise<void> {
+    if (entry.settled || entry.run !== undefined)
+      throw new Error("Agent capacity reservation is no longer available.");
+    entry.run = onRun;
+    if (this.#active.has(entry)) this.#start(entry);
+    return entry.completion.promise;
   }
 
   /**
    * Starts a retained descriptor only after it receives an active slot.
    */
   #start(entry: RetainedRequest): void {
+    if (entry.run === undefined || entry.started || entry.settled) return;
     entry.started = true;
-    this.#active.add(entry);
     void Promise.resolve()
       .then(() => {
-        if (!entry.signal.aborted) return entry.run();
+        if (!entry.signal.aborted) return entry.run?.();
       })
       .then(
         () => {
@@ -139,9 +199,13 @@ export class AgentExecutionCapacity {
    */
   #cancelWaiting(entry: RetainedRequest): void {
     if (entry.started || entry.settled) return;
-    const index = this.#waiting.indexOf(entry);
-    if (index >= 0) this.#waiting.splice(index, 1);
-    this.#settle(entry);
+    if (this.#active.has(entry)) this.#finish(entry);
+    else {
+      const index = this.#waiting.indexOf(entry);
+      if (index >= 0) this.#waiting.splice(index, 1);
+      this.#settle(entry);
+      this.#notifyAvailable(entry.key);
+    }
   }
 
   /**
@@ -156,8 +220,20 @@ export class AgentExecutionCapacity {
       this.#waiting.length > 0
     ) {
       const next = this.#waiting.shift();
-      if (next !== undefined && !next.settled) this.#start(next);
+      if (next !== undefined && !next.settled) {
+        this.#active.add(next);
+        this.#start(next);
+      }
     }
+    this.#notifyAvailable(entry.key);
+  }
+
+  /**
+   * Wakes eligibility observers after active and queued positions settle.
+   */
+  #notifyAvailable(key: string): void {
+    this.#availabilityGeneration += 1;
+    for (const listener of this.#listeners) listener(key);
   }
 
   /**

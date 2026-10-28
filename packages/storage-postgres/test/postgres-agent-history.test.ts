@@ -45,6 +45,31 @@ function required(value: string | undefined): string {
 }
 
 describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
+  it("rolls back an immutable audit group when its second row conflicts", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: required(url) })
+      .build();
+    const history = AgentHistoryStorageFactories.create(factory, scope);
+    const agent = `batch-${randomUUID()}`;
+    const existing = conversation("conflict", "reply", occurredAt(2n));
+    const request = conversation("request", "reply", occurredAt(1n));
+    try {
+      await history.append(agent, existing);
+      await expect(
+        history.appendAll(agent, [request, conversation("conflict", "reply", occurredAt(3n))]),
+      ).rejects.toThrow(/immutable|conflict/i);
+      const page = await history.read({ entityId: agent, view: { kind: "full" }, count: 5 });
+      expect(page.entries).toEqual([existing]);
+      await history.appendAll(agent, [request, event("system", occurredAt(4n), true)]);
+      await history.appendAll(agent, [request, event("system", occurredAt(4n), true)]);
+      expect(
+        (await history.read({ entityId: agent, view: { kind: "full" }, count: 5 })).entries,
+      ).toHaveLength(3);
+    } finally {
+      history.close();
+      await factory.close();
+    }
+  });
   it("rejects creation of an Agent history handle after factory closure", async () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: required(url) })

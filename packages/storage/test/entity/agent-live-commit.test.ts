@@ -32,7 +32,7 @@ import { InMemoryStorageBackend } from "../../src/memory/in-memory-storage-backe
 import { MemoryEntityStorageFactory } from "../../src/memory/in-memory-entity-history.js";
 import { StoragePreparations } from "../../src/internal/storage-preparation.js";
 import { vi } from "vitest";
-import { entityInput } from "./agent-execution-fixtures.js";
+import { entityInput } from "./agent-live-fixtures.js";
 import { conversation } from "./agent-history-fixtures.js";
 
 describe("live Agent conditional persistence", () => {

@@ -12,17 +12,15 @@
  * the License.
  */
 
-import { create, equals, type Message } from "@bufbuild/protobuf";
+import { create, equals } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, Mcp, ModelRef } from "@spine-event-engine/ai";
 import {
   createBackendRegistration,
   type AiMcpProtocolControl,
 } from "@spine-event-engine/ai/spi/adapter";
-import { AnyPacker, EntityQuery, Time } from "@spine-event-engine/core";
+import { AnyPacker, EntityQuery } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
-import { QuerySchema } from "@spine-event-engine/proto/client";
 import {
   AgentHistoryCursorSchema,
   AgentAiOperationStartedSchema,
@@ -33,7 +31,6 @@ import {
   AgentToolCallStartedSchema,
   AgentToolCallFinishedSchema,
   AgentModelSelectionChangedSchema,
-  AgentInvocationTerminatedSchema,
   AiContentDigestSchema,
   AiModelKind,
   AiOutcome,
@@ -57,16 +54,10 @@ import {
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { agentHistoryView } from "@spine-event-engine/server/testing";
 import type {
-  AgentExecutionCapacity,
-  AgentExecutionStorage,
-  AgentExecutionStorageInput,
+  AgentHistoryCapacity,
+  AgentHistoryStorage,
+  AgentHistoryStorageInput,
 } from "@spine-event-engine/storage/provider";
-// prettier-ignore
-import {
-  AgentProjectionReadResultSchema,
-  AgentInvocationStatus,
-  type AgentExecutionRecord,
-} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import { describe, expect, it } from "vitest";
 import { AiTestBackend, BlackBox } from "../src/index.js";
 import {
@@ -234,30 +225,22 @@ class ProjectAggregate extends Aggregate<string, typeof ProjectSchema> {
   }
 }
 
-class RecordingExecutionFactory extends InMemoryStorageFactory {
-  readLast?: () => Promise<AgentExecutionRecord | undefined>;
+class RecordingHistoryFactory extends InMemoryStorageFactory {
   readonly historyWrites: AgentHistoryEntry[] = [];
 
-  constructor(private readonly limits: AgentExecutionCapacity = {}) {
+  constructor(private readonly limits: AgentHistoryCapacity = {}) {
     super();
   }
 
-  protected override createAgentExecutionStorage<I, S extends Message>(
-    input: AgentExecutionStorageInput<I, S>,
-  ): AgentExecutionStorage<I, S> {
-    const storage = super.createAgentExecutionStorage(input);
+  protected override createAgentHistoryStorage<I>(
+    input: AgentHistoryStorageInput<I>,
+  ): AgentHistoryStorage<I> {
+    const storage = super.createAgentHistoryStorage(input);
     Object.defineProperty(storage, "capacity", { value: this.limits });
-    const admit = storage.admit.bind(storage);
-    const update = storage.update.bind(storage);
-    storage.update = async (input) => {
-      await update(input);
-      this.historyWrites.push(...(input.historyEntries ?? []));
-    };
-    storage.admit = async (accepted) => {
-      const record = await admit(accepted);
-      const key = accepted.key;
-      if (key !== undefined) this.readLast = () => storage.read(key);
-      return record;
+    const appendAll = storage.appendAll.bind(storage);
+    storage.appendAll = async (entityId, entries) => {
+      await appendAll(entityId, entries);
+      this.historyWrites.push(...entries);
     };
     return storage;
   }
@@ -267,7 +250,6 @@ function draftingRepository() {
   return new Repository({
     entityType: DraftingAgent,
     schema: SupportReplyAgentStateSchema,
-    agentCodeRevision: "drafting-v1",
     ai: { models: [proposal, toolProposal] },
     handlers: new HandlerRegistryIngestor().ingest({
       receivers: [
@@ -296,11 +278,10 @@ function draftingRepository() {
 
 async function configuredBox(
   backend: AiTestBackend,
-  limits: AgentExecutionCapacity = {},
+  limits: AgentHistoryCapacity = {},
   alternate?: AiTestBackend,
   projection = false,
   sequential = false,
-  recoveryBytes = 24_000,
 ) {
   let registry = AiRegistry.create({
     defaultModels: { generation: backend.registration.ref },
@@ -312,13 +293,12 @@ async function configuredBox(
       deadlineMs: 1000,
       totalInputBytes: 8000,
       totalOutputBytes: 8000,
-      maxRecoveryBytes: recoveryBytes,
     },
     concurrentOperations: 1,
     queuedOperations: 0,
   }).register(backend.registration);
   if (alternate !== undefined) registry = registry.register(alternate.registration);
-  const factory = new RecordingExecutionFactory(limits);
+  const factory = new RecordingHistoryFactory(limits);
   const repository = draftingRepository();
   const builder = BoundedContext.singleTenant("AiSupport")
     .withAi(registry)
@@ -459,7 +439,7 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
         receivedBytes: 64,
         response: create(GenerationResponseSchema, {
           outcome: AiOutcome.TOOL_REQUESTED,
-          toolCalls: [{ providerCallId: "model-call-1", toolName: "tool_0", argumentsJson: "{}" }],
+          toolCalls: [{ providerCallId: "model-call-1", toolName: "lookup", argumentsJson: "{}" }],
         }),
       });
       sequence.push("model-proposal");
@@ -515,14 +495,13 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
       deadlineMs: 3_000,
       totalInputBytes: 16_384,
       totalOutputBytes: 16_384,
-      maxRecoveryBytes: 32_768,
     },
     concurrentOperations: 1,
     queuedOperations: 0,
   })
     .register(registration)
     .registerTools(tools);
-  const factory = new RecordingExecutionFactory();
+  const factory = new RecordingHistoryFactory();
   const repository = draftingRepository();
   const context = await BoundedContext.singleTenant("AiToolSupport")
     .withAi(registry)
@@ -539,8 +518,8 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
 }
 
 describe("Agent scripted execution through BlackBox", () => {
-  it("keeps a saved result when MCP cleanup fails and records a safe diagnostic", async () => {
-    const { blackBox, factory } = await configuredToolBox("throw");
+  it("reports a live failure when MCP cleanup fails", async () => {
+    const { blackBox } = await configuredToolBox("throw");
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     try {
       const posted = await blackBox
@@ -550,23 +529,19 @@ describe("Agent scripted execution through BlackBox", () => {
           create(DraftSupportReplySchema, { agent: id, question: "Use knowledge" }),
         );
       expect(posted.kind).toBe("ok");
-      await blackBox.eventually(
-        () => blackBox.assertEvents(),
-        (events) => events.length === 1,
+      const failure = await blackBox.eventually(
+        () => DraftingAgent.failure,
+        (value) => value instanceof Error,
       );
-      const record = await factory.readLast?.();
-      const operation = record?.journal.find((entry) => entry.evidence.case === "operation");
-      expect(operation?.evidence.case).toBe("operation");
-      if (operation?.evidence.case !== "operation") throw new Error("Expected saved operation.");
-      expect(operation.evidence.value.result.case).toBe("admittedOutput");
-      expect(operation.evidence.value.diagnostics).toHaveLength(1);
+      expect(String(failure)).toContain("MCP session close failed");
+      expect(blackBox.assertEvents()).toEqual([]);
     } finally {
       await blackBox.close();
     }
   });
 
-  it("keeps a saved result when MCP cleanup never settles", async () => {
-    const { blackBox, factory } = await configuredToolBox("never");
+  it("bounds a live failure when MCP cleanup never settles", async () => {
+    const { blackBox } = await configuredToolBox("never");
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-48" });
     try {
       const posted = await blackBox
@@ -576,16 +551,12 @@ describe("Agent scripted execution through BlackBox", () => {
           create(DraftSupportReplySchema, { agent: id, question: "Use knowledge" }),
         );
       expect(posted.kind).toBe("ok");
-      await blackBox.eventually(
-        () => blackBox.assertEvents(),
-        (events) => events.length === 1,
+      const failure = await blackBox.eventually(
+        () => DraftingAgent.failure,
+        (value) => value instanceof Error,
       );
-      const record = await factory.readLast?.();
-      const operation = record?.journal.find((entry) => entry.evidence.case === "operation");
-      expect(operation?.evidence.case).toBe("operation");
-      if (operation?.evidence.case !== "operation") throw new Error("Expected saved operation.");
-      expect(operation.evidence.value.result.case).toBe("admittedOutput");
-      expect(operation.evidence.value.diagnostics).toHaveLength(1);
+      expect(String(failure)).toContain("MCP session close failed");
+      expect(blackBox.assertEvents()).toEqual([]);
     } finally {
       await blackBox.close();
     }
@@ -602,7 +573,7 @@ describe("Agent scripted execution through BlackBox", () => {
       .respondWith(
         create(ProposedSupportReplySchema, { reply: "I inspected the ticket history." }),
       );
-    const { blackBox, factory, repository } = await configuredBox(backend);
+    const { blackBox, repository } = await configuredBox(backend);
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     try {
       const posted = await blackBox
@@ -617,9 +588,7 @@ describe("Agent scripted execution through BlackBox", () => {
         (events) => events.length === 1,
       );
       expect(DraftingAgent.historyReadCount).toBeGreaterThan(0);
-      const retained = await factory.readLast?.();
-      const read = retained?.journal.find((entry) => entry.evidence.case === "read");
-      expect(read?.evidence.case).toBe("read");
+
       const history = await blackBox.readAgentHistory(repository, id, { pageSize: 10 });
       expect(history.items.some((entry) => entry.item.case === "systemEvent")).toBe(true);
     } finally {
@@ -639,7 +608,7 @@ describe("Agent scripted execution through BlackBox", () => {
         reply: "Project is ready.",
       }),
     );
-    const { blackBox, factory } = await configuredBox(backend, {}, undefined, true);
+    const { blackBox } = await configuredBox(backend, {}, undefined, true);
     try {
       expect(
         (
@@ -675,19 +644,7 @@ describe("Agent scripted execution through BlackBox", () => {
         (events) => events.length === 2,
       );
       expect(DraftingAgent.projectionReadCount).toBe(1);
-      const saved = await factory.readLast?.();
-      const read = saved?.journal.find((entry) => entry.evidence.case === "read");
-      if (read?.evidence.case !== "read") throw new Error("Expected a saved Projection read.");
-      expect(read.evidence.value.readName).toBe("query:0");
-      const request = read.evidence.value.request;
-      const result = read.evidence.value.result;
-      if (request === undefined || result === undefined)
-        throw new Error("Expected typed saved Projection request and result.");
-      expect(AnyPacker.tryUnpack(request, QuerySchema)?.target?.type).toBeDefined();
-      const states = AnyPacker.tryUnpack(result, AgentProjectionReadResultSchema)?.states;
-      expect(states).toHaveLength(1);
-      if (states?.[0] === undefined) throw new Error("Expected the saved Project overview.");
-      expect(AnyPacker.tryUnpack(states[0], ProjectOverviewSchema)?.name).toBe("Support project");
+      expect(ProjectOverview.applied).toBe(1);
       backend.assertSatisfied();
     } finally {
       await blackBox.close();
@@ -726,13 +683,9 @@ describe("Agent scripted execution through BlackBox", () => {
       );
       expect(DraftingAgent.calls).toBe(1);
       expect(backend.requests()).toHaveLength(2);
-      const saved = await factory.readLast?.();
-      expect(saved?.journal.map((entry) => entry.evidence.case)).toEqual([
-        "operation",
-        "attempt",
-        "operation",
-        "attempt",
-      ]);
+      expect(
+        factory.historyWrites.filter((entry) => entry.item.case === "conversationRecord").length,
+      ).toBeGreaterThanOrEqual(2);
       backend.assertSatisfied();
     } finally {
       await blackBox.close();
@@ -752,7 +705,7 @@ describe("Agent scripted execution through BlackBox", () => {
     alternate
       .forModel(proposal)
       .respondWith(create(ProposedSupportReplySchema, { reply: "Second reply" }));
-    const { blackBox, factory, repository } = await configuredBox(primary, {}, alternate);
+    const { blackBox, repository } = await configuredBox(primary, {}, alternate);
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     try {
       const first = await blackBox
@@ -773,8 +726,6 @@ describe("Agent scripted execution through BlackBox", () => {
         });
       expect(primary.requests()).toHaveLength(1);
       expect(alternate.requests()).toHaveLength(0);
-      const afterFirst = await factory.readLast?.();
-      expect(afterFirst?.completion?.preferences[0]?.selection.case).toBe("model");
       const preferenceHistory = await blackBox.readAgentHistory(repository, agent, {
         pageSize: 20,
       });
@@ -817,7 +768,7 @@ describe("Agent scripted execution through BlackBox", () => {
 
   it("journals a model-proposed MCP lookup before returning the saved Agent result", async () => {
     DraftingAgent.calls = 0;
-    const { blackBox, factory, repository, sequence } = await configuredToolBox();
+    const { blackBox, repository, sequence } = await configuredToolBox();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     try {
       const posted = await blackBox
@@ -838,15 +789,6 @@ describe("Agent scripted execution through BlackBox", () => {
       );
       expect(DraftingAgent.calls).toBe(1);
       expect(sequence).toEqual(["model-proposal", "tool-call"]);
-      const saved = await factory.readLast?.();
-      expect(saved?.journal.map((entry) => entry.evidence.case)).toEqual([
-        "operation",
-        "protocol",
-        "attempt",
-        "tool",
-        "protocol",
-        "attempt",
-      ]);
       const page = await blackBox.readAgentHistory(repository, id, { pageSize: 20 });
       const conversation = page.items.filter((entry) => entry.item.case === "conversationRecord");
       expect(conversation).toHaveLength(6);
@@ -935,7 +877,7 @@ describe("Agent scripted execution through BlackBox", () => {
         reply: "Your order is on its way.",
       }),
     );
-    const { blackBox, context, factory, repository } = await configuredBox(backend);
+    const { blackBox, context, repository } = await configuredBox(backend);
     try {
       const posted = await postDraft(blackBox);
       expect(posted.kind).toBe("ok");
@@ -960,25 +902,11 @@ describe("Agent scripted execution through BlackBox", () => {
       expect(DraftingAgent.calls).toBe(1);
       expect(backend.requests()).toHaveLength(1);
       expect(backend.requests()[0]?.call).toBe("draft");
-      const saved = await factory.readLast?.();
-      expect(saved?.journal.map((entry) => entry.evidence.case)).toEqual(["operation", "attempt"]);
-      expect(saved?.journal[0]?.evidence.case).toBe("operation");
-      expect(saved?.journal[1]?.evidence.case).toBe("attempt");
-      if (saved?.journal[0]?.evidence.case === "operation") {
-        expect(saved.journal[0].evidence.value.callName).toBe("draft");
-        expect(saved.journal[0].evidence.value.result.case).toBe("admittedOutput");
-        const deadline = saved.journal[0].evidence.value.deadline;
-        expect(deadline).toBeDefined();
-        if (deadline !== undefined && saved.started?.deadline !== undefined)
-          expect(deadline.seconds <= saved.started.deadline.seconds).toBe(true);
-      }
-      if (saved?.journal[1]?.evidence.case === "attempt") {
-        expect(saved.journal[1].evidence.value.response.case).toBe("generationResponse");
-        expect(saved.journal[1].evidence.value.inputBytes).toBeGreaterThan(0n);
-      }
-      const exchanges = factory.historyWrites.filter(
-        (entry) => entry.item.case === "conversationRecord",
-      );
+      const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
+      const retained = await blackBox.readAgentHistory(repository, agentId, { pageSize: 10 });
+      const exchanges = retained.items
+        .filter((entry) => entry.item.case === "conversationRecord")
+        .reverse();
       expect(exchanges).toHaveLength(2);
       expect(
         exchanges.map(
@@ -1002,8 +930,6 @@ describe("Agent scripted execution through BlackBox", () => {
         expect(
           AnyPacker.tryUnpack(exchanges[1].item.value.content, GenerationResponseSchema),
         ).toBeDefined();
-      const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
-      const retained = await blackBox.readAgentHistory(repository, agentId, { pageSize: 10 });
       const issued = context.registeredRepositories()[0];
       if (issued === undefined) throw new Error("Expected a registered Agent view.");
       expect((await agentHistoryView(context, issued, agentId, { pageSize: 10 })).items).toEqual(
@@ -1063,7 +989,7 @@ describe("Agent scripted execution through BlackBox", () => {
       kind: "generation",
     });
     backend.forModel(proposal).respondWithText("not JSON");
-    const { blackBox, factory, repository } = await configuredBox(backend);
+    const { blackBox, repository } = await configuredBox(backend);
     try {
       expect((await postDraft(blackBox)).kind).toBe("ok");
       const events = await blackBox
@@ -1082,25 +1008,6 @@ describe("Agent scripted execution through BlackBox", () => {
       );
       expect(DraftingAgent.calls).toBe(1);
       expect(backend.requests()).toHaveLength(1);
-      const saved = await factory.readLast?.();
-      if (saved?.journal[0]?.evidence.case !== "operation")
-        throw new Error("Expected a saved named operation.");
-      expect(saved.journal[0].evidence.value.result.case).toBe("failure");
-      const operation = saved.journal[0].evidence.value;
-      const failedAttempt = saved.journal.find(
-        (entry) =>
-          entry.evidence.case === "attempt" &&
-          entry.evidence.value.response.case === "generationResponse",
-      );
-      if (
-        failedAttempt?.evidence.case !== "attempt" ||
-        failedAttempt.evidence.value.response.case !== "generationResponse"
-      )
-        throw new Error("Expected a saved failed model response.");
-      expect(operation.diagnostics).toHaveLength(1);
-      expect(operation.diagnostics[0]?.diagnostic?.value).toBe(
-        failedAttempt.evidence.value.response.value.diagnosticId?.value,
-      );
       const history = await blackBox.readAgentHistory(
         repository,
         create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" }),
@@ -1119,6 +1026,15 @@ describe("Agent scripted execution through BlackBox", () => {
       expect(system.map((event) => event.message?.typeUrl)).toContain(
         `type.spine.io/${AgentAiOperationFailedSchema.typeName}`,
       );
+      const failure = system
+        .flatMap((event) =>
+          event.message === undefined
+            ? []
+            : [AnyPacker.tryUnpack(event.message, AgentAiOperationFailedSchema)],
+        )
+        .find(Boolean);
+      expect(failure?.diagnosticId?.value).toBeTruthy();
+      expect(failure?.attempt?.value).toBeTruthy();
       expect(
         system.every(
           (event, index) =>
@@ -1131,105 +1047,8 @@ describe("Agent scripted execution through BlackBox", () => {
     }
   });
 
-  it("keeps a thrown handler draft pending until its saved deadline terminates it", async () => {
+  it.each([128])("rejects a model fetch when %i-byte history cannot fit", async (maxBytes) => {
     DraftingAgent.calls = 0;
-    const backend = AiTestBackend.create({
-      ref: ModelRef.of("support-scripted", "v1"),
-      kind: "generation",
-    });
-    const { blackBox, factory, repository } = await configuredBox(backend);
-    let originalTime: ReturnType<typeof Time.setProvider> | undefined;
-    try {
-      expect(
-        (
-          await blackBox.asGuest().post(
-            DraftSupportReplySchema,
-            create(DraftSupportReplySchema, {
-              agent: create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" }),
-              question: "Throw transient",
-            }),
-          )
-        ).kind,
-      ).toBe("ok");
-      await blackBox.eventually(
-        () => DraftingAgent.calls,
-        (calls) => calls === 1,
-      );
-      const before = await factory.readLast?.();
-      expect(before?.status).toBe(AgentInvocationStatus.AGENT_INVOCATION_ACTIVE);
-      expect(before?.completion).toBeUndefined();
-      expect(blackBox.assertEvents()).toEqual([]);
-      const now = Time.currentTimeMillis();
-      originalTime = Time.setProvider({
-        currentTime: () =>
-          create(TimestampSchema, {
-            seconds: BigInt(Math.trunc((now + 31_000) / 1_000)),
-            nanos: ((now + 31_000) % 1_000) * 1_000_000,
-          }),
-      });
-      await blackBox.eventually(
-        () => factory.readLast?.(),
-        (record) => record?.status === AgentInvocationStatus.AGENT_INVOCATION_TERMINATED,
-      );
-      expect(blackBox.assertEvents()).toEqual([]);
-      const history = await blackBox.readAgentHistory(
-        repository,
-        create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" }),
-        { pageSize: 20 },
-      );
-      const termination = history.items.flatMap((entry) =>
-        entry.item.case === "systemEvent" &&
-        entry.item.value.message?.typeUrl ===
-          `type.spine.io/${AgentInvocationTerminatedSchema.typeName}`
-          ? [entry.item.value]
-          : [],
-      );
-      expect(termination).toHaveLength(1);
-      const event = termination[0];
-      if (event?.id === undefined || event.message === undefined)
-        throw new Error("Expected a termination System Event.");
-      expect(AnyPacker.tryUnpack(event.message, AgentInvocationTerminatedSchema)?.reason).toBe(
-        "DEADLINE_EXCEEDED",
-      );
-      const [copy] = await blackBox.readSystemEvents([event.id]);
-      if (copy === undefined) throw new Error("Expected the persisted System copy.");
-      expect(equals(EventSchema, copy, event)).toBe(true);
-    } finally {
-      if (originalTime) Time.setProvider(originalTime);
-      await blackBox.close();
-    }
-  }, 15_000);
-
-  it.each([128, 6_000])(
-    "rejects a model fetch when %i-byte history cannot fit",
-    async (maxBytes) => {
-      DraftingAgent.calls = 0;
-      DraftingAgent.failure = undefined;
-      const backend = AiTestBackend.create({
-        ref: ModelRef.of("support-scripted", "v1"),
-        kind: "generation",
-      });
-      backend.forModel(proposal).respondWith(
-        create(ProposedSupportReplySchema, {
-          reply: "A reply that must not be requested.",
-        }),
-      );
-      const { blackBox } = await configuredBox(backend, { historyRecordBytes: maxBytes });
-      try {
-        expect((await postDraft(blackBox)).kind).toBe("ok");
-        const failure = await blackBox.eventually(
-          () => DraftingAgent.failure,
-          (value) => value instanceof Error,
-        );
-        expect(String(failure)).toContain("history");
-        expect(backend.requests()).toHaveLength(0);
-      } finally {
-        await blackBox.close();
-      }
-    },
-  );
-
-  it("rejects model dispatch when credited evidence cannot fit recovery bytes", async () => {
     DraftingAgent.failure = undefined;
     const backend = AiTestBackend.create({
       ref: ModelRef.of("support-scripted", "v1"),
@@ -1237,28 +1056,24 @@ describe("Agent scripted execution through BlackBox", () => {
     });
     backend.forModel(proposal).respondWith(
       create(ProposedSupportReplySchema, {
-        reply: "Never fetched",
+        reply: "A reply that must not be requested.",
       }),
     );
-    const { blackBox } = await configuredBox(backend, {}, undefined, false, false, 8_000);
+    const { blackBox } = await configuredBox(backend, { historyRecordBytes: maxBytes });
     try {
       expect((await postDraft(blackBox)).kind).toBe("ok");
       const failure = await blackBox.eventually(
         () => DraftingAgent.failure,
         (value) => value instanceof Error,
       );
-      expect(String(failure)).toContain("recovery bytes");
+      expect(String(failure)).toContain("history");
       expect(backend.requests()).toHaveLength(0);
     } finally {
       await blackBox.close();
     }
   });
 
-  it.each([
-    [{ executionRecordBytes: 6_000 }, "record"],
-    [{ executionHeadBytes: 64 }, "head"],
-    [{ transactionPayloadBytes: 8_000 }, "transaction"],
-  ] as const)(
+  it.each([[{ transactionPayloadBytes: 128 }, "group"]] as const)(
     "rejects before provider fetch when %s capacity is insufficient",
     async (capacity, reason) => {
       DraftingAgent.failure = undefined;

@@ -209,6 +209,8 @@ describe("LocalEntityInbox", () => {
     });
     const readMessage = vi.fn().mockResolvedValue(undefined);
     const delivery = {
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
       inbox: {
         receive: vi
           .fn()
@@ -249,6 +251,8 @@ describe("LocalEntityInbox", () => {
       },
     });
     const delivery = {
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
       inbox: {
         receive: () => Promise.resolve({ outcome: "WRITTEN", message: persisted }),
         readMessage: () => Promise.resolve(undefined),
@@ -274,6 +278,8 @@ describe("LocalEntityInbox", () => {
     const persisted = writtenResult(input, 1n).message;
     const failure = new Error("exact acknowledgement failed");
     const delivery = {
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
       inbox: {
         receive: () => Promise.resolve({ outcome: "WRITTEN", message: persisted }),
         readMessage: () => Promise.resolve(undefined),
@@ -335,13 +341,12 @@ describe("LocalEntityInbox", () => {
         ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
       ),
     ).rejects.toBe(drainFailure);
-    expect(replayed).toEqual(["first", "first"]);
+    expect(replayed).toEqual(["first", "second"]);
     expect(monitor).not.toHaveBeenCalled();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toEqual([
       expect.objectContaining({ signalId: "signal-first", status: "TO_DELIVER" }),
-      expect.objectContaining({ signalId: "signal-second", status: "TO_DELIVER" }),
     ]);
   });
 
@@ -404,8 +409,15 @@ describe("LocalEntityInbox", () => {
     await expect(
       inbox.receive(delivery, processInput(targetTypeUrl, "routed"), tenant("tenant-a")),
     ).resolves.toBeDefined();
-    expect(replayed).toEqual(["admitted", "buffered-a", "buffered-b"]);
+    expect(replayed).toEqual(["admitted"]);
     expect(routed).toHaveLength(2);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([
+      { signalId: "signal-buffered-a" },
+      { signalId: "signal-buffered-b" },
+      { signalId: "signal-routed" },
+    ]);
   });
 
   it("emits readiness after persistence before exact drain settles", async () => {
@@ -476,7 +488,11 @@ describe("LocalEntityInbox", () => {
       .fn()
       .mockResolvedValueOnce(writtenResult(firstInput, 1n))
       .mockRejectedValueOnce(new Error("second write rejected"));
-    const delivery = { inbox: { receive } } as unknown as Delivery;
+    const delivery = {
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox: { receive },
+    } as unknown as Delivery;
     const ready: unknown[] = [];
     const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     inbox.register({
@@ -633,6 +649,8 @@ describe("LocalEntityInbox", () => {
     const ready: unknown[] = [];
     const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const rejectedDelivery = {
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
       inbox: { receive: () => Promise.reject(new Error("write rejected")) },
     } as unknown as Delivery;
     const input = {
@@ -648,6 +666,8 @@ describe("LocalEntityInbox", () => {
 
     const duplicate = writtenResult(input, 1n).message;
     const duplicateDelivery = {
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
       inbox: {
         receive: () => Promise.resolve({ outcome: "DUPLICATE", message: duplicate }),
         readMessage: () => Promise.resolve({ ...duplicate, status: "DELIVERED" }),
@@ -807,6 +827,7 @@ describe("LocalEntityInbox", () => {
     });
     expect(delivered.signal).toBeDefined();
     expect(delivered.keepUntil).toBeUndefined();
+    await delivery.whenIdle();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
     ).resolves.toEqual([]);
@@ -841,6 +862,7 @@ describe("LocalEntityInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
     });
+    await delivery.whenIdle();
     await expect(delivery.inbox.readMessage(first.id)).resolves.toBeUndefined();
     await expect(delivery.inbox.readMessage(second.id)).resolves.toBeUndefined();
   });
@@ -907,6 +929,7 @@ describe("LocalEntityInbox", () => {
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
     });
+    await delivery.whenIdle();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
     ).resolves.toEqual([]);
@@ -964,6 +987,7 @@ describe("LocalEntityInbox", () => {
     expect(duplicateMessage.id).toEqual(firstMessage.id);
     expect(seen).toHaveLength(1);
     expect(followUps).toBe(1);
+    await delivery.whenIdle();
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
@@ -1037,6 +1061,7 @@ describe("LocalEntityInbox", () => {
 
     expect(duplicateMessages.map(({ id }) => id)).toEqual(firstMessages.map(({ id }) => id));
     expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
+    await delivery.whenIdle();
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
@@ -1114,6 +1139,7 @@ describe("LocalEntityInbox", () => {
 
     expect(duplicateMessage.id).toEqual(batchMessages[1]?.id);
     expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
+    await delivery.whenIdle();
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
@@ -1193,6 +1219,7 @@ describe("LocalEntityInbox", () => {
 
     expect(batchMessages[0]?.id).toEqual(singleMessage.id);
     expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
+    await delivery.whenIdle();
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
@@ -1201,7 +1228,9 @@ describe("LocalEntityInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalEntityInbox("Tasks");
+    const readiness = new DeliveryReadiness();
+    const inbox = new LocalEntityInbox("Tasks", readiness);
+    readiness.configureDirect((message) => inbox.replay(message));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
@@ -1246,6 +1275,7 @@ describe("LocalEntityInbox", () => {
       "Entity Inbox delivery did not reach the target row before the local drain finished.",
     );
 
+    await delivery.whenIdle();
     expect(seen).toHaveLength(1);
     const pending = await delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] });
     const delivered = await delivery.inbox.read(shard, { statuses: ["DELIVERED"] });
@@ -1270,7 +1300,9 @@ describe("LocalEntityInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalEntityInbox("Tasks");
+    const readiness = new DeliveryReadiness();
+    const inbox = new LocalEntityInbox("Tasks", readiness);
+    readiness.configureDirect((message) => inbox.replay(message));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const unrelatedProcessManagerTypeUrl = "type.example.dev/Tasks.OtherProcessManager";
     const shard = ShardIndex.single();
@@ -1296,19 +1328,6 @@ describe("LocalEntityInbox", () => {
 
     await delivery.inbox.receive({
       inboxId: {
-        targetId: typedTarget("projection-0"),
-        targetTypeUrl: "type.example.dev/Tasks.Projection",
-      },
-      signalId: "event-0",
-      signal: eventSignal(),
-      label: "UPDATE_SUBSCRIBER",
-      status: "TO_DELIVER",
-      shard,
-      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
-      version: 1n,
-    });
-    await delivery.inbox.receive({
-      inboxId: {
         targetId: typedTarget("pm-0"),
         targetTypeUrl: unrelatedProcessManagerTypeUrl,
       },
@@ -1318,7 +1337,7 @@ describe("LocalEntityInbox", () => {
       status: "TO_DELIVER",
       shard,
       whenReceived: timestampFromDate(new Date("2026-07-08T09:00:01.000Z")),
-      version: 2n,
+      version: 1n,
     });
 
     await inbox.receive(delivery, {
@@ -1329,6 +1348,7 @@ describe("LocalEntityInbox", () => {
       status: "TO_DELIVER",
     });
 
+    await delivery.whenIdle();
     expect(seen).toHaveLength(1);
     expect(unrelatedSeen).toHaveLength(1);
     expect(seen[0]).toMatchObject({
@@ -1336,13 +1356,7 @@ describe("LocalEntityInbox", () => {
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
     });
-    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([
-      expect.objectContaining({
-        signalId: "event-0",
-        label: "UPDATE_SUBSCRIBER",
-        status: "TO_DELIVER",
-      }),
-    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
@@ -1376,7 +1390,7 @@ describe("LocalEntityInbox", () => {
     ).resolves.toMatchObject([{ signalId: "signal-2", status: "TO_DELIVER" }]);
   });
 
-  it("preserves a primitive replay infrastructure failure and pending row", async () => {
+  it("preserves a primitive replay failure as the cause and retains the pending row", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1389,7 +1403,7 @@ describe("LocalEntityInbox", () => {
       targetTypeUrl,
       labels: processManagerLabels,
       replay() {
-        // The primitive rejection is intentional: managed replay must preserve its identity.
+        // The primitive rejection is intentional: managed replay retains it as the cause.
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         return Promise.reject(reason);
       },
@@ -1403,7 +1417,10 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       }),
-    ).rejects.toBe(reason);
+    ).rejects.toMatchObject({
+      message: "Entity Inbox replay failed.",
+      cause: reason,
+    });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([{ signalId: "signal-3", status: "TO_DELIVER" }]);
@@ -1446,6 +1463,7 @@ describe("LocalEntityInbox", () => {
     }
 
     await expect(inbox.receive(delivery, input)).resolves.toBeDefined();
+    await delivery.whenIdle();
 
     const reacquired = await delivery.shards.pickUp(
       shard,

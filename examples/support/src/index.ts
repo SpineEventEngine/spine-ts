@@ -165,7 +165,6 @@ export const SupportContext: Readonly<{
       .persistSystemEvents()
       .add(SupportTicket)
       .add(SupportDraftAgent, {
-        agentCodeRevision: "support-draft-v1",
         ai: { models: [draftSupportReply] },
       })
       .add(SupportReview);

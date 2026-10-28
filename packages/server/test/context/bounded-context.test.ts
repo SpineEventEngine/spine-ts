@@ -39,6 +39,7 @@ import {
 } from "@spine-event-engine/proto";
 import {
   EventStore,
+  InMemoryStorageBackend,
   InMemoryStorageFactory,
   InMemoryRecordStorage,
   type RecordSpec,
@@ -966,7 +967,7 @@ describe("BoundedContext assembly", () => {
     expect(names).toEqual(["Task Ready dependency"]);
   });
 
-  it("drains accepted standalone-produced Commands when close starts immediately", async () => {
+  it("drains a produced Command when close starts before its bus dispatch", async () => {
     const commands: string[] = [];
     const registryRoot = createStandaloneGeneratedRegistryRoot([
       standaloneReceiver(
@@ -987,10 +988,68 @@ describe("BoundedContext assembly", () => {
       )
       .build();
 
-    await context.commandBus().post(createScheduleReviewTask("closing-command"));
-    await context.close();
+    let closing: Promise<void> | undefined;
+    const observer = boundedContextAccess.observeProducedSignals(context, {
+      onCommand: () => {
+        closing ??= context.close();
+      },
+    });
+    try {
+      await context.commandBus().post(createScheduleReviewTask("closing-command"));
+      await closing;
+    } finally {
+      observer.close();
+      await context.close();
+    }
 
     expect(commands).toHaveLength(1);
+  });
+
+  it("drains an ordinary Entity Command handed off before close", async () => {
+    const backend = new InMemoryStorageBackend();
+    const registryRoot = createStandaloneGeneratedRegistryRoot([
+      standaloneReceiver(
+        StandaloneCommander,
+        "command-substitution",
+        "substitute",
+        ScheduleReviewTaskSchema,
+        [AssignReviewTaskSchema],
+      ),
+      {
+        receiverKind: "entity",
+        receiverType: ReplayTaskAggregate,
+        ...aggregateReplayRegistry(ReplayTaskAggregate),
+      },
+    ]);
+    const build = () =>
+      BoundedContext.singleTenant("OrdinaryHandoffClose")
+        .withStorageFactory(new InMemoryStorageFactory(backend))
+        .withGeneratedRegistryRoot(registryRoot)
+        .addCommandDispatcher(new StandaloneCommander())
+        .add(ReplayTaskAggregate)
+        .build();
+    const first = await build();
+    let closing: Promise<void> | undefined;
+    const observer = boundedContextAccess.observeProducedSignals(first, {
+      onCommand: () => {
+        closing ??= first.close();
+      },
+    });
+    try {
+      await first.commandBus().post(createScheduleReviewTask("pending", "pending-task"));
+      await closing;
+      const reopened = await build();
+      try {
+        expect((await reopened.stand().read(ProjectStateSchema, "pending-task"))?.name).toBe(
+          "Task Ready",
+        );
+      } finally {
+        await reopened.close();
+      }
+    } finally {
+      observer.close();
+      await first.close();
+    }
   });
 
   it("contains one standalone-produced Command failure without suppressing its later sibling", async () => {

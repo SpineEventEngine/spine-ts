@@ -52,7 +52,6 @@ import * as transportSchemas from "../generated/spine/server/transport/transport
 import * as nodeDiscoverySchemas from "../generated/spine/deployment/node_discovery_pb.js";
 import * as systemEventSchemas from "../generated/spine/system/server/entity_log_events_pb.js";
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
-import * as agentExecutionSchemas from "../generated/spine/server/agent/execution_record_pb.js";
 import * as agentHistorySchemas from "../generated/spine/server/agent/history_record_pb.js";
 import * as agentContentSchemas from "../generated/spine/ts/agent/content_pb.js";
 import * as agentHistoryPublicSchemas from "../generated/spine/ts/agent/history_pb.js";
@@ -169,7 +168,6 @@ describe("spineProtoModule", () => {
       ...schemaNames(nodeDiscoverySchemas),
       ...schemaNames(systemEventSchemas),
       ...schemaNames(systemTypeSchemas),
-      ...schemaNames(agentExecutionSchemas),
       ...schemaNames(agentHistorySchemas),
       ...schemaNames(agentContentSchemas),
       ...schemaNames(agentHistoryPublicSchemas),

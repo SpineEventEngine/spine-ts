@@ -88,11 +88,13 @@ describe("Agent history binding", () => {
       "Agent history is available only from repository execution.",
     );
     expect(() =>
-      AgentHistoryReads.withJournal(agent, async (_scope, _view, _request, live) => live()),
+      AgentHistoryReads.withReadInterceptor(agent, async (_scope, _request, live) => live()),
     ).toThrow("Agent history is available only from repository execution.");
     let readCount = 0;
     const storage: AgentHistoryStorage<SupportReplyAgentId> = {
+      capacity: {},
       append: () => Promise.resolve(),
+      appendAll: () => Promise.resolve(),
       read: (request) => {
         expect(request.entityId).toEqual(id);
         expect(["full", "conversation"]).toContain(request.view.kind);
@@ -242,7 +244,7 @@ describe("Agent history binding", () => {
     storage.close();
   });
 
-  it("reuses a journaled page without asking live storage again", async () => {
+  it("reuses a intercepted page without asking live storage again", async () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-replay" });
     const agent = new ReadingAgent({
       id,
@@ -277,7 +279,9 @@ describe("Agent history binding", () => {
       entityId: id,
       scope,
       storage: {
+        capacity: {},
         append: () => Promise.resolve(),
+        appendAll: () => Promise.resolve(),
         read: () => Promise.resolve(saved),
         close: () => undefined,
       },
@@ -289,22 +293,23 @@ describe("Agent history binding", () => {
       entityId: id,
       scope,
       storage: {
+        capacity: {},
         append: () => Promise.resolve(),
+        appendAll: () => Promise.resolve(),
         read: () => {
           liveReads += 1;
-          return Promise.reject(new Error("Live history changed during recovery."));
+          return Promise.resolve(saved);
         },
         close: () => undefined,
       },
-      journal: (seenScope, view, request) => {
+      interceptRead: (seenScope, request, live) => {
         expect(seenScope).toEqual(scope);
-        expect(view).toEqual({ kind: "full" });
         expect(request).toEqual({ pageSize: 1 });
-        return Promise.resolve(saved);
+        return live();
       },
     });
     expect(await agent.readFull({ pageSize: 1 })).toEqual(original);
-    expect(liveReads).toBe(0);
+    expect(liveReads).toBe(1);
   });
 
   it("accepts a valid cursor containing long typed identifiers", async () => {
@@ -337,7 +342,9 @@ describe("Agent history binding", () => {
       },
       maxBytes: 300_000,
       storage: {
+        capacity: {},
         append: () => Promise.resolve(),
+        appendAll: () => Promise.resolve(),
         read: (request) =>
           Promise.resolve(
             request.after === undefined
@@ -528,7 +535,9 @@ describe("Agent history binding", () => {
       version: create(VersionSchema),
     });
     const storage: AgentHistoryStorage<SupportReplyAgentId> = {
+      capacity: {},
       append: () => Promise.resolve(),
+      appendAll: () => Promise.resolve(),
       read: () => Promise.resolve({ entries: [], hasMore: true }),
       close: () => undefined,
     };
@@ -563,7 +572,13 @@ describe("Agent history binding", () => {
         repository: SupportReplyAgentStateSchema.typeName,
         entity: id.ticketNumber,
       },
-      storage: { append: () => Promise.resolve(), read, close: () => undefined },
+      storage: {
+        capacity: {},
+        append: () => Promise.resolve(),
+        appendAll: () => Promise.resolve(),
+        read,
+        close: () => undefined,
+      },
     });
     await agent.readFull({ pageSize: 1 });
     expect(read).toHaveBeenCalledWith({
@@ -593,7 +608,9 @@ describe("Agent history binding", () => {
         entity: id.ticketNumber,
       },
       storage: {
+        capacity: {},
         append: () => Promise.resolve(),
+        appendAll: () => Promise.resolve(),
         read: () => Promise.resolve({ entries: [wrong], hasMore: false }),
         close: () => undefined,
       },
@@ -611,7 +628,9 @@ describe("Agent history binding", () => {
         entity: id.ticketNumber,
       },
       storage: {
+        capacity: {},
         append: () => Promise.resolve(),
+        appendAll: () => Promise.resolve(),
         read: () =>
           Promise.resolve({
             entries: [

@@ -110,7 +110,7 @@ export class DeliveryReadiness {
   /**
    * Current readiness transition phase.
    */
-  #mode: "direct" | "transition" | "routed" | "failed" = "direct";
+  #mode: "direct" | "transition" | "routed" | "failed" | "closed" = "direct";
 
   /**
    * Scopes configured for the transfer.
@@ -131,6 +131,92 @@ export class DeliveryReadiness {
    * Remote ports installed after a successful transfer.
    */
   #ports: EnvironmentDeliveryPorts | undefined;
+
+  /**
+   * Direct and routed delivery instances retained for one physical scope.
+   */
+  readonly #deliveries = new Map<string, Delivery>();
+
+  readonly #factoryKeys = new WeakMap<object, number>();
+
+  #nextFactoryKey = 0;
+
+  readonly #deferred = new Map<string, DeliveryReady>();
+
+  #closeAttempt: Promise<void> | undefined;
+
+  /**
+   * Stops direct routes and waits for every retained shard session.
+   *
+   * @returns Completion after admitted work and retained cleanup settle.
+   */
+  close(): Promise<void> {
+    if (this.#closeAttempt !== undefined) return this.#closeAttempt;
+    this.#mode = "closed";
+    this.#deferred.clear();
+    const attempts = [...this.#deliveries.values()].map((delivery) => delivery.close());
+    this.#closeAttempt = Promise.allSettled(attempts).then((results) => {
+      const errors = results.flatMap((result): unknown[] =>
+        result.status === "rejected" ? [result.reason as unknown] : [],
+      );
+      if (errors.length > 0) throw new AggregateError(errors, "Delivery readiness close failed.");
+    });
+    return this.#closeAttempt;
+  }
+
+  /**
+   * Stores one route hint without retaining the failed input or callback.
+   *
+   * @param ready Ready Inbox route being notified.
+   */
+  defer(ready: DeliveryReady): void {
+    this.#deferred.set(InboxHandoff.readyKey(ready), InboxHandoff.cloneReady(ready));
+  }
+
+  /**
+   * Checks every deferred route when shared Agent capacity becomes available.
+   */
+  retryDeferred(): void {
+    const ready = [...this.#deferred.values()];
+    this.#deferred.clear();
+    for (const route of ready) this.notify(route);
+  }
+
+  #directReplay: ((message: InboxMessage, tenantId?: TenantId) => Promise<void>) | undefined;
+
+  /**
+   * Sets the complete Entity/projection direct replay before input admission.
+   *
+   * @param onReplay Callback that replays a ready Inbox route.
+   */
+  configureDirect(onReplay: (message: InboxMessage, tenantId?: TenantId) => Promise<void>): void {
+    this.#directReplay = onReplay;
+  }
+
+  /**
+   * Checks one existing durable route after its eligibility changes.
+   *
+   * @param ready Ready Inbox route being notified.
+   */
+  notify(ready: DeliveryReady): void {
+    if (this.#mode === "transition") {
+      const key = InboxHandoff.readyKey(ready);
+      if (this.#configured.has(key)) this.#buffered.set(key, InboxHandoff.cloneReady(ready));
+      else this.#invalidTransition = true;
+      return;
+    }
+    if (this.#mode === "routed") {
+      this.#notify(ready);
+      return;
+    }
+    if (this.#mode !== "direct") return;
+    const key =
+      ready.tenantId === undefined
+        ? TenantBoundary.single.key
+        : TenantBoundary.from(ready.tenantId).key;
+    for (const delivery of this.#deliveries.values())
+      if (TenantBoundary.of(delivery.context).key === key) delivery.wake(ready.shard);
+  }
 
   /**
    * Creates a readiness coordinator.
@@ -199,17 +285,33 @@ export class DeliveryReadiness {
    * @internal
    */
   route(delivery: Delivery): Delivery {
+    const factory = this.#factoryKeys.get(delivery.storageFactory) ?? ++this.#nextFactoryKey;
+    this.#factoryKeys.set(delivery.storageFactory, factory);
+    const key = JSON.stringify([
+      factory,
+      delivery.context.name,
+      String(TenantBoundary.of(delivery.context).key),
+      delivery.node,
+    ]);
+    const retained = this.#deliveries.get(key);
+    if (retained !== undefined) return retained;
     const ports = this.#ports;
-    if (ports === undefined) return delivery;
-    return new Delivery({
-      context: delivery.context,
-      storageFactory: delivery.storageFactory,
-      strategy: delivery.strategy,
-      node: delivery.node,
-      pageSize: delivery.pageSize,
-      inbox: ports.inbox,
-      workRegistry: ports.workRegistry,
-    });
+    const selected =
+      ports === undefined
+        ? delivery
+        : new Delivery({
+            context: delivery.context,
+            storageFactory: delivery.storageFactory,
+            strategy: delivery.strategy,
+            node: delivery.node,
+            pageSize: delivery.pageSize,
+            inbox: ports.inbox,
+            workRegistry: ports.workRegistry,
+          });
+    if (ports === undefined && this.#directReplay !== undefined)
+      selected.setReplay((message) => this.#directReplay?.(message, selected.context.tenantId));
+    this.#deliveries.set(key, selected);
+    return selected;
   }
 
   /**
@@ -244,20 +346,28 @@ export class DeliveryReadiness {
     this.#invalidTransition = false;
     this.#mode = "transition";
     const admitted = [...this.#active];
-    return Promise.allSettled(admitted).then(() => {
-      if (this.#invalidTransition) {
-        this.#buffered.clear();
-        this.#mode = "failed";
-        throw new Error("Delivery readiness transition received an unconfigured scope.");
-      }
-      this.#onReady = onReady;
-      this.#ports = options.ports;
-      this.#mode = "routed";
-      for (const ready of this.#buffered.values()) {
-        this.#notify(ready);
-      }
+    return Promise.allSettled(admitted).then(() => this.#finishTransition(onReady, options.ports));
+  }
+
+  /**
+   * Drains direct sessions before activating routed readiness.
+   */
+  async #finishTransition(
+    onReady: OnDeliveryReady,
+    ports?: EnvironmentDeliveryPorts,
+  ): Promise<void> {
+    await Promise.all([...this.#deliveries.values()].map((delivery) => delivery.whenIdle()));
+    if (this.#invalidTransition) {
       this.#buffered.clear();
-    });
+      this.#mode = "failed";
+      throw new Error("Delivery readiness transition received an unconfigured scope.");
+    }
+    this.#onReady = onReady;
+    this.#ports = ports;
+    this.#mode = "routed";
+    this.#deliveries.clear();
+    for (const ready of this.#buffered.values()) this.#notify(ready);
+    this.#buffered.clear();
   }
 
   #directHandoff(): DeliveryHandoff {
@@ -561,20 +671,23 @@ export const InboxHandoff: Readonly<{
       options.received,
       InboxHandoff.drainInput(options),
     );
-    if (
-      direct.acknowledged ||
-      (await options.delivery.inbox.readMessage(options.received.id))?.status === "DELIVERED"
-    )
+    if (direct.outcome?.kind === "acknowledged") return "ACKNOWLEDGED";
+    if (direct.outcome?.kind === "deferred") return "RETRY";
+    if (direct.outcome?.kind === "failed")
+      throw InboxHandoff.replayFailure(direct.outcome.error, options.replayFailureMessage);
+    if (direct.acknowledged) return "ACKNOWLEDGED";
+    const run =
+      direct.run ?? (direct.outcome?.kind === "unresolved" ? direct.outcome.run : undefined);
+    if (run === undefined) return "RETRY";
+    if ((await options.delivery.inbox.readMessage(options.received.id))?.status === "DELIVERED")
       return "ACKNOWLEDGED";
-    const failure = direct.run.failures.find(({ message }) =>
+    const failure = run.failures.find(({ message }) =>
       InboxHandoff.sameDelivery(message, options.received),
     );
     if (failure !== undefined)
       throw InboxHandoff.replayFailure(failure.error, options.replayFailureMessage);
-    if (direct.run.status === "SKIPPED") throw new Error(options.skippedMessage);
-    return direct.run.accepted === 0 && direct.run.delivered === 0 && direct.run.failed === 0
-      ? "IDLE"
-      : "RETRY";
+    if (run.status === "SKIPPED") throw new Error(options.skippedMessage);
+    return run.accepted === 0 && run.delivered === 0 && run.failed === 0 ? "IDLE" : "RETRY";
   },
 
   drainInput(options: LocalInboxDrainOptions): Parameters<Delivery["drainMessage"]>[1] {

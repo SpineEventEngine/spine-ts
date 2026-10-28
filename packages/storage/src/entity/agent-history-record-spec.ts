@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, ScalarType } from "@bufbuild/protobuf";
+import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import {
   AgentHistoryRecordSchema,
@@ -49,6 +49,15 @@ interface AgentHistoryRecordLayout {
    * @returns Internal storage envelope.
    */
   record(stateType: string, agentKey: string, entry: AgentHistoryEntry): AgentHistoryRecord;
+
+  /**
+   * Calculates one complete persisted Agent audit envelope.
+   * @param stateType Generated Agent state type.
+   * @param agentKey Canonical Agent identifier.
+   * @param entry Original typed audit entry.
+   * @returns Full encoded AgentHistoryRecord bytes.
+   */
+  bytes(stateType: string, agentKey: string, entry: AgentHistoryEntry): number;
 
   /**
    * Encodes the immutable logical record identity.
@@ -133,6 +142,18 @@ export const AgentHistoryRecords: AgentHistoryRecordLayout = {
       scope: create(AgentStorageKeySchema, { stateType, agentKey }),
       entry,
     });
+  },
+
+  /**
+   * Calculates the byte size of a complete stored row including its scope and original entry.
+   *
+   * @param stateType Declared Agent state type.
+   * @param agentKey Canonical typed Agent identifier key.
+   * @param entry Complete original audit entry.
+   * @returns Serialized byte count of the full stored history row.
+   */
+  bytes(stateType: string, agentKey: string, entry: AgentHistoryEntry): number {
+    return toBinary(AgentHistoryRecordSchema, this.record(stateType, agentKey, entry)).length;
   },
 
   /**

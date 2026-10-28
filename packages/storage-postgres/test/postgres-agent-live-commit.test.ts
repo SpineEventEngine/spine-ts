@@ -32,7 +32,7 @@ import {
   type SupportReplyAgentState,
   SupportReplyAgentStateSchema,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
-import { entityInput } from "../../storage/test/entity/agent-execution-fixtures.js";
+import { entityInput } from "../../storage/test/entity/agent-live-fixtures.js";
 import { conversation } from "../../storage/test/entity/agent-history-fixtures.js";
 import { PostgresStorageFactory } from "../src/index.js";
 

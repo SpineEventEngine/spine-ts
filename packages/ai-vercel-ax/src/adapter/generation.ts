@@ -1469,6 +1469,7 @@ const runtimeFunctions = (request: AiBackendExecution, state: GenerationState) =
           providerCallId: next.providerCallId,
           server: tool.server,
           tool: tool.tool,
+          providerToolName: tool.modelName,
           argumentsJson: next.input,
         }),
       );

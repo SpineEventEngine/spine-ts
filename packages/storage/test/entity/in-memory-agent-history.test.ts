@@ -154,6 +154,32 @@ function event(id: string, time: Timestamp, system: boolean): AgentHistoryEntry 
 }
 
 describe("in-memory Agent history", () => {
+  it("appends a conversation and System audit group atomically", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = AgentHistoryStorageFactories.create(factory, scope);
+    const existing = conversation("conflict", "reply", occurredAt(2n));
+    const request = conversation("new-request", "reply", occurredAt(1n));
+    const changed = conversation("conflict", "reply", occurredAt(3n));
+    try {
+      await storage.append("T-history", existing);
+      await expect(storage.appendAll("T-history", [request, changed])).rejects.toThrow(/conflict/);
+      const afterFailure = await storage.read({
+        entityId: "T-history",
+        view: { kind: "full" },
+        count: 5,
+      });
+      expect(afterFailure.entries).toEqual([existing]);
+      const system = event("system-batch", occurredAt(4n), true);
+      await storage.appendAll("T-history", [request, system]);
+      await storage.appendAll("T-history", [request, system]);
+      await storage.appendAll("T-history", []);
+      const page = await storage.read({ entityId: "T-history", view: { kind: "full" }, count: 5 });
+      expect(page.entries).toHaveLength(3);
+    } finally {
+      storage.close();
+      await factory.close();
+    }
+  });
   it("passes reusable provider history conformance", async () => {
     const factory = new InMemoryStorageFactory();
     await AgentHistoryConformance.check({

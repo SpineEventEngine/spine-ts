@@ -340,42 +340,22 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
       "ok",
     );
     const agentRepository = context.getRepository(ReleaseNotesAgent);
-    let lastPhase = "unobserved";
-    const result = await box
-      .eventually(
-        async () => {
-          const events = box.assertEvents();
-          const requested = events.find(
-            (event) =>
-              event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema),
-          );
-          if (requested?.id) {
-            lastPhase =
-              (await agentRepository.agentExecution(id, requested.id, {})) ?? "unobserved";
-          }
-          return events.flatMap<
-            { kind: "staged"; staged: ReleaseNotesStaged } | { kind: "failed"; reason: string }
-          >((event) => {
-            const staged =
-              event.message && AnyPacker.tryUnpack(event.message, ReleaseNotesStagedSchema);
-            if (staged) return [{ kind: "staged" as const, staged }];
-            const failed =
-              event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationFailedSchema);
-            return failed ? [{ kind: "failed" as const, reason: failed.reason }] : [];
-          });
-        },
-        (events) => events.length > 0 || lastPhase === "terminated",
-      )
-      .catch((error: unknown) => {
-        throw new Error(
-          `Generation did not stage (phase=${lastPhase}, providerCalls=${String(providerBodies.length)}).`,
-          { cause: error },
-        );
-      });
-    if (result.length === 0)
-      throw new Error(
-        `Generation terminated without staging (providerCalls=${String(providerBodies.length)}).`,
-      );
+    const result = await box.eventually(
+      () => {
+        const events = box.assertEvents();
+        return events.flatMap<
+          { kind: "staged"; staged: ReleaseNotesStaged } | { kind: "failed"; reason: string }
+        >((event) => {
+          const staged =
+            event.message && AnyPacker.tryUnpack(event.message, ReleaseNotesStagedSchema);
+          if (staged) return [{ kind: "staged" as const, staged }];
+          const failed =
+            event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationFailedSchema);
+          return failed ? [{ kind: "failed" as const, reason: failed.reason }] : [];
+        });
+      },
+      (events) => events.length > 0,
+    );
     expect(result).toHaveLength(1);
     if (result[0]?.kind === "failed")
       throw new Error(`Generation failed with safe reason ${result[0].reason}.`);
@@ -397,9 +377,7 @@ it("uses the real Agent, plan Responses, and local Git tool before staging evide
           event.message && AnyPacker.tryUnpack(event.message, ReleaseGenerationRequestedSchema),
       );
     if (!requested?.id) throw new Error("Accepted generation Event was not recorded.");
-    const registeredAgent = context.getRepository(ReleaseNotesAgent);
-    expect(await registeredAgent.agentExecution(id, requested.id, {})).toBe("completed");
-    const registeredHistory = await registeredAgent
+    const registeredHistory = await agentRepository
       .agentHistory(id, {})
       .fullHistory({ pageSize: 40 });
     expect(registeredHistory.items.length).toBeGreaterThan(0);

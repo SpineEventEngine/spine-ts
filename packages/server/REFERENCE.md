@@ -677,9 +677,9 @@ start a new autonomous Entity loop.
 ### Configuration
 
 Register a factory-created `AiRegistry`, enable `persistSystemEvents()`, and
-configure `agentCodeRevision` plus `ai.models` for each Agent repository. Use
+configure `ai.models` for each Agent repository. Use
 an empty `models` array when that Agent has no model calls. Readiness requires
-indexed Agent history and execution storage from the selected provider.
+indexed Agent history and atomic live Agent commits from the selected provider.
 The [Support Bounded Context](../../examples/support/src/index.ts) uses generated
 registration with these options.
 
@@ -710,7 +710,7 @@ signal; `undefined` preserves it. This allows an Agent without a configured
 default to start after a deployment is appended to the bound registry. The
 runtime checks repository allowlists, capabilities and `authorizeSelection`
 before saving the selection and connection identity. A saved selection is reused
-on continuation. Resolver and authorization callbacks receive linked cancellation
+for the current signal. Resolver and authorization callbacks receive linked cancellation
 and the smaller of the invocation deadline and registry hook timeout. An
 effective `this.ai.select()` change, including reset to inheritance, is
 authorized before the Entity transition and preference Events commit; a no-op
@@ -725,60 +725,29 @@ See [adapter configuration](../ai-vercel-ax/README.md).
 
 ### Acceptance and completion
 
-Before acknowledging Agent intake, the runtime saves the original signal,
-recipient, selected handlers and code/schema/policy revisions. The scheduler
-processes one accepted signal at a time per Agent instance, under a provider
-claim. Different instances can run concurrently within configured limits.
-Bounded Contexts using the same registry object share its capacity within the process.
-Signals beyond the bounded in-memory waiting queue remain durably pending.
-Waiting before a fresh execution starts precedes its deadline. Once execution
-starts, recovery continues with the saved deadline and counts. The same deadline
-bounds an awaited application handler. Expiry or Bounded Context shutdown ends that wait
-and prevents late handler results from changing Entity state or emitting signals;
-it cannot stop arbitrary application JavaScript or undo external effects.
-
-Newly accepted work supplies its repository and tenant to prompt discovery.
-Periodic discovery reads tenant pages and constructs repository scopes as they
-are needed. It retains at most one page of 16 tenants, four periodic scan scopes,
-and 64 scopes awaiting a prompt scan. A turn requests at most one tenant page
-and reads at most four pending-work pages. It does not load the complete tenant
-catalog or retain a scan position for every tenant.
-
-A sweep finishes before another begins. The next starts no earlier than five
-seconds after the preceding sweep started, measured by `Time`; longer sweeps
-restart after completion. This lets discovery reach tenants near the end of a
-large catalog and find later admissions on the next sweep. Periodic scans keep
-their turn during new arrivals, including while execution capacity is full.
-A pending catalog request does not block prompt scans of known scopes.
-
-Bounded Context shutdown stops waiting for discovery reads even if a provider ignores
-cancellation. Late results cannot submit work or restart scanning. Built-in
-adapters use their available cancellation and timeout controls; detaching the
-scheduler does not guarantee cancellation of an already issued native request.
+An accepted signal and recipient are admitted through ordinary Delivery. A
+typed receipt prevents a duplicate signal from starting the same Agent turn.
+Within one process, live capacity serializes turns for one Agent instance and
+permits different instances up to configured limits. The shared registry's
+capacity applies across Bounded Contexts using that registry. A waiting signal
+stays in the ordinary Inbox until capacity can admit it; capacity release wakes
+the ordinary Delivery worker. There is no Agent-specific discovery scheduler.
 
 The signal's matching handlers share one Entity draft. Each handler can await
-`this.ai.invoke()` through the protected Spine facade. Calls in one handler must
-be sequential and finish before it returns. Requests, results and
-validation failures are saved as the operation progresses. The final accepted
-state, Version, history and outgoing Command obligations are committed under the
-same execution claim. Emitted domain Events enter immutable Agent history but are
-not stored as delivery obligations. A no-op still completes its execution record. Waiting for
-a provider does not hold a database transaction open.
+`this.ai.invoke()` through the protected Spine facade. Calls in one handler
+must be sequential and finish before it returns. Requests, results, and
+validation failures are saved as audited history while work progresses. The
+final accepted state, Version, preference changes, Agent history, and outgoing
+Command obligations use an atomic live Agent commit. Emitted domain Events
+enter immutable Agent history before normal EventBus publication. A no-op or
+preference-only turn can commit without a state Version increase. Waiting for a
+provider does not hold a database transaction open.
 
-Recovery compares the registered handler, schema and policy with accepted work.
-A saved named call can reuse its result; changing that call's input or prepared
-request is a mismatch, not a new attempt. Domain code should derive its decisions
-from accepted signals and recorded reads. Arbitrary external effects performed
-by handler code are outside the model/tool journal.
-
-After completion, emitted domain Events are handed once to the Bounded Context's
-normal EventBus. The Agent does not track Event recipients, retry a failed handoff,
-or replay Event delivery after restart. Immutable Agent history remains readable
-independently of EventBus delivery. Saved outgoing Commands retain their original
-IDs and recipient bindings for recovery without rerunning the producing handler
-or model. Generated repository and standalone Command receivers provide the
-required binding metadata; matching raw custom Command dispatchers without it
-are rejected.
+An admitted turn uses a current session and cancellation guard. Shutdown drains
+tracked work and prevents late results from changing Entity state or emitting
+signals. It cannot undo external effects already performed by application code.
+A restarted process can read retained receipts and audit history, but it does
+not replay a model response or re-enter an interrupted Agent handler.
 
 ### Retained history
 
@@ -798,7 +767,7 @@ persistent provider when records must survive process termination.
 All methods return newest entries first. A request supplies positive `pageSize`
 and an optional opaque cursor; `nextCursor` continues toward older entries.
 There is no fixed 100-item or page-byte ceiling. Reads made during a handler count
-toward any configured invocation limits for recorded reads and recovery data. Ordering
+toward any configured invocation limits for recorded reads. Ordering
 uses the full Spine `Time` timestamp, category and existing record ID. There is
 no repository-managed history counter. Cursors cannot be transferred across
 Agents, tenants, categories or conversations.
@@ -818,19 +787,15 @@ For a trusted application bridge, `context.getRepository(AgentClass)` returns
 the registered Agent `Repository`, which exposes
 `agentHistory(id, scope)` with the same four history methods and page contracts.
 The scope is explicit: pass `{}` in a single-tenant Bounded Context or
-`{ tenantId }` in a multitenant Bounded Context. The repository also exposes
-`agentExecution(id, sourceCommandOrEventId, scope)` for the exact recorded phase:
-`accepted`, `active`, `completed-pending-commands`, `completed`, or `terminated`.
-An absent record returns `undefined`; it does not establish completion. These
-reads use indexed storage without restoring an Agent. The application bridge
-must authorize access before calling either method; actor metadata does not
-grant read permission.
+`{ tenantId }` in a multitenant Bounded Context. Reads use indexed storage
+without restoring an Agent. The application bridge must authorize access;
+actor metadata does not grant read permission.
 
-If a selected model's `authorizeUse` callback explicitly returns `false` at
-Agent claim time, the execution becomes `terminated` with one
-`AgentInvocationTerminated` System Event carrying `MODEL_USE_DENIED`. No Agent
-handler runs and no application-domain result Event is emitted. Callback
-exceptions and infrastructure failures remain distinct from this denial.
+If a selected model's `authorizeUse` callback explicitly returns `false`
+before the handler, the turn records one `AgentInvocationTerminated` System
+Event carrying `MODEL_USE_DENIED`. No handler runs, no application-domain
+result Event is invented, and other failures remain distinct. Applications
+may correlate this fact with the original source through paged Agent history.
 
 ## Signals, validation, and rejection behavior
 

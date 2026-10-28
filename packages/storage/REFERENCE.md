@@ -96,50 +96,28 @@ Paging is a finite traversal, not an atomic catalog snapshot: a concurrent
 registration can appear in the current or next sweep. The separate `all()`
 operation remains available to callers requiring the complete catalog.
 
-## Agent execution storage
+## Agent live persistence and history
 
-`AgentExecutionStorageFactories` opens the provider-only execution handle for an
-Agent repository and tenant. `supports()` checks factory registration without
-opening a tenant. It does not replace the provider checks made when admitting
-work. Application code configures a storage factory; it does not claim or poll
-these records directly.
+Providers retain indexed Agent history separately from Entity state. The
+provider-only `AgentHistoryStorage.appendAll()` commits one immutable audit
+batch; reads use the same scoped indexes and finite cursors as individual
+appends. A complete System audit group is saved before its original Event is
+published. Its failure remains observable and does not create a replacement
+application Event.
 
-The handle's `capacity` reports encoded execution, per-instance and history-record
-limits plus a transaction payload limit where the provider enforces one.
-`AgentExecutionSizes` measures the full internal Protobuf wrappers, including
-scope and metadata. The runtime must allow for the bounded response and complete
-record overhead before dispatch; a payload limit is not a history retention rule.
+A typed receipt records live admission without a replayable execution record.
+`EntityCommitStorage.commitAgent()` atomically compares an exact Entity image
+and model preferences, then writes the accepted state, preference and history
+changes. An unchanged-state or preference-only turn can succeed without
+increasing the Entity Version. Failed comparisons write no prefix. The ordinary
+`commit()` contract below remains separate and can retain prefix writes after
+an error. Built-in providers implement the live Agent operation with their
+native transaction semantics; custom providers must explicitly support it.
 
-`admit()` stores the original signal, typed recipient and selected handlers once.
-`claim()` permits one execution at a time for an Agent instance. `renew()`,
-`update()`, `complete()` and `markDelivered()` check the current claim token.
-Updates also compare the exact previously read record. Completion compares the
-initial Entity Version and stores the Entity changes, mandatory histories, model
-preferences and original outgoing Command obligations in one provider operation. Emitted
-domain Events are retained in immutable Agent history and handed to the normal
-EventBus after completion; they are not saved delivery obligations. This includes
-handlers that change no state or produce only a Command.
-
-Pending queries read one pending invocation per Agent instance from an index. A page
-carries its original time cutoff and the provider-observed continuation, so the
-caller can continue even when another execution claims a returned invocation.
-These internal pages are separate from application history pages. Eligibility
-and claim expiry use Spine `Time`; original Inbox order determines which signal
-runs next within an instance.
-
-Each saved outgoing Command can receive one dispatch plan before transport
-begins. The plan and original Command envelope cannot be replaced.
-`markDelivered()` requires that plan and a current claim. Command retries must
-still visit every saved recipient; these records do not make downstream
-application callbacks execute exactly once. Independently, the framework's
-internal EventStore retry operation accepts an identical existing envelope;
-ordinary public EventStore append still rejects duplicate IDs. EventStore
-history is not an Agent Event delivery queue.
-
-The memory implementation coordinates changes only within a shared in-process
-backend. PostgreSQL, transactional MySQL and Datastore use native transactions.
-Database query, index and payload requirements are documented in each provider's
-reference. No execution-storage operation trims the Agent's history.
+Memory coordinates these changes within a shared in-process backend;
+PostgreSQL, transactional MySQL/MariaDB, and Datastore use their native atomic
+storage operations. Closing a factory drains admitted work before releasing
+retained private handles.
 
 ## Record storage
 

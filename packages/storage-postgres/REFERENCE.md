@@ -108,18 +108,17 @@ B-tree entry limits still apply to exceptionally long record IDs. Pages use
 bounded SQL chunks and sum serialized entry bytes; a fetched chunk can be
 larger than the returned byte budget.
 
-## Agent execution
+## Agent live persistence
 
-Agent execution records and per-instance pending entries are stored in separate
-tenant database tables. Indexed queries select the next eligible instance and
-the first unresolved signal within it. Required B-tree indexes use complete
-binary-comparable ordering keys and are checked before admission.
-
-Claims, history updates and conditional Entity completion use the same native
-transaction connection. Completion compares the original Entity Version before
-writing the resulting state, history, preferences and outgoing Commands. Reopening
-a factory can read the saved work. No database transaction remains open while a
-model request runs.
+Agent audit entries use the indexed tenant-scoped `agent_history` family above.
+`appendAll()` writes the complete immutable group in one PostgreSQL transaction.
+Live Agent completion uses `EntityCommitStorage.commitAgent()` to compare the
+exact Entity state image and model preferences, and to commit state, preference,
+and history changes atomically. A no-op or preference-only turn does not need a
+new Entity Version. The typed admission receipt is a separate record family;
+it is not a replayable execution record. No database transaction remains open
+while a model request runs. Factory shutdown drains admitted operations before
+closing their retained connections.
 
 ## Lifecycle and errors
 

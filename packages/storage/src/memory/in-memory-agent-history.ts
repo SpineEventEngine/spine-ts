@@ -12,7 +12,8 @@
  * the License.
  */
 
-import type { AgentHistoryEntry } from "@spine-event-engine/proto/agent";
+import { clone } from "@bufbuild/protobuf";
+import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 
 import type {
   AgentHistoryPage,
@@ -82,6 +83,8 @@ export const MemoryAgentHistory: MemoryAgentHistoryAccess = Object.freeze({
  * @typeParam Id Typed Agent identifier.
  */
 class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
+  readonly capacity = Object.freeze({});
+
   readonly #idKey: (id: Id) => string;
 
   readonly #records: Map<string, AgentHistoryIndex>;
@@ -115,15 +118,26 @@ class MemoryAgentHistoryHandle<Id> implements AgentHistoryStorage<Id> {
    * @returns Resolves after the entry is indexed.
    */
   append(entityId: Id, entry: AgentHistoryEntry): Promise<void> {
+    return this.appendAll(entityId, [entry]);
+  }
+
+  /**
+   * Writes atomically adds an immutable group after validating all rows and indexes.
+   *
+   * @param entityId Typed Entity identifier.
+   * @param entries Complete immutable history group.
+   * @returns Completion after the immutable audit group commits atomically.
+   */
+  async appendAll(entityId: Id, entries: readonly AgentHistoryEntry[]): Promise<void> {
+    this.#requireOpen();
     const key = this.#key(entityId);
-    return this.#queue.run(key, () => {
-      this.#requireOpen();
-      let index = this.#records.get(key);
-      if (index === undefined) {
-        index = new AgentHistoryIndex();
-        this.#records.set(key, index);
-      }
-      index.append(entry);
+    const captured = entries.map((entry) => clone(AgentHistoryEntrySchema, entry));
+    if (captured.length === 0) return;
+    await this.#queue.run(key, () => {
+      const existing = this.#records.get(key);
+      const index = existing ?? new AgentHistoryIndex();
+      index.withEntries(captured).apply();
+      if (existing === undefined) this.#records.set(key, index);
     });
   }
 

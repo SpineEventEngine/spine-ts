@@ -208,7 +208,7 @@ state are declared in Proto and its handlers use generated registration.
 
 An Agent can read its recorded interactions and emitted domain Events through
 its repository. See the [Agent execution reference](REFERENCE.md#agent-execution)
-for history methods, paging, and recovery behavior.
+for history methods, paging, and live execution behavior.
 
 Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
 on the state. The [Support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md) includes
@@ -278,8 +278,8 @@ class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateS
 <!-- prettier-ignore-end -->
 
 Configure the registry outside the Entity. The Bounded Context requires persisted System
-Events, and the Agent registration supplies its code revision and permitted
-capabilities. The [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
+Events, and the Agent registration supplies its permitted capabilities. The
+[example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
 assembles these settings with the generated handler registry. A server-wide
 `withAi()` default can be supplied when building Bounded Contexts through `Server`;
 Bounded Context configuration can provide its registry directly.
@@ -287,7 +287,7 @@ Bounded Context configuration can provide its registry directly.
 Posting a Command awaits acceptance. Model work and the resulting domain Event
 arrive asynchronously afterward. The handling operation can await a model without
 keeping a database transaction open. See the [Agent execution reference](REFERENCE.md#agent-execution)
-for defaults, recovery and retained history.
+for defaults and retained history.
 
 ## Native lifecycle and routing
 

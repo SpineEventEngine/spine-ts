@@ -432,7 +432,6 @@ const supportRepository = (chatgptPlan = false) =>
   new Repository({
     entityType: chatgptPlan ? ChatgptPlanSupportAgent : McpSupportAgent,
     schema: SupportRecoveryStateSchema,
-    agentCodeRevision: "support-mcp-v1",
     ai: { models: [chatgptPlan ? chatgptPlanSupportModel : mcpSupportModel] },
     handlers: new HandlerRegistryIngestor().ingest({
       receivers: [
@@ -528,7 +527,6 @@ const supportBox = async (
       deadlineMs: 10_000,
       totalInputBytes: 32_768,
       totalOutputBytes: 262_144,
-      maxRecoveryBytes: 262_144,
     },
     concurrentOperations: 1,
     queuedOperations: 0,
@@ -838,7 +836,6 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
         deadlineMs: 10_000,
         totalInputBytes: 32_768,
         totalOutputBytes: 262_144,
-        maxRecoveryBytes: 262_144,
       },
       concurrentOperations: 1,
       queuedOperations: 0,

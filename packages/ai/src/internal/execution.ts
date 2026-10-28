@@ -355,6 +355,11 @@ export interface AiToolInvocation {
   readonly tool: string;
 
   /**
+   * Exact model-facing alias when it differs from the configured MCP tool name.
+   */
+  readonly providerToolName?: string;
+
+  /**
    * Canonical JSON arguments validated against tool policy.
    */
   readonly argumentsJson: string;

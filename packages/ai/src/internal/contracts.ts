@@ -99,11 +99,6 @@ export interface AiInvocationLimits {
    * Maximum cumulative output bytes for one accepted signal.
    */
   readonly totalOutputBytes?: number;
-
-  /**
-   * Maximum bytes retained for replay after interruption.
-   */
-  readonly maxRecoveryBytes?: number;
 }
 
 /**

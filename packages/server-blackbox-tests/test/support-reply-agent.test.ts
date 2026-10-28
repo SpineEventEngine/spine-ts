@@ -80,7 +80,6 @@ function emptyModelRegistry(): AiRegistry {
       deadlineMs: 1_000,
       totalInputBytes: 4_000,
       totalOutputBytes: 4_000,
-      maxRecoveryBytes: 4_000,
     },
     concurrentOperations: 1,
     queuedOperations: 0,
@@ -109,7 +108,6 @@ describe("support reply Agent", () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-48" });
     const context = await generatedSupportContext("Support reply generated")
       .add(SupportReplyAgent, {
-        agentCodeRevision: "support-reply-v1",
         ai: { models: [] },
       })
       .build();
@@ -139,7 +137,6 @@ describe("support reply Agent", () => {
       .add(
         new Repository({
           entityType: SupportReplyAgent,
-          agentCodeRevision: "support-reply-v1",
           ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
@@ -176,7 +173,6 @@ describe("support reply Agent", () => {
       .add(
         new Repository({
           entityType: SupportReplyAgent,
-          agentCodeRevision: "support-reply-v1",
           ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
@@ -215,7 +211,6 @@ describe("support reply Agent", () => {
       .add(
         new Repository({
           entityType: SupportReplyAgent,
-          agentCodeRevision: "support-reply-v1",
           ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
@@ -262,7 +257,6 @@ describe("support reply Agent", () => {
     const assignee = new SupportReviewAssignee();
     const repository = new Repository({
       entityType: SupportReplyAgent,
-      agentCodeRevision: "support-reply-v1",
       ai: { models: [] },
       schema: SupportReplyAgentStateSchema,
       handlers: agentHandlers,
@@ -341,7 +335,6 @@ describe("support reply Agent", () => {
       .add(
         new Repository({
           entityType: SupportReplyAgent,
-          agentCodeRevision: "support-reply-v1",
           ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
@@ -379,7 +372,6 @@ describe("support reply Agent", () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
     const repository = new Repository({
       entityType: SupportReplyAgent,
-      agentCodeRevision: "support-reply-v1",
       ai: { models: [] },
       schema: SupportReplyAgentStateSchema,
       handlers: agentHandlers,

@@ -350,7 +350,7 @@ message DecisionResponse {
 
 // Actual authorized external tool request.
 message ToolRequest {
-  // Logical call identity preserved across recovery.
+  // Logical call identity within the running Agent invocation.
   AiToolCallId call = 1 [
     (required) = true,
     (validate) = true

@@ -30,6 +30,28 @@ import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("DeliveryReadiness", () => {
+  it("does not turn an explicit receipt failure into success through delivered readback", async () => {
+    const message = {
+      id: { value: "failed-agent", shard: ShardIndex.single() },
+    } as InboxMessage;
+    const failure = new Error("receipt compare-and-set failed");
+    const delivery = {
+      drainMessage: () =>
+        Promise.resolve({ acknowledged: false, outcome: { kind: "failed", error: failure } }),
+      inbox: { readMessage: () => Promise.resolve({ ...message, status: "DELIVERED" }) },
+    } as unknown as Delivery;
+    await expect(
+      InboxHandoff.runDrain({
+        delivery,
+        received: message,
+        node: "AgentReceipts",
+        onReplay: () => undefined,
+        replayFailureMessage: "replay failed",
+        skippedMessage: "skipped",
+        unfinishedMessage: "unfinished",
+      }),
+    ).rejects.toBe(failure);
+  });
   it("stops a direct handoff when an older row for the same signal fails", async () => {
     const shard = ShardIndex.single();
     const received = {
