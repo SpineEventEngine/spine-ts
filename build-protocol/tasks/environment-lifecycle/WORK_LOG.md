@@ -3493,3 +3493,30 @@ manifest and lockfile change is exactly .24 to .25, with no third-party version
 or resolution changes. Direct release-policy validation accepts snapshot.25;
 record formatting and git diff --check pass. This deterministic micro correction
 does not reopen runtime specialist reviews. The full preflight restarts next.
+
+Release attempt 1 stopped before tests: tracked Proto manifests retain .24 after
+the required package-version bump. All eleven manifests need regeneration; all
+model packages depend on the canonical Proto package. The existing generator
+validates that live dependency manifest while staging model outputs, so first
+use its existing writeSpineProtoArtifacts function to regenerate the canonical
+package metadata, then run the ordinary Proto generation workflow. Do not hand
+edit generated manifests or change the generator contract for this release step.
+Classify as mechanical packaging regeneration (0.1–0.2 hours). Verify changes
+are version/generation metadata only, then commit and push separately. The whole
+cheap preflight must pass again before release attempt 2. Prior focused tests
+passed 153/153; no global test or coverage result exists yet.
+
+Workspace regeneration then reached Message Board registry composition, which
+also validates its live model manifest before publishing staged outputs. Run the
+existing Message Board model package proto:generate command before the workspace
+workflow. The failed attempt rolled back staged outputs; only the canonical
+metadata regeneration remains. No generator implementation or validation bypass
+is introduced. This is preparation of version-coupled generated metadata.
+
+Version metadata regeneration now passes. Scripted JSON comparison confirms all
+11 Proto manifests match package version .25; their generation IDs and five
+tracked matching marker IDs are the only other changes. No schema or generated
+TypeScript changed. Existing generator commands produced all metadata. This
+mechanical correction preserves accepted runtime reviews; a complete preflight
+and second release attempt follow. Root records the deterministic verification
+and pushes the metadata separately from the required version-only commit.
