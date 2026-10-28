@@ -3704,3 +3704,48 @@ lint/format/diff pass. Evidence m13-managed-server-fixture-evidence.md. Original
 107 failure mapping now has focused green evidence for every failed-file group
 in m13-attempt3-residual-checklist.md. This does not substitute for final full
 release verification. C2 reliability review and evidence requirements remain.
+
+C2 final targeted test correction estimated 0.25–0.5 hours, within the updated
+overall 2–4 hour estimate: use explicit completion evidence for detached produced
+Commands and add the missing supervised same-shard regression, then focused
+verification and reliability confirmation. Existing implementation remains
+frozen except these accepted tests until evidence says otherwise.
+
+Security inventory correction: parent rg identified direct Vite pins in
+examples/message-board/web and examples/release-notes, direct Vitest in Message
+Board web, and direct Zod in Release Notes. Luna/medium amended the external
+report to include all direct manifests; update these pins alongside root paired
+Vitest/coverage and compatible transitive resolutions. A transitive-only change
+would leave vulnerable direct dependencies. The Security workflow has a safe
+workflow_dispatch audit-only path; after the final dependency commit is pushed,
+run it on this feature branch and verify its exact SHA. Build CI still requires
+a human-authorized PR; do not change workflow triggers to bypass that rule.
+
+C2 test review refinement: parent found the first supervised fixture routed its
+produced Command to a standalone dispatcher, bypassing Entity Inbox. Implementer
+replaced it with an actual Aggregate repository and gated handler on the shared
+shard. Focused behavior and tooling typecheck pass; final static/coverage checks
+and targeted reliability confirmation follow. No production correction added.
+Security registry timestamp check also confirms all eight patched version targets
+are older than the configured 24-hour minimumReleaseAge; no exception needed.
+
+Fresh read-only branch audit before remediation exits 1 and reproduces exactly
+31 findings (12 high, 15 moderate, 4 low); JSON retained externally as
+security-audit-before.json. No lockfile or dependency mutations occurred.
+
+C2 accepted after clean API and final reliability confirmation, focused behavior
+and coverage evidence, static checks and exact frozen-hash verification. Commit
+four code/test/manifest paths with D-0164 and task records. All known release
+attempt-3 regression groups now have focused green evidence; combined release
+verification remains pending.
+
+Proceed M14 security remediation after lifecycle correction acceptance. Existing
+sole implementer retains explicit Sol/medium profile. Standard risk; bounded
+manifest/override/lockfile edits in security-remediation-edit-plan.md, preserving
+major lines and unrelated packages. Acceptance: all 31 current findings removed,
+both unchanged low-threshold audits pass, affected tooling/typechecks pass,
+independent security/dependency review converges, final release passes and the
+GitHub Security workflow passes on the pushed feature SHA. Estimate 0.75–1.5
+hours for dependency correction, focused verification and review within the
+remaining overall estimate; final release timing is additional. No audit
+suppression, threshold reduction, migration, PR or master push.

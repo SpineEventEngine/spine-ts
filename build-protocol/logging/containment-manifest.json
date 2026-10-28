@@ -29,6 +29,13 @@
       "test": "packages/server/test/repository/repository-routing.test.ts"
     },
     {
+      "id": "server.process_manager_command_follow_up",
+      "source": "../../packages/server/src/repository/repository.ts",
+      "operation": "repository.command_follow_up",
+      "disposition": "error",
+      "test": "packages/server-blackbox-tests/test/project-event-routing.test.ts"
+    },
+    {
       "id": "server.repository_rejection_follow_up",
       "source": "../../packages/server/src/repository/repository.ts",
       "operation": "repository.event_follow_up",

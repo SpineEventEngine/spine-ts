@@ -1696,3 +1696,28 @@ No public, persisted, runtime-concurrency, security or documentation contract
 changes, so additional specialist lanes are N/A for these fixture-only edits.
 C2 API review is clean with all three hashes matching and explicit Sol/medium
 profile confirmed; collect reliability findings before accepting the full wave.
+
+C2 complete review wave collected: API clean; reliability confirms no production
+defect and reports two accepted P2 test gaps. Update repository-routing
+assertions to wait for produced Command work through existing public drain or
+behavior synchronization instead of assuming Event post waits for descendants.
+Add supervised same-shard PM Event-to-Command progress coverage under D-0164.
+Existing downstream-failure, commit-failure, duplicate-guard and malformed-output
+cases pass 5/5; retain them. One aggregate batch returns to existing explicit
+Sol/medium implementer. Re-review only reliability after focused verification;
+public API/source contract remains unchanged. No full-wave restart.
+
+C2 test correction frozen in m13-c2-review-correction-evidence.md: original
+three packet hashes unchanged; repository-routing test adds actual Aggregate
+Entity Inbox same-shard supervised proof and synchronizes two child assertions.
+Affected selection passes 3/3 with fresh build, tooling, lint, format, diff and
+scoped changed-line coverage. Return only these two accepted findings to the
+existing explicit Sol/medium reliability reviewer for confirmation. API and
+production review remain clean; no new whole-wave review.
+
+C2 final reliability confirmation is clean: four frozen hashes match, exact
+shared-shard supervised Entity Inbox path is proven, and both previously racing
+assertions now wait for observed dispatch. Explicit immutable Sol/medium profile
+confirmed; runtime introspection unavailable. API review remains clean. Parent
+style review accepts the bounded private method change and domain-valid fixtures;
+TSDoc describes registration accurately. All accepted C2 findings resolved.

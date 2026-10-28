@@ -5942,7 +5942,7 @@ class ProcessManagerEventExecution {
    *
    * @param entityId Target Entity identifier.
    * @param intake Decoded Event and matching handlers.
-   * @returns Completion after accepted results are published.
+   * @returns Completion after accepted results are registered for publication.
    */
   async #executeEntity(
     entityId: unknown,
@@ -5975,7 +5975,7 @@ class ProcessManagerEventExecution {
     if (!committed) return;
     this.#publishChangedState(loaded, entityId);
     this.#postEvents(events);
-    await this.#postCommands(commands);
+    this.#postCommands(commands);
   }
 
   /**
@@ -6247,11 +6247,11 @@ class ProcessManagerEventExecution {
    * Publishes each produced Command in handler order.
    *
    * @param commands Bound Commands to publish.
-   * @returns Completion after all Commands are published.
    */
-  async #postCommands(commands: readonly Command[]): Promise<void> {
+  #postCommands(commands: readonly Command[]): void {
     for (const command of commands) {
-      await this.#runtime.publisher.publishCommand(command);
+      // spine-log-boundary: server.process_manager_command_follow_up
+      void this.#runtime.publisher.publishCommand(command);
     }
   }
 

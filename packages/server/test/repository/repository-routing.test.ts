@@ -402,6 +402,19 @@ class CreateProjectRoutingAggregate extends Aggregate<string, typeof ProjectStat
   }
 }
 
+class HeldSupervisedPmAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  static entered: (() => void) | undefined;
+  static release: Promise<undefined> | undefined;
+  static completed = 0;
+
+  async createProject(command: CreateProject): Promise<void> {
+    HeldSupervisedPmAggregate.entered?.();
+    await HeldSupervisedPmAggregate.release;
+    this.update((draft) => Object.assign(draft, { id: this.id, name: command.name }));
+    HeldSupervisedPmAggregate.completed += 1;
+  }
+}
+
 class IdlessCommandProcessManager extends ProcessManager<string, typeof ProjectQueueStateSchema> {
   createProject(command: CreateProject): void {
     void command;
@@ -9928,6 +9941,7 @@ describe("repository signal routing", () => {
     );
 
     expect(RoutingProcessManager.commandReactionCalls).toBe(1);
+    await waitForCondition(() => commands.length === 1);
     expect(commands).toHaveLength(1);
     expect(commands[0]?.id?.uuid).toMatch(/.+/);
     expect(commands[0]?.context?.actorContext).toEqual(sourceActorContext);
@@ -9951,6 +9965,79 @@ describe("repository signal routing", () => {
         name: "Task follow-up command",
       }),
     );
+  });
+
+  it("drains a supervised Process Manager Event before its held same-shard Command", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const borrowed = new Delivery({
+      context: { name: "SupervisedPmSource", multitenant: false },
+      storageFactory: factory,
+    });
+    await ServerEnvironmentLifecycle.resetForTest();
+    const remoteFacility: ServerEnvironmentDelivery = {
+      open: () => undefined,
+      close: () => borrowed.close(),
+      inbox: borrowed.inbox,
+      workRegistry: borrowed.shards,
+      source: {
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => ({
+          [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => undefined) }),
+        }),
+        releaseExpired: () => Promise.resolve([]),
+      },
+    };
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: factory,
+      delivery: remoteFacility,
+    });
+    await ServerEnvironment.instance().completeSetup();
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    HeldSupervisedPmAggregate.completed = 0;
+    HeldSupervisedPmAggregate.entered = () => {
+      entered.resolve(undefined);
+    };
+    HeldSupervisedPmAggregate.release = release.promise;
+    const context = await BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerEventRepository())
+      .add(
+        new Repository({
+          entityType: HeldSupervisedPmAggregate,
+          schema: ProjectStateSchema,
+          handlers: EntityHandlers.define(
+            HeldSupervisedPmAggregate,
+            ProjectStateSchema,
+            (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+          ),
+        }),
+      )
+      .build();
+    try {
+      await context.eventBus().post(createProjectCreated("supervised-pm-event", "supervised-pm"));
+      await entered.promise;
+      const rows = await borrowed.inbox.read(ShardIndex.single(), {
+        statuses: ["DELIVERED"],
+        limit: 100,
+      });
+      expect(rows.some((row) => row.signalId === "supervised-pm-event")).toBe(true);
+      await expect(context.stand().read(ProjectQueueStateSchema, "supervised-pm")).resolves.toEqual(
+        create(ProjectQueueStateSchema, { id: "supervised-pm", queue: "Task commanded" }),
+      );
+      await expect(
+        context.stand().read(ProjectStateSchema, "supervised-pm"),
+      ).resolves.toBeUndefined();
+      const closing = context.close();
+      release.resolve(undefined);
+      await closing;
+      expect(HeldSupervisedPmAggregate.completed).toBe(1);
+    } finally {
+      release.resolve(undefined);
+      await context.close();
+      HeldSupervisedPmAggregate.entered = undefined;
+      HeldSupervisedPmAggregate.release = undefined;
+    }
   });
 
   it("rejects missing source event ids before process-manager command reactions mutate state", async () => {
@@ -10185,6 +10272,7 @@ describe("repository signal routing", () => {
         queue: "Task commanded",
       }),
     );
+    await waitForCondition(() => commandDispatches.length === 1);
     expect(commandDispatches).toHaveLength(1);
     expect(commandDispatches[0]).toMatch(/.+/);
     await waitForCondition(() => eventDispatches.length === 1);

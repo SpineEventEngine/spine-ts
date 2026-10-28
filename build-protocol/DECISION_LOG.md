@@ -6999,3 +6999,40 @@ Public read/service input checks must not fence internal repository work already
 admitted. Lazy failures, membership failures, invalid input, local misuse and absent
 explicit setup remain nonfatal under the accepted contract. No public lifecycle API,
 process exit, new timer, recovery or change to D0161 delivery completion is introduced.
+
+## D-0164 — Process Manager Event outputs use tracked publication
+
+2026-10-28. Accepted bounded correction for a demonstrated shared-shard cycle.
+A Process Manager Event callback awaited handling of a produced Command that
+needed the same shard still executing that callback. The source row and later
+recipients could not finish, and context close waited indefinitely.
+
+After the successful Process Manager commit, register each validated produced
+Command synchronously with the existing SignalPublisher, in handler order. Do
+not await descendant handling inside the source Event Inbox callback. The
+publisher retains the handling promises, reports contained failures, and drains
+them together with the ordinary CommandBus. Preserve the existing Event replay
+return types, command-substitution follow-ups, exact local acknowledgement and
+remote reception behavior. This applies to Process Manager Event output only.
+
+Do not defer first publication to a new post-acknowledgement callback: that is
+unnecessary and the supervised replay path may still await such a callback.
+Do not add a persistence-only posting mode, queue, outbox or recovery mechanism.
+The state/dispatch-guard commit already precedes outgoing publication; this code
+does not promise atomic durable storage of both. Once an outgoing Command enters
+ordinary durable infrastructure, its existing delivery behavior applies. This
+correction removes the deadlocking normal-execution wait and preserves tracked
+publication before source completion; it does not claim identical crash-window
+duration or a new durability guarantee.
+
+Tests must exercise same-shard direct and supervised progress, tracked outgoing
+work during graceful close, handler-order publication, contained downstream
+failure, no publication on commit failure, and existing duplicate dispatch guards.
+Reuse focused coverage where already present. Keep ordinary local rejection/
+acknowledgement and remote reception tests unchanged.
+
+The existing requirements-splitter used explicit gpt-6-astra/high, read-only, for
+this demonstrated concurrency/durability ambiguity; runtime metadata unavailable.
+Local JVM ProcessManagerRepository posts produced Commands with a no-op observer
+following state storage. That supports normal bus handoff without waiting for
+application responses, not a cross-store atomic durability claim.

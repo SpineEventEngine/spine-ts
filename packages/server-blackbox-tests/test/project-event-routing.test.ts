@@ -14,9 +14,15 @@
 
 import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import type { Any } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, RejectionThrowable, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
-import { CommandContextSchema, type CommandContext, type Event } from "@spine-event-engine/proto";
+import {
+  ActorContextSchema,
+  CommandContextSchema,
+  UserIdSchema,
+  type CommandContext,
+  type Event,
+} from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   type QueryResponse,
@@ -76,9 +82,11 @@ import {
 
 class Project extends Aggregate<ProjectId, typeof ProjectStateSchema> {
   static scheduledStatuses: string[] = [];
+  static scheduleGate: (() => Promise<void>) | undefined;
 
   static reset(): void {
     this.scheduledStatuses = [];
+    this.scheduleGate = undefined;
   }
   create(command: CreateProject): ProjectCreated {
     const project = command.project;
@@ -96,6 +104,7 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema> {
   }
 
   async schedule(command: ScheduleProject): Promise<ProjectScheduled> {
+    await Project.scheduleGate?.();
     await Promise.resolve();
     if (command.status === "rejected") {
       throw RejectionThrowable.create(ProjectSchedulingRejectedSchema, { project: this.id });
@@ -460,7 +469,7 @@ async function awaitProjectWorkflowStates(
 async function createProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
   await boundedContext.commandBus().post(
     SignalEnvelopes.command({
-      context: create(CommandContextSchema),
+      context: projectCommandContext(),
       schema: CreateProjectSchema,
       message: create(CreateProjectSchema, { project: id, name: "roadmap" }),
     }),
@@ -469,11 +478,19 @@ async function createProject(boundedContext: BoundedContext, id: ProjectId): Pro
 async function approveProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
   await boundedContext.commandBus().post(
     SignalEnvelopes.command({
-      context: create(CommandContextSchema),
+      context: projectCommandContext(),
       schema: ApproveProjectSchema,
       message: create(ApproveProjectSchema, { project: id, status: "approved" }),
     }),
   );
+}
+function projectCommandContext(): CommandContext {
+  return create(CommandContextSchema, {
+    actorContext: create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "project-test-user" }),
+      timestamp: create(TimestampSchema, { seconds: 1_700_000_000n }),
+    }),
+  });
 }
 function ids() {
   return {
@@ -549,6 +566,35 @@ describe("project workflow Event routing", () => {
     await approveProject(boundedContext, project);
     await boundedContext.close();
     expect(Project.scheduledStatuses).toContain("approved");
+  });
+
+  it("settles a Process Manager Event while its published Command handler is held", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    Project.reset();
+    Project.scheduleGate = () => {
+      entered.resolve(undefined);
+      return release.promise;
+    };
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
+    try {
+      const posting = createProject(boundedContext, project);
+      await entered.promise;
+      await posting;
+      expect(Project.scheduledStatuses).not.toContain("scheduled");
+      await expect(
+        boundedContext.stand().read(CoordinationStateSchema, project),
+      ).resolves.toMatchObject({ projectName: "roadmap" });
+      const closing = boundedContext.close();
+      release.resolve(undefined);
+      await closing;
+      expect(Project.scheduledStatuses).toContain("scheduled");
+    } finally {
+      release.resolve(undefined);
+      await boundedContext.close();
+      Project.reset();
+    }
   });
 
   it("updates custom- and producer-ID-routed persisted Entity states", async () => {
