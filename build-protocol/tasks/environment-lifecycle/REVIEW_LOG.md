@@ -1950,3 +1950,26 @@ Documentation, public API and security lanes are N/A for this assertion-only
 packet with no new runtime or public contract. Evidence:
 /tmp/spine-environment-lifecycle-20261027/m17-provider-atomicity-review.md and
 m17-provider-atomicity-coverage-evidence.md. All canonical concerns disposed.
+
+M18 read-only coverage triage assignment: orchestrator-dispatched scanning
+function, explicit gpt-6-luna/medium, on the existing M15 branch inventory and
+source/test evidence. Identify coherent untested behavior in changed retained
+runtime modules beyond already-covered query/filter and provider matrices.
+No edits, tests, builds or child agents. Exclude M16 changed-source tuple claims;
+current full coverage awaits correction of three test assertions/imports.
+Runtime metadata is unavailable; explicit immutable dispatch profile applies.
+
+M18 deterministic correction frozen: two test files, 175/175 affected tests and
+static checks pass. Original explicit Sol/medium reliability reviewer receives
+only service Ack assertions and MySQL metadata fixture import correction for
+narrow confirmation against accepted M16 behavior. No new runtime or contract.
+Parent style inspection clean; documentation/API/security reopening N/A because
+assertions now match the previously reviewed public claims, with no source edit.
+Read-only, no tests/builds/children. Evidence m18-service-expectations-evidence.md.
+
+M18 accepted after narrow reliability confirmation: both hashes match; service
+Ack/no-invalid-state and escaped structured-error cases are meaningful; MySQL
+metadata fixture matches declared optional-family columns. No remaining finding.
+Explicit configured Sol/medium profile confirmed, runtime metadata unavailable.
+Read-only evidence m18-test-correction-review.md. Mechanical four-timeout-suite
+rerun passes 109/109; original 175/175/static results remain current.

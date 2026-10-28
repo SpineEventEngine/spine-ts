@@ -41,6 +41,7 @@ import {
   CommandContextSchema,
   CommandIdSchema,
   Command_SystemPropertiesSchema,
+  ConstraintViolationSchema,
   EmailAddressSchema,
   EventContextSchema,
   EventIdSchema,
@@ -120,6 +121,7 @@ import {
 import { TenantIndexes } from "../../src/context/tenant-index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
+import { TransitionValidationError } from "../../src/repository/command-errors.js";
 import { spineServicesAccess } from "../../src/services/spine-services.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
@@ -1936,34 +1938,53 @@ describe("SpineServices", () => {
     expect(validationDetails(ack.status?.status)).toBeUndefined();
   });
 
-  it("reports transition validation failures in the command Ack", async () => {
+  it("acknowledges a monitored transition failure without persisting invalid state", async () => {
     const context = await BoundedContext.singleTenant("Tasks")
       .add(createTransitionViolatingRepository())
       .build();
     const handlers = registeredCommandHandlers(context);
-
     const ack = await handlers.post(
       createAggregateCommand("command-transition-invalid", "task-transition-invalid"),
     );
-
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
-    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+    expect(ack.status?.status.case).toBe("ok");
+    await expect(
+      context.stand().read(ProjectStateSchema, "task-transition-invalid"),
+    ).resolves.toBeUndefined();
   });
 
-  it("reports rollback transition validation failures in the command Ack", async () => {
+  it("acknowledges a monitored rollback transition without persisting invalid state", async () => {
     const context = await BoundedContext.singleTenant("Tasks")
       .add(createRollingBackTransitionRepository())
       .build();
     const handlers = registeredCommandHandlers(context);
-
     const ack = await handlers.post(
       createAggregateCommand("command-transition-rollback", "task-transition-rollback"),
     );
+    expect(ack.status?.status.case).toBe("ok");
+    await expect(
+      context.stand().read(ProjectStateSchema, "task-transition-rollback"),
+    ).resolves.toBeUndefined();
+  });
 
+  it("returns structured transition details when the failure escapes service processing", async () => {
+    const validation = create(ValidationErrorSchema, {
+      constraintViolation: [
+        create(ConstraintViolationSchema, { typeName: ProjectStateSchema.typeName }),
+      ],
+    });
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => [CreateReviewProjectSchema],
+      dispatch: () => Promise.reject(new TransitionValidationError(validation)),
+    };
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
+    const ack = await registeredCommandHandlers(context).post(
+      createProjectionCommand("command-escaped-transition"),
+    );
     expect(ack.status?.status.case).toBe("error");
     expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
-    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+    expect(validationDetails(ack.status?.status)).toEqual(validation);
   });
 
   it("rejects command tenant mismatches without dispatching", async () => {

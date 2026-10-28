@@ -60,16 +60,11 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import { conversation, scope } from "../../storage/test/entity/agent-history-fixtures.js";
 import { entityInput as supportAgentInput } from "../../storage/test/entity/agent-live-fixtures.js";
-import { eventHistorySpec, stateHistorySpec } from "../../storage/src/internal/entity-history.js";
 import type {
   SupportReplyAgentId,
   SupportReplyAgentState,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
-// prettier-ignore
-import {
-  SupportReplyAgentIdSchema,
-  SupportReplyAgentStateSchema,
-} from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+import { SupportReplyAgentIdSchema } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 
 import {
   MysqlStorageFactory,
@@ -1436,20 +1431,18 @@ function agentMetadataQuery(sql: string, values: readonly unknown[], repaired: b
   const table = values[0];
   if (repaired && sql.includes("information_schema.columns") && typeof table === "string") {
     const extra = table.includes("agent_history")
-      ? AgentHistoryRecords.spec((value) => value).columns
-      : table.endsWith("_EntityRecord")
-        ? stateHistorySpec(SupportReplyAgentStateSchema).spec.columns
+      ? AgentHistoryRecords.spec((value) => value).columns.map((column) => column.name)
+      : table.endsWith("_EntityRecord") || (table.endsWith("_Event") && !table.startsWith("es_"))
+        ? ["entity_id", "created", "version"]
         : table.endsWith("_Event")
-          ? table.startsWith("es_")
-            ? eventStoreRecordSpec.columns
-            : eventHistorySpec(SupportReplyAgentStateSchema).spec.columns
+          ? eventStoreRecordSpec.columns.map((column) => column.name)
           : [];
     if (extra.length)
       return Promise.resolve([
         [
           { column_name: "ID" },
           { column_name: "bytes" },
-          ...extra.map((column) => ({ column_name: column.name })),
+          ...extra.map((column_name) => ({ column_name })),
         ],
         [],
       ]);

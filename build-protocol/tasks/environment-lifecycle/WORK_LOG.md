@@ -4093,3 +4093,36 @@ whole-suite coverage once to select remaining behavior gaps accurately; this is
 coverage diagnosis, not another release-profile attempt. Hold test edits during
 measurement. Then implement a coherent live-Agent MCP failure/audit slice if the
 fresh evidence confirms the gap. No threshold changes or filler matrices.
+
+M17 committed/pushed as 72fba44ace074838e691ca029ae534b9dee8fb32; exact remote
+SHA confirmed. Current full Vitest diagnostic used the default five-second test
+timeout accidentally, unlike the release profile's 15 seconds. It finished in
+115.45s with 6242 passing, seven failed, 16 skipped: four timeout failures, one new MySQL test import
+violating sibling-package source restrictions, and two stale service assertions expecting error Acks for monitor-acknowledged Entity
+transition failures. Vitest did not emit coverage on failure. Do not claim a fresh
+baseline. Same Sol/medium implementer will correct the two service tests, asserting
+monitor error/validation details, no invalid persistence and OK Ack; preserve
+structured Ack coverage for errors that actually escape delivery. Micro test-only
+correction, estimate 0.1–0.25 hours including focused checks and narrow review.
+Correct the MySQL test import without exposing a new public API.
+Then rerun affected failed suites with the release timeout and measure coverage
+with failure reporting enabled; no threshold changes. MCP tests remain deferred.
+
+M19 coherent test-only live-Agent failure slice approved, standard classification,
+estimate 0.25–0.5 hours including focused validation and reliability review.
+Same existing explicit Sol/medium implementer, no children. Assigned only
+agent-live-mcp-controls.test.ts and agent-live-ai-runtime.test.ts. Acceptance:
+partial second-server discovery failure closes both sessions and never reaches
+model/tool execution; failed admitted read/write calls retain distinct FAILED
+versus UNKNOWN outcomes, audit evidence and spent credit, without replay or an
+extra physical tool call. Reuse actual generated SupportReply domain fixtures.
+No broad scalar/auth matrix or production changes without demonstrated defect.
+M18 frozen test files remain untouched until parent review/commit. Current full
+coverage remains unmeasured; defer the second global measurement until this
+already-justified packet lands to avoid another redundant whole-suite run.
+
+M18 correction complete: 175/175 affected tests and all scoped static checks
+pass; separate four timeout-affected suites pass 109/109 with release timeout in
+17.89s. Independent original Sol/medium reliability confirmation clean, frozen
+hashes verified. No production source changed. Commit/push only M18 service and
+MySQL tests plus parent records; M19 independent test edits may remain dirty.
