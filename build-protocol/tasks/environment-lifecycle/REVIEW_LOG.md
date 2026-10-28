@@ -2573,3 +2573,17 @@ proof plus 521 passing affected tests; no new lifecycle behavior. Documentation
 is deletion of obsolete internal TSDoc only. Security delta removes unreachable
 code and does not alter active checks. No findings or correction batch.
 Evidence: m45-api-review.md and m45-repository-cleanup.md outside Git.
+
+M46 review dispatched to original explicit Sol/medium API reviewer; both fields
+explicit originally, runtime introspection unavailable. Frozen two-file tests
+and hashes in m46-evidence.md. Check genuine domain fixtures, mandatory preference
+metadata ordering/retry, normal live correction and typed request/response/event
+associations. Parent style; production/docs/security unchanged.
+
+M46 accepted: independent API review clean; parent style review accepts reuse of
+existing fixtures and typed record assertions. Both files frozen hashes match.
+No source/API/serialized/security changes. Datastore fake metadata queries share
+a namespace, so family identification rests on production preparation sequence
+plus exact retry count; it does not claim to inspect Datastore Entity kinds.
+Thirty-three tests and static gates pass; shared TypeScript tooling also covers
+M47 transport assertions. Evidence m46-api-review.md and m46-evidence.md.

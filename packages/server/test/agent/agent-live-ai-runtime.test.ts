@@ -440,6 +440,175 @@ describe("live Agent AI execution", () => {
     expect(saved).toEqual([]);
   });
 
+  it("retains both physical correction attempts and admits only the validated reply", async () => {
+    const correctionModel = AiModel.define({
+      name: "live-support-correction",
+      version: "v1",
+      kind: "generation",
+      input: SupportTicketFactsSchema,
+      output: ProposedSupportReplySchema,
+      instructions: "Draft a support reply.",
+      outputMode: "prompt-and-validate",
+      limits: { modelRequests: 2, toolCalls: 0, maxInputBytes: 1_024, maxOutputBytes: 1_024 },
+    });
+    const correctionRef = ModelRef.of("live-support-correction-backend", "v1");
+    const tickets: string[] = [];
+    const execute = vi.fn(async (execution: AiBackendExecution) => {
+      if (!isMessage(execution.input, SupportTicketFactsSchema))
+        throw new TypeError("Expected support ticket facts.");
+      let previous: string | undefined;
+      for (const [number, text] of ["{}", '{"replyText":"Ready"}'].entries()) {
+        const ticket = await execution.control.beginAttempt({
+          kind: "generation",
+          content: create(GenerationRequestSchema, {
+            input: AnyPacker.pack(SupportTicketFactsSchema, execution.input),
+            instructions: "Draft a support reply.",
+            outputSchemaJson: "{}",
+            promptJson: "{}",
+            digest: create(AiContentDigestSchema, { value: String(number + 1).repeat(64) }),
+            ...(previous === undefined ? {} : { corrects: { value: previous } }),
+          }),
+        });
+        tickets.push(ticket.id);
+        await execution.control.reserveTransport(ticket.id, 20, 100);
+        execution.control.onReceived(ticket.id, Buffer.byteLength(text));
+        const admitted = await execution.control.admitGeneration(
+          text,
+          execution.definition,
+          execution.input,
+        );
+        await execution.control.finishAttempt({
+          ticketId: ticket.id,
+          receivedBytes: Buffer.byteLength(text),
+          response: create(GenerationResponseSchema, {
+            rawOutput: text,
+            outcome: admitted.ok ? AiOutcome.ADMITTED : AiOutcome.INVALID_OUTPUT,
+            ...(admitted.ok
+              ? {
+                  admittedOutput: AnyPacker.pack(
+                    ProposedSupportReplySchema,
+                    admitted.value as never,
+                  ),
+                }
+              : {}),
+          }),
+          ...(admitted.ok ? {} : { issues: admitted.issues }),
+        });
+        if (admitted.ok) return { ok: true as const, value: admitted.value };
+        previous = ticket.id;
+      }
+      throw new Error("Corrected support reply was not admitted.");
+    });
+    const registry = AiRegistry.create({ defaultModels: { generation: correctionRef } });
+    registry.register(
+      createBackendRegistration({
+        ref: correctionRef,
+        kind: "generation",
+        supports: () => true,
+        resolveIdentity: () => ({
+          provider: "test",
+          account: "support",
+          endpoint: "local",
+          model: "v1",
+        }),
+        authorizeUse: () => true,
+        connect: (_scope, identity) => ({ model: {}, identity }),
+        execute,
+      }),
+    );
+    const { scope, audit, saved } = liveFixture("T-correction");
+    const selected = await AgentModelSelection.selectLiveKind(
+      registry,
+      { models: [correctionModel] },
+      scope,
+      [],
+      new AbortController().signal,
+      undefined,
+      "generation",
+    );
+    const runtime = new AgentLiveAiRuntime(
+      registry,
+      { models: [correctionModel] },
+      scope,
+      new Map([[AiModelKind.GENERATION, selected]]),
+      new AgentLiveBudget({ modelRequests: 2, totalOutputBytes: 1_024 }),
+      new AbortController().signal,
+      undefined,
+      () => undefined,
+      audit,
+    );
+    const result = await runtime.invoke(correctionModel, {
+      call: "draft",
+      conversation: create(ConversationIdSchema, { value: "support-correction" }),
+      input: create(SupportTicketFactsSchema, {
+        ticketNumber: create(SupportTicketNumberSchema, { value: "T-correction" }),
+        customerQuestion: "Please draft",
+      }),
+    });
+    expect(result).toMatchObject({ ok: true, value: { replyText: "Ready" } });
+    expect(execute).toHaveBeenCalledOnce();
+    expect(tickets).toHaveLength(2);
+    expect(tickets[0]).not.toBe(tickets[1]);
+
+    const system = saved.flatMap((entry) =>
+      entry.item.case === "systemEvent" ? [entry.item.value.message] : [],
+    );
+    const starts = system.flatMap((item) => {
+      const value = AnyPacker.tryUnpack(item, AgentModelAttemptStartedSchema);
+      return value === undefined ? [] : [value];
+    });
+    const finishes = system.flatMap((item) => {
+      const value = AnyPacker.tryUnpack(item, AgentModelAttemptFinishedSchema);
+      return value === undefined ? [] : [value];
+    });
+    const admitted = system.flatMap((item) => {
+      const value = AnyPacker.tryUnpack(item, AgentAiResultAdmittedSchema);
+      return value === undefined ? [] : [value];
+    });
+    expect(starts.map((item) => item.attempt?.value)).toEqual(tickets);
+    expect(starts[0]?.previousAttempt).toBeUndefined();
+    expect(starts[1]?.previousAttempt?.value).toBe(tickets[0]);
+    expect(finishes.map((item) => item.attempt?.value)).toEqual(tickets);
+    expect(finishes.map((item) => item.outcome)).toEqual([
+      AiOutcome.INVALID_OUTPUT,
+      AiOutcome.ADMITTED,
+    ]);
+    expect(finishes.map((item) => item.operation)).toEqual(starts.map((item) => item.operation));
+    expect(admitted).toHaveLength(1);
+    expect(admitted[0]?.operation).toEqual(starts[0]?.operation);
+    const conversation = saved.flatMap((entry) =>
+      entry.item.case === "conversationRecord" ? [entry.item.value] : [],
+    );
+    const requests = conversation.flatMap((entry) => {
+      const value = AnyPacker.tryUnpack(entry.content, GenerationRequestSchema);
+      return value === undefined ? [] : [{ entry, value }];
+    });
+    const responses = conversation.flatMap((entry) => {
+      const value = AnyPacker.tryUnpack(entry.content, GenerationResponseSchema);
+      return value === undefined ? [] : [{ entry, value }];
+    });
+    expect(requests.map(({ entry }) => entry.attempt?.value)).toEqual(tickets);
+    expect(responses.map(({ entry }) => entry.attempt?.value)).toEqual(tickets);
+    expect(requests.map(({ entry }) => entry.operation)).toEqual(
+      starts.map((item) => item.operation?.operation),
+    );
+    expect(responses.map(({ entry }) => entry.operation)).toEqual(
+      starts.map((item) => item.operation?.operation),
+    );
+    expect(conversation.map((entry) => entry.conversation?.value)).toEqual(
+      Array.from({ length: 4 }, () => "support-correction"),
+    );
+    expect(requests[1]?.value.corrects?.value).toBe(tickets[0]);
+    expect(responses.map(({ value }) => value.outcome)).toEqual([
+      AiOutcome.INVALID_OUTPUT,
+      AiOutcome.ADMITTED,
+    ]);
+    expect(responses[0]?.value.admittedOutput).toBeUndefined();
+    expect(
+      AnyPacker.tryUnpack(responses[1]?.value.admittedOutput, ProposedSupportReplySchema),
+    ).toEqual(result.ok ? result.value : undefined);
+  });
+
   it("executes the same named call anew for two accepted signals and enforces physical credit", async () => {
     const physicalRequests = vi.fn();
     const execute = vi.fn(async (execution: AiBackendExecution) => {

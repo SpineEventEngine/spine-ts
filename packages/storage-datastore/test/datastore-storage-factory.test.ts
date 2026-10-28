@@ -21,7 +21,10 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
-import { StoragePreparations } from "@spine-event-engine/storage/provider";
+import {
+  StoragePreparations,
+  type EntityStoragePreparationInput,
+} from "@spine-event-engine/storage/provider";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -29,8 +32,15 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ProjectStateSchema } from "../../core/test-fixtures/generated/project_states_pb.js";
 import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
-import { AnyPacker } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { scope } from "../../storage/test/entity/agent-history-fixtures.js";
+import { entityInput } from "../../storage/test/entity/agent-live-fixtures.js";
+import {
+  SupportReplyAgentIdSchema,
+  SupportReplyAgentStateSchema,
+  type SupportReplyAgentId,
+  type SupportReplyAgentState,
+} from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 
 import { DatastoreQueryLimitError, DatastoreStorageFactory } from "../src/index.js";
 
@@ -347,6 +357,60 @@ describe("DatastoreStorageFactory", () => {
     await preparation.prepareEntity(input, "create");
     expect(client.queries).toHaveLength(5);
     expect(client.writes).toBe(0);
+  });
+
+  it("retries a failed mandatory Agent preference probe without repeating ready families", async () => {
+    const client = new MetadataClient();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(
+      new TypeRegistry([SupportReplyAgentIdSchema, SupportReplyAgentStateSchema]),
+    );
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const input = {
+      ...entityInput(),
+      stateHistory: true,
+      eventHistory: true,
+    } as unknown as EntityStoragePreparationInput<SupportReplyAgentId, SupportReplyAgentState>;
+    const failure = new Error("Agent preference metadata unavailable");
+    client.failQueryNumber = 6;
+    client.queryFailure = failure;
+    try {
+      await expect(preparation.prepareAgentCommit(input, "check")).rejects.toBe(failure);
+      expect(client.queries).toHaveLength(6);
+      for (const query of client.queries)
+        expect(query).toMatchObject({
+          namespace: "",
+          kind: "__namespace__",
+          projection: "__key__",
+        });
+      expect(client.keys).toEqual(
+        Array.from({ length: 6 }, () => ({ namespace: "", path: ["__namespace__", 1] })),
+      );
+      expect(client.filters).toEqual(
+        client.keys.map((key) => ({
+          op: "AND",
+          filters: [
+            { name: "__key__", op: ">=", val: key },
+            { name: "__key__", op: "<=", val: key },
+          ],
+        })),
+      );
+      expect(client.writes).toBe(0);
+
+      client.failQueryNumber = undefined;
+      await preparation.prepareAgentCommit(input, "check");
+      expect(client.queries).toHaveLength(7);
+      await preparation.prepareAgentCommit(input, "create");
+      expect(client.queries).toHaveLength(7);
+      expect(client.writes).toBe(0);
+    } finally {
+      await factory.close();
+    }
+    expect(client.closed).toBe(false);
   });
 
   it("selects exact custom preparation and rejects a custom Entity without its callback", async () => {
@@ -771,6 +835,8 @@ class MetadataClient {
   writes = 0;
   closed = false;
   fail = false;
+  failQueryNumber: number | undefined;
+  queryFailure: Error | undefined;
   gate: Promise<void> | undefined;
   readonly namespace = "";
   key(value: unknown): unknown {
@@ -798,6 +864,8 @@ class MetadataClient {
   }
   async runQuery(): Promise<[unknown[]]> {
     if (this.fail) throw new Error("metadata read failed");
+    if (this.queries.length === this.failQueryNumber && this.queryFailure !== undefined)
+      throw this.queryFailure;
     await this.gate;
     return [[]];
   }

@@ -4939,3 +4939,30 @@ original error, continued delivery and closed admission, without private state
 or sleeps. API/docs/security unchanged; specialist lanes N/A for bounded test
 assertions. Evidence m47-transport-tests.log, m47-transport-coverage.log and
 m47-coverage-gain.json outside Git. Include in next shared tooling check.
+
+M48 follow-on coverage selection: parent found SQL legacy continuation tests only
+exercise one ascending value key. Ask existing Sol/medium reliability reviewer
+to verify whether multi-column/descending cursor traversal is missing in both
+providers, using genuine existing record fixtures and exact bound SQL assertions.
+This is normal public paging behavior, not malformed-input coverage. No new API
+or production edits. Selection only, no duplicated native scenario if covered.
+
+M46 frozen: 33 affected tests and tooling/package TypeScript, lint/cleanup/format/
+diff pass. Four new Datastore outcomes with matching M43 branch keys; live
+correction proves required audit contract without new branch gain. API review
+uses original explicit Sol/medium reviewer for typed audit association and exact
+preparation retry assertions; parent style review. Evidence m46-evidence.md.
+
+M49 standard MySQL Entity history test slice now selected from M46 reviewer
+packet. Existing sole explicit Sol/medium implementer edits only
+mysql-entity-commit-contract.test.ts; M46 files stay frozen. Add normal
+nanosecond cutoff behavior across two Task IDs plus real current-port typed query
+mapping. Fix existing record fake to compare exact domain deletion keys; preserve
+live production behavior. Estimate 0.3–0.5 hour for tests/static and review.
+No new fixtures unrelated to domain, no matrix/private forcing/source changes.
+
+M46 review accepted clean; parent style inspection agrees. Explicit original
+Sol/medium configuration confirmed, runtime introspection unavailable. Commit and
+push two test files plus records now. M49 remains disjoint. M48 reviewer selected
+two useful SQL paging cases (mixed-direction timestamp/ID and default-ID cursor)
+for the next bounded test packet; skip already covered offset variations.
