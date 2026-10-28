@@ -15,8 +15,6 @@
 import type { MessageShape } from "@bufbuild/protobuf";
 import type { MessageSchema } from "@spine-event-engine/core";
 import type {
-  AgentAiOperationFailed,
-  AgentToolCallFinished,
   AiOperationId,
   AiUsage,
   DecisionRequest,
@@ -25,7 +23,6 @@ import type {
   GenerationResponse,
   ToolResponse,
 } from "@spine-event-engine/proto/agent";
-import { AiOutcome } from "@spine-event-engine/proto/agent";
 import type {
   AiConnectionIdentity,
   AiControl,
@@ -71,154 +68,6 @@ export type AiAttemptRequest =
 export type AiAttemptResponse = GenerationResponse | DecisionResponse;
 
 /**
- * Rejects a nonterminal tool proposal in incompatible conversation/event contexts.
- *
- * @param content Typed response or terminal System event.
- */
-export const assertAiOutcomeContext = (
-  content:
-    | GenerationResponse
-    | DecisionResponse
-    | ToolResponse
-    | AgentToolCallFinished
-    | AgentAiOperationFailed,
-): void => {
-  if (content.$typeName !== "spine.ts.agent.GenerationResponse") {
-    if (content.outcome === AiOutcome.TOOL_REQUESTED)
-      throw new TypeError("TOOL_REQUESTED is only a generation response outcome");
-    return;
-  }
-  const hasCalls = content.toolCalls.length > 0;
-  const hasOutput = content.admittedOutput !== undefined;
-  if (content.outcome === AiOutcome.TOOL_REQUESTED && (!hasCalls || hasOutput))
-    throw new TypeError("TOOL_REQUESTED requires proposals without admitted output");
-  if (content.outcome === AiOutcome.ADMITTED && (!hasOutput || hasCalls))
-    throw new TypeError("ADMITTED requires output without outstanding proposals");
-  if (content.outcome !== AiOutcome.ADMITTED && hasOutput)
-    throw new TypeError("Only ADMITTED may carry application output");
-  if (content.anthropicContent && content.openaiContent)
-    throw new TypeError("Generation response has multiple provider content envelopes");
-  if (content.anthropicContent) assertAnthropicProjection(content);
-  if (content.openaiContent) assertOpenAiProjection(content);
-};
-
-/**
- * Checks the typed Responses projection without depending on provider SDK data.
- *
- * @param content Generation response with ordered Responses items.
- */
-const assertOpenAiProjection = (content: GenerationResponse): void => {
-  const receipt = content.openaiContent;
-  if (!receipt) return;
-  if (
-    (content.outcome === AiOutcome.ADMITTED || content.outcome === AiOutcome.TOOL_REQUESTED) &&
-    !receipt.complete
-  )
-    throw new TypeError("Responses receipt incomplete");
-  const { text, calls } = projectOpenAiItems(receipt);
-  const partialFailure =
-    !receipt.complete &&
-    (content.outcome === AiOutcome.FAILED || content.outcome === AiOutcome.REFUSED);
-  const savedText = text.join("");
-  const textMatches = partialFailure
-    ? content.rawOutput.startsWith(savedText)
-    : savedText === content.rawOutput;
-  const callCountMatches = partialFailure
-    ? calls.length <= content.toolCalls.length
-    : calls.length === content.toolCalls.length;
-  if (
-    !textMatches ||
-    !callCountMatches ||
-    calls.some(
-      (call, index) =>
-        call.providerCallId !== content.toolCalls[index]?.providerCallId ||
-        call.toolName !== content.toolCalls[index].toolName ||
-        call.argumentsJson !== content.toolCalls[index].argumentsJson,
-    )
-  )
-    throw new TypeError("Responses projection differs from standard fields");
-};
-
-/**
- * @param receipt Ordered typed Responses items.
- * @returns Standard text and tool projection.
- */
-const projectOpenAiItems = (receipt: NonNullable<GenerationResponse["openaiContent"]>) => {
-  const text: string[] = [];
-  const calls: GenerationResponse["toolCalls"] = [];
-  for (const item of receipt.items) {
-    if (item.content.case === "message") {
-      for (const part of item.content.value.parts) {
-        if (part.content.case === "outputText") text.push(part.content.value);
-      }
-    } else if (item.content.case === "functionCall") {
-      if (!item.content.value.call) throw new TypeError("Responses call missing");
-      calls.push(item.content.value.call);
-    } else if (item.content.case !== "reasoning")
-      throw new TypeError("Responses item kind missing");
-  }
-  return { text, calls };
-};
-
-/**
- * Checks that ordered Anthropic blocks project to the journal's standard fields.
- *
- * @param content Generation response with ordered Anthropic content.
- */
-const assertAnthropicProjection = (content: GenerationResponse): void => {
-  const text: string[] = [];
-  const calls: typeof content.toolCalls = [];
-  for (const block of content.anthropicContent?.blocks ?? [])
-    collectAnthropicBlock(content.outcome, block, text, calls);
-  if (text.join("") !== content.rawOutput)
-    throw new TypeError("Anthropic text projection differs from raw output");
-  if (
-    calls.length !== content.toolCalls.length ||
-    calls.some((call, index) => {
-      const saved = content.toolCalls[index];
-      if (saved === undefined) return true;
-      return (
-        call.providerCallId !== saved.providerCallId ||
-        call.toolName !== saved.toolName ||
-        call.argumentsJson !== saved.argumentsJson
-      );
-    })
-  )
-    throw new TypeError("Anthropic tool projection differs from proposals");
-};
-
-/**
- * Projects a block while requiring complete reasoning for terminal proposals.
- *
- * @param outcome Saved generation outcome.
- * @param block Ordered Anthropic block.
- * @param text Mutable projected text segments.
- * @param calls Mutable projected tool proposals.
- */
-const collectAnthropicBlock = (
-  outcome: AiOutcome,
-  block: NonNullable<GenerationResponse["anthropicContent"]>["blocks"][number],
-  text: string[],
-  calls: GenerationResponse["toolCalls"],
-): void => {
-  if (block.content.case === "text") text.push(block.content.value);
-  else if (block.content.case === "toolCall") calls.push(block.content.value);
-  else if (block.content.case === "thinking") {
-    if (
-      (outcome === AiOutcome.TOOL_REQUESTED || outcome === AiOutcome.ADMITTED) &&
-      !block.content.value.signature
-    )
-      throw new TypeError("Complete Anthropic thinking requires a signature");
-  } else if (block.content.case === "redactedThinking") {
-    if (
-      (outcome === AiOutcome.TOOL_REQUESTED || outcome === AiOutcome.ADMITTED) &&
-      !block.content.value.data
-    )
-      throw new TypeError("Complete Anthropic redacted thinking requires data");
-  } else throw new TypeError("Anthropic content block kind missing");
-};
-
-/**
  * One persisted physical request identity and its reserved resource bounds.
  */
 export interface AiAttemptTicket {
@@ -246,36 +95,6 @@ export interface AiAttemptTicket {
    * Cancellation and execution-fence loss signal.
    */
   readonly signal: AbortSignal;
-}
-
-/**
- * Completed physical attempt returned from a durable journal without redispatch.
- */
-export interface AiAttemptReplay {
-  /**
-   * Distinguishes saved content from a new physical-attempt ticket.
-   */
-  readonly kind: "replay";
-
-  /**
-   * Original attempt identity retained for tool-call correlation.
-   */
-  readonly id: string;
-
-  /**
-   * Previously journaled bounded provider response.
-   */
-  readonly response: AiAttemptResponse;
-
-  /**
-   * Previously journaled local validation issues, when any.
-   */
-  readonly issues?: readonly AiValidationIssue[];
-
-  /**
-   * Original persisted failure and retryability matching the response diagnostic.
-   */
-  readonly failure?: AiFailure;
 }
 
 /**
@@ -394,7 +213,7 @@ export interface AiExecutionControl extends AiControl {
    * @param request Typed generation or decision content, including correction text.
    * @returns Runtime-assigned ticket after the journal and budget barrier.
    */
-  readonly beginAttempt: (request: AiAttemptRequest) => Promise<AiAttemptTicket | AiAttemptReplay>;
+  readonly beginAttempt: (request: AiAttemptRequest) => Promise<AiAttemptTicket>;
 
   /**
    * Records transport bytes against the existing attempt ticket.

@@ -229,7 +229,7 @@ export interface AiMcpAdvertisedTool {
   readonly inputSchemaJson: string;
 
   /**
-   * Canonical supported output schema retained for request replay comparison.
+   * Canonical supported output schema discovered for this tool.
    */
   readonly outputSchemaJson?: string;
 }

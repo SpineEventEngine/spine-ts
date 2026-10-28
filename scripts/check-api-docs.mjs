@@ -1078,7 +1078,6 @@ const expectedAiDocumentedExports = [
 ];
 const expectedAiAdapterExports = [
   "AiAttemptCompletion",
-  "AiAttemptReplay",
   "AiAttemptRequest",
   "AiAttemptResponse",
   "AiAttemptTicket",
@@ -1101,7 +1100,6 @@ const expectedAiAdapterExports = [
   "AiMcpToolDefinition",
   "AiMcpToolResult",
   "AiToolInvocation",
-  "assertAiOutcomeContext",
   "backendDefinition",
   "createBackendRegistration",
   "deriveOutputSchema",

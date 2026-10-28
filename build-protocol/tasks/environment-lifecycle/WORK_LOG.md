@@ -4180,3 +4180,23 @@ independent reliability review clean. Commit/push test and current records now.
 M21 contract map accepted with orphan assertAiOutcomeContext removed alongside
 replay SPI and paths; preserve active-handler corrections and typed audit data.
 No migration, server-runtime redesign or compatibility wrapper.
+
+M21 production build and 279 affected tests pass, including two fresh native
+Anthropic correction cases preserving signed/redacted thinking; existing Agent
+integration plus BlackBox pass 17/17. Documentation checks pass after removing
+the two obsolete SPI names from the deterministic API inventory. Final scoped
+coverage/static evidence and review remain pending; no new global percentage.
+Read-only server coverage scan found only two justified candidates (Process
+Manager Event tenant checks and transient generated-registry load retry); generic
+lazy preparation/storage retention/service subscription paths already have tests.
+Keep these and the three provider candidates pending until M21 review converges.
+
+M21 accepted after full relevant review and narrow assertion correction. Ticket-only
+SPI, obsolete validator/replay removal, preserved live corrections/tool calls and
+audit serialization, exact API inventory and narrow docs verified. Initial 279
+affected and 17 Agent tests passed; final test-only correction passes 167/167 plus
+tooling/lint/cleanup/format/diff. API/reliability clean, style P2 resolved, parent
+docs clean. Commit/push the frozen packet and records. A diagnostic replacement
+of changed-file LCOV counters still leaves about 208 branch hits short; it is not
+a current global result. Continue meaningful provider lifecycle coverage before
+final full release and exact-SHA Security checks.

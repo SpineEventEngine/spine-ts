@@ -22,7 +22,6 @@ export type {
   AiAttemptRequest,
   AiAttemptResponse,
   AiAttemptTicket,
-  AiAttemptReplay,
   AiAttemptCompletion,
   AiCandidateAdmission,
   AiToolInvocation,
@@ -30,7 +29,6 @@ export type {
   AiBackendExecution,
   AiBackendOutcome,
 } from "../internal/execution.js";
-export { assertAiOutcomeContext } from "../internal/execution.js";
 export { AiMcpSetupFailure } from "../internal/mcp-protocol.js";
 export type {
   AiMcpProtocolFactory,

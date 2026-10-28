@@ -22,10 +22,8 @@ import type {
   AiBackendExecution,
   AiBackendOutcome,
   AiAttemptTicket,
-  AiAttemptReplay,
   AiCandidateAdmission,
 } from "@spine-event-engine/ai/spi/adapter";
-import { assertAiOutcomeContext } from "@spine-event-engine/ai/spi/adapter";
 import {
   AiContentDigestSchema,
   AiDiagnosticIdSchema,
@@ -46,7 +44,6 @@ import {
   type DecisionAnswer,
 } from "@spine-event-engine/proto/agent";
 import { providerConnection } from "./factory.js";
-import { replayFailure } from "./replay-failure.js";
 import { scheduleBoundedDeadline } from "./deadline.js";
 
 /**
@@ -397,24 +394,6 @@ const providerDecision = async (
 };
 
 /**
- * Returns a saved typed decision without consuming another attempt ticket.
- */
-const replayDecision = (request: AiBackendExecution, replay: AiAttemptReplay): AiBackendOutcome => {
-  const response = replay.response;
-  if (response.$typeName !== "spine.ts.agent.DecisionResponse")
-    throw new TypeError("Saved attempt response kind mismatch");
-  assertAiOutcomeContext(response);
-  if (response.outcome === AiOutcome.ADMITTED) {
-    const output =
-      response.admittedOutput &&
-      AnyPacker.tryUnpack(response.admittedOutput, request.definition.output);
-    if (!output) throw new TypeError("Saved decision output missing");
-    return { ok: true, value: output };
-  }
-  return { ok: false, failure: replayFailure(replay) };
-};
-
-/**
  * Executes one non-generative Jev decision without SDK retries.
  *
  * @param request Authenticated capability and fenced runtime controls.
@@ -426,7 +405,6 @@ export const executeDecision = async (request: AiBackendExecution): Promise<AiBa
     kind: "decision",
     content: requestContent(request),
   });
-  if ("kind" in attempt) return replayDecision(request, attempt);
   const ticket = attempt;
   const expired = ticketFailure(request, ticket);
   if (expired) return providerFailure(request, ticket, expired, false);

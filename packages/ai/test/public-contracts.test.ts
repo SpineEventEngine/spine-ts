@@ -14,12 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import { create, fromBinary, fromJson, toBinary, toJson } from "@bufbuild/protobuf";
-import { AnyPacker } from "@spine-event-engine/core";
-import { assertAiOutcomeContext } from "../src/spi/adapter.js";
-import {
-  AnthropicAssistantContentSchema,
-  OpenAiAssistantContentSchema,
-} from "@spine-event-engine/proto/agent";
+import { AnthropicAssistantContentSchema } from "@spine-event-engine/proto/agent";
 import {
   ProposedSupportReplySchema,
   SupportTicketFactsSchema,
@@ -51,73 +46,6 @@ import {
 } from "../src/index.js";
 
 describe("public SDK-free facade inventory", () => {
-  it("rejects incomplete or mismatched typed Responses receipts", () => {
-    const content = create(OpenAiAssistantContentSchema, {
-      complete: false,
-      items: [
-        {
-          itemId: "message-1",
-          content: {
-            case: "message",
-            value: {
-              parts: [{ content: { case: "outputText", value: "Hello" } }],
-            },
-          },
-        },
-      ],
-    });
-    const response = create(GenerationResponseSchema, {
-      outcome: AiOutcome.TOOL_REQUESTED,
-      rawOutput: "Different",
-      toolCalls: [{ providerCallId: "call-1", toolName: "tool_0", argumentsJson: "{}" }],
-      openaiContent: content,
-    });
-    expect(() => {
-      assertAiOutcomeContext(response);
-    }).toThrow("Responses");
-    response.openaiContent = create(OpenAiAssistantContentSchema, { ...content, complete: true });
-    expect(() => {
-      assertAiOutcomeContext(response);
-    }).toThrow("Responses");
-  });
-
-  it("accepts bounded normalized text and tool deltas in an incomplete failed Responses receipt", () => {
-    const response = create(GenerationResponseSchema, {
-      outcome: AiOutcome.FAILED,
-      rawOutput: "started",
-      toolCalls: [{ providerCallId: "call-1", toolName: "tool_0", argumentsJson: "{}" }],
-      openaiContent: create(OpenAiAssistantContentSchema, { complete: false }),
-    });
-    expect(() => {
-      assertAiOutcomeContext(response);
-    }).not.toThrow();
-    response.outcome = AiOutcome.TOOL_REQUESTED;
-    expect(() => {
-      assertAiOutcomeContext(response);
-    }).toThrow("incomplete");
-  });
-
-  it("rejects a failed partial Responses receipt that contradicts normalized text", () => {
-    const response = create(GenerationResponseSchema, {
-      outcome: AiOutcome.FAILED,
-      rawOutput: "later text",
-      openaiContent: create(OpenAiAssistantContentSchema, {
-        complete: false,
-        items: [
-          {
-            itemId: "message-1",
-            content: {
-              case: "message",
-              value: { parts: [{ content: { case: "outputText", value: "different" } }] },
-            },
-          },
-        ],
-      }),
-    });
-    expect(() => {
-      assertAiOutcomeContext(response);
-    }).toThrow("projection");
-  });
   it("provides factory values with their approved type names", () => {
     const ref: ModelRef = ModelRef.of("deployment", "r1");
     const model: AiModel<typeof SupportTicketFactsSchema, typeof ProposedSupportReplySchema> =
@@ -231,47 +159,9 @@ describe("public SDK-free facade inventory", () => {
       if (thinking?.case !== "thinking") throw new Error("Expected thinking block");
       expect(thinking.value.text).toBe("");
       expect(thinking.value.signature).toBe("signed");
-      expect(() => {
-        assertAiOutcomeContext(restored);
-      }).not.toThrow();
-      restored.rawOutput = "contradiction";
-      expect(() => {
-        assertAiOutcomeContext(restored);
-      }).toThrow("text projection");
+      expect(restored.rawOutput).toBe("beforeafter");
+      expect(restored.toolCalls).toEqual([toolCall]);
     }
-  });
-
-  it("records incomplete failed reasoning but rejects incomplete tool continuations", () => {
-    const partial = create(AnthropicAssistantContentSchema, {
-      blocks: [{ content: { case: "thinking", value: { text: "partial", signature: "" } } }],
-    });
-    expect(() => {
-      assertAiOutcomeContext(
-        create(GenerationResponseSchema, {
-          outcome: AiOutcome.FAILED,
-          anthropicContent: partial,
-        }),
-      );
-    }).not.toThrow();
-    expect(() => {
-      assertAiOutcomeContext(
-        create(GenerationResponseSchema, {
-          outcome: AiOutcome.TOOL_REQUESTED,
-          toolCalls: [{ providerCallId: "call", toolName: "tool_0", argumentsJson: "{}" }],
-          anthropicContent: create(AnthropicAssistantContentSchema, {
-            blocks: [
-              ...partial.blocks,
-              {
-                content: {
-                  case: "toolCall",
-                  value: { providerCallId: "call", toolName: "tool_0", argumentsJson: "{}" },
-                },
-              },
-            ],
-          }),
-        }),
-      );
-    }).toThrow("signature");
   });
 
   it("round-trips absent, zero and nonzero decision precision", () => {
@@ -299,62 +189,5 @@ describe("public SDK-free facade inventory", () => {
       expect(restored.rounding?.probabilityDecimals).toBe(expected?.probabilityDecimals);
       expect(restored.rounding?.scoreDecimals).toBe(expected?.scoreDecimals);
     }
-  });
-
-  it("rejects nonterminal outcomes outside generation and contradictory generation output", () => {
-    const proposal = create(ModelToolCallSchema, {
-      providerCallId: "call-1",
-      toolName: "lookup",
-      argumentsJson: "{}",
-    });
-    const continued = create(GenerationResponseSchema, {
-      outcome: AiOutcome.TOOL_REQUESTED,
-      toolCalls: [proposal],
-    });
-    expect(() => {
-      assertAiOutcomeContext(continued);
-    }).not.toThrow();
-    expect(() => {
-      assertAiOutcomeContext(
-        create(GenerationResponseSchema, {
-          outcome: AiOutcome.TOOL_REQUESTED,
-        }),
-      );
-    }).toThrow("requires proposals");
-    expect(() => {
-      assertAiOutcomeContext(
-        create(GenerationResponseSchema, {
-          outcome: AiOutcome.ADMITTED,
-          toolCalls: [proposal],
-          admittedOutput: AnyPacker.pack(
-            ProposedSupportReplySchema,
-            create(ProposedSupportReplySchema, { replyText: "Hello" }),
-          ),
-        }),
-      );
-    }).toThrow("without outstanding proposals");
-    expect(() => {
-      assertAiOutcomeContext(
-        create(GenerationResponseSchema, {
-          outcome: AiOutcome.INVALID_OUTPUT,
-          admittedOutput: AnyPacker.pack(
-            ProposedSupportReplySchema,
-            create(ProposedSupportReplySchema, { replyText: "Hello" }),
-          ),
-        }),
-      );
-    }).toThrow("Only ADMITTED");
-    expect(() => {
-      assertAiOutcomeContext(create(DecisionResponseSchema, { outcome: AiOutcome.FAILED }));
-    }).not.toThrow();
-    for (const content of [
-      create(DecisionResponseSchema, { outcome: AiOutcome.TOOL_REQUESTED }),
-      create(ToolResponseSchema, { outcome: AiOutcome.TOOL_REQUESTED }),
-      create(AgentToolCallFinishedSchema, { outcome: AiOutcome.TOOL_REQUESTED }),
-      create(AgentAiOperationFailedSchema, { outcome: AiOutcome.TOOL_REQUESTED }),
-    ])
-      expect(() => {
-        assertAiOutcomeContext(content);
-      }).toThrow("only a generation response");
   });
 });

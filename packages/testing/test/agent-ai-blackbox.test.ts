@@ -447,7 +447,6 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
         digest: create(AiContentDigestSchema, { value: "0".repeat(64) }),
       });
       const first = await execution.control.beginAttempt({ kind: "generation", content: prepared });
-      if ("kind" in first) throw new Error("Unexpected saved model replay in fresh fixture.");
       await execution.control.reserveTransport(first.id, 128, 1024);
       await execution.control.finishAttempt({
         ticketId: first.id,
@@ -470,7 +469,6 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
         kind: "generation",
         content: prepared,
       });
-      if ("kind" in second) throw new Error("Unexpected saved model replay in fresh fixture.");
       await execution.control.reserveTransport(second.id, 128, 1024);
       const output = create(ProposedSupportReplySchema, { reply: "Ticket found; we can help." });
       await execution.control.finishAttempt({

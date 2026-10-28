@@ -29,10 +29,11 @@ passes through the runtime response parser, Proto constraints, and application
 validation; decision answers pass through the runtime decision admission.
 `requests()` gives immutable per-request snapshots with capability name, Agent
 call name, one-based attempt, prepared input ProtoJSON, correction target and
-issues, local validation issues, and advertised tool names. Recovery reuse does
-not produce a new backend request. `assertSatisfied()` fails for any queued
-response left unused or any admitted request without a matching script. This
-includes a request waiting at a gate. If cancellation interrupts a reserved
+issues, local validation issues, and advertised tool names. Each dispatched
+live attempt, including a correction, produces a new request observation.
+`assertSatisfied()` fails for any queued response left unused or any admitted
+request without a matching script. This includes a request waiting at a gate.
+If cancellation interrupts a reserved
 response, the scripted observation remains pending and satisfaction does not
 pass. This dependency does not replace BlackBox, establish delivery or state, or provide an
 MCP tool transport.

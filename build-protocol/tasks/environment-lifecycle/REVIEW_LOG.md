@@ -2035,3 +2035,66 @@ are removed replay branches; preserve audit serialization assertions and actual
 live streamed-model validation. Same explicit Astra/high profile accepted; no
 new runtime call or replacement API. The bounded map is now accepted for the
 existing sole Sol/medium implementer.
+
+M21 parallel mechanical preparation assignment: orchestrator-dispatched function,
+explicit gpt-6-luna/medium, refresh the stale M15 final verification plan using
+current scripts and accepted evidence. Read-only repository inspection; write
+only temporary plan, no tests/builds/code edits/children. Ensure preflight covers
+changed AI source/contracts and current docs, followed by one converged release
+profile and exact-final-SHA Security workflow. No coverage threshold overrides.
+Desktop supports explicit profiles; runtime self-introspection unavailable.
+
+M21 final-plan review requires deterministic correction: verify:task is an
+expensive profile and must not be used as cheap preflight before verify:release.
+Use affected-file/source checks and current matching implementer evidence; avoid
+redundant Proto generation when Proto inputs are unchanged. M21 diff scope starts
+at 5b281e484, while the origin/master diff legitimately contains the entire task.
+Same Luna/medium function updates only the temporary plan; no reviewer lane.
+
+M21 parallel read-only runtime coverage selection: original Sol/medium reliability
+reviewer investigates repository/context/service lifecycle gaps from frozen M19
+LCOV and current unchanged server source. Exclude already investigated provider,
+AI and scalar-filter matrices. Identify a small coherent behavior packet only;
+no runtime/test edits or builds. Raw candidate record stays outside Git.
+
+M21 mechanical-plan correction accepted: temporary plan now distinguishes scoped
+preflight from the release profile, reuses only exact-input evidence, avoids
+Proto regeneration without changed inputs, and measures M21 against 5b281e484.
+Explicit Luna/medium dispatch confirmed; no runtime metadata exposed. No tests
+or source edits performed by this planning function. Final release and Security
+checks remain pending, not authorized by the temporary plan itself.
+
+M21 pre-review gates pass: production/tooling typechecks, 279 affected tests,
+17 existing Agent integration/BlackBox tests, ESLint/cleanup/TSDoc/copyright,
+docs/API/snippets, formatting and diff checks. Removed SPI inventory is exact.
+Parent scoped docs/status lint finds no active replay promise in affected docs;
+TASK now states the remaining adapter omission and current diagnostic limits.
+Review wave: existing TypeScript/API role (explicit gpt-6-sol/medium) checks
+ticket-only contracts, exports and preserved audit schemas; existing
+performance/reliability reviewer (original explicit Sol/medium) checks live
+corrections/tool continuation/audit ordering and retained mixed-test behavior;
+existing style/maintainability role (explicit gpt-6-sol/medium) checks deletion
+completeness and test clarity. Parent disposes narrow documentation changes: tool
+schema description and fresh request observations match actual active behavior.
+No children; read-only source/report work. Collect complete wave before fixes.
+Runtime metadata unavailable; immutable explicit dispatch profiles apply.
+
+M21 complete review wave collected. API and reliability clean; explicit Sol/medium
+profiles confirmed. Style P2 accepted: fresh Anthropic correction test must verify
+ordered assistant content, distinct ticket identities, and both recorded outcomes,
+rather than two calls plus a string substring. API advisory accepted as trivial
+cleanup: remove two impossible replay-result guards from BlackBox fixture. Style
+single-element fixture loop also accepted as deterministic cleanup. Defer ordinary
+local attempt aliases and current-invocation saved variable wording as harmless
+advisory polish; they do not implement recovery. Parent narrow docs disposition
+clean. One correction batch returns to same implementer, estimate 0.1–0.2 hours.
+No production behavior change expected. Reconfirm the strengthened test via the
+style lane; no full-wave repeat. API result delivered directly (no report file),
+other reports m21-style-review.md and m21-reliability-review.md.
+
+M21 narrow style confirmation resolves accepted P2; exact structured continuation,
+distinct tickets and both outcomes now asserted. Same explicit Sol/medium profile
+accepted; runtime metadata unavailable. Parent verifies all 12 frozen manifest
+hashes. Updated factory/BlackBox 167/167 and scoped static checks pass; runtime
+unchanged since the clean API/reliability review. All four canonical concerns
+disposed; no unresolved accepted findings. Final global coverage remains pending.

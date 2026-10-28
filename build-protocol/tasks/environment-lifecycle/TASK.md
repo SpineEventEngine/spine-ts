@@ -18,7 +18,10 @@ complete. Public live TenantIndex configuration and native membership are review
 and complete. Tenant admission and identifiable errors are reviewed and complete.
 Unconditional duplicate-state registration and the unified asynchronous build API
 are verified, independently reviewed and pushed. Immutable Agent acceptance receipts and
-conditional live Agent persistence and complete runtime recovery removal are reviewed and pushed.
+conditional live Agent persistence and server recovery removal are reviewed and pushed.
+M21 removal of the remaining AI-adapter replay SPI and saved-response paths is
+verified and independently reviewed, including preservation of live corrections
+and typed audit records.
 Shared environment setup and Delivery consolidation are reviewed and complete,
 including context-specific shutdown and retained shared dispatch lifetimes.
 Bounded Context eager/lazy initialization is reviewed and pushed.
@@ -27,9 +30,11 @@ preparation APIs are verified, independently reviewed and pushed. Protocol integ
 and remaining AnyPacker adoption are verified, independently reviewed and pushed.
 Final documentation, native evidence, specialist review and security review
 are accepted. The version-only commit for all 35 workspace manifests is pushed.
-Full-suite regression corrections are implemented, reviewed and pushed. The latest
-release run passes all 6,239 Vitest tests, but global branch coverage is 88.22%
-against the required 90%; focused behavior-test additions are in progress.
+Full-suite regression corrections are implemented, reviewed and pushed. The latest full diagnostic run has 6,251 passing tests, one failure and 16 skipped;
+global branch coverage is 89.13% against the required 90%. M20 corrected the
+shared test failure observation behind that failure; 12 focused BlackBox tests
+and five nested coverage-tooling tests pass. M21 source removal requires fresh
+coverage evidence before the final release gate can pass.
 Exact-final-SHA remote CI remains pending. On 2026-10-28 the human additionally
 requested remediation of all findings from the scheduled Security workflow,
 including run 40632154594. Its dependency audit reports 31 vulnerabilities;
