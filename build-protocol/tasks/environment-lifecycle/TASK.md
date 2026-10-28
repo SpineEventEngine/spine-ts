@@ -32,8 +32,9 @@ and final release verification are in progress;
 exact-SHA remote CI remains pending. On 2026-10-28 the human additionally
 requested remediation of all findings from the scheduled Security workflow,
 including run 40632154594. Its dependency audit reports 31 vulnerabilities;
-remediation follows lifecycle regression convergence and is required before
-final acceptance. Remaining milestones follow
+remediation is implemented and independently reviewed, and both local audits
+report zero known vulnerabilities. Full release and feature-branch GitHub
+Security verification remain required before final acceptance. Remaining milestones follow
 MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.
@@ -91,7 +92,8 @@ Focused behavior tests precede runtime changes. Cheap preflight precedes
 specialist review and expensive gates. Use the release profile after convergence
 because shared runtime is affected. Every canonical review concern applies to
 the full task: maintainability, documentation, TypeScript/API and reliability.
-Final release-readiness security review is accepted. Baseline build and
+The lifecycle security review is accepted; the added dependency remediation
+requires its own focused security confirmation. Baseline build and
 tooling typechecks, baseline tests and focused retention checks passed. Bounded
 reviews are recorded in REVIEW_LOG.md; release verification and exact-final-SHA
 CI remain pending. WORK_LOG.md records the current evidence. Raw command outputs

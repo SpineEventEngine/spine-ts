@@ -1721,3 +1721,35 @@ assertions now wait for observed dispatch. Explicit immutable Sol/medium profile
 confirmed; runtime introspection unavailable. API review remains clean. Parent
 style review accepts the bounded private method change and domain-valid fixtures;
 TSDoc describes registration accurately. All accepted C2 findings resolved.
+
+### M14 scheduled security dependency remediation
+
+Six-path dependency/test packet frozen in m14-security-dependency-evidence.md
+after both unchanged audits report zero findings, frozen install, generated
+build, tooling typecheck, policy tests 15/15, coverage-backed Delivery 52/52,
+TypeDoc/docs, both affected example build preparations and static checks.
+Existing final security reviewer retains explicit gpt-6-sol/high for bounded
+advisory coverage, transitive changes, integrity/policy and residual risk review.
+Existing documentation/dependency verification function uses explicit
+gpt-6-luna/medium for version ranges, Node compatibility, direct pins and
+lockfile completeness. Read-only, no tests/installs/edits or nested agents;
+collect both results before corrections. Parent style inspection covers the
+mechanical manifest/test update. Runtime/API reliability re-review is N/A because
+no runtime/public/serialized code changes; dependency behavior is verified by
+the focused checks and forthcoming complete release. Human ledger applies;
+historical superseded text alone is not a finding. Explicit profiles required;
+actual runtime metadata unavailable.
+
+M14 independent dependency review is clean. Six frozen hashes match; direct
+pins and all resolved vulnerable package versions meet patched floors. Undici
+major lines remain distinct, Node/release-age requirements are compatible, and
+additional Rolldown/platform/OXC/picomatch changes follow Vite's dependency graph.
+Explicit Luna/medium profile confirmed; runtime introspection unavailable.
+Collect final security review before accepting the complete wave.
+
+M14 final security review is clean. Existing explicit Sol/high profile confirmed;
+runtime introspection unavailable. All six hashes match. Actual resolutions
+address all 31 findings/23 advisories; old versions appear only as override
+selectors. New package entries carry SHA-512 integrity, with no new tarball/Git
+source or registry. Audit command, threshold and workflow are unchanged. Parent
+accepts the complete dependency/security review wave; no findings remain.

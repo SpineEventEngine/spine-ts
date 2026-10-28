@@ -3749,3 +3749,46 @@ GitHub Security workflow passes on the pushed feature SHA. Estimate 0.75–1.5
 hours for dependency correction, focused verification and review within the
 remaining overall estimate; final release timing is additional. No audit
 suppression, threshold reduction, migration, PR or master push.
+
+M14 implementation is active. Reuse the existing explicitly configured Luna/low
+mechanical verification function to prepare the final mandatory preflight and
+release command sequence from prior retry-3 evidence, including the changed
+regression slices and dependency tooling. Preparation is read-only: no builds,
+tests or installs until dependency review converges and the parent authorizes
+execution. No child delegation. Final global coverage must meet repository
+thresholds; scoped threshold-zero evidence remains distinct.
+
+Security edits selected the planned patched direct versions and updated existing
+markdown-it/Undici 8 overrides. Initial install retained Undici 7.30.0 and
+fast-uri 3.1.8, so exact-version overrides now select 7.30.1 and 3.1.9. Keep
+Undici 6.28.1. Parent reviewed the bounded direct manifest/override diff; lockfile
+peer-resolution changes and current audits are being verified by implementer.
+No security policy, workflow, audit threshold or package major changed.
+
+Both unchanged low-threshold security audits now pass with no known
+vulnerabilities. Parent active-source/docs stale-version scan found three exact
+Vitest 4.1.11 assertions in scripts/package-metadata.test.mjs; update only those
+policy expectations to the approved paired 4.1.12 version and rerun the file.
+Other matches are intentional old-version override selectors. Focused build,
+tooling, TypeDoc and coverage validation continues before review.
+
+M14 six-path packet is frozen. Both complete and production audits report zero
+findings. Generated build/tooling, 15 package-policy tests, 52 delivery tests with
+V8 coverage, TypeDoc/docs, both affected example preparations, frozen install and
+static checks pass. Vite's required Rolldown/bindings/OXC types and picomatch
+changes are documented in the evidence. Proceed independent security and
+dependency review, then checkpoint/push and final mandatory preflight/release.
+
+M14 accepted after clean independent dependency and security reviews, exact
+frozen hashes and passing focused verification. Commit all six dependency/test
+paths plus parent records and push immediately. The 31 scheduled findings are
+resolved locally; final release and GitHub Security workflow still need to run.
+
+Authorize existing explicit Luna/low mechanical function to complete the
+mandatory preflight on this frozen endpoint and then run verify:release once.
+Reuse M14's unchanged successful generated build/tooling/docs checks as current
+preflight evidence, with all remaining cheap gates and focused protocol tests
+executed before full verification. Stop on first failure, preserve raw logs and
+return evidence; no source edits or diagnostic full-suite loops. Estimate
+0.25–0.75 hours for gates and full-suite execution if no additional defect is
+exposed. Full coverage thresholds remain unchanged.

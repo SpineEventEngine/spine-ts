@@ -183,9 +183,9 @@ describe("package metadata", () => {
     const rootPackage = readJson("package.json");
     const messageBoardWeb = readJson("examples/message-board/web/package.json");
 
-    expect(rootPackage.devDependencies.vitest).toBe("4.1.11");
-    expect(rootPackage.devDependencies["@vitest/coverage-v8"]).toBe("4.1.11");
-    expect(messageBoardWeb.devDependencies.vitest).toBe("4.1.11");
+    expect(rootPackage.devDependencies.vitest).toBe("4.1.12");
+    expect(rootPackage.devDependencies["@vitest/coverage-v8"]).toBe("4.1.12");
+    expect(messageBoardWeb.devDependencies.vitest).toBe("4.1.12");
     expect(workspace.overrides?.["js-yaml"]).toBe("4.3.2");
     expect(workspace.overrides?.["smol-toml"]).toBe("1.7.1");
   });
