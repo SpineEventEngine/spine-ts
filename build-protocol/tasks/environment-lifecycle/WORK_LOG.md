@@ -3865,3 +3865,16 @@ Supervisor startup correction accepted after full affected tests/coverage,
 static checks, clean reliability review and frozen-hash confirmation. Checkpoint
 only managed-delivery-gate.ts and its focused test plus parent records; preserve
 the implementer's disjoint ongoing Node harness edits. Push immediately.
+
+Node runner correction frozen: six paths, actual Node 39/39, wrapper/metadata
+59/59, injected nonzero failure proof, relative/absolute selection guards and
+static checks pass. Review the complete reliability/style wave before accepting
+and pushing. Full release remains pending; current approximate progress is 95%.
+Remaining estimate 0.5–1 hour for review, complete cheap preflight, full release,
+and final GitHub Security verification, subject to new failures. The task is
+not complete, and no PR is authorized.
+
+Both bounded Node harness reviews are clean; accept the correction and checkpoint
+its six paths with these records. Push immediately, then execute the refreshed
+complete cheap-preflight plan and one full release profile with normal global
+thresholds. Security CI will be refreshed on the final pushed revision.

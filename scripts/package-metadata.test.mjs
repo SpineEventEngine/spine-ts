@@ -466,6 +466,10 @@ describe("package metadata", () => {
       "packages/server/test/server/server-integration-broker-cross-process.test.ts",
     );
     expect(releaseGenerated.match(/vitest run/gu)).toHaveLength(1);
+    expect(releaseGenerated).toContain("&& pnpm test:node:generated");
+    expect(rootPackage.scripts["test:node:generated"]).toBe(
+      "node --test packages/testing/test/black-box.node.test.mjs packages/testing/test/black-box.lifecycle.node.test.mjs scripts/check-log-containment.test.mjs compatibility-tests/jvm/wire-compatibility.test.mjs",
+    );
     expect(generatedGates.match(/pnpm typecheck:build:generated/gu)).toHaveLength(1);
     expect(generatedGates.match(/pnpm docs:check:generated/gu)).toHaveLength(1);
     expect(generatedGates).toContain("pnpm lint:cleanup");

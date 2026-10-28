@@ -1,5 +1,15 @@
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import { findPrimaryMergeBase } from "./git-primary-branch.mjs";
+
+const nativeNodeTestFiles = new Set(
+  [
+    "packages/testing/test/black-box.node.test.mjs",
+    "packages/testing/test/black-box.lifecycle.node.test.mjs",
+    "scripts/check-log-containment.test.mjs",
+    "compatibility-tests/jvm/wire-compatibility.test.mjs",
+  ].map((path) => resolve(path)),
+);
 
 /**
  * Parses task-verification coverage and test-selection arguments.
@@ -21,6 +31,9 @@ export function parseTaskVerificationArgs(args) {
   const paths = values.slice(1, sourceIndex === -1 ? undefined : sourceIndex);
   if (paths.length === 0 || paths.some((path) => path.startsWith("--"))) {
     throw new Error("verify:task requires at least one focused test path.");
+  }
+  if (paths.some((path) => nativeNodeTestFiles.has(resolve(path)))) {
+    throw new Error("Native Node tests require pnpm test:node:generated, not verify:task.");
   }
   const coverage = values[0] === "--coverage";
   const sources = sourceIndex === -1 ? [] : values.slice(sourceIndex + 1);

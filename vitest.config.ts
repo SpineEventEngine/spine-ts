@@ -41,6 +41,10 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       ...infrastructureTestFiles,
+      "packages/testing/test/black-box.node.test.mjs",
+      "packages/testing/test/black-box.lifecycle.node.test.mjs",
+      "scripts/check-log-containment.test.mjs",
+      "compatibility-tests/jvm/wire-compatibility.test.mjs",
       "examples/release-notes/test/e2e/**",
     ],
     coverage: {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
 import {
   changedPaths,
   classifyTaskChanges,
@@ -70,6 +71,24 @@ describe("verify-task", () => {
       parseTaskVerificationArgs(["--no-coverage", "test.mjs", "--source", "source.mjs"]),
     ).toThrow("only with --coverage");
     expect(() => parseTaskVerificationArgs(["--no-tests", "test.mjs"])).toThrow("only argument");
+  });
+
+  it("rejects native Node suites from the Vitest-only focused runner", () => {
+    for (const path of [
+      "packages/testing/test/black-box.node.test.mjs",
+      "scripts/check-log-containment.test.mjs",
+      "compatibility-tests/jvm/wire-compatibility.test.mjs",
+    ]) {
+      expect(() => parseTaskVerificationArgs(["--no-coverage", path])).toThrow(
+        "test:node:generated",
+      );
+    }
+    expect(() =>
+      parseTaskVerificationArgs([
+        "--no-coverage",
+        resolve("packages/testing/test/black-box.lifecycle.node.test.mjs"),
+      ]),
+    ).toThrow("test:node:generated");
   });
 
   it("skips Proto and TypeDoc gates only for known record or Markdown changes", () => {

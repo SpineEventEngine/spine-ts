@@ -1779,3 +1779,26 @@ still provides same-environment coalescing and propagates startup errors.
 Managed-child activation/cancel behavior is unchanged. Parent style/TSDoc review
 accepts the small internal change. No API/serialized/authentication change;
 other specialist lanes are N/A. Node harness review remains separate and pending.
+
+### Enforced native Node test runner
+
+Six-path packet frozen in m14-node-harness-correction-evidence.md after actual
+Node suites pass 39/39, injected failure exits 1, focused wrapper/metadata tests
+pass 59/59, absolute and relative selection guards pass, and static checks pass.
+Parent pre-review diff/status inspection confirms the four excluded files are
+explicitly executed by the checked release command. Existing reliability and
+style reviewers retain explicit gpt-6-sol/medium profiles, assigned respectively
+failure propagation/setup/discovery and bounded harness maintainability. Runtime
+introspection is unavailable; immutable configured profiles are the acceptance
+basis. Read-only review, no builds/tests/edits or nested agents. Collect the whole
+wave before fixes. Human requirements ledger applies; historical superseded
+text is not a finding unless current claims adopt it. Framework API review is
+N/A: no exports or public framework contracts change. Documentation completeness
+is checked against changed command/error claims in this bounded review.
+
+Complete Node harness review wave is clean. Both existing Sol/medium reviewers
+confirmed all six frozen hashes and the relevant human ledger. Reliability
+confirms enforced native failure propagation and setup/selection behavior;
+style confirms the bounded runner split and unchanged shared contract cases.
+No findings remain. Actual runtime model introspection is unavailable; immutable
+explicit profiles match the dispatched functions. Parent accepts the correction.

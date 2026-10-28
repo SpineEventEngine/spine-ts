@@ -92,8 +92,8 @@ Focused behavior tests precede runtime changes. Cheap preflight precedes
 specialist review and expensive gates. Use the release profile after convergence
 because shared runtime is affected. Every canonical review concern applies to
 the full task: maintainability, documentation, TypeScript/API and reliability.
-The lifecycle security review is accepted; the added dependency remediation
-requires its own focused security confirmation. Baseline build and
+The lifecycle and dependency security reviews are accepted. Both dependency
+audits are clean, and the feature-branch Security workflow passed at 89e6faafa. Baseline build and
 tooling typechecks, baseline tests and focused retention checks passed. Bounded
 reviews are recorded in REVIEW_LOG.md; release verification and exact-final-SHA
 CI remain pending. WORK_LOG.md records the current evidence. Raw command outputs
@@ -102,10 +102,10 @@ and dispatch evidence are kept outside version control in `/tmp/spine-environmen
 ## Remaining work
 
 The ordered milestones are frozen in MILESTONES.md. Implementation and review
-are accepted for the completed slices. Resolve the full-suite regression failures,
-remediate the scheduled security findings, complete the mandatory preflight and
-release checks, push every feature commit immediately, and report exact
-remote state. The common unused version has been committed separately. Do not create
+are accepted for the completed slices. The scheduled security findings are fixed
+and reviewed. Complete the bounded Node runner review, mandatory cheap preflight
+and full release checks, refresh Security CI on the final pushed SHA, and report
+exact remote state. The common unused version has been committed separately. Do not create
 or merge a pull request without explicit human instruction.
 
 ## JVM source guardrail
