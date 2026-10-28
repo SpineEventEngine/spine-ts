@@ -4834,3 +4834,22 @@ raw anyPack/anyUnpack/anyUnpackTo occurrences. Parent micro review confirms the
 ProjectCreated Event fixture and all assertions unchanged. No specialist/security
 lane needed for test call substitution plus existing workspace dev link. M41
 shared tooling check will include the new resolved test import. Commit/push now.
+
+M41 mechanical evidence passes: 111 SQL tests plus tooling/lint/cleanup/format/
+diff. Fourteen new unchanged factory branch outcomes. Review pending, tests
+frozen. Parent refreshes emitted output for the M40 final comment before the
+fresh full diagnostic. No authored source or test changes during measurement.
+
+M43 next verification function: reuse the original mechanical coverage function
+with explicit configured gpt-6-luna/low, Standard speed (runtime introspection
+unavailable). After M41 deterministic correction is accepted and pushed, run
+one current full Vitest coverage diagnostic with no thresholds/exclusion changes
+and native-service variables unset. Preserve raw log/LCOV outside Git, report
+all test totals and four exact coverage ratios, classify exit code, and regenerate
+mechanical missed-changed-source inventory. No source edits, review opinions,
+children, release-profile invocation or retries. Expected elapsed 0.05–0.1 hour.
+
+M41 final accepted and frozen: 111 tests and scoped static gates pass after the
+two assertion/fixture corrections. No production changes. Current generated build
+passed before this test-only correction. Commit/push paired tests and records,
+then start M43 one fresh full diagnostic at the exact pushed revision.

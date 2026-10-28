@@ -27,7 +27,10 @@ import {
   TenantIdSchema,
   UserIdSchema,
 } from "@spine-event-engine/proto";
-import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 // prettier-ignore
 import {
@@ -38,6 +41,7 @@ import {
   AgentHistoryRecords,
   eventStoreRecordSpec,
   EntityCommitStorageFactories,
+  EventStoreGroups,
   StoragePreparations,
   TenantBoundary,
   type EntityStorageInput,
@@ -125,6 +129,104 @@ describe("MysqlStorageFactory builder contract", () => {
       await preparation.prepareAgentCommit(layout, "check");
       expect(auditColumns()).toBeGreaterThan(inspectionsBeforeRepair);
       expect(query.mock.calls.every(([sql]) => sql.trimStart().startsWith("SELECT"))).toBe(true);
+    } finally {
+      await factory.close();
+    }
+  });
+
+  it.each(["state", "event"] as const)(
+    "prepares current, %s history, and context EventStore without opening Entity handles",
+    async (enabled) => {
+      const tables = new Map<string, MysqlTableSpec<unknown, Message>>();
+      const requested: { source: string; record: string; group?: string }[] = [];
+      const probed: string[] = [];
+      const query = vi.fn((sql: string, values: readonly unknown[] = []) => {
+        const table = tables.get(String(values[0]));
+        if (sql.includes("information_schema.columns") && table !== undefined) {
+          probed.push(table.tableName);
+          return Promise.resolve([
+            table.columns.map((column) => ({
+              column_name: column.name,
+              column_type: column.mysqlType.toLowerCase(),
+              is_nullable: column.nullable ? "YES" : "NO",
+              column_default: column.defaultSql ?? null,
+            })),
+            [],
+          ]);
+        }
+        return mysqlQuery(sql);
+      });
+      vi.mocked(createPool).mockReturnValue({
+        getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+        end: vi.fn(() => Promise.resolve()),
+      } as never);
+      const operation: CreateOperationFactory = (table) => {
+        tables.set(table.tableName, table as MysqlTableSpec<unknown, Message>);
+        requested.push({
+          source: table.sourceType.typeName,
+          record: table.recordType.typeName,
+          ...(table.groupName === undefined ? {} : { group: table.groupName }),
+        });
+        return { sql: `CREATE TABLE \`${table.tableName}\` (test INT)` };
+      };
+      const factory = await MysqlStorageFactory.newBuilder()
+        .setOptions({ url: "mysql://db.example/entity_preparation" })
+        .useOperationFactory(operation)
+        .build();
+      const context = { name: `task-${enabled}`, multitenant: false } as const;
+      const opened = vi.spyOn(MysqlStorageFactory.prototype, "createRecordStorage");
+      try {
+        await StoragePreparations.for(factory).prepareEntity(
+          entityInput(context, enabled === "state", enabled === "event"),
+          "create",
+        );
+        expect(requested).toHaveLength(3);
+        expect(requested.slice(0, 2)).toEqual([
+          { source: TaskSchema.typeName, record: EntityRecordSchema.typeName },
+          {
+            source: enabled === "state" ? TaskSchema.typeName : EventSchema.typeName,
+            record: enabled === "state" ? EntityRecordSchema.typeName : EventSchema.typeName,
+            group: TaskSchema.typeName,
+          },
+        ]);
+        expect(requested[2]).toMatchObject({
+          source: EventSchema.typeName,
+          record: EventSchema.typeName,
+        });
+        expect(requested[2]?.group).toBe(EventStoreGroups.forContext(context.name).name);
+        expect(probed).toHaveLength(3);
+        expect(new Set(probed)).toEqual(new Set(tables.keys()));
+        expect(opened).not.toHaveBeenCalled();
+      } finally {
+        opened.mockRestore();
+        await factory.close();
+      }
+    },
+  );
+
+  it("rejects mismatched Entity column declarations before MySQL pool acquisition", async () => {
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/entity_preparation" })
+      .build();
+    const input = entityInput({ name: "task-mismatch", multitenant: false }, true, false);
+    const beforePools = vi.mocked(createPool).mock.calls.length;
+    try {
+      await expect(
+        StoragePreparations.for(factory).prepareEntity(
+          {
+            ...input,
+            columns: [
+              new RecordColumn(
+                "entity_id",
+                ColumnTypes.message(AnySchema),
+                (record: EntityRecord) => record.entityId,
+              ),
+            ],
+          },
+          "create",
+        ),
+      ).rejects.toThrow("Entity query columns differ from current records.");
+      expect(createPool).toHaveBeenCalledTimes(beforePools);
     } finally {
       await factory.close();
     }

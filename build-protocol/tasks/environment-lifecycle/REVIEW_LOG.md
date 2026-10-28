@@ -2538,3 +2538,25 @@ wording correction. Focused 89 tests and static checks pass. Existing explicit
 Sol/medium reviewer profile confirmed, introspection unavailable. No architecture,
 serialized contract or security execution change. Broad review lanes N/A because
 only uncalled internal methods were deleted; live paths preserved and tested.
+
+M41 independent API review dispatched to original explicit Sol/medium reviewer.
+Frozen paired SQL tests and hashes in m41-preparation-evidence.md; 111 affected
+tests/tooling/static pass. Verify exact selected families, omission of disabled
+history, no acquired storage handles and mismatch rejection before pool/SQL.
+Parent handles style. No production/API/docs/security behavior changes.
+
+M41 complete review wave: no P0/P1; two accepted P2 test corrections from API
+review and matching parent inspection. Assert exact EventStoreGroups.forContext
+context identity rather than only es_ prefix. Replace title -> $typeName fixture
+extractor with genuine EntityRecord entity_id Any column (or an explicitly
+uninvoked throwing extractor). Remaining selection/readiness fixture assertions
+accepted. Return one deterministic correction batch to same Sol/medium writer.
+No specialist re-review needed after exact mechanical assertion/fixture changes;
+parent checks final diff and rerun evidence. Estimate under 0.1 hour.
+
+M41 deterministic corrections accepted: exact EventStoreGroups context identity
+and truthful EntityRecord entity_id Any column are present in both test files.
+111 tests/tooling/lint/format/diff pass on updated hashes in the evidence packet.
+Parent final diff confirms the complete accepted batch; no substantive behavior
+or review concern changed. No specialist lane reopened. Original explicit
+Sol/medium reviewer profile accepted; runtime introspection unavailable.

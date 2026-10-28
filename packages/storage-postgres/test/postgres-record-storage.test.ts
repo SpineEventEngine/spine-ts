@@ -12,9 +12,14 @@
  * the License.
  */
 
-import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { TenantIdSchema } from "@spine-event-engine/proto";
-import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { create, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { AnyPacker, Identifiers } from "@spine-event-engine/core";
+import { EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import {
   ColumnTypes,
   RecordColumn,
@@ -82,10 +87,13 @@ const driver = vi.hoisted(() => {
 vi.mock("pg", () => ({ Pool: driver.Pool }));
 
 import { PostgresStorageFactory } from "../src/index.js";
-import { StoragePreparations } from "@spine-event-engine/storage/provider";
+import { EventStoreGroups, StoragePreparations } from "@spine-event-engine/storage/provider";
 import { PostgresClientDisposal, PostgresTransactionErrors } from "../src/postgres/errors.js";
 import { PostgresRecordStorage } from "../src/postgres/record-storage.js";
 import { PostgresTableSpecs } from "../src/postgres/table-spec.js";
+import type { PostgresTableSpec } from "../src/postgres/storage-factory.js";
+import { TaskIdSchema } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 describe("Postgres record storage", () => {
   it("binds each legacy scalar-list member and makes an empty list match no rows", async () => {
@@ -201,6 +209,111 @@ describe("Postgres record storage", () => {
     expect(driver.end).toHaveBeenCalledTimes(2);
     await factory.close();
     expect(driver.end).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(["state", "event"] as const)(
+    "prepares current, %s history, and context EventStore without opening Entity handles",
+    async (enabled) => {
+      const tables = new Map<string, PostgresTableSpec<unknown, Message>>();
+      const requested: { source: string; record: string; group?: string }[] = [];
+      const probed: string[] = [];
+      const ordinary = driver.query.getMockImplementation();
+      if (ordinary === undefined) throw new Error("Expected PostgreSQL metadata query fixture.");
+      driver.query.mockImplementation((sql, values) => {
+        const table = tables.get(String(values?.[1]));
+        if (sql.includes("columns WHERE") && table !== undefined) {
+          probed.push(table.tableName);
+          driver.recordCall(sql, values);
+          return Promise.resolve({
+            rows: table.columns.map((column) => ({
+              column_name: column.name,
+              data_type:
+                column.postgresType === "VARCHAR(512)"
+                  ? "character varying"
+                  : column.postgresType === "INT"
+                    ? "integer"
+                    : column.postgresType.toLowerCase(),
+              character_maximum_length: column.postgresType === "VARCHAR(512)" ? 512 : null,
+              is_nullable: column.nullable ? "YES" : "NO",
+              column_default: column.defaultSql ?? null,
+            })),
+          });
+        }
+        return ordinary(sql, values);
+      });
+      const factory = await PostgresStorageFactory.newBuilder()
+        .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+        .useOperationFactory((table) => {
+          tables.set(table.tableName, table as PostgresTableSpec<unknown, Message>);
+          requested.push({
+            source: table.sourceType.typeName,
+            record: table.recordType.typeName,
+            ...(table.groupName === undefined ? {} : { group: table.groupName }),
+          });
+          return { sql: `CREATE TABLE "${table.schema}"."${table.tableName}" ()` };
+        })
+        .build();
+      const context = { name: `task-${enabled}`, multitenant: false } as const;
+      const opened = vi.spyOn(PostgresStorageFactory.prototype, "createRecordStorage");
+      try {
+        await StoragePreparations.for(factory).prepareEntity(
+          taskEntityInput(context, enabled === "state", enabled === "event"),
+          "create",
+        );
+        expect(requested).toHaveLength(3);
+        expect(requested.slice(0, 2)).toEqual([
+          { source: TaskSchema.typeName, record: EntityRecordSchema.typeName },
+          {
+            source: enabled === "state" ? TaskSchema.typeName : EventSchema.typeName,
+            record: enabled === "state" ? EntityRecordSchema.typeName : EventSchema.typeName,
+            group: TaskSchema.typeName,
+          },
+        ]);
+        expect(requested[2]).toMatchObject({
+          source: EventSchema.typeName,
+          record: EventSchema.typeName,
+        });
+        expect(requested[2]?.group).toBe(EventStoreGroups.forContext(context.name).name);
+        expect(probed).toHaveLength(3);
+        expect(new Set(probed)).toEqual(new Set(tables.keys()));
+        expect(opened).not.toHaveBeenCalled();
+      } finally {
+        opened.mockRestore();
+        await factory.close();
+      }
+    },
+  );
+
+  it("rejects mismatched Entity column declarations before PostgreSQL pool acquisition", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .build();
+    const input = taskEntityInput({ name: "task-mismatch", multitenant: false }, true, false);
+    const beforePools = driver.Pool.mock.calls.length;
+    const beforeConnections = driver.connect.mock.calls.length;
+    const beforeQueries = driver.query.mock.calls.length;
+    try {
+      await expect(
+        StoragePreparations.for(factory).prepareEntity(
+          {
+            ...input,
+            columns: [
+              new RecordColumn(
+                "entity_id",
+                ColumnTypes.message(AnySchema),
+                (record: EntityRecord) => record.entityId,
+              ),
+            ],
+          },
+          "create",
+        ),
+      ).rejects.toThrow("Entity query columns differ from current records.");
+      expect(driver.Pool).toHaveBeenCalledTimes(beforePools);
+      expect(driver.connect).toHaveBeenCalledTimes(beforeConnections);
+      expect(driver.query).toHaveBeenCalledTimes(beforeQueries);
+    } finally {
+      await factory.close();
+    }
   });
 
   it("prepares equivalent reordered columns without invoking record callbacks", async () => {
@@ -1791,6 +1904,38 @@ function recordSpec(): RecordSpec<string, StringValue> {
     extractId: (record) => record.value,
     columns: valueColumns(),
   });
+}
+
+function taskEntityInput(
+  context: { name: string; multitenant: false },
+  stateHistory: boolean,
+  eventHistory: boolean,
+) {
+  return {
+    context,
+    id: {
+      clone: (id: ReturnType<typeof create<typeof TaskIdSchema>>) => create(TaskIdSchema, id),
+      key: (id: ReturnType<typeof create<typeof TaskIdSchema>>) => id.value,
+      pack: (id: ReturnType<typeof create<typeof TaskIdSchema>>) =>
+        Identifiers.pack(TaskIdSchema, id),
+      unpack: (packed: ReturnType<typeof Identifiers.pack>) =>
+        AnyPacker.tryUnpack(packed, TaskIdSchema),
+    },
+    columns: [],
+    recordSpec: new RecordSpec({
+      sourceType: TaskSchema,
+      recordType: EntityRecordSchema,
+      idSchema: TaskIdSchema,
+      extractId: (record: EntityRecord) => {
+        if (record.entityId === undefined) throw new Error("Task Entity ID is required.");
+        return AnyPacker.unpack(record.entityId, TaskIdSchema);
+      },
+    }),
+    sourceType: TaskSchema,
+    stateSchema: TaskSchema,
+    stateHistory,
+    eventHistory,
+  };
 }
 
 function valueColumns(): readonly RecordColumn<StringValue, string>[] {
