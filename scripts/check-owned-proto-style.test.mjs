@@ -146,4 +146,27 @@ describe("authored Proto style", () => {
       "packages/core/test-fixtures/proto/invalid.proto: test-fixture Proto filename needs a role suffix",
     );
   });
+
+  it("ignores temporary generated fixture staging while checking authored Proto", () => {
+    const root = protoStyleFixture();
+    run("git", ["add", "."], root);
+    run("git", ["commit", "-m", "baseline"], root);
+    markOriginMaster(root);
+    const staged = join(
+      root,
+      "packages/server/test-fixtures/.fixture-query-test-1/.generated.stage-1/module/invalid.proto",
+    );
+    mkdirSync(
+      join(root, "packages/server/test-fixtures/.fixture-query-test-1/.generated.stage-1/module"),
+      {
+        recursive: true,
+      },
+    );
+    writeFileSync(
+      staged,
+      'syntax = "proto3";\n\n// One paragraph.\n//\n// Another paragraph.\nmessage Invalid {}\n',
+    );
+
+    expect(checkOwnedProtoStyle(root)).toEqual([]);
+  });
 });

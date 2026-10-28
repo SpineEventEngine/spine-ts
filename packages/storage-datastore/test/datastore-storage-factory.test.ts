@@ -343,9 +343,9 @@ describe("DatastoreStorageFactory", () => {
 
     await preparation.prepareEntity(input, "check");
     await preparation.prepareAgentHistory(scope, "create");
-    expect(client.queries).toHaveLength(4);
+    expect(client.queries).toHaveLength(5);
     await preparation.prepareEntity(input, "create");
-    expect(client.queries).toHaveLength(4);
+    expect(client.queries).toHaveLength(5);
     expect(client.writes).toBe(0);
   });
 

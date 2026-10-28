@@ -216,7 +216,7 @@ function writeExactConsumerManifest(consumer, artifacts) {
  */
 const exactConsumerSource = [
   ...frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";"),
-  'import { Server } from "@spine-event-engine/server";',
+  'import { Server, ServerEnvironment } from "@spine-event-engine/server";',
   'import { BrowserServer } from "@spine-event-engine/server/browser";',
   "import { BlackBox } from '@spine-event-engine/testing';",
   "import { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';",
@@ -224,6 +224,7 @@ const exactConsumerSource = [
   "if (typeof resetServerEnvironmentForTest !== 'function') " +
     "throw new Error('Server testing path is unavailable');",
   "await resetServerEnvironmentForTest();",
+  "await ServerEnvironment.instance().completeSetup();",
   "const native = await Server.atPort(0).start();",
   "const browser = await BrowserServer.open(native, {",
   '  origins: ["http://127.0.0.1:5173"],',

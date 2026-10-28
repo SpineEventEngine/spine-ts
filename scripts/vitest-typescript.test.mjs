@@ -23,7 +23,7 @@ import { typescriptVitestPlugin } from "./vitest-typescript.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const runtime = [
-  "packages/server/src/agent/agent-ai-runtime.ts",
+  "packages/server/src/agent/agent-live-ai-runtime.ts",
   "packages/testing/src/ai-test/ai-test-backend.ts",
   "packages/testing/src/ai-test/scripted-attempts.ts",
   "packages/testing/src/black-box/black-box.ts",
@@ -40,7 +40,7 @@ function coverageFor(mode, directory) {
 export default { root: ${JSON.stringify(root)}, oxc: false, esbuild: false,
   plugins: [typescriptVitestPlugin()], test: {
     include: ["packages/testing/test/agent-ai-blackbox.test.ts",
-      "packages/server/test/agent/agent-ai-runtime.test.ts"], pool: "threads", maxWorkers: 1,
+      "packages/server/test/agent/agent-live-ai-runtime.test.ts"], pool: "threads", maxWorkers: 1,
     coverage: { provider: "v8", reporter: ["json"], reportsDirectory: ${JSON.stringify(report)},
       include: ${JSON.stringify(include)}, exclude: ["**/*.test.ts"],
       excludeAfterRemap: ${mode !== "compiled"} } } };\n`;
@@ -94,7 +94,7 @@ function assertHitUnion(source, compiled, combined) {
 }
 
 function assertDistinctAgentRuntimeHits(source, compiled, combined) {
-  const file = Object.keys(source).find((name) => name.endsWith("/agent-ai-runtime.ts"));
+  const file = Object.keys(source).find((name) => name.endsWith("/agent-live-ai-runtime.ts"));
   assert.ok(file, "Expected authored Agent AI runtime coverage.");
   const direct = source[file];
   const built = compiled[file];
@@ -140,8 +140,8 @@ it("preserves standard decorator emit and ignores JavaScript and virtual modules
 });
 
 it("emits the same Agent runtime JavaScript as the package compiler", () => {
-  const source = path.join(root, "packages/server/src/agent/agent-ai-runtime.ts");
-  const compiled = path.join(root, "packages/server/dist/agent/agent-ai-runtime.js");
+  const source = path.join(root, "packages/server/src/agent/agent-live-ai-runtime.ts");
+  const compiled = path.join(root, "packages/server/dist/agent/agent-live-ai-runtime.js");
   const transformed = typescriptVitestPlugin().transform(readFileSync(source, "utf8"), source);
   assert.ok(transformed);
   const built = readFileSync(compiled, "utf8").replace(/\n\/\/# sourceMappingURL=.*\s*$/, "\n");

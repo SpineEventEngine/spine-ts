@@ -1567,3 +1567,43 @@ Message Board suite passed 9/9. Counts are scoped and may overlap other runs.
 Studio passed alone; a combined run timed out. Project produced-signal workflow
 and broader managed lifecycle failures remain unresolved and are not accepted
 as passing. They proceed in slice C. No global convergence claim.
+
+### Focused shutdown regression investigation during slice B
+
+Reuse existing performance/reliability reviewer, explicitly configured
+gpt-6-sol / medium, for a read-only source investigation of the two already
+failed accepted cross-context read tests. Scope is the reviewed shutdown/admission
+code and those exact tests; baseline 2057426a9. No edits, tests, builds, nested
+agents or broader review. The implementer is independently updating slice B
+fixtures/inventories and will receive confirmed findings as one bounded batch.
+Read the full TASK human ledger and D-0162/D-0163 before assessing behavior.
+Actual runtime metadata is unavailable; immutable configured profile applies.
+This targeted concern has concrete failure evidence, not speculative expansion.
+
+Shutdown investigation accepted from the existing explicit Sol/medium reliability
+profile; runtime metadata unavailable. Source trace confirms P1: Stand admission
+rejects an accepted handler's cross-context follow-up after both contexts are
+fenced. P2: a fully closed Stand checks the context fence before its terminal
+closed state. Report m13-shutdown-regression-review.md. Both go to slice C;
+preserve immediate rejection of fresh work and prevent escaped async callbacks
+from retaining access after the handler settles. Reuse existing runtime scope
+where possible; any demonstrated new concurrency/lifetime ambiguity triggers
+the architecture gate. Reviewer made no edits or test runs.
+
+### Full-suite correction slice B review
+
+Ten-path slice frozen after focused tests, tooling typecheck, lint, formatting
+and whitespace checks. Existing style/maintainability reviewer, explicitly
+configured gpt-6-sol / medium, reviews the bounded diff, particularly temporary
+Proto-stage exclusion and fidelity of fixtures/inventories. Read-only; no tests,
+builds, edits or nested agents. Full human ledger in TASK applies. Runtime/API/
+security contract review remains accepted because no runtime or public contract
+changes; documentation concern is N/A because no human-facing claims changed.
+Actual runtime metadata is unavailable; immutable configured profile applies.
+
+Slice B style review is clean; all ten hashes match. Explicit immutable
+Sol/medium profile confirmed, runtime metadata unavailable. Temporary Proto
+stage exclusion retains authored checks and has red/green proof; fixture changes
+retain current public contracts. All relevant dispositions are accepted. C will
+receive targeted reliability review after its executable correction and focused
+checks, including immediate fresh-input rejection and expired handler scope.

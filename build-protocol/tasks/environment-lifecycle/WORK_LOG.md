@@ -3586,3 +3586,12 @@ m13-regression-slice-a-evidence.md. Runtime source remains unchanged; Projects
 application explicitly completes environment setup. All original failure
 records remain available. Continue automatically with slice B after push, then
 slice C runtime investigation. The final full release result remains failed.
+
+Slice B is reviewed and accepted. Existing explicit Sol/medium style reviewer
+reports no findings and verifies all ten frozen hashes. Focused inventories,
+provider doubles, client iterator, Agent compiler/coverage tooling, Proto style,
+AI alias and actual external tarball consumer tests pass; exact counts in
+m13-regression-slice-b-evidence.md. No production runtime contract changed.
+Checkpoint and push, then proceed C using the existing runtimeWork active frame
+rather than a new async scope or public API. The frame already expires on
+handler settlement; preserve that safeguard and test escaped callbacks.

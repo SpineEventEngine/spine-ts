@@ -53,6 +53,8 @@ import * as nodeDiscoverySchemas from "../generated/spine/deployment/node_discov
 import * as systemEventSchemas from "../generated/spine/system/server/entity_log_events_pb.js";
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
 import * as agentHistorySchemas from "../generated/spine/server/agent/history_record_pb.js";
+import * as agentReceiptSchemas from "../generated/spine/server/agent/acceptance_receipt_pb.js";
+import * as agentPreferencesSchemas from "../generated/spine/server/agent/model_preferences_record_pb.js";
 import * as agentContentSchemas from "../generated/spine/ts/agent/content_pb.js";
 import * as agentHistoryPublicSchemas from "../generated/spine/ts/agent/history_pb.js";
 import * as agentInteractionSchemas from "../generated/spine/ts/agent/interaction_events_pb.js";
@@ -109,7 +111,7 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(56);
+    expect(manifest.protoFiles).toHaveLength(57);
     expect(manifest.generationId).toEqual(expect.stringMatching(/\S/u));
     expect(
       JSON.parse(
@@ -169,6 +171,8 @@ describe("spineProtoModule", () => {
       ...schemaNames(systemEventSchemas),
       ...schemaNames(systemTypeSchemas),
       ...schemaNames(agentHistorySchemas),
+      ...schemaNames(agentReceiptSchemas),
+      ...schemaNames(agentPreferencesSchemas),
       ...schemaNames(agentContentSchemas),
       ...schemaNames(agentHistoryPublicSchemas),
       ...schemaNames(agentInteractionSchemas),

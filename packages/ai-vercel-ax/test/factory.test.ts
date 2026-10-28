@@ -4361,6 +4361,7 @@ describe("Vercel connection registration", () => {
       expect(runtime.callTool).toHaveBeenCalledWith({
         ticketId: "attempt-1",
         providerCallId: "provider-1",
+        providerToolName: "tool_0",
         server: "support",
         tool: "lookup",
         argumentsJson: '{"ticket":"T-1"}',

@@ -152,6 +152,7 @@ export function checkOwnedProtoStyle(root = repositoryRoot) {
       (path) =>
         !frozen.has(path) &&
         !path.includes("/.generated-") &&
+        !path.includes("/.generated.stage-") &&
         (path.startsWith("packages/proto/proto/") || changed.has(path)),
     )
     .filter((path) => existsSync(resolve(root, path)))

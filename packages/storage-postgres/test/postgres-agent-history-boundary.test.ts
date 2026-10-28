@@ -108,6 +108,9 @@ describe("PostgreSQL Agent history provider boundary", () => {
     const executor = {
       prepare: vi.fn(() => Promise.resolve()),
       using: <T>(work: (connection: typeof client) => Promise<T>) => work(client),
+      transaction: <T>(work: (connection: typeof client) => Promise<T>) => work(client),
+      appendImmutable: (_connection: typeof client, record: AgentHistoryRecord) =>
+        writeImmutable(record),
       table: () => '"test_history"',
       query,
     };
@@ -240,6 +243,8 @@ describe("PostgreSQL Agent history provider boundary", () => {
     const executor = {
       prepare: () => Promise.resolve(),
       using: <T>(work: (connection: typeof client) => Promise<T>) => work(client),
+      transaction: <T>(work: (connection: typeof client) => Promise<T>) => work(client),
+      appendImmutable: () => Promise.resolve(),
       table: () => '"test_history"',
     };
     const history = new PostgresAgentHistory(

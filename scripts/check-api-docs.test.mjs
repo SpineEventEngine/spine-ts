@@ -68,6 +68,7 @@ const expectedStorageProviderExports = [
   "disabledStateHistoryPort",
   "eventHistorySpec",
   "eventStoreAccess",
+  "EventStoreGroups",
   "eventStoreRecordSpec",
   "stateHistorySpec",
 ];
