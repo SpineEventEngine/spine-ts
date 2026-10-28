@@ -1919,3 +1919,34 @@ frozen hashes; metadata retry and both SQL/rollback findings resolved, with no n
 finding. Original explicit Sol/medium configured profiles confirmed, actual runtime
 metadata unavailable. Parent accepts test-only packet for commit/push. Public API,
 documentation and security changes are N/A: only provider tests/import wrapping.
+
+M17 optional-row atomicity packet frozen (two provider test files), 77/77 affected
+and 98/98 three-provider selection pass; scoped coverage exits 1 solely because
+unchanged global threshold applies to narrow selection. Source-aware provider
+union adds 30 beyond prior176. Assign existing reliability reviewer explicit
+Sol/medium to transaction fake fidelity and meaningful assertions only. Parent
+handles style/test-value inspection. API/docs/security re-review N/A for test-only
+changes to existing transaction behavior. No tests/builds/source edits/children
+by reviewer. Verify hashes in m17-provider-atomicity-coverage-evidence.md.
+
+M17 complete bounded review: reliability accepts both frozen hashes and returns
+P2 Datastore optional writes are not proven by retry row-count growth. Require
+exact optional state-history/diagnostic records and proof of staging before late
+conflict if retaining that claim. Parent adds confirmed P2 at MySQL test currentBytes
+lookup (~266): first key containing SupportReplyAgentState can select the earlier
+state-history row, whose grouped table name also contains that state name and
+whose bytes are the same next EntityRecord. writeAgentRows writes history before
+current; therefore deleting the current-row write can leave this assertion green.
+Use actual current-record read or exact distinct current table/key and assert
+optional records explicitly. Source proof: MysqlTableResolver.resolve grouped
+name plus stateHistorySpec group=stateType.typeName, and writeAgentRows order.
+Return both as one correction batch; no production defect demonstrated.
+
+M17 narrow confirmation: original performance/reliability reviewer confirmed
+both replacement hashes and both accepted P2 corrections. No remaining finding.
+Original explicit gpt-6-sol/medium dispatch and immutable profile confirmed;
+runtime self-introspection unavailable. Parent accepts style/test maintainability.
+Documentation, public API and security lanes are N/A for this assertion-only
+packet with no new runtime or public contract. Evidence:
+/tmp/spine-environment-lifecycle-20261027/m17-provider-atomicity-review.md and
+m17-provider-atomicity-coverage-evidence.md. All canonical concerns disposed.

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createPool } from "mysql2/promise";
 import {
@@ -21,7 +21,12 @@ import {
   StringifierRegistry,
   TypeRegistry,
 } from "@spine-event-engine/core";
-import { EventSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
+import {
+  EventIdSchema,
+  EventSchema,
+  TenantIdSchema,
+  UserIdSchema,
+} from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 // prettier-ignore
@@ -55,6 +60,7 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import { conversation, scope } from "../../storage/test/entity/agent-history-fixtures.js";
 import { entityInput as supportAgentInput } from "../../storage/test/entity/agent-live-fixtures.js";
+import { eventHistorySpec, stateHistorySpec } from "../../storage/src/internal/entity-history.js";
 import type {
   SupportReplyAgentId,
   SupportReplyAgentState,
@@ -62,6 +68,7 @@ import type {
 // prettier-ignore
 import {
   SupportReplyAgentIdSchema,
+  SupportReplyAgentStateSchema,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 
 import {
@@ -72,6 +79,10 @@ import {
 } from "../src/index.js";
 import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
 import { AgentHistoryIndexes } from "../src/mysql/agent-history.js";
+// prettier-ignore
+import {
+  SupportReplyDraftedSchema,
+} from "../../server/test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
 
 vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 
@@ -107,7 +118,7 @@ describe("MysqlStorageFactory builder contract", () => {
           ([sql, values]) =>
             sql.includes("information_schema.columns") &&
             typeof values?.[0] === "string" &&
-            values?.[0].includes("agent_history"),
+            values[0].includes("agent_history"),
         ).length;
       const inspectionsBeforeRepair = auditColumns();
       expect(inspectionsBeforeRepair).toBeGreaterThan(0);
@@ -120,9 +131,10 @@ describe("MysqlStorageFactory builder contract", () => {
       await factory.close();
     }
   });
-  it("rolls back tentative Agent admission when the current Version is stale", async () => {
+  it("rolls back stale Agent admission and optional writes after a late audit failure", async () => {
     const rows = new Map<string, Uint8Array>();
     let staged: Map<string, Uint8Array> | undefined;
+    let failAuditWrite = false;
     const query = vi.fn((sql: string, values: readonly unknown[] = []) =>
       agentMetadataQuery(sql, values, true),
     );
@@ -135,6 +147,8 @@ describe("MysqlStorageFactory builder contract", () => {
         return Promise.resolve([bytes === undefined ? [] : [{ bytes }], []]);
       }
       if (sql.startsWith("INSERT") && values[1] instanceof Uint8Array) {
+        if (failAuditWrite && table.includes("agent_history"))
+          throw new Error("late Agent audit write failed");
         (staged ?? rows).set(key, values[1]);
         return Promise.resolve([{ affectedRows: 1 }, []]);
       }
@@ -173,10 +187,11 @@ describe("MysqlStorageFactory builder contract", () => {
       .setOptions({ url: "mysql://db.example/agent_transaction" })
       .setStringifierRegistry(stringifiers)
       .build();
-    const layout = supportAgentInput() as unknown as EntityStorageInput<
-      SupportReplyAgentId,
-      SupportReplyAgentState
-    >;
+    const layout = {
+      ...supportAgentInput(),
+      stateHistory: true,
+      eventHistory: true,
+    } as unknown as EntityStorageInput<SupportReplyAgentId, SupportReplyAgentState>;
     const commits = EntityCommitStorageFactories.create(factory, layout);
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-stale" });
     const input = {
@@ -207,6 +222,67 @@ describe("MysqlStorageFactory builder contract", () => {
       expect(fromBinary(AgentModelPreferencesRecordSchema, preferenceBytes).key?.stateType).toBe(
         layout.stateSchema.typeName,
       );
+      const before = new Map(rows);
+      const next = create(EntityRecordSchema, {
+        entityId: layout.id.pack(id),
+        state: AnyPacker.pack(
+          layout.stateSchema,
+          create(layout.stateSchema, { id, proposedReply: "ready" }),
+        ),
+        version: { number: 1 },
+      });
+      const finalInput = {
+        ...input,
+        expectedVersion: 0,
+        expectedPreferences: [],
+        entityCommit: {
+          context: layout.context,
+          entity: layout,
+          entityId: id,
+          next,
+          states: [next],
+          diagnostics: [supportDraftedEvent("diagnostic", id, "diagnostic", 1)],
+          events: [supportDraftedEvent("delivery", id, "delivery", 1)],
+        },
+        historyEntries: [
+          conversation("final", "support", create(TimestampSchema, { seconds: 2n })),
+        ],
+      };
+      failAuditWrite = true;
+      const attemptedBefore = execute.mock.calls.length;
+      await expect(commits.commitAgent(finalInput)).rejects.toThrow(
+        "late Agent audit write failed",
+      );
+      const attemptedInserts = execute.mock.calls
+        .slice(attemptedBefore)
+        .map(([sql]) => sql)
+        .filter((sql) => sql.startsWith("INSERT"));
+      expect(attemptedInserts.some((sql) => sql.includes("_EntityRecord"))).toBe(true);
+      expect(attemptedInserts.filter((sql) => sql.includes("_Event"))).toHaveLength(2);
+      expect(rows).toEqual(before);
+      expect(rollback).toHaveBeenCalledTimes(2);
+      failAuditWrite = false;
+      const currentTable = layout.stateSchema.typeName.replaceAll(".", "_");
+      await commits.commitAgent(finalInput);
+      const currentBytes = [...rows].find(([key]) => key.startsWith(`${currentTable}/`))?.[1];
+      const stateHistoryBytes = [...rows].find(([key]) =>
+        key.split("/")[0]?.endsWith("_EntityRecord"),
+      )?.[1];
+      const diagnosticBytes = [...rows].find(
+        ([key, bytes]) =>
+          key.split("/")[0]?.endsWith("_Event") &&
+          fromBinary(EventSchema, bytes).id?.value === "diagnostic",
+      )?.[1];
+      expect(currentBytes).toBeInstanceOf(Uint8Array);
+      expect(stateHistoryBytes).toBeInstanceOf(Uint8Array);
+      expect(diagnosticBytes).toBeInstanceOf(Uint8Array);
+      if (!(currentBytes instanceof Uint8Array)) throw new Error("The Agent state was not stored.");
+      expect(fromBinary(EntityRecordSchema, currentBytes)).toEqual(next);
+      expect(stateHistoryBytes).toEqual(toBinary(EntityRecordSchema, next));
+      const expectedDiagnostic = finalInput.entityCommit.diagnostics[0];
+      if (expectedDiagnostic === undefined) throw new Error("The diagnostic Event is missing.");
+      expect(diagnosticBytes).toEqual(toBinary(EventSchema, expectedDiagnostic));
+      expect(rows.size).toBeGreaterThan(before.size);
     } finally {
       await commits.close();
       await factory.close();
@@ -1361,9 +1437,13 @@ function agentMetadataQuery(sql: string, values: readonly unknown[], repaired: b
   if (repaired && sql.includes("information_schema.columns") && typeof table === "string") {
     const extra = table.includes("agent_history")
       ? AgentHistoryRecords.spec((value) => value).columns
-      : table.endsWith("_Event")
-        ? eventStoreRecordSpec.columns
-        : [];
+      : table.endsWith("_EntityRecord")
+        ? stateHistorySpec(SupportReplyAgentStateSchema).spec.columns
+        : table.endsWith("_Event")
+          ? table.startsWith("es_")
+            ? eventStoreRecordSpec.columns
+            : eventHistorySpec(SupportReplyAgentStateSchema).spec.columns
+          : [];
     if (extra.length)
       return Promise.resolve([
         [
@@ -1392,6 +1472,26 @@ function agentMetadataQuery(sql: string, values: readonly unknown[], repaired: b
   if (repaired && sql.includes("table_name IN (?)"))
     return Promise.resolve([(values[0] as string[]).map(() => ({ engine: "InnoDB" })), []]);
   return mysqlQuery(sql);
+}
+
+function supportDraftedEvent(
+  id: string,
+  agent: SupportReplyAgentId,
+  reply: string,
+  version: number,
+) {
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: id }),
+    message: AnyPacker.pack(
+      SupportReplyDraftedSchema,
+      create(SupportReplyDraftedSchema, { agent, reply }),
+    ),
+    context: {
+      producerId: AnyPacker.pack(SupportReplyAgentIdSchema, agent),
+      version: { number: version },
+      timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
+    },
+  });
 }
 
 function userStringifier(prefix: string) {

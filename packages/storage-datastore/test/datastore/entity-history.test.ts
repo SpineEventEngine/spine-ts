@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   AgentHistoryEntrySchema,
@@ -48,6 +48,10 @@ import {
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { entityInput as supportAgentInput } from "../../../storage/test/entity/agent-live-fixtures.js";
 import { conversation } from "../../../storage/test/entity/agent-history-fixtures.js";
+// prettier-ignore
+import {
+  SupportReplyDraftedSchema,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
 import {
   TaskSchema,
   type Task,
@@ -126,6 +130,20 @@ function event(id: string, version: number) {
     },
   });
 }
+function draftedEvent(id: string, agent: SupportReplyAgentId, reply: string, version: number) {
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: id }),
+    message: AnyPacker.pack(
+      SupportReplyDraftedSchema,
+      create(SupportReplyDraftedSchema, { agent, reply }),
+    ),
+    context: {
+      producerId: AnyPacker.pack(SupportReplyAgentIdSchema, agent),
+      version: { number: version },
+      timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
+    },
+  });
+}
 function factory(backend: HistoryDatastoreBackend) {
   const stringifiers = new StringifierRegistry();
   stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema, TaskSchema, TaskCreatedSchema]));
@@ -136,6 +154,139 @@ function factory(backend: HistoryDatastoreBackend) {
 }
 
 describe("Datastore generated Entity records", () => {
+  it("keeps all optional Agent rows unchanged when a late delivery Event conflicts", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const inspectedKinds: string[] = [];
+    const transaction = client.transaction.bind(client);
+    vi.spyOn(client, "transaction").mockImplementation(() => {
+      const tx = transaction();
+      const get = tx.get.bind(tx);
+      vi.spyOn(tx, "get").mockImplementation((key) => {
+        inspectedKinds.push(key.path.at(-2) ?? "");
+        return get(key);
+      });
+      return tx;
+    });
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));
+    const provider = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const layout = {
+      ...supportAgentInput(),
+      stateHistory: true,
+      eventHistory: true,
+    } as unknown as EntityStorageInput<SupportReplyAgentId, SupportReplyAgentState>;
+    const commits = EntityCommitStorageFactories.create(provider, layout);
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-optional" });
+    const first = create(EntityRecordSchema, {
+      entityId: layout.id.pack(id),
+      state: AnyPacker.pack(
+        SupportReplyAgentStateSchema,
+        create(SupportReplyAgentStateSchema, { id }),
+      ),
+      version: { number: 1 },
+    });
+    const next = create(EntityRecordSchema, {
+      entityId: layout.id.pack(id),
+      state: AnyPacker.pack(
+        SupportReplyAgentStateSchema,
+        create(SupportReplyAgentStateSchema, { id, proposedReply: "new" }),
+      ),
+      version: { number: 2 },
+    });
+    const originalEvent = draftedEvent("drafted", id, "original", 1);
+    const initial = {
+      entityId: id,
+      expectedVersion: 0,
+      expectedPreferences: undefined,
+      preferences: [],
+      entityCommit: {
+        context: layout.context,
+        entity: layout,
+        entityId: id,
+        next: first,
+        events: [originalEvent],
+      },
+      historyEntries: [
+        conversation("initial", "support", create(TimestampSchema, { seconds: 1n })),
+      ],
+    };
+    try {
+      await commits.commitAgent(initial);
+      const before = [...backend.entities];
+      const rollbacks = backend.rollbacks;
+      inspectedKinds.length = 0;
+      const attempted = {
+        ...initial,
+        expectedVersion: 1,
+        expectedPreferences: [],
+        entityCommit: {
+          ...initial.entityCommit,
+          next,
+          states: [next],
+          diagnostics: [draftedEvent("diagnostic", id, "diagnostic", 2)],
+          events: [draftedEvent("drafted", id, "changed", 2)],
+        },
+        historyEntries: [
+          conversation("later", "support", create(TimestampSchema, { seconds: 2n })),
+        ],
+      };
+      await expect(commits.commitAgent(attempted)).rejects.toThrow("divergent");
+      expect(inspectedKinds).toContain(`${layout.stateSchema.typeName}_EntityRecord`);
+      expect(inspectedKinds).toContain(`${layout.stateSchema.typeName}_Event`);
+      expect(backend.rollbacks).toBe(rollbacks + 1);
+      expect([...backend.entities]).toEqual(before);
+      await commits.commitAgent({
+        ...attempted,
+        entityCommit: {
+          ...attempted.entityCommit,
+          events: [draftedEvent("drafted-next", id, "changed", 2)],
+        },
+      });
+      const rows = [...backend.entities].map(([key, row]) => ({
+        kind: (JSON.parse(key) as [unknown, [string, string]])[1][0],
+        bytes: row.data.bytes,
+      }));
+      const current = rows.find((row) => row.kind === layout.stateSchema.typeName);
+      const stateHistory = rows.find(
+        (row) => row.kind === `${layout.stateSchema.typeName}_EntityRecord`,
+      );
+      const diagnostic = rows.find(
+        (row) =>
+          row.kind === `${layout.stateSchema.typeName}_Event` &&
+          row.bytes instanceof Uint8Array &&
+          fromBinary(EventSchema, row.bytes).id?.value === "diagnostic",
+      );
+      expect(current?.bytes).toBeInstanceOf(Uint8Array);
+      expect(stateHistory?.bytes).toBeInstanceOf(Uint8Array);
+      expect(diagnostic?.bytes).toBeInstanceOf(Uint8Array);
+      if (
+        !(current?.bytes instanceof Uint8Array) ||
+        !(stateHistory?.bytes instanceof Uint8Array) ||
+        !(diagnostic?.bytes instanceof Uint8Array)
+      )
+        throw new Error("The Agent optional rows were not stored.");
+      expect(
+        Buffer.from(current.bytes).equals(Buffer.from(toBinary(EntityRecordSchema, next))),
+      ).toBe(true);
+      expect(
+        Buffer.from(stateHistory.bytes).equals(Buffer.from(toBinary(EntityRecordSchema, next))),
+      ).toBe(true);
+      const expectedDiagnostic = attempted.entityCommit.diagnostics[0];
+      if (expectedDiagnostic === undefined) throw new Error("The diagnostic Event is missing.");
+      expect(
+        Buffer.from(diagnostic.bytes).equals(
+          Buffer.from(toBinary(EventSchema, expectedDiagnostic)),
+        ),
+      ).toBe(true);
+    } finally {
+      await commits.close();
+      await provider.close();
+    }
+  });
   it("rolls back a failed final Agent transaction and rejects stale images without partial writes", async () => {
     const backend = new HistoryDatastoreBackend();
     const stringifiers = new StringifierRegistry();

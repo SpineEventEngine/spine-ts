@@ -4070,3 +4070,26 @@ extension only if it proves a distinct omitted contract. Same explicit Sol/mediu
 implementer; no source edits without demonstrated runtime defect. Measure one
 coherent focused slice, not repeated tiny coverage loops. Projection remains
 source-sensitive after M16; final global passing result still unestablished.
+
+Provider coverage packet committed/pushed as
+09c12f002388f29cf85828bb8ab00d8a714a1c8d, remote SHA confirmed. M17 Datastore and
+MySQL optional-row atomicity cases now pass; affected two-file suite 77/77, tooling,
+scoped lint, cleanup, formatting and diff clean. Datastore late divergent delivery
+Event collision leaves exact prior backend snapshot; MySQL late audit insert
+failure after state/Event-family writes leaves durable map unchanged; valid retries
+succeed. One three-provider scoped LCOV measurement is running, with cumulative
+M15 union and incremental-over-176 counts requested. No production edits; no new
+current-global percentage claimed from old M16 source. Review coherent coverage
+batch after measurement/next-scope decision, not every individual test.
+
+M17 corrections accepted: 77/77 affected tests and tooling, lint, cleanup,
+formatting and diff checks pass. Datastore proves optional-family processing
+before the late conflict and exact current/history/diagnostic bytes after retry;
+MySQL distinguishes the current table from grouped state history. Independent
+reliability confirmation is clean. Commit/push the two tests and records next.
+Coverage remains unfinished: 206 cumulative additional provider branch hits over
+M15 are diagnostic only, because M16 changed server source. Next, measure current
+whole-suite coverage once to select remaining behavior gaps accurately; this is
+coverage diagnosis, not another release-profile attempt. Hold test edits during
+measurement. Then implement a coherent live-Agent MCP failure/audit slice if the
+fresh evidence confirms the gap. No threshold changes or filler matrices.
