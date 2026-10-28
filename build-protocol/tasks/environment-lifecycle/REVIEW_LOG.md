@@ -2518,3 +2518,16 @@ confirms only obsolete method plus TSDoc removed; retained commitAgent and
 applyConditional unchanged. API/reliability concern resolved by removal, style
 and documentation clean by scoped checks, security unchanged execution paths.
 No tests added for deleted behavior. Build and 21 focused commit tests pass.
+
+M39 review dispatched to original explicit Sol/medium performance/reliability
+reviewer. Scope is two frozen shutdown tests in subscription-runtime.test.ts and
+delivery-fencing.test.ts; 46 tests/static pass. Check causal synchronization,
+error preservation and complete cleanup, no sleeps or fixture-only assertions.
+Parent handles style; production/public documentation/security unchanged.
+Evidence m39-shutdown-evidence.md outside Git once writer freezes.
+
+M39 reliability review accepted clean; exact frozen test hashes match. Evidence
+actual name is m39-lifecycle-evidence.md; review m39-reliability-review.md.
+Parent style inspection accepts reuse of existing gates and domain fixtures.
+No runtime, public API, documentation or security behavior changed. Original
+explicit Sol/medium configuration accepted; introspection unavailable.

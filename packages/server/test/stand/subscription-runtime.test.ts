@@ -109,6 +109,50 @@ describe("SubscriptionRuntime", () => {
     }
   });
 
+  it("drains the first pass during close without starting periodic reconciliation", async () => {
+    vi.useFakeTimers();
+    const registry = new GatedSnapshotRegistry();
+    const cleanup = vi.spyOn(registry, "cleanup");
+    const snapshot = vi.spyOn(registry, "snapshot");
+    const close = vi.spyOn(registry, "close");
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      registry,
+    );
+    const starting = runtime.start();
+    try {
+      await registry.snapshotCaptured;
+      const closing = runtime.close();
+      let settled = false;
+      void closing.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      expect(close).not.toHaveBeenCalled();
+      await expect(runtime.start()).rejects.toThrow("closing");
+      registry.releaseSnapshot();
+      await starting;
+      await closing;
+      expect(close).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(snapshot).toHaveBeenCalledOnce();
+    } finally {
+      registry.releaseSnapshot();
+      await runtime.close();
+      vi.useRealTimers();
+    }
+  });
+
   it("owns one explicit reconciliation lifecycle", () => {
     expect(SubscriptionRuntime).toBeTypeOf("function");
   });

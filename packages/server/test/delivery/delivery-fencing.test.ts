@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
 import { Inbox } from "../../src/delivery/inbox.js";
+import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { AgentDeliveryScope } from "../../src/delivery/agent-delivery-scope.js";
@@ -223,6 +224,69 @@ describe("Delivery fencing", () => {
     const closing = readiness.close();
     releaseWork.resolve(undefined);
     await expect(closing).rejects.toMatchObject({ errors: [releaseFailure] });
+  });
+
+  it("attempts both retained store closes and preserves an admitted release failure", async () => {
+    const factory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "FailedPhysicalDeliveryClose", multitenant: false },
+      storageFactory: factory,
+    });
+    const message = createMessage("release-and-store-close", "signal", 1n);
+    const accepted = Promise.withResolvers<undefined>();
+    const releaseWork = Promise.withResolvers<undefined>();
+    const storeCloseEntered = Promise.withResolvers<undefined>();
+    const releaseStoreClose = Promise.withResolvers<undefined>();
+    const releaseFailure = new Error("shard release failed");
+    const storeFailure = new Error("inbox store close failed");
+    const inboxClose = vi.spyOn(InboxStorage.prototype, "close").mockImplementation(async () => {
+      storeCloseEntered.resolve(undefined);
+      await releaseStoreClose.promise;
+      throw storeFailure;
+    });
+    const shardClose = vi.spyOn(ShardedWorkRegistry.prototype, "close");
+    vi.spyOn(ShardedWorkRegistry.prototype, "release").mockRejectedValue(releaseFailure);
+    await (delivery.inbox as Inbox).storage.write(message);
+    try {
+      await delivery.drainMessage(message, {
+        onMessage: () => {
+          AgentDeliveryScope.record({
+            kind: "accepted",
+            discard: () => undefined,
+            run: async () => {
+              accepted.resolve(undefined);
+              await releaseWork.promise;
+            },
+          });
+        },
+      });
+      await accepted.promise;
+      const closing = delivery.close();
+      let settled = false;
+      void closing.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      expect(inboxClose).not.toHaveBeenCalled();
+      releaseWork.resolve(undefined);
+      await storeCloseEntered.promise;
+      expect(settled).toBe(false);
+      expect(shardClose).toHaveBeenCalledOnce();
+      releaseStoreClose.resolve(undefined);
+      await expect(closing).rejects.toMatchObject({
+        errors: [releaseFailure, storeFailure],
+      });
+      expect(inboxClose).toHaveBeenCalledOnce();
+      expect(shardClose).toHaveBeenCalledOnce();
+    } finally {
+      releaseWork.resolve(undefined);
+      releaseStoreClose.resolve(undefined);
+      vi.restoreAllMocks();
+    }
   });
 
   it("renews the leased shard session while an acknowledged Agent call remains held", async () => {

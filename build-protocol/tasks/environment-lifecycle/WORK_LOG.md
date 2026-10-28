@@ -4748,3 +4748,38 @@ native cases skip in this focused invocation. Build/tooling/lint/cleanup/TSDoc/
 format/diff pass; evidence m38-removal-evidence.md. Security delta is deletion
 of an uncalled recovery-only helper; live transaction logic is unchanged. No
 additional security lane reopened. Commit/push before M39 test integration.
+
+M40 bounded dead-helper inspection follows scripts-first evidence in
+recovery-unused-candidates.json outside Git. Candidate methods are AgentLiveAudit
+historyBytes, DatastoreRecordStorage.queryTransactionSuccessors and
+InMemoryEntityCommitStorage.commitAgentConditional. Each has one current textual
+occurrence (definition); origin/master shows removed Agent recovery callers.
+The memory private runAgentConditional is still used by live commitAgent and
+MUST remain. Existing explicit Sol/medium API reviewer checks callers, exports,
+capacity validation and exact safe removal scope read-only. Estimate 0.1–0.2 hour
+inspection and 0.2–0.4 hour removal/checks if confirmed. No threshold change or
+removal of used validation is authorized.
+
+M40 selection accepted from original explicit Sol/medium API reviewer. Remove
+only the three named unused methods and their TSDoc after M39 freezes. All
+current audit-size checks/imports, shared Datastore filters, and memory private
+runAgentConditional/applyAgentConditional remain. Historical callers were removed
+recovery implementations; package supported exports do not expose these methods.
+Evidence m40-removal-selection.md. Scope remains 0.2–0.4 hour for exact removal,
+focused affected suites, build/static checks and final diff acceptance.
+
+M41 read-only selection proposed for explicit SQL Entity preparation. Current
+native tests prepare layouts with both histories enabled; ordinary tests do not
+exercise prepareEntity with independently enabled state/event history. Existing
+API reviewer explicit Sol/medium checks whether a concise paired-provider test
+of state-only versus event-only declarations would prove required physical-family
+selection, no storage-handle acquisition and read-only checks without duplicating
+native metadata validation. Also inspect coherent-column mismatch rejection only
+if it represents a supported custom provider error not already tested. No edits
+or tests during selection. Estimate 0.1–0.2 hour; implement only grounded cases.
+
+M39 accepted: 46 tests and scoped static checks pass, independent reliability
+review clean. Four newly covered unchanged-source outcomes, cumulative 46 since
+M26 through M39. M38 deletion changes PostgreSQL entity-commit branch keys, so
+that file is excluded from unchanged-tuple comparison; no new global percentage
+or exact post-deletion remaining count claimed. Commit/push tests and records.
