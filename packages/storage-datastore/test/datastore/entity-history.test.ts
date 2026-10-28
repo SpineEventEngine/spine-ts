@@ -47,7 +47,12 @@ import {
   type SupportReplyAgentState,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { entityInput as supportAgentInput } from "../../../storage/test/entity/agent-live-fixtures.js";
-import { conversation } from "../../../storage/test/entity/agent-history-fixtures.js";
+import {
+  conversation,
+  event as agentEvent,
+  occurredAt,
+  scope as agentScope,
+} from "../../../storage/test/entity/agent-history-fixtures.js";
 // prettier-ignore
 import {
   SupportReplyDraftedSchema,
@@ -154,6 +159,38 @@ function factory(backend: HistoryDatastoreBackend) {
 }
 
 describe("Datastore generated Entity records", () => {
+  it("retries an Agent audit group after the commit applied but its result was lost", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const store = factory(backend);
+    const history = AgentHistoryStorageFactories.create(store, agentScope);
+    const entries = [
+      agentEvent("audit-first", occurredAt(1_789_200_001n), false),
+      agentEvent("audit-second", occurredAt(1_789_200_002n), true),
+    ];
+    const bytes = (entry: (typeof entries)[number]) =>
+      Buffer.from(toBinary(AgentHistoryEntrySchema, entry)).toString("hex");
+    const expected = entries.map(bytes).sort();
+    try {
+      backend.failCommitAppliedOnce = true;
+      await expect(history.appendAll("ticket", entries)).rejects.toThrow(
+        "commit applied before connection closed",
+      );
+      await history.appendAll("ticket", entries);
+      const page = await history.read({
+        entityId: "ticket",
+        view: { kind: "full" },
+        count: 3,
+        maxBytes: 100_000,
+      });
+      expect(page.hasMore).toBe(false);
+      expect(page.entries.map(bytes).sort()).toEqual(expected);
+      expect(entries.map(bytes).sort()).toEqual(expected);
+      expect(backend.entities.size).toBe(2);
+    } finally {
+      history.close();
+      await store.close();
+    }
+  });
   it("keeps all optional Agent rows unchanged when a late delivery Event conflicts", async () => {
     const backend = new HistoryDatastoreBackend();
     const client = backend.client();
@@ -1337,6 +1374,51 @@ describe("Datastore generated Entity records", () => {
     await expect(closing).resolves.toBeUndefined();
     await expect(factoryClosing).resolves.toBeUndefined();
     expect(close).toHaveBeenCalledOnce();
+  });
+  it("retains a custom bundle when idle cleanup fails before asynchronous close", async () => {
+    const release = deferred<undefined>();
+    let settled = false;
+    const idleFailure = new Error("idle cleanup failed");
+    const close = vi.fn(async () => {
+      await release.promise;
+      settled = true;
+    });
+    const store = DatastoreStorageFactory.newBuilder()
+      .setClient(new HistoryDatastoreBackend().client() as never)
+      .useEntityStorage(TaskSchema, () => ({
+        current: {} as never,
+        states: {} as never,
+        events: {} as never,
+        commits: {
+          commit: vi.fn(),
+          readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+          commitAgent: vi.fn().mockResolvedValue(undefined),
+          close: vi.fn(),
+          closeIdle: vi.fn(),
+        },
+        isOpen: () => true,
+        close,
+        closeIdle: () => {
+          throw idleFailure;
+        },
+      }))
+      .build();
+    const port = EntityCommitStorageFactories.create(store, input(false));
+    expect(() => {
+      port.closeIdle();
+    }).toThrow(idleFailure);
+    expect(close).not.toHaveBeenCalled();
+    const catalogClose = vi.spyOn(store.tenantCatalog(), "close").mockImplementation(() => {
+      if (!settled) throw new Error("catalog closed before bundle settled");
+      return Promise.resolve();
+    });
+    const closing = store.close();
+    await Promise.resolve();
+    expect(catalogClose).not.toHaveBeenCalled();
+    release.resolve(undefined);
+    await expect(closing).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledOnce();
+    expect(catalogClose).toHaveBeenCalledOnce();
   });
   it("removes individually settled Datastore bundles before factory shutdown", async () => {
     const store = factory(new HistoryDatastoreBackend());

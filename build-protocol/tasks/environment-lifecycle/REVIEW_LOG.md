@@ -2098,3 +2098,43 @@ accepted; runtime metadata unavailable. Parent verifies all 12 frozen manifest
 hashes. Updated factory/BlackBox 167/167 and scoped static checks pass; runtime
 unchanged since the clean API/reliability review. All four canonical concerns
 disposed; no unresolved accepted findings. Final global coverage remains pending.
+
+M22 assignment: existing implementer, original explicit gpt-6-sol/medium profile,
+provider test-only lifecycle scenarios defined in WORK_LOG. No child delegation.
+Parent records expected/explicit immutable profile; runtime introspection remains
+unavailable. Reliability review follows frozen focused evidence; parent handles
+test maintainability, API/docs/security reopening N/A if production and public
+claims remain unchanged. Reclassify if a production defect is demonstrated.
+
+M22 frozen two-file test packet passes 70/70 plus tooling, scoped ESLint,
+cleanup, format and diff checks. Scoped LCOV adds 27 previously unhit provider
+branch tuples against unchanged M19 provider source; not global acceptance.
+Existing original Sol/medium reliability reviewer checks exact persisted bytes,
+resource cleanup ordering and retry/readiness assertions. No children or source
+edits; parent maintains test-style and record dispositions. Public API/docs and
+security lanes N/A because only test fixtures/assertions changed.
+
+M22 complete narrow review: accept two P2 test-fidelity findings. Snapshot expected
+Datastore audit bytes before the first append so source mutation cannot mask a
+changed record. PostgreSQL release/end assertions must identify individual
+temporary clients/pools rather than only shared counters. Custom idle-close
+cleanup test is sound. No production defect. Parent test style otherwise clean;
+return one correction batch to original Sol/medium implementer, estimate
+0.1–0.2 hours for focused assertions/checks and narrow confirmation.
+
+M22 correction checks pass, 70/70 and scoped statics; original explicit Sol/medium
+reviewer performs narrow confirmation of both accepted assertions. Parent confirms
+identical BRDA key sets for the four measured provider files across M19/M22, so
+the 27 additional hits are a valid unchanged-source diagnostic comparison.
+
+Next bounded read-only coverage selection: existing TypeScript/API reviewer with
+explicit Sol/medium profile inspects PostgreSQL/MySQL external schema compatibility
+checks and existing tests. Exclude previously scanned query/filter/scalar matrices
+and provider close/audit paths. Identify meaningful public preparation contract
+cases only, or state no justified additions. No tests/builds/edits/children.
+This selection does not authorize new production behavior or a test matrix.
+
+M22 narrow confirmation clean: both accepted P2s resolved, replacement hashes
+match. Original explicit Sol/medium profile accepted; runtime metadata unavailable.
+Parent accepts test maintainability; no remaining findings, all canonical
+concerns disposed. Commit/push two tests and records.

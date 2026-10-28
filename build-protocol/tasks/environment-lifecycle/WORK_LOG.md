@@ -4200,3 +4200,33 @@ docs clean. Commit/push the frozen packet and records. A diagnostic replacement
 of changed-file LCOV counters still leaves about 208 branch hits short; it is not
 a current global result. Continue meaningful provider lifecycle coverage before
 final full release and exact-SHA Security checks.
+
+M21 committed/pushed as 54142939999a2ff3e05f8112ba1452a5bc95dfe4, exact
+remote SHA confirmed. M22 standard test-only provider lifecycle packet, estimate
+0.4–0.75 hours including focused verification, review and push. Existing sole
+implementer explicit gpt-6-sol/medium, no children; parent edits logs/Git. Three
+source-backed gaps from m20-lifecycle-coverage-candidates.md: PostgreSQL audit
+index preparation failure releases temporary resources and can retry successfully;
+Datastore audit append after a post-apply commit error can be repeated without
+duplicate or changed entries; failed custom bundle idle cleanup remains tracked
+for awaited asynchronous shutdown before catalog close. Use existing domain
+fixtures and deterministic latches, no arbitrary sleeps, production changes,
+scalar matrix or duplicated provider scenarios. Freeze coherent packet, inspect
+scoped LCOV against M19 unchanged provider source, then one reliability review.
+Global branch gate remains unresolved; never report scoped/combined estimates
+as fresh global coverage. Two server candidates remain pending.
+
+M22 accepted after narrow reliability confirmation. Seventy tests and scoped
+static checks pass. Distinct PG resource cleanup/retry/readiness and immutable
+Datastore audit bytes verified; caller messages unchanged and asynchronous custom
+bundle cleanup remains awaited. No production defect/change. Commit/push now.
+
+M23 standard test-only server packet, estimate 0.25–0.5 hours for two selected
+behaviors, focused checks, review and push. Original sole Sol/medium implementer,
+no children. Use m21-server-coverage-candidates.md: reject missing/foreign stored
+Event tenant before Process Manager mutation; allow repaired generated registry
+loading from the same root after a failed import using existing retry behavior.
+Preserve startup failure semantics; use a fresh configured environment when the
+failed environment is closed/fenced, never add a revival API. No production
+changes, no arbitrary waits or unrelated malformed-input matrix. Parent records
+and read-only SQL compatibility analysis proceed independently.
