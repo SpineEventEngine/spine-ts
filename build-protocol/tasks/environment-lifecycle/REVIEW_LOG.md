@@ -2599,3 +2599,22 @@ EntityStateKey/EventId fake deletion, real inclusive stateAt and exclusive
 truncate behavior, typed current ID and truthful Any column. Parent style review
 agrees; focused 9 tests and static gates pass. No runtime/docs/security change.
 Evidence m49-api-review.md and m49-history-evidence.md. Commit/push now.
+
+M50 review dispatched: original explicit Sol/medium reliability reviewer;
+runtime introspection unavailable. Frozen paired SQL paging test hashes in
+m50-paging-evidence.md; 130 tests/static pass. Review exact SQL grouping/bind order,
+real Event cursor fields, default-ID continuation. Parent style. Newly confirmed
+NULL paging defect is a separate M52 fix; M50 tests cover non-NULL behavior only.
+
+M50 accepted: independent reliability review clean, frozen hashes match; parent
+style review accepts exact SQL/bind assertions and real Event cursor columns.
+Tests capture SQL through public query and do not claim native result proof.
+Separate M52 NULL behavior correction follows. Original explicit Sol/medium
+profile confirmed; runtime introspection unavailable. Evidence
+m50-reliability-review.md, m50-paging-evidence.md. 130 tests/static pass.
+
+M51 independent API selection clean: exact executor declaration/TSDoc and
+historyExecutor closure only; sole old caller removed with Agent recovery.
+Retained appendImmutableOn validates live writes. Separate class helper stays.
+Original explicit Sol/medium reviewer profile accepted; evidence
+m51-removal-selection.md. Actual deletion reviewed by parent against this scope.

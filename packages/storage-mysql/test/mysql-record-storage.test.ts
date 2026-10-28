@@ -13,8 +13,8 @@
  */
 
 import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import { VersionSchema } from "@spine-event-engine/proto";
+import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { EventIdSchema, EventSchema, VersionSchema, type Event } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -1420,6 +1420,69 @@ describe("MysqlRecordStorage", () => {
     });
 
     expect(calls.at(-1)).toContain("ID > ?");
+  });
+
+  it("binds a mixed-direction Event cursor in lexicographic order", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const received = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_500_000 });
+    const event = create(EventSchema, {
+      id: create(EventIdSchema, { value: "middle" }),
+      context: { timestamp: received },
+    });
+    const spec = new RecordSpec<string, Event>({
+      recordType: EventSchema,
+      idKind: "string",
+      extractId: (value) => value.id?.value ?? "",
+      columns: [
+        new RecordColumn(
+          "received",
+          ColumnTypes.message(TimestampSchema),
+          (value) => value.context?.timestamp,
+        ),
+      ],
+    });
+    const storage = new MysqlRecordStorage(
+      { name: "events", multitenant: false },
+      spec,
+      new MysqlTableResolver().resolve(EventSchema.typeName, undefined),
+      lifecycle(readyConnection(calls, { columns: ["ID", "bytes", "received"] })),
+      () => undefined,
+    );
+
+    await storage.query({
+      sort: [
+        { field: "received", direction: "asc" },
+        { field: "id", direction: "desc" },
+      ],
+      after: {
+        values: [
+          { field: "received", value: event.context?.timestamp },
+          { field: "id", value: event.id?.value },
+        ],
+        id: "middle",
+      },
+      limit: 2,
+    });
+
+    const query = calls.find(({ sql }) => sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).toContain(
+      "WHERE (`received` > ? OR `received` <=> ? AND `ID` < ? OR " +
+        "`received` <=> ? AND `ID` <=> ? AND ID > ?)",
+    );
+    expect(query?.sql).toContain("ORDER BY `received` ASC, `ID` DESC, ID ASC LIMIT ?");
+    const nanos = 1_789_000_000_123_500_000n;
+    expect(query?.values).toEqual([nanos, nanos, "middle", nanos, "middle", "middle", 2]);
+  });
+
+  it("continues an unsorted record page by ID alone", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const storage = stringStorage(readyConnection(calls));
+
+    await storage.query({ after: { values: [], id: "middle" }, limit: 2 });
+
+    const query = calls.find(({ sql }) => sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).toContain("WHERE (ID > ?) ORDER BY ID ASC LIMIT ?");
+    expect(query?.values).toEqual(["middle", 2]);
   });
 
   it("uses a conditional insert without session locks", async () => {

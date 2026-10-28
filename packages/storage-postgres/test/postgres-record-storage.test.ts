@@ -19,7 +19,13 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type StringValue,
+} from "@bufbuild/protobuf/wkt";
+import { EventIdSchema, type Event } from "@spine-event-engine/proto";
 import {
   ColumnTypes,
   RecordColumn,
@@ -1807,6 +1813,89 @@ describe("Postgres record storage", () => {
     expect(query?.sql).toContain('"value" < $1');
     expect(query?.sql).toContain('"value" IS NOT DISTINCT FROM $2 AND "ID" > $3');
     expect(query?.values).toEqual(["middle", "middle", "one", 2]);
+  });
+
+  it("binds a mixed-direction Event cursor in lexicographic order", async () => {
+    const received = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 123_500_000 });
+    const event = create(EventSchema, {
+      id: create(EventIdSchema, { value: "middle" }),
+      context: { timestamp: received },
+    });
+    const spec = new RecordSpec<string, Event>({
+      recordType: EventSchema,
+      idKind: "string",
+      extractId: (value) => value.id?.value ?? "",
+      columns: [
+        new RecordColumn(
+          "received",
+          ColumnTypes.message(TimestampSchema),
+          (value) => value.context?.timestamp,
+        ),
+      ],
+    });
+    const table = PostgresTableSpecs.resolvedPostgresTableSpec({
+      schema: "spine",
+      tableName: "paged_events",
+      sourceType: spec.sourceType,
+      recordType: spec.recordType,
+      idType: spec.idType,
+      declaredColumns: spec.columns,
+    });
+    const storage = new PostgresRecordStorage(
+      { name: "events", multitenant: false },
+      spec,
+      table.tableName,
+      () => table,
+      {
+        resolve: () => Promise.resolve(),
+        track: (work) => work,
+        prepare: () => Promise.resolve(),
+        publicOpen: () => true,
+        databaseName: "test",
+        schema: "spine",
+        acquire: () => driver.connect() as never,
+      },
+      () => undefined,
+    );
+    driver.calls.length = 0;
+
+    await storage.query({
+      sort: [
+        { field: "received", direction: "asc" },
+        { field: "id", direction: "desc" },
+      ],
+      after: {
+        values: [
+          { field: "received", value: event.context?.timestamp },
+          { field: "id", value: event.id?.value },
+        ],
+        id: "middle",
+      },
+      limit: 2,
+    });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain(
+      'WHERE ((("received" IS NOT NULL AND "received" > $1)) OR ' +
+        '("received" IS NOT DISTINCT FROM $2 AND ("ID" IS NOT NULL AND "ID" < $3)) OR ' +
+        '("received" IS NOT DISTINCT FROM $4 AND "ID" IS NOT DISTINCT FROM $5 AND "ID" > $6))',
+    );
+    expect(query?.sql).toContain(
+      'ORDER BY "received" ASC NULLS FIRST, "ID" DESC NULLS LAST, "ID" ASC LIMIT $7',
+    );
+    const nanos = 1_789_000_000_123_500_000n;
+    expect(query?.values).toEqual([nanos, nanos, "middle", nanos, "middle", "middle", 2]);
+  });
+
+  it("continues an unsorted record page by ID alone", async () => {
+    const storage = await recordStorage();
+    driver.calls.length = 0;
+
+    await storage.query({ after: { values: [], id: "middle" }, limit: 2 });
+
+    const query = driver.calls.find(({ sql }) => sql.startsWith('SELECT "ID", "bytes"'));
+    expect(query?.sql).toContain('WHERE (("ID" > $1)) ORDER BY "ID" ASC LIMIT $2');
+    expect(query?.values).toEqual(["middle", 2]);
   });
 
   it("decodes stable ID-tied query rows in PostgreSQL result order", async () => {

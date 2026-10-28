@@ -4989,3 +4989,37 @@ removed. Select this recovery-only executor member for later bounded deletion
 and independent caller/export review; leave its unrelated pre-existing public
 record helper alone unless separate provenance proves it is part of recovery.
 Do not edit record source while M50 measures matching branch keys.
+
+M51 read-only API selection uses existing explicit Sol/medium reviewer to confirm
+PostgresRecordExecutor.assertImmutable signature and historyExecutor closure
+are recovery-only, have no current callers, and have no supported export. Verify
+live immutable append collision validation remains independent. No deletion yet;
+M50 measurements need unchanged source keys. Expected bounded deletion/checks
+under 0.2 hour after that measurement, if independently confirmed.
+
+M50 frozen: 130 tests/static pass and exact M43 branch keys show 15 newly hit
+outcomes (6 MySQL,9 PostgreSQL). Independent reliability review uses original
+explicit Sol/medium reviewer; parent style. Evidence m50-paging-evidence.md.
+
+M52 standard bounded correctness fix discovered during paging coverage: native
+read-only CTE probes on MySQL8.4 and PostgreSQL18 confirm descending cursor after
+2 omits the NULL-valued last row (only b returned instead of b,a). MySQL ascending
+after NULL returns no rows instead of b,c. Expected shared sorting places NULL
+first ascending, last descending. No API or serialized contract change; fix
+continuation to preserve that existing order, retaining ID tie-break/prefixes
+and parameter binding. Original code is also on master; this is a confirmed
+storage paging defect within the current broad adapter work, not invented input
+validation. Evidence mysql-null-cursor-probe.log and postgres-null-cursor-probe.log
+outside Git. Estimate0.3–0.6 hour for focused failing tests, minimal SQL change,
+native PG/MySQL/Maria verification, static gates and relevant independent review.
+No new type/operator matrix, migrations or fixture framework. Sole existing
+explicit Sol/medium implementer handles both record-storage source files and
+focused/native provider test files after M50 is accepted/pushed. Delay Boolean/
+bigint packet until this actual defect is fixed. M51 tiny executor deletion can
+be included only after current M50 coverage evidence is frozen; independent
+caller/export review has already confirmed exact signature/closure removal.
+
+M50 clean review accepted. Commit and immediate push frozen test checkpoint,
+then allow sole implementer to modify source/tests for M52. Native result
+verification is required because SQL text assertions alone do not prove complete
+NULL page traversal. Preserve original scope and no public API expansion.
