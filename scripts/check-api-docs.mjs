@@ -632,6 +632,7 @@ const expectedServerExports = [
   "BaseHandlerMetadata",
   "BoundedContext",
   "BoundedContextBuilder",
+  "BoundedContextBuildOptions",
   "BoundedContextName",
   "BoundedContextNameError",
   "DuplicateEntityStateException",

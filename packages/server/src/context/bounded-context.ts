@@ -43,7 +43,10 @@ import {
 import {
   AgentHistoryStorageFactories,
   EventStoreGroups,
+  eventStoreRecordSpec,
+  StoragePreparations,
   TenantBoundary,
+  type StoragePreparationMode,
 } from "@spine-event-engine/storage/provider";
 
 import { CommandBus, commandBusAccess } from "../bus/command-bus.js";
@@ -65,7 +68,11 @@ import {
   AgentExecutionCapacity,
   type AgentCapacityReservation,
 } from "../agent/agent-execution-capacity.js";
-import { AgentAcceptanceReceipts } from "../agent/agent-acceptance-receipts.js";
+import {
+  AgentAcceptanceReceipts,
+  agentAcceptanceReceiptGroup,
+  agentAcceptanceReceiptSpec,
+} from "../agent/agent-acceptance-receipts.js";
 import {
   Repository,
   repositoryAccess,
@@ -106,6 +113,7 @@ import { Stand, standAccess } from "../stand/stand.js";
 import { SubscriptionRuntime, subscriptionRuntimeAccess } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
+  subscriptionRecordSpec,
   type StandSubscriptionRegistry,
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
@@ -532,6 +540,14 @@ const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
 const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
+const contextPreparations = new WeakMap<
+  BoundedContext,
+  (options: BoundedContextBuildOptions) => Promise<void>
+>();
+const contextInputPreparations = new WeakMap<
+  BoundedContext,
+  (tenantId?: TenantId) => Promise<void>
+>();
 const contextLoggers = new WeakMap<BoundedContext, ILogLayer>();
 const contextSignalPublishers = new WeakMap<BoundedContext, SignalPublisher>();
 const contextEventBuses = new WeakMap<BoundedContext, readonly [EventBus, EventBus]>();
@@ -557,6 +573,34 @@ const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise
 const builderBuilds = new WeakMap<BoundedContextBuilder, () => Promise<BoundedContext>>();
 
 interface BoundedContextAccess {
+  /**
+   * Admits a service membership and preparation chain before its first await.
+   *
+   * @param context Selected built context.
+   * @param tenantId Captured tenant identity, when applicable.
+   * @param onMembership Checks live tenant membership.
+   * @param onReady Performs the admitted one-shot registry mutation, if present.
+   * @returns Tracked completion of membership and model preparation.
+   */
+  admitServiceInput(
+    context: BoundedContext,
+    tenantId: TenantId | undefined,
+    onMembership: () => Promise<void>,
+    onReady?: () => Promise<void>,
+  ): Promise<void>;
+
+  /**
+   * Admits one shared subscription-registry operation before asynchronous lookup.
+   *
+   * @param context Selected built context.
+   * @param onOperation Complete registry operation.
+   * @returns Tracked operation completion.
+   */
+  admitServiceRegistryOperation(
+    context: BoundedContext,
+    onOperation: () => Promise<void>,
+  ): Promise<void>;
+
   /**
    * Registers an entered shared replay through its complete callback.
    *
@@ -892,6 +936,14 @@ export class BoundedContext {
 
   readonly #activeReplays = new Set<Promise<void>>();
 
+  readonly #activePreparations = new Set<Promise<void>>();
+
+  readonly #tenantPreparations = new Map<string | symbol, Promise<void>>();
+
+  readonly #preparationController = new AbortController();
+
+  #sharedPreparation: Promise<void> | undefined;
+
   #closed: Promise<void> | undefined;
 
   /**
@@ -900,7 +952,7 @@ export class BoundedContext {
   static {
     constructBoundedContext = (input): BoundedContext => new BoundedContext(input);
     registerBoundedContext = (context, repositories) => {
-      context.#registerAndStart(repositories);
+      context.#registerRepositories(repositories);
     };
   }
 
@@ -926,7 +978,7 @@ export class BoundedContext {
     this.#agentReceipts = new AgentAcceptanceReceipts(input.storageFactory);
     this.#environment = ServerEnvironment.instance();
     this.#ai = input.ai;
-    this.#installTenantAdmission(input.tenantIndex);
+    this.#installTenantAdmission();
     this.#commandEndpoint = Object.freeze({
       acceptedCommandTypes: () => this.#commandBus.acceptedCommandTypes(),
       post: (command: Command) => this.#commandBus.post(command),
@@ -947,27 +999,18 @@ export class BoundedContext {
   /**
    * Installs live membership checks on context signal buses.
    *
-   * @param index Effective receiving-context membership index.
    */
-  #installTenantAdmission(index: TenantIndex): void {
-    const contextName = this.#snapshot.spec.name.value;
-    const multitenant = this.#snapshot.tenantMode === "multitenant";
+  #installTenantAdmission(): void {
     commandBusAccess.setAdmission(this.#commandBus, (command) =>
-      TenantAdmissions.require(
-        index,
-        contextName,
-        multitenant,
-        command.context?.actorContext?.tenantId,
-      ),
+      this.#admitTenant(command.context?.actorContext?.tenantId),
     );
     eventBusAccess.setAdmission(this.#eventBus, (event) =>
-      TenantAdmissions.require(
-        index,
-        contextName,
-        multitenant,
-        ContextParts.readReplayTenant(event),
-      ),
+      this.#admitTenant(ContextParts.readReplayTenant(event)),
     );
+    standAccess.setAdmission(this.#stand, (tenantId) => this.#admitTenant(tenantId));
+    standAccess.setPublicAdmission(this.#stand, () => {
+      if (closingContexts.has(this)) throw new Error("Bounded Context is closing.");
+    });
   }
 
   /**
@@ -975,13 +1018,192 @@ export class BoundedContext {
    *
    * @param tenantId Captured tenant identity, when applicable.
    */
-  #admitTenant(tenantId?: TenantId): Promise<void> {
-    return TenantAdmissions.require(
+  async #admitTenant(tenantId?: TenantId): Promise<void> {
+    await TenantAdmissions.require(
       this.tenantIndex,
       this.#snapshot.name.value,
       this.isMultitenant,
       tenantId,
     );
+    await this.#prepareInput(tenantId);
+  }
+
+  /**
+   * Initializes only the admitted input's complete context and tenant requirements.
+   * @param tenantId Captured input tenant identity, when applicable.
+   * @returns Completion after storage and first monitoring pass are ready.
+   */
+  async #prepareInput(tenantId?: TenantId): Promise<void> {
+    await this.#prepareShared("create");
+    await this.#prepareTenant(tenantId, "create");
+    if (!closingContexts.has(this)) await this.#subscriptionRuntime.start();
+  }
+
+  /**
+   * Prepares the fixed shared subscription registry layout once per context.
+   * @param mode Required provider preparation mode.
+   * @returns Shared preparation completion.
+   */
+  #prepareShared(mode: StoragePreparationMode): Promise<void> {
+    if (!(this.#subscriptionRuntime.registry() instanceof StorageSubscriptionRegistry))
+      return Promise.resolve();
+    if (this.#sharedPreparation !== undefined) return this.#sharedPreparation;
+    const attempt = this.#trackPreparation(() =>
+      StoragePreparations.for(this.#storageFactory).prepareRecord(
+        ContextParts.createSubscriptionStorageContext(this.#snapshot.spec),
+        subscriptionRecordSpec,
+        undefined,
+        mode,
+      ),
+    );
+    this.#sharedPreparation = attempt;
+    void attempt.catch(() => {
+      if (this.#sharedPreparation === attempt) this.#sharedPreparation = undefined;
+    });
+    return attempt;
+  }
+
+  /**
+   * Shares one pending complete-tenant preparation without caching a stale model flag.
+   * @param tenantId Captured tenant identity, when applicable.
+   * @param mode Required provider preparation mode.
+   * @returns Complete tenant preparation attempt.
+   */
+  #prepareTenant(tenantId: TenantId | undefined, mode: StoragePreparationMode): Promise<void> {
+    const context = this.#storageContextFor(tenantId);
+    const key = TenantBoundary.of(context).key;
+    const pending = this.#tenantPreparations.get(key);
+    if (pending !== undefined) return pending;
+    const attempt = this.#trackPreparation(() => this.#prepareTenantNow(context, mode));
+    this.#tenantPreparations.set(key, attempt);
+    void attempt.then(
+      () => this.#tenantPreparations.delete(key),
+      () => this.#tenantPreparations.delete(key),
+    );
+    return attempt;
+  }
+
+  /**
+   * Prepares exact Event, Entity and Agent families for one captured destination.
+   * @param context Captured physical storage destination.
+   * @param mode Required provider preparation mode.
+   * @returns Completion after all declared families are ready.
+   */
+  async #prepareTenantNow(context: StorageContext, mode: StoragePreparationMode): Promise<void> {
+    const preparation = StoragePreparations.for(this.#storageFactory);
+    await preparation.prepareRecord(
+      context,
+      eventStoreRecordSpec,
+      EventStoreGroups.forContext(context.name),
+      mode,
+    );
+    const system = ContextParts.requireSystemPairing(this).system;
+    if (system.storesEvents) {
+      const systemContext = { ...context, name: system.name.value };
+      await preparation.prepareRecord(
+        systemContext,
+        eventStoreRecordSpec,
+        EventStoreGroups.forContext(system.name.value, "system"),
+        mode,
+      );
+    }
+    for (const repository of this.#repositoryViews)
+      await repositoryAccess.prepareStorage(repository, context, this.#storageFactory, mode);
+    if ([...this.#repositoryViews].some((repository) => repository.entityFamily === "agent"))
+      await preparation.prepareRecord(
+        context,
+        agentAcceptanceReceiptSpec,
+        agentAcceptanceReceiptGroup,
+        mode,
+      );
+  }
+
+  /**
+   * Captures the same tenant scope used by repository and Event storage.
+   * @param tenantId Complete selected tenant identity, when applicable.
+   * @returns A detached provider storage context.
+   */
+  #storageContextFor(tenantId: TenantId | undefined): StorageContext {
+    if (!this.isMultitenant) return { name: this.name.value, multitenant: false };
+    if (tenantId === undefined) throw new Error("Multitenant preparation requires tenantId.");
+    return {
+      name: this.name.value,
+      multitenant: true,
+      tenantId: TenantBoundary.from(tenantId).tenantId,
+    };
+  }
+
+  /**
+   * Retains an admitted preparation until closure can safely release its provider.
+   * @param onPrepare Complete provider preparation callback.
+   * @returns Tracked preparation completion.
+   */
+  #trackPreparation(onPrepare: () => Promise<void>): Promise<void> {
+    const attempt = Promise.resolve().then(onPrepare);
+    this.#activePreparations.add(attempt);
+    void attempt.then(
+      () => this.#activePreparations.delete(attempt),
+      () => this.#activePreparations.delete(attempt),
+    );
+    return attempt;
+  }
+
+  /**
+   * Completes independently requested eager structure and monitor phases.
+   * @param options Independent build-time initialization choices.
+   * @returns Completion after requested phases settle.
+   */
+  async #prepareBuild(options: BoundedContextBuildOptions): Promise<void> {
+    if (options.createStorageStructures !== false) {
+      await this.#requiredPrepare(() => this.#prepareShared("create"));
+      await this.#prepareCurrentTenants();
+    }
+    if (options.startSubscriptionMonitoring !== false) {
+      await this.#requiredPrepare(() => this.#prepareShared("create"));
+      await this.#requiredPrepare(() => this.#subscriptionRuntime.start());
+    }
+  }
+
+  /**
+   * Classifies a requested startup phase without changing shared lazy attempts.
+   * @param onPrepare Required provider or initial-monitor phase.
+   * @returns Completion of the requested phase.
+   */
+  async #requiredPrepare(onPrepare: () => Promise<void>): Promise<void> {
+    serverEnvironmentAccess.requireAvailable(this.#environment);
+    try {
+      await onPrepare();
+    } catch (error) {
+      serverEnvironmentAccess.failStartup(this.#environment, error);
+      throw error;
+    }
+    serverEnvironmentAccess.requireAvailable(this.#environment);
+  }
+
+  /**
+   * Traverses the current live index in finite pages without a tenant cap.
+   * @returns Completion after currently listed tenants are prepared.
+   */
+  async #prepareCurrentTenants(): Promise<void> {
+    if (!this.isMultitenant)
+      return this.#requiredPrepare(() => this.#prepareTenant(undefined, "create"));
+    let after: import("./tenant-index.js").TenantIndexCursor | undefined;
+    do {
+      serverEnvironmentAccess.requireAvailable(this.#environment);
+      const page = await this.tenantIndex.page({
+        count: 64,
+        signal: this.#preparationController.signal,
+        ...(after === undefined ? {} : { after }),
+      });
+      serverEnvironmentAccess.requireAvailable(this.#environment);
+      for (const id of page.ids) {
+        serverEnvironmentAccess.requireAvailable(this.#environment);
+        await TenantAdmissions.require(this.tenantIndex, this.name.value, true, id);
+        serverEnvironmentAccess.requireAvailable(this.#environment);
+        await this.#requiredPrepare(() => this.#prepareTenant(id, "create"));
+      }
+      after = page.hasMore ? page.after : undefined;
+    } while (after !== undefined);
   }
 
   /**
@@ -992,13 +1214,7 @@ export class BoundedContext {
    */
   #createDelivery(tenantIndex: TenantIndex): ContextDeliveryParts {
     const deliveryReadiness = this.#createReadiness();
-    const onAdmit = (tenantId: TenantId) =>
-      TenantAdmissions.require(
-        tenantIndex,
-        this.#snapshot.name.value,
-        this.#snapshot.tenantMode === "multitenant",
-        tenantId,
-      );
+    const onAdmit = (tenantId?: TenantId) => this.#admitTenant(tenantId);
     const entityInbox = new LocalEntityInbox(
       this.#snapshot.name.value,
       deliveryReadiness,
@@ -1058,6 +1274,8 @@ export class BoundedContext {
     contextTenantIndexes.set(this, delivery.tenantIndex);
     contextStorageFactories.set(this, input.storageFactory);
     contextSubscriptionRuntimes.set(this, this.#subscriptionRuntime);
+    contextPreparations.set(this, (options) => this.#prepareBuild(options));
+    contextInputPreparations.set(this, (tenantId) => this.#prepareInput(tenantId));
     contextSignalPublishers.set(this, this.#publisher);
     contextClosePhases.set(this, {
       begin: () => {
@@ -1070,16 +1288,6 @@ export class BoundedContext {
       this,
       ContextParts.createDeliveryDescriptor(this.#entityInbox, this.#projectionInbox),
     );
-  }
-
-  /**
-   * Registers repositories and starts subscriptions, clearing failed metadata.
-   *
-   * @param repositories Prepared repositories.
-   */
-  #registerAndStart(repositories: readonly RepositoryView[]): void {
-    this.#registerRepositories(repositories);
-    this.#subscriptionRuntime.start();
   }
 
   #registerRepositories(repositories: readonly RepositoryView[]): void {
@@ -1438,6 +1646,7 @@ export class BoundedContext {
    */
   #beginClose(): void {
     closingContexts.add(this);
+    this.#preparationController.abort(new Error("Bounded Context closed."));
     serverEnvironmentAccess.stopRecipients(this.#environment, this);
     this.#agentController.abort(new Error("Bounded Context closed."));
     this.#publisher.beginClose();
@@ -1512,6 +1721,10 @@ export class BoundedContext {
    */
   async #drainAdmittedContextWork(errors: unknown[]): Promise<void> {
     await this.#closePart(
+      () => Promise.allSettled([...this.#activePreparations]).then(() => undefined),
+      errors,
+    );
+    await this.#closePart(
       () => Promise.allSettled([...this.#activeReplays]).then(() => undefined),
       errors,
     );
@@ -1583,6 +1796,53 @@ export class BoundedContext {
  * Exposes framework-only operations for built contexts and their builders.
  */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  /**
+   * Admits a service membership and preparation chain before its first await.
+   *
+   * @param context Selected built context.
+   * @param tenantId Captured tenant identity, when applicable.
+   * @param onMembership Checks live tenant membership.
+   * @param onReady Performs the admitted one-shot registry mutation, if present.
+   * @returns Tracked completion of membership and model preparation.
+   */
+  admitServiceInput(
+    context: BoundedContext,
+    tenantId: TenantId | undefined,
+    onMembership: () => Promise<void>,
+    onReady?: () => Promise<void>,
+  ): Promise<void> {
+    if (closingContexts.has(context))
+      return Promise.reject(new Error("Bounded Context is closing."));
+    const prepare = contextInputPreparations.get(context);
+    const phase = contextClosePhases.get(context);
+    if (prepare === undefined || phase === undefined)
+      return Promise.reject(new TypeError("Service input requires a built context."));
+    return phase.trackReplay(async () => {
+      await onMembership();
+      await prepare(tenantId);
+      await onReady?.();
+    });
+  },
+
+  /**
+   * Admits one shared subscription-registry operation before asynchronous lookup.
+   *
+   * @param context Selected built context.
+   * @param onOperation Complete registry operation.
+   * @returns Tracked operation completion.
+   */
+  admitServiceRegistryOperation(
+    context: BoundedContext,
+    onOperation: () => Promise<void>,
+  ): Promise<void> {
+    if (closingContexts.has(context))
+      return Promise.reject(new Error("Bounded Context is closing."));
+    const phase = contextClosePhases.get(context);
+    if (phase === undefined)
+      return Promise.reject(new TypeError("Service registry requires a built context."));
+    return phase.trackReplay(onOperation);
+  },
+
   trackReplay(context: BoundedContext, onReplay: () => Promise<void>): Promise<void> {
     const phase = contextClosePhases.get(context);
     if (phase === undefined)
@@ -1822,6 +2082,21 @@ interface ContextBuildRuntime {
   readonly stand: Stand;
   readonly registry: StandSubscriptionRegistry;
   readonly runtime: SubscriptionRuntime;
+}
+
+/**
+ * Selects which initialization operations build awaits before returning.
+ */
+export interface BoundedContextBuildOptions {
+  /**
+   * Defers model structure preparation until a valid first input when false.
+   */
+  readonly createStorageStructures?: boolean;
+
+  /**
+   * Defers the first subscription pass until a valid first input when false.
+   */
+  readonly startSubscriptionMonitoring?: boolean;
 }
 
 /**
@@ -2127,21 +2402,33 @@ export class BoundedContextBuilder {
   /**
    * Builds a context after loading generated handlers and preparing runtime resources.
    *
-   * @returns The built context after assembly and integration are ready.
+   * @param options Independent eager structure and subscription timing choices.
+   * @returns The built context after requested initialization and integration are ready.
    */
-  build(): Promise<BoundedContext> {
-    return this.#buildAsyncWith();
+  build(options: BoundedContextBuildOptions = {}): Promise<BoundedContext> {
+    return this.#buildAsyncWith(options);
   }
 
-  async #buildAsyncWith(): Promise<BoundedContext> {
+  async #buildAsyncWith(options: BoundedContextBuildOptions = {}): Promise<BoundedContext> {
     const environment = ServerEnvironment.instance();
     const finishBuild = serverEnvironmentAccess.beginContextBuild(environment);
+    let built: BoundedContext | undefined;
+    let failed = false;
+    let failure: unknown;
     try {
       await serverEnvironmentAccess.awaitSetup(environment);
-      return await this.#buildAsyncReady();
+      built = await this.#buildAsyncReady(options, environment);
+    } catch (error) {
+      failed = true;
+      failure = error;
     } finally {
       finishBuild();
     }
+    if (serverEnvironmentAccess.hasStartupFailure(environment))
+      return serverEnvironmentAccess.awaitStartupFailure(environment);
+    if (failed) throw failure;
+    if (built === undefined) throw new Error("Bounded Context build did not complete.");
+    return built;
   }
 
   /**
@@ -2149,31 +2436,75 @@ export class BoundedContextBuilder {
    *
    * @returns The integrated context.
    */
-  async #buildAsyncReady(): Promise<BoundedContext> {
+  async #buildAsyncReady(
+    options: BoundedContextBuildOptions,
+    environment: ServerEnvironment,
+  ): Promise<BoundedContext> {
     const generated = await this.#loadGeneratedArtifacts([...this.#entityTypes]);
+    serverEnvironmentAccess.requireAvailable(environment);
     const repositories = [...this.#repositories, ...generated.repositories];
 
     const context = await this.#buildWithResources(
       repositories,
-      ServerEnvironment.instance().storageFactory,
+      environment.storageFactory,
       generated.standalone,
       this.#aiRegistry,
     );
     try {
-      await ContextParts.integrationReady(context);
-      await serverEnvironmentAccess.completeContext(ServerEnvironment.instance(), context);
+      await this.#integrateBuiltContext(context, options, environment);
     } catch (error) {
-      try {
-        await context.close();
-      } catch (closeError) {
-        throw new AggregateError(
-          [error, closeError],
-          "BoundedContext broker open failed during cleanup.",
-        );
-      }
-      throw error;
+      return this.#closeFailedBuild(context, environment, error);
     }
     return context;
+  }
+
+  /**
+   * Completes required integration and requested initialization before publication.
+   * @param context Constructed context.
+   * @param options Requested eager initialization phases.
+   * @param environment Captured environment lifetime.
+   */
+  async #integrateBuiltContext(
+    context: BoundedContext,
+    options: BoundedContextBuildOptions,
+    environment: ServerEnvironment,
+  ): Promise<void> {
+    serverEnvironmentAccess.requireAvailable(environment);
+    boundedContextAccess.installLogger(context, serverEnvironmentAccess.loggerFor(environment));
+    await ContextParts.integrationReady(context).catch((error: unknown) => {
+      serverEnvironmentAccess.failStartup(environment, error);
+      throw error;
+    });
+    serverEnvironmentAccess.requireAvailable(environment);
+    const prepare = contextPreparations.get(context);
+    if (prepare === undefined) throw new Error("Context preparation is unavailable.");
+    await prepare(options);
+    serverEnvironmentAccess.requireAvailable(environment);
+    await serverEnvironmentAccess.completeContext(environment, context);
+  }
+
+  /**
+   * Releases a failed partial context before its build ticket settles.
+   * @param context Context assembled before the failure.
+   * @param environment Captured environment lifetime.
+   * @param error Original build failure.
+   * @returns Rejection retaining the original and any local cleanup failure.
+   */
+  async #closeFailedBuild(
+    context: BoundedContext,
+    environment: ServerEnvironment,
+    error: unknown,
+  ): Promise<never> {
+    try {
+      await context.close();
+    } catch (closeError) {
+      if (serverEnvironmentAccess.hasStartupFailure(environment)) {
+        serverEnvironmentAccess.recordStartupCleanup(environment, closeError);
+        throw error;
+      }
+      throw new AggregateError([error, closeError], "BoundedContext open cleanup failed.");
+    }
+    throw error;
   }
 
   /**
@@ -3812,6 +4143,8 @@ const ContextParts = Object.freeze({
     contextStorageFactories.delete(context);
     contextDeliveryDescriptors.delete(context);
     contextSubscriptionRuntimes.delete(context);
+    contextInputPreparations.delete(context);
+    contextPreparations.delete(context);
     contextIntegrations.delete(context);
     eventSubscribers.delete(context);
     systemEventPosters.delete(context);

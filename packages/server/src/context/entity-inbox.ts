@@ -47,7 +47,7 @@ export class LocalEntityInbox implements EntityInbox {
 
   readonly #readiness: DeliveryReadiness;
 
-  readonly #onAdmit: (tenantId: TenantId) => Promise<void>;
+  readonly #onAdmit: (tenantId?: TenantId) => Promise<void>;
 
   readonly #strategy: DeliveryStrategy;
 
@@ -85,7 +85,7 @@ export class LocalEntityInbox implements EntityInbox {
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
-    onAdmit: (tenantId: TenantId) => Promise<void> = () => Promise.resolve(),
+    onAdmit: (tenantId?: TenantId) => Promise<void> = () => Promise.resolve(),
     strategy: DeliveryStrategy = UniformAcrossAllShards.singleShard(),
   ) {
     this.#contextName = contextName;
@@ -251,9 +251,7 @@ export class LocalEntityInbox implements EntityInbox {
   }
 
   async #admitDeliveryTenant(deliveryTenantId: TenantId | undefined): Promise<void> {
-    if (deliveryTenantId !== undefined) {
-      await this.#onAdmit(deliveryTenantId);
-    }
+    await this.#onAdmit(deliveryTenantId);
   }
 
   async #writeRows(

@@ -93,6 +93,10 @@ export class SubscriptionRuntime {
 
   #timerReconciliation: Promise<void> | undefined;
 
+  #initialPass: Promise<void> | undefined;
+
+  #initialSucceeded = false;
+
   #closing = false;
 
   #closed: Promise<void> | undefined;
@@ -122,14 +126,31 @@ export class SubscriptionRuntime {
   }
 
   /**
-   * Starts immediate and ten-second complete-snapshot reconciliation.
+   * Awaits the first complete snapshot, then starts periodic reconciliation.
+   * @returns Shared first-pass completion; a failure permits a later retry.
    */
-  start(): void {
+  start(): Promise<void> {
+    if (this.#closing) return Promise.reject(new Error("Subscription runtime is closing."));
+    if (this.#initialSucceeded) return Promise.resolve();
+    if (this.#initialPass !== undefined) return this.#initialPass;
+    const attempt = this.reconcile()
+      .then(() => {
+        if (this.#closing) return;
+        this.#initialSucceeded = true;
+        this.#startTimer();
+      })
+      .finally(() => {
+        if (this.#initialPass === attempt) this.#initialPass = undefined;
+      });
+    this.#initialPass = attempt;
+    return attempt;
+  }
+
+  /**
+   * Starts the existing periodic reconciliation cadence after first success.
+   */
+  #startTimer(): void {
     if (this.#timer !== undefined || this.#closing) return;
-    // spine-log-boundary: server.subscription_initial_reconcile
-    void this.reconcile().catch(() => {
-      this.#warnReconciliationFailure();
-    });
     this.#timer = setInterval(() => {
       void this.#reconcileTimer();
     }, 10_000);

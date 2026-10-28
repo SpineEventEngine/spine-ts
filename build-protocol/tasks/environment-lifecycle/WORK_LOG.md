@@ -2613,3 +2613,404 @@ explicit immutable Sol/medium confirmed, runtime metadata unavailable. Preparing
 record-only status update and cheap diff/format check, then one M8 feature commit and
 immediate push to official origin/environment-lifecycle. Repository origin and branch
 reconfirmed. No master/PR action. M9 preparation proceeds after durable checkpoint.
+
+M8 committed and immediately pushed to official origin/environment-lifecycle as
+bc70731f55e7dcda0f5edcc551075bf244c8ee68. Local HEAD and ls-remote match exactly;
+worktree clean before M9 records. No master/PR action. Shared environment/Delivery,
+D0160 EventStore grouping and D0161/D0162 completion/close corrections are durable.
+
+M9 begins, high-risk under the accepted frozen wave: public eager/lazy build flags,
+model-dependent structure preparation and common ingress readiness with startup vs
+request failure semantics. Estimate5–7hours including implementation, focused tests,
+cheap checks, relevant review/corrections and feature push; implementation-only
+forecast was4–6hours. Same bounded implementer storage_retention, original explicit
+immutable gpt-6-sol/medium, responsible for affected context/bus/Stand/repository/
+environment implementation, pure provider requirement declarations, matching tests
+and narrow current API docs. Parent retains task/review/decision records. No children,
+other source writers, commits or pushes by implementer.
+
+Read-only m9-implementation-readiness.md accepted as routine implementation outline.
+M9 pulls forward the minimal coalesced/awaitable first subscription-monitor pass
+from M10, because eager build cannot be truthful while start() detaches reconciliation.
+Install logger before first pass; preserve later loop semantics, leaving complete
+periodic retry matrix for M10. No new product decision or repeated architecture pass:
+this implements the accepted contract. M11 environment/context public explicit
+preparation methods remain subsequent; internal required work must already compose
+with them without placeholder APIs or conflicting readiness caches.
+
+Behavior acceptance: all TT/TF/FT/FF combinations; explicit environment setup never
+initiated by build; pure actual model requirements with D0160 groups and surviving
+Agent audit/receipt/preferences; known-tenant first input only, no idle/all-tenant
+lazy scans; unknown or malformed input before resolver/DDL/Inbox writes; live override
+index and added tenants; concurrent attempts, partial success and later retry;
+read-only check readiness; already-completed sibling operation during later build;
+catastrophic required startup preparation failure fences environmental work and
+attempts cleanup, while failed lazy request stays local; D0162 close drains admitted
+preparation without reviving monitor/intake. Domain-correct fixtures and unconditional
+duplicate-state rejection remain binding. Focused red tests precede implementation.
+
+M9 behavior-first evidence recorded in m9-initial-red.log: eager build resolves
+before a gated initial subscription snapshot completes, and both-false build still
+calls snapshot. Two focused failures before any M9 production edits. Same writer
+now adds minimal awaitable/coalesced first pass and independent flags, followed by
+pure requirements and common admission/preparation. Work continues.
+
+M9 initial two-case red→green complete (m9-initial-red.log / m9-initial-green.log):
+eager build waits for the gated first subscription snapshot; both-false build does
+not start that pass. Awaitable/coalesced SubscriptionRuntime.start and initial build
+flag plumbing are in place; logger installs before monitoring. This focused result
+does not establish mixed storage-flag behavior or whole-ingress readiness yet.
+Same writer proceeds with pure requirement enumeration and common preparation.
+
+M9 monitor slice expands to 107/107 passing across bounded-context and
+subscription-runtime suites, with obsolete detached-start/logger expectations
+replaced. Source inspection confirms pure RepositoryStorage.entityStorageInput,
+existing provider StoragePreparations and async bus/Stand admission hooks. First-input
+behavior tests precede preparation wiring. No architecture blocker reported.
+
+M9 first-input read regression m9-lazy-read-red.log proves valid first Stand read
+invoked prepareEntity zero times; green after #admitTenant/Stand reaches pure context
+preparation. It uses actual captured repository Entity input, canonical subscription/
+EventStore/Agent receipt specs and finite TenantIndex paging. Interim two-suite run
+found metadata override and read-fault fixture timing regressions: captured repository
+snapshot fixes the former; latter undergoing deterministic classification, no broad
+green claim. Explicit annotation errors corrected and generated build passes.
+Remaining service/Inbox ingress gates are next; parent preserves permitted shared
+subscription-ID lookup before tenant identification without tenant access beforehand.
+
+M9 invalid-input regression m9-invalid-input-red.log showed missing-message Command
+triggering prepareEntity before rejection. Dispatcher validation now precedes admission;
+m9-invalid-input-green.log passes, and Event payload prevalidation uses the same
+ordering. Captured repository snapshot regression resolved. Current context/monitor
+selection109/109passes (m9-context-monitor-current.log). Inbox read-fault test now holds
+its simulated outage through direct-post rejection instead of allowing a supervisor
+read to consume a one-shot fault; no runtime error expectation was relaxed. Mixed
+flags plus service/import/saved-replay paths are next. No whole-M9 acceptance yet.
+
+M9 native subscription first-input regression recorded in m9-subscription-red.log
+(prepareEntity0), then green through internal boundedContextAccess.prepareInput at
+service tenant admission (m9-subscription-green.log). Mixed TF/FT build cases2/2green.
+Service suite127/127passes (m9-services-current.log). Activation cleanup fixture now
+arms its failure immediately before activation, preserving its original dual-error
+assertion rather than failing during newly awaited eager startup. Imported Event,
+saved Inbox, concurrent attempts/retry and close tests remain. Final mechanical pass
+will use the existing explicitly configured Luna function from an exact writer-supplied
+command/path list, avoiding duplicate final checks; writer retains implementation fixes.
+
+M9 single-tenant Inbox regression: undefined TenantId bypassed onAdmit and therefore
+lazy preparation. m9-inbox-single-red.log reproduces it; neutral-scope callback
+execution makes m9-inbox-single-green.log pass. Entity/Projection Inbox selection
+57/57passes (m9-inbox-current.log). Neutral scope remains ordinary single tenancy,
+with no synthetic TenantIndex registration or multitenant Inbox option. Lifecycle,
+coalescing and broader context checks continue.
+
+M9 generated build passes (m9-build-current.log). Deterministic concurrent first-read
+case passes (m9-coalescing.log): two reads share one prepareEntity call, both receive
+the same temporary failure, and a later read retries successfully. This proves local
+attempt sharing/retry, not yet full explicit-startup failure behavior. Close during
+admitted preparation and complete ingress checks remain.
+
+M9 close/preparation proof: held admitted Stand read resolves after close begins;
+close waits and a new read rejects. Added no-late-monitor assertion exposed snapshot
+startup after the close fence (m9-close-monitor-red.log); skipping initial monitor
+start once close began makes m9-close-monitor-green.log pass. Service preparation
+also fences new calls. Focused case shows no resource use after final closure.
+D0162 exact local handoffs/follow-ups remain required, with preparation before new
+Inbox persistence. Broader lifecycle/ingress checks continue.
+
+M9 affected runtime selection297/297passes (m9-affected-current.log); this overlaps
+previous focused selections and is not an additive count. Cheap local checks report
+format/TSDoc/lint corrections only: comments, long line, unused import, explicit generic
+constructor, Promise.withResolvers<void> and floating test promise. Same writer fixes
+these before final mechanical dispatch; no final verification/review freeze yet.
+
+M9 lazy tenant test passes (m9-lazy-tenant.log): no idle model preparation after lazy
+multitenant build; first selected tenant A read prepares only A; tenant C explicitly
+kept after build prepares on first read. Imported Event first-dispatch preparation
+passes (m9-import-event.log). Close/admitted-read and no-late-monitor proofs retained.
+TSDoc, cleanup, diff and focused ESLint green after fixes; newest tests still need
+final format/build verification. Explicit startup failure and remaining complete
+coverage dispositions must be present before freeze.
+
+M9 routing sweep found standalone EventBus validation-order regression caused by early
+validation and a native-subscription fixture missing explicit environment setup.
+Context-bound buses validate before admission; standalone buses retain existing
+accept-boundary validation exactly once. Native fixture now explicitly completes
+and resets environment. EventBus/native subscription selection51/51passes
+(m9-routing-correction.log); command-bus/repository-routing earlier pass reported.
+Same writer now completes required eager-failure environment fence and saved Inbox
+paths. No change to gRPC-only Server/setup responsibility.
+
+M9 startup-failure seam confirmed by sole writer: current eager failure closes only
+partial context, while public environment.close rejects during active contexts/builds
+and awaitSetup/beginContextBuild have no fatal initialization fence. Focused gated
+sibling/failure RED comes first. Accepted design already requires internal fatal
+intake/build fence and coordinated attempt-all cleanup preserving original error;
+no process.exit/public lifecycle API. Parent requires admitted operations/builds to
+settle before shared resources close, retaining D0162 semantics. Escalate only a
+concrete concurrent-build/admission ordering ambiguity with source/barrier evidence
+to bounded Astra decision; no blocker declared yet.
+
+M9 saved ordinary Inbox proof passes (m9-pending-replay.log): lazy provider-preparation
+failure leaves TO_DELIVER, subsequent wake retries and reaches DELIVERED. No premature
+acknowledgement. Eager startup failure RED remains (m9-eager-fence-red.log): earlier
+completed sibling reads while second build is pending, failure occurs, later build
+still succeeds.
+
+Demonstrated architecture blocker: required initialization failure must synchronously
+fence intake and coordinate automatic attempt-all cleanup under the accepted contract;
+a fence-only implementation followed by caller-triggered explicit close is insufficient.
+Public environment.close rejects during active contexts/builds, and awaiting cleanup
+inside a build may deadlock its own release. Dispatch bounded existing requirements
+splitter application_architecture, original explicit immutable gpt-6-astra/high,
+read-only exact concurrent-build/fatal-cleanup decision. No source edits/tests/children.
+Estimate0.5–1hour for this decision within M9. Sole writer pauses only fatal-lifecycle
+production changes, continues independent readiness tests/static fixes. Parent task
+records and accepted PROPOSAL/brief remain authoritative; no new user product question.
+
+M9 bounded architecture preliminary source trace confirms public close/full core
+beginClose cannot run at first fatal fence without blocking retained exact handoffs.
+Decision will separate synchronous fresh-input/public-run fencing from later complete
+Delivery shutdown after context/build drain. Parent requires error retention to cover
+new internal drains started during that interval, not only an initial static snapshot;
+no accumulating completed-run history outside the one shutdown attempt. No fatal
+lifecycle production edits authorized before final ruling.
+
+Independent M9 generated build and focused subscription-registry ESLint pass after
+explicit declaration type for exported subscriptionRecordSpec (isolatedDeclarations).
+Four current affected suites186/186pass; this is a different overlapping selection,
+not a replacement whole-M9 total. Only known red remains required eager failure
+fence/automatic cleanup; other tests/static work continues.
+
+M9 bounded-context interim105pass/1excluded: required eager-failure test remains
+ENABLED in source; only the command-level filter excluded it while the decision is
+pending. Parent initially described re-enabling but corrected that interpretation.
+Final gates must include it. Removed only a new assertion expecting dispatch after
+closing recipient fencing, which contradicted D0162 pending-row guarantee; no runtime
+change for that correction. Generated build, targeted ESLint, cleanup and TSDoc pass.
+
+M9 independent checks while fatal decision is pending: corrected and formatted the
+explicit subscriptionRecordSpec declaration; API inventory (250 server exports),
+audience and TypeScript snippets pass under docs:check:generated. Tooling typecheck
+caught a fixture Promise<void> where Inbox replay expects undefined/follow-up; changed
+to Promise.resolve(undefined), typecheck passes and EntityInbox41/41rerun passes.
+No runtime semantics changed in that fixture correction. Generated build remains
+green. These are interim checks before fatal-lifecycle edits, not final M9 evidence.
+Writer now holds only the sole red fatal path; architecture notified of critical path.
+
+D0163 accepted after parent inspection of exact source-backed fatal-startup decision.
+Durable FATAL_INITIALIZATION.md records mark/fence, automatic cleanup, local rollback,
+release-before-global-join, active-build idle gate, completed/partial context sequencing
+and finite shutdown-run error retention. Scope remains approved required-initialization
+policy; lazy/membership/misuse stay nonfatal. Existing Astra/high explicit immutable
+profile confirmed; runtime metadata unavailable, no child edits/tests/grandchildren.
+
+Fatal-lifecycle implementation resumes in same Sol/medium context. Estimate1.5–3hours
+for remaining implementation/race tests and final M9 mechanical/review work. Existing
+enabled eager RED must turn green; prove concurrent builds/self-wait, retained ordinary
+handoffs, fresh public/read/service fencing, automatic attempt-all cleanup and late
+release-error preservation. Keep independent work frozen except necessary integration
+fixes. No new public API, process.exit, arbitrary timeout or generalized lifecycle system.
+
+Independent read-only M10 preparation while sole writer implements D0163: reuse
+mechanical_checks, original explicit immutable gpt-6-luna/low scanning function.
+Refresh only subscription-runtime timer/start/close source and relevant existing
+behavior-test map after M9's minimal awaited first-pass change. Earlier inventory
+predates that change. No implementation design, edits, tests, builds or children;
+report current facts and uncovered named requirements with evidence for next slice.
+This does not start M10 implementation or relax M9 freeze/check requirements.
+
+D0163 first implementation checkpoint: enabled eager required-preparation RED now
+passes; full bounded-context suite106/106 and generated build pass. Fatal latch,
+automatic cleanup, release-before-global-join and narrow Delivery drain exist in WIP.
+These are interim results, not milestone acceptance. Concurrent-build, public-read,
+retained exact handoff and cleanup-error tests remain under implementation.
+M10 read-only source/test refresh dispatched to the logged existing Luna/low function.
+
+M10 read-only refresh accepted from existing explicitly configured Luna/low scanning
+function; runtime metadata unavailable. Report m10-monitor-current-map.md identifies
+awaited/coalesced first pass and retained serialized timer retry, but current WARN
+drops the cause. Focused coverage still needs subsequent successful retry, continued
+observer delivery, context/cause logging, close timer cancellation, concurrent start
+and lazy first-pass failure/retry. No source edits/tests/builds by scanner. Carry
+these bounded items into M10 after M9 acceptance; no additional architecture needed.
+
+D0163 focused races: public Stand read rejects while sibling close is gated;
+metadata-loading concurrent build releases before shared factory close. Both1/1pass
+interim. Metadata ordering still being strengthened to prove latch before loader
+release; not yet acceptance evidence. Parent prepared concern-specific inactive
+m9-review-dispatch-plan.md; no review dispatch before coherent cheap-check freeze.
+
+D0163 expanded focused race checkpoint passes: early public Stand fence1, metadata
+concurrent-build/factory ordering1, independent required failures plus factory
+cleanup aggregation1, and Delivery startup drain/public run/exact pending/late
+release3. Earlier106/106suite predates these additions and is not final. Writer
+runs affected suites next and will provide coherent mechanical handoff; no freeze yet.
+
+D0163 true RED-to-GREEN regression: a retained exact handoff started a shared shard
+run whose fallback also acknowledged an unrelated pending row. Startup-drain
+selection now rejects unselected rows; regression passes with the unrelated row
+pending. Late exact-run release failure remains retained through final close.
+This is a runtime correction, not an expectation change; reliability review must
+inspect exact selection as well as physical-run admission.
+
+D0163 integration checkpoint: affected suites 137/137 pass after early lifecycle
+and Delivery fixes; lint:cleanup passes after splitting the expanded builder
+callable to the protocol limit. Classification and automatic resource-release
+ordering remain under focused verification. No final freeze or acceptance yet.
+
+D0163 classification and error retention checkpoint: directory page failure remains
+local and a subsequent build succeeds (1/1); automatic cleanup includes completed
+sibling Stand close error with original provider cause (1/1); independent provider
+failures plus factory cleanup error remain preserved. Admitted ordinary work and
+follow-up regression is the remaining focused case before mechanical handoff.
+
+M9 coherent candidate frozen for mechanical checks. Latest six affected suites
+327/327 pass; exact paths/commands and interim evidence are in external
+m9-initialization-implementation-evidence.md. Writer pauses source/test/docs edits.
+Handoff explicitly discloses metadata-fatal barrier ordering, full ordinary local
+follow-up-chain coverage and no new native-provider M9 run. Assess these against
+existing evidence and review; do not infer a final acceptance from the count.
+
+Dispatch existing mechanical_checks function, original explicit immutable
+gpt-6-luna/low, for fresh generated build, tooling typecheck, ESLint, cleanup,
+TSDoc, format, deterministic docs, diff and six-suite LCOV with changed-line
+inspection. No edits/children/expensive verification profile. Runtime metadata
+unavailable. Expected remaining M9 checks/review/corrections 0.75–1.5 hours.
+
+M9 mechanical candidate results accepted from existing explicit Luna/low function
+(runtime metadata unavailable): generated build, tooling, six suites 327/327 with
+LCOV, cleanup, deterministic docs and diff check pass. ESLint26 errors, TSDoc
+and format fail; complete external m9-final-mechanical-evidence.md. Unawaited
+Stand-test calls are SubscriptionRuntime.start(), not Stand.read(). Source/test
+changes resume only for this mechanical correction batch in same Sol/medium context.
+Estimate 0.25–0.75 hours for fixes, meaningful missing-path verification and narrow
+rechecks. No specialist review before green preflight.
+
+Coverage-driven checks before review: shared registry preparation failure/retry,
+required integration failure and failed-partial-context rollback error reporting,
+and real Agent model preparation families. Prefer existing Agent integration suite
+for the last path; add only a missing behavior assertion, not implementation mirrors.
+Metadata fatal-barrier ordering is an acknowledged test weakness and should be
+strengthened without sleeps. Parent candidate runtime observations remain held for
+independent full review wave; no partial runtime review correction dispatch.
+
+Clarified milestone wording to match the already accepted M9–M11 handoff: M9
+contains common preparation and eager/lazy build/input integration; M11 exposes
+the public context runtime and environment preparation methods. No API or behavior
+change; avoids claiming the explicit APIs are in the current M9 candidate.
+
+M9 mechanical correction checkpoint: Stand49/49 after awaited monitor start and
+immediate snapshot fixture fix; shared-registry retry, integration failure plus
+rollback cleanup and strengthened metadata-fatal ordering3/3; real Agent repository
+AI integration5/5. Targeted ESLint and full TSDoc pass. Fresh generated build,
+affected LCOV and final static evidence remain in progress; no commit or review yet.
+
+M9 corrected preflight is clean and candidate frozen: generated build, tooling,
+8-suite LCOV383/383, full ESLint, TSDoc, cleanup, deterministic docs, format and
+diff check all pass. Evidence m9-mechanical-correction-evidence.md. Stand update
+snapshots input before its newly awaited tenant check to preserve existing input
+isolation; affected Stand49/49 and Agent5/5 are included, not additional totals.
+Metadata barrier now observes fatal fencing before loader release. Remaining
+changed-line gaps are classified rather than claimed covered. Same explicit
+Sol/medium profile confirmed; runtime metadata unavailable.
+
+Dispatch existing Luna/low mechanical function for hash snapshot only; no rerun
+of passing gates. Capture changed/untracked files versus M8 with only WORK_LOG
+and REVIEW_LOG excluded from content hashes. Verify referenced evidence files
+exist. Then launch prepared four-concern review wave under recorded profiles.
+
+M9 four-concern review wave complete; parent accepted six deduplicated findings
+from three technical Sol/medium and documentation Luna/medium contexts. Single
+correction batch m9-review-correction-batch.md includes R1–R4 concurrency/error
+ordering and D1/D2 current public explanations. Same sole writer resumes, estimate
+0.75–1.5 hours with tests/checks/targeted review. No new architectural ambiguity
+or user question; metadata barrier now adequate and no new follow-up-chain defect
+confirmed. No source changes occurred during review; frozen hashes match.
+
+User requested percentage/feature progress and explicit continuation. Reported
+approximately65% by agreed scope:8/13milestones accepted/pushed, M9 review
+corrections active, M10–M13 remaining. This is an estimate, not a test-count or
+completion claim. No scope change or pause; same correction batch continues.
+
+M9 accepted-review correction checkpoint: R1/R2/R4 focused3/3 green after
+deterministic red evidence (early unhandled close rejection,3post-fatal tenant
+preparations,interleaved rollback); R3 changed from timeout-only initial proof
+to controlled extra-membership-lookup red and now green. Existing fatal record
+uses separate original/cleanup arrays; completed closes observed immediately;
+eager boundaries check availability; service admission is synchronous/tracked.
+Affected suites, static/docs and targeted re-review remain; no acceptance yet.
+
+M9 accepted review corrections pass fresh build/tooling and8affected suites
+386/386 plus full static/docs/format/diff checks; external correction evidence
+records R1–R4 behavior-first red/green and scoped LCOV. Before final re-review
+manifest, parent deterministic inspection found the replaced internal
+boundedContextAccess.prepareInput has zero call sites after R3; remove its old
+interface/member rather than retain dead compatibility code. Also use structures
+instead of Entity tables in new README wording and qualify retryable facility close
+as ordinary-close behavior (fatal close joins its completed automatic attempt).
+These narrow cleanup/doc corrections remain in the same accepted batch, with
+no additional reviewer wave or new public contract. Writer applies then freezes.
+
+Final M9 deterministic cleanup frozen: zero-caller internal prepareInput removed,
+README uses Entity storage structures, ordinary-close retry qualifier documented.
+Fresh generated build/tooling, ESLint/TSDoc/format/docs/diff and8-suite LCOV386/386
+pass. Corrected changed-line coverage:context123/125,environment62/63,services5/5;
+remaining defensive/local-rollback limits explicitly recorded externally. No tests
+added solely for removed unused code. Same writer profile confirmed.
+
+M9 targeted re-review resolves early-close observation and original-error order;
+remaining eager directory pre-call fence plus admitted subscription mutation
+lifetime accepted for bounded correction. Shared provider DDL is already fenced,
+but new page/member lookups must also stop. Service registry write must remain
+tracked beyond preparation until mutation settles; streaming lifetime stays
+separate. Same writer,0.5–1.25hours revised remaining correction/check/review.
+
+Independent read-only preparation for M11 while M9 service correction runs:
+reuse mechanical_checks, original explicit Luna/low scanning function. Refresh
+current context/provider preparation modes and pending-attempt keys, completed/open
+context enumeration versus closing contexts, effective index/page hooks and
+tracked-preparation/fatal-join seams. Earlier implementation brief predates M9.
+Report actual reuse points and gaps against accepted M11 contracts, no new design
+or source edits/tests/children. This does not start M11 implementation.
+
+Final targeted M9 regressions RED before production correction: shared-
+preparation barrier permits tenantIndex.page after fatal (m9-final-r2-red.log);
+held registry.create overlaps fatal close and registry closes before accepted
+create finishes (m9-final-r3-red.log). Same writer now adds pre-page/per-ID
+checks and complete one-shot service-operation tracking, no public API/architecture
+expansion. Long-lived streams remain outside close-drain operation lifetime.
+
+M11 read-only map accepted from original explicit Luna/low scanning function;
+runtime metadata unavailable, no edits/tests/builds. m11-current-preparation-map.md
+confirms mode-agnostic context promise coalescing, onlycreate current public flows,
+completed snapshot still includes closing registrations, and64-item indexed pages
+with cancellation. Carry into M11. Tenant pending entries clearing on success is
+intentional: physical requirement success is retained by providers; do not add
+a tenant-wide readiness boolean merely because this context map is transient.
+
+Final targeted M9 checkpoint: held registry.create regression red-to-green,
+accepted write completes before fatal resource close. Fresh build and4affected
+suites pass. Immediate pre-page/per-ID guards added. Combined controlled page
+test green, but withholding only pre-page guard stays green because earlier
+phase check catches that schedule; do not claim unique isolation. No artificial
+microtask-counting or runtime-test hooks to manufacture red. Briefly tracked
+activation/cancel/discovery operations now separate from long-lived streams;
+final static/LCOV and narrow re-review still pending.
+
+Final targeted M9 checks pass: fresh generated build,4focused suites265/265
+with LCOV,tooling,cleanup,TSDoc,ESLint,format,diff. Held-cancel regression
+proves finite registry mutation drains without retaining streaming lifetime.
+Changed lines context130/134 andservices25/25; residual guards/local-cleanup
+limits disclosed, and pre-page guard has no isolated red proof. Evidence packet
+and final freeze being prepared; not yet accepted or committed.
+
+M9 accepted after final targeted reliability review: all27 frozen hashes match;
+residual directory fencing and finite subscription-operation lifetime resolved.
+Fresh generated build and4affected suites265/265 with LCOV pass, along with
+tooling, cleanup, TSDoc, ESLint, format and diff checks. Earlier8-suite386/386
+selection covers the broader correction; these overlapping counts are not added.
+Changed-line coverage context130/134, services25/25; defensive guard/rollback
+limits and non-isolated pre-page proof remain recorded externally. All four
+canonical review concerns resolved; security and release remain M13. Commit and
+immediately push this accepted snapshot, then continue M10.

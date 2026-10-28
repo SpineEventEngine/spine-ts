@@ -35,7 +35,7 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   Aggregate,
@@ -48,6 +48,11 @@ import {
   SpineServices,
   type EntityHandlersMetadata,
 } from "../../src/index.js";
+import {
+  ServerEnvironment,
+  ServerEnvironmentLifecycle,
+  serverEnvironmentAccess,
+} from "../../src/server/server-environment.js";
 import {
   NativeProjectStateSchema,
   NativeProcessManagerStateSchema,
@@ -72,6 +77,16 @@ import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+
+beforeEach(async () => {
+  await ServerEnvironment.instance().completeSetup();
+});
+
+afterEach(async () => {
+  const environment = ServerEnvironment.instance();
+  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
+  await ServerEnvironmentLifecycle.resetForTest();
+});
 
 class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema> {
   assign(command: AssignReviewTask): TaskCreated {

@@ -17,7 +17,7 @@ import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { InMemoryTransportFactory, type TransportFactory } from "@spine-event-engine/transport";
 import { spineCoreRegistry, type TypeRegistryLookup } from "@spine-event-engine/core";
 
-import { RetryableCloseGroup } from "./retryable-close.js";
+import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { Delivery as CoreDelivery } from "../delivery/delivery.js";
 import { deliveryControls, deliveryStrategyAccess } from "../delivery/delivery-builder.js";
 import { DeliverySupervisor, deliverySupervisorAccess } from "../delivery/delivery-supervisor.js";
@@ -225,6 +225,14 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 
   #closing = false;
 
+  #fatal:
+    | {
+        readonly originals: unknown[];
+        readonly cleanupErrors: unknown[];
+        readonly cleanup: Promise<void>;
+      }
+    | undefined;
+
   /**
    * Initializes resolved environment facilities.
    *
@@ -268,6 +276,19 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   #registerRuntimeHooks(logger: ILogLayer): void {
     environmentLoggers.set(this, logger);
     environmentContexts.set(this, new EnvironmentContextRegistrations());
+    startupControls.set(this, {
+      fail: (cause) => {
+        this.#failStartup(cause);
+      },
+      awaitFailure: () => this.#awaitStartupFailure(),
+      available: () => {
+        if (this.#closing) throw new Error("ServerEnvironment is closed.");
+      },
+      failed: () => this.#fatal !== undefined,
+      recordCleanup: (error) => {
+        if (this.#fatal !== undefined) CloseErrors.collect(error, this.#fatal.cleanupErrors);
+      },
+    });
     warnedVolatileRegistries.set(this, new WeakSet());
     supervisorStarters.set(this, () => this.#startSupervisor());
     deliveryNotifiers.set(this, (shard) => {
@@ -369,14 +390,15 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   /**
    * Closes this environment after all Bounded Contexts close.
    *
-   * Admission permanently closes the environment and prevents reuse. If it is
-   * in use, closure rejects without owned-facility teardown. Failed facility
-   * closes are retryable and already closed facilities are not closed again.
+   * A healthy environment with active contexts rejects without teardown. After
+   * required startup failure, this joins automatic cleanup and rejects with the
+   * original cause and any cleanup failures. Successful closure prevents reuse;
+   * failed facility closes during an ordinary close remain retryable.
    *
-   * @returns A promise that settles after the environment and owned facilities close.
-   *
+   * @returns Completion after facilities close or a rejection reporting failures.
    */
   close(): Promise<void> {
+    if (this.#fatal !== undefined) return this.#awaitStartupFailure();
     if (EnvironmentContextRegistrations.forEnvironment(this).active)
       return Promise.reject(
         new Error("Cannot close ServerEnvironment with active Bounded Contexts."),
@@ -394,6 +416,77 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
         throw error;
       });
     return this.#close;
+  }
+
+  /**
+   * Fences a failed required startup phase and starts one automatic cleanup.
+   * @param cause Original required-phase failure.
+   */
+  #failStartup(cause: unknown): void {
+    if (this.#fatal !== undefined) {
+      this.#fatal.originals.push(cause);
+      return;
+    }
+    this.#closing = true;
+    const contexts = EnvironmentContextRegistrations.forEnvironment(this);
+    const cleanupErrors: unknown[] = [];
+    const cleanup = Promise.resolve().then(() => this.#cleanupStartup(contexts, cleanupErrors));
+    this.#fatal = { originals: [cause], cleanupErrors, cleanup };
+    for (const context of contexts.allContexts()) {
+      try {
+        boundedContextAccess.beginClose(context);
+      } catch (error) {
+        CloseErrors.collect(error, cleanupErrors);
+      }
+    }
+    this.#delivery?.beginStartupDrain();
+  }
+
+  /**
+   * Waits for local rollbacks, then closes contexts and shared facilities.
+   * @param contexts Context registrations for this environment.
+   * @param cleanupErrors Mutable cleanup failures.
+   * @returns Completion after every cleanup attempt.
+   */
+  async #cleanupStartup(
+    contexts: EnvironmentContextRegistrations,
+    cleanupErrors: unknown[],
+  ): Promise<void> {
+    const started = new Set(contexts.openContexts());
+    const observe = (context: BoundedContext): Promise<PromiseSettledResult<void>> =>
+      Promise.resolve()
+        .then(() => context.close())
+        .then(
+          (): PromiseFulfilledResult<void> => ({ status: "fulfilled", value: undefined }),
+          (reason: unknown): PromiseRejectedResult => ({ status: "rejected", reason }),
+        );
+    const completed = [...started].map(observe);
+    await contexts.whenBuildsIdle();
+    const remaining = contexts
+      .allContexts()
+      .filter((context) => !started.has(context))
+      .map(observe);
+    for (const result of await Promise.all([...completed, ...remaining]))
+      if (result.status === "rejected") CloseErrors.collect(result.reason, cleanupErrors);
+    this.#delivery?.beginClose();
+    try {
+      await this.#closeGroup.close();
+    } catch (error) {
+      CloseErrors.collect(error, cleanupErrors);
+    }
+  }
+
+  /**
+   * Reports all original and cleanup errors after automatic cleanup settles.
+   * @returns Rejection preserving the original failure when it is the only error.
+   */
+  async #awaitStartupFailure(): Promise<never> {
+    const fatal = this.#fatal;
+    if (fatal === undefined) throw new Error("No startup failure was recorded.");
+    await fatal.cleanup;
+    const failures = [...fatal.originals, ...fatal.cleanupErrors];
+    if (failures.length === 1) throw failures[0];
+    throw new AggregateError(failures, "Required environment initialization failed.");
   }
 
   #openDelivery(): Promise<void> {
@@ -544,6 +637,8 @@ export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<
           if (resolved !== undefined && EnvironmentContextRegistrations.forEnvironment(resolved).active) {
             throw new Error("Cannot reset ServerEnvironment with active Bounded Contexts.");
           }
+          if (resolved !== undefined && startupControls.get(resolved)?.failed())
+            return resolved.close().catch(() => undefined);
           return resolved?.close();
         })
         .then(() => {
@@ -605,6 +700,41 @@ interface ServerEnvironmentAccess {
    * @returns Callback that marks this build settled.
    */
   beginContextBuild(environment: ServerEnvironment): () => void;
+
+  /**
+   * Marks the environment unavailable after a required startup failure.
+   *
+   * @param environment Environment whose required phase failed.
+   * @param cause Original provider, monitor, or transport error.
+   */
+  failStartup(environment: ServerEnvironment, cause: unknown): void;
+
+  /**
+   * Waits for the automatic cleanup and reports original and cleanup failures.
+   * @param environment Failed environment.
+   * @returns Rejection after cleanup settles.
+   */
+  awaitStartupFailure(environment: ServerEnvironment): Promise<never>;
+
+  /**
+   * Checks whether a required startup phase already failed.
+   * @param environment Resolved environment.
+   * @returns Whether automatic fatal cleanup is active.
+   */
+  hasStartupFailure(environment: ServerEnvironment): boolean;
+
+  /**
+   * Records a local rollback error without treating it as a new startup cause.
+   * @param environment Failed environment.
+   * @param error Local rollback failure.
+   */
+  recordStartupCleanup(environment: ServerEnvironment, error: unknown): void;
+
+  /**
+   * Checks the synchronous startup admission fence.
+   * @param environment Resolved environment.
+   */
+  requireAvailable(environment: ServerEnvironment): void;
 
   /**
    * Records a constructed context, including an empty one.
@@ -687,6 +817,16 @@ interface ServerEnvironmentAccess {
 }
 
 const environmentSetups = new WeakMap<ServerEnvironment, Promise<void>>();
+const startupControls = new WeakMap<
+  ServerEnvironment,
+  {
+    readonly fail: (cause: unknown) => void;
+    readonly awaitFailure: () => Promise<never>;
+    readonly available: () => void;
+    readonly failed: () => boolean;
+    readonly recordCleanup: (error: unknown) => void;
+  }
+>();
 const environmentDeliveryCores = new WeakMap<ServerEnvironment, CoreDelivery>();
 const remoteSupervisedEnvironments = new WeakSet<ServerEnvironment>();
 const environmentLoggers = new WeakMap<ServerEnvironment, ILogLayer>();
@@ -712,6 +852,8 @@ class EnvironmentContextRegistrations {
   readonly #recipients = new Map<string, BoundedContext>();
 
   #builds = 0;
+
+  #buildsIdle: PromiseWithResolvers<undefined> | undefined;
 
   /**
    * Finds the registrations attached to one resolved environment.
@@ -741,13 +883,31 @@ class EnvironmentContextRegistrations {
    * @returns A callback that finishes this build exactly once.
    */
   beginBuild(): () => void {
+    if (this.#builds === 0) this.#buildsIdle = Promise.withResolvers<undefined>();
     this.#builds++;
     let finished = false;
     return () => {
       if (finished) return;
       finished = true;
       this.#builds--;
+      if (this.#builds === 0) this.#buildsIdle?.resolve(undefined);
     };
+  }
+
+  /**
+   * Waits until every admitted build releases its local assembly ticket.
+   * @returns Completion when no build remains.
+   */
+  whenBuildsIdle(): Promise<void> {
+    return this.#buildsIdle?.promise ?? Promise.resolve();
+  }
+
+  /**
+   * Lists constructed contexts, including incomplete registrations.
+   * @returns Snapshot of all constructed contexts.
+   */
+  allContexts(): readonly BoundedContext[] {
+    return [...this.#contexts];
   }
 
   /**
@@ -863,22 +1023,61 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     deliveryNotifiers.get(environment)?.(shard);
   },
   awaitSetup(environment: ServerEnvironment) {
+    this.requireAvailable(environment);
     return (
       environmentSetups.get(environment) ??
       Promise.reject(
         new Error("Await ServerEnvironment.completeSetup() before building a Bounded Context."),
       )
-    );
+    ).then(() => {
+      this.requireAvailable(environment);
+    });
   },
-  beginContextBuild: (environment: ServerEnvironment) =>
-    EnvironmentContextRegistrations.forEnvironment(environment).beginBuild(),
+  beginContextBuild(environment: ServerEnvironment): () => void {
+    this.requireAvailable(environment);
+    return EnvironmentContextRegistrations.forEnvironment(environment).beginBuild();
+  },
+
+  /**
+   * Starts automatic cleanup after a required startup failure.
+   *
+   * @param environment Failed environment.
+   * @param cause Original required-phase error.
+   */
+  failStartup(environment: ServerEnvironment, cause: unknown): void {
+    startupControls.get(environment)?.fail(cause);
+  },
+  awaitStartupFailure(environment: ServerEnvironment): Promise<never> {
+    const control = startupControls.get(environment);
+    if (control === undefined) return Promise.reject(new Error("Unknown ServerEnvironment."));
+    return control.awaitFailure();
+  },
+  hasStartupFailure(environment: ServerEnvironment): boolean {
+    return startupControls.get(environment)?.failed() ?? false;
+  },
+
+  /**
+   * Adds an independent partial-context rollback failure to the fatal result.
+   *
+   * @param environment Failed environment.
+   * @param error Local rollback failure.
+   */
+  recordStartupCleanup(environment: ServerEnvironment, error: unknown): void {
+    startupControls.get(environment)?.recordCleanup(error);
+  },
+  requireAvailable(environment: ServerEnvironment): void {
+    startupControls.get(environment)?.available();
+  },
   addContext: (environment: ServerEnvironment, context: BoundedContext) => {
+    serverEnvironmentAccess.requireAvailable(environment);
     EnvironmentContextRegistrations.forEnvironment(environment).add(context);
   },
   completeContext: async (environment: ServerEnvironment, context: BoundedContext) => {
+    serverEnvironmentAccess.requireAvailable(environment);
     EnvironmentContextRegistrations.forEnvironment(environment).complete(context);
     const endpoints = boundedContextAccess.delivery(context).endpoints();
     if (endpoints.length > 0) await supervisorStarters.get(environment)?.();
+    serverEnvironmentAccess.requireAvailable(environment);
     for (const endpoint of endpoints) deliveryNotifiers.get(environment)?.(endpoint.shard);
   },
   reserveState: (environment: ServerEnvironment, context: BoundedContext, typeUrl: string) =>

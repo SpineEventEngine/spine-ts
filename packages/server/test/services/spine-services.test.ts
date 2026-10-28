@@ -98,7 +98,7 @@ import {
   StorageFactory,
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
-import { TenantBoundary } from "@spine-event-engine/storage/provider";
+import { StoragePreparations, TenantBoundary } from "@spine-event-engine/storage/provider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ILogLayer } from "loglayer";
 
@@ -2079,6 +2079,159 @@ describe("SpineServices", () => {
     removed = false;
     await handlers.cancel(subscription);
     await context.close();
+  });
+
+  it("prepares a lazy context before creating a native subscription", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
+    const context = await BoundedContext.singleTenant("LazySubscription")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+    try {
+      expect(prepareEntity).not.toHaveBeenCalled();
+      await registeredSubscriptionHandlers(context).subscribe(createTopic());
+      expect(prepareEntity).toHaveBeenCalledOnce();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("rejects new native subscription preparation after the context close fence", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
+    const context = await BoundedContext.singleTenant("ClosingLazySubscription")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+    const handlers = registeredSubscriptionHandlers(context);
+    boundedContextAccess.beginClose(context);
+    try {
+      await expect(handlers.subscribe(createTopic())).rejects.toThrow("closing");
+      expect(prepareEntity).not.toHaveBeenCalled();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("drains an admitted subscription membership check and rejects fresh checks", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const index = TenantIndexes.fromFactory(factory);
+    await index.keep(tenantValue("tenant-a"));
+    const contains = index.contains.bind(index);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const lookup = vi.spyOn(index, "contains").mockImplementation(async (tenantId) => {
+      if (lookup.mock.calls.length === 1) {
+        entered.resolve(undefined);
+        await release.promise;
+      }
+      return contains(tenantId);
+    });
+    const context = await BoundedContext.multitenant("AdmittedSubscriptionTenant")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+    const handlers = registeredSubscriptionHandlers(context);
+    const admitted = handlers.subscribe(createTopic("tenant-a"));
+    const admittedResult = expect(admitted).resolves.toBeDefined();
+    await entered.promise;
+    const closing = context.close();
+    try {
+      await expect(handlers.subscribe(createTopic("tenant-a"))).rejects.toThrow("closing");
+      expect(lookup).toHaveBeenCalledOnce();
+      release.resolve(undefined);
+      await admittedResult;
+      await closing;
+    } finally {
+      release.resolve(undefined);
+      await closing.catch(() => undefined);
+    }
+  });
+
+  it("keeps an admitted subscription create open through fatal context cleanup", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const registry = new InMemorySubscriptionRegistry();
+    const createRecord = registry.create.bind(registry);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    vi.spyOn(registry, "create").mockImplementation(async (subscription) => {
+      entered.resolve(undefined);
+      await release.promise;
+      return createRecord(subscription);
+    });
+    let registryClosed = false;
+    const closeRegistry = registry.close.bind(registry);
+    vi.spyOn(registry, "close").mockImplementation(async () => {
+      registryClosed = true;
+      await closeRegistry();
+    });
+    const context = await BoundedContext.singleTenant("HeldSubscriptionCreate")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const accepted = registeredSubscriptionHandlers(context).subscribe(createTopic());
+    const acceptedResult = expect(accepted).resolves.toBeDefined();
+    await entered.promise;
+    const failure = new Error("other eager model failed");
+    vi.spyOn(StoragePreparations.for(factory), "prepareEntity").mockRejectedValueOnce(failure);
+    const failing = BoundedContext.singleTenant("TriggersSubscriptionClose")
+      .add(new Repository({ entityType: RejectingTaskAggregate, schema: ProjectStateSchema }))
+      .build();
+    const failed = expect(failing).rejects.toBe(failure);
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(registryClosed).toBe(false);
+      release.resolve(undefined);
+      await acceptedResult;
+      await failed;
+      expect(registryClosed).toBe(true);
+    } finally {
+      release.resolve(undefined);
+      await Promise.allSettled([accepted, failing]);
+    }
+  });
+
+  it("drains an admitted subscription cancellation without waiting for a stream", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("HeldSubscriptionCancel")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const deleteRecord = registry.delete.bind(registry);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    vi.spyOn(registry, "delete").mockImplementation(async (id) => {
+      entered.resolve(undefined);
+      await release.promise;
+      return deleteRecord(id);
+    });
+    let registryClosed = false;
+    const closeRegistry = registry.close.bind(registry);
+    vi.spyOn(registry, "close").mockImplementation(async () => {
+      registryClosed = true;
+      await closeRegistry();
+    });
+    const cancellation = handlers.cancel(subscription);
+    await entered.promise;
+    const closing = context.close();
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(registryClosed).toBe(false);
+      release.resolve(undefined);
+      await expect(cancellation).resolves.toMatchObject({ status: { status: { case: "ok" } } });
+      await closing;
+      expect(registryClosed).toBe(true);
+    } finally {
+      release.resolve(undefined);
+      await Promise.allSettled([cancellation, closing]);
+    }
   });
 
   it("treats command tenant domain and email variants as present", async () => {
@@ -4288,6 +4441,7 @@ describe("SpineServices", () => {
       .build();
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createTopic());
+    registry.failCleanup();
 
     try {
       await expect(
@@ -5656,6 +5810,11 @@ class InertActivationRegistry extends InMemorySubscriptionRegistry {
 
 class FailingDeleteRegistry extends InMemorySubscriptionRegistry {
   deletions = 0;
+  #cleanupFails = false;
+
+  failCleanup(): void {
+    this.#cleanupFails = true;
+  }
 
   override delete(
     id: Parameters<InMemorySubscriptionRegistry["delete"]>[0],
@@ -5666,7 +5825,9 @@ class FailingDeleteRegistry extends InMemorySubscriptionRegistry {
   }
 
   override cleanup(): ReturnType<InMemorySubscriptionRegistry["cleanup"]> {
-    return Promise.reject(new Error("subscription attachment setup failed"));
+    return this.#cleanupFails
+      ? Promise.reject(new Error("subscription attachment setup failed"))
+      : super.cleanup();
   }
 }
 

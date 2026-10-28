@@ -1212,3 +1212,138 @@ correction selection and earlier 656-test M8 selection overlap and are not summe
 native-provider and managed tests remain separately scoped. R2/R3 test ordering lapse
 and receipt-gap non-isolating proof remain disclosed. M8 is ready for feature commit
 and immediate origin push; no PR or master action authorized.
+
+M9 bounded architecture assignment: existing requirements-splitter
+application_architecture, original explicitly configured gpt-6-astra/high; actual
+runtime metadata unavailable. Resolve fatal initialization cleanup ordering for
+already-completed contexts and concurrent builds, using current source and
+m9-eager-fence-red.log. Required automatic cleanup is already accepted, not a product
+choice. No edits/tests/children; output external m9-fatal-startup-decision.md.
+
+D0163 architecture accepted. Existing explicit immutable Astra/high confirmed;
+independent runtime metadata unavailable. Parent reviewed the external decision and
+persisted FATAL_INITIALIZATION.md; no source/test changes by architect. Required
+automatic cleanup is settled. Review must inspect build/preparation release before
+cleanup join, public-vs-admitted work distinction, finite error retention for internal
+runs created during fatal drain, and classification at the required-operation caller.
+Same implementer receives decision; no new fixer/reviewer wave before checks.
+
+M9 review wave prepared, inactive until corrected cheap preflight is green.
+Use existing reviewers and original explicit immutable profiles: performance/
+reliability live_reliability_review Sol/medium; TypeScript/API live_api_review
+Sol/medium; style/maintainability live_style_review Sol/medium; documentation
+live_documentation_review Luna/medium. Each receives its concern-specific section
+of external m9-review-dispatch-plan.md, full TASK human ledger, current D0163
+and frozen evidence/manifest. Runtime metadata unavailable. No edits, tests,
+builds or children; external report writing allowed. Collect all four before
+returning one accepted correction batch. Final security remains M13.
+
+Parent candidate observations are held in m9-parent-review-notes.md for reliability
+confirmation: immediately observe completed close rejections while builds drain,
+original-cause versus cleanup ordering, availability between eager phases, and
+remaining meaningful admission/follow-up proof. Metadata barrier weakness has now
+been strengthened by the implementer and must be assessed against current source,
+not the earlier candidate. No candidate concern is dispatched for a partial fix.
+
+M9 corrected cheap preflight green (m9-mechanical-correction-evidence.md),
+383/383 across eight suites with fresh LCOV. Source/test/docs frozen pending
+hash snapshot; parent task logs remain mutable. All four prepared concerns apply.
+Do not treat the first failed mechanical candidate as current. Metadata barrier
+has been strengthened; remaining parent reliability candidates require independent
+assessment against the final snapshot. Security remains M13.
+
+M9 hash snapshot verified by existing explicit Luna/low function:29 paths,
+28 modified and1 untracked,27 content hashes, only WORK_LOG/REVIEW_LOG content
+excluded, no deletions. HEAD remains bc70731f55e7dcda0f5edcc551075bf244c8ee68;
+all referenced evidence exists. Runtime metadata unavailable. Parent pre-review
+status/docs/API lint inspected TASK/MILESTONES, README/REFERENCE, index exports
+and API inventory: current scope and deferred M11 claims consistent; only approved
+BoundedContextBuildOptions added to package exports. Four prepared reviews now
+dispatched in capacity order with this manifest; no source/test/docs edits.
+
+M9 review progress: API complete, one P2 close() TSDoc/REFERENCE fatal-cleanup
+exception; no export/signature mismatch. Maintainability complete, one P2 originals-
+before-cleanup ordering issue, overlapping reliability. Existing explicit Sol/medium
+profiles confirmed; runtime metadata unavailable; no child edits/tests. Documentation
+Luna/medium dispatched as capacity freed. Reliability confirms unobserved early
+context-close rejection during held build, mixed error order, fresh eager work after
+fatal fence, and service membership lookup before fresh-input fence. Requested
+supervisor-start classification check found no separate defect under accepted D0158
+retry policy. Full wave still pending; no corrections dispatched.
+
+M9 complete review wave accepted: reliability R1–R3 P1 (early close rejection
+observation, eager work after fatal fence, service admission tracking) and R4 P2
+(original-cause ordering); maintainability overlaps R4; API D1 P2 close docs and
+documentation overlaps D1 plus D2 P2 shared monitoring registry dependency.
+Parent accepts all six deduplicated corrections. Original explicit Sol/medium
+and Luna/medium profiles confirmed; runtime metadata unavailable. No child edits/
+tests. Documentation returned prose despite external-report permission; parent
+persisted exact substance as m9-documentation-review.md. Manifest27/27matches.
+
+Single batch m9-review-correction-batch.md goes to same implementer. Estimate
+0.75–1.5 hours for focused fixes/tests/checks and targeted reliability re-review.
+No new architecture required: D0163 already determines all four runtime rules.
+API/doc corrections and minimal separate-array style change receive deterministic
+checks; revisit those concerns only if actual new substantive changes require it.
+Metadata test weakness resolved; no new concrete full-follow-up or supervisor-start
+defect. Final security/release remain M13. No milestone acceptance yet.
+
+M9 targeted re-review prepared after all accepted corrections and deterministic
+cleanup pass. Existing live_reliability_review, original explicit immutable
+gpt-6-sol/medium, scoped R1–R4 plus service-admission consequences, using external
+m9-reliability-rereview-brief.md and final correction evidence. No edits/tests/
+children. API/doc D1/D2 inspected deterministically against actual fatal close and
+shared-registry behavior; no public contract change. Minimal separate arrays and
+zero-caller private helper removal satisfy maintainability correction without
+reopening whole style lane. Luna/low function will refresh hashes only before
+actual dispatch; no passing checks repeated. Security remains M13.
+
+M9 final correction manifest verified by original explicit Luna/low function:
+29paths,27hashes,only2mutablelogs excluded,HEAD unchanged andall13evidence
+artifacts exist. No checks rerun; runtime metadata unavailable. Parent inspected
+D1/D2 final text and confirmed old prepareInput has no definition/callers.
+Targeted existing Sol/medium reliability re-review now dispatched with
+m9-correction-frozen-manifest.json and final correction evidence. Source frozen.
+
+M9 targeted reliability re-review complete under original explicit Sol/medium;
+27/27hashes match, runtime metadata unavailable, no tests/edits. R1 andR4
+resolved; R3 membership/preparation fix resolved. Accept residual R2 P2:
+fresh tenantIndex.page before availability check. Parent confirms analogous
+per-ID membership entry gap after prior await. Accept additional R3 P1:
+registry.create begins after tracked preparation settles and can outlive
+registry close; extend actual admitted one-shot service mutation lifetime.
+Full task D0163 already requires resources retained through admitted work.
+No new public design; exclude long-lived response stream from drain tracking.
+
+Same writer receives m9-final-targeted-correction.md; estimate0.5–1.25hours
+with focused regression/check/re-review. Check analogous activation/cancel setup
+and discovery lifetime within this concrete service defect. Re-review only these
+affected paths, not an additional whole-change wave. No milestone acceptance yet.
+
+Final targeted M9 correction frozen (m9-final-targeted-evidence.md): immediate
+pre-page and pre-member eager checks, tracked finite create/activation/cancel/
+registry operations, streams excluded. Fresh build,4named suites265/265 LCOV
+and tooling/cleanup/TSDoc/ESLint/format/diff pass. Prior386selection is separate.
+Pre-page combined test not uniquely isolating the new guard; preserve limitation.
+Same explicit Sol/medium writer confirmed; runtime metadata unavailable.
+
+Dispatch existing Luna/low function for final-targeted hashes/evidence existence
+only, then existing Sol/medium reliability reviewer for residual R2 and additional
+R3 finite-operation lifetime. No full review restart; R1/R4 and D1/D2 dispositions
+stand. No source edits/tests/builds/children by reviewer. Profile metadata
+limitations unchanged. Any new finding must be concrete in changed paths.
+
+Final-targeted manifest verified by explicit Luna/low:29paths,27hashes,
+2mutablelogs excluded,HEAD unchanged,evidence present. Parent additionally
+checked all8brace-group command log paths exist. Existing Sol/medium final
+narrow review dispatched for residualR2 andfinite service-operation lifetime,
+with non-isolation limitation explicit. No source/test/docs edits pending.
+
+M9 final targeted reliability review CLEAN, m9-final-targeted-reliability-review.md.
+Original explicit immutable Sol/medium profile confirmed; runtime introspection
+unavailable. All27 manifest hashes match. Residual R2 and additional R3 resolved
+by source ordering and focused behavior evidence; pre-page guard lacks isolated
+red proof and is not represented otherwise. R1/R4 and deterministic D1/D2
+dispositions stand. Reliability accepted; maintainability accepted; API accepted;
+documentation accepted. No further relevant finding. Final security/release
+remain M13. M9 accepted for feature commit and immediate origin push.

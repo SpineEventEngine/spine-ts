@@ -240,10 +240,11 @@ describe("Stand", () => {
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     registry.gateNextSnapshot();
     const runtime = pairedRuntime(stand, factory, registry, bus, bus);
-    runtime.start();
+    const starting = runtime.start();
     await registry.snapshotStarted;
     await registry.delete(subscription.id);
     registry.releaseSnapshot();
+    await starting;
     await runtime.reconcile();
     let delivered = 0;
     await runtime.consume("gated-delete", () => delivered++);
@@ -277,7 +278,7 @@ describe("Stand", () => {
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     const runtime = pairedRuntime(stand, factory, registry, bus, bus);
-    runtime.start();
+    await runtime.start();
     let deliveries = 0;
     await runtime.consume("gated-close", () => deliveries++);
     expect(observedEventBusSubscriptions).toHaveLength(5);
@@ -335,7 +336,7 @@ describe("Stand", () => {
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };
     subscriptionRuntimeAccess.installLogger(runtime, logger as never);
-    runtime.start();
+    await runtime.start();
     await runtime.reconcile();
     const deferred = Promise.withResolvers<undefined>();
     let peer = 0;
@@ -438,7 +439,7 @@ describe("Stand", () => {
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
     const runtime = pairedRuntime(stand, storageFactory, registry, eventBus, eventBus);
-    runtime.start();
+    await runtime.start();
     await runtime.reconcile();
     registry.failNextSnapshot();
     let failedConsumerDeliveries = 0;
@@ -484,7 +485,7 @@ describe("Stand", () => {
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
     const runtime = pairedRuntime(stand, storageFactory, registry, eventBus, eventBus);
-    runtime.start();
+    await runtime.start();
     await runtime.consume("s-1", () => observed.push(1));
 
     await postStateChange(eventBus, ProjectOverviewStateSchema, createState("one", "Before fence"));
@@ -570,7 +571,7 @@ describe("Stand", () => {
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     const restarted = new StorageSubscriptionRegistry(context, storageFactory);
     const runtime = pairedRuntime(stand, storageFactory, restarted, bus, bus);
-    runtime.start();
+    await runtime.start();
     await runtime.consume("restart", () => undefined);
     expect(observedEventBusSubscriptions.some((observer) => !observer.closed)).toBe(true);
 
@@ -616,8 +617,8 @@ describe("Stand", () => {
     eventBusAccess.registerSchemas(secondBus, [EntityLog.EntityStateChangedSchema]);
     const firstRuntime = pairedRuntime(first, storageFactory, registry, firstBus, firstBus);
     const secondRuntime = pairedRuntime(second, storageFactory, registry, secondBus, secondBus);
-    firstRuntime.start();
-    secondRuntime.start();
+    await firstRuntime.start();
+    await secondRuntime.start();
     await firstRuntime.consume("shared", () => observed.first++);
     await secondRuntime.consume("shared", () => observed.second++);
 
@@ -674,8 +675,8 @@ describe("Stand", () => {
     await registry.activate(subscription.id);
     const firstRuntime = pairedRuntime(first, storageFactory, registry, firstBus, firstBus);
     const secondRuntime = pairedRuntime(second, storageFactory, registry, secondBus, secondBus);
-    firstRuntime.start();
-    secondRuntime.start();
+    await firstRuntime.start();
+    await secondRuntime.start();
     await firstRuntime.consume("shared-events", () => observed.first++);
     await secondRuntime.consume("shared-events", () => observed.second++);
 

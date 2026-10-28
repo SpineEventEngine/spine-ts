@@ -647,6 +647,94 @@ describe("Delivery fencing", () => {
     await expect(delivery.close()).rejects.toBe(failure);
   });
 
+  it("retains a public run release error across the fatal startup drain interval", async () => {
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const failure = new Error("public release failed during startup drain");
+    const delivery = agentDelivery(
+      [],
+      () => undefined,
+      () => {
+        throw failure;
+      },
+    );
+    delivery.shards.pickUp = () => pickup.promise;
+    const running = delivery.run({ onMessage: () => undefined });
+    delivery.beginStartupDrain();
+    await expect(delivery.run({ onMessage: () => undefined })).resolves.toMatchObject({
+      status: "STOPPED",
+    });
+    pickup.resolve(session());
+    await expect(running).resolves.toMatchObject({ status: "FAILED" });
+    await expect(delivery.close()).rejects.toBe(failure);
+  });
+
+  it("permits only an exact pending handoff to start a shared fatal-drain run", async () => {
+    const message = createMessage("fatal-exact", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const delivery = agentDelivery([message], (next) => acknowledged.add(next.id.value));
+    let pickups = 0;
+    delivery.shards.pickUp = () => Promise.resolve(++pickups === 1 ? session() : undefined);
+    delivery.setReplay(() => undefined);
+    delivery.beginStartupDrain();
+    await expect(
+      delivery.runControlled({
+        shard: message.shard,
+        onMessage: () => undefined,
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toMatchObject({ status: "STOPPED" });
+    expect(pickups).toBe(0);
+    const selected = await delivery.drainMessage(message, { onMessage: () => undefined });
+    expect(selected.acknowledged).toBe(true);
+    expect(acknowledged.has(message.id.value)).toBe(true);
+    expect(pickups).toBe(1);
+    await delivery.close();
+  });
+
+  it("does not replay an unrelated row beside an admitted fatal handoff", async () => {
+    const exact = createMessage("fatal-selected", "signal-a", 1n);
+    const other = createMessage("fatal-unrelated", "signal-b", 2n);
+    const acknowledged = new Set<string>();
+    const delivery = agentDelivery([exact, other], (message) => acknowledged.add(message.id.value));
+    let replayed = 0;
+    delivery.shards.pickUp = () => Promise.resolve(session());
+    delivery.setReplay(() => {
+      replayed++;
+    });
+    delivery.beginStartupDrain();
+    await expect(
+      delivery.drainMessage(exact, { onMessage: () => undefined }),
+    ).resolves.toMatchObject({
+      acknowledged: true,
+    });
+    await delivery.whenIdle();
+    expect(acknowledged.has(exact.id.value)).toBe(true);
+    expect(acknowledged.has(other.id.value)).toBe(false);
+    expect(replayed).toBe(0);
+    await delivery.close();
+  });
+
+  it("retains a late exact-handoff release failure until full fatal close", async () => {
+    const message = createMessage("fatal-late-release", "signal", 1n);
+    const failure = new Error("late exact release failed");
+    const delivery = agentDelivery(
+      [message],
+      () => undefined,
+      () => {
+        throw failure;
+      },
+    );
+    delivery.shards.pickUp = () => Promise.resolve(session());
+    delivery.beginStartupDrain();
+    await expect(
+      delivery.drainMessage(message, { onMessage: () => undefined }),
+    ).resolves.toMatchObject({
+      acknowledged: true,
+    });
+    await expect(delivery.whenIdle()).rejects.toBe(failure);
+    await expect(delivery.close()).rejects.toBe(failure);
+  });
+
   it("leaves a fresh shared row pending when its recipient closes after the first predicate", async () => {
     const message = createMessage("closed-recipient", "signal", 1n);
     const validation = Promise.withResolvers<undefined>();

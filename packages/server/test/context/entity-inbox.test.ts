@@ -168,6 +168,28 @@ describe("LocalEntityInbox", () => {
     await receiving;
   });
 
+  it("prepares a single-tenant inbox before persisting its first batch", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const admitted = Promise.withResolvers<undefined>();
+    const onAdmit = vi.fn(() => admitted.promise);
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const inbox = new LocalEntityInbox("Tasks", undefined, onAdmit);
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.resolve(undefined),
+    });
+    const receiving = inbox.receiveAll(delivery, [processInput(targetTypeUrl, "first")]);
+    await Promise.resolve();
+    expect(onAdmit).toHaveBeenCalledExactlyOnceWith(undefined);
+    await expect(delivery.inbox.read(ShardIndex.single())).resolves.toEqual([]);
+    admitted.resolve(undefined);
+    await receiving;
+  });
+
   it("rejects a saved Entity inbox row after its tenant is removed", async () => {
     const failure = new Error("tenant removed");
     let admitted = true;

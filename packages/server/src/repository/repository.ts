@@ -80,7 +80,12 @@ import {
   type NormalizedQueryEntry,
   StorageQueryPolicy,
 } from "@spine-event-engine/storage";
-import { TenantBoundary, eventStoreAccess } from "@spine-event-engine/storage/provider";
+import {
+  TenantBoundary,
+  eventStoreAccess,
+  StoragePreparations,
+  type StoragePreparationMode,
+} from "@spine-event-engine/storage/provider";
 import type {
   EntityEventHistoryPort,
   EntityRecordStorage,
@@ -1592,6 +1597,21 @@ export interface RepositoryAccess {
   snapshot(repository: RepositoryView): RepositoryIdentitySnapshot;
 
   /**
+   * Prepares the repository's actual current, history and Agent declarations.
+   * @param repository Registered repository model.
+   * @param context Complete selected storage scope.
+   * @param factory Its configured provider.
+   * @param mode Creation or compatibility inspection.
+   * @returns Completion after every required family is established.
+   */
+  prepareStorage(
+    repository: RepositoryView,
+    context: StorageContext,
+    factory: StorageFactory,
+    mode: StoragePreparationMode,
+  ): Promise<void>;
+
+  /**
    * Returns schemas for events that the repository can produce.
    *
    * @param repository the repository to inspect.
@@ -1797,6 +1817,33 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     }
 
     return RepositoryIdentity.cloneRepositorySnapshot(snapshot);
+  },
+
+  /**
+   * Prepares actual Entity and Agent families from the captured repository definition.
+   * @param repository Registered repository model.
+   * @param context Complete selected storage scope.
+   * @param factory Configured provider factory.
+   * @param mode Creation or compatibility inspection.
+   * @returns Completion after all required physical families are ready.
+   */
+  async prepareStorage(
+    repository: RepositoryView,
+    context: StorageContext,
+    factory: StorageFactory,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    const input = RepositoryStorage.entityStorageInput(repository, context);
+    const preparation = StoragePreparations.for(factory);
+    if (repository.entityFamily !== "agent") {
+      await preparation.prepareEntity(input, mode);
+      return;
+    }
+    await preparation.prepareAgentCommit(input, mode);
+    await preparation.prepareAgentHistory(
+      { context, stateType: input.sourceType.typeName, id: { key: input.id.key } },
+      mode,
+    );
   },
 
   /**
@@ -10221,16 +10268,19 @@ const RepositoryStorage = {
     repository: RepositoryView,
     context: StorageContext,
   ): EntityStorageInput<unknown, Message> {
+    const snapshot = repositorySnapshots.get(repository);
+    if (snapshot === undefined)
+      throw new TypeError("Entity storage requires a Repository instance.");
     const descriptor = entityStorageDescriptor(
       context,
-      repositorySpecScanner.scan(repository.entityType, repository.metadata),
-      repository.metadata,
+      repositorySpecScanner.scan(snapshot.entityType, snapshot.metadata),
+      snapshot.metadata,
     ) as EntityStorageInput<unknown, Message>;
     const history = RepositoryStorage.historyConfiguration(repository);
     return {
       ...descriptor,
       stateHistory: history.stateHistory,
-      eventHistory: repository.entityFamily === "aggregate" || history.processManagerEventHistory,
+      eventHistory: snapshot.entityFamily === "aggregate" || history.processManagerEventHistory,
     };
   },
 

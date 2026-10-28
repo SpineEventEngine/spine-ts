@@ -254,8 +254,9 @@ export class CommandBus {
   }
 
   async #dispatch(command: Command): Promise<void> {
+    const dispatcher = this.#checkedDispatcher(command);
     await commandAdmissions.get(this)?.(command);
-    await this.#checkedDispatcher(command).dispatch(command);
+    await dispatcher.dispatch(command);
   }
 
   #checkedDispatcher(command: Command): CommandDispatcher {

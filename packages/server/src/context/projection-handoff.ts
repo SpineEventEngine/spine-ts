@@ -43,7 +43,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
   readonly #readiness: DeliveryReadiness;
 
-  readonly #onAdmit: (tenantId: TenantId) => Promise<void>;
+  readonly #onAdmit: (tenantId?: TenantId) => Promise<void>;
 
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
 
@@ -62,7 +62,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
-    onAdmit: (tenantId: TenantId) => Promise<void> = () => Promise.resolve(),
+    onAdmit: (tenantId?: TenantId) => Promise<void> = () => Promise.resolve(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
@@ -131,7 +131,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     input: ProjectionInput,
     deliveryTenantId?: TenantId,
   ): Promise<InboxMessage> {
-    if (deliveryTenantId !== undefined) await this.#onAdmit(deliveryTenantId);
+    await this.#onAdmit(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input);
     this.#trackMessage(written.message);
     try {
@@ -225,7 +225,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   async #replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
     receptionObservation.markManaged();
     LocalProjectionInbox.#assert(message);
-    if (deliveryTenantId !== undefined) await this.#onAdmit(deliveryTenantId);
+    await this.#onAdmit(deliveryTenantId);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
 

@@ -65,27 +65,23 @@ describe("SubscriptionRuntime", () => {
     }).toThrow("Subscription runtime logger is not installed.");
     await runtime.close();
   });
-  it("warns once when detached initial reconciliation fails", async () => {
+  it("rejects a failed first pass and permits a later successful start", async () => {
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    const registry = new InMemorySubscriptionRegistry();
+    vi.spyOn(registry, "snapshot").mockRejectedValueOnce(new Error("snapshot failed"));
     const runtime = new SubscriptionRuntime(
       {} as never,
       {} as never,
       {} as never,
       {} as never,
-      new FailingSnapshotRegistry(),
+      registry,
     );
     subscriptionRuntimeAccess.installLogger(runtime, logger as never);
 
-    runtime.start();
-    await new Promise<void>((resolve) => setImmediate(resolve));
-
-    expect(logger.withMetadata).toHaveBeenCalledWith({
-      operation: "subscription.reconcile",
-      reasonCode: "failed",
-    });
-    expect(warn).toHaveBeenCalledOnce();
-    expect(warn).toHaveBeenCalledWith("Subscription reconciliation failed.");
+    await expect(runtime.start()).rejects.toThrow("snapshot failed");
+    await expect(runtime.start()).resolves.toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
     await runtime.close();
   });
 
@@ -203,9 +199,7 @@ describe("SubscriptionRuntime", () => {
     } as never);
 
     try {
-      runtime.start();
-      await Promise.resolve();
-      await Promise.resolve();
+      await runtime.start();
       await vi.advanceTimersByTimeAsync(10_000);
       await registry.cleanupStarted;
       await vi.advanceTimersByTimeAsync(30_000);
@@ -264,9 +258,10 @@ describe("SubscriptionRuntime", () => {
     expect(withMetadata).not.toHaveBeenCalled();
   });
 
-  it("exposes its registry and ignores a failed timer reconciliation", async () => {
+  it("exposes its registry and warns after a later failed timer reconciliation", async () => {
     vi.useFakeTimers();
-    const registry = new FailingSnapshotRegistry();
+    const registry = new InMemorySubscriptionRegistry();
+    vi.spyOn(registry, "snapshot").mockRejectedValueOnce(new Error("snapshot failed"));
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };
     const runtime = new SubscriptionRuntime(
@@ -278,10 +273,11 @@ describe("SubscriptionRuntime", () => {
     );
     subscriptionRuntimeAccess.installLogger(runtime, logger as never);
     expect(runtime.registry()).toBe(registry);
-    runtime.start();
-    await vi.advanceTimersByTimeAsync(0);
+    await expect(runtime.start()).rejects.toThrow("snapshot failed");
+    await runtime.start();
+    vi.spyOn(registry, "snapshot").mockRejectedValueOnce(new Error("later snapshot failed"));
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledOnce();
     expect(logger.withMetadata).toHaveBeenNthCalledWith(1, {
       operation: "subscription.reconcile",
       reasonCode: "failed",
@@ -363,11 +359,5 @@ class FailingCloseRegistry extends InMemorySubscriptionRegistry {
   override close(): Promise<void> {
     this.closeCalls += 1;
     return Promise.reject(new Error("close failed"));
-  }
-}
-
-class FailingSnapshotRegistry extends InMemorySubscriptionRegistry {
-  override snapshot() {
-    return Promise.reject(new Error("snapshot failed"));
   }
 }

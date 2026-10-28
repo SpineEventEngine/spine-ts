@@ -66,6 +66,7 @@ interface DirectDrainInput {
 }
 
 interface DirectPending {
+  readonly shardKey: string;
   readonly input: DirectDrainInput;
   readonly settle: (outcome: DeliveryMessageOutcome) => void;
 }
@@ -288,9 +289,11 @@ export class Delivery {
 
   #closing = false;
 
+  #startupDraining = false;
+
   #closeAttempt: Promise<void> | undefined;
 
-  #closingRuns: readonly ActiveDeliveryRun[] | undefined;
+  #closingRuns: ActiveDeliveryRun[] | undefined;
 
   /**
    * Sets the complete direct fallback dispatcher before receiving work.
@@ -364,8 +367,19 @@ export class Delivery {
   beginClose(): void {
     if (this.#closing) return;
     this.#closing = true;
-    this.#closingRuns = [...this.#activeRuns];
+    this.#closingRuns ??= [...this.#activeRuns];
     for (const active of this.#closingRuns) active.drain?.stop(new Error("Delivery closed."));
+  }
+
+  /**
+   * Marks public runs as unavailable while preserving exact admitted local handoffs.
+   *
+   * @internal
+   */
+  beginStartupDrain(): void {
+    if (this.#startupDraining || this.#closing) return;
+    this.#startupDraining = true;
+    this.#closingRuns = [...this.#activeRuns];
   }
 
   /**
@@ -375,7 +389,7 @@ export class Delivery {
    * @param shard Delivery shard identifier.
    */
   wake(shard: ShardIndex): void {
-    if (this.#closing) return;
+    if (this.#closing || (this.#startupDraining && !this.#hasPending(shard.key()))) return;
     const drain = this.#directDrains.get(shard.key());
     if (drain !== undefined) {
       if (!drain.wake()) this.#pendingDirectWake.add(shard.key());
@@ -521,7 +535,7 @@ export class Delivery {
       this.#directPending.delete(key);
       selected.resolve(Object.freeze({ acknowledged: outcome.kind === "acknowledged", outcome }));
     };
-    this.#directPending.set(key, { input, settle });
+    this.#directPending.set(key, { shardKey: message.shard.key(), input, settle });
     const completed = this.#startDirect(message.shard);
     this.#observeSelectedRun(message.shard, key, completed, settle);
     return selected.promise;
@@ -563,8 +577,18 @@ export class Delivery {
    * Starts or wakes the retained direct run for one shard.
    */
   #startDirect(shard: ShardIndex): Promise<DeliveryRun> {
-    if (this.#closing) return Promise.resolve(result("STOPPED"));
+    if (this.#closing || (this.#startupDraining && !this.#hasPending(shard.key())))
+      return Promise.resolve(result("STOPPED"));
     return this.#startShared(shard, this.#directOptions());
+  }
+
+  /**
+   * Checks whether an exact accepted handoff needs this shard.
+   * @param shardKey Canonical shard key.
+   * @returns Whether an exact pending observer remains.
+   */
+  #hasPending(shardKey: string): boolean {
+    return [...this.#directPending.values()].some((pending) => pending.shardKey === shardKey);
   }
 
   /**
@@ -575,6 +599,7 @@ export class Delivery {
    */
   #startShared(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const key = shard.key();
+    if (this.#startupDraining && !this.#hasPending(key)) return Promise.resolve(result("STOPPED"));
     const active = this.#activeDirect.get(key);
     if (active !== undefined) {
       active.wake();
@@ -613,7 +638,9 @@ export class Delivery {
       acceptMessage: (message) => {
         const selected = request(message);
         return selected === undefined
-          ? this.#replay !== undefined && (this.#acceptReplay?.(message) ?? true)
+          ? !this.#startupDraining &&
+              this.#replay !== undefined &&
+              (this.#acceptReplay?.(message) ?? true)
           : (selected.input.acceptMessage?.(message) ?? true);
       },
       onDelivered: (message) => request(message)?.input.onDelivered?.(message),
@@ -645,10 +672,12 @@ export class Delivery {
     options: DeliveryDrainOptions,
     shared: boolean,
   ): Promise<DeliveryRun> {
-    if (this.#closing) return Promise.resolve(result("STOPPED"));
+    if (this.#closing || (this.#startupDraining && (!shared || !this.#hasPending(shard.key()))))
+      return Promise.resolve(result("STOPPED"));
     const completion = Promise.withResolvers<DeliveryRun>();
     const active: ActiveDeliveryRun = { completed: completion.promise, shared };
     this.#activeRuns.add(active);
+    if (this.#startupDraining) this.#closingRuns?.push(active);
     void this.#drainAdmitted(shard, options, active).then(completion.resolve, completion.reject);
     void active.completed.finally(() => this.#activeRuns.delete(active)).catch(() => undefined);
     return active.completed;

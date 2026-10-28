@@ -163,6 +163,18 @@ closes acquired facilities and prevents context assembly. Building a context
 does not start setup. The environment logs an INFO message after each successful
 phase without implying that every Entity model has been prepared.
 
+`BoundedContextBuilder.build({ createStorageStructures, startSubscriptionMonitoring })`
+awaits both model preparation and the first subscription reconciliation by
+default. Each option can be set to `false` independently. A deferred phase runs
+before the first valid Command, Event, query, subscription operation, or Inbox
+replay for the receiving context; lazy multitenant preparation selects only that
+input's currently registered tenant. A failed lazy attempt rejects its current
+input and can be retried by a later input. Monitoring requires the shared
+subscription registry, so `startSubscriptionMonitoring: true` prepares that
+registry even when `createStorageStructures: false`; it does not prepare all
+tenant Entity families. An eager required preparation or initial monitoring
+failure stops accepting new input and triggers attempt-all cleanup.
+
 `storageFactory` supplies records and events to every context. `typeRegistry` is the complete
 application schema universe used by `ThirdPartyContext` to encode outgoing
 imported events. An optional `integrationChannelFactory` overrides the
@@ -1170,7 +1182,10 @@ and acknowledgement recovery remain separate Delivery behavior.
 `Environment` resolves the Node `local` or `production` profile once from
 `NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that
 profile and exposes its `storageFactory`, `tenantIndex`, `nodeId`, and
-`close()` lifecycle. After explicit `completeSetup()`, its `delivery` property
+`close()` lifecycle. A healthy close with active contexts rejects without
+teardown; after required startup failure, close joins automatic cleanup and
+reports the original cause plus cleanup failures. After explicit
+`completeSetup()`, its `delivery` property
 is the usable shared public `Delivery` facade. A Bounded Context cannot build
 before setup, and a server does not start setup on the application's behalf.
 Neither API authenticates requests or supplies remote topology or a deployment

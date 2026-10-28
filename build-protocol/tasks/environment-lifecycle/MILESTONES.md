@@ -48,14 +48,15 @@ a time; independent checks and relevant reviews may run concurrently. See the
    created delivery storage, then factories. Closing one context leaves shared
    resources open. Supplied ports follow explicit cleanup delegation.
 9. **Bounded Context initialization:** the asynchronous build from M6 gains independent eager
-   flags, runtime preparation methods and first-input gating across every ingress.
+   flags, shared preparation machinery and first-input gating across every ingress.
    Failed lazy attempts reject requests and remain retryable; explicit startup
    failure stops environment intake. Install consumers behind the gate so Events
    can trigger lazy preparation. No active/inactive context API.
 10. **Subscription monitoring:** awaited first pass, separate initial-success and
     current-health state, WARN and restart after later errors, no overlapping loops
     or restart after close. No whole-environment failure after initial success.
-11. **Environment preparation:** completed/open context snapshot, paged effective
+11. **Explicit context and environment preparation:** public runtime/environment
+    methods, completed/open context snapshot, paged effective
     indexes, all supplied IDs validated before structure work, no keep, close
     coordination and shared lazy/explicit attempts. No monitoring side effect.
 12. **Server and protocols:** gRPC-only Server, typed errors through native/browser/

@@ -6975,3 +6975,27 @@ Detailed source seams, ordering and focused race tests are recorded in
 Existing requirements-splitter ran explicit immutable Astra/high, read-only; runtime
 metadata unavailable. Local JVM Repository unregisters its Inbox before storage
 close, but supplies no claimed analogue for TypeScript Agent async cancellation.
+
+## D-0163 — Fatal required initialization coordinates automatic cleanup
+
+2026-10-28. Accepted bounded architecture ruling for the demonstrated M9 eager
+preparation failure. Detailed source-backed ordering and tests:
+[tasks/environment-lifecycle/FATAL_INITIALIZATION.md](tasks/environment-lifecycle/FATAL_INITIALIZATION.md).
+
+A required eager/explicit preparation failure synchronously records its original
+cause and fences fresh environmental input/builds, then starts one automatic
+cleanup attempt. The failing build or tracked preparation releases its admission
+after local rollback, before awaiting global cleanup; it cannot wait on itself.
+Completed contexts drain while partial builds unwind. Shared facilities close only
+after safe context/build drainage. Preserve original causes and cleanup failures.
+
+Delivery first fences fresh public runs and generic scans, while retained exact
+handoffs from already-admitted ordinary work remain drainable. One shutdown-attempt
+collection includes active operations and subsequent permitted exact runs through
+final close, preserving release failures without healthy completed-run history.
+The final full core close and established facility order follow context drainage.
+
+Public read/service input checks must not fence internal repository work already
+admitted. Lazy failures, membership failures, invalid input, local misuse and absent
+explicit setup remain nonfatal under the accepted contract. No public lifecycle API,
+process exit, new timer, recovery or change to D0161 delivery completion is introduced.

@@ -393,12 +393,14 @@ export class EventBus {
       throw new Error("EventBus requires event.message.typeUrl.");
     }
 
-    await eventAdmissions.get(this)?.(event);
+    const onAdmit = eventAdmissions.get(this);
+    if (onAdmit !== undefined) this.#validate(event, typeUrl);
+    await onAdmit?.(event);
 
     const dispatchers = this.#registry.find(typeUrl, event.context?.external === true);
 
     if (forgettingBuses.has(this)) {
-      this.#validate(event, typeUrl);
+      if (onAdmit === undefined) this.#validate(event, typeUrl);
       const accepted = await this.#accept(event, dispatchers);
       await this.#deliverAccepted(event, accepted);
       return;
@@ -411,7 +413,7 @@ export class EventBus {
 
     let acceptedDispatchers: readonly AcceptedEventDispatcher[] = [];
     const stored = await eventStore.acceptThenAppend(event, async (accepted) => {
-      this.#validate(accepted, typeUrl);
+      if (onAdmit === undefined) this.#validate(accepted, typeUrl);
       acceptedDispatchers = await this.#accept(accepted, dispatchers);
     });
 

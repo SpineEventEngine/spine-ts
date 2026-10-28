@@ -100,7 +100,7 @@ import {
 } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
-import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
+import { BoundedContext, boundedContextAccess } from "../context/bounded-context.js";
 import { EffectiveTenants } from "../context/effective-tenant.js";
 import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
@@ -493,9 +493,9 @@ export class SpineServices {
     if (registry === undefined) {
       throw new ConnectError("Subscription registry is unavailable.", Code.FailedPrecondition);
     }
-    return TenantStatuses.require(route.context, tenantId)
-      .then(() => registry.create(subscription))
-      .then(() => clone(SubscriptionSchema, subscription));
+    return TenantStatuses.require(route.context, tenantId, async () => {
+      await registry.create(subscription);
+    }).then(() => clone(SubscriptionSchema, subscription));
   }
 
   async *#activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> {
@@ -549,7 +549,24 @@ export class SpineServices {
   async #startActivationRecord(id: string): Promise<SubscriptionRecord | undefined> {
     const record = this.#subscriptions.get(id) ?? (await this.#findSubscription(id));
     if (record === undefined) return undefined;
-    await this.#requireSubscriptionTenant(record);
+    let attached: SubscriptionRecord | undefined;
+    await this.#requireSubscriptionTenant(record, async () => {
+      attached = await this.#activateKnownRecord(record, id);
+    });
+    return attached;
+  }
+
+  /**
+   * Activates and attaches one admitted record before its registry closes.
+   *
+   * @param record Discovered subscription record.
+   * @param id Canonical subscription ID.
+   * @returns Attached record, if activation remains eligible.
+   */
+  async #activateKnownRecord(
+    record: SubscriptionRecord,
+    id: string,
+  ): Promise<SubscriptionRecord | undefined> {
     if (record.delivery.active) return undefined;
     const activation = await this.#subscriptionRegistry(record.route.context)?.activate(
       create(SubscriptionIdSchema, { value: id }),
@@ -619,8 +636,8 @@ export class SpineServices {
    */
   async #cancelKnown(id: string): Promise<Response> {
     const record = this.#subscriptions.get(id) ?? (await this.#findSubscription(id));
-    if (record !== undefined) await this.#requireSubscriptionTenant(record);
-    await this.#removeSubscription(id);
+    if (record === undefined) await this.#removeSubscription(id);
+    else await this.#requireSubscriptionTenant(record, () => this.#removeSubscription(id));
     return ServiceValues.okResponse();
   }
 
@@ -628,9 +645,13 @@ export class SpineServices {
    * Checks the discovered subscription tenant before tenant-specific control work.
    *
    * @param record Canonical shared-registry subscription record.
+   * @param onReady Complete admitted one-shot mutation, if present.
    */
-  async #requireSubscriptionTenant(record: SubscriptionRecord): Promise<void> {
-    await TenantStatuses.require(record.route.context, record.tenantId);
+  async #requireSubscriptionTenant(
+    record: SubscriptionRecord,
+    onReady?: () => Promise<void>,
+  ): Promise<void> {
+    await TenantStatuses.require(record.route.context, record.tenantId, onReady);
   }
 
   #subscriptionRoute(topic: Topic): SubscriptionRoute {
@@ -777,14 +798,7 @@ export class SpineServices {
           create(SubscriptionIdSchema, { value: id }),
         );
       } else {
-        await Promise.all(
-          ServiceValues.uniqueContexts(this.#contexts).flatMap((context) => {
-            const registry = this.#subscriptionRegistry(context);
-            return registry === undefined
-              ? []
-              : [registry.delete(create(SubscriptionIdSchema, { value: id }))];
-          }),
-        );
+        await this.#deleteUnknownSubscription(id);
       }
       removal.resolve();
     } catch (error) {
@@ -799,10 +813,34 @@ export class SpineServices {
     }
   }
 
+  /**
+   * Deletes an unknown subscription from every configured context registry.
+   *
+   * @param id Subscription ID to remove.
+   */
+  async #deleteUnknownSubscription(id: string): Promise<void> {
+    await Promise.all(
+      ServiceValues.uniqueContexts(this.#contexts).flatMap((context) => {
+        const registry = this.#subscriptionRegistry(context);
+        return registry === undefined
+          ? []
+          : [
+              this.#registryOperation(context, async () => {
+                await registry.delete(create(SubscriptionIdSchema, { value: id }));
+              }),
+            ];
+      }),
+    );
+  }
+
   async #findSubscription(id: string): Promise<SubscriptionRecord | undefined> {
     const subscriptionId = create(SubscriptionIdSchema, { value: id });
     for (const context of ServiceValues.uniqueContexts(this.#contexts)) {
-      const entry = await this.#subscriptionRegistry(context)?.get(subscriptionId);
+      const registry = this.#subscriptionRegistry(context);
+      let entry: Awaited<ReturnType<StandSubscriptionRegistry["get"]>>;
+      await this.#registryOperation(context, async () => {
+        entry = await registry?.get(subscriptionId);
+      });
       const subscription = entry?.subscription;
       const topic = subscription?.topic;
       if (entry === undefined || subscription === undefined || topic === undefined) continue;
@@ -824,6 +862,20 @@ export class SpineServices {
       });
     }
     return undefined;
+  }
+
+  /**
+   * Retains one short registry read or delete through the context close drain.
+   *
+   * @param context Context selected by the shared subscription route.
+   * @param onOperation Complete registry callback.
+   * @returns Completion before the selected registry may close.
+   */
+  #registryOperation(context: BoundedContext, onOperation: () => Promise<void>): Promise<void> {
+    const runtimeContext: unknown = context;
+    return runtimeContext instanceof BoundedContext
+      ? boundedContextAccess.admitServiceRegistryOperation(runtimeContext, onOperation)
+      : onOperation();
   }
 
   #subscriptionRegistry(
@@ -2162,16 +2214,38 @@ const TenantStatuses = Object.freeze({
    *
    * @param context Receiving context and its selected index.
    * @param tenantId Complete selected tenant identity.
-   * @returns Completion after current membership is confirmed.
+   * @param onReady Complete one-shot mutation after membership and preparation.
+   * @returns Completion after membership and any mutation settle.
    */
-  async require(context: BoundedContext, tenantId?: TenantId): Promise<void> {
+  async require(
+    context: BoundedContext,
+    tenantId?: TenantId,
+    onReady?: () => Promise<void>,
+  ): Promise<void> {
     try {
-      await TenantAdmissions.require(
-        context.tenantIndex,
-        context.name.value,
-        context.isMultitenant,
-        tenantId,
-      );
+      const runtimeContext: unknown = context;
+      if (runtimeContext instanceof BoundedContext)
+        await boundedContextAccess.admitServiceInput(
+          runtimeContext,
+          tenantId,
+          () =>
+            TenantAdmissions.require(
+              context.tenantIndex,
+              context.name.value,
+              context.isMultitenant,
+              tenantId,
+            ),
+          onReady,
+        );
+      else {
+        await TenantAdmissions.require(
+          context.tenantIndex,
+          context.name.value,
+          context.isMultitenant,
+          tenantId,
+        );
+        await onReady?.();
+      }
     } catch (error) {
       if (error instanceof TenantUnknownError) throw TenantStatuses.unknown(error);
       throw error;

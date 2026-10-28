@@ -401,7 +401,7 @@ export class Stand {
     id: unknown,
     options: StandReadOptions = {},
   ): Promise<StandReadResult<Schema> | undefined> {
-    const finish = this.#beginOperation();
+    const finish = this.#beginPublicOperation();
 
     try {
       const registration = this.#registration(schema, "read");
@@ -450,7 +450,7 @@ export class Stand {
     query: RecordQuery<unknown> = {},
     options: StandReadOptions = {},
   ): Promise<readonly StandReadResult<Schema>[]> {
-    const finish = this.#beginOperation();
+    const finish = this.#beginPublicOperation();
 
     try {
       const registration = this.#registration(schema, "read");
@@ -482,7 +482,7 @@ export class Stand {
     plan: NormalizedQueryPlan<unknown>,
     options: StandReadOptions = {},
   ): Promise<readonly StandReadResult<Schema>[]> {
-    const finish = this.#beginOperation();
+    const finish = this.#beginPublicOperation();
     try {
       const registration = this.#registration(schema, "read");
       const tenantId = await this.#checkedTenantId(options.tenantId);
@@ -608,9 +608,9 @@ export class Stand {
       const registration = this.#registration(schema, "update");
       if (metadata !== undefined && metadata.schema !== registration.schema)
         throw new Error("Repository metadata does not match the Entity state schema.");
-      const tenantId = await this.#checkedTenantId(options.tenantId);
       const snapshot = Stand.#snapshotUpdateOptions(options);
       const stateCopy = clone(schema, state);
+      const tenantId = await this.#checkedTenantId(options.tenantId);
       const id = Stand.#readStateId(stateCopy, registration);
       storage = this.#leaseCurrent(registration, tenantId);
       const previousState = await this.#previousUpdateState(registration, tenantId, id, storage);
@@ -1086,6 +1086,15 @@ export class Stand {
   }
 
   /**
+   * Admits an external read before repository operations can continue internally.
+   * @returns Completion callback for the tracked read.
+   */
+  #beginPublicOperation(): () => void {
+    standPublicAdmissions.get(this)?.();
+    return this.#beginOperation();
+  }
+
+  /**
    * Clones a state update before delivering it to subscribers.
    *
    * @typeParam Schema The updated state schema.
@@ -1279,6 +1288,14 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
  */
 interface StandAccess {
   /**
+   * Sets the immediate external read admission check.
+   *
+   * @param stand Context Stand.
+   * @param onAdmit Synchronous external admission check.
+   */
+  setPublicAdmission(stand: Stand, onAdmit: () => void): void;
+
+  /**
    * Sets receiving-context admission before Entity record work.
    *
    * @param stand Context Stand.
@@ -1356,6 +1373,18 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
+  /**
+   * Sets the immediate external read admission check.
+   *
+   * @param stand Context Stand.
+   * @param onAdmit Synchronous external admission check.
+   */
+  setPublicAdmission(stand: Stand, onAdmit: () => void): void {
+    if (!(stand instanceof Stand))
+      throw new TypeError("Stand admission requires a Stand instance.");
+    standPublicAdmissions.set(stand, onAdmit);
+  },
+
   /**
    * Installs an internal receiving-context membership check.
    *
@@ -1485,5 +1514,6 @@ type CurrentReadCall = <Schema extends MessageSchema>(
 const deferredUpdates = new WeakMap<Stand, DeferredUpdateCall>();
 
 const standAdmissions = new WeakMap<Stand, (tenantId: TenantId | undefined) => Promise<void>>();
+const standPublicAdmissions = new WeakMap<Stand, () => void>();
 
 const currentReads = new WeakMap<Stand, CurrentReadCall>();

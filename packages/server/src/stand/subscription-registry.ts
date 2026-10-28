@@ -37,6 +37,28 @@ import { StandSubscriptionRecords } from "./subscription-records.js";
 const cleanupPageSize = 25;
 
 /**
+ * Exact durable subscription layout shared by the registry and preparation.
+ */
+export const subscriptionRecordSpec: RecordSpec<SubscriptionId, SubscriptionRecord> =
+  new RecordSpec<SubscriptionId, SubscriptionRecord>({
+    recordType: StandSubscriptionRecords.schema,
+    idSchema: SubscriptionIdSchema,
+    extractId: (record) => record.id ?? fail("Stand subscription record is invalid."),
+    columns: [
+      new RecordColumn(
+        "status",
+        ColumnTypes.fromField(StandSubscriptionRecords.schema.field.status),
+        (record) => record.status,
+      ),
+      new RecordColumn("when_activation_expires", ColumnTypes.scalar(ScalarType.INT64), (record) =>
+        record.whenActivationExpires === undefined
+          ? Number.MAX_SAFE_INTEGER
+          : time(record.whenActivationExpires),
+      ),
+    ],
+  });
+
+/**
  * Describes one canonical durable subscription lifecycle entry.
  */
 interface StandSubscriptionEntryBase {
@@ -423,29 +445,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    * @param storageFactory Creates the registry record handle.
    */
   constructor(context: StorageContext, storageFactory: StorageFactory) {
-    this.#storage = storageFactory.createRecordStorage(
-      context,
-      new RecordSpec<SubscriptionId, SubscriptionRecord>({
-        recordType: StandSubscriptionRecords.schema,
-        idSchema: SubscriptionIdSchema,
-        extractId: (record) => record.id ?? fail("Stand subscription record is invalid."),
-        columns: [
-          new RecordColumn(
-            "status",
-            ColumnTypes.fromField(StandSubscriptionRecords.schema.field.status),
-            (record) => record.status,
-          ),
-          new RecordColumn(
-            "when_activation_expires",
-            ColumnTypes.scalar(ScalarType.INT64),
-            (record) =>
-              record.whenActivationExpires === undefined
-                ? Number.MAX_SAFE_INTEGER
-                : time(record.whenActivationExpires),
-          ),
-        ],
-      }),
-    );
+    this.#storage = storageFactory.createRecordStorage(context, subscriptionRecordSpec);
     if (!this.#storage.atomicCompareAndSet) {
       this.#storage.close();
       throw new Error("Stand subscription storage must support atomic compare-and-set.");

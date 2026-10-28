@@ -44,6 +44,16 @@ Add generated entities with `BoundedContext.add(...)` and use
 context is single-tenant or multitenant by construction; select that mode
 before registering application handlers and storage.
 
+`build()` prepares the current model storage and awaits the first subscription
+registry pass. Set `createStorageStructures: false` or
+`startSubscriptionMonitoring: false` in `build({...})` to defer either phase
+independently until the first valid input. Complete environment setup explicitly
+before building, even when both phases are deferred.
+Starting monitoring still prepares its shared subscription registry when model
+structure creation is deferred; it does not prepare every tenant's Entity storage structures.
+An eager required-phase failure stops accepting new input and triggers environment
+cleanup. A lazy first-input failure rejects that input and can be retried.
+
 ## Give an Entity an application service
 
 Spine normally constructs an Entity with its ID, state, version, and lifecycle
