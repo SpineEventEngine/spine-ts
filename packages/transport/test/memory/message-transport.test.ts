@@ -128,19 +128,47 @@ describe("InMemoryTransportFactory", () => {
     );
   });
 
-  it("propagates consumer failures through publication and publisher close", async () => {
+  it("continues after a failed publication and preserves its error when the factory closes", async () => {
     const factory = new InMemoryTransportFactory();
     const channel = create(ChannelIdSchema, { targetType: "type.spine.io/wave13.Failure" });
     const subscriber = await factory.createSubscriber(channel);
-    await subscriber.addConsumer(() => {
-      throw new Error("consumer failed");
+    const failure = new Error("consumer failed");
+    const consumer = await subscriber.addConsumer(() => {
+      throw failure;
     });
     const publisher = await factory.createPublisher(channel);
-    await expect(publisher.publish(frame("failed"), externalMessage("failed"))).rejects.toThrow(
-      "consumer failed",
+    await expect(publisher.publish(frame("failed"), externalMessage("failed"))).rejects.toBe(
+      failure,
     );
-    await expect(publisher.close()).rejects.toThrow("Accepted message publication failed");
-    await Promise.all([subscriber.close(), factory.close()]);
+
+    await consumer.close();
+    const received: string[] = [];
+    await subscriber.addConsumer((message) => {
+      received.push(message.boundedContextName?.value ?? "");
+    });
+    await publisher.publish(frame("next"), externalMessage("next"));
+    expect(received).toEqual(["memory-test"]);
+
+    const closing = factory.close();
+    expect(factory.close()).toBe(closing);
+    const error = await closing.catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(AggregateError);
+    const failures = (error as AggregateError).errors as unknown[];
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toBeInstanceOf(AggregateError);
+    expect((failures[0] as AggregateError).errors).toEqual([failure]);
+    expect(publisher.isStale()).toBe(true);
+    expect(subscriber.isStale()).toBe(true);
+    await expect(publisher.publish(frame("late"), externalMessage("late"))).rejects.toThrow(
+      "Message publisher is closed",
+    );
+    await expect(subscriber.addConsumer(() => undefined)).rejects.toThrow(
+      "Message subscriber is closed",
+    );
+    await expect(factory.createSubscriber(channel)).rejects.toThrow(
+      "In-memory message transport is closed",
+    );
+    expect(received).toEqual(["memory-test"]);
   });
 
   it("defensively copies frames before consumer delivery", async () => {

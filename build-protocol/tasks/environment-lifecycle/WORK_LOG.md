@@ -4913,3 +4913,29 @@ M45 accepted: independent API review clean, parent deletion diff review clean;
 Three uncalled internal helpers and orphan TSDoc removed. Current source hash
 matches frozen evidence. Commit and immediate push of cleanup plus current
 progress/review records; M46 test work continues in disjoint files.
+
+M45 pushed b4388a78a; exact origin feature ref verified. M46 independent API
+selection now examines MySQL Entity history public read/truncate behavior using
+fresh whole-file coverage; parent located wholly unhit public truncate/current
+query wrappers. Distinguish missing behavior from already verified native cases.
+Use existing explicit Sol/medium reviewer, no edits or children. Selection may
+recommend a small normal-history scenario; no malformed-record matrices.
+
+M47 micro transport test correction, parent-only disjoint file
+packages/transport/test/memory/message-transport.test.ts. Existing failure test
+closes publisher before factory, so it misses environment-shared factory failure
+aggregation. Strengthen that existing test to prove failed publication does not
+poison the next one and factory close reports original failure while closing
+all channels. Keep direct publisher-error coverage from malformed-frame case.
+No new source/API; wire transport fixture intentionally uses arbitrary Any.
+Estimate 0.1–0.2 hour for focused test/static/coverage and parent review.
+
+M47 accepted micro: all 8 transport tests pass; ESLint/format/diff pass. Focused
+coverage records three newly hit M43 outcomes with identical branch keys. Its
+exit 1 is expected global-threshold failure for a one-file measurement; no test
+failure. Existing test strengthened, no added test count or runtime code. Parent
+review verifies real public factory/publisher/subscriber APIs, exact nested
+original error, continued delivery and closed admission, without private state
+or sleeps. API/docs/security unchanged; specialist lanes N/A for bounded test
+assertions. Evidence m47-transport-tests.log, m47-transport-coverage.log and
+m47-coverage-gain.json outside Git. Include in next shared tooling check.
