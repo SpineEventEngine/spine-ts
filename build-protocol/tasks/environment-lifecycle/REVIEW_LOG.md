@@ -2618,3 +2618,27 @@ historyExecutor closure only; sole old caller removed with Agent recovery.
 Retained appendImmutableOn validates live writes. Separate class helper stays.
 Original explicit Sol/medium reviewer profile accepted; evidence
 m51-removal-selection.md. Actual deletion reviewed by parent against this scope.
+
+### M51–M53 SQL query review wave
+
+Frozen scope: two record-storage source files and their unit/native test files,
+listed/hashes in m52-m53-evidence.md. Mechanical evidence:134 unit tests, native
+NULL traversal on PG18/MySQL8.4/Maria11.4, generated build/tooling/static all pass.
+API: original explicit Sol/medium adapter_api_review; reliability: original
+explicit Sol/medium protocol_reliability_review. Final security delta: existing
+security_reviewer role, fresh explicit gpt-6-sol/high dispatch. Runtime metadata
+introspection unavailable; immutable dispatch/profile accepted. Parent style and
+narrow TSDoc; no changed public API or broader human-documentation workflow.
+
+M51–M53 review wave accepted: API/DDD, reliability and bounded final-security
+review clean; six hashes match. Parent style confirms minimal scoped predicate
+change, grouped terms and preserved parameter binding; M51 exact deletion matches
+prior caller proof. One accepted evidence-only correction narrows the M53 claim:
+its fake supplies all rows, so it proves SQL/binds and application-side evaluation,
+not native SQL filtering. Updated external evidence; no source correction or
+re-review needed. Native NULL fixtures prove original omissions on three engines;
+NULL tie/multi-key traversal relies on SQL/source inspection plus existing prefix
+checks, not a new full native matrix. All profiles explicit as dispatched,
+runtime introspection unavailable. Reports m52-m53-api-review.md,
+m52-m53-reliability-review.md, m52-m53-security-review.md; evidence
+m52-m53-evidence.md. Prior broad security review remains accepted plus this delta.

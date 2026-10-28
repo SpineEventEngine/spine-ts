@@ -981,10 +981,14 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
         return `\`${field}\` <=> ?`;
       });
       const field = item.field === "id" ? "ID" : item.field;
-      values.push(this.queryValue(field, field === "ID" ? after.id : after.values[index]?.value));
+      const value = this.queryValue(field, field === "ID" ? after.id : after.values[index]?.value);
       const prior = prefix.length === 0 ? "" : `${prefix.join(" AND ")} AND `;
-      const comparison = item.direction === "desc" ? "<" : ">";
-      return `${prior}\`${field}\` ${comparison} ?`;
+      if (value === null)
+        return `${prior}${item.direction === "desc" ? "1=0" : `\`${field}\` IS NOT NULL`}`;
+      values.push(value);
+      if (item.direction === "desc" && field !== "ID")
+        return `${prior}(\`${field}\` < ? OR \`${field}\` IS NULL)`;
+      return `${prior}\`${field}\` ${item.direction === "desc" ? "<" : ">"} ?`;
     });
     const prefixes = order.map((item, index) => {
       const field = item.field === "id" ? "ID" : item.field;

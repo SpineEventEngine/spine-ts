@@ -5023,3 +5023,47 @@ M50 clean review accepted. Commit and immediate push frozen test checkpoint,
 then allow sole implementer to modify source/tests for M52. Native result
 verification is required because SQL text assertions alone do not prove complete
 NULL page traversal. Preserve original scope and no public API expansion.
+
+M52 RED reproduced exact failures before the correction. Fresh generated build
+passed; new targeted native traversal passes on PostgreSQL18/MySQL8.4/MariaDB11.4,
+one case each; new SQL unit cases pass two/two. Full affected unit/static gates
+are running. Preserve raw evidence outside Git. Parent source diff inspection
+confirms only nullable cursor predicate correction and selected M51 removal.
+
+M53 selected normal exhaustive query case will share the same SQL review wave:
+Boolean archived flag plus bigint version.timestamp.seconds filter using valid
+Task Entity records and existing spec/evaluator fixtures. One case per provider,
+no type/operator matrix or synthetic numeric ID. With string Entity IDs, provider
+must not push its final LIMIT; shared evaluator determines the limited result.
+Existing sole explicit Sol/medium implementer extends only the same record test
+files after M52 focused checks, before the combined review freeze. Estimate
+0.2–0.4 hour for focused checks and same relevant review. This keeps review one
+coherent SQL query packet; no extra production change anticipated.
+
+M52/M53 six-file SQL packet frozen. Evidence m52-m53-evidence.md includes hashes,
+134 unit tests pass, native NULL cases pass PG18/MySQL8.4/Maria11.4 one each,
+fresh generated build/tooling/lint/cleanup/TSDoc/format/diff pass. Scoped coverage
+uses changed branch keys, so no M43 union/global-rate claim. Parent final diff
+review confirms minimal nullable predicate changes and exact M51 deletion.
+
+One combined review wave: existing explicit Sol/medium API reviewer checks Task
+fixtures, M51 internal contract removal and M53 evaluator/public-query claims;
+existing explicit Sol/medium reliability reviewer checks full NULL traversal,
+prefixes, ties and bound SQL. Parent maintainability/narrow-doc review. Reopen
+only SQL final-security delta with existing security_reviewer role, explicitly
+gpt-6-sol/high, Standard speed; no children. Prior final lifecycle/dependency
+security review stays accepted. Desktop supports explicit required profiles;
+actual runtime self-introspection unavailable, immutable configured profiles
+recorded. Collect full findings wave before one correction batch. Estimated
+review/acceptance plus fresh global diagnostic0.2–0.4 hour; no full release gate
+until global coverage converges.
+
+M51–M53 accepted after complete clean review wave. Evidence-only SQL filtering
+claim corrected as requested; source/tests stay frozen. 134 unit tests, three
+native checks, fresh build/tooling/static pass. Commit/push now, then one fresh
+whole Vitest diagnostic M54 at the pushed revision. Original M43 was89.65%; no
+current global estimate from mismatched source branch keys. Mechanical function
+will use explicitly dispatched gpt-6-luna/low, Standard speed, no edits/children;
+run once, preserve complete logs/LCOV and exact four coverage ratios/test totals.
+Refresh missed changed-source inventory. Not verify:release; that remains after
+coverage convergence and final cheap preflight. Expected diagnostic0.05–0.1 hour.

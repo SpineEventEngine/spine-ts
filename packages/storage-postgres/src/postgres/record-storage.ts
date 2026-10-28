@@ -141,15 +141,6 @@ export interface PostgresRecordExecutor<I, R extends Message> {
   read(client: PoolClient, id: I, lock?: "for-update"): Promise<R | undefined>;
 
   /**
-   * Checks an immutable record on the Agent transaction client.
-   *
-   * @param client Active transaction client.
-   * @param record Proposed immutable record.
-   * @returns Completion after collision validation.
-   */
-  assertImmutable(client: PoolClient, record: R): Promise<void>;
-
-  /**
    * Writes an immutable record on the Agent transaction client.
    *
    * @param client Active transaction client.
@@ -338,11 +329,6 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       transaction: (work) => this.transaction(work),
       using: (work) => this.using(work),
       read: (client, id, lock) => this.readOn(client, id, lock === "for-update"),
-      assertImmutable: async (client, record) => {
-        const existing = await this.readOn(client, this.recordSpec.idValueIn(record));
-        if (existing !== undefined && !this.same(existing, record))
-          throw new PostgresStorageOperationError("PostgreSQL immutable record collides.");
-      },
       appendImmutable: (client, record) => this.appendImmutableOn(client, record),
       write: (client, record) => this.writeOn(client, record),
       query: (client, sql, values) => this.historyEntries(client, sql, values),
@@ -1208,7 +1194,10 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     bind: Binds,
   ): string {
     if (value === null) return direction === "desc" ? "FALSE" : `${column} IS NOT NULL`;
-    return `(${column} IS NOT NULL AND ${column} ${direction === "desc" ? "<" : ">"} ${bind.add(value)})`;
+    const comparison = `(${column} IS NOT NULL AND ${column} ${direction === "desc" ? "<" : ">"} ${bind.add(value)})`;
+    return direction === "desc" && column !== '"ID"'
+      ? `(${comparison} OR ${column} IS NULL)`
+      : comparison;
   }
 
   /**

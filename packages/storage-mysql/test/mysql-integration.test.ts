@@ -25,6 +25,7 @@ import {
   EventSchema,
   type Event,
   TenantIdSchema,
+  UserIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
 import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
@@ -35,7 +36,10 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskListSchema } from "../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
-import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
+import {
+  TaskSchema,
+  type Task,
+} from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -294,6 +298,56 @@ live("MySQL-family record layout", () => {
       });
       expect(continued.map((event) => event.id?.value)).toEqual(["m-middle", "a-last"]);
       expect(continued.map((event) => event.context?.timestamp)).toEqual([middle, last]);
+    } finally {
+      storage.close();
+    }
+  });
+
+  it("pages optional Task assignees after NULL and into the descending NULL tail", async () => {
+    const task = (id: string, assignee?: string) =>
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: `Task ${id}`,
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+        ...(assignee === undefined ? {} : { assignee: create(UserIdSchema, { value: assignee }) }),
+      });
+    const records = [task("a"), task("b", "user-1"), task("c", "user-2")];
+    const spec = new RecordSpec<string, Task>({
+      recordType: TaskSchema,
+      idKind: "string",
+      extractId: (value) => value.id?.value ?? "",
+      columns: [
+        new RecordColumn(
+          "assignee",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (value) => value.assignee?.value,
+        ),
+      ],
+    });
+    const context = {
+      name: `nullable_assignee_${randomUUID().replaceAll("-", "")}`,
+      multitenant: false,
+    } as const;
+    const storage = factory.createRecordStorage(context, spec, new StorageGroup(context.name));
+    try {
+      await storage.writeAll([...records].reverse());
+      expect(
+        (await storage.query({ sort: [{ field: "assignee", direction: "asc" }] })).map(
+          (value) => value.id?.value,
+        ),
+      ).toEqual(["a", "b", "c"]);
+      const afterNull = await storage.query({
+        sort: [{ field: "assignee", direction: "asc" }],
+        after: { values: [{ field: "assignee", value: null }], id: "a" },
+        limit: 2,
+      });
+      expect(afterNull.map((value) => value.id?.value)).toEqual(["b", "c"]);
+      const afterHighest = await storage.query({
+        sort: [{ field: "assignee", direction: "desc" }],
+        after: { values: [{ field: "assignee", value: "user-2" }], id: "c" },
+        limit: 2,
+      });
+      expect(afterHighest.map((value) => value.id?.value)).toEqual(["b", "a"]);
     } finally {
       storage.close();
     }

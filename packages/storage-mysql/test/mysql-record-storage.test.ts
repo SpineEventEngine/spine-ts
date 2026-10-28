@@ -13,14 +13,30 @@
  */
 
 import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { AnyPacker } from "@spine-event-engine/core";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, VersionSchema, type Event } from "@spine-event-engine/proto";
+import {
+  EventIdSchema,
+  EventSchema,
+  VersionSchema,
+  UserIdSchema,
+  type Event,
+} from "@spine-event-engine/proto";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskSchema,
+  type Task,
+} from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
   ColumnTypes,
+  InMemoryRecordStorage,
   RecordColumn,
   RecordSpec,
   type NormalizedQueryPlan,
@@ -1483,6 +1499,149 @@ describe("MysqlRecordStorage", () => {
     const query = calls.find(({ sql }) => sql.startsWith("SELECT ID, bytes"));
     expect(query?.sql).toContain("WHERE (ID > ?) ORDER BY ID ASC LIMIT ?");
     expect(query?.values).toEqual(["middle", 2]);
+  });
+
+  it("continues nullable Task assignee order after NULL and before the NULL tail", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const spec = new RecordSpec<string, Task>({
+      recordType: TaskSchema,
+      idKind: "string",
+      extractId: (task) => task.id?.value ?? "",
+      columns: [
+        new RecordColumn(
+          "assignee",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (task) => task.assignee?.value,
+        ),
+      ],
+    });
+    const storage = new MysqlRecordStorage(
+      { name: "tasks", multitenant: false },
+      spec,
+      new MysqlTableResolver().resolve(TaskSchema.typeName, undefined),
+      lifecycle(readyConnection(calls, { columns: ["ID", "bytes", "assignee"] })),
+      () => undefined,
+    );
+    const task = (id: string, assignee?: string) =>
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: `Task ${id}`,
+        taskListId: create(TaskListIdSchema, { value: "list" }),
+        ...(assignee === undefined ? {} : { assignee: create(UserIdSchema, { value: assignee }) }),
+      });
+    const unassigned = task("a");
+    const assigned = task("c", "user-2");
+
+    await storage.query({
+      sort: [{ field: "assignee", direction: "asc" }],
+      after: {
+        values: [{ field: "assignee", value: unassigned.assignee?.value ?? null }],
+        id: "a",
+      },
+      limit: 2,
+    });
+    const ascending = calls.find(({ sql }) => sql.startsWith("SELECT ID, bytes"));
+    expect(ascending?.sql).toContain(
+      "WHERE (`assignee` IS NOT NULL OR `assignee` <=> ? AND ID > ?)",
+    );
+    expect(ascending?.values).toEqual([null, "a", 2]);
+
+    calls.length = 0;
+    await storage.query({
+      sort: [{ field: "assignee", direction: "desc" }],
+      after: { values: [{ field: "assignee", value: assigned.assignee?.value }], id: "c" },
+      limit: 2,
+    });
+    const descending = calls.find(({ sql }) => sql.startsWith("SELECT ID, bytes"));
+    expect(descending?.sql).toContain(
+      "WHERE ((`assignee` < ? OR `assignee` IS NULL) OR `assignee` <=> ? AND ID > ?)",
+    );
+    expect(descending?.values).toEqual(["user-2", "user-2", "c", 2]);
+  });
+
+  it("keeps Boolean and bigint Entity filters aligned with exhaustive evaluation", async () => {
+    const records = [
+      { id: "a", archived: false, seconds: 1n },
+      { id: "b", archived: true, seconds: 2n },
+      { id: "c", archived: false, seconds: 3n },
+      { id: "d", archived: false, seconds: 4n },
+    ].map(({ id, archived, seconds }) =>
+      create(EntityRecordSchema, {
+        entityId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
+        state: AnyPacker.pack(
+          TaskSchema,
+          create(TaskSchema, {
+            id: create(TaskIdSchema, { value: id }),
+            title: `Task ${id}`,
+            taskListId: create(TaskListIdSchema, { value: "list" }),
+          }),
+        ),
+        lifecycleFlags: { archived, deleted: false },
+        version: create(VersionSchema, {
+          number: Number(seconds),
+          timestamp: create(TimestampSchema, { seconds }),
+        }),
+      }),
+    );
+    const spec = new RecordSpec<string, EntityRecord>({
+      sourceType: TaskSchema,
+      recordType: EntityRecordSchema,
+      idKind: "string",
+      extractId: (record) => {
+        if (record.entityId === undefined) throw new Error("Task Entity ID is required.");
+        return AnyPacker.unpack(record.entityId, TaskIdSchema).value;
+      },
+      columns: [
+        new RecordColumn(
+          "archived",
+          ColumnTypes.scalar(ScalarType.BOOL),
+          (record) => record.lifecycleFlags?.archived,
+        ),
+        new RecordColumn(
+          "created_seconds",
+          ColumnTypes.scalar(ScalarType.INT64),
+          (record) => record.version?.timestamp?.seconds,
+        ),
+      ],
+    });
+    const plan = {
+      exhaustive: true,
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "comparison", column: "archived", operator: "equal", value: false },
+          { kind: "comparison", column: "created_seconds", operator: "greaterOrEqual", value: 2n },
+        ],
+      },
+      order: [{ column: "created_seconds", direction: "asc" }],
+      limit: 1,
+    } as const;
+    const memory = new InMemoryRecordStorage({ name: "tasks", multitenant: false }, spec);
+    await memory.writeAll(records);
+    expect((await memory.queryPlan(plan)).map((record) => spec.idValueIn(record))).toEqual(["c"]);
+
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const storage = new MysqlRecordStorage(
+      { name: "tasks", multitenant: false },
+      spec,
+      new MysqlTableResolver().resolve(TaskSchema.typeName, undefined),
+      lifecycle(
+        readyConnection(calls, {
+          columns: ["ID", "bytes", "archived", "created_seconds"],
+          planRows: records.map((record) => ({
+            ID: spec.idValueIn(record),
+            bytes: toBinary(EntityRecordSchema, record),
+          })),
+        }),
+      ),
+      () => undefined,
+    );
+    expect((await storage.queryPlan(plan)).map((record) => spec.idValueIn(record))).toEqual(["c"]);
+    const query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).toContain("`archived` = ?");
+    expect(query?.sql).toContain("`created_seconds` >= ?");
+    expect(query?.sql).not.toContain("LIMIT");
+    expect(query?.values).toEqual([false, 2n]);
   });
 
   it("uses a conditional insert without session locks", async () => {
