@@ -13,6 +13,7 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   AnyPacker,
   Identifiers,
@@ -24,6 +25,11 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+// prettier-ignore
+import {
+  AgentModelPreferencesRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
 import { RecordSpec } from "@spine-event-engine/storage";
 import {
   EntityCommitStorageFactories,
@@ -40,7 +46,15 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskListSchema } from "../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
 import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
+import {
+  SupportReplyAgentIdSchema,
+  type SupportReplyAgentId,
+  type SupportReplyAgentState,
+} from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+import { entityInput as supportAgentInput } from "../../storage/test/entity/agent-live-fixtures.js";
+import { conversation } from "../../storage/test/entity/agent-history-fixtures.js";
 import { PostgresRecordStorage } from "../src/postgres/record-storage.js";
+import { PostgresTableInitializer } from "../src/postgres/table-initializer.js";
 import { PostgresEntityCommitStorage } from "../src/postgres/entity-commit.js";
 
 const driver = vi.hoisted(() => {
@@ -86,7 +100,11 @@ const driver = vi.hoisted(() => {
       return Promise.resolve({ rows: [] });
     }
     if (sql.startsWith('SELECT "bytes"')) {
-      const bytes = sql.includes('"spine_examples_todo_task"') ? current : immutable;
+      const bytes =
+        sql.includes('"spine_examples_todo_task"') ||
+        sql.includes('"spine_server_testing_supportreplyagentstate"')
+          ? current
+          : immutable;
       return Promise.resolve({ rows: bytes === undefined ? [] : [{ bytes }] });
     }
     if (sql === "COMMIT" && commitFailure !== undefined) {
@@ -106,7 +124,11 @@ const driver = vi.hoisted(() => {
       const bytes = values[1] as Uint8Array;
       const write = () => {
         durableWrites += 1;
-        if (sql.includes('"spine_examples_todo_task"')) current = bytes;
+        if (
+          sql.includes('"spine_examples_todo_task"') ||
+          sql.includes('"spine_server_testing_supportreplyagentstate"')
+        )
+          current = bytes;
         else immutable = bytes;
       };
       if (transaction) pending.push(write);
@@ -191,6 +213,94 @@ vi.mock("pg", () => ({ Pool: driver.Pool }));
 import { PostgresStorageFactory } from "../src/index.js";
 
 describe("PostgreSQL Entity commit", () => {
+  it("rolls back a final Agent audit and preference group when transaction commit fails", async () => {
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/spine", schema: "spine" })
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const layout = supportAgentInput() as unknown as EntityStorageInput<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    const commits = EntityCommitStorageFactories.create(factory, layout);
+    const prepare = vi.spyOn(PostgresTableInitializer.prototype, "prepare").mockResolvedValue();
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-rollback" });
+    const input = {
+      entityId: id,
+      expectedVersion: 0,
+      expectedPreferences: undefined,
+      preferences: [],
+      historyEntries: [
+        conversation("rollback-audit", "support", create(TimestampSchema, { seconds: 1n })),
+      ],
+    };
+    try {
+      const failure = new Error("final transaction failed");
+      driver.failCommit(failure);
+      await expect(commits.commitAgent(input)).rejects.toBe(failure);
+      expect(driver.durableWrites()).toBe(0);
+      await commits.commitAgent(input);
+      expect(driver.durableWrites()).toBe(2);
+      expect(driver.query.mock.calls.map(([sql]) => sql)).toContain("ROLLBACK");
+      const writes = driver.query.mock.calls.filter(([sql]) => sql.startsWith("INSERT")).slice(-2);
+      const auditBytes = writes[0]?.[1]?.[1];
+      const preferenceBytes = writes[1]?.[1]?.[1];
+      if (!(auditBytes instanceof Uint8Array) || !(preferenceBytes instanceof Uint8Array))
+        throw new Error("Final Agent transaction must persist audit and preference rows.");
+      const audit = fromBinary(AgentHistoryRecordSchema, auditBytes);
+      const preferences = fromBinary(AgentModelPreferencesRecordSchema, preferenceBytes);
+      expect(audit.scope?.stateType).toBe(layout.stateSchema.typeName);
+      expect(audit.scope?.agentKey).toBe(id.ticketNumber);
+      expect(audit.entry).toEqual(input.historyEntries[0]);
+      expect(preferences.key?.stateType).toBe(layout.stateSchema.typeName);
+      expect(preferences.key?.recipientId).toEqual(AnyPacker.pack(SupportReplyAgentIdSchema, id));
+      const current = create(EntityRecordSchema, {
+        entityId: layout.id.pack(id),
+        version: { number: 1 },
+      });
+      const next = create(EntityRecordSchema, {
+        entityId: layout.id.pack(id),
+        version: { number: 2 },
+      });
+      driver.setCurrent(current);
+      const mutation = { context: layout.context, entity: layout, entityId: id, next };
+      await expect(
+        commits.commitAgent({ ...input, expectedVersion: 1, entityCommit: mutation }),
+      ).rejects.toThrow("preferences changed");
+      await expect(
+        commits.commitAgent({
+          ...input,
+          expectedVersion: 0,
+          expectedPreferences: [],
+          entityCommit: { ...mutation, next: current },
+        }),
+      ).rejects.toThrow("Version");
+      expect(driver.durableWrites()).toBe(2);
+      await expect(
+        commits.commitAgent({
+          ...input,
+          expectedVersion: 1,
+          expectedPreferences: [],
+          preferences: [],
+          entityCommit: mutation,
+        }),
+      ).resolves.toBeUndefined();
+      expect(driver.durableWrites()).toBe(5);
+      const committedCurrent = driver.query.mock.calls
+        .filter(([sql]) => sql.startsWith("INSERT") && sql.includes("supportreplyagentstate"))
+        .at(-1)?.[1]?.[1];
+      expect(committedCurrent).toBeInstanceOf(Uint8Array);
+      if (!(committedCurrent instanceof Uint8Array))
+        throw new Error("Agent current row is missing.");
+      expect(fromBinary(EntityRecordSchema, committedCurrent)).toEqual(next);
+    } finally {
+      prepare.mockRestore();
+      await commits.close();
+      await factory.close();
+    }
+  });
   it("retains a current record handle across repeated commits", async () => {
     const factory = await postgresFactory();
     const entity = entityInput();

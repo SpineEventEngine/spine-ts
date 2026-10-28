@@ -4038,3 +4038,35 @@ coverage. Last actual full global branch coverage remains 88.22%; prior provider
 union projected 88.98% before M16 runtime edits and is no longer a final-source
 projection. Refresh source-aware diagnostic evidence before choosing final gates;
 never present scoped coverage or old-source union as a global passing result.
+
+M16 committed/pushed as 5c1e378da333a64e37283e210c9b08bb68a260de; exact remote
+branch SHA confirmed. Provider test files remain dirty intentionally. Coverage
+work resumes with estimate 1.5–3 hours: correct provider test fidelity/cleanup,
+add meaningful coverage for remaining behavior, focused review, complete cheap
+preflight, one full release check and exact-final-SHA Security CI. Preserve prior
+raw coverage/logs. Do not rerun broad tests as a diagnostic loop or relax gates.
+Same existing explicit Sol/medium implementer corrects the three accepted provider
+P2s and two cleanup lines first; no production edits without demonstrated defect.
+
+Human requested immediate copy-pasteable Delivery report, then coverage. Report
+provided in chat as Markdown with shipment example, before/after flow, monitor
+ack/repeat and caller semantics, DB/Agent exclusions, logging and verified commit.
+Coverage continues. Luna/medium read-only m17-coverage-evidence.md confirms saved
+baseline and provider tuple union but excludes four M16 changed runtime sources
+from stale projections. Its suggested Agent preflight slice is small (1–15 branch
+hits estimated) and insufficient alone; do not add scattered coverage-only tests.
+Implementer proposes coherent optional-row Agent atomicity cases for Datastore
+and MySQL using existing fixtures; consider PostgreSQL only if distinctly needed.
+Next slice must prove no partial state/preferences/audit/optional rows on a late
+failure, with no production edits or broad duplicate matrix. Decide after current
+provider correction review confirmation.
+
+Provider packet accepted after both original reviewers confirmed corrections.
+97/97 tests pass in 1.44s, tooling/cleanup/lint/format/diff pass. Commit the three
+provider test files and current records. Next approved coherent slice: Datastore
+and MySQL optional-row Agent final-commit atomicity with late failure and no
+partial persisted prefix, reusing existing domain fixtures/fakes. PostgreSQL
+extension only if it proves a distinct omitted contract. Same explicit Sol/medium
+implementer; no source edits without demonstrated runtime defect. Measure one
+coherent focused slice, not repeated tiny coverage loops. Projection remains
+source-sensitive after M16; final global passing result still unestablished.

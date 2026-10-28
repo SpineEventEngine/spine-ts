@@ -12,17 +12,30 @@
  * the License.
  */
 
-import { create, ScalarType, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, type Message } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createPool } from "mysql2/promise";
-import { AnyPacker, Identifiers, StringifierRegistry } from "@spine-event-engine/core";
+import {
+  AnyPacker,
+  Identifiers,
+  StringifierRegistry,
+  TypeRegistry,
+} from "@spine-event-engine/core";
 import { EventSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+// prettier-ignore
+import {
+  AgentModelPreferencesRecordSchema,
+} from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
 import {
   AgentHistoryStorageFactories,
+  AgentHistoryRecords,
+  eventStoreRecordSpec,
   EntityCommitStorageFactories,
   StoragePreparations,
   TenantBoundary,
+  type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import {
   ColumnTypes,
@@ -40,7 +53,16 @@ import {
   TaskSchema,
   type Task,
 } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
-import { scope } from "../../storage/test/entity/agent-history-fixtures.js";
+import { conversation, scope } from "../../storage/test/entity/agent-history-fixtures.js";
+import { entityInput as supportAgentInput } from "../../storage/test/entity/agent-live-fixtures.js";
+import type {
+  SupportReplyAgentId,
+  SupportReplyAgentState,
+} from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+// prettier-ignore
+import {
+  SupportReplyAgentIdSchema,
+} from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 
 import {
   MysqlStorageFactory,
@@ -49,12 +71,146 @@ import {
   type MysqlTableSpec,
 } from "../src/index.js";
 import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
+import { AgentHistoryIndexes } from "../src/mysql/agent-history.js";
 
 vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 
 describe("MysqlStorageFactory builder contract", () => {
   beforeEach(() => {
     vi.mocked(createPool).mockReset();
+  });
+  it("checks Agent families without DDL and leaves a missing audit column retryable", async () => {
+    let repaired = false;
+    const query = vi.fn((sql: string, values: readonly unknown[] = []) => {
+      if (!sql.trimStart().startsWith("SELECT"))
+        throw new Error(`Read-only Agent preparation attempted mutation: ${sql}`);
+      return agentMetadataQuery(sql, values, repaired);
+    });
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/agent_check" })
+      .build();
+    const layout = supportAgentInput() as unknown as EntityStorageInput<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    const preparation = StoragePreparations.for(factory);
+    try {
+      await expect(preparation.prepareAgentCommit(layout, "check")).rejects.toMatchObject({
+        cause: { message: "MySQL table agent_history_AgentHistoryRecord lacks state_type." },
+      });
+      const auditColumns = () =>
+        query.mock.calls.filter(
+          ([sql, values]) =>
+            sql.includes("information_schema.columns") &&
+            typeof values?.[0] === "string" &&
+            values?.[0].includes("agent_history"),
+        ).length;
+      const inspectionsBeforeRepair = auditColumns();
+      expect(inspectionsBeforeRepair).toBeGreaterThan(0);
+      expect(query.mock.calls.every(([sql]) => sql.trimStart().startsWith("SELECT"))).toBe(true);
+      repaired = true;
+      await preparation.prepareAgentCommit(layout, "check");
+      expect(auditColumns()).toBeGreaterThan(inspectionsBeforeRepair);
+      expect(query.mock.calls.every(([sql]) => sql.trimStart().startsWith("SELECT"))).toBe(true);
+    } finally {
+      await factory.close();
+    }
+  });
+  it("rolls back tentative Agent admission when the current Version is stale", async () => {
+    const rows = new Map<string, Uint8Array>();
+    let staged: Map<string, Uint8Array> | undefined;
+    const query = vi.fn((sql: string, values: readonly unknown[] = []) =>
+      agentMetadataQuery(sql, values, true),
+    );
+    const execute = vi.fn((sql: string, values: readonly unknown[] = []) => {
+      const table = /(?:FROM|INTO) `([^`]+)`/u.exec(sql)?.[1];
+      if (table === undefined) throw new Error(`Agent SQL lacks a table: ${sql}`);
+      const key = `${table}/${String(values[0])}`;
+      if (sql.startsWith("SELECT")) {
+        const bytes = (staged ?? rows).get(key);
+        return Promise.resolve([bytes === undefined ? [] : [{ bytes }], []]);
+      }
+      if (sql.startsWith("INSERT") && values[1] instanceof Uint8Array) {
+        (staged ?? rows).set(key, values[1]);
+        return Promise.resolve([{ affectedRows: 1 }, []]);
+      }
+      throw new Error(`Unexpected Agent SQL: ${sql}`);
+    });
+    const rollback = vi.fn(() => {
+      staged = undefined;
+      return Promise.resolve();
+    });
+    const connection = {
+      query,
+      execute,
+      beginTransaction: () => {
+        if (staged !== undefined) throw new Error("Prior Agent transaction was not rolled back.");
+        staged = new Map(rows);
+        return Promise.resolve();
+      },
+      commit: () => {
+        if (staged !== undefined) {
+          rows.clear();
+          for (const [key, value] of staged) rows.set(key, value);
+          staged = undefined;
+        }
+        return Promise.resolve();
+      },
+      rollback,
+      release: vi.fn(),
+    };
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(connection)),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/agent_transaction" })
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const layout = supportAgentInput() as unknown as EntityStorageInput<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    const commits = EntityCommitStorageFactories.create(factory, layout);
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-stale" });
+    const input = {
+      entityId: id,
+      expectedVersion: 1,
+      expectedPreferences: undefined,
+      preferences: [],
+      historyEntries: [conversation("stale", "support", create(TimestampSchema, { seconds: 1n }))],
+    };
+    try {
+      await expect(commits.commitAgent(input)).rejects.toThrow("Version");
+      expect(execute.mock.calls.some(([sql]) => sql.startsWith("INSERT"))).toBe(true);
+      expect(rollback).toHaveBeenCalledTimes(1);
+      expect(rows.size).toBe(0);
+      await commits.commitAgent({ ...input, expectedVersion: 0 });
+      expect(rows.size).toBe(2);
+      expect([...rows.keys()].some((key) => key.includes("agent_history"))).toBe(true);
+      expect([...rows.keys()].some((key) => key.includes("agent_model"))).toBe(true);
+      const auditBytes = [...rows].find(([key]) => key.includes("agent_history"))?.[1];
+      const preferenceBytes = [...rows].find(([key]) => key.includes("agent_model"))?.[1];
+      expect(auditBytes).toBeInstanceOf(Uint8Array);
+      expect(preferenceBytes).toBeInstanceOf(Uint8Array);
+      if (!(auditBytes instanceof Uint8Array) || !(preferenceBytes instanceof Uint8Array))
+        throw new Error("The retry did not persist both Agent records.");
+      expect(fromBinary(AgentHistoryRecordSchema, auditBytes).entry).toEqual(
+        input.historyEntries[0],
+      );
+      expect(fromBinary(AgentModelPreferencesRecordSchema, preferenceBytes).key?.stateType).toBe(
+        layout.stateSchema.typeName,
+      );
+    } finally {
+      await commits.close();
+      await factory.close();
+    }
   });
   it("checks a declared family without opening Storage, then reuses readiness without DDL", async () => {
     const query = vi.fn(mysqlQuery);
@@ -1198,6 +1354,44 @@ function mysqlQuery(sql: string) {
   if (sql.includes("information_schema.tables"))
     return Promise.resolve([[{ engine: "InnoDB" }], []]);
   return Promise.resolve([[], []]);
+}
+
+function agentMetadataQuery(sql: string, values: readonly unknown[], repaired: boolean) {
+  const table = values[0];
+  if (repaired && sql.includes("information_schema.columns") && typeof table === "string") {
+    const extra = table.includes("agent_history")
+      ? AgentHistoryRecords.spec((value) => value).columns
+      : table.endsWith("_Event")
+        ? eventStoreRecordSpec.columns
+        : [];
+    if (extra.length)
+      return Promise.resolve([
+        [
+          { column_name: "ID" },
+          { column_name: "bytes" },
+          ...extra.map((column) => ({ column_name: column.name })),
+        ],
+        [],
+      ]);
+  }
+  if (repaired && sql.includes("AND index_name=?")) {
+    const columns = AgentHistoryIndexes.find(([name]) => name === values[1])?.[1] ?? [];
+    return Promise.resolve([
+      columns.map((column_name, index) => ({
+        index_name: values[1],
+        column_name,
+        seq_in_index: index + 1,
+        non_unique: 1,
+        sub_part: null,
+        collation: "A",
+        index_type: "BTREE",
+      })),
+      [],
+    ]);
+  }
+  if (repaired && sql.includes("table_name IN (?)"))
+    return Promise.resolve([(values[0] as string[]).map(() => ({ engine: "InnoDB" })), []]);
+  return mysqlQuery(sql);
 }
 
 function userStringifier(prefix: string) {

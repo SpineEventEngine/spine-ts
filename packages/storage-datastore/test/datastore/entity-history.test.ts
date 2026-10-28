@@ -12,8 +12,13 @@
  * the License.
  */
 
-import { create, ScalarType } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import {
+  AgentHistoryEntrySchema,
+  AiModelKind,
+  ModelPreferenceSchema,
+} from "@spine-event-engine/proto/agent";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import {
   AnyPacker,
@@ -23,7 +28,10 @@ import {
 } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
+import {
+  AgentHistoryStorageFactories,
+  EntityCommitStorageFactories,
+} from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -32,6 +40,14 @@ import {
   type TaskId,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import {
+  SupportReplyAgentIdSchema,
+  SupportReplyAgentStateSchema,
+  type SupportReplyAgentId,
+  type SupportReplyAgentState,
+} from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+import { entityInput as supportAgentInput } from "../../../storage/test/entity/agent-live-fixtures.js";
+import { conversation } from "../../../storage/test/entity/agent-history-fixtures.js";
 import {
   TaskSchema,
   type Task,
@@ -120,6 +136,126 @@ function factory(backend: HistoryDatastoreBackend) {
 }
 
 describe("Datastore generated Entity records", () => {
+  it("rolls back a failed final Agent transaction and rejects stale images without partial writes", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(
+      new TypeRegistry([SupportReplyAgentIdSchema, SupportReplyAgentStateSchema]),
+    );
+    const provider = DatastoreStorageFactory.newBuilder()
+      .setClient(backend.client() as never)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const layout = supportAgentInput() as unknown as EntityStorageInput<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    const commits = EntityCommitStorageFactories.create(provider, layout);
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-atomic" });
+    const preference = create(ModelPreferenceSchema, {
+      kind: AiModelKind.GENERATION,
+      selection: { case: "inheritRepositoryDefault", value: create(EmptySchema) },
+    });
+    const historyEntry = conversation(
+      "atomic-audit",
+      "support",
+      create(TimestampSchema, { seconds: 1n }),
+    );
+    const next = create(EntityRecordSchema, {
+      entityId: layout.id.pack(id),
+      state: AnyPacker.pack(
+        SupportReplyAgentStateSchema,
+        create(SupportReplyAgentStateSchema, { id }),
+      ),
+      version: { number: 1 },
+    });
+    const input = {
+      entityId: id,
+      expectedVersion: 0,
+      expectedPreferences: undefined,
+      preferences: [preference],
+      entityCommit: { context: layout.context, entity: layout, entityId: id, next },
+      historyEntries: [historyEntry],
+    };
+    try {
+      backend.failTransactionCommit = new Error("final transaction failed");
+      await expect(commits.commitAgent(input)).rejects.toThrow("final transaction failed");
+      expect(backend.entities.size).toBe(0);
+      await expect(commits.readAgentPreferences(id)).resolves.toBeUndefined();
+      backend.failTransactionCommit = undefined;
+      await commits.commitAgent(input);
+      await expect(commits.readAgentPreferences(id)).resolves.toEqual([preference]);
+      const current = provider.createRecordStorage(layout.context, layout.recordSpec);
+      const history = AgentHistoryStorageFactories.create(provider, {
+        context: layout.context,
+        stateType: layout.stateSchema.typeName,
+        id: { key: (value: typeof id) => value.ticketNumber },
+      });
+      try {
+        await expect(current.read(id)).resolves.toEqual(next);
+        const page = await history.read({ entityId: id, view: { kind: "full" }, count: 10 });
+        expect(page.entries.map((entry) => toBinary(AgentHistoryEntrySchema, entry))).toEqual([
+          toBinary(AgentHistoryEntrySchema, historyEntry),
+        ]);
+        const nextHistory = conversation(
+          "atomic-audit-next",
+          "support",
+          create(TimestampSchema, { seconds: 2n }),
+        );
+        const nextState = create(EntityRecordSchema, {
+          entityId: layout.id.pack(id),
+          state: AnyPacker.pack(
+            SupportReplyAgentStateSchema,
+            create(SupportReplyAgentStateSchema, { id, proposedReply: "updated" }),
+          ),
+          version: { number: 2 },
+        });
+        await expect(
+          commits.commitAgent({
+            entityId: id,
+            expectedVersion: 0,
+            expectedPreferences: [preference],
+            preferences: [preference],
+            historyEntries: [nextHistory],
+          }),
+        ).rejects.toThrow("Version");
+        await expect(
+          commits.commitAgent({
+            ...input,
+            expectedVersion: 1,
+            expectedPreferences: [],
+            entityCommit: {
+              context: layout.context,
+              entity: layout,
+              entityId: id,
+              next: nextState,
+            },
+            historyEntries: [nextHistory],
+          }),
+        ).rejects.toThrow("preferences changed");
+        expect(backend.entities.size).toBe(3);
+        await expect(current.read(id)).resolves.toEqual(next);
+        await commits.commitAgent({
+          ...input,
+          expectedVersion: 1,
+          expectedPreferences: [preference],
+          entityCommit: { context: layout.context, entity: layout, entityId: id, next: nextState },
+          historyEntries: [nextHistory],
+        });
+        await expect(current.read(id)).resolves.toEqual(nextState);
+        const updated = await history.read({ entityId: id, view: { kind: "full" }, count: 10 });
+        expect(updated.entries.map((entry) => toBinary(AgentHistoryEntrySchema, entry))).toEqual(
+          [nextHistory, historyEntry].map((entry) => toBinary(AgentHistoryEntrySchema, entry)),
+        );
+      } finally {
+        current.close();
+        history.close();
+      }
+    } finally {
+      await commits.close();
+      await provider.close();
+    }
+  });
   it("retries an immutable history insert when a colliding row disappears before inspection", async () => {
     const compareAndSet = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const read = vi.fn().mockResolvedValue(undefined);
