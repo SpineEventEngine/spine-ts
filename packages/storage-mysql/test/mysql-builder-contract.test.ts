@@ -797,6 +797,34 @@ describe("MysqlStorageFactory builder contract", () => {
     expect(end).toHaveBeenCalledOnce();
   });
 
+  it("keeps a retained shared pool usable after a second grouped family fails read-only checking", async () => {
+    const { factory, records, query, end, metadataReads, repair, check } =
+      await retainedGroupedMysql();
+    try {
+      await expect(records.read("first-missing")).resolves.toBeUndefined();
+      expect(createPool).toHaveBeenCalledOnce();
+      const before = metadataReads();
+      const creates = query.mock.calls.filter(([sql]) => sql.startsWith("CREATE")).length;
+      await expect(check()).rejects.toThrow(/incompatible/i);
+      expect(metadataReads()).toBe(before + 1);
+      expect(query.mock.calls.filter(([sql]) => sql.startsWith("CREATE"))).toHaveLength(creates);
+      expect(createPool).toHaveBeenCalledOnce();
+      expect(end).not.toHaveBeenCalled();
+      await expect(records.read("still-missing")).resolves.toBeUndefined();
+      repair();
+      const beforeRetry = metadataReads();
+      await check();
+      expect(metadataReads()).toBe(beforeRetry + 1);
+      expect(query.mock.calls.filter(([sql]) => sql.startsWith("CREATE"))).toHaveLength(creates);
+      expect(createPool).toHaveBeenCalledOnce();
+      expect(end).not.toHaveBeenCalled();
+    } finally {
+      records.close();
+      await factory.close();
+    }
+    expect(end).toHaveBeenCalledOnce();
+  });
+
   it("builds offline and checks the shared destination without retaining its probe pool", async () => {
     const release = vi.fn();
     const end = vi.fn(() => Promise.resolve());
@@ -1609,6 +1637,43 @@ function mysqlQuery(sql: string) {
   if (sql.includes("information_schema.tables"))
     return Promise.resolve([[{ engine: "InnoDB" }], []]);
   return Promise.resolve([[], []]);
+}
+
+async function retainedGroupedMysql() {
+  let repaired = false;
+  const query = vi.fn((sql: string, values: readonly unknown[] = []) => {
+    if (sql.includes("information_schema.columns") && values[0] === "late_history" && !repaired)
+      return Promise.resolve([[], []]);
+    return mysqlQuery(sql);
+  });
+  const end = vi.fn(() => Promise.resolve());
+  vi.mocked(createPool).mockReturnValue({
+    getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+    end,
+  } as never);
+  const factory = await MysqlStorageFactory.newBuilder()
+    .setOptions({ url: "mysql://db.example/shared" })
+    .setTableName(StringValueSchema, StringValueSchema, "late_history")
+    .build();
+  const context = { name: "shared", multitenant: false } as const;
+  const extractId = (record: import("@bufbuild/protobuf/wkt").StringValue) => record.value;
+  const spec = new RecordSpec({ recordType: StringValueSchema, idKind: "string", extractId });
+  const group = new StorageGroup("history");
+  return {
+    factory,
+    records: factory.createRecordStorage(context, spec),
+    query,
+    end,
+    repair: () => {
+      repaired = true;
+    },
+    metadataReads: () =>
+      query.mock.calls.filter(
+        ([sql, values]) =>
+          sql.includes("information_schema.columns") && values?.[0] === "late_history",
+      ).length,
+    check: () => StoragePreparations.for(factory).prepareRecord(context, spec, group, "check"),
+  };
 }
 
 function agentMetadataQuery(sql: string, values: readonly unknown[], repaired: boolean) {

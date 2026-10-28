@@ -2490,3 +2490,25 @@ native skip groups; genuine database close/reopen cases keep their guards and
 assertions. With service settings unset, 2 tests pass and 4 native cases skip.
 Type/lint/cleanup/format/diff pass. No new production/API/docs/security concerns;
 no specialist rerun needed for test classification alone.
+
+### M36 retained SQL pool after second-family check failure
+
+Independent TypeScript/API reviewer reused with explicit configured Sol/medium.
+Frozen scope: paired PostgreSQL/MySQL tests only; evidence m36-provider-evidence.md
+outside Git. Verify public lifecycle assertions, exact fresh metadata recheck,
+no DDL, no pool replacement/disposal, and usable original records after failure.
+Parent handles maintainability/diff hygiene. Documentation and security contracts
+are unchanged; no additional specialist lane is warranted for test-only coverage.
+Mechanical gate: 105 tests, tooling typecheck, format/lint/cleanup/diff pass.
+
+M36 API review accepted: no P0/P1/P2 findings. Parent inspection confirms focused
+behavior assertions and existing metadata fixtures without domain substitutions.
+Configured Sol/medium matched original explicit dispatch; actual introspection
+unavailable. Evidence m36-api-review.md outside Git. M38 caller/export removal
+advisory is also clean; current live commitAgent uses applyConditional directly.
+
+Read-only lifecycle coverage selection accepted from original explicit
+Sol/medium performance/reliability reviewer; actual metadata unavailable. Two
+useful gaps: subscription close during first pass, and Delivery close combining
+an admitted release failure with retained-store cleanup failure. No broad guard
+matrix selected. Evidence next-coverage-selection.md outside Git.

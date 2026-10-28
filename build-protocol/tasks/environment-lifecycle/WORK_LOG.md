@@ -4713,3 +4713,20 @@ Prettier, diff hygiene and comment-free runtime equality pass. All canonical
 review concerns are disposed as unchanged behavior/contracts/documentation claims
 except the corrected persisted-preference wording; no specialist lane reopened.
 Commit and push only M37 paths plus this record while M36 tests remain in progress.
+
+M38 micro removal selected by concrete source history: PostgreSQL
+PostgresEntityCommitStorage.prepareAgentConditional is called only by the old
+agent-execution.ts implementation in origin/master. That file and its tests
+were removed under the approved Agent recovery task. There are no current
+source callers; the class is not part of the package export map or index. Remove
+this obsolete helper and its TSDoc, preserving live commitAgent/applyConditional.
+The current API reviewer independently checks this caller/export evidence along
+with M36. Sole existing Sol/medium implementer handles this disjoint source
+removal after M36 freeze. Estimate 0.1–0.2 hour for removal, focused PostgreSQL
+commit checks, build/static validation and independent API disposition. No new
+recovery API tests or compatibility wrappers are appropriate.
+
+M36 accepted after independent API review and parent maintainability inspection.
+105 tests and static checks pass, no production defect. Two additional unchanged
+baseline branch outcomes are covered (cumulative 42 before M38 source deletion).
+Commit/push the paired provider tests and records; keep M38 source edit separate.

@@ -504,6 +504,33 @@ describe("Postgres record storage", () => {
     expect(driver.end).toHaveBeenCalledOnce();
   });
 
+  it("keeps a retained shared pool usable after a second grouped family fails read-only checking", async () => {
+    const { factory, records, metadataReads, repair, check } = await retainedGroupedPostgres();
+    try {
+      await expect(records.read("first-missing")).resolves.toBeUndefined();
+      expect(driver.Pool).toHaveBeenCalledOnce();
+      const before = metadataReads();
+      const creates = driver.calls.filter(({ sql }) => sql.startsWith("CREATE")).length;
+      await expect(check()).rejects.toThrow(/incompatible/i);
+      expect(metadataReads()).toBe(before + 1);
+      expect(driver.calls.filter(({ sql }) => sql.startsWith("CREATE"))).toHaveLength(creates);
+      expect(driver.Pool).toHaveBeenCalledOnce();
+      expect(driver.end).not.toHaveBeenCalled();
+      await expect(records.read("still-missing")).resolves.toBeUndefined();
+      repair();
+      const beforeRetry = metadataReads();
+      await check();
+      expect(metadataReads()).toBe(beforeRetry + 1);
+      expect(driver.calls.filter(({ sql }) => sql.startsWith("CREATE"))).toHaveLength(creates);
+      expect(driver.Pool).toHaveBeenCalledOnce();
+      expect(driver.end).not.toHaveBeenCalled();
+    } finally {
+      records.close();
+      await factory.close();
+    }
+    expect(driver.end).toHaveBeenCalledOnce();
+  });
+
   it("joins explicit tenant checking to a pending runtime database without a second pool", async () => {
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<{ url: string; schema: string }>();
@@ -1717,6 +1744,38 @@ describe("Postgres record storage", () => {
     expect(query?.values).toEqual([2]);
   });
 });
+
+async function retainedGroupedPostgres() {
+  let repaired = false;
+  const ordinary = driver.query.getMockImplementation();
+  if (ordinary === undefined) throw new Error("Expected PostgreSQL metadata query fixture.");
+  driver.query.mockImplementation((sql, values) => {
+    if (sql.includes("columns WHERE") && values?.[1] === "late_history" && !repaired) {
+      driver.recordCall(sql, values);
+      return Promise.resolve({ rows: [] });
+    }
+    return ordinary(sql, values);
+  });
+  const factory = await PostgresStorageFactory.newBuilder()
+    .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+    .setTableName(StringValueSchema, StringValueSchema, "late_history")
+    .build();
+  const context = { name: "shared", multitenant: false } as const;
+  const spec = recordSpec();
+  const group = new StorageGroup("history");
+  return {
+    factory,
+    records: factory.createRecordStorage(context, spec),
+    repair: () => {
+      repaired = true;
+    },
+    metadataReads: () =>
+      driver.calls.filter(
+        ({ sql, values }) => sql.includes("columns WHERE") && values?.[1] === "late_history",
+      ).length,
+    check: () => StoragePreparations.for(factory).prepareRecord(context, spec, group, "check"),
+  };
+}
 
 async function recordStorage() {
   const factory = await PostgresStorageFactory.newBuilder()
