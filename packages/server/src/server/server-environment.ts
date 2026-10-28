@@ -13,6 +13,8 @@
  */
 
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
+import type { TenantId } from "@spine-event-engine/proto";
+import { TenantBoundary, type StoragePreparationMode } from "@spine-event-engine/storage/provider";
 import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { InMemoryTransportFactory, type TransportFactory } from "@spine-event-engine/transport";
 import { spineCoreRegistry, type TypeRegistryLookup } from "@spine-event-engine/core";
@@ -28,6 +30,7 @@ import { emitServerInfo, emitServerWarning } from "./server-log.js";
 import { managedDeliveryGate } from "./managed-delivery-gate.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import { TenantIndexes, type TenantIndex } from "../context/tenant-index.js";
+import { TenantUnknownError } from "../context/tenant-unknown-error.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import type { DeliverySource } from "../delivery/delivery-supervisor.js";
@@ -349,6 +352,100 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     const started = this.#completeSetup();
     environmentSetups.set(this, started);
     return started;
+  }
+
+  /**
+   * Creates declared structures for the completed open contexts in this environment.
+   * Explicit IDs select matching multitenant contexts through their effective indexes.
+   * Database-backed providers require an existing database; this method does not
+   * provision one or register tenants.
+   * @param tenantIds Optional complete tenant identities; absence includes single-tenant
+   * contexts and pages current multitenant indexes.
+   * @returns Completion after participating contexts are prepared.
+   */
+  createStorageStructures(...tenantIds: TenantId[]): Promise<void> {
+    return this.#prepareContexts("create", tenantIds);
+  }
+
+  /**
+   * Checks existing structures without authorizing creation.
+   * Explicit IDs select matching multitenant contexts through their effective indexes.
+   * The operation does not provision databases or register tenants.
+   * @param tenantIds Optional complete tenant identities; absence includes single-tenant
+   * contexts and pages current multitenant indexes.
+   * @returns Completion after participating contexts pass read-only checks.
+   */
+  checkStructureCompatibility(...tenantIds: TenantId[]): Promise<void> {
+    return this.#prepareContexts("check", tenantIds);
+  }
+
+  /**
+   * Prevalidates selected tenant membership before starting provider work.
+   * @param contexts Captured completed context references.
+   * @param tenantIds Explicit complete tenant identities.
+   * @returns Participating contexts and their selected tenants.
+   */
+  async #selectedContexts(
+    contexts: readonly BoundedContext[],
+    tenantIds: readonly TenantId[],
+  ): Promise<Map<BoundedContext, TenantId[]>> {
+    const selected = new Map<BoundedContext, TenantId[]>();
+    const boundaries = new Map<string | symbol, ReturnType<typeof TenantBoundary.from>>();
+    for (const id of tenantIds) {
+      const boundary = TenantBoundary.from(id);
+      boundaries.set(boundary.key, boundary);
+    }
+    for (const boundary of boundaries.values()) {
+      let found = false;
+      for (const context of contexts) {
+        serverEnvironmentAccess.requireAvailable(this);
+        if (!context.isMultitenant) continue;
+        const present = await context.tenantIndex.contains(boundary.tenantId);
+        serverEnvironmentAccess.requireAvailable(this);
+        if (!present) continue;
+        const ids = selected.get(context) ?? [];
+        ids.push(boundary.tenantId);
+        selected.set(context, ids);
+        found = true;
+      }
+      if (!found) throw new TenantUnknownError(boundary.tenantId, "ServerEnvironment");
+    }
+    return selected;
+  }
+
+  /**
+   * Prepares captured contexts after complete explicit-ID validation.
+   * @param mode Creation or read-only check.
+   * @param tenantIds Optional complete tenant identities.
+   * @returns Completion after every participating context settles.
+   */
+  async #prepareContexts(
+    mode: StoragePreparationMode,
+    tenantIds: readonly TenantId[],
+  ): Promise<void> {
+    serverEnvironmentAccess.requireAvailable(this);
+    const captured = tenantIds.map((id) => TenantBoundary.from(id).tenantId);
+    const contexts = serverEnvironmentAccess
+      .openContexts(this)
+      .filter((context) => !boundedContextAccess.isClosing(context));
+    if (contexts.length === 0)
+      throw new Error("ServerEnvironment has no completed Bounded Context to prepare.");
+    const selection = Promise.withResolvers<Map<BoundedContext, TenantId[]> | undefined>();
+    const admitted = contexts.map((context) =>
+      boundedContextAccess.admitServiceRegistryOperation(context, async () => {
+        const selected = await selection.promise;
+        const ids = selected?.get(context);
+        if (selected !== undefined && ids === undefined) return;
+        await boundedContextAccess.prepareExplicit(context, mode, ids ?? []);
+      }),
+    );
+    if (captured.length === 0) selection.resolve(undefined);
+    else void this.#selectedContexts(contexts, captured).then(selection.resolve, selection.reject);
+    const results = await Promise.allSettled(admitted);
+    if (serverEnvironmentAccess.hasStartupFailure(this))
+      return serverEnvironmentAccess.awaitStartupFailure(this);
+    const failure = results.find((result) => result.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
   }
 
   async #completeSetup(): Promise<void> {

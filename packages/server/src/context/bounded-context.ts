@@ -571,8 +571,34 @@ const contextIntegrations = new WeakMap<
 >();
 const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
 const builderBuilds = new WeakMap<BoundedContextBuilder, () => Promise<BoundedContext>>();
+const explicitPreparations = new WeakMap<
+  BoundedContext,
+  (mode: StoragePreparationMode, ids: readonly TenantId[]) => Promise<void>
+>();
 
 interface BoundedContextAccess {
+  /**
+   * Returns whether a completed context has begun closing.
+   *
+   * @param context Completed context.
+   * @returns Whether close has started.
+   */
+  isClosing(context: BoundedContext): boolean;
+
+  /**
+   * Prepares one already-admitted context without joining global fatal cleanup.
+   *
+   * @param context Admitted context.
+   * @param mode Creation or read-only check.
+   * @param ids Captured tenant identities, when supplied.
+   * @returns Completion of local preparation.
+   */
+  prepareExplicit(
+    context: BoundedContext,
+    mode: StoragePreparationMode,
+    ids: readonly TenantId[],
+  ): Promise<void>;
+
   /**
    * Admits a service membership and preparation chain before its first await.
    *
@@ -887,6 +913,37 @@ let constructContextSpec:
   ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => ContextSpec) | undefined;
 
 /**
+ * Explicit preparation operations for one built Bounded Context.
+ */
+export interface BoundedContextRuntime {
+  /**
+   * Creates declared storage structures for current or selected tenants.
+   * With no IDs, a multitenant context pages its current index; a single-tenant
+   * context prepares its neutral destination. Database-backed providers require
+   * an existing database; this method does not provision one.
+   * @param tenantIds Optional registered complete tenant identities.
+   * @returns Completion after required structures are ready; malformed IDs reject the promise.
+   */
+  createStorageStructures(...tenantIds: TenantId[]): Promise<void>;
+
+  /**
+   * Checks declared structures without creating them.
+   * With no IDs, a multitenant context pages its current index; a single-tenant
+   * context checks its neutral destination. Database-backed providers require
+   * an existing database; this method does not provision one.
+   * @param tenantIds Optional registered complete tenant identities.
+   * @returns Completion after read-only compatibility checks; malformed IDs reject the promise.
+   */
+  checkStructureCompatibility(...tenantIds: TenantId[]): Promise<void>;
+
+  /**
+   * Starts the first shared subscription registry pass without tenant structures.
+   * @returns Completion after initial monitoring is ready.
+   */
+  startSubscriptionMonitoring(): Promise<void>;
+}
+
+/**
  * Represents a built bounded context and its command, event, repository, and read-side resources.
  */
 export class BoundedContext {
@@ -927,6 +984,11 @@ export class BoundedContext {
   readonly #systemStand: Stand;
 
   readonly #subscriptionRuntime: SubscriptionRuntime;
+
+  /**
+   * Explicit storage and subscription preparation for this built context.
+   */
+  readonly runtime: BoundedContextRuntime;
 
   readonly #agentReceipts: AgentAcceptanceReceipts;
 
@@ -974,6 +1036,7 @@ export class BoundedContext {
     this.#stand = input.stand;
     this.#systemStand = input.systemStand;
     this.#subscriptionRuntime = input.subscriptionRuntime;
+    this.runtime = this.#createRuntime();
     this.#storageFactory = input.storageFactory;
     this.#agentReceipts = new AgentAcceptanceReceipts(input.storageFactory);
     this.#environment = ServerEnvironment.instance();
@@ -997,10 +1060,24 @@ export class BoundedContext {
   }
 
   /**
+   * Exposes explicit preparation for this built context.
+   *
+   * @returns Stable explicit preparation methods.
+   */
+  #createRuntime(): BoundedContextRuntime {
+    return Object.freeze({
+      createStorageStructures: (...ids: TenantId[]) => this.#explicitStructures("create", ids),
+      checkStructureCompatibility: (...ids: TenantId[]) => this.#explicitStructures("check", ids),
+      startSubscriptionMonitoring: () => this.#explicitMonitoring(),
+    });
+  }
+
+  /**
    * Installs live membership checks on context signal buses.
    *
    */
   #installTenantAdmission(): void {
+    explicitPreparations.set(this, (mode, ids) => this.#prepareExplicitLocal(mode, ids));
     commandBusAccess.setAdmission(this.#commandBus, (command) =>
       this.#admitTenant(command.context?.actorContext?.tenantId),
     );
@@ -1156,7 +1233,7 @@ export class BoundedContext {
   async #prepareBuild(options: BoundedContextBuildOptions): Promise<void> {
     if (options.createStorageStructures !== false) {
       await this.#requiredPrepare(() => this.#prepareShared("create"));
-      await this.#prepareCurrentTenants();
+      await this.#prepareCurrentTenants("create");
     }
     if (options.startSubscriptionMonitoring !== false) {
       await this.#requiredPrepare(() => this.#prepareShared("create"));
@@ -1182,11 +1259,12 @@ export class BoundedContext {
 
   /**
    * Traverses the current live index in finite pages without a tenant cap.
+   * @param mode Creation or read-only check.
    * @returns Completion after currently listed tenants are prepared.
    */
-  async #prepareCurrentTenants(): Promise<void> {
+  async #prepareCurrentTenants(mode: StoragePreparationMode): Promise<void> {
     if (!this.isMultitenant)
-      return this.#requiredPrepare(() => this.#prepareTenant(undefined, "create"));
+      return this.#requiredPrepare(() => this.#prepareTenant(undefined, mode));
     let after: import("./tenant-index.js").TenantIndexCursor | undefined;
     do {
       serverEnvironmentAccess.requireAvailable(this.#environment);
@@ -1200,10 +1278,93 @@ export class BoundedContext {
         serverEnvironmentAccess.requireAvailable(this.#environment);
         await TenantAdmissions.require(this.tenantIndex, this.name.value, true, id);
         serverEnvironmentAccess.requireAvailable(this.#environment);
-        await this.#requiredPrepare(() => this.#prepareTenant(id, "create"));
+        await this.#requiredPrepare(() => this.#prepareTenant(id, mode));
       }
       after = page.hasMore ? page.after : undefined;
     } while (after !== undefined);
+  }
+
+  /**
+   * Admits explicit structure work and joins fatal cleanup after local settlement.
+   * @param mode Creation or read-only compatibility mode.
+   * @param tenantIds Explicit complete tenant identities, if supplied.
+   * @returns Completion after the selected structures are ready.
+   */
+  async #explicitStructures(
+    mode: StoragePreparationMode,
+    tenantIds: readonly TenantId[],
+  ): Promise<void> {
+    const captured = tenantIds.map((id) => TenantBoundary.from(id).tenantId);
+    const admitted = boundedContextAccess.admitServiceRegistryOperation(this, () =>
+      this.#prepareExplicitLocal(mode, captured),
+    );
+    return this.#joinRequiredCleanup(admitted);
+  }
+
+  /**
+   * Runs explicit preparation while the caller holds this context's admission.
+   *
+   * @param mode Creation or read-only check.
+   * @param ids Captured tenant identities, when supplied.
+   * @returns Completion of the local preparation.
+   */
+  async #prepareExplicitLocal(
+    mode: StoragePreparationMode,
+    ids: readonly TenantId[],
+  ): Promise<void> {
+    const selected = await this.#selectedTenants(ids);
+    await this.#requiredPrepare(() => this.#prepareShared(mode));
+    if (selected === undefined) return this.#prepareCurrentTenants(mode);
+    for (const id of selected) {
+      await TenantAdmissions.require(this.tenantIndex, this.name.value, this.isMultitenant, id);
+      await this.#requiredPrepare(() => this.#prepareTenant(id, mode));
+    }
+  }
+
+  /**
+   * Validates all explicit IDs before any provider preparation.
+   *
+   * @param ids Captured explicit tenant identities.
+   * @returns Distinct current IDs or undefined for all current tenants.
+   */
+  async #selectedTenants(ids: readonly TenantId[]): Promise<readonly TenantId[] | undefined> {
+    if (ids.length === 0) return undefined;
+    const selected = new Map<string | symbol, TenantId>();
+    for (const id of ids) {
+      await TenantAdmissions.require(this.tenantIndex, this.name.value, this.isMultitenant, id);
+      const boundary = TenantBoundary.from(id);
+      selected.set(boundary.key, boundary.tenantId);
+    }
+    return [...selected.values()];
+  }
+
+  /**
+   * Starts the one initial monitor pass as an explicit required phase.
+   *
+   * @returns Completion after the initial pass.
+   */
+  #explicitMonitoring(): Promise<void> {
+    const admitted = boundedContextAccess.admitServiceRegistryOperation(this, async () => {
+      await this.#requiredPrepare(() => this.#prepareShared("create"));
+      await this.#requiredPrepare(() => this.#subscriptionRuntime.start());
+    });
+    return this.#joinRequiredCleanup(admitted);
+  }
+
+  /**
+   * Waits for recorded fatal cleanup only after context admission settles.
+   *
+   * @param admitted Locally admitted operation.
+   * @returns Completion after local work or fatal cleanup.
+   */
+  async #joinRequiredCleanup(admitted: Promise<void>): Promise<void> {
+    try {
+      await admitted;
+    } catch (error) {
+      if (serverEnvironmentAccess.hasStartupFailure(this.#environment))
+        return serverEnvironmentAccess.awaitStartupFailure(this.#environment);
+      throw error;
+    }
   }
 
   /**
@@ -1796,6 +1957,33 @@ export class BoundedContext {
  * Exposes framework-only operations for built contexts and their builders.
  */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  /**
+   * Reports whether close has started for the given context.
+   *
+   * @param context Completed context.
+   * @returns Whether close has started.
+   */
+  isClosing: (context: BoundedContext) => closingContexts.has(context),
+
+  /**
+   * Prepares an admitted context without joining global fatal cleanup.
+   *
+   * @param context Admitted context.
+   * @param mode Creation or read-only check.
+   * @param ids Captured tenant identities.
+   * @returns Completion of local preparation.
+   */
+  prepareExplicit(
+    context: BoundedContext,
+    mode: StoragePreparationMode,
+    ids: readonly TenantId[],
+  ): Promise<void> {
+    const prepare = explicitPreparations.get(context);
+    if (prepare === undefined)
+      return Promise.reject(new TypeError("Preparation requires a built context."));
+    return prepare(mode, ids);
+  },
+
   /**
    * Admits a service membership and preparation chain before its first await.
    *

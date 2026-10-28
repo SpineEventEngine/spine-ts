@@ -45,7 +45,10 @@ import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import type { TenantIndex } from "../../src/context/tenant-index.js";
 import { tenant } from "../tenant-fixture.js";
-import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
+import {
+  InMemorySubscriptionRegistry,
+  StorageSubscriptionRegistry,
+} from "../../src/stand/subscription-registry.js";
 import { Server } from "../../src/server/server.js";
 import { emitServerError, emitServerWarning } from "../../src/server/server-log.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
@@ -271,7 +274,10 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
     const environment = ServerEnvironment.instance();
     await environment.completeSetup();
-    const context = await BoundedContext.singleTenant("CataloglessTasks").build();
+    const context = await BoundedContext.singleTenant("CataloglessTasks").build({
+      createStorageStructures: false,
+      startSubscriptionMonitoring: false,
+    });
     expect(context.tenantIndex).toBe(environment.tenantIndex);
     await environment.tenantIndex.keep(tenant("known"));
     await expect(context.tenantIndex.contains(tenant("known"))).resolves.toBe(true);
@@ -568,16 +574,21 @@ describe("ServerEnvironment delivery lifecycle", () => {
     };
     logger.child.mockReturnValue(logger);
     EnvironmentTests.use(EnvironmentType.Production);
+    const storageFactory = new InMemoryStorageFactory();
     ServerEnvironment.when(EnvironmentType.Production).use({
-      storageFactory: new InMemoryStorageFactory(),
+      storageFactory,
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
     await environment.completeSetup();
+    const registry = new StorageSubscriptionRegistry(
+      { name: "PersistentTasks", multitenant: false },
+      storageFactory,
+    );
     const context = await BoundedContext.singleTenant("PersistentTasks")
-      .withSubscriptionRegistry({ persistent: true, close: () => Promise.resolve() } as never)
+      .withSubscriptionRegistry(registry)
       .build();
 
     try {

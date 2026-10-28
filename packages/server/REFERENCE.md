@@ -179,6 +179,25 @@ with the context name and bounded error name or code, leaves unaffected observer
 and retries on the existing ten-second schedule. Closing the context cancels
 the timer and drains an admitted pass before detaching observers.
 
+`context.runtime.createStorageStructures(...tenantIds)` and
+`context.runtime.checkStructureCompatibility(...tenantIds)` prepare declared
+Record, Entity, history, and Agent audit structures through the configured
+provider. The check is read-only; a successful provider check also satisfies
+later creation readiness. Explicit IDs must be registered in the context's
+effective tenant index. With no IDs, a multitenant context traverses its current
+index in finite pages; a single-tenant context prepares its neutral destination
+without registering a synthetic tenant. `context.runtime.startSubscriptionMonitoring()`
+performs the first registry pass independently of per-tenant Entity preparation.
+The environment's no-argument structure methods include both kinds of completed,
+open context. With explicit IDs, they select only matching multitenant contexts,
+respect each `withTenantIndex` override, and reject an ID absent from all current
+indexes before provider work. They validate every supplied ID before preparing
+any structures. Database-backed providers require an existing database; these
+calls do not provision one or register a tenant. Required explicit provider or initial-monitor
+failure stops new input and triggers automatic cleanup. Unknown or malformed IDs,
+directory lookup failure, and local API misuse reject only that operation;
+lazy first-input provider failures remain request-local and retryable.
+
 `storageFactory` supplies records and events to every context. `typeRegistry` is the complete
 application schema universe used by `ThirdPartyContext` to encode outgoing
 imported events. An optional `integrationChannelFactory` overrides the

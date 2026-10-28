@@ -53,6 +53,15 @@ Starting monitoring still prepares its shared subscription registry when model
 structure creation is deferred; it does not prepare every tenant's Entity storage structures.
 An eager required-phase failure stops accepting new input and triggers environment
 cleanup. A lazy first-input failure rejects that input and can be retried.
+After build, `context.runtime.createStorageStructures(...tenantIds)` explicitly
+creates declared structures; `checkStructureCompatibility(...tenantIds)` checks
+them without creating structures. With no IDs, a multitenant context traverses
+its current tenant index in pages; a single-tenant context prepares its neutral
+destination. `startSubscriptionMonitoring()` starts the initial registry pass
+without preparing every tenant's Entity structures. The environment offers the
+same operations across completed, open contexts, selecting matching multitenant
+contexts for explicit IDs. Database-backed providers require an existing
+database; these operations do not provision one or register tenants.
 
 ## Give an Entity an application service
 

@@ -3095,3 +3095,134 @@ metadata unavailable. Narrow diagnostic propagation preserves existing timer,
 coalescing and close machinery; no unsafe errorMessage field. API/style N/A
 reasons recorded in review log; final security/release remain M13. Commit and
 immediate push next, then M11. Overall progress approximately75%.
+
+M10 committed0141af486ba4ab7ed9b3e03ebd2e6194b79d7a54 and immediately pushed
+to official origin/environment-lifecycle; exact remote SHA verified, worktree
+clean before M11 records. Ten of thirteen milestones accepted; approximately75%.
+
+M11 starts, high-risk public APIs and preparation/shutdown coordination. Estimate
+2–4hours includes implementation, tenant-selection/concurrency/shutdown behavior
+tests, narrow docs, cheap checks, independent relevant review, correction and push.
+Architecture follows approved frozen proposal and D0163; no new planning pass
+unless a demonstrated material ambiguity appears. Existing implementer
+storage_retention remains sole runtime/test/docs writer, original explicit
+gpt-6-sol/medium; runtime metadata unavailable. Parent edits records only.
+No children/commits/pushes. Handoff context-initialization-implementation-brief.md
+M11 plus m11-current-preparation-map.md; authoritative factory concurrency table
+supersedes earlier contradictory external wording (already corrected).
+
+Acceptance: context.runtime and environment createStorageStructures/checkStructureCompatibility
+with no/one/severalIDs; context.runtime.startSubscriptionMonitoring; completed/open
+context snapshot only, closing contexts excluded; all explicitIDs validated
+before any resolver/structure work; effective index overrides respected; no keep
+or provisioning; noarg bounded pages plus neutral single-tenant scope; check stays
+read-only and success satisfies readiness; creation/check share pending results
+as approved, including failed check; structure methods do not start monitoring.
+Retain selected work through close, fence new input on required explicit failure,
+and release every admitted preparation before joining fatal cleanup to prevent
+self-wait. Directory/API validation failures remain local. No new public late-model
+registration lifecycle; preserve complete assembled requirements. Focused evidence
+and cheap checks before all relevant public-contract review concerns; fullrelease M13.
+
+Independent M13 documentation preparation while M11 runtime writer works: reuse
+monitor_documentation_review, explicit immutable Luna/medium documentation role,
+for a read-only active-guidance inventory of remaining Agent recovery promises,
+removed scheduling/config APIs, per-context facility settings, attachment and
+implicit environment setup. Distinguish historical task records/source baseline
+analysis from current human and agent instructions; no broad history rewriting.
+No edits/tests/builds/children; external bounded correction inventory only.
+
+Independent M13 native verification preparation: existing mechanical_checks
+function, original explicit Luna/low, maps accepted prior native evidence to
+current explicit test commands and inspects only named task containers/ports.
+No native tests, database writes, container changes, network fetch, or source
+edits; no children. Avoid duplicate native runs when unchanged provider proof
+remains sufficient; identify actual M9–M12 cross-layer proof gaps for final plan.
+External command/evidence inventory only; final verification runs after convergence.
+
+M11 initial context.runtime tests red-to-green for previously absent API, explicit
+ID prevalidation and compatibility preparation. Parent identified a redundant
+tenant-success cache motivated by a spy asserting zero subsequent preparation
+method calls rather than the accepted no-DDL guarantee. Writer reverted that
+change: existing transient coalescing and settled clearing remain; provider
+physical readiness stays authoritative. Test now checks read-only mode, no monitor
+side effect and later valid read. Environment APIs continue; no acceptance yet.
+
+M13 read-only inventories accepted: documentation Luna/medium identifies three
+active broad replay/recovered-handler passages requiring Agent qualification;
+current removed-API/setup guidance otherwise aligned within scan scope. Historical
+Firestore analysis already explicitly superseded, no rewrite needed. Mechanical
+Luna/low confirms4task containers available, classifies actual native selected
+cases versus skips and wrong-DB diagnostics; missing Datastore Agent reopen raw
+log is not counted as durable raw evidence. Both explicit profiles confirmed;
+runtime metadata unavailable, no source edits/tests. External inventories retained.
+Final native selection will cover actual remaining evidence gaps after APIs settle.
+
+M11 context-level lifecycle checkpoint: focused tests pass for check/create
+sharing a pending read-only result, context close draining a held check, and
+automatic fatal cleanup preserving original explicit failure. Wrong generic-close
+expectation corrected to D0163 original-error contract, not a runtime defect.
+Environment-wide retained selection, live rechecks/ID copies, paging, monitor
+independence and final APIs/docs/checks remain. Parent reiterated existing
+release-before-global-join rule for multiple retained contexts before final review.
+
+M11 lifecycle regressions observed red-to-green: caller TenantId mutation during
+awaited membership, and environment index lookup racing context close. Focused
+4/4 pass. Writer now captures IDs before await, retains selected completed context
+work before async directory selection, and releases those admissions before
+joining global fatal cleanup. Live membership recheck/paging/monitor/static/docs
+remain; no freeze/acceptance yet.
+
+M11 focused green: live membership removed during shared preparation rejects
+before tenant Entity work; noarg compatibility call traverses65tenants in2pages;
+explicit monitor starts first pass without per-tenant Entity preparation. Prior
+ID mutation and directory-close regressions remain green. Public export/docs and
+affected cheap gates follow; no blanket final coverage/native claim.
+
+M11 additional focused proof green: environment-wide explicit preparation retains
+two completed contexts, required provider failure triggers full cleanup without
+self-wait, and subsequent calls preserve the original failure. Environment IDs
+are copied before async lookup. Full context suite previously130/130 before
+added case; final affected suites/static/coverage still pending. Public docs and
+type export now included; external m11-review-context.md prepared but not dispatched.
+
+M11 expanded affected run180pass/2fail exposed older environment fixtures:
+catalogless custom factory accidentally requested unsupported eager preparation;
+a fake persistent subscription registry lacked cleanup. Writer corrected setup
+for the tests' actual membership/warning purposes (deferred catalogless build;
+real StorageSubscriptionRegistry),focused2/2pass. Full4-suite rerun/static pending.
+Changed executable coverage context40/41 (defensive invalid-built-context guard),
+environment41/41. Keep this limitation; no coverage-filling test requested.
+
+M11 implementation frozen:4affected suites182/182; separate overlapping
+context-focused coverage131/131,changed lines context40/41/environment41/41.
+Fresh generated build,tooling,changed-fileESLint,cleanup,TSDoc,copyright,docs,
+format,diff pass. One defensive internal missing-context guard unhit; no global
+coverage claim. Existing explicit Sol/medium implementer confirmed, runtime
+metadata unavailable. Evidence m11-preparation-evidence.md. Parent pre-review
+status/export/docs check confirms narrow intended public surface; source frozen
+for all4canonical concerns. No changes/commit before full wave collected.
+
+M11 whole review wave collected: reliability/style clean; API synchronous-error
+contract and3documentation gaps accepted. Same writer receives single bounded
+batch m11-review-correction-batch.md; estimate0.25–0.5hours. Preserve ID capture
+and admission beforefirstawait while ensuring rejectedPromise for invalidID.
+Clarify singletenant/noarg/override scope, existingDBs and precise fatal-vs-local
+failures. Targeted API/docs re-review only after fresh relevantchecks.
+
+M11 A1 regression red-to-green: malformed generated TenantId formerly threw
+synchronously; async explicitStructures now rejects its Promise and still copies
+IDs beforefirstawait. Focused1/1 and fresh generatedbuildpass. D1–D3 prose/TSDoc
+updated for neutral single-tenant scope, paged multitenant/override selection,
+existingdatabase/noimplicitkeep and precise requiredfatal-vs-localerrors.
+Final focusedcoverage/static then targetedAPI/docsre-review remain.
+
+M11 accepted: public runtime/environment preparation APIs complete. API A1
+red-to-green and targeted re-review clean; docs D1/D2 and precise failure scope
+confirmed, final deterministic D3qualification now limits existing-database
+prerequisite to database-backed providers. Parent verified literal correction;
+TSDoc/generateddocs/format/diffpass after prose-only change, no redundant runtime
+test rerun. Four affected suites183/183, freshbuild/tooling/static/docs pass;
+scoped changedlines context40/41 andenvironment41/41, defensiveguard limit
+retained. Reliability/style clean; all4canonical concerns accepted. Final
+security/release M13. Commit and immediate origin push next. Approximately82%.

@@ -16,6 +16,7 @@ export {
   BoundedContext,
   BoundedContextBuilder,
   type BoundedContextBuildOptions,
+  type BoundedContextRuntime,
   type BoundedContextName,
   BoundedContextNameError,
   DuplicateEntityStateException,

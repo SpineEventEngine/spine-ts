@@ -1377,3 +1377,62 @@ focused behavior evidence. No edits/reruns/children; runtime metadata unavailabl
 Report m10-reliability-review.md. Documentation Luna/medium clean. API/style
 N/A dispositions above remain appropriate to unchanged public/structural surface.
 No correction batch needed. M10 accepted; final security/release remain M13.
+
+M11 review plan prepared, dispatch only after complete cheap checks and freeze.
+All four canonical concerns apply: new public runtime/environment APIs and
+declarations, preparation/close coordination, added runtime selection structure,
+and changed usage/TSDoc claims. Estimate0.5–1hour for concern-specific review and
+aggregation, included in milestone estimate; correction time depends on findings.
+Existing reliability reviewer live_reliability_review, original explicit Sol/medium;
+existing typescript_api_docs_reviewer role and style_maintainability_reviewer role,
+each explicit gpt-6-sol/medium; existing documentation role
+monitor_documentation_review, explicit immutable gpt-6-luna/medium.
+Use external m11-review-context.md plus final evidence/manifest and full TASK
+ledger. No reviewer edits/tests/builds/children; separate concerns only. Runtime
+metadata unavailable unless exposed. One complete wave before returning one
+accepted batch to same implementer; no source edits while frozen. Security M13.
+
+M11 reliability Sol/medium CLEAN,9/9 hashes match; reviewer withdrew a potential
+monitor-close concern after verifying accepted work drains before monitor close.
+No actionable runtime defect. API reviewer explicit Sol/medium reports P2:
+malformedTenantId synchronously throws from Promise-returning context methods,
+unlike rejected environment promises. Documentation explicit Luna/medium reports
+3P2 gaps: neutral single-tenant scope incorrectly described as index paging;
+environment override/noarg selection unclear; explicit failure/existing-DB
+semantics omitted. Reports persisted externally; no edits/tests/builds/children.
+Immutable explicit profiles confirmed, runtime introspection unavailable.
+Maintainability concern still pending, now dispatched existing role explicit
+Sol/medium; no correction batch until whole wave complete.
+
+M11 complete wave: maintainability explicit Sol/medium CLEAN,9/9hashes match,
+no edits/reruns/children. All4profiles explicit and confirmed; runtime metadata
+unavailable. Parent accepts API A1 synchronous malformed-ID throw plus docs
+D1singletenant wording,D2environment override/noarg scope,D3explicitfailure and
+existingdatabase semantics. Four deduplicated P2 corrections in external
+m11-review-correction-batch.md return to same writer. Reliability/style clean
+stand; re-review only substantive API/docs after checks. Estimate0.25–0.5hours
+for bounded correction/check/review; no new architecture. No M11acceptanceyet.
+
+M11 correction frozen: A1 observedred-to-green,183/183affectedtests and fresh
+build/static/docs/format/diffpass. Correctedmanifest9hashes,mutablelogs excluded.
+D1–D3 prose/TSDoc updated. Same writer explicitSol/medium confirmed. Dispatch
+existing preparation_api_review Sol/medium for A1 only, existing documentation
+role monitor_documentation_review Luna/medium for D1–D3 only. No tests/edits/
+children. Reliability/style dispositions stand: async validation boundary and
+clarified prose do not alter reviewed lifecycle selection/tracking.
+
+M11 targeted A1 API re-review CLEAN,9/9correctionhashes match; explicitSol/medium
+confirmed, no reruns/edits, runtime metadata unavailable. Documentation D1/D2
+resolved and failure-scope D3 resolved; one residual P2 overbroad existing-database
+prerequisite applies incorrectly to memory. Accept deterministic qualification:
+only database-backed providers require an existing configured database. Samewriter
+returns this narrow wording correction; no substantive runtime/API change or
+full review reopening. Parent checks final wording plus documentation gates.
+
+M11 final D3qualification inspected by parent: database-backed providers only,
+memory unaffected. Writer changed prose/TSDoc only; documentation/format/diff
+gates pass. No substantive contract/lifecycle change requiring new lane. API A1
+targeted confirmation clean; D1/D2/failure semantics confirmed by Luna review;
+reliability and maintainability clean from fullwave. All explicitconfigured
+profiles confirmed, runtime metadata unavailable. M11 accepted with defensive
+internalguard coverage limitation; final security/release remain M13.

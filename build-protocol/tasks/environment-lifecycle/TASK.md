@@ -22,8 +22,9 @@ conditional live Agent persistence and complete runtime recovery removal are rev
 Shared environment setup and Delivery consolidation are reviewed and complete,
 including context-specific shutdown and retained shared dispatch lifetimes.
 Bounded Context eager/lazy initialization is reviewed and pushed.
-Subscription monitoring is verified and independently reviewed. Explicit context
-and environment preparation APIs are next. Remaining milestones follow
+Subscription monitoring is reviewed and pushed. Explicit context and environment
+preparation APIs are verified and independently reviewed. Protocol integration
+and remaining AnyPacker adoption are next. Remaining milestones follow
 MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.
