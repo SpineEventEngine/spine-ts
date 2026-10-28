@@ -17,12 +17,23 @@ import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Client } from "@spine-event-engine/client-web";
 import { ErrorSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
-import { BoundedContext, Server, ServerEnvironment } from "@spine-event-engine/server";
+import {
+  Aggregate,
+  BoundedContext,
+  Repository,
+  Server,
+  ServerEnvironment,
+} from "@spine-event-engine/server";
 import { BrowserServer } from "@spine-event-engine/server/browser";
 import { ServerTests } from "@spine-event-engine/server/testing";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { CreateProjectSchema } from "../generated/spine/server/testing/project_commands_pb.js";
+import { ProjectCreatedSchema } from "../generated/spine/server/testing/project_events_pb.js";
+import {
+  ProjectStateSchema,
+  type ProjectId,
+} from "../generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflowIds } from "../test-fixtures/project-workflow.js";
 
 afterEach(async () => ServerTests.resetEnvironment());
@@ -76,6 +87,65 @@ it("preserves unknown-tenant details through browser gateway and Connect client"
     expect((result as ConnectError).code, String(result)).toBe(Code.NotFound);
     expect((result as ConnectError).findDetails(ErrorSchema)[0]?.type).toBe("TENANT_UNKNOWN");
     expect(dispatch).not.toHaveBeenCalled();
+  } finally {
+    await closeBrowserResources([
+      () => client?.close(),
+      () => running?.close(),
+      () => native?.close(),
+      () => context.close(),
+    ]);
+  }
+});
+
+it("preserves unknown-tenant details for browser subscription activation", async () => {
+  const environment = ServerEnvironment.instance();
+  await environment.completeSetup();
+  const tenant = create(TenantIdSchema, { kind: { case: "value", value: "absent-browser-sub" } });
+  const actor = create(UserIdSchema, { value: "guest" });
+
+  /**
+   * Provides a domain-correct Event route for the browser subscription.
+   */
+  class Project extends Aggregate<ProjectId, typeof ProjectStateSchema> {}
+  const context = await BoundedContext.multitenant("BrowserSubscriptionTenantProof")
+    .add(
+      new Repository({
+        entityType: Project,
+        schema: ProjectStateSchema,
+        events: [ProjectCreatedSchema],
+      }),
+    )
+    .build();
+  const actorContext = { actor, tenant, timestamp: create(TimestampSchema) };
+  let native: Awaited<ReturnType<Server["start"]>> | undefined;
+  let running: Awaited<ReturnType<typeof BrowserServer.run>> | undefined;
+  let client: Client | undefined;
+  try {
+    native = await new Server({ contexts: [context], port: 0 }).start();
+    running = await BrowserServer.open(native, {
+      origins: ["http://127.0.0.1:5173"],
+      publicAccess: true,
+      authorize: () => Promise.resolve(true),
+      contexts: {
+        resolve: () => Promise.resolve(actorContext),
+        resolveContext: () => Promise.resolve(actorContext),
+      },
+      clock: { now: () => create(TimestampSchema) },
+    });
+    client = Client.forConnect(running.baseUrl, {
+      tenant,
+      onRequestMetadata: () => ({ origin: "http://127.0.0.1:5173" }),
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription([ProjectCreatedSchema], { kind: "event" });
+    const result = await subscription.activate().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(result).toBeInstanceOf(ConnectError);
+    expect((result as ConnectError).code, String(result)).toBe(Code.NotFound);
+    expect((result as ConnectError).findDetails(ErrorSchema)[0]?.type).toBe("TENANT_UNKNOWN");
   } finally {
     await closeBrowserResources([
       () => client?.close(),

@@ -156,6 +156,63 @@ describe("SubscriptionUpdateRelay", () => {
 });
 
 describe("NativeSubscriptionCreator", () => {
+  it.each(["activate", "cancel", "dispose"] as const)(
+    "retains application metadata on failed subscription %s",
+    async (operation) => {
+      const failure = new ConnectError("backend unavailable", Code.Unavailable, {
+        "content-type": "application/grpc+proto",
+        "grpc-message": "backend unavailable",
+        "x-application-trace": "operation-trace",
+      });
+      const creator = new NativeSubscriptionCreator({
+        unary: () => Promise.reject(failure),
+        stream: () => Promise.reject(failure),
+      });
+      const bytes = toBinary(
+        SubscriptionSchema,
+        create(SubscriptionSchema, {
+          id: { value: "one" },
+          topic: create(TopicSchema),
+        }),
+      );
+      const wire = { kind: "public-subscription" as const, bytes };
+      const backend = { kind: "backend-subscription-envelope" as const, bytes };
+      const signal = new AbortController().signal;
+      const work =
+        operation === "activate"
+          ? creator.activate({ wire: backend, updates: () => Promise.resolve() }, signal)
+          : operation === "cancel"
+            ? creator.cancel({ wire }, signal)
+            : creator.dispose(backend, signal);
+      await expect(work).rejects.toBe(failure);
+      expect(failure.metadata.get("content-type")).toBeNull();
+      expect(failure.metadata.get("grpc-message")).toBeNull();
+      expect(failure.metadata.get("x-application-trace")).toBe("operation-trace");
+    },
+  );
+
+  it("keeps subscription application metadata while dropping backend protocol headers", async () => {
+    const failure = new ConnectError("missing tenant", Code.NotFound, {
+      "content-type": "application/grpc+proto",
+      "grpc-status": "5",
+      "x-application-trace": "subscription-trace",
+    });
+    const creator = new NativeSubscriptionCreator({
+      unary: () => Promise.reject(failure),
+    } as unknown as Transport);
+    const wire = {
+      kind: "public-subscription" as const,
+      bytes: toBinary(
+        SubscriptionSchema,
+        create(SubscriptionSchema, { topic: create(TopicSchema) }),
+      ),
+    };
+    await expect(creator.subscribe(wire, new AbortController().signal)).rejects.toBe(failure);
+    expect(failure.metadata.get("content-type")).toBeNull();
+    expect(failure.metadata.get("grpc-status")).toBeNull();
+    expect(failure.metadata.get("x-application-trace")).toBe("subscription-trace");
+  });
+
   it("preserves application error metadata while dropping backend protocol headers", async () => {
     const failure = new ConnectError("missing tenant", Code.NotFound, {
       "content-type": "application/grpc+proto",

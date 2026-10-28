@@ -1477,3 +1477,62 @@ Initial inline throw lint diagnostic resolved by helper. This deterministic
 test-only correction does not reopen runtime/API/docs/style lanes. Allfour
 concerns accepted; security reserved finalM13. External correction evidence
 m12-review-correction-evidence.md. No global/native-provider coverage claim.
+
+## M13 convergence and final release-readiness review
+
+M13basea3f062f5229233d80957ff4851c63b14ad20e9cb. Fulltaskbaseline
+ff6c8669537a016c47f012150306500d3b52b5d1. Externalm13-frozen-manifest.json,
+m13-convergence-implementation-evidence.md andm13-final-review-context.md.
+Scoped21/21 andauthchanged23/23covered; currentnativePGpublicprep1/1, Datastore
+reopen1selected/family1selected; build/tooling/static/docs/checks pass.
+Heldsharddiagnostic explained bycontrolledfixtureisolation/reproduction; final
+nativetest isolatesbothfamilies andusesenvironmentcleanup. No releaseglobal
+coverageclaim. Relevantprior M1–M12reviewacceptance remainsvalid.
+
+Read-only assignments, explicitconfiguredprofiles, runtime metadataunavailable,
+noedits/tests/builds/children; hasheschecked excludingparentrecords:
+
+- security_reviewer gpt-6-sol/high: finalrelease changedrisks acrossfulltask
+  baseline usingfinal-environment-security-review-context.md.
+- documentation_reviewer gpt-6-luna/medium: currentguides/examples/workflows
+  againstacceptedfinalcontracts, preservehistoricalrecords/fullAgenttask.
+- performance_reliability_reviewer gpt-6-sol/medium: M13protocolnormalization,
+  nativeproof/isolation/cleanup and anyconcretecrosschange risk.
+- typescript_api_docs_reviewer gpt-6-sol/medium: final M13observableprotocol
+  andpublicworkflowclaims; followscapacity.
+- style_maintainability_reviewer gpt-6-sol/medium: M13source/testsimplicity,
+  domainfixtures/inventory andtestquality; followscapacity.
+  Collectallfive beforeoneacceptedcorrectionbatch. Estimate0.5–1.5hours.
+
+M13 fullfiveconcern wavecollected. API/styleclean. AcceptedSEC-1High rawconsole
+Commanderrorbypass; reliabilityP2 nativefixturetableaccumulation; documentation
+P2 receiptpersistentstoragequalification. All11hashesmatch eachreview; explicit
+Sol/mediumtechnical,Luna/mediumdocs,Sol/highsecurityprofilesconfirmed; independent
+runtimeintrospectionunavailable. Fulltasksource-addition scanfindsonlyone new
+console/Mnumberdebugcall, the acceptedSEC-1. Samewriter receivesexternal
+m13-correction-batch.md; estimate0.3–0.6hours. Targetedsecurity/reliability
+confirmation afterchecks; narrowdocqualification deterministic. No newarchitecture
+or broadreview/reverificationloop. Release/version/CI remainpending.
+
+M13 correction evidence is frozen in m13-correction-manifest.json. SEC-1 has
+red/green proof: the existing safe-log test captured the raw console call before
+removal; the complete service suite passes132/132 and final focused case1/1.
+R1 uses a test-created unique schema in the existing PostgreSQL database; closes
+context/environment, drops only that schema, asserts absence, and closes the
+administrative pool. Native case1/1 and separate schema inventory pass. D1 now
+qualifies persistent versus memory receipt survival. Fresh build, tooling,
+relevant lint/TSDoc/cleanup/docs/format/diff checks pass; scoped LCOV retained.
+Targeted confirmation reuses explicit Sol/high security and Sol/medium reliability
+profiles. No whole-task review rerun; API/style unchanged. Parent verifies the
+deterministic documentation qualifier directly. Runtime metadata unavailable.
+
+M13 final review corrections accepted. Targeted reliability confirmation checks
+all13 hashes and resolves R1: isolated schema, ordered attempt-all cleanup,
+verified schema absence, and pool release. Targeted security confirmation checks
+all13 hashes and resolves SEC-1: no raw console call; safe structured log and
+generic acknowledgement remain; secret-bearing failure regression is meaningful.
+The first security confirmation returned without inspection and was not accepted;
+the same explicit Sol/high reviewer completed the bounded retry. Parent verified
+the D1 persistent/memory qualifier directly. No unresolved accepted findings.
+All five concerns have accepted dispositions; final release coverage and exact-SHA
+CI remain separate pending gates. Profile metadata limitation remains recorded.

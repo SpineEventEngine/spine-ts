@@ -24,8 +24,10 @@ including context-specific shutdown and retained shared dispatch lifetimes.
 Bounded Context eager/lazy initialization is reviewed and pushed.
 Subscription monitoring is reviewed and pushed. Explicit context and environment
 preparation APIs are verified, independently reviewed and pushed. Protocol integration
-and remaining AnyPacker adoption are verified and independently reviewed. Final
-documentation, native evidence, security review and release convergence are next. Remaining milestones follow
+and remaining AnyPacker adoption are verified, independently reviewed and pushed.
+Final documentation, native evidence, specialist review and security review
+are accepted. Version preparation and final release verification are in progress;
+exact-SHA remote CI remains pending. Remaining milestones follow
 MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.

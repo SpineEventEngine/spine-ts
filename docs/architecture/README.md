@@ -791,13 +791,15 @@ acknowledgement-only retries. The supervisor
 rescans pending shards every 10 seconds by default, separately from the
 60-second stale-session threshold and the configurable Delivery server processing
 timeout, which is disabled by default. These [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
-do not guarantee a delivery or takeover deadline. It adds no persisted attempts,
-quarantine, receipts, markers, or dead-letter storage. Callback snapshots copy `Date` values
+do not guarantee a delivery or takeover deadline. The ordinary Delivery
+supervisor adds no persisted attempts, quarantine, receipts, markers, or dead-letter storage.
+Callback snapshots copy `Date` values
 and `Any.value` bytes. The package exposes no raw worker callback API; replay
 stays behind validated endpoints. Local posting handoffs cover command rows,
-projection subscriber rows, and process-manager event rows. Command
+projection subscriber rows, and process-manager event rows. Ordinary Command
 handlers and projection subscribers wait for the exact received row to replay;
-framework replay validates the row label and pending `TO_DELIVER` status
+an accepted Agent interaction is never re-executed after interruption.
+Framework replay validates the row label and pending `TO_DELIVER` status
 before projection or user handler code runs, and the posting path resolves only
 after that row reaches `DELIVERED`. Live
 process-manager event routing writes `REACT_UPON_EVENT` rows carrying the

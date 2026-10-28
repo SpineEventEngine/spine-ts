@@ -345,9 +345,11 @@ partition in a multitenant destination. The query never replaces the tenant to
 suit the target. A valid query with no matching record keeps its ordinary empty
 result (`undefined` from `findById()`). Reads remain eventually consistent.
 
-Routes are available before recovered handlers execute. Server shutdown drains
-accepted handlers across contexts before closing any target read-side; failed
-startup validation participates in context and resource cleanup.
+Routes are available before ordinary Inbox work resumes. An accepted Agent
+interaction never resumes after interruption; a fresh signal starts fresh work.
+Server shutdown drains admitted handlers across contexts before closing any
+target read-side; failed startup validation participates in context and
+resource cleanup.
 
 ```ts
 import type { Message } from "@bufbuild/protobuf";
@@ -594,8 +596,10 @@ repeated declarations fail closed. It is not an alternative routing mechanism.
 Configure logging through `ServerEnvironment` when assembling the server. The
 server installs that logger into its runtime components, where warnings and
 failures carry operation context. Durable facts belong in events or storage.
-Entity Inbox replay sends persisted accepted work through the normal handler
-path, so handler effects must be replay-safe.
+Ordinary Aggregate, Process Manager, and Projection Inbox replay sends persisted
+accepted work through the normal handler path, so those handler effects must be
+replay-safe. An accepted Agent interaction is recorded by its receipt and is
+never re-executed after interruption.
 
 ## Context assembly and entities
 

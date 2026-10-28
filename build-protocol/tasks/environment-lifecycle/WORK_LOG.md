@@ -3331,3 +3331,115 @@ focusedchecks pass. Real browser/native structured tenant errors and ordinary
 Any adoption complete. No unresolved M12finding. Commit/immediatepush next;
 approximately90percent implementation,12of13milestones accepted. M13 final
 docs/nativeevidence/security/release/version/remoteCI still required.
+
+M12 pushed a3f062f5229233d80957ff4851c63b14ad20e9cb; exactremoteSHA and clean
+worktree confirmed. Twelveofthirteen milestones accepted, approximately90percent.
+
+M13 convergence begins, highrisk finalrelease integration. Estimate2–4hours
+includes currentguidance/examples, native publicAPI/reopen evidence, relevant
+review+finalsecurity, cheap preflight/fullrelease and commonversion/push.
+Existing sole implementer /root/storage_retention reused with explicitly
+configured gpt-6-sol/medium; actual runtime metadata unavailable. Desktop
+profiles supported. No children/commits/pushes; parentrecords/review orchestration.
+External m13-convergence-implementation-brief.md governs bounded firstpass.
+Acceptance: no current recovery promises or staleinventory; final publicAPI
+examples match actual contracts; real native publicprep and missingDatastore
+rawproof addressed; focusedchecks clean. Freeze before finalspecialist/security
+reviews; finalrelease follows allacceptedcorrections. No migrations/provisioning,
+PR or master changes. Version-onlycommit remains separate for all35manifests.
+
+M13 independent version preparation: same orchestrator-dispatched read-only
+mechanical function /root/release_inventory, explicit immutablegpt-6-luna/low.
+Estimate0.1–0.2hours includedinM13. Exactworkspace manifestset and public npm
+registry versions checked scripts-first; no edits/builds/publication/commits.
+Report candidate availability with exacttimestamp and errors, no inferredabsence
+onfailedquery. Finalavailabilityrecheck beforeversionmutation remainsrequired.
+
+M13 native/inventory firstpass: stableCIinventory red1failed/3passed from3deleted
+paths. Datastore Agentreopen actualemulator1passed/2unselected, closes missing
+rawloggap. Physicalfamilycase red1failed/8unselected fromold ungroupedEventkind
+assertion; writer corrects exactfixtures thenreruns. No productiondefect inferred.
+
+M13 adjacent protocol inspection: NativeSubscriptionCreator.subscribe returns
+nativegrpc errors directly; gateway subscription path rethrows unlike new
+Post/Read headernormalization. Parent identified concrete possible sameheader
+defect, asked samewriter for realbrowser Subscribe unknown-tenant reproduction
+before anyclaim/fix. Expand M13 narrowly onlyifconfirmed; preserveerror metadata.
+
+Version preparation accepted: explicitLuna/low, metadataunavailable. All21public
+packages from package-artifacts returnedvalidregistryHTTP200 at
+2026-10-28T11:42:18.786Z, highest snapshot.24 andcandidate.25absent. No failed
+queries assumedabsence. Publicartifact policy29manifestset differs from exact
+workspace35set; requiredbump stillall35. Recheck.25immediatelybeforemutation.
+External m13-version-availability.md retains exact evidence; no edits/publication.
+
+M13 adjacentbrowser subscription bug confirmed by realConnectclient red:
+unknown-tenant activation/admission yieldsInternal13/HTTP400 ratherthan
+NotFound5+TENANT_UNKNOWN; existing browserPost passes. Native subscribe
+forwards grpcmetadata unchanged, M12normalization wasPost/Readonly. Samewriter
+applies sharednativeerror-header normalization to affected subscriptionRPC
+paths, preserving appmetadata/details. Existing approved propagationcontract,
+no newarchitecture/publicsignature; focusedredgreen thenrelevantreview required.
+
+M13 native publicAPI1/1passes on existingPostgreSQL62812/spine_env_test:
+explicitsetup, lazyfiveEntityProjectcontext, runtime.createStorageStructures,
+environment.checkStructureCompatibility, publicCommand andStandstateread.
+No newDB/container. New native test belongs infrastructureinventory. Datastore
+reopen/family proof and correctedinventory previouslygreen.
+
+Browser Subscribe nowgreen after normalization and validProject/eventfixture.
+Parent requested isolated regression proof with finalvalidfixture on bothsides
+to separate originalinvalidfixtureHTTP400 from actualmetadata defect; final
+packet must not misattribute fixtureerrors. No broadrepeat requested.
+
+M13 controlled browser regression confirmed: finalvalidProject/eventfixture
+unchanged, oldauth/native source compiled => Unimplemented12/HTTP404 insteadof
+NotFound5; restoredcorrectedsource/build => browser2/2 andnative-relay12/12pass.
+EarlierInternal13/HTTP400 was invalidfixture diagnostic, superseded as causal
+proof. Source restoration verified. Documentation/static/freeze remain.
+
+M13 unresolvednativeDelivery diagnostic is NOT accepted as incidental limitation.
+Original fiveEntity publicCommand probe intermittently fails LocalInboxHandoff:
+'Entity Inbox delivery was skipped before the target row was delivered'.
+Delivery drain returnedSKIPPED after workregistry.pickUp foundheldsession; only
+Inbox wasisolated, sessionsremainshared. Currentlogs do notidentifyholder.
+Narrow publicprep Standwrite/read test passes, but cannot resolve this other
+task-relatedfailure. Parent directs sameSol/mediumwriter source/evidence-first
+investigation of persistedfixturelease vs sameenv notification/safetyscan race;
+isolate allDeliveryfamilies usingexistingDB/config, no arbitrarywait/limits or
+newprodworkaround. If actualbug, deterministicred andminimalfix; demonstrated
+highriskambiguity goes to existingarchitect onlythen. Estimate0.5–1hour, may
+extendM13. Finalfreeze/security/release waits for explained/resolveddiagnostic.
+
+M13 Delivery diagnostic resolved: controlled uniqueInbox+ShardSession test
+executesallfiveProjecthandlers successfully; secondworker holdingisolatedshard
+reproducesexact skippedhandofferror. Shareddefaultsessionrow existedpicked
+2026-10-28T11:54:49.758Z. No sameenvrace demonstrated; testisolationcause
+established, noDeliveryruntimechange. Temporarydiagnostic removed.
+
+Parent pre-review nativefixturehardening applied: uniqueInbox+ShardSession
+tables retained eveninnarrowpublicprep test; closecontextthenenvironment,
+notfactorybeforeDelivery. PG1/1 andtooling/lint/format/diffpass. Allprior
+unchanged source/docs/scopedcoverage evidence remainscurrent.
+M13 finalfreeze: parentmanifest excludesmutablerecords. ExistingSol/medium
+implementer confirmed, runtime metadataunavailable. Finalreview wave begins,
+estimate0.5–1.5hours includingcorrections. Fullrelease/version/remoteCI pending.
+
+M13 finalwave accepted3findings; API/styleclean. ExistingSol/mediumwriter
+correctsrawdebuglog withsafe-log regression, PostgreSQLtest-onlystructure
+teardown (uniqueschema permittedinsideexistingDB, noframeworkprovisioning),
+andreceipt persistencequalifier. Externalbatchdetailsboundscope. Estimate
+0.3–0.6hoursincludingfocusedchecks/targetedreview. No sourceeditsbeforewholewave
+wascollected. Finalrelease notyetstarted.
+
+Finalintegrationread: freshlyfetched officialorigin/master remainsbaseline
+ff6c8669537a016c47f012150306500d3b52b5d1; no incomingcommits/backmerge needed.
+Featureworktree/branch isolation preserved; correctionbatch continues.
+
+M13 implementation and reviews converge. Both targeted confirmations are clean
+and all13 correction hashes match. SEC-1 regression red/green plus132/132 service
+tests; native preparation/cleanup1/1; scoped auth/browser/inventory21/21 and
+23/23 changed auth lines covered. Current docs and all accepted findings resolved.
+Global release coverage remains unverified. Approximately95percent complete;
+reviewed convergence checkpoint/push, common version, mandatory preflight and
+full release gate follow. Exact-SHA Build CI still requires an authorized PR.

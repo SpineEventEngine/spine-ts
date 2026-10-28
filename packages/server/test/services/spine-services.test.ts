@@ -812,22 +812,28 @@ describe("SpineServices", () => {
     } as never);
     if (post === undefined) throw new Error("CommandService was not registered.");
 
-    const ack = await post(createProjectionCommand("command-diagnostic"));
-    const wire = Buffer.from(toBinary(AckSchema, ack)).toString("utf8");
+    const rawError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const ack = await post(createProjectionCommand("command-diagnostic"));
+      const wire = Buffer.from(toBinary(AckSchema, ack)).toString("utf8");
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
-    expect(wire).not.toContain("secret SQL");
-    expect(wire).not.toContain("password");
-    expect(error).toHaveBeenCalledOnce();
-    expect(withMetadata).toHaveBeenCalledWith({
-      contextName: "Tasks",
-      commandId: "command-diagnostic",
-      commandType: TypeUrls.derive(CreateReviewProjectSchema),
-      operation: "command.post",
-      errorName: "Error",
-      errorCode: "ER_LOCK_DEADLOCK",
-    });
+      expect(ack.status?.status.case).toBe("error");
+      expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
+      expect(wire).not.toContain("secret SQL");
+      expect(wire).not.toContain("password");
+      expect(rawError).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledOnce();
+      expect(withMetadata).toHaveBeenCalledWith({
+        contextName: "Tasks",
+        commandId: "command-diagnostic",
+        commandType: TypeUrls.derive(CreateReviewProjectSchema),
+        operation: "command.post",
+        errorName: "Error",
+        errorCode: "ER_LOCK_DEADLOCK",
+      });
+    } finally {
+      rawError.mockRestore();
+    }
   });
 
   it("keeps a safe command status when an error has an unreadable diagnostic code", async () => {

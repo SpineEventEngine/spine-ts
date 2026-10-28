@@ -332,10 +332,14 @@ it starts another scan only if it delivered messages during the completed scan.
 It stops after a scan with no deliveries, rather than returning to the beginning
 after every productive page. The 30-second Inbox
 deduplication window controls how long delivered rows remain available as
-duplicate evidence. It is not a replay-retention period; accepted rows follow
-their Inbox lifecycle and may be replayed after the duplicate window has elapsed.
-The framework persists no attempts, quarantine, receipts, markers, timers, backoff,
-dead-letter storage, or scheduler policy.
+duplicate evidence. It is not a replay-retention period; ordinary accepted rows
+follow their Inbox lifecycle and may be replayed after the duplicate window has
+elapsed. An accepted Agent interaction has a stored receipt and never resumes
+handler or model execution after interruption. The receipt survives process
+termination with persistent storage; memory storage retains it only within that
+process. Ordinary Delivery persists no
+attempts, quarantine, receipts, markers, timers, backoff, dead-letter storage,
+or scheduler policy.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
