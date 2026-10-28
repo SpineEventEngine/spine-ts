@@ -135,7 +135,7 @@ interface AgentModelSelectionAccess {
    * @param registry Effective registry and hook bound.
    * @param repository Repository selection policy.
    * @param scope Accepted source and actor.
-   * @param preferences Claim-time per-instance selections.
+   * @param preferences Persisted per-instance selections.
    * @param signal Invocation cancellation.
    * @param deadlineEpochMs Absolute invocation deadline.
    * @param kind Generation or decision kind.
@@ -359,7 +359,7 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
    * @param registry Effective registry and hook bound.
    * @param repository Repository selection policy.
    * @param scope Accepted source and actor.
-   * @param preferences Claim-time per-instance selections.
+   * @param preferences Persisted per-instance selections.
    * @param signal Invocation cancellation.
    * @param deadlineEpochMs Absolute invocation deadline.
    * @param kind Generation or decision kind.
@@ -499,11 +499,11 @@ export const AgentModelSelection: AgentModelSelectionAccess = Object.freeze({
   },
 
   /**
-   * Builds the accepted deployment precedence from repository and claim-time facts.
+   * Builds deployment precedence from repository settings and persisted preferences.
    *
    * @param registry Effective deployment registry.
    * @param repository Repository models and selection policy.
-   * @param preferences Claim-time per-instance selections.
+   * @param preferences Persisted per-instance selections.
    * @param kind Generation or decision kind to select.
    * @returns Inputs for the registry's normal selection path.
    */

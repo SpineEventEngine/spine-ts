@@ -4646,3 +4646,70 @@ are now accepted: reviewed MySQL competing-index preparation tests (36 pass)
 and two existing offline preparation tests moved out of service skip groups
 (2 pass, 4 genuine native cases remain skipped). Static checks pass; production
 remains unchanged. Commit/push the three test files and records.
+
+M34/M35 push confirmed at 65012e630a070837376613bfcb79e36f5361a241 with clean
+working tree. Next M36 read-only selection targets a distinct preparation path:
+a retained runtime pool already serves one family; checking another family's
+structure fails and then succeeds after repair. Verify the first family's reads
+continue, the pool is not disposed, and failed structure readiness is retryable.
+PostgreSQL attemptTable's retained-pool failure branch at storage-factory.ts:1198
+is missed in rebuilt M26; compare MySQL's corresponding behavior and existing
+tests before selecting. Original API reviewer explicit Sol/medium handles this
+bounded inspection; no children, edits or tests. Estimate 0.1–0.2 hour selection,
+then 0.3–0.6 hour implementation/check/review if it is a genuinely missing case.
+
+Orchestrator-dispatched mechanical coverage measurement uses explicit
+`gpt-6-luna` / `low`, Standard speed, as a bounded function rather than a new
+project role. Measure only the two newly unskipped M35 files with service
+variables unset and current emitted output, then compare exact LCOV branch keys
+with rebuilt M26 and prior packets. No repository edits, children, generation,
+full-suite or release run. Persist evidence outside Git. Desktop supports this
+explicit model/reasoning dispatch; runtime metadata may not be introspectable.
+
+M35 mechanical measurement accepted: explicit dispatch fields were
+`gpt-6-luna` / `low`; runtime metadata unavailable, configured profile recorded.
+Two offline tests pass and four native cases skip. Every observed baseline
+branch-key set matches. Cumulative M27–M35 unique hits total 40, estimated 99
+remaining; no new global percentage claimed. Evidence
+m35-coverage-measurement.md and current-cumulative-coverage-gain.json outside Git.
+
+M36 exact selection confirmed by original API reviewer. Same sole Sol/medium
+implementer adds paired SQL tests: one live shared family retains a pool, another
+grouped family fails explicit read-only compatibility, original reads continue,
+no DDL or pool disposal occurs, external repair permits a fresh successful
+check, and shutdown ends one pool once. Use public table/group registration and
+existing metadata mocks. No production changes absent demonstrated defect.
+Estimate 0.3–0.6 hour for focused checks, review and push.
+
+M37 micro wording correction: final stale-recovery terminology scan found three
+claim-time references in AgentModelSelection TSDoc and one test name (two source
+comment lines, one test-title line). Replace with persisted preferences; behavior,
+signatures and serialized contracts are unchanged. Parent handles this disjoint
+micro edit while the sole implementer writes only M36 provider tests. Estimate
+under 0.1 hour including scoped static checks and current emit refresh. Parent
+review suffices; no security boundary or architecture change. Preserve source
+line counts and compare emitted runtime bytes to establish unchanged behavior.
+
+M37 static checks pass. TypeScript transpilation with comments removed is exactly
+identical before/after; source line count is unchanged. Evidence is
+m37-semantic-check.json outside Git. The earlier runtime-byte comparison means
+comment-free emitted JavaScript, since ordinary emission preserves comments.
+The security-reviewed source hash changes only in those two comments; runtime,
+contracts and security behavior remain unchanged. Refresh emitted build output
+before further coverage measurement.
+
+Remaining-work estimate revised to 2–4 hours for meaningful coverage completion,
+focused review, release verification and final-SHA Security CI, excluding new
+material defects. Read-only coverage selection is dispatched to the existing
+performance/reliability reviewer, explicitly configured Sol/medium. Inspect
+uncovered changed runtime behavior against existing tests and cumulative hits;
+return a short prioritized batch with concrete supported scenarios, not defensive
+input matrices or duplicate native cases. No edits, tests, children or new role.
+This selection may proceed alongside M36 implementation because it is read-only.
+
+M37 build refresh passes. Parent review confirms only two source comments and
+one test title changed; no extra behavior tests are appropriate. Scoped ESLint,
+Prettier, diff hygiene and comment-free runtime equality pass. All canonical
+review concerns are disposed as unchanged behavior/contracts/documentation claims
+except the corrected persisted-preference wording; no specialist lane reopened.
+Commit and push only M37 paths plus this record while M36 tests remain in progress.

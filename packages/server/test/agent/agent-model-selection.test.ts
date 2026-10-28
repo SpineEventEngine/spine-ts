@@ -208,7 +208,7 @@ describe("Agent model authorization scope", () => {
     await expect(pending).rejects.toThrow("cancelled");
     timeout.mockRestore();
   });
-  it("uses the accepted support Command and claim-time preference before authorizing a deployment", async () => {
+  it("uses the accepted support Command and persisted preference before authorizing a deployment", async () => {
     const authorized = vi.fn(() => true);
     const { registry, preferred } = selectionRegistry(authorized);
     const selected = await AgentModelSelection.selectLiveKind(
