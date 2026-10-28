@@ -12,10 +12,11 @@
  * the License.
  */
 
-import { ManagedServerApplication, Server } from "../../dist/index.js";
+import { ManagedServerApplication, Server, ServerEnvironment } from "../../dist/index.js";
 import { managedServerApplicationAccess } from "../../dist/server/managed-server-application.js";
 import process from "node:process";
 
+await ServerEnvironment.instance().completeSetup();
 const managed = await ManagedServerApplication.run({
   processCount: 1,
   port: 0,

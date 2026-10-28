@@ -1672,3 +1672,27 @@ and release retry semantics remain unchanged. Parent style review accepts the
 two-line reorder. Managed-server fixture correction is deterministic under
 D-0159: reject reuse of a closed environment and build against an explicitly
 prepared fresh test environment. No additional specialist lane is warranted.
+
+### Full-suite correction C2: Process Manager produced Commands
+
+Frozen three-path packet in m13-produced-command-correction-evidence.md passes
+8/8 workflow cases, focused repository behavior, generated build, tooling,
+lint/TSDoc/format/containment/diff and changed-line coverage. Review scope is
+repository.ts, project-event-routing.test.ts and containment-manifest.json only.
+Existing reliability and TypeScript/API reviewers retain explicit Sol/medium
+profiles; sequence lanes for current capacity, collect the complete wave before
+fixes. Read-only, no tests/builds/edits or children. Check D-0164 publication
+registration, drain, failure containment, handler ordering and ordinary delivery.
+Assess missing supervised/commit-failure/duplicate tests against actual changed
+paths, without claiming unrun coverage. Parent inspects bounded style; narrow
+TSDoc accompanies source and no public API or serialized data changes. Security
+disposition is unchanged for this correction; separate dependency follow-on is
+requested. Full human ledger applies; historical superseded prose alone is not
+a finding. Runtime metadata unavailable; explicit immutable profiles apply.
+
+Managed subprocess fixture correction: parent deterministic review accepts two
+explicit setup calls under D-0159; full affected suites and static checks pass.
+No public, persisted, runtime-concurrency, security or documentation contract
+changes, so additional specialist lanes are N/A for these fixture-only edits.
+C2 API review is clean with all three hashes matching and explicit Sol/medium
+profile confirmed; collect reliability findings before accepting the full wave.

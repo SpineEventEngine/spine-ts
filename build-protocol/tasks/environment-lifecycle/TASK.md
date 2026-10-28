@@ -29,7 +29,11 @@ Final documentation, native evidence, specialist review and security review
 are accepted. The version-only commit for all 35 workspace manifests is pushed.
 The first full-suite execution exposed regression failures; bounded corrections
 and final release verification are in progress;
-exact-SHA remote CI remains pending. Remaining milestones follow
+exact-SHA remote CI remains pending. On 2026-10-28 the human additionally
+requested remediation of all findings from the scheduled Security workflow,
+including run 40632154594. Its dependency audit reports 31 vulnerabilities;
+remediation follows lifecycle regression convergence and is required before
+final acceptance. Remaining milestones follow
 MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.
@@ -58,6 +62,8 @@ supported only after implementation.
   Preserve Any type URLs through packing and round trips; do not work around the
   Datastore key defect by carrying native keys instead of correcting packing.
 - Preserve independent Bounded Context operation during other context builds.
+- Address all scheduled security dependency findings after lifecycle work; retain
+  the existing audit thresholds and checks.
 
 ## Workflow
 
@@ -95,7 +101,8 @@ and dispatch evidence are kept outside version control in `/tmp/spine-environmen
 
 The ordered milestones are frozen in MILESTONES.md. Implementation and review
 are accepted for the completed slices. Resolve the full-suite regression failures,
-complete the mandatory preflight and release checks, push every feature commit immediately, and report exact
+remediate the scheduled security findings, complete the mandatory preflight and
+release checks, push every feature commit immediately, and report exact
 remote state. The common unused version has been committed separately. Do not create
 or merge a pull request without explicit human instruction.
 

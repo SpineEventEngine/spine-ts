@@ -3668,3 +3668,39 @@ Updated remaining estimate: 2–4 hours for regression convergence, dependency
 remediation, focused review and full release verification; package compatibility
 is the principal uncertainty. Current completion estimate remains approximately
 93 percent, with security remediation additionally required.
+
+Read-only security dependency investigation dispatched as an orchestrator
+function, explicit gpt-6-luna / medium. Inspect the saved failed job log, current
+manifest/lockfile dependency paths and authoritative package metadata; report
+minimal compatible patched versions and focused verification requirements. No
+source/dependency edits, installs, commits, tests or nested agents. This prepares
+the requested follow-on while the sole implementer finishes lifecycle regressions.
+Desktop supports explicit profiles; actual runtime metadata is unavailable.
+
+Managed-server SIGTERM timeout isolated to two further subprocess fixtures that
+omit completeSetup before waiting for readiness IPC. Existing implementer will
+correct managed-server-application-parent.mjs and start-parent.mjs, then check
+the exact signal/start cases and the full affected managed suite. No coordinator
+runtime change or test-timeout increase is authorized by this diagnosis.
+
+Security dependency inventory completed by the explicitly configured Luna/medium
+read-only function; no runtime introspection available. Report
+security-remediation-inventory.md covers all 31 findings, 23 distinct advisories
+and six package names. Patched floors are markdown-it 14.3.3, vite 8.1.6, zod
+4.6.6, undici 7.30.1/8.12.2, @vitest/mocker 4.1.12 and fast-uri 3.1.9. Pair
+Vitest/coverage-v8 pins. Metadata confirms compatibility with Node >=24; actual
+package behavior remains to be verified. Production audit never ran in the
+scheduled failure because the first command short-circuited. Both audits are
+required. This dependency-only follow-on is standard risk; no new architecture
+pass is justified. Existing verification skill/workflow applies; no additional
+authentication or security architecture skill is needed for bounded patched
+dependency updates. Complete lifecycle corrections before changing dependencies.
+
+Managed fixture correction accepted: focused SIGTERM/caller-managed cases pass
+2/2, full managed-application suite passes 63/63, and full Server suite passes
+153/153. Two entry-point fixtures now explicitly prepare their environment; no
+runtime or timeout changes. Parent inspected diff and frozen hashes; targeted
+lint/format/diff pass. Evidence m13-managed-server-fixture-evidence.md. Original
+107 failure mapping now has focused green evidence for every failed-file group
+in m13-attempt3-residual-checklist.md. This does not substitute for final full
+release verification. C2 reliability review and evidence requirements remain.

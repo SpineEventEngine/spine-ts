@@ -69,6 +69,11 @@ a time; independent checks and relevant reviews may run concurrently. See the
     final specialist/security review, cheap preflight then release verification,
     unused common workspace version, required feature pushes and exact remote
     state. No PR creation or merge without explicit instruction.
+14. **Scheduled security findings:** remediate every dependency advisory from
+    run 40632154594 and the current audit without lowering audit thresholds.
+    Preserve compatible dependency major versions; verify both complete and
+    production-only audits, affected tooling, and final release behavior.
+    Review the dependency changes before final acceptance.
 
 Every slice records focused acceptance evidence and review dispositions before
 moving on. No existing-data migration or conversion work belongs to any milestone.
