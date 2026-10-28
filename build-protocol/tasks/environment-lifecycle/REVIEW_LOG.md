@@ -1536,3 +1536,15 @@ the same explicit Sol/high reviewer completed the bounded retry. Parent verified
 the D1 persistent/memory qualifier directly. No unresolved accepted findings.
 All five concerns have accepted dispositions; final release coverage and exact-SHA
 CI remain separate pending gates. Profile metadata limitation remains recorded.
+
+### Final logging-containment correction
+
+Existing implementation function retained its explicit gpt-6-sol / medium
+profile; runtime self-introspection remains unavailable. Parent inspected the
+complete three-file diff: two source annotations and the containment inventory,
+with no executable changes. The initial monitoring failure now propagates and
+therefore no longer belongs to the swallowed-error inventory. Fatal test reset
+joins an already reported cleanup outcome; malformed warning metadata cannot
+prevent the later safe WARN. Checker 5/5 and runtime 44/44 pass, with relevant
+lint, typecheck, format and diff checks. This deterministic correction preserves
+all accepted specialist/security dispositions; no review lane is reopened.

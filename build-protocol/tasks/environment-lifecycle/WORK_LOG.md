@@ -3520,3 +3520,25 @@ TypeScript changed. Existing generator commands produced all metadata. This
 mechanical correction preserves accepted runtime reviews; a complete preflight
 and second release attempt follow. Root records the deterministic verification
 and pushes the metadata separately from the required version-only commit.
+
+Release attempt 2 passed generation, build, lint, docs and Proto checks, then
+stopped at logging containment before the full tests. Mechanical evidence:
+server-environment.ts:738 reset callback contains a rejected close; subscription-
+runtime.ts:234 contains malformed rejection metadata; old initial reconciliation
+inventory entry has no binding because the initial pass is now awaited.
+Bounded standard correction: confirm the intended propagation in all three
+paths, align containment annotations/inventory with actual behavior, preserve
+safe WARN and startup failure semantics. One Sol/medium implementer, no nested
+agents, no concurrent production edits. Estimate 0.2–0.4 hours including focused
+verification and any relevant targeted review, then complete preflight again
+before a justified third release attempt. No architecture redesign is indicated.
+
+Logging-containment correction accepted after parent diff inspection. Only two
+annotations and matching manifest entries changed; no executable behavior.
+Checker 5/5 and environment/subscription suites 44/44 pass; relevant lint,
+tooling typecheck, formatting and whitespace checks pass. Existing explicit
+Sol/medium implementation profile confirmed; runtime metadata unavailable.
+Push the correction, then reuse the explicit Luna/low mechanical function for
+the entire cheap preflight (including logging containment and all remaining
+cheap policy checks) before release attempt 3. Earlier full attempts never
+reached global tests or coverage. Do not infer a full-suite result from them.

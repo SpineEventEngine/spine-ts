@@ -735,6 +735,7 @@ export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<
             throw new Error("Cannot reset ServerEnvironment with active Bounded Contexts.");
           }
           if (resolved !== undefined && startupControls.get(resolved)?.failed())
+            // spine-log-boundary: server.fatal_environment_test_reset
             return resolved.close().catch(() => undefined);
           return resolved?.close();
         })

@@ -92,6 +92,14 @@
       "test": "packages/server/test/server/server-environment.test.ts"
     },
     {
+      "id": "server.fatal_environment_test_reset",
+      "source": "../../packages/server/src/server/server-environment.ts",
+      "operation": "server.environment_test_reset",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/server-environment.test.ts",
+      "rationale": "A fatal environment already attempted and recorded automatic cleanup; test reset restores singleton configuration after joining that outcome."
+    },
+    {
       "id": "server.log_sync_failure",
       "source": "../../packages/server/src/server/server-log.ts",
       "operation": "log.emit",
@@ -141,18 +149,19 @@
       "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
     },
     {
-      "id": "server.subscription_initial_reconcile",
+      "id": "server.subscription_timer_reconcile",
       "source": "../../packages/server/src/stand/subscription-runtime.ts",
       "operation": "subscription.reconcile",
       "disposition": "warn",
       "test": "packages/server/test/stand/subscription-runtime.test.ts"
     },
     {
-      "id": "server.subscription_timer_reconcile",
+      "id": "server.subscription_warning_metadata",
       "source": "../../packages/server/src/stand/subscription-runtime.ts",
       "operation": "subscription.reconcile",
-      "disposition": "warn",
-      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+      "disposition": "no-log",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts",
+      "rationale": "A malformed Error getter cannot block the later reconciliation warning or the next periodic pass."
     },
     {
       "id": "server.subscription_reconcile_tail",

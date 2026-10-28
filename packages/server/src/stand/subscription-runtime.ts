@@ -231,6 +231,7 @@ export class SubscriptionRuntime {
         errorName = error.name;
         errorCode = Reflect.get(error, "code");
       }
+      // spine-log-boundary: server.subscription_warning_metadata
     } catch {
       // A malformed rejection cannot prevent the next reconciliation pass.
     }
