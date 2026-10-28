@@ -2239,3 +2239,61 @@ M25 read-only selection accepted from original explicit Sol/medium API reviewer:
 live Decision result/audit, pending/stale facade, and authorization drift are
 meaningful gaps distinct from existing unit/sequential/new-signal-denial tests.
 Dispatch these three to existing implementer; reviewer made no edits or checks.
+
+Concrete follow-up investigation, not implementation approval: parent found
+SpineServices production code stores #testRegistries and catches context-access
+errors to create InMemorySubscriptionRegistry for structural test doubles. Its
+activation catch also switches to direct Stand/Event observers for those doubles.
+Built contexts now always provide their registry/runtime. Existing API reviewer
+Sol/medium will identify whether any supported caller needs these fallbacks and
+the smallest way to exercise services with real built contexts instead. Assess
+current mandatory shared lifecycle and fail-fast requirements, avoid unrelated
+query/test-observer redesign. No edits/builds/tests/children; implementation M25
+continues separately. This is a concrete obsolete-path hypothesis, not permission
+to remove code merely for coverage or to rewrite all service tests.
+
+M26 API investigation accepted in bounded scope: no supported caller requires
+test registry/direct observer fallbacks. Preserve real SubscriptionObservers
+redaction and canonical-topic matching; remove only helpers proven fallback-only.
+Do not repeat the investigator's broader claim about closed-context lookup errors:
+runtime.registry itself merely returns the registry. Confirmed issue is a
+production test-double path swallowing access errors and bypassing configured
+subscription runtime. Same explicit Sol/medium profile accepted.
+
+M25 frozen test-only packet: 11/11 affected tests, tooling, ESLint, cleanup,
+formatting and diff pass; hashes in m25-live-agent-evidence.md. Original
+protocol_reliability_review explicit Sol/medium checks typed Decision audit,
+selection-to-invocation authorization denial, and concurrent/pending/stale
+capability behavior with no late state/history effects. Parent handles test
+maintainability; API/docs/security reopening N/A (tests only). M26 separate
+service source/test files may proceed while these two Agent files stay frozen.
+Collect complete M25 review before one correction batch. No children/reruns.
+
+M25 complete review wave: accept one P2 test-fidelity finding (also noted by
+parent). Decision history assertions prove types only; decode actual rows and
+assert exact request input/question, response answer/output, and correlated
+admitted-result identity. Existing audit tests cover Generation values, not this
+Decision flow. Authorization drift and held-handler return tests are sound.
+Return one correction batch to original Sol/medium writer; estimate 0.1–0.2 hours
+for stronger assertions, focused checks and narrow reliability confirmation.
+No production defect or changed API. Other canonical concerns remain disposed.
+
+M25 parent adds one timing assertion to the same open correction batch: the
+public invoke promise may already reject on close, so awaiting it after releasing
+the held backend does not itself prove the late backend continuation settled.
+Resolve a backend-settled gate in execute's finally and await it before asserting
+no physical completion/history addition. This keeps the same scenario and avoids
+a microtask-order-dependent proof; no sleeps or production changes.
+
+M25 correction verified: both suites 11/11, tooling typecheck, ESLint, format
+and diff pass. Exact Decision request/answer/output and operation/attempt/
+conversation/result digest assertions replace type-only checks; backend-settled
+gate now makes late-effect assertions deterministic. Same original explicit
+Sol/medium reviewer performs narrow confirmation using updated evidence/hashes.
+M26 disjoint service fixture work continues, Agent files remain frozen.
+
+M25 narrow confirmation clean; updated hashes match and both test-fidelity
+concerns resolved. Original explicit Sol/medium profile accepted, runtime
+self-metadata unavailable. Parent accepts test maintainability; all canonical
+concerns disposed. Commit/push frozen test packet and records while preserving
+M26 in-progress source/test edits. No global coverage claim.

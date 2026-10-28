@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, isMessage } from "@bufbuild/protobuf";
+import { create, isMessage, toBinary } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import { AiModel, AiRegistry, Mcp, ModelRef } from "@spine-event-engine/ai";
 import {
@@ -29,11 +29,23 @@ import {
   GenerationResponseSchema,
   AiOutcome,
   GenerationRequestSchema,
+  DecisionRequestSchema,
+  DecisionResponseSchema,
+  DecisionQuestionSchema,
+  DecisionQuestionIdSchema,
+  DecisionQuestionKind,
+  DecisionChoiceSchema,
+  DecisionAlternativeKeySchema,
+  DecisionAnswerSchema,
+  DecisionDistributionSchema,
+  DecisionProbabilitySchema,
+  AgentAiResultAdmittedSchema,
   AiContentDigestSchema,
   AiDiagnosticIdSchema,
   ModelToolCallSchema,
   AgentToolCallFinishedSchema,
   AgentModelAttemptStartedSchema,
+  AgentModelAttemptFinishedSchema,
   ToolResponseSchema,
   type AgentHistoryEntry,
   type ToolResponse,
@@ -52,6 +64,8 @@ import {
 import { DraftSupportReplySchema } from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 import {
   ProposedSupportReplySchema,
+  SupportRoutingResultSchema,
+  SupportQueueNameSchema,
   SupportTicketFactsSchema,
   SupportTicketNumberSchema,
 } from "../../test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
@@ -68,7 +82,361 @@ const model = AiModel.define({
 });
 const ref = ModelRef.of("live-support-backend", "v1");
 
+function liveFixture(ticketNumber: string) {
+  const agentId = create(SupportReplyAgentIdSchema, { ticketNumber });
+  const scope = {
+    actor: create(ActorContextSchema),
+    tenant: { kind: "single-tenant" as const },
+    agent: create(MessageIdSchema, {
+      id: AnyPacker.pack(SupportReplyAgentIdSchema, agentId),
+      typeUrl: TypeUrls.derive(SupportReplyAgentIdSchema),
+    }),
+    source: create(MessageIdSchema, {
+      id: AnyPacker.pack(
+        CommandIdSchema,
+        create(CommandIdSchema, { uuid: `source-${ticketNumber}` }),
+      ),
+      typeUrl: TypeUrls.derive(DraftSupportReplySchema),
+    }),
+  };
+  const metadata = new SignalMetadata({
+    timeProvider: { currentTime: () => create(TimestampSchema, { seconds: 1_800_300_000n }) },
+  });
+  const source = SignalEnvelopes.command({
+    schema: DraftSupportReplySchema,
+    message: create(DraftSupportReplySchema, { agent: agentId, question: "Route this ticket" }),
+    context: metadata.commandContext({}),
+  });
+  const saved: AgentHistoryEntry[] = [];
+  const history = {
+    capacity: {},
+    appendAll: (_id: unknown, entries: readonly AgentHistoryEntry[]) => {
+      saved.push(...entries);
+      return Promise.resolve();
+    },
+  } as unknown as AgentHistoryStorage<unknown>;
+  const audit = new AgentLiveAudit(
+    {
+      source: { case: "command", value: source },
+      recipientId: AnyPacker.pack(SupportReplyAgentIdSchema, agentId),
+      stateType: SupportReplyAgentStateSchema.typeName,
+    },
+    SupportReplyAgentStateSchema,
+    agentId,
+    ticketNumber,
+    history,
+    metadata,
+    () => undefined,
+    () => Promise.resolve(),
+  );
+  return { scope, audit, saved };
+}
+
 describe("live Agent AI execution", () => {
+  it("maps a live Decision and retains its typed request, response, and admitted audit", async () => {
+    const decision = AiModel.define({
+      name: "route-live-support",
+      version: "v1",
+      kind: "decision",
+      input: SupportTicketFactsSchema,
+      output: SupportRoutingResultSchema,
+      questions: {
+        queue: {
+          type: "choice",
+          instructions: "Which support queue handles this ticket?",
+          criteria: { priority: "Priority support", standard: "Standard support" },
+        },
+      },
+      mapping: {
+        version: "v1",
+        toMessage: (answers) =>
+          create(SupportRoutingResultSchema, {
+            queue: create(SupportQueueNameSchema, {
+              value: answers.answers.queue?.type === "choice" ? answers.answers.queue.choice : "",
+            }),
+          }),
+      },
+      limits: { modelRequests: 1, toolCalls: 0, maxInputBytes: 1_024, maxOutputBytes: 1_024 },
+    });
+    const decisionRef = ModelRef.of("live-support-decision", "v1");
+    const execute = vi.fn(async (execution: AiBackendExecution) => {
+      const request = await execution.control.beginAttempt({
+        kind: "decision",
+        content: create(DecisionRequestSchema, {
+          input: AnyPacker.pack(SupportTicketFactsSchema, execution.input as never),
+          questions: [
+            create(DecisionQuestionSchema, {
+              id: create(DecisionQuestionIdSchema, { value: "queue" }),
+              kind: DecisionQuestionKind.CHOICE,
+              instructions: "Which support queue handles this ticket?",
+              choices: [
+                create(DecisionChoiceSchema, {
+                  key: create(DecisionAlternativeKeySchema, { value: "priority" }),
+                  description: "Priority support",
+                }),
+                create(DecisionChoiceSchema, {
+                  key: create(DecisionAlternativeKeySchema, { value: "standard" }),
+                  description: "Standard support",
+                }),
+              ],
+            }),
+          ],
+          digest: create(AiContentDigestSchema, { value: "d".repeat(64) }),
+        }),
+      });
+      await execution.control.reserveTransport(request.id, 100, 100);
+      const admitted = await execution.control.admitDecision(
+        {
+          answers: {
+            queue: {
+              type: "choice",
+              choice: "priority",
+              probabilities: {
+                priority: 0.9,
+                standard: 0.1,
+              },
+            },
+          },
+        },
+        execution.definition,
+        execution.input,
+      );
+      if (!admitted.ok) throw new Error("Valid support routing answer was not admitted.");
+      await execution.control.finishAttempt({
+        ticketId: request.id,
+        receivedBytes: 50,
+        response: create(DecisionResponseSchema, {
+          outcome: AiOutcome.ADMITTED,
+          admittedOutput: AnyPacker.pack(SupportRoutingResultSchema, admitted.value as never),
+          answers: [
+            create(DecisionAnswerSchema, {
+              id: create(DecisionQuestionIdSchema, { value: "queue" }),
+              kind: DecisionQuestionKind.CHOICE,
+              value: {
+                case: "choice",
+                value: create(DecisionAlternativeKeySchema, { value: "priority" }),
+              },
+              distribution: create(DecisionDistributionSchema, {
+                probabilities: [
+                  create(DecisionProbabilitySchema, {
+                    key: create(DecisionAlternativeKeySchema, { value: "priority" }),
+                    probability: 0.9,
+                  }),
+                  create(DecisionProbabilitySchema, {
+                    key: create(DecisionAlternativeKeySchema, { value: "standard" }),
+                    probability: 0.1,
+                  }),
+                ],
+              }),
+            }),
+          ],
+        }),
+      });
+      return { ok: true as const, value: admitted.value };
+    });
+    const registry = AiRegistry.create({ defaultModels: { decision: decisionRef } });
+    registry.register(
+      createBackendRegistration({
+        ref: decisionRef,
+        kind: "decision",
+        supports: () => true,
+        resolveIdentity: () => ({
+          provider: "test",
+          account: "support",
+          endpoint: "local",
+          model: "v1",
+        }),
+        authorizeUse: () => true,
+        connect: (_scope, identity) => ({ model: {}, identity }),
+        execute,
+      }),
+    );
+    const { scope, audit, saved } = liveFixture("T-decision");
+    const selected = await AgentModelSelection.selectLiveKind(
+      registry,
+      { models: [decision] },
+      scope,
+      [],
+      new AbortController().signal,
+      undefined,
+      "decision",
+    );
+    const runtime = new AgentLiveAiRuntime(
+      registry,
+      { models: [decision] },
+      scope,
+      new Map([[AiModelKind.DECISION, selected]]),
+      new AgentLiveBudget({ modelRequests: 1, totalOutputBytes: 1_024 }),
+      new AbortController().signal,
+      undefined,
+      () => undefined,
+      audit,
+    );
+    const result = await runtime.invoke(decision, {
+      call: "route",
+      conversation: create(ConversationIdSchema, { value: "support-route" }),
+      input: create(SupportTicketFactsSchema, {
+        ticketNumber: create(SupportTicketNumberSchema, { value: "T-decision" }),
+        customerQuestion: "Please route this ticket",
+      }),
+    });
+    if (result.ok === false) throw new Error("Valid live decision was not admitted.");
+    expect(result).toMatchObject({ ok: true, value: { queue: { value: "priority" } } });
+    expect(execute).toHaveBeenCalledOnce();
+    const system = saved.flatMap((entry) =>
+      entry.item.case === "systemEvent" ? [entry.item.value.message] : [],
+    );
+    const starts = system.flatMap((item) => {
+      const value = AnyPacker.tryUnpack(item, AgentModelAttemptStartedSchema);
+      return value === undefined ? [] : [value];
+    });
+    const finishes = system.flatMap((item) => {
+      const value = AnyPacker.tryUnpack(item, AgentModelAttemptFinishedSchema);
+      return value === undefined ? [] : [value];
+    });
+    const admissions = system.flatMap((item) => {
+      const value = AnyPacker.tryUnpack(item, AgentAiResultAdmittedSchema);
+      return value === undefined ? [] : [value];
+    });
+    expect(starts).toHaveLength(1);
+    expect(finishes).toHaveLength(1);
+    expect(admissions).toHaveLength(1);
+    expect(finishes[0]?.attempt).toEqual(starts[0]?.attempt);
+    expect(finishes[0]?.operation).toEqual(starts[0]?.operation);
+    expect(admissions[0]?.operation).toEqual(starts[0]?.operation);
+    expect(finishes[0]?.outcome).toBe(AiOutcome.ADMITTED);
+    const resultDigest = createHash("sha256")
+      .update(toBinary(SupportRoutingResultSchema, result.value))
+      .digest("hex");
+    expect(admissions[0]?.result?.value).toBe(resultDigest);
+    const conversation = saved.flatMap((entry) =>
+      entry.item.case === "conversationRecord" ? [entry.item.value] : [],
+    );
+    const requests = conversation.flatMap((entry) => {
+      const value = AnyPacker.tryUnpack(entry.content, DecisionRequestSchema);
+      return value === undefined ? [] : [{ entry, value }];
+    });
+    const responses = conversation.flatMap((entry) => {
+      const value = AnyPacker.tryUnpack(entry.content, DecisionResponseSchema);
+      return value === undefined ? [] : [{ entry, value }];
+    });
+    expect(requests).toHaveLength(1);
+    expect(responses).toHaveLength(1);
+    const requestRecord = requests[0];
+    const responseRecord = responses[0];
+    if (requestRecord === undefined || responseRecord === undefined)
+      throw new Error("Expected the Decision request and response audit rows.");
+    expect(requests[0]?.entry.attempt).toEqual(starts[0]?.attempt);
+    expect(responses[0]?.entry.attempt).toEqual(starts[0]?.attempt);
+    expect(requests[0]?.entry.operation).toEqual(starts[0]?.operation?.operation);
+    expect(responses[0]?.entry.operation).toEqual(starts[0]?.operation?.operation);
+    expect(requests[0]?.entry.conversation?.value).toBe("support-route");
+    expect(responses[0]?.entry.conversation?.value).toBe("support-route");
+    expect(requests[0]?.value.digest?.value).toBe("d".repeat(64));
+    expect(starts[0]?.request).toEqual(requests[0]?.value.digest);
+    expect(AnyPacker.tryUnpack(requestRecord.value.input, SupportTicketFactsSchema)).toEqual(
+      create(SupportTicketFactsSchema, {
+        ticketNumber: create(SupportTicketNumberSchema, { value: "T-decision" }),
+        customerQuestion: "Please route this ticket",
+      }),
+    );
+    expect(requests[0]?.value.questions).toMatchObject([
+      {
+        id: { value: "queue" },
+        kind: DecisionQuestionKind.CHOICE,
+        instructions: "Which support queue handles this ticket?",
+        choices: [
+          { key: { value: "priority" }, description: "Priority support" },
+          { key: { value: "standard" }, description: "Standard support" },
+        ],
+      },
+    ]);
+    expect(responses[0]?.value.outcome).toBe(AiOutcome.ADMITTED);
+    expect(
+      AnyPacker.tryUnpack(responseRecord.value.admittedOutput, SupportRoutingResultSchema),
+    ).toEqual(result.value);
+    expect(responses[0]?.value.answers).toMatchObject([
+      {
+        id: { value: "queue" },
+        value: { case: "choice", value: { value: "priority" } },
+        distribution: {
+          probabilities: [
+            { key: { value: "priority" }, probability: 0.9 },
+            { key: { value: "standard" }, probability: 0.1 },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it("rechecks model use after selection and before connecting the same invocation", async () => {
+    let allowed = true;
+    const connect = vi.fn(
+      (
+        _scope: unknown,
+        identity: {
+          provider: string;
+          account: string;
+          endpoint: string;
+          model: string;
+        },
+      ) => ({ model: {}, identity }),
+    );
+    const execute = vi.fn(() => Promise.reject(new Error("Denied model reached the provider.")));
+    const registry = AiRegistry.create({ defaultModels: { generation: ref } });
+    registry.register(
+      createBackendRegistration({
+        ref,
+        kind: "generation",
+        supports: () => true,
+        resolveIdentity: () => ({
+          provider: "test",
+          account: "support",
+          endpoint: "local",
+          model: "v1",
+        }),
+        authorizeUse: () => allowed,
+        connect,
+        execute,
+      }),
+    );
+    const { scope, audit, saved } = liveFixture("T-revoked");
+    const selected = await AgentModelSelection.selectLiveKind(
+      registry,
+      { models: [model] },
+      scope,
+      [],
+      new AbortController().signal,
+      undefined,
+      "generation",
+    );
+    allowed = false;
+    const runtime = new AgentLiveAiRuntime(
+      registry,
+      { models: [model] },
+      scope,
+      new Map([[AiModelKind.GENERATION, selected]]),
+      new AgentLiveBudget({ modelRequests: 1, totalOutputBytes: 1_024 }),
+      new AbortController().signal,
+      undefined,
+      () => undefined,
+      audit,
+    );
+    await expect(
+      runtime.invoke(model, {
+        call: "draft",
+        conversation: create(ConversationIdSchema, { value: "support-revoked" }),
+        input: create(SupportTicketFactsSchema, {
+          ticketNumber: create(SupportTicketNumberSchema, { value: "T-revoked" }),
+          customerQuestion: "Please draft",
+        }),
+      }),
+    ).rejects.toThrow("identity or authorization changed");
+    expect(connect).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(saved).toEqual([]);
+  });
+
   it("executes the same named call anew for two accepted signals and enforces physical credit", async () => {
     const physicalRequests = vi.fn();
     const execute = vi.fn(async (execution: AiBackendExecution) => {

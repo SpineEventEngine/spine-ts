@@ -119,8 +119,54 @@ const alternateRef = ModelRef.of("source-support-alternate", "v1");
 class DraftingAgent extends Agent<SupportReplyAgentId, typeof SupportReplyAgentStateSchema> {
   static historyCount = 0;
   static stateHistoryCount = 0;
+  static pendingCase:
+    | {
+        started: Promise<undefined>;
+        handlerReturned: () => void;
+        pending: Promise<unknown> | undefined;
+        overlapError: unknown;
+        invokeLater: (() => Promise<unknown>) | undefined;
+      }
+    | undefined;
 
   async draft(command: DraftSupportReply) {
+    if (command.question === "Return with pending model") {
+      const pendingCase = DraftingAgent.pendingCase;
+      if (pendingCase === undefined) throw new Error("Pending Agent case was not configured.");
+      const ai = this.ai;
+      const request = {
+        call: "draft",
+        conversation: create(ConversationIdSchema, { value: "support-pending" }),
+        input: create(SupportTicketFactsSchema, {
+          ticketNumber: create(SupportTicketNumberSchema, {
+            value: command.agent?.ticketNumber ?? "",
+          }),
+          customerQuestion: command.question,
+        }),
+      };
+      pendingCase.invokeLater = () => ai.invoke(proposal, request);
+      pendingCase.pending = ai.invoke(proposal, request);
+      void pendingCase.pending.catch(() => undefined);
+      try {
+        await Promise.race([
+          pendingCase.started,
+          pendingCase.pending.then(
+            () => {
+              throw new Error("Pending Agent AI call completed before provider entry.");
+            },
+            (error: unknown) => {
+              throw error;
+            },
+          ),
+        ]);
+        pendingCase.overlapError = await ai
+          .invoke(proposal, { ...request, call: "overlap" })
+          .catch((error: unknown) => error);
+      } finally {
+        pendingCase.handlerReturned();
+      }
+      return;
+    }
     if (command.question === "Reset selection") {
       this.ai.select(AiModelKind.GENERATION, undefined);
       return;
@@ -234,6 +280,112 @@ function draftingRepository(aiOptions: Partial<RepositoryAiOptions> = {}) {
 }
 
 describe("Agent repository source integration", () => {
+  it("rejects a handler return with pending AI work and fences its captured facade", async () => {
+    const ref = ModelRef.of("pending-support", "v1");
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const backendSettled = Promise.withResolvers<undefined>();
+    const handlerReturned = Promise.withResolvers<undefined>();
+    const providerFinished = vi.fn();
+    const registry = AiRegistry.create({ defaultModels: { generation: ref } });
+    registry.register(
+      createBackendRegistration({
+        ref,
+        kind: "generation",
+        supports: () => true,
+        resolveIdentity: () => ({
+          provider: "test",
+          account: "support",
+          endpoint: "local",
+          model: "v1",
+        }),
+        authorizeUse: () => true,
+        connect: (_scope, identity) => ({ model: {}, identity }),
+        execute: async (execution) => {
+          try {
+            const attempt = await execution.control.beginAttempt({
+              kind: "generation",
+              content: create(GenerationRequestSchema, {
+                input: AnyPacker.pack(SupportTicketFactsSchema, execution.input as never),
+                instructions: "Draft a support reply for review.",
+                outputSchemaJson: "{}",
+                promptJson: "{}",
+                digest: create(AiContentDigestSchema, { value: "a".repeat(64) }),
+              }),
+            });
+            entered.resolve(undefined);
+            await release.promise;
+            await execution.control.reserveTransport(attempt.id, 40, 80);
+            providerFinished();
+            const value = create(ProposedSupportReplySchema, { replyText: "Too late" });
+            await execution.control.finishAttempt({
+              ticketId: attempt.id,
+              receivedBytes: 20,
+              response: create(GenerationResponseSchema, { outcome: AiOutcome.ADMITTED }),
+            });
+            return { ok: true as const, value };
+          } finally {
+            backendSettled.resolve(undefined);
+          }
+        },
+      }),
+    );
+    const pendingCase = {
+      started: entered.promise,
+      handlerReturned: () => {
+        handlerReturned.resolve(undefined);
+      },
+      pending: undefined as Promise<unknown> | undefined,
+      overlapError: undefined as unknown,
+      invokeLater: undefined as (() => Promise<unknown>) | undefined,
+    };
+    DraftingAgent.pendingCase = pendingCase;
+    await configureStorage(new InMemoryStorageFactory());
+    const repository = draftingRepository();
+    const context = await BoundedContext.singleTenant("PendingAiReturn")
+      .withAi(registry)
+      .persistSystemEvents()
+      .add(repository)
+      .build();
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-pending" });
+    try {
+      const posting = context.commandBus().post(
+        SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, {
+            agent: id,
+            question: "Return with pending model",
+          }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "support-user" }),
+            }),
+          }),
+        }),
+      );
+      await handlerReturned.promise;
+      await posting;
+      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
+      expect(pendingCase.overlapError).toMatchObject({
+        message: "Agent AI calls must be sequential within one handler.",
+      });
+      await expect(pendingCase.invokeLater?.()).rejects.toThrow("closed");
+      expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
+      const before = await readAgentHistoryPage(context, repository, id, { pageSize: 50 });
+      release.resolve(undefined);
+      await expect(pendingCase.pending).rejects.toThrow();
+      await backendSettled.promise;
+      expect(providerFinished).not.toHaveBeenCalled();
+      expect(await context.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
+      const after = await readAgentHistoryPage(context, repository, id, { pageSize: 50 });
+      expect(after.items).toEqual(before.items);
+    } finally {
+      release.resolve(undefined);
+      DraftingAgent.pendingCase = undefined;
+      await Promise.allSettled([pendingCase.pending, context.close()]);
+    }
+  });
+
   it("commits a model reply and retains original Agent/System audit copies", async () => {
     const ref = ModelRef.of("source-support", "v1");
     const response = create(ProposedSupportReplySchema, { replyText: "We can help." });

@@ -4296,3 +4296,39 @@ Reuse domain-correct support fixtures and deterministic gates; capture pending
 rejections without sleeps. No new policy/production edit without demonstrated
 defect, no malformed-object matrix. Measure current changed-source coverage
 with relevant existing suites; no full release until convergence.
+
+M26 next bounded correction approved after concrete read-only API inspection:
+remove SpineServices subscription handling that exists only for structural test
+doubles (#testRegistries, catch-and-create in-memory registry, direct observer
+fallback). Supported built contexts always supply the configured registry and
+subscription runtime; errors must propagate instead of switching implementations.
+Convert only successful fake-context subscription tests to real built contexts;
+leave independent query/command doubles and pre-registry invalid-topic tests
+unless the actual change requires otherwise. Remove helpers/imports used solely
+by the deleted path, preserve normal filter validation and native redaction.
+No new runtime test seam or constructor-wide validation redesign.
+
+JVM guardrail: read spine-jvm-docs/spine-server-runtime-and-bounded-context.md
+subscription section. Its old /private/tmp/spine-research checkout is absent;
+fetched current official core-jvm SubscriptionService.java through gh api into
+/tmp/spine-environment-lifecycle-20261027/SubscriptionService.java. Inspected
+SubscriptionImpl.serve (187–195), ActivationImpl.serve (240–248), CancellationImpl
+.serve (263–271): each uses the real context's Stand. No service-local replacement
+registry for an invalid context is appropriate. This is cleanup within accepted
+shared lifecycle requirements, no new subscription policy or JVM unknown-target
+behavior. Standard milestone, estimate 0.5–1 hour for implementation, real-context
+fixture adaptation, affected checks, review and push. Same sole explicit
+Sol/medium implementer follows M25 frozen packet; parent records/Git, no children.
+
+M25 accepted after narrow confirmation: exact Decision history data and correlated
+identifiers verified; late callback settlement explicitly awaited. Eleven focused
+tests and static checks pass, no production change. Commit/push only the two
+frozen Agent test files plus current records; preserve active M26 service edits.
+Official remote master remains ff6c866, matching task base.
+
+M26 diagnostic service run: 114 pass, 19 expected failures at removed structural
+registry path. Some fake cases duplicate built-context coverage; others use
+invalid identifiers; unique mutation/filter/queue semantics need typed real
+fixtures. Revise estimate to another 1–2 hours before focused gates. Consolidate
+redundant/invalid cases, retain required behavior rather than mechanically
+recreating every old test. No new public contract or runtime blocker reported.
