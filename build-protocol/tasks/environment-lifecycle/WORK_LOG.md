@@ -3443,3 +3443,53 @@ tests; native preparation/cleanup1/1; scoped auth/browser/inventory21/21 and
 Global release coverage remains unverified. Approximately95percent complete;
 reviewed convergence checkpoint/push, common version, mandatory preflight and
 full release gate follow. Exact-SHA Build CI still requires an authorized PR.
+
+Reviewed convergence pushed as f345a68cbb63282743380040e5e709041b5c87b1; exact
+origin branch SHA and clean worktree confirmed. Final local steps estimate
+0.5–1.5hours: registry recheck, version-only commit, mandatory cheap preflight,
+then one release profile after convergence. No publication or PR creation.
+Version recheck reuses explicit Luna/low mechanical function; checks all21 public
+packages and exact35 workspace manifests. Parent performs the mechanical
+version-only edit/commit after confirmed availability. Runtime metadata unavailable.
+
+Final version-only commit ac64c730aa6c459535690191b3dafd7308c4b147 updates all
+35 workspace manifests to 2.0.0-snapshot.25. The immediate registry recheck
+found that version unused across all 21 public packages. Exact remote SHA
+matches after push. Only top-level version fields changed in that commit.
+
+Final mechanical verification assignment: reuse the existing orchestrator-
+dispatched release_inventory function, explicitly configured gpt-6-luna / low.
+Desktop supports explicit model/reasoning profiles; actual runtime metadata is
+unavailable. No source editing or nested delegation is authorized. Run the
+mandatory affected-scope cheap preflight, then one pnpm verify:release after
+it passes. Capture logs outside version control. Stop on a concrete failure
+and return evidence to the existing implementation context. The release
+profile is required because the task changes shared runtime and build behavior.
+Current estimate remains 0.5–1.5 hours for final verification and bounded triage.
+Exact-final-SHA CI remains dependent on an explicitly authorized pull request;
+all authorized local verification and feature pushes continue first.
+
+Final preflight first attempt stopped before tests: pnpm's dependency validation
+requires an install refresh after the version-only workspace changes. Both local
+and full-branch whitespace checks passed. Refresh local dependencies with
+pnpm install --frozen-lockfile, preserving the lockfile, then restart the cheap
+preflight. Do not bypass verify-deps-before-run. This is a local installation
+metadata correction; no runtime or public contract change is indicated.
+
+Release policy also identified remaining exact internal .24 dependency pins;
+the earlier inventory's workspace:* statement was incomplete. Classify this as
+a micro mechanical packaging correction. The orchestrator updates only internal
+workspace dependency pins to .25 and refreshes corresponding lockfile importer
+specifiers in a separate commit. Preserve third-party versions and resolutions.
+Acceptance: all 35 workspace versions agree; public release policy passes;
+lockfile changes contain only corresponding internal specifiers; installation
+and whitespace checks pass. No runtime, API or serialized contract changes;
+existing specialist reviews remain valid. Estimate 0.1–0.2 hours before resuming
+the mandatory preflight. No release profile has run yet.
+
+Packaging correction passes: 67 internal pins in 25 manifests now use .25;
+pnpm install --ignore-scripts succeeded. Scripted comparison confirms every
+manifest and lockfile change is exactly .24 to .25, with no third-party version
+or resolution changes. Direct release-policy validation accepts snapshot.25;
+record formatting and git diff --check pass. This deterministic micro correction
+does not reopen runtime specialist reviews. The full preflight restarts next.

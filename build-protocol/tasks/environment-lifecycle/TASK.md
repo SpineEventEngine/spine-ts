@@ -26,7 +26,8 @@ Subscription monitoring is reviewed and pushed. Explicit context and environment
 preparation APIs are verified, independently reviewed and pushed. Protocol integration
 and remaining AnyPacker adoption are verified, independently reviewed and pushed.
 Final documentation, native evidence, specialist review and security review
-are accepted. Version preparation and final release verification are in progress;
+are accepted. The version-only commit for all 35 workspace manifests is pushed.
+Final release verification is in progress;
 exact-SHA remote CI remains pending. Remaining milestones follow
 MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
@@ -83,18 +84,18 @@ Focused behavior tests precede runtime changes. Cheap preflight precedes
 specialist review and expensive gates. Use the release profile after convergence
 because shared runtime is affected. Every canonical review concern applies to
 the full task: maintainability, documentation, TypeScript/API and reliability.
-Final release-readiness security review remains required. Baseline build and
+Final release-readiness security review is accepted. Baseline build and
 tooling typechecks, baseline tests and focused retention checks passed. Bounded
-reviews are recorded in REVIEW_LOG.md; full-task review and release verification
-remain pending. WORK_LOG.md records the current evidence. Raw command outputs
+reviews are recorded in REVIEW_LOG.md; release verification and exact-final-SHA
+CI remain pending. WORK_LOG.md records the current evidence. Raw command outputs
 and dispatch evidence are kept outside version control in `/tmp/spine-environment-lifecycle-20261027`.
 
 ## Remaining work
 
-The ordered milestones are frozen in MILESTONES.md. Continue implementing,
-verifying and reviewing each. Update public documentation and examples as interfaces
-stabilize. Run release checks, select an unused common workspace version, push
-every feature commit immediately, and report exact remote state. Do not create
+The ordered milestones are frozen in MILESTONES.md. Implementation and review
+are accepted. Complete the mandatory preflight and release checks, resolve any
+confirmed failures, push every feature commit immediately, and report exact
+remote state. The common unused version has been committed separately. Do not create
 or merge a pull request without explicit human instruction.
 
 ## JVM source guardrail
