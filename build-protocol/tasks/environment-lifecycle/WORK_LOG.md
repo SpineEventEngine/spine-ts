@@ -4368,3 +4368,41 @@ matching production emit. Source-direct focused packet plus complete independent
 wave accepted; parent fixes one same-line internal TSDoc claim after measurement.
 No runtime/instrumented-line change, no behavior rerun needed for comment.
 Commit/push M26 implementation and records, then meaningful coverage convergence.
+
+M27 coverage convergence selection starts from pushed cff753810. Current verified
+global branches20,549/22,986 (89.39%),139hits short. Estimate0.5–1.5hours for
+one coherent focused behavior packet, checks, review and push. Read-only
+mechanical missed-line snippets persisted m27-*-misses.txt before classification.
+Original adapter_api_review explicit Sol/medium assesses provider factory
+preparation/tenant resolver lifecycle gaps against existing tests; original
+protocol_reliability_review explicit Sol/medium assesses Repository/Agent MCP
+lifecycle gaps. No edits/tests/children, no repeated broad scan or malformed
+input matrices. Prior SQL closeIdle investigation established no reachable
+resourceful assembly path; do not repeat it. Select meaningful missing contract
+proofs only. Existing sole implementer storage_retention remains Sol/medium;
+parent handles records/Git. No production behavior change without a demonstrated
+defect, no threshold/exclusion or fixture-domain shortcuts.
+
+M27 server selection accepted: no additional Repository test is justified by
+inspected misses. Two live MCP contracts need proof: tool-specific authorization
+refusal/unavailability before persisted tool intent or external call, and closing
+a protocol session arriving after cancellation during connect. Original sole
+Sol/medium implementer adds focused tests in agent-live-mcp-controls.test.ts,
+using registered knowledge.lookup/support fixtures and deterministic gates.
+No production edit absent actual defect; no replay/new policy. Provider read-only
+selection continues independently. Estimate within current0.5–1.5h batch.
+
+Next provider packet selected, queued after M27 live MCP: one cross-provider
+contract in PostgreSQL/MySQL tests. Tenant A probe fails after target reservation;
+cleanup succeeds; tenant B targeting the same normalized database prepares; A
+retry then correctly collides with successful B. Existing resolver-error tests
+fail before reservation and do not prove release. API selection report
+m27-provider-selection.md. No extra Datastore or schema matrix selected.
+Estimate0.3–0.6h for two cases, focused checks and narrow independent review.
+
+M27 accepted: six focused tests/static/current-build checks pass; independent
+reliability review clean, parent test maintainability clean, API/docs N/A.
+Exact unchanged-source BRDA comparison with rebuilt M26 gives seven additional
+hits, no key mismatches (m27-coverage-gain.json). This is diagnostic incremental
+evidence, not a fresh global percentage. Commit/push frozen MCPtest and records
+while preserving active M28 provider test files.

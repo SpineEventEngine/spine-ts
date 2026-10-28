@@ -2331,3 +2331,15 @@ M26 P2 resolved with a same-line comment naming topic validation and returned
 subscription shape. Deterministic comment correction does not reopen reviewers.
 All canonical concerns disposed; current full tests pass, global branch gate
 still fails at89.39%. Accept bounded packet, not final release.
+
+M27 frozen test-only MCP packet: six tests and matching production build,
+tooling typecheck/lint/cleanup/format pass. Original reliability reviewer
+explicit Sol/medium checks authorization-before-intent and deterministic late
+session cleanup assertions; parent test maintainability. API/docs N/A: no
+production/public contract or prose changes. No children/verification reruns.
+M28 provider tests proceed in disjoint files with sole original implementer.
+
+M27 reliability clean, frozen hash matches. Both tool-specific authorization
+outcomes and cancellation-before-connect lifecycle proved with deterministic
+gates. Parent accepts bounded fixture maintainability; all canonical concerns
+disposed. Original explicit Sol/medium reviewer accepted; no source changes.

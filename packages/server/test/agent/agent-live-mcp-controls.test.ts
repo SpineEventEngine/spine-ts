@@ -20,6 +20,7 @@ import {
   McpToolNameSchema,
   ToolEffect,
   AiOperationIdSchema,
+  AiOutcome,
   ConversationIdSchema,
 } from "@spine-event-engine/proto/agent";
 import { describe, expect, it, vi } from "vitest";
@@ -168,6 +169,152 @@ describe("live MCP controls", () => {
     expect(toolFinished).toHaveBeenCalledTimes(1);
     await runtime.close();
     expect(protocol.close).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { authorization: "denied", code: "AUTHENTICATION_REQUIRED" },
+    { authorization: "throws", code: "UNAVAILABLE" },
+  ])(
+    "rejects a $authorization tool authorization before intent or protocol dispatch",
+    async ({ authorization, code }) => {
+      const protocol = {
+        identity: {
+          serverId: "knowledge",
+          revision: "v1",
+          endpoint: `sha256:${createHash("sha256").update("https://knowledge.test/mcp").digest("hex")}`,
+        },
+        discover: vi.fn(() =>
+          Promise.resolve([{ name: "lookup", description: "Find ticket", inputSchemaJson: "{}" }]),
+        ),
+        validateArguments: vi.fn(),
+        call: vi.fn(),
+        close: vi.fn(() => Promise.resolve()),
+      };
+      const registry = AiRegistry.create({ defaultModels: {} }).registerTools(
+        Mcp.server({
+          id: "knowledge",
+          revision: "v1",
+          authorizeConnect: () => true,
+          transport: { kind: "streamable-http", url: "https://knowledge.test/mcp" },
+          tools: {
+            lookup: {
+              effect: "read",
+              timeoutMs: 1_000,
+              maxArgumentBytes: 128,
+              maxResultBytes: 128,
+              authorize: () => {
+                if (authorization === "throws") throw new Error("private authorization detail");
+                return false;
+              },
+            },
+          },
+        }),
+      );
+      const toolStarted = vi.fn();
+      const toolFinished = vi.fn();
+      const audit = { toolStarted, toolFinished } as unknown as AgentLiveAiAudit;
+      const controls = new AgentLiveMcpControls({
+        scope: {} as never,
+        registry,
+        backend: { mcp: { connect: () => Promise.resolve(protocol) } } as never,
+        operation: {
+          operation: create(AiOperationIdSchema, { value: "operation-refused" }),
+          conversation: create(ConversationIdSchema, { value: "conversation-refused" }),
+        },
+        signal: new AbortController().signal,
+        budget: new AgentLiveBudget({ toolCalls: 1, totalInputBytes: 100, totalOutputBytes: 100 }),
+        audit,
+        maxToolCalls: 1,
+        onProposal: vi.fn(),
+      });
+      const failure = vi.spyOn(controls, "recordFailure");
+      const runtime = new AgentLiveMcpRuntime(controls, [{ server: "knowledge", tool: "lookup" }]);
+
+      await expect(runtime.prepare()).resolves.toHaveLength(1);
+      const response = await runtime.call({
+        ticketId: "attempt-refused",
+        server: "knowledge",
+        tool: "lookup",
+        argumentsJson: "{}",
+        providerCallId: "proposal-refused",
+      });
+      expect(response.outcome).toBe(AiOutcome.FAILED);
+      expect(response.diagnosticId?.value).toBeTruthy();
+      expect(failure).toHaveBeenCalledExactlyOnceWith(code, false);
+      expect(toolStarted).not.toHaveBeenCalled();
+      expect(toolFinished).not.toHaveBeenCalled();
+      expect(protocol.call).not.toHaveBeenCalled();
+      await runtime.close();
+    },
+  );
+
+  it("closes a connection completed after cancellation without discovering or reviving it", async () => {
+    const connected = Promise.withResolvers<typeof protocol>();
+    const entered = Promise.withResolvers<undefined>();
+    const closed = Promise.withResolvers<undefined>();
+    const protocol = {
+      identity: {
+        serverId: "knowledge",
+        revision: "v1",
+        endpoint: `sha256:${createHash("sha256").update("https://knowledge.test/mcp").digest("hex")}`,
+      },
+      discover: vi.fn(),
+      validateArguments: vi.fn(),
+      call: vi.fn(),
+      close: vi.fn(() => {
+        closed.resolve(undefined);
+        return Promise.resolve();
+      }),
+    };
+    const registry = AiRegistry.create({ defaultModels: {} }).registerTools(
+      Mcp.server({
+        id: "knowledge",
+        revision: "v1",
+        authorizeConnect: () => true,
+        transport: { kind: "streamable-http", url: "https://knowledge.test/mcp" },
+        tools: {
+          lookup: {
+            effect: "read",
+            timeoutMs: 1_000,
+            maxArgumentBytes: 128,
+            maxResultBytes: 128,
+            authorize: () => true,
+          },
+        },
+      }),
+    );
+    const cancellation = new AbortController();
+    const connect = vi.fn(() => {
+      entered.resolve(undefined);
+      return connected.promise;
+    });
+    const controls = new AgentLiveMcpControls({
+      scope: {} as never,
+      registry,
+      backend: { mcp: { connect } } as never,
+      operation: {
+        operation: create(AiOperationIdSchema, { value: "operation-late" }),
+        conversation: create(ConversationIdSchema, { value: "conversation-late" }),
+      },
+      signal: cancellation.signal,
+      budget: new AgentLiveBudget({ toolCalls: 1, totalInputBytes: 100, totalOutputBytes: 100 }),
+      audit: { toolStarted: vi.fn(), toolFinished: vi.fn() } as unknown as AgentLiveAiAudit,
+      maxToolCalls: 1,
+      onProposal: vi.fn(),
+    });
+    const runtime = new AgentLiveMcpRuntime(controls, [{ server: "knowledge", tool: "lookup" }]);
+    const preparing = runtime.prepare();
+    await entered.promise;
+    cancellation.abort();
+    await expect(preparing).rejects.toThrow("MCP operation deadline or cancellation");
+    connected.resolve(protocol);
+    await closed.promise;
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(protocol.close).toHaveBeenCalledTimes(1);
+    expect(protocol.discover).not.toHaveBeenCalled();
+    expect(protocol.call).not.toHaveBeenCalled();
+    await expect(runtime.prepare()).rejects.toThrow("closed");
+    await runtime.close();
   });
 
   it("closes every connected server when a later discovery omits a configured tool", async () => {
