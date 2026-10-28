@@ -474,6 +474,36 @@ describe("Postgres record storage", () => {
     expect(driver.end).toHaveBeenCalledOnce();
   });
 
+  it("retries a failed shared connection check through its retained runtime pool", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .build();
+    const records = factory.createRecordStorage(
+      { name: "shared", multitenant: false },
+      recordSpec(),
+    );
+    try {
+      await expect(records.read("missing")).resolves.toBeUndefined();
+      expect(driver.Pool).toHaveBeenCalledOnce();
+      driver.connect.mockRejectedValueOnce(new Error("probe unavailable"));
+      await expect(factory.checkConnection()).rejects.toThrow("Unable to connect to PostgreSQL.");
+      expect(driver.Pool).toHaveBeenCalledOnce();
+      expect(driver.end).not.toHaveBeenCalled();
+      await expect(records.read("still-missing")).resolves.toBeUndefined();
+      const acquisitions = driver.connect.mock.calls.length;
+      const probes = driver.calls.filter(({ sql }) => sql.includes("schemata")).length;
+      await expect(factory.checkConnection()).resolves.toBeUndefined();
+      expect(driver.connect).toHaveBeenCalledTimes(acquisitions + 1);
+      expect(driver.calls.filter(({ sql }) => sql.includes("schemata"))).toHaveLength(probes + 1);
+      expect(driver.Pool).toHaveBeenCalledOnce();
+      expect(driver.end).not.toHaveBeenCalled();
+    } finally {
+      records.close();
+      await factory.close();
+    }
+    expect(driver.end).toHaveBeenCalledOnce();
+  });
+
   it("joins explicit tenant checking to a pending runtime database without a second pool", async () => {
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<{ url: string; schema: string }>();

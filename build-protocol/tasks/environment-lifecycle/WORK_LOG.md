@@ -4620,3 +4620,9 @@ pass. Oversized typed Datastore audit rejection and live memory stale-preference
 rollback/retry are proven without production changes. Three new baseline branch
 outcomes are recorded; no full-suite coverage result claimed. Commit/push this
 frozen pair while M32 deterministic SQL assertions are finalized separately.
+
+M33 pushed and official feature ref verified at
+c0eebaab6b17616635498da3c3185441ec25ff1a. M32 deterministic API correction
+passes 101 SQL tests and static checks; parent confirms exact fresh acquisition
+and probe assertions. Server test remains at its independently reviewed hash.
+Commit/push M32 before releasing its MySQL test file for M34.

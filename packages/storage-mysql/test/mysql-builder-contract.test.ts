@@ -730,6 +730,44 @@ describe("MysqlStorageFactory builder contract", () => {
     );
   });
 
+  it("retries a failed shared connection check through its retained runtime pool", async () => {
+    const query = vi.fn(mysqlQuery);
+    const getConnection = vi.fn(() => Promise.resolve(mysqlConnection(query)));
+    const end = vi.fn(() => Promise.resolve());
+    vi.mocked(createPool).mockReturnValue({ getConnection, end } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
+      .build();
+    const records = factory.createRecordStorage(
+      { name: "shared", multitenant: false },
+      new RecordSpec({
+        recordType: StringValueSchema,
+        idKind: "string",
+        extractId: (value) => value.value,
+      }),
+    );
+    try {
+      await expect(records.read("missing")).resolves.toBeUndefined();
+      expect(createPool).toHaveBeenCalledOnce();
+      getConnection.mockRejectedValueOnce(new Error("probe unavailable"));
+      await expect(factory.checkConnection()).rejects.toThrow("Unable to connect to MySQL.");
+      expect(createPool).toHaveBeenCalledOnce();
+      expect(end).not.toHaveBeenCalled();
+      await expect(records.read("still-missing")).resolves.toBeUndefined();
+      const acquisitions = getConnection.mock.calls.length;
+      const probes = query.mock.calls.filter(([sql]) => sql === "SELECT 1").length;
+      await expect(factory.checkConnection()).resolves.toBeUndefined();
+      expect(getConnection).toHaveBeenCalledTimes(acquisitions + 1);
+      expect(query.mock.calls.filter(([sql]) => sql === "SELECT 1")).toHaveLength(probes + 1);
+      expect(createPool).toHaveBeenCalledOnce();
+      expect(end).not.toHaveBeenCalled();
+    } finally {
+      records.close();
+      await factory.close();
+    }
+    expect(end).toHaveBeenCalledOnce();
+  });
+
   it("builds offline and checks the shared destination without retaining its probe pool", async () => {
     const release = vi.fn();
     const end = vi.fn(() => Promise.resolve());

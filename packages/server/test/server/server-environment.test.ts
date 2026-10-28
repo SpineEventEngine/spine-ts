@@ -341,6 +341,68 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await closing;
   });
 
+  it("waits for a successful remote Delivery open before closing its facilities", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const storage = new InMemoryStorageFactory();
+    const transport = new InMemoryTransportFactory();
+    const closeStorage = vi.spyOn(storage, "close");
+    const closeTransport = vi.spyOn(transport, "close");
+    const ports = new DeliveryBuilder()
+      .withStorageFactory(storage)
+      .withNode("remote-close")
+      .build();
+    const remote = {
+      open: vi.fn(async () => {
+        entered.resolve(undefined);
+        await release.promise;
+      }),
+      close: vi.fn(() => Promise.resolve()),
+      inbox: ports.inbox,
+      workRegistry: {
+        sessionKind: ports.inbox.sessionKind,
+        pickUp: () => Promise.resolve(undefined),
+        release: () => Promise.resolve(true),
+      },
+    };
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: storage,
+      integrationChannelFactory: transport,
+      delivery: remote,
+    });
+    const environment = ServerEnvironment.instance();
+    const setup = environment.completeSetup();
+    await entered.promise;
+    const closing = environment.close();
+    let closed = false;
+    void closing.then(
+      () => {
+        closed = true;
+      },
+      () => {
+        closed = true;
+      },
+    );
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(() => environment.delivery).toThrow("completeSetup");
+      expect(closed).toBe(false);
+      expect(remote.close).not.toHaveBeenCalled();
+      expect(closeTransport).not.toHaveBeenCalled();
+      expect(closeStorage).not.toHaveBeenCalled();
+    } finally {
+      release.resolve(undefined);
+      await Promise.allSettled([setup, closing]);
+    }
+    await expect(setup).rejects.toThrow("closed during Delivery setup");
+    await expect(closing).resolves.toBeUndefined();
+    expect(remote.close).toHaveBeenCalledOnce();
+    expect(closeTransport).toHaveBeenCalledOnce();
+    expect(closeStorage).toHaveBeenCalledOnce();
+    expect(() => environment.delivery).toThrow("completeSetup");
+    await expect(BoundedContext.singleTenant("AfterRemoteClose").build()).rejects.toThrow("closed");
+  });
+
   it("rejects full reset during an empty context build and while its context remains open", async () => {
     await ServerEnvironment.instance().completeSetup();
     const building = BoundedContext.singleTenant("EmptyPending").build();

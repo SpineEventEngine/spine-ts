@@ -2461,3 +2461,9 @@ unchanged audit history, not reversal of an already staged audit record. All
 canonical concerns are disposed. No production changes; security source hashes
 remain current. Commit the two test files and accepted records, preserving M32
 SQL correction files.
+
+M32 P2 resolved: each successful explicit retry increments both physical
+acquisition and actual probe counts exactly once, while pool creation remains
+one. PostgreSQL probes schema availability; MySQL issues SELECT 1. Parent
+verified the deterministic assertion correction; 101 SQL tests and static checks
+pass, unchanged server evidence is reused. All canonical concerns are disposed.
