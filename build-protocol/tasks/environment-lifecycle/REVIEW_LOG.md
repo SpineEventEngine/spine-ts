@@ -1993,3 +1993,45 @@ Sol/medium immutable profile confirmed; runtime metadata unavailable. API/docs a
 security lanes N/A, no production/public contract changes. Review report
 m19-live-agent-review.md. Current global gate is still failing coverage and one
 nested test; M19 acceptance does not imply release readiness.
+
+M20 parallel read-only reliability investigation, existing reviewer explicit
+Sol/medium: fresh M19 provider lifecycle branches, especially native PostgreSQL
+Agent preparation, Datastore audit transaction failure, and custom idle cleanup.
+Luna scan found only tiny duplicate-admission/memory-close gaps; further
+classification requires persistence/lifecycle reasoning. Determine actual absent
+behavior tests from source and existing suites; no filler predicate matrix.
+No edits/tests/builds/children. Source unchanged from frozen measurement.
+
+M21 bounded architecture assignment: existing requirements_splitter role,
+explicit gpt-6-astra/high, to distinguish retained recovery-only AI backend SPI
+and adapter code from normal live corrective attempts. No code edits, tests,
+builds or children. Inspect exact call graph, public exports, test/docs claims;
+produce bounded deletion/preservation map and acceptance checks. This is a
+material public-contract omission discovered during coverage, not a repeat full
+architecture review. Desktop supports explicit required profiles. Runtime
+introspection unavailable; immutable configured profile is acceptance evidence.
+
+M20 frozen seven-line fixture correction receives narrow independent reliability
+review from the original explicitly configured Sol/medium reviewer. Focus:
+shared static failure isolation and never-settling MCP cleanup outcome. Twelve
+BlackBox and five nested coverage-tooling tests pass with scoped static checks;
+no production or deadline change. Parent handles test maintainability; API/docs
+and security reopening are N/A because no public behavior or contract changed.
+
+M21 architecture follow-up challenges retention of assertAiOutcomeContext: all
+three production callers are replay paths slated for removal. Direct tests alone
+do not justify an orphan exported validator. Same explicit Astra/high splitter
+will resolve this against the complete removal requirement before implementation;
+no new runtime call may be invented just to retain the helper.
+
+M20 independent review clean; frozen test hash matches. Parent accepts focused
+maintainability; all four canonical concerns disposed as above. Runtime profile
+self-introspection unavailable, original explicit Sol/medium dispatch confirmed.
+Evidence: m20-fixture-isolation-review.md. No re-run or production changes.
+
+M21 map corrected after parent challenge: remove assertAiOutcomeContext, its
+export and four private helpers plus validator-only tests. All production callers
+are removed replay branches; preserve audit serialization assertions and actual
+live streamed-model validation. Same explicit Astra/high profile accepted; no
+new runtime call or replacement API. The bounded map is now accepted for the
+existing sole Sol/medium implementer.

@@ -534,6 +534,7 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
 
 describe("Agent scripted execution through BlackBox", () => {
   it("reports a live failure when MCP cleanup fails", async () => {
+    DraftingAgent.failure = undefined;
     const { blackBox } = await configuredToolBox("throw");
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     try {
@@ -556,7 +557,8 @@ describe("Agent scripted execution through BlackBox", () => {
   });
 
   it("bounds a live failure when MCP cleanup never settles", async () => {
-    const { blackBox } = await configuredToolBox("never");
+    DraftingAgent.failure = undefined;
+    const { blackBox, sequence } = await configuredToolBox("never");
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-48" });
     try {
       const posted = await blackBox
@@ -570,7 +572,8 @@ describe("Agent scripted execution through BlackBox", () => {
         () => DraftingAgent.failure,
         (value) => value instanceof Error,
       );
-      expect(String(failure)).toContain("MCP session close failed");
+      expect(sequence).toEqual(["model-proposal", "tool-call"]);
+      expect(String(failure)).toContain("MCP operation deadline or cancellation");
       expect(blackBox.assertEvents()).toEqual([]);
     } finally {
       await blackBox.close();

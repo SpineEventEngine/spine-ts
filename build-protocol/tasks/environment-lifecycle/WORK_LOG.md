@@ -4141,3 +4141,42 @@ behavior before any timeout change. Raw m19-current-global-coverage.log and
 m19-current-global-coverage/summary.json. Commit/push M19 tests and records now,
 then same implementer investigates the nested failure. Further coverage selection
 will use this fresh source baseline, not old projections or scattered filler.
+
+M19 pushed as fb9aa7016dfbb4d21c4408a884b429c1c77ed778; remote SHA confirmed.
+M20 nested-test isolation investigation, micro until evidence shows runtime risk,
+estimate 0.15–0.3 hours with causal reproduction, focused checks and review.
+Same explicit Sol/medium implementer. Parent source evidence: first two
+agent-ai-blackbox cleanup tests do not clear shared DraftingAgent.failure. The
+second can read the first's failure and close its live invocation early, whose
+later cancellation can contaminate a following test. Capacity proposal has no
+tools; AgentLiveAiRuntime.mcp returns undefined for it, so an MCP error cannot be
+explained merely by its one-second deadline. Reproduce shared-state path; no
+arbitrary timeout increase or runtime changes without demonstrated defect.
+Current 89.13% coverage artifact remains valid diagnostic evidence on frozen
+M19 source; 202 more branches needed. Keep full release gate pending.
+
+M21 newly confirmed incomplete human requirement: while inspecting uncovered
+adapter source, parent found AiAttemptReplay still exported through ai/spi/adapter,
+AiExecutionControl.beginAttempt still returns a ticket-or-replay union, and
+ai-vercel-ax generation/decision reconstruct saved results through replayGeneration,
+replayAdmittedGeneration, replayToolProposals, replayDecision and replayFailure.
+Server live beginAttempt always creates a fresh ticket, so this adapter/SPI recovery
+path is obsolete under the mandatory full removal task. Remove recovery-only
+contracts/code/tests/docs; do not add coverage merely to preserve obsolete code.
+Preserve audit records/readability and normal live corrections, model/tool rounds,
+provider validations and configured retries. No migration or compatibility wrapper.
+High-risk public SPI removal within the accepted task. Estimate 0.75–1.5 hours
+including bounded contract/architecture analysis, implementation, focused checks
+and relevant review. One existing requirements_splitter Astra/high pass authorized
+because a retained public contract contradicts the accepted frozen removal.
+Implementation remains sole existing Sol/medium writer after M20 test isolation.
+M20 read-only provider lifecycle candidates remain pending, not automatically
+implemented while mandatory recovery cleanup is incomplete.
+
+M20 accepted: shared stale failure reproduced, both cleanup tests reset it; the
+never-settling case proves its own model/tool sequence and expected cancellation
+error. BlackBox 12/12 and nested runner 5/5 pass, scoped static checks pass,
+independent reliability review clean. Commit/push test and current records now.
+M21 contract map accepted with orphan assertAiOutcomeContext removed alongside
+replay SPI and paths; preserve active-handler corrections and typed audit data.
+No migration, server-runtime redesign or compatibility wrapper.
