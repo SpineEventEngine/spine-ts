@@ -12,15 +12,16 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { create, isMessage, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, Identifiers } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { RecordSpec } from "@spine-event-engine/storage";
+import { EntityStateKeySchema } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
+import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -112,6 +113,45 @@ describe("MysqlEntityStorage independent histories", () => {
     expect(pool.query).toHaveBeenNthCalledWith(2, expect.any(String), ['{"value":"task"}']);
   });
 
+  it("maps public current reads and queries to typed Task IDs and declared columns", async () => {
+    const value = record("task", 1, 1n);
+    const column = new RecordColumn(
+      "entity_id",
+      ColumnTypes.message(AnySchema),
+      (entry: EntityRecord) => entry.entityId,
+    );
+    const base = entityInput(false, false);
+    const input = {
+      ...base,
+      columns: [column],
+      recordSpec: new RecordSpec({
+        sourceType: TaskSchema,
+        recordType: EntityRecordSchema,
+        idSchema: TaskIdSchema,
+        extractId: (entry: EntityRecord) =>
+          entry.entityId === undefined
+            ? taskId("")
+            : AnyPacker.unpack(entry.entityId, TaskIdSchema),
+        columns: [column],
+      }),
+    };
+    const read = vi.fn((id: TaskId) => Promise.resolve(id.value === "task" ? value : undefined));
+    const queryPlanEntries = vi.fn(() => Promise.resolve([{ record: value }]));
+    const current = { ...fakeRecords([]), read, queryPlanEntries };
+    const storage = new MysqlEntityStorage(input, () => current as never);
+    try {
+      await expect(storage.current.read(taskId("missing"))).resolves.toBeUndefined();
+      await expect(storage.current.read(taskId("task"))).resolves.toEqual(value);
+      await expect(storage.current.query({})).resolves.toEqual([
+        { id: taskId("task"), record: value, columns: new Map([["entity_id", value.entityId]]) },
+      ]);
+      expect(read).toHaveBeenCalledWith(taskId("task"));
+      expect(queryPlanEntries).toHaveBeenCalledWith({});
+    } finally {
+      storage.close();
+    }
+  });
+
   it("keeps disabled histories inert and rejects appends", async () => {
     const storage = new MysqlEntityStorage(
       entityInput(false, false),
@@ -168,6 +208,58 @@ describe("MysqlEntityStorage independent histories", () => {
     expect(states.values.map(versionOf)).toContain(3);
     storage.close();
   });
+
+  it("selects the exact state timestamp and truncates older Task histories across IDs", async () => {
+    const current = fakeRecords([]);
+    const states = fakeRecords([
+      record("other", 1, 7n, 500),
+      record("task", 1, 7n, 400),
+      record("task", 2, 7n, 500),
+      record("task", 3, 7n, 600),
+      record("other", 3, 7n, 300),
+    ]);
+    const diagnostics = fakeRecords([
+      event("other", "other-exact", 1, 7n, 500),
+      event("task", "task-early", 1, 7n, 400),
+      event("task", "task-exact", 2, 7n, 500),
+      event("task", "task-late", 3, 7n, 600),
+      event("other", "other-early", 3, 7n, 300),
+    ]);
+    const stores = [current, states, diagnostics];
+    const storage = new MysqlEntityStorage(entityInput(true, true), () => stores.shift() as never);
+    const cutoff = create(TimestampSchema, { seconds: 7n, nanos: 500 });
+    try {
+      await expect(storage.states.stateAt(taskId("task"), cutoff)).resolves.toEqual(
+        create(TaskSchema, { id: taskId("task"), title: "state-2" }),
+      );
+      await expect(
+        storage.states.stateAt(
+          taskId("task"),
+          create(TimestampSchema, { seconds: 7n, nanos: 499 }),
+        ),
+      ).resolves.toEqual(create(TaskSchema, { id: taskId("task"), title: "state-1" }));
+      await storage.states.truncate(cutoff);
+      await storage.events.truncate(cutoff);
+      await expect(storage.states.backward(taskId("task"), 10)).resolves.toMatchObject([
+        { version: { number: 3 } },
+        { version: { number: 2 } },
+      ]);
+      await expect(storage.states.backward(taskId("other"), 10)).resolves.toMatchObject([
+        { version: { number: 1 } },
+      ]);
+      await expect(storage.events.backward(taskId("task"), 10)).resolves.toMatchObject([
+        { id: { value: "task-late" } },
+        { id: { value: "task-exact" } },
+      ]);
+      await expect(storage.events.backward(taskId("other"), 10)).resolves.toMatchObject([
+        { id: { value: "other-exact" } },
+      ]);
+      expect(states.values).toHaveLength(3);
+      expect(diagnostics.values).toHaveLength(3);
+    } finally {
+      storage.close();
+    }
+  });
 });
 
 function taskId(value: string): TaskId {
@@ -201,7 +293,7 @@ function entityInput(
   };
 }
 
-function record(id: string, version: number, seconds: bigint): EntityRecord {
+function record(id: string, version: number, seconds: bigint, nanos = 0): EntityRecord {
   const value = taskId(id);
   return create(EntityRecordSchema, {
     entityId: Identifiers.pack(TaskIdSchema, value),
@@ -211,12 +303,12 @@ function record(id: string, version: number, seconds: bigint): EntityRecord {
     ),
     version: create(VersionSchema, {
       number: version,
-      timestamp: create(TimestampSchema, { seconds }),
+      timestamp: create(TimestampSchema, { seconds, nanos }),
     }),
   });
 }
 
-function event(id: string, value: string, version: number, seconds: bigint) {
+function event(id: string, value: string, version: number, seconds: bigint, nanos = 0) {
   const task = taskId(id);
   return create(EventSchema, {
     id: create(EventIdSchema, { value }),
@@ -231,7 +323,7 @@ function event(id: string, value: string, version: number, seconds: bigint) {
     context: {
       producerId: Identifiers.pack(TaskIdSchema, task),
       version: create(VersionSchema, { number: version }),
-      timestamp: create(TimestampSchema, { seconds }),
+      timestamp: create(TimestampSchema, { seconds, nanos }),
     },
   });
 }
@@ -247,8 +339,18 @@ function fakeRecords(values: object[]) {
       return Promise.resolve();
     },
     query: () => Promise.resolve([...values].sort((a, b) => versionOf(b) - versionOf(a))),
-    delete: (key: { version?: number }) => {
-      const index = values.findIndex((value) => versionOf(value) === key.version);
+    delete: (key: object) => {
+      const index = values.findIndex((value) => {
+        if (isMessage(key, EntityStateKeySchema) && isMessage(value, EntityRecordSchema))
+          return (
+            key.version === value.version?.number &&
+            AnyPacker.tryUnpack(key.entityId, TaskIdSchema)?.value ===
+              AnyPacker.tryUnpack(value.entityId, TaskIdSchema)?.value
+          );
+        if (isMessage(key, EventIdSchema) && isMessage(value, EventSchema))
+          return key.value === value.id?.value;
+        return false;
+      });
       if (index >= 0) values.splice(index, 1);
       return Promise.resolve(index >= 0);
     },

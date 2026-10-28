@@ -2587,3 +2587,15 @@ a namespace, so family identification rests on production preparation sequence
 plus exact retry count; it does not claim to inspect Datastore Entity kinds.
 Thirty-three tests and static gates pass; shared TypeScript tooling also covers
 M47 transport assertions. Evidence m46-api-review.md and m46-evidence.md.
+
+M49 API review: original explicit Sol/medium adapter_api_review; runtime
+introspection unavailable. Frozen mysql-entity-commit-contract.test.ts hash and
+9 passing tests in m49-history-evidence.md. Check exact domain deletion keys,
+exclusive truncate/inclusive stateAt semantics across two IDs, and genuine
+current query mapping. Parent style; production/API/docs/security unchanged.
+
+M49 accepted clean: original explicit Sol/medium API review confirms complete
+EntityStateKey/EventId fake deletion, real inclusive stateAt and exclusive
+truncate behavior, typed current ID and truthful Any column. Parent style review
+agrees; focused 9 tests and static gates pass. No runtime/docs/security change.
+Evidence m49-api-review.md and m49-history-evidence.md. Commit/push now.

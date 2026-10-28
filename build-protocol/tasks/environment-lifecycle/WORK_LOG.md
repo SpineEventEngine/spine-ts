@@ -4966,3 +4966,26 @@ Sol/medium configuration confirmed, runtime introspection unavailable. Commit an
 push two test files plus records now. M49 remains disjoint. M48 reviewer selected
 two useful SQL paging cases (mixed-direction timestamp/ID and default-ID cursor)
 for the next bounded test packet; skip already covered offset variations.
+
+M49 frozen: 9 full-file tests and tooling/lint/cleanup/format/diff pass; exact
+M43 Entity-history BRDA keys match and 17 previous misses are now covered.
+Independent API review uses original explicit Sol/medium reviewer; parent style.
+Current docs audience/TSDoc/log-containment/production-dependency preflight passes
+(current-doc-preflight.log). M46 push 649820448 exact origin ref verified.
+
+M50 standard paired SQL paging test slice: existing sole explicit Sol/medium
+implementer handles the two record-storage test files only, using M48 selection.
+Mixed-direction timestamp and ID cursor plus default ID continuation must assert
+exact predicates and parameter order. Reuse genuine Event fixture. Estimate
+0.3–0.5 hour including focused tests/static and review. M49 stays frozen.
+Follow-on normal Boolean/bigint query selection remains read-only; do not add an
+operator/type matrix or new generated fixture merely for coverage.
+
+M49 independent review and parent diff review clean. Accepted 17 new outcomes;
+commit/push existing MySQL history tests and records. Next M50 stays test-only.
+Parent source scan also finds PostgresRecordExecutor.assertImmutable has no
+current caller, while origin/master proves its sole Agent execution caller was
+removed. Select this recovery-only executor member for later bounded deletion
+and independent caller/export review; leave its unrelated pre-existing public
+record helper alone unless separate provenance proves it is part of recovery.
+Do not edit record source while M50 measures matching branch keys.
