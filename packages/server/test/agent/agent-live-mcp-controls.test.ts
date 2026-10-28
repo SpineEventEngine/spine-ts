@@ -30,6 +30,43 @@ import { AgentLiveMcpRuntime } from "../../src/agent/agent-live-mcp-runtime.js";
 import type { AgentLiveAiAudit } from "../../src/agent/agent-live-ai-audit.js";
 
 describe("live MCP controls", () => {
+  it("keeps input credit available after a rejected setup reservation", async () => {
+    const budget = new AgentLiveBudget({ totalInputBytes: 10, totalOutputBytes: 12 });
+    const controls = new AgentLiveMcpControls({
+      scope: {} as never,
+      registry: AiRegistry.create({ defaultModels: {} }),
+      backend: {} as never,
+      operation: {
+        operation: create(AiOperationIdSchema, { value: "operation-credit" }),
+        conversation: create(ConversationIdSchema, { value: "conversation-credit" }),
+      },
+      signal: new AbortController().signal,
+      budget,
+      audit: { toolStarted: vi.fn(), toolFinished: vi.fn() } as unknown as AgentLiveAiAudit,
+      maxToolCalls: 1,
+      onProposal: vi.fn(),
+    });
+    await expect(
+      controls.reserveMessage("knowledge", {
+        phase: "setup",
+        method: "initialize",
+        inputBytes: 11,
+        maxOutputBytes: 8,
+      }),
+    ).rejects.toMatchObject({ reason: "MODEL_BUDGET_EXCEEDED" });
+
+    const ticket = await controls.reserveMessage("knowledge", {
+      phase: "setup",
+      method: "initialize",
+      inputBytes: 10,
+      maxOutputBytes: 8,
+    });
+    expect(ticket.maxOutputBytes).toBe(8);
+    controls.onReceived(ticket.id, 3);
+    await controls.finishMessage(ticket.id, 3);
+    expect(budget.reservePhysical(0, 10, "protocol").maxOutputBytes).toBe(9);
+  });
+
   it("reserves shared credit and tool count before asynchronous audit or dispatch", async () => {
     const auditGate = Promise.withResolvers<undefined>();
     const audit = {

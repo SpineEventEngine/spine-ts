@@ -2401,3 +2401,21 @@ M29 deterministic P2 correction verified: backend.rollback count increments
 exactlyonce after divergent audit rejection;49suite/type/lint/cleanup/formatpass.
 Parent verifies assertion, no specialistreopen needed. All canonicalconcerns
 disposed; sourceunchanged, securitydelta review remains current.
+
+M30 frozen three testfiles,146affectedtests/static/currentemit evidencepass.
+Original reliability reviewer explicit Sol/medium checks MCPinputbudget atomicity
+and mandatory toolresultaudit-failure/no continuation/cleanup; originalAPIreviewer
+explicit Sol/medium checks first-only and multi-tenant exactcontext selection
+fixture (separateconcern). Parentmaintainability. No production/publicAPI/prose
+change, documentationN/A. Current securitysourcehashesunchanged. Nochildren or
+checkreruns; collectbothbeforeonecorrectionbatch. M31providerfilesdisjointactive.
+
+M30 API and reliability reviews are clean; all frozen hashes match. Parent
+accepts the focused test changes and shared fixture hook. All canonical concerns
+are disposed; no source changes or security review reopening are needed.
+
+M31 frozen provider race packet: 99 affected tests and static checks pass. The
+original reliability reviewer, explicitly configured Sol/medium, checks that the
+gates actually establish runtime-first overlap, one resolver/pool, and no early
+pool closure. Parent reviews test maintainability. API/docs are N/A for this
+test-only proof of the accepted lifecycle contract. No children or check reruns.

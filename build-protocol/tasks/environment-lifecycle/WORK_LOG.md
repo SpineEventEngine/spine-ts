@@ -4435,3 +4435,64 @@ Incremental unchanged-source evidence adds four providerreservation hits and
 two Datastoreaudit hits beyond M26; together with M27seven,13newhits. No fresh
 globalrateclaimed (lastfull89.39%); estimated126remainingbranchoutcomes with
 unchangedkeys. Commit/push three accepted provider testfiles plus records.
+
+M30 next selection uses mechanical changed-line coverage intersection saved in
+m30-changed-source-misses.json:554 missed branch outcomes lie on modified package
+runtime lines (before M27–29 additionalhits). Avoid unrelated baseline behavior.
+Original reliability reviewer explicit Sol/medium assesses live Agent budget,
+read capability and MCP control failure boundaries for a coherent useful packet
+against existing behavior tests. No children/edits/tests; use freshM26linekeys
+and accountM27newhits. Parent reviews source-of-truth tenant catalog fallback
+only if actual runtime references support concern; no architecturechangeapproved.
+Estimate0.2–0.3h selection, then0.5–1h implementation/check/review if meaningful
+scenarios exist. No arbitrary malformed-input matrix, duplicate native tests or
+coverage configuration changes. Existing sole Sol/medium writer remainsavailable.
+
+Parent boundedinspection finds no TenantIndex source-of-truth defect: explicit
+environment index overrides factorydefault; default StorageTenantIndex adapts
+configured catalog and does not invoke resolver on membershipcheck. Keep API.
+One concrete existing-test gap selected for next testpacket: context test
+“validates every environment tenant before preparing matching override contexts”
+currently requests both indexes' tenants, so it never proves unrelated completed
+context is skipped. Add first-only read-onlypreparation assertion before existing
+both-tenant/caller-mutation sequence; assert exact selectedcontext/tenant/mode,
+then exact complete both sequence. Reuse two distinctstate fixtures, no new
+contextfixture/API/productioncode. Soleimplementer may incorporate after live
+Agent selection arrives; no separate broadtestmatrix.
+
+M30 Agent selection accepted: valid MCPsetup inputbytes above configuredcredit
+reject without consumingbudget, allowing a subsequent smaller validsetupmessage;
+physicalreadtool result followed by failed mandatory AgentToolCallFinished audit
+append rejects liveinvoke before backendcontinuation/admittedoutput and closes
+MCPsession. Existingtests cover attempt-start auditfailure and toolerror with
+successfulaudit, not these cases. Same sole explicit Sol/medium implementer adds
+two focusedtests in existingMCPcontrols/liveAItest files after first-onlycontext
+case. No productionchange absentactualdefect, no fabricatedguardmatrix. Existing
+read quotas/invalidguards excluded. Estimate0.5–1h including focusedchecks/review
+within recordedM30range.
+
+Next bounded provider investigation: current PG resolveBinding runtimePending
+branch (storage-factory.ts1254) and matching MySQLpath may lack proof of concurrent
+first data access plus explicit read-only preparation. API reviewer explicit
+Sol/medium checks this exact supported race versus currenttests: one tenant
+resolver/runtimepool, explicitcheck joins pendingruntime ratherthan opening an
+extra temporarypool or closing runtimepool; both settle and factoryclose releases
+resources. Read-only/nochildren/nochecks, no broadrescan. Estimate0.1–0.2h
+selection; implement only if distinct missing behavior established.
+
+M31 provider race selected after exact existingtestcomparison: MySQL currently
+tests preparation-first join; PGtests twoCRUDorwrite/close, not runtime-first
+CRUD plus explicitcheck. Add paired PG/MySQL publicpath tests gatedresolver,
+check enters while runtimebinding pending, resolveronce/onepool, bothsettle,
+no endbeforefactoryclose, endonceafter. Existing sole explicit Sol/medium writer
+queues after M30freeze, disjointproviderfiles; no sourcechangeabsentdefect.
+Estimate0.3–0.6h tests/checks/review/push. No arbitrarysleeps/matrix.
+
+M30 accepted: both independent reviews are clean, parent maintainability is clean,
+and all 146 affected tests and static checks pass. Exact cumulative BRDA union
+against rebuilt M26 finds 17 unique new hits across M27–M30, with no key
+mismatches; estimated remaining count is 122. M29 contributes three across all
+files (two in its named Datastore source), while seven M30 hits repeat M27.
+Evidence: m30-cumulative-coverage-gain.json. This is incremental planning evidence,
+not a new full-suite percentage. Commit/push the three frozen server test files
+and records while preserving M31 provider edits.

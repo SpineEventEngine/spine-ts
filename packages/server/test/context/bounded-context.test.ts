@@ -2412,12 +2412,29 @@ describe("BoundedContext assembly", () => {
         environment.createStorageStructures(tenant("first"), tenant("missing")),
       ).rejects.toThrow("not registered");
       expect(prepareEntity).not.toHaveBeenCalled();
+      await environment.checkStructureCompatibility(tenant("first"));
+      expect(
+        prepareEntity.mock.calls.map(([input, mode]) => ({
+          context: input.context.name,
+          tenantId: input.context.tenantId,
+          mode,
+        })),
+      ).toEqual([{ context: "FirstOverride", tenantId: tenant("first"), mode: "check" }]);
+      prepareEntity.mockClear();
       const supplied = tenant("first");
       const checking = environment.checkStructureCompatibility(supplied, tenant("second"));
       supplied.kind = { case: "value", value: "mutated" };
       await checking;
-      expect(prepareEntity).toHaveBeenCalledTimes(2);
-      expect(prepareEntity.mock.calls.every((call) => call[1] === "check")).toBe(true);
+      expect(
+        prepareEntity.mock.calls.map(([input, mode]) => ({
+          context: input.context.name,
+          tenantId: input.context.tenantId,
+          mode,
+        })),
+      ).toEqual([
+        { context: "FirstOverride", tenantId: tenant("first"), mode: "check" },
+        { context: "SecondOverride", tenantId: tenant("second"), mode: "check" },
+      ]);
     } finally {
       await first.close();
       await second.close();

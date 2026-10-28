@@ -82,7 +82,10 @@ const model = AiModel.define({
 });
 const ref = ModelRef.of("live-support-backend", "v1");
 
-function liveFixture(ticketNumber: string) {
+function liveFixture(
+  ticketNumber: string,
+  onAppend?: (entries: readonly AgentHistoryEntry[]) => void | Promise<void>,
+) {
   const agentId = create(SupportReplyAgentIdSchema, { ticketNumber });
   const scope = {
     actor: create(ActorContextSchema),
@@ -110,9 +113,9 @@ function liveFixture(ticketNumber: string) {
   const saved: AgentHistoryEntry[] = [];
   const history = {
     capacity: {},
-    appendAll: (_id: unknown, entries: readonly AgentHistoryEntry[]) => {
+    appendAll: async (_id: unknown, entries: readonly AgentHistoryEntry[]) => {
+      await onAppend?.(entries);
       saved.push(...entries);
-      return Promise.resolve();
     },
   } as unknown as AgentHistoryStorage<unknown>;
   const audit = new AgentLiveAudit(
@@ -280,7 +283,7 @@ describe("live Agent AI execution", () => {
         customerQuestion: "Please route this ticket",
       }),
     });
-    if (result.ok === false) throw new Error("Valid live decision was not admitted.");
+    if (!result.ok) throw new Error("Valid live decision was not admitted.");
     expect(result).toMatchObject({ ok: true, value: { queue: { value: "priority" } } });
     expect(execute).toHaveBeenCalledOnce();
     const system = saved.flatMap((entry) =>
@@ -799,6 +802,174 @@ describe("live Agent AI execution", () => {
     ).resolves.toMatchObject({ ok: true });
     expect(protocol.call).toHaveBeenCalledTimes(1);
     expect(saved).toHaveBeenCalled();
+  });
+
+  it("rejects a physical tool result when its mandatory audit append fails", async () => {
+    const toolModel = AiModel.define({
+      name: "live-support-audit-failure",
+      version: "v1",
+      kind: "generation",
+      input: SupportTicketFactsSchema,
+      output: ProposedSupportReplySchema,
+      instructions: "Read the support ticket.",
+      outputMode: "prompt-and-validate",
+      tools: [{ server: "knowledge", tool: "lookup" }],
+      limits: { modelRequests: 1, toolCalls: 1, maxInputBytes: 1_024, maxOutputBytes: 1_024 },
+    });
+    const protocol = {
+      identity: {
+        serverId: "knowledge",
+        revision: "v1",
+        endpoint: `sha256:${createHash("sha256").update("https://knowledge.test/mcp").digest("hex")}`,
+      },
+      discover: () =>
+        Promise.resolve([{ name: "lookup", description: "Read ticket", inputSchemaJson: "{}" }]),
+      validateArguments: () => undefined,
+      call: vi.fn(() =>
+        Promise.resolve({ content: [{ kind: "text" as const, text: "Found" }], isError: false }),
+      ),
+      close: vi.fn(() => Promise.resolve()),
+    };
+    let continued = false;
+    const execute = vi.fn(async (execution: AiBackendExecution) => {
+      const attempt = await execution.control.beginAttempt({
+        kind: "generation",
+        content: create(GenerationRequestSchema, {
+          input: AnyPacker.pack(SupportTicketFactsSchema, execution.input as never),
+          instructions: "Read the support ticket.",
+          outputSchemaJson: "{}",
+          promptJson: "{}",
+          digest: create(AiContentDigestSchema, { value: "c".repeat(64) }),
+        }),
+      });
+      await execution.control.reserveTransport(attempt.id, 20, 80);
+      await execution.control.finishAttempt({
+        ticketId: attempt.id,
+        receivedBytes: 10,
+        response: create(GenerationResponseSchema, {
+          outcome: AiOutcome.TOOL_REQUESTED,
+          toolCalls: [
+            create(ModelToolCallSchema, {
+              providerCallId: "lookup-1",
+              toolName: "tool_0",
+              argumentsJson: "{}",
+            }),
+          ],
+        }),
+      });
+      await execution.control.callTool({
+        ticketId: attempt.id,
+        server: "knowledge",
+        tool: "lookup",
+        providerToolName: "tool_0",
+        argumentsJson: "{}",
+        providerCallId: "lookup-1",
+      });
+      continued = true;
+      return {
+        ok: true as const,
+        value: create(ProposedSupportReplySchema, { replyText: "Ready" }),
+      };
+    });
+    const registry = AiRegistry.create({ defaultModels: { generation: ref } });
+    registry.registerTools(
+      Mcp.server({
+        id: "knowledge",
+        revision: "v1",
+        transport: { kind: "streamable-http", url: "https://knowledge.test/mcp" },
+        authorizeConnect: () => true,
+        tools: {
+          lookup: {
+            effect: "read",
+            timeoutMs: 1_000,
+            maxArgumentBytes: 128,
+            maxResultBytes: 128,
+            authorize: () => true,
+          },
+        },
+      }),
+    );
+    registry.register(
+      createBackendRegistration({
+        ref,
+        kind: "generation",
+        supports: () => true,
+        resolveIdentity: () => ({
+          provider: "test",
+          account: "support",
+          endpoint: "local",
+          model: "v1",
+        }),
+        authorizeUse: () => true,
+        connect: (_scope, identity) => ({ model: {}, identity }),
+        execute,
+        mcp: { connect: () => Promise.resolve(protocol) },
+      }),
+    );
+    const auditFailure = new Error("tool result audit failed");
+    let finishBatch = false;
+    const { scope, audit, saved } = liveFixture("T-tool-audit", (entries) => {
+      const finished = entries.some(
+        (entry) =>
+          entry.item.case === "systemEvent" &&
+          AnyPacker.tryUnpack(entry.item.value.message, AgentToolCallFinishedSchema) !== undefined,
+      );
+      if (!finished) return;
+      finishBatch = entries.some(
+        (entry) =>
+          entry.item.case === "conversationRecord" &&
+          AnyPacker.tryUnpack(entry.item.value.content, ToolResponseSchema) !== undefined,
+      );
+      throw auditFailure;
+    });
+    const selected = await AgentModelSelection.selectLiveKind(
+      registry,
+      { models: [toolModel] },
+      scope,
+      [],
+      new AbortController().signal,
+      undefined,
+      "generation",
+    );
+    const runtime = new AgentLiveAiRuntime(
+      registry,
+      { models: [toolModel] },
+      scope,
+      new Map([[AiModelKind.GENERATION, selected]]),
+      new AgentLiveBudget({ modelRequests: 1, toolCalls: 1, totalOutputBytes: 1_024 }),
+      new AbortController().signal,
+      undefined,
+      () => undefined,
+      audit,
+    );
+
+    try {
+      await expect(
+        runtime.invoke(toolModel, {
+          call: "draft",
+          conversation: create(ConversationIdSchema, { value: "support" }),
+          input: create(SupportTicketFactsSchema, {
+            ticketNumber: create(SupportTicketNumberSchema, { value: "T-tool-audit" }),
+            customerQuestion: "Help?",
+          }),
+        }),
+      ).rejects.toBe(auditFailure);
+      expect(finishBatch).toBe(true);
+      expect(protocol.call).toHaveBeenCalledOnce();
+      expect(protocol.close).toHaveBeenCalledOnce();
+      expect(execute).toHaveBeenCalledOnce();
+      expect(continued).toBe(false);
+      expect(
+        saved.some(
+          (entry) =>
+            entry.item.case === "systemEvent" &&
+            AnyPacker.tryUnpack(entry.item.value.message, AgentAiResultAdmittedSchema) !==
+              undefined,
+        ),
+      ).toBe(false);
+    } finally {
+      runtime.close();
+    }
   });
 
   it("persists failed read and uncertain write tool outcomes without dispatching either again", async () => {
