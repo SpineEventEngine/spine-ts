@@ -169,4 +169,73 @@ describe("live MCP controls", () => {
     await runtime.close();
     expect(protocol.close).toHaveBeenCalledTimes(1);
   });
+
+  it("closes every connected server when a later discovery omits a configured tool", async () => {
+    const locations = ["knowledge", "actions"] as const;
+    const sessions = locations.map((id) => ({
+      identity: {
+        serverId: id,
+        revision: "v1",
+        endpoint: `sha256:${createHash("sha256").update(`https://${id}.test/mcp`).digest("hex")}`,
+      },
+      discover: vi.fn(() =>
+        Promise.resolve(
+          id === "knowledge"
+            ? [{ name: "lookup", description: "Find ticket", inputSchemaJson: "{}" }]
+            : [],
+        ),
+      ),
+      validateArguments: vi.fn(),
+      call: vi.fn(),
+      close: vi.fn(() => Promise.resolve()),
+    }));
+    const registry = AiRegistry.create({ defaultModels: {} });
+    for (const id of locations)
+      registry.registerTools(
+        Mcp.server({
+          id,
+          revision: "v1",
+          authorizeConnect: () => true,
+          transport: { kind: "streamable-http", url: `https://${id}.test/mcp` },
+          tools: {
+            [id === "knowledge" ? "lookup" : "submit"]: {
+              effect: id === "knowledge" ? "read" : "write",
+              timeoutMs: 1_000,
+              maxArgumentBytes: 128,
+              maxResultBytes: 128,
+              authorize: () => true,
+            },
+          },
+        }),
+      );
+    const connect = vi.fn(({ server }: { server: { id: string } }) =>
+      Promise.resolve(sessions.find((session) => session.identity.serverId === server.id)),
+    );
+    const controls = new AgentLiveMcpControls({
+      scope: {} as never,
+      registry,
+      backend: { mcp: { connect } } as never,
+      operation: {
+        operation: create(AiOperationIdSchema, { value: "operation-2" }),
+        conversation: create(ConversationIdSchema, { value: "conversation-2" }),
+      },
+      signal: new AbortController().signal,
+      budget: new AgentLiveBudget({ toolCalls: 2, totalInputBytes: 100, totalOutputBytes: 100 }),
+      audit: { toolStarted: vi.fn(), toolFinished: vi.fn() } as unknown as AgentLiveAiAudit,
+      maxToolCalls: 2,
+      onProposal: vi.fn(),
+    });
+    const runtime = new AgentLiveMcpRuntime(controls, [
+      { server: "knowledge", tool: "lookup" },
+      { server: "actions", tool: "submit" },
+    ]);
+
+    await expect(runtime.prepare()).rejects.toMatchObject({ code: "UNSUPPORTED_CAPABILITY" });
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(sessions[0]?.close).toHaveBeenCalledTimes(1);
+    expect(sessions[1]?.close).toHaveBeenCalledTimes(1);
+    expect(sessions.flatMap((session) => session.call.mock.calls)).toEqual([]);
+    await expect(runtime.prepare()).rejects.toThrow("closed");
+    await runtime.close();
+  });
 });

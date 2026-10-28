@@ -4126,3 +4126,18 @@ pass; separate four timeout-affected suites pass 109/109 with release timeout in
 17.89s. Independent original Sol/medium reliability confirmation clean, frozen
 hashes verified. No production source changed. Commit/push only M18 service and
 MySQL tests plus parent records; M19 independent test edits may remain dirty.
+
+M19 accepted test packet: six affected tests and tooling/lint/cleanup/format/diff
+pass; no runtime edits. Independent reliability review is clean except accepted
+record-only wording: fake history append proves submission to storage, not durable
+DB persistence. Correct evidence wording; no code re-review needed. MySQL import
+wrap also fixes M18's actual 124-character cleanup violation, caught by current
+M19 verification. Current global measurement: 20800/23335 branches = 89.13%,
+202 more hits required at this denominator; statements 92.67%, functions 94.69%,
+lines 94.55%. 6251 pass, one fail, 16 skip, 109.41s. Failure is nested coverage
+regression's capacity test expecting group rejection but receiving MCP deadline
+or cancellation. Do not call this a passing suite; inspect causal timing/scope
+behavior before any timeout change. Raw m19-current-global-coverage.log and
+m19-current-global-coverage/summary.json. Commit/push M19 tests and records now,
+then same implementer investigates the nested failure. Further coverage selection
+will use this fresh source baseline, not old projections or scattered filler.

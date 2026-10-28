@@ -1973,3 +1973,23 @@ metadata fixture matches declared optional-family columns. No remaining finding.
 Explicit configured Sol/medium profile confirmed, runtime metadata unavailable.
 Read-only evidence m18-test-correction-review.md. Mechanical four-timeout-suite
 rerun passes 109/109; original 175/175/static results remain current.
+
+M19 frozen three-file test packet: two Agent failure cases plus deterministic
+MySQL import wrapping from M18. Six focused tests and tooling, cleanup, ESLint,
+format/diff pass. Scoped threshold failure is expected for two test files and is
+not a global result. Existing reliability reviewer, explicit Sol/medium profile,
+checks real cleanup, persisted audit/outcome and budget/no-extra-call assertions.
+Read-only, no tests/builds/edits/children. Parent handles test maintainability;
+public API, docs and security re-review N/A for test-only unchanged behavior.
+M19 full current-source coverage measurement runs concurrently with read-only
+review; authors hold edits until both finish. It uses the release timeout and
+coverage.reportOnFailure, without threshold changes or source exclusions.
+
+M19 review converged: all three hashes match, no code/test finding. Parent accepts
+maintainability of the two focused domain-fixture scenarios. Reviewer confirmed
+actual runtime cleanup/audit/outcome/budget behavior. Accepted evidence wording
+correction distinguishes fake audit append from durable persistence. Same explicit
+Sol/medium immutable profile confirmed; runtime metadata unavailable. API/docs and
+security lanes N/A, no production/public contract changes. Review report
+m19-live-agent-review.md. Current global gate is still failing coverage and one
+nested test; M19 acceptance does not imply release readiness.

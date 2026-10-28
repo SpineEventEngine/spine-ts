@@ -64,7 +64,10 @@ import type {
   SupportReplyAgentId,
   SupportReplyAgentState,
 } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
-import { SupportReplyAgentIdSchema } from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
+// prettier-ignore
+import {
+  SupportReplyAgentIdSchema,
+} from "../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 
 import {
   MysqlStorageFactory,
