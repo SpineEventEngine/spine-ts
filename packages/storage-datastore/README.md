@@ -233,6 +233,9 @@ Ordinary `write()` and `writeAll()` calls are independent provider writes. Use
 compare-and-set for an atomic conditional record update. An Entity commit
 writes history, diagnostic Events, delivery Events, and current state in order;
 a later failure can leave the completed prefix.
+The provider-only live Agent commit uses one native Datastore transaction to
+check the initial Entity version and complete model preferences, then commit
+any changed state, final audit, and preferences together.
 
 ## 🧪 Verify with a local emulator
 

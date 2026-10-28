@@ -18,6 +18,7 @@ import type { EntityRecord as EntityRecordValue } from "./entity/entity-record.j
  * Exports provider-only contracts for implementing a Spine storage adapter.
  */
 export * from "./internal/entity-commit.js";
+export * from "./internal/agent-model-preferences.js";
 export * from "./internal/entity-history.js";
 export * from "./internal/event-store.js";
 export * from "./internal/query-values.js";

@@ -141,6 +141,105 @@ replay, saved-output contract, provider, export, helper and obsolete test. Revie
 agentExecution/status explicitly; receipt presence is not a replacement status
 API. No compatibility wrappers or migration scans.
 
+## Live conditional persistence contract
+
+D-0154 resolves the actual provider contract needed before recovery removal.
+Extend the existing provider-only EntityCommitStorage; keep ordinary commit and
+its possible-prefix behavior unchanged:
+
+```ts
+readAgentPreferences<I>(entityId: I):
+  Promise<readonly ModelPreference[] | undefined>;
+
+commitAgent<I, S extends Message>(input: AgentCommitInput<I, S>): Promise<void>;
+
+interface AgentCommitInput<I, S extends Message> {
+  readonly entityId: I;
+  readonly expectedVersion: number;
+  readonly expectedPreferences: readonly ModelPreference[] | undefined;
+  readonly preferences: readonly ModelPreference[];
+  readonly entityCommit?: EntityCommitInput<I, S>;
+  readonly historyEntries?: readonly AgentHistoryEntry[];
+}
+```
+
+Undefined expected preferences means no record was observed; an empty array
+means an existing record with no overrides. Return defensive copies. Compare
+the full captured preference image as well as Entity version inside the native
+transaction, even for no-op or preference-only changes. Missing Entity is version
+zero under existing rules. Optional Entity mutation must match the handle's
+complete tenant, typed ID, state layout and captured history settings, and advance
+exactly one version. Validate existing preference kinds/references/uniqueness;
+add no count or size limits beyond existing native constraints.
+
+Store AgentModelPreferencesRecord containing a required AgentModelPreferencesKey
+(state_type and exact recipient Any) and repeated existing ModelPreference. Its
+ordinary string slot is v1: plus full lowercase SHA-256 of compact UTF-8 JSON:
+
+```text
+["spine.server.agent.AgentModelPreferencesKey/v1", stateType,
+ exactRecipientTypeUrl, standardBase64(recipientValueBytes)]
+```
+
+Keep the complete key in the body and verify it on every read/update. Use one
+spine_agent_model_preferences family with no query indexes. Derive typed identity
+through the captured Entity codec/shared AnyPacker. Do not add execution/source
+IDs, timestamps, statuses, revision counters or old-head fallback. Follow existing
+portable shared-layout/provider digest conventions without adding a dependency.
+
+Capture Entity ID, both preference arrays, optional Entity mutation and final
+history synchronously before any await. Serialize the short transaction for one
+Agent, including absent rows. Check preference identity/image and current Entity
+version, preflight immutable history conflicts, then commit Entity/state history,
+final Agent audit and preferences together. On failure none of that group remains;
+earlier independently appended conversation/tool audit remains. Ambiguous native
+commit errors propagate without handler retry, read-back success invention or
+output finishing. Known rolled-back contention may retry the same captured
+storage input under the existing provider policy. Never retry application code.
+
+PostgreSQL reuses its native transaction and stable per-Agent advisory lock before
+reading absent/existing rows. MySQL/MariaDB require all participating tables to
+be InnoDB and one bound connection; handle absent preference rows with unique-slot
+transactional insertion/locking, retaining the observed absence distinction.
+Do not rely solely on locking a missing row at every isolation level. Datastore
+uses native transactional reads/staging, existing contention policy/payload bounds,
+and rejects unsupported custom transactional capabilities. Memory uses shared
+history then Entity mutation queues and rolls back all affected records; never
+re-enter an already held queue through public append. Preserve shared history
+indexes and all four normal history views.
+
+Read current Entity and preferences when the live turn starts, after earlier
+same-Agent work settles. Image comparison does not detect A-to-B-to-A changes
+and is not a replacement for ordinary Delivery session checks. No monotonic
+execution counter is introduced. Conditional persistence does not claim an
+atomic transaction across the database, shard service and external model/tool.
+
+Admitted preference reads/commits/preparation use the retained handle's close
+fence and drain. Factory shutdown waits before closing internal children; failed
+acquisition preserves already retained children and cleans new ones. Agent
+preparation includes Entity/enabled histories, Agent history, preference family
+and native transaction support. Add a concrete provider-only prepareAgentCommit
+operation if the existing requirement dispatcher cannot express that full check;
+reuse preparers, perform no DDL/data writes in check mode, and never construct
+throwaway handles to discover requirements.
+
+An inactive primitive slice may extract shared native state/history routines,
+with old execution checks remaining only in their old caller. No old production
+completion is redirected or dual-written. Later switch preference reads, live
+completion and admission/scheduler coherently, then delete obsolete helpers.
+Provider evidence covers reopen, state plus preference/final audit persistence,
+stale no-op/version and preference-only conflicts (including first absent-row
+races), rollback without audit prefixes, exact identity/tenant/long-ID handling,
+native unsupported cases, capture-before-await, retention and close draining.
+Keep those cases focused; do not repeat the receipt's whole identity matrix.
+
+Retain audit message definitions needed to decode history, including historical
+System Event types, even when the old scheduler emitted them. The history
+envelopes are independent of execution_record.proto. Delete executable records
+and status APIs without deleting necessary audit schemas or inventing startup
+termination Events. This is history preservation, with no migration or recovery
+compatibility wrapper.
+
 ## Evidence required
 
 Use deterministic interruption barriers and separate provider handles/processes:

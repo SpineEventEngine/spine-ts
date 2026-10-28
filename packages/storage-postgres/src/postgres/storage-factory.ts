@@ -34,6 +34,7 @@ import {
 import {
   AgentExecutionRecords,
   AgentHistoryRecords,
+  AgentModelPreferences,
   type AgentExecutionStorageInput,
 } from "@spine-event-engine/storage/provider";
 import {
@@ -403,6 +404,7 @@ export class PostgresStorageFactory extends StorageFactory {
       prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
       prepareEntity: (input, mode) => this.prepareEntity(input, mode),
       prepareAgentHistory: (input, mode) => this.prepareAgentHistory(input, mode),
+      prepareAgentCommit: (input, mode) => this.prepareAgentCommit(input, mode),
     });
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
@@ -542,6 +544,44 @@ export class PostgresStorageFactory extends StorageFactory {
       const spec = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
       await this.prepareRecordAdmitted(input.context, spec, AgentHistoryRecords.group, mode);
       await this.prepareAudit(input.context, spec, mode);
+    });
+  }
+
+  /**
+   * Prepares all live Agent state, audit, and preference requirements without a handle.
+   * @param input Declarative Agent Entity layout.
+   * @param mode Creation or read-only compatibility check.
+   * @returns Completion after native table and audit-index checks.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   */
+  private prepareAgentCommit<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admitPublic(async () => {
+      if (!this.sameEntityColumns(input))
+        throw new PostgresStorageConfigurationError(
+          "Entity query columns differ from current records.",
+        );
+      await this.prepareRecordAdmitted(input.context, input.recordSpec, undefined, mode);
+      if (input.stateHistory) {
+        const layout = stateHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, layout.spec, layout.group, mode);
+      }
+      if (input.eventHistory) {
+        const layout = eventHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, layout.spec, layout.group, mode);
+      }
+      const audit = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
+      await this.prepareRecordAdmitted(input.context, audit, AgentHistoryRecords.group, mode);
+      await this.prepareAudit(input.context, audit, mode);
+      await this.prepareRecordAdmitted(
+        input.context,
+        AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
+        AgentModelPreferences.group,
+        mode,
+      );
     });
   }
 

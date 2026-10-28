@@ -56,6 +56,21 @@ export class MysqlAgentTransaction {
   }
 
   /**
+   * Checks every declared live Agent table for native transaction support.
+   * @param tables Participating physical table names.
+   * @returns Completion after a read-only InnoDB inspection.
+   */
+  async check(tables: readonly string[]): Promise<void> {
+    const connection = await this.connections.acquire();
+    try {
+      if (!(await this.allTransactional(connection, tables)))
+        throw new Error("MySQL Agent execution requires transactional record tables.");
+    } finally {
+      this.connections.release(connection);
+    }
+  }
+
+  /**
    * Determines whether every participating table supports transactions.
    *
    * @param connection Provides the connection used for metadata inspection.

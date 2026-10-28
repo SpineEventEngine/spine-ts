@@ -13,7 +13,13 @@
  */
 
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
-import { toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, toBinary, type Message } from "@bufbuild/protobuf";
+import {
+  AgentHistoryEntrySchema,
+  type AgentHistoryEntry,
+  type ModelPreference,
+} from "@spine-event-engine/proto/agent";
+import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
@@ -37,7 +43,14 @@ import {
   type EntityStoragePreparationInput,
   type AgentHistoryStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { AgentExecutionRecords, AgentHistoryRecords } from "@spine-event-engine/storage/provider";
+import {
+  AgentExecutionRecords,
+  AgentHistoryRecords,
+  AgentModelPreferences,
+  type PreferencesRecord,
+  type AgentCommitInput,
+  type EntityCommitInput,
+} from "@spine-event-engine/storage/provider";
 import {
   EntityCommitStorageFactories,
   EntityCommitSnapshots,
@@ -138,7 +151,7 @@ export interface MysqlTenantStorageOptions {
 }
 
 /**
- * Resolves application-provided tenant database settings on first use.
+ * Finds application-provided tenant database settings on first use.
  *
  * @param tenantId Complete generated tenant identity.
  * @returns Connection options for that tenant.
@@ -473,6 +486,7 @@ export class MysqlStorageFactory extends StorageFactory {
       prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
       prepareEntity: (input, mode) => this.prepareEntity(input, mode),
       prepareAgentHistory: (input, mode) => this.prepareAgentHistory(input, mode),
+      prepareAgentCommit: (input, mode) => this.prepareAgentCommit(input, mode),
     });
     this.registerAgentHistory();
     this.registerAgentExecution();
@@ -508,7 +522,7 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
-   * Opens all record families required by fenced Agent completion.
+   * Acquires all record families required by fenced Agent completion.
    *
    * @param input Requested fenced execution change.
    * @returns Tenant-scoped Agent execution storage handle.
@@ -738,7 +752,7 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
-   * Resolves the physical declaration shared by ordinary use and preparation.
+   * Finds the physical declaration shared by ordinary use and preparation.
    * @typeParam I Typed record identifier.
    * @typeParam R Stored record type.
    * @param spec Record declaration.
@@ -878,6 +892,67 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
+   * Prepares live Agent current, history, audit, and preferences as InnoDB tables.
+   * @param input Declarative Agent Entity layout.
+   * @param mode Creation or read-only compatibility check.
+   * @returns Completion after every transactional family is compatible.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   */
+  private prepareAgentCommit<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admitPublic(async () => {
+      if (!this.sameEntityColumns(input))
+        throw new MysqlStorageSchemaError("Entity query columns differ from current records.");
+      const specs = this.agentSpecs(input);
+      for (const [spec, group] of specs)
+        await this.prepareRecordAdmitted(input.context, spec, group, mode);
+      const boundary = this.database(input.context);
+      const audit = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
+      const table = this.tableSpec(audit, AgentHistoryRecords.group);
+      for (const [name, columns] of AgentHistoryIndexes)
+        await this.prepareAuditIndex(boundary, table, name, columns, mode);
+      await new MysqlAgentTransaction(this.connections(boundary)).check(
+        specs.map(([spec, group]) => this.tableSpec(spec, group).tableName),
+      );
+    });
+  }
+
+  /**
+   * Collects complete physical Agent table declarations without opening handles.
+   * @param input Declarative Agent Entity layout.
+   * @returns Current, enabled histories, audit, and preference specifications.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   */
+  private agentSpecs<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+  ): [RecordSpec<unknown, Message>, StorageGroup | undefined][] {
+    const specs: [RecordSpec<unknown, Message>, StorageGroup | undefined][] = [
+      [input.recordSpec as never, undefined],
+    ];
+    if (input.stateHistory) {
+      const layout = stateHistorySpec(input.stateSchema);
+      specs.push([layout.spec as never, layout.group]);
+    }
+    if (input.eventHistory) {
+      const layout = eventHistorySpec(input.stateSchema);
+      specs.push([layout.spec as never, layout.group]);
+    }
+    specs.push([
+      AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+      AgentHistoryRecords.group,
+    ]);
+    specs.push([
+      AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
+      AgentModelPreferences.group,
+    ]);
+    return specs;
+  }
+
+  /**
    * Creates MySQL storage for one Entity family.
    *
    * @typeParam I Entity identifier type.
@@ -920,23 +995,59 @@ export class MysqlStorageFactory extends StorageFactory {
   ): EntityCommitStorage {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     const boundary = this.database(input.context);
-    const registration = {} as { handle: { close(): void } };
+    const handle = this.newEntityCommitHandle(input, boundary);
+    this.#commits.add(handle as MysqlEntityCommitStorage<unknown, Message>);
+    return handle;
+  }
+
+  /**
+   * Creates the retained commit handle and its lazy private family openers.
+   *
+   * @param input Captured Entity layout.
+   * @param boundary Captured tenant database selection.
+   * @returns The new commit handle.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   */
+  private newEntityCommitHandle<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+    boundary: TenantBoundary,
+  ): MysqlEntityCommitStorage<I, S> {
     const handle = new MysqlEntityCommitStorage(
       input,
       () => this.createEntityStorage(input, false, true),
+      () => this.createCommitEvents(input.context, boundary),
       () =>
         this.createMysqlRecordStorage(
           input.context,
-          eventStoreRecordSpec,
-          undefined,
+          AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+          AgentHistoryRecords.group,
           boundary,
           false,
         ),
-      () => this.#commits.delete(registration.handle as MysqlEntityCommitStorage<unknown, Message>),
+      () =>
+        this.createMysqlRecordStorage(
+          input.context,
+          AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
+          AgentModelPreferences.group,
+          boundary,
+          false,
+        ),
+      new MysqlAgentTransaction(this.connections(boundary)),
+      () => this.#commits.delete(handle as MysqlEntityCommitStorage<unknown, Message>),
     );
-    registration.handle = handle;
-    this.#commits.add(handle as MysqlEntityCommitStorage<unknown, Message>);
     return handle;
+  }
+
+  /**
+   * Acquires the private delivery Event family after commit admission.
+   *
+   * @param context Captured Entity storage context.
+   * @param boundary Captured tenant database selection.
+   * @returns The private Event record family.
+   */
+  private createCommitEvents(context: StorageContext, boundary: TenantBoundary) {
+    return this.createMysqlRecordStorage(context, eventStoreRecordSpec, undefined, boundary, false);
   }
 
   /**
@@ -1206,7 +1317,7 @@ export class MysqlStorageFactory extends StorageFactory {
   };
 
   /**
-   * Resolves the database configured for a storage context.
+   * Finds the database configured for a storage context.
    *
    * @param context Supplies the storage and tenant context.
    * @returns The configured tenant database.
@@ -1221,7 +1332,7 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
-   * Resolves and retains one tenant database, coalescing concurrent first uses.
+   * Finds and retains one tenant database, coalescing concurrent first uses.
    *
    * @param boundary Captured tenant boundary.
    * @returns The retained database and pool.
@@ -1243,7 +1354,7 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
-   * Resolves one proven destination for preparation without retaining a pool.
+   * Finds one proven destination for preparation without retaining a pool.
    * @param boundary Captured tenant scope.
    * @returns Stable settings after a read-only connection probe.
    */
@@ -1312,7 +1423,7 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
-   * Opens a runtime pool only after its selected database responds to a read-only probe.
+   * Acquires a runtime pool only after its selected database responds to a read-only probe.
    *
    * @param boundary Captured tenant boundary.
    * @returns The retained database and pool.
@@ -1696,12 +1807,16 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
 
   #events: MysqlDeliveryStorage | undefined;
 
+  #history: MysqlRecordStorage<string, AgentHistoryRecord> | undefined;
+
+  #preferences: MysqlRecordStorage<string, PreferencesRecord> | undefined;
+
   #idleOutcome: { error?: Error } | undefined;
 
   /**
    * Commit completions admitted before the close fence.
    */
-  readonly #active = new Set<Promise<void>>();
+  readonly #active = new Set<Promise<unknown>>();
 
   #closing: Promise<void> | undefined;
 
@@ -1711,6 +1826,9 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    * @param entity Defines the captured Entity scope.
    * @param openStorage Opens the current and history families.
    * @param openEvents Opens delivery Event storage.
+   * @param openHistory Opens the retained Agent audit family.
+   * @param openPreferences Opens the inert model-preference family.
+   * @param coordinator Coordinates one native InnoDB transaction.
    * @param onClose Removes the handle from factory tracking.
    */
   constructor(
@@ -1720,6 +1838,9 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       import("@spine-event-engine/proto").EventId,
       import("@spine-event-engine/proto").Event
     >,
+    private readonly openHistory: () => MysqlRecordStorage<string, AgentHistoryRecord>,
+    private readonly openPreferences: () => MysqlRecordStorage<string, PreferencesRecord>,
+    private readonly coordinator: MysqlAgentTransaction,
     private readonly onClose: () => void,
   ) {}
 
@@ -1734,6 +1855,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   commit<Id, State extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
   ): Promise<void> {
+    if (!this.#open)
+      return Promise.reject(new MysqlStorageOperationError("Entity commit storage is closed."));
     return this.track(() => {
       this.validate(input);
       const prepared = EntityCommitSnapshots.capture(input);
@@ -1746,11 +1869,12 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    *
    * @param action The admitted provider operation.
    * @returns The admitted provider operation completion.
+   * @typeParam T Result type of the admitted provider operation.
    */
-  private track(action: () => Promise<void>): Promise<void> {
-    let complete!: () => void;
+  private track<T>(action: () => Promise<T>): Promise<T> {
+    let complete!: (value: T) => void;
     let fail!: (error: unknown) => void;
-    const work = new Promise<void>((resolve, reject) => {
+    const work = new Promise<T>((resolve, reject) => {
       complete = resolve;
       fail = reject;
     });
@@ -1765,6 +1889,378 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       fail(error);
     }
     return work;
+  }
+
+  /**
+   * Reads one detached current model-preference image.
+   * @param entityId Typed Agent identifier.
+   * @returns Current preferences or absence.
+   */
+  readAgentPreferences(entityId: unknown): Promise<readonly ModelPreference[] | undefined> {
+    if (!this.#open)
+      return Promise.reject(new MysqlStorageOperationError("Entity commit storage is closed."));
+    return this.track(async () => {
+      const key = AgentModelPreferences.key(this.entity, entityId as I);
+      const [, , preferences] = this.agentRecords();
+      await preferences.prepare();
+      const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
+      const found = await preferences.read(slot);
+      if (found === undefined) return undefined;
+      AgentModelPreferences.requireIdentity(found, key);
+      return AgentModelPreferences.copy(found.preferences);
+    });
+  }
+
+  /**
+   * Commits Agent state, final audit, and preferences in one InnoDB transaction.
+   * @param input Captured live Agent transition.
+   * @returns Completion after the conditional group commits.
+   * @typeParam Id Typed Agent identifier.
+   * @typeParam State Generated Agent state.
+   */
+  commitAgent<Id, State extends Message>(input: AgentCommitInput<Id, State>): Promise<void> {
+    if (!this.#open)
+      return Promise.reject(new MysqlStorageOperationError("Entity commit storage is closed."));
+    return this.track(async () => {
+      const id = this.entity.id.clone(input.entityId as unknown as I);
+      const key = AgentModelPreferences.key(this.entity, id);
+      const expected =
+        input.expectedPreferences === undefined
+          ? undefined
+          : AgentModelPreferences.copy(input.expectedPreferences);
+      const next = AgentModelPreferences.record(key, input.preferences);
+      const mutation = input.entityCommit && EntityCommitSnapshots.capture(input.entityCommit);
+      const history = this.captureAgentHistory(input.historyEntries);
+      this.validateAgent(id, input.expectedVersion, mutation);
+      const [storage, audit, preferences, events] = this.agentRecords(mutation as never);
+      await this.settleAgentPreparations([
+        storage.prepare(),
+        audit.prepare(),
+        preferences.prepare(),
+        events?.prepare(),
+      ]);
+      await this.commitAgentPrepared(
+        storage,
+        audit,
+        preferences,
+        events,
+        id,
+        input.expectedVersion,
+        expected,
+        next,
+        mutation,
+        history,
+      );
+    });
+  }
+
+  /**
+   * Waits for every started Agent family preparation before reporting failures.
+   * @param pending Started current, audit, preference, and optional Event preparations.
+   * @returns Completion after all preparations settle.
+   */
+  private async settleAgentPreparations(
+    pending: readonly (Promise<void> | undefined)[],
+  ): Promise<void> {
+    const started = pending.filter((work): work is Promise<void> => work !== undefined);
+    const settled = await Promise.allSettled(started);
+    const errors: unknown[] = [];
+    for (const result of settled)
+      if (result.status === "rejected") errors.push(result.reason as unknown);
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1)
+      throw new AggregateError(errors, "MySQL Agent family preparation failed.");
+  }
+
+  /**
+   * Captures final Agent audit entries before provider callbacks.
+   * @param entries Final Agent audit entries.
+   * @returns Detached final audit entries.
+   */
+  private captureAgentHistory(
+    entries: readonly AgentHistoryEntry[] | undefined,
+  ): AgentHistoryEntry[] {
+    return entries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+  }
+
+  /**
+   * Acquires retained Entity, audit, preference, and optional delivery families.
+   *
+   * @param mutation Optional changed Entity rows.
+   * @returns The retained family group.
+   */
+  private agentRecords(
+    mutation?: EntityCommitInput<unknown, Message>,
+  ): [
+    MysqlEntityStorage<I, S>,
+    MysqlRecordStorage<string, AgentHistoryRecord>,
+    MysqlRecordStorage<string, PreferencesRecord>,
+    MysqlDeliveryStorage | undefined,
+  ] {
+    const storage = this.#storage ?? this.openStorage();
+    let audit: MysqlRecordStorage<string, AgentHistoryRecord> | undefined;
+    let preferences: MysqlRecordStorage<string, PreferencesRecord> | undefined;
+    let events: MysqlDeliveryStorage | undefined;
+    try {
+      storage.ensure(Boolean(mutation?.states?.length), Boolean(mutation?.diagnostics?.length));
+      audit = this.#history ?? this.openHistory();
+      preferences = this.#preferences ?? this.openPreferences();
+      if (mutation?.events?.length && this.#events === undefined) events = this.openEvents();
+      this.#storage ??= storage;
+      this.#history ??= audit;
+      this.#preferences ??= preferences;
+      this.#events ??= events;
+      return [storage, audit, preferences, this.#events];
+    } catch (error) {
+      this.rollbackAgentRecords(error, [
+        this.#history === undefined ? audit : undefined,
+        this.#preferences === undefined ? preferences : undefined,
+        events,
+        this.#storage === undefined ? storage : undefined,
+      ]);
+    }
+  }
+
+  /**
+   * Clears newly acquired Agent families and retains all failure causes.
+   * @param error Original acquisition failure.
+   * @param ports Newly acquired record families.
+   * @returns Never returns; throws the original or aggregated cleanup failure.
+   */
+  private rollbackAgentRecords(
+    error: unknown,
+    ports: readonly (Pick<MysqlRecordStorage<unknown, Message>, "close"> | undefined)[],
+  ): never {
+    const errors = [error];
+    for (const port of ports)
+      try {
+        port?.close();
+      } catch (cleanup) {
+        errors.push(cleanup);
+      }
+    if (errors.length > 1)
+      throw new AggregateError(errors, "MySQL Agent family acquisition failed.");
+    throw error;
+  }
+
+  /**
+   * Validates the captured Entity identity and exactly one next version.
+   * @param id Captured Agent identifier.
+   * @param version Initial Entity version.
+   * @param mutation Optional prepared Entity mutation.
+   * @typeParam Id Typed Agent identifier.
+   * @typeParam State Generated Agent state.
+   */
+  private validateAgent<Id, State extends Message>(
+    id: I,
+    version: number,
+    mutation?: EntityCommitInput<Id, State>,
+  ): void {
+    if (!Number.isSafeInteger(version) || version < 0)
+      throw new TypeError("Agent commit requires a valid initial Entity Version.");
+    if (mutation === undefined) return;
+    this.validate(mutation);
+    if (
+      this.entity.id.key(id) !== this.entity.id.key(mutation.entityId as unknown as I) ||
+      mutation.next.version?.number !== version + 1
+    )
+      throw new Error("Agent commit requires the same Entity ID and one new Version.");
+  }
+
+  /**
+   * Executes all conditional writes on the same verified InnoDB connection.
+   * @param storage Retained current and optional Entity histories.
+   * @param audit Retained final Agent history.
+   * @param preferences Retained model selections.
+   * @param events Optional delivery rows.
+   * @param id Captured Agent identifier.
+   * @param version Initial Entity version.
+   * @param expected Initial preference image.
+   * @param next Complete replacement preference record.
+   * @param mutation Optional Entity mutation.
+   * @param history Final audit entries.
+   * @typeParam Id Typed Agent identifier.
+   * @typeParam State Generated Agent state.
+   * @returns Completion after the conditional Agent transaction commits.
+   */
+  private async commitAgentPrepared<Id, State extends Message>(
+    storage: MysqlEntityStorage<I, S>,
+    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
+    preferences: MysqlRecordStorage<string, PreferencesRecord>,
+    events: MysqlDeliveryStorage | undefined,
+    id: I,
+    version: number,
+    expected: readonly ModelPreference[] | undefined,
+    next: PreferencesRecord,
+    mutation: EntityCommitInput<Id, State> | undefined,
+    history: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    if (next.key === undefined) throw new Error("Agent preference identity is missing.");
+    const key = next.key;
+    const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
+    const tables = this.agentTableNames(storage, audit, preferences, events);
+    const work = () =>
+      this.applyAgentLocked(
+        storage,
+        audit,
+        preferences,
+        id,
+        slot,
+        version,
+        expected,
+        next,
+        mutation,
+        history,
+        events,
+      );
+    await this.coordinator.commit(tables, (connection) =>
+      this.withAgentConnection(connection, storage, audit, preferences, events, work),
+    );
+  }
+
+  /**
+   * Lists all tables required by the admitted Agent transaction.
+   * @param audit Retained Agent audit family.
+   * @param events Optional delivery Event family.
+   * @param preferences Retained model-preference family.
+   * @param storage Retained provider record family.
+   * @returns The complete list of tables in the Agent transaction.
+   */
+  private agentTableNames(
+    storage: MysqlEntityStorage<I, S>,
+    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
+    preferences: MysqlRecordStorage<string, PreferencesRecord>,
+    events: MysqlDeliveryStorage | undefined,
+  ): string[] {
+    return [
+      preferences.tableName,
+      audit.tableName,
+      ...storage.tableNames(),
+      ...(events === undefined ? [] : [events.tableName]),
+    ];
+  }
+
+  /**
+   * Binds all retained Agent families to one admitted transaction connection.
+   * @param audit Retained Agent audit family.
+   * @param connection Admitted InnoDB transaction connection.
+   * @param events Optional delivery Event family.
+   * @param preferences Retained model-preference family.
+   * @param storage Retained provider record family.
+   * @param work Conditional Agent write on that connection.
+   * @returns Completion after the bound Agent write settles.
+   */
+  private withAgentConnection(
+    connection: PoolConnection,
+    storage: MysqlEntityStorage<I, S>,
+    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
+    preferences: MysqlRecordStorage<string, PreferencesRecord>,
+    events: MysqlDeliveryStorage | undefined,
+    work: () => Promise<void>,
+  ): Promise<void> {
+    return preferences.withConnection(connection, () =>
+      audit.withConnection(connection, () =>
+        storage.withConnection(connection, () =>
+          events === undefined ? work() : events.withConnection(connection, work),
+        ),
+      ),
+    );
+  }
+
+  /**
+   * Checks both initial images before writing the final group.
+   * @param storage Current Entity family.
+   * @param audit Final Agent audit family.
+   * @param preferences Current model selections.
+   * @param id Captured Agent identifier.
+   * @param slot Bounded preference slot.
+   * @param version Initial Entity version.
+   * @param expected Initial preference image.
+   * @param next Complete replacement preferences.
+   * @param mutation Optional Entity mutation.
+   * @param history Final Agent audit entries.
+   * @param events Optional delivery Event family.
+   * @typeParam Id Typed Agent identifier.
+   * @typeParam State Generated Agent state.
+   * @returns Completion after the conditional Agent rows are written.
+   */
+  private async applyAgentLocked<Id, State extends Message>(
+    storage: MysqlEntityStorage<I, S>,
+    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
+    preferences: MysqlRecordStorage<string, PreferencesRecord>,
+    id: I,
+    slot: string,
+    version: number,
+    expected: readonly ModelPreference[] | undefined,
+    next: PreferencesRecord,
+    mutation: EntityCommitInput<Id, State> | undefined,
+    history: readonly AgentHistoryEntry[],
+    events?: MysqlDeliveryStorage,
+  ): Promise<void> {
+    await this.guardPreference(preferences, slot, expected, next);
+    const current = await storage.readCurrentLocked(id);
+    if ((current?.version?.number ?? 0) !== version)
+      throw new Error("Agent initial Entity Version is no longer current.");
+    await this.writeAgentRows(storage, audit, events, id, mutation, history);
+    await preferences.write(next);
+  }
+
+  /**
+   * Serializes absent-row admission and checks the complete initial image.
+   * @param storage Retained preference family.
+   * @param slot Bounded physical slot.
+   * @param expected Initial preference image.
+   * @param next Complete replacement record.
+   * @returns Completion after the complete preference image is checked.
+   */
+  private async guardPreference(
+    storage: MysqlRecordStorage<string, PreferencesRecord>,
+    slot: string,
+    expected: readonly ModelPreference[] | undefined,
+    next: PreferencesRecord,
+  ): Promise<void> {
+    if (next.key === undefined) throw new Error("Agent preference identity is missing.");
+    const prior = await storage.readLocked(slot);
+    if (prior !== undefined) AgentModelPreferences.requireIdentity(prior, next.key);
+    if (!AgentModelPreferences.same(prior?.preferences, expected))
+      throw new Error("Agent model preferences changed during the live turn.");
+    if (
+      prior === undefined &&
+      !(await storage.compareAndSet(slot, undefined, AgentModelPreferences.record(next.key, [])))
+    )
+      throw new Error("Agent model preference admission conflicted.");
+  }
+
+  /**
+   * Writes one validated Agent transition on the already bound connection.
+   * @param storage Entity families.
+   * @param audit Final Agent history family.
+   * @param events Optional delivery family.
+   * @param id Captured Agent identifier.
+   * @param mutation Optional Entity mutation.
+   * @param history Final audit entries.
+   * @typeParam Id Typed Agent identifier.
+   * @typeParam State Generated Agent state.
+   * @returns Completion after the Entity and final audit writes.
+   */
+  private async writeAgentRows<Id, State extends Message>(
+    storage: MysqlEntityStorage<I, S>,
+    audit: MysqlRecordStorage<string, AgentHistoryRecord>,
+    events: MysqlDeliveryStorage | undefined,
+    id: I,
+    mutation: EntityCommitInput<Id, State> | undefined,
+    history: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    for (const row of mutation?.states ?? [])
+      await storage.commitCapability().appendStateImmutable(row);
+    for (const row of mutation?.diagnostics ?? [])
+      await storage.commitCapability().appendDiagnosticImmutable(row);
+    for (const row of mutation?.events ?? []) await events?.writeImmutable(row);
+    if (mutation !== undefined) await storage.writeCurrentAdmitted(mutation.next);
+    for (const entry of history)
+      await audit.writeImmutable(
+        AgentHistoryRecords.record(this.entity.stateSchema.typeName, this.entity.id.key(id), entry),
+      );
   }
 
   /**
@@ -1796,7 +2292,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   }
 
   /**
-   * Opens only the record families required by this commit.
+   * Acquires only the record families required by this commit.
    *
    * @param input The captured Entity persistence input.
    * @returns The retained records required by this commit.
@@ -1887,7 +2383,6 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   private validate<Id, State extends Message>(
     input: import("@spine-event-engine/storage/provider").EntityCommitInput<Id, State>,
   ): void {
-    if (!this.#open) throw new MysqlStorageOperationError("Entity commit storage is closed.");
     if (input.entity.sourceType.typeName !== this.entity.sourceType.typeName)
       throw new MysqlStorageOperationError("Entity commit source type is incompatible.");
     if (!this.accepts(input))
@@ -1987,7 +2482,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
    */
   private closeRetained(): Error | undefined {
     const errors: unknown[] = [];
-    for (const port of [this.#events, this.#storage]) {
+    for (const port of [this.#events, this.#history, this.#preferences, this.#storage]) {
       try {
         port?.close();
       } catch (error) {
@@ -1995,6 +2490,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       }
     }
     this.#events = undefined;
+    this.#history = undefined;
+    this.#preferences = undefined;
     this.#storage = undefined;
     try {
       this.onClose();

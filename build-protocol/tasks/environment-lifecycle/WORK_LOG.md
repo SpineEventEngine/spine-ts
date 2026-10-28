@@ -5,7 +5,7 @@
 Started 2026-10-27 from freshly fetched official master
 `ff6c8669537a016c47f012150306500d3b52b5d1`. Branch `environment-lifecycle` is in
 `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
-Latest accepted checkpoint `7aee260f5` is pushed to official
+Latest accepted checkpoint `77ec92e32` is pushed to official
 `origin/environment-lifecycle`. Repository/EventStore/query/history retention,
 shared AnyPacker, provider commit retention/shutdown, memory/SQL/Datastore
 preparation, and public live TenantIndex/native membership are complete.
@@ -1181,3 +1181,144 @@ AGENT_LIVE_EXECUTION and the external accepted plan. The same Sol/medium
 implementation context supplied the ordered extraction/admission/Delivery/removal
 outline; no new broad architecture pass is needed. Two recorded Agent failures
 remain required M7 dispositions.
+
+M7a commit77ec92e32 pushed successfully to official origin/environment-lifecycle.
+
+M7b dispatch: existing storage_retention implementer, explicit immutable
+gpt-6-sol/medium, sole production writer. Runtime metadata is not exposed. No
+children, parent record edits, commit or push. Scope is the coherent live runtime
+cutover, ordinary Delivery integration, complete recovery-only contract/provider
+removal, focused interruption/concurrency/provider evidence and affected docs.
+Read external agent-live-cutover-implementation-brief.md and accepted design.
+Estimate 5–9 hours includes implementation, mechanical proof, focused full review
+wave, corrections and publication; provider conditional state and cross-instance
+interruption behavior are the principal uncertainties. No new broad architecture
+pass unless concrete evidence establishes a material blocker. Full release profile
+remains after all milestones. Continue automatically through remaining milestones.
+
+M7b demonstrated conditional-persistence design blocker, before runtime edits:
+AgentExecutionStorage.complete combines Entity/version/history with preferences
+in execution head across memory, PostgreSQL, MySQL and Datastore. Deleting that
+head removes the only durable preference container. Existing generic
+EntityCommitStorage.commit permits prefix writes and supplies neither expected
+version nor atomic preference mutation. Reusing it unchanged violates D-0152.
+Parent read internal/entity-commit.ts, entity/agent-execution.ts and located all
+four completion implementations. Existing application_architecture requirements
+splitter (explicit immutable gpt-6-astra/high, runtime metadata unavailable)
+receives only this demonstrated serialized/atomic-write seam, not a broad replan.
+Determine the smallest surviving preference record/conditional commit contract,
+actual per-provider guarantees, close/preparation integration and focused tests.
+No edits, tests or children. Estimate 0.3–0.6 hours for source-based decision and
+handoff. Same implementer continues independent test/source mapping; dependent
+contract implementation waits for the decision.
+
+D-0154 accepted after parent read the full external
+agent-live-persistence-decision.md. Existing requirements splitter used the
+explicit immutable Astra/high profile; runtime metadata unavailable, no edits,
+checks or children. Durable Agent design now records exact seam, inert record
+identity, absent/present preference and no-op checks, native provider guarantees,
+preparation and focused proof. Parent also mapped independent history schemas in
+agent-history-schema-removal-note.md; retained audit definitions are preserved.
+
+M7b1 inactive persistence extraction proceeds in the same explicit immutable
+Sol/medium implementation context. Estimate 2–4 hours for all provider primitives,
+focused real-provider/cleanup evidence and bounded review, within the M7b estimate.
+No production admission switch or old-head dual write in this slice. The subsequent
+M7b runtime slice still switches receipt admission and scheduler execution together.
+
+M8 preparatory source-contract question, investigated independently while M7b1
+implementation runs: accepted completeSetup initializes configured transport
+resources before model assembly, but TS and inspected JVM TransportFactory only
+create publishers/subscribers and close. There is no generic open/check operation,
+and model channel IDs do not yet exist. Parent source notes identify this concrete
+public contract gap; a fake channel probe or log claiming connection validation
+would be wrong. Existing application_architecture requirements splitter receives
+a bounded read-only decision with explicit immutable Astra/high profile, no
+runtime metadata, edits, tests or children. Compare the minimal truthful setup
+guarantee against a necessary narrow factory lifecycle method; do not redesign
+Delivery, add Application or replan the frozen wave. Estimate 0.2–0.4 hours for
+source-backed decision and durable M8 handoff. No M7 code changes depend on it.
+
+D-0155 accepted after parent read environment-transport-setup-decision.md.
+Explicit immutable Astra/high profile confirmed; no runtime metadata, source edits,
+tests or children. Record the required TransportFactory.initialize and truthful
+factory-vs-channel guarantee in PROPOSAL and DECISION_LOG for M8. No active M7
+production changes depend on this future contract.
+
+Parent source audit also found remaining ordinary production Any packing in
+server/integration/external-messages.ts (wrapper Event/EventId and control frames).
+Decoding already uses AnyPacker, but valid encoding still repeats type URL plus
+toBinary. Include these ordinary wrappers in M12's remaining adoption scope,
+while preserving malformed/opaque/wire-assertion fixtures. This completes the
+human's use-everywhere instruction, not a new serialized behavior or key workaround.
+
+M12 residual production Any scan: parent confirmed ordinary manual packing in
+integration/external-messages.ts and third-party-context.ts; the earlier residual
+audit covered tests/examples only. Reuse mechanical_checks as the existing
+orchestrator-dispatched read-only scanning function, explicit immutable
+gpt-6-luna/low profile, no runtime metadata. Scope remaining authored production
+Any packing/unpacking outside the shared packer implementation; exclude generated
+code and ordinary non-Any binary encoding. No edits/tests/children. Estimate
+0.1–0.2 hours for scan and parent classification; active M7b1 work continues.
+
+Residual Any production scan accepted: mechanical_checks used the recorded
+explicit immutable Luna/low function profile, no runtime metadata, edits, tests
+or children. External any-production-adoption-audit.md confirms no further
+unambiguous typed packing omissions beyond integration/external-messages.ts and
+third-party-context.ts. Opaque wire copies and synthetic sizing placeholders are
+distinct; preserve those rather than normalize envelopes. Existing AnyPacker
+implementation and non-Any RPC binary serialization are excluded. M12 carries
+the two concrete production wrappers plus the earlier fixture audit.
+
+2026-10-28 continuation: same isolated worktree and sole implementation context.
+M7b1 initial focused evidence now reports memory5, PostgreSQL2, MySQL2 and
+Datastore3 passing cases, including independent-handle absent-row races, immutable
+history conflict rollback, input capture, preparation and admitted-close behavior.
+These are progress results, not frozen acceptance. Await final build-backed LCOV
+and static gates before specialist review. Parent reread canonical protocol and
+completion sequence; no new task, worktree, baseline or broad architecture pass.
+Desktop explicit child profile support remains available; existing immutable
+assignments continue. Remaining task scope and final CI limitation are unchanged.
+
+M7b1 frozen evidence accepted for review input (not milestone acceptance):
+external agent-live-persistence-evidence.md records 189/189 in11 selected suites,
+separate MySQL transaction5/5 and MariaDB2/2, successful generated build/tooling,
+ESLint/TSDoc/cleanup/docs/format/Proto/current/copyright/diff gates. Parent read the
+complete evidence and independently refreshed changed LCOV from
+m7b1-coverage-expanded/lcov.info. Residual changed cleanup acquisition failures,
+optional Event families and unsupported custom native commit paths are explicitly
+identified for reliability/API review, not silently waived. Focused zero thresholds
+only permit scoped measurement; final release90% is unchanged. Implementer explicit
+immutable Sol/medium dispatch confirmed, runtime metadata unavailable. Freeze has
+no runtime admission change. Dispatch the previously recorded four concerns using
+the frozen external evidence and review context; no source edits/checks/children.
+
+M7b1 full review wave collected. Reliability P2 accepted: MySQL Promise.all table
+preparation may reject while sibling preparation remains active, leaving commit
+tracking before shutdown can safely close children/pool. Await all started work
+(or sequence it), retain original/aggregate failure and prove close waits with a
+deterministic gate. Style P2 accepted: memory constructor eagerly binds Agent-only
+maps/queue for ordinary Entity handles; bind/cache on first Agent operation with
+same backend scope and no generic resource framework. API P3 accepted: qualify
+REFERENCE retry/prefix/interleaving sentences explicitly as ordinary commit.
+Documentation otherwise clean and deduplicates that paragraph. All four immutable
+configured profiles match recorded explicit dispatch; runtime metadata unavailable.
+Parent read reports and source triggers; no high-risk finding is waived. Return one
+batch to existing Sol/medium implementer. Estimate0.3–0.6hours for bounded fixes,
+focused behavioral/static/coverage proof and targeted reliability/style confirmation.
+API/docs deterministic wording fix can be checked by parent; no full lane reopening
+unless contracts change. Final release/security and full Agent cutover remain later.
+
+M7b1 accepted after targeted confirmations: reliability confirms all-started MySQL
+preparation drain and original/aggregate failures; style confirms lazy cached memory
+Agent bindings preserve shared data and avoid ordinary Entity allocation. Parent
+resolved documentation qualifier. All four concern dispositions clean/resolved;
+explicit immutable profiles match dispatch, runtime metadata unavailable. No
+remaining accepted P0–P2 in this slice. Final proof: expanded189/189 before bounded
+corrections, fresh affected53/53 and MariaDB3/3 afterward, final build/static/docs
+green, changed-line coverage inspected. Unchanged PG/Datastore evidence remains
+current. The API is inactive pending M7b runtime cutover. Neither known Agent
+runtime failure is waived and no full release/security claim is made. Stage only
+authored reviewed paths, source Proto checksum and parent task records; defer
+generation fingerprints to final convergence. Commit/push checkpoint, then continue
+same implementation context with coherent admission/Delivery/scheduler removal.

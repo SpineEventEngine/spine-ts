@@ -499,6 +499,7 @@ const expectedStorageExports = [
   "StorageQueryPolicy",
 ];
 const expectedStorageProviderDocumentedExports = [
+  "AgentCommitInput",
   "AgentExecutionCapacity",
   "AgentExecutionClaim",
   "AgentExecutionComplete",
@@ -524,6 +525,7 @@ const expectedStorageProviderDocumentedExports = [
   "AgentHistoryStorageFactory",
   "AgentHistoryStorageInput",
   "AgentHistoryView",
+  "AgentModelPreferences",
   "AgentPendingCursor",
   "AgentPendingKey",
   "AgentPendingPage",
@@ -543,6 +545,7 @@ const expectedStorageProviderDocumentedExports = [
   "EntityStorageConformance",
   "EntityStorageInput",
   "EntityStoragePreparationInput",
+  "PreferencesRecord",
   "StoragePreparation",
   "StoragePreparationMode",
   "StoragePreparations",

@@ -267,10 +267,16 @@ record layouts are unchanged.
 
 The built-in providers capture prepared input before I/O and write state history,
 diagnostic Events, delivery Events, then current state as independent records.
-SQL and Datastore providers automatically retry one classified transient Entity
-persistence failure using that captured input. In memory, a caller retry must
-reuse the same versions and Event IDs without rerunning the handler. A later
-failure leaves completed writes in place. The presence of a delivery Event
-alone does not prove the entire Entity save completed. Concurrent saves may
-interleave, including current-state writes. Automatic Entity versions,
-single-record atomic compare-and-set, and immutable-record checks remain.
+For ordinary Entity `commit()`, SQL and Datastore providers automatically retry
+one classified transient persistence failure using the captured input. In
+memory, a caller retry must reuse the same versions and Event IDs without
+rerunning the handler. A later failure leaves completed writes in place. The
+presence of a delivery Event alone does not prove the entire Entity save
+completed. Concurrent ordinary saves may interleave, including current-state
+writes. Automatic Entity versions, single-record atomic compare-and-set, and
+immutable-record checks remain.
+
+The provider-only `commitAgent()` instead checks the initial Entity version and
+complete model-preference image, then atomically commits any changed Entity
+record, final Agent audit, and replacement preferences. It also checks the
+initial Entity version when the turn has no state change.

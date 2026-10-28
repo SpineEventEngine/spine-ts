@@ -96,7 +96,11 @@ export interface DatastoreExecutionRows<I> {
 }
 
 type Transaction = ReturnType<Datastore["transaction"]>;
-type NativeRow = ReturnType<
+
+/**
+ * Contains one native row staged for a Datastore transaction.
+ */
+export type NativeRow = ReturnType<
   DatastoreRecordStorage<string, AgentExecutionRecord>["transactionEntity"]
 >;
 
@@ -1003,8 +1007,10 @@ function checkIdentity(record: AgentExecutionRecord | undefined, key: AgentInvoc
 
 /**
  * Returns the first native entity when Datastore returns an array.
+ * @param value Candidate native transaction value.
+ * @returns The first native query result, or absence.
  */
-function first(value: unknown): unknown {
+export function first(value: unknown): unknown {
   return Array.isArray(value) ? value[0] : value;
 }
 
@@ -1023,8 +1029,9 @@ function requiredStorage<I, R extends Message>(
 
 /**
  * Checks provider mutation, entity-group and payload budgets before committing.
+ * @param rows Native rows staged for one transaction.
  */
-function validateTransactionRows(rows: readonly NativeRow[]): void {
+export function validateTransactionRows(rows: readonly NativeRow[]): void {
   const keys = rows.map((row) => JSON.stringify(row.key));
   if (rows.length > 500)
     throw new Error("Agent execution exceeds Datastore transaction mutation limit.");
@@ -1050,8 +1057,10 @@ function validateTransactionRows(rows: readonly NativeRow[]): void {
 }
 
 /**
- * Identifies native write contention eligible for a bounded retry.
+ * Checks native write contention eligible for a bounded retry.
+ * @param error The original provider failure.
+ * @returns Whether native contention permits a bounded retry.
  */
-function isAborted(error: unknown): boolean {
+export function isAborted(error: unknown): boolean {
   return typeof error === "object" && error !== null && Reflect.get(error, "code") === 10;
 }

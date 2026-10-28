@@ -933,6 +933,8 @@ describe("Datastore generated Entity records", () => {
     const commitClose = vi.fn().mockResolvedValue(undefined);
     const commits = {
       commit: vi.fn().mockResolvedValue(undefined),
+      readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+      commitAgent: vi.fn().mockResolvedValue(undefined),
       close: commitClose,
       closeIdle: vi.fn(),
     };
@@ -979,7 +981,13 @@ describe("Datastore generated Entity records", () => {
             current: {} as never,
             states: {} as never,
             events: {} as never,
-            commits: { commit: vi.fn(), close: vi.fn(), closeIdle: vi.fn() },
+            commits: {
+              commit: vi.fn(),
+              readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+              commitAgent: vi.fn().mockResolvedValue(undefined),
+              close: vi.fn(),
+              closeIdle: vi.fn(),
+            },
             isOpen: () => !closed,
             close: () => {
               release();
@@ -1011,7 +1019,13 @@ describe("Datastore generated Entity records", () => {
         current: {} as never,
         states: {} as never,
         events: {} as never,
-        commits: { commit: vi.fn(), close: vi.fn(), closeIdle: vi.fn() },
+        commits: {
+          commit: vi.fn(),
+          readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+          commitAgent: vi.fn().mockResolvedValue(undefined),
+          close: vi.fn(),
+          closeIdle: vi.fn(),
+        },
         isOpen: () => false,
         close,
         closeIdle: () => {
@@ -1144,7 +1158,13 @@ describe("Datastore generated Entity records", () => {
           current: {} as never,
           states: {} as never,
           events: {} as never,
-          commits: { commit: vi.fn(), close: vi.fn(), closeIdle: vi.fn() },
+          commits: {
+            commit: vi.fn(),
+            readAgentPreferences: vi.fn().mockResolvedValue(undefined),
+            commitAgent: vi.fn().mockResolvedValue(undefined),
+            close: vi.fn(),
+            closeIdle: vi.fn(),
+          },
           isOpen: () => true,
           close,
           closeIdle: vi.fn(),

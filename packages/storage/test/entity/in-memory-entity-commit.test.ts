@@ -56,6 +56,27 @@ import { RecordSpec } from "../../src/record/record-spec.js";
 import { StorageFactory } from "../../src/storage/storage-factory.js";
 
 describe("MemoryEntityCommitStorage", () => {
+  it("does not bind Agent-only families for an ordinary Entity commit", async () => {
+    const backend = new InMemoryStorageBackend();
+    const factory = new InMemoryStorageFactory(backend);
+    const bind = vi.spyOn(InMemoryStorageBackend, "bind");
+    const input = entityInput(false);
+    const commits = commitStorage(factory, input);
+    try {
+      await commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("ordinary", 1n),
+      });
+      expect(bind.mock.calls.some((call) => call[3].startsWith("agent-"))).toBe(false);
+    } finally {
+      bind.mockRestore();
+      await commits.close();
+      await factory.close();
+    }
+  });
+
   it("admits all three memory preparation calls before close", async () => {
     const factory = new InMemoryStorageFactory();
     const preparation = StoragePreparations.for(factory);

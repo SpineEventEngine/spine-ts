@@ -35,6 +35,7 @@ import {
 import {
   AgentExecutionRecords,
   AgentHistoryRecords,
+  AgentModelPreferences,
   eventHistorySpec,
   stateHistorySpec,
 } from "@spine-event-engine/storage/provider";
@@ -493,6 +494,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
       prepareEntity: (input, mode) => this.prepareEntity(input, mode),
       prepareAgentHistory: (input) => this.prepareAgentHistory(input),
+      prepareAgentCommit: (input, mode) => this.prepareAgentCommit(input, mode),
     });
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
@@ -648,6 +650,49 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
+   * Creates native live Agent current, audit, and preference requirements.
+   * @param input Declarative Agent Entity layout.
+   * @param mode Creation or read-only metadata check.
+   * @returns Completion after native definitions are compatible.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   */
+  private prepareAgentCommit<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    return this.admit(async () => {
+      if (this.#entityCreators.has(input.sourceType.typeName))
+        throw new Error(
+          "Custom Datastore Entity storage does not support native Agent transactions.",
+        );
+      if (this.columnSignature(input.columns) !== this.columnSignature(input.recordSpec.columns))
+        throw new Error("Datastore Entity query columns differ from current records.");
+      await this.prepareRecordAdmitted(input.context, input.recordSpec, undefined, mode, false);
+      if (input.stateHistory) {
+        const layout = stateHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, layout.spec, layout.group, mode, false);
+      }
+      if (input.eventHistory) {
+        const layout = eventHistorySpec(input.stateSchema);
+        await this.prepareRecordAdmitted(input.context, layout.spec, layout.group, mode, false);
+      }
+      await this.prepareNative(
+        input.context,
+        AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+        AgentHistoryRecords.group,
+        "spine_agent_history",
+      );
+      await this.prepareNative(
+        input.context,
+        AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
+        AgentModelPreferences.group,
+        "spine_agent_model_preferences",
+      );
+    });
+  }
+
+  /**
    * Checks one native physical definition and its namespace read access.
    * @typeParam I Record identifier type.
    * @typeParam R Stored record type.
@@ -746,7 +791,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Resolves the pure native namespace, kind, and record layout declaration.
+   * Finds the pure native namespace, kind, and record layout declaration.
    * @typeParam I Record identifier type.
    * @typeParam R Stored record type.
    * @param context Complete tenant context.
@@ -851,7 +896,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Opens one Agent execution handle after factory lifecycle validation.
+   * Acquires one Agent execution handle after factory lifecycle validation.
    *
    * @param input Requested fenced execution change.
    * @returns Tenant-scoped Agent execution storage handle.
@@ -866,7 +911,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Opens the fixed execution kinds and existing Entity record families.
+   * Acquires the fixed execution kinds and existing Entity record families.
    *
    * @param input Requested fenced execution change.
    * @returns Tenant-scoped native record handles.
@@ -904,7 +949,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Opens optional existing Entity state and diagnostic record families.
+   * Acquires optional existing Entity state and diagnostic record families.
    *
    * @param input Typed Agent repository and history configuration.
    * @returns Optional native state and diagnostic handles.
@@ -944,7 +989,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Resolves one native kind through the existing record layout.
+   * Finds one native kind through the existing record layout.
    *
    * @param context Captured event storage context.
    * @param fixedKind Fixed native Datastore kind.
@@ -1013,7 +1058,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Opens direct built-in commit access without an unused Entity read bundle.
+   * Acquires direct built-in commit access without an unused Entity read bundle.
    *
    * @param input The captured Entity persistence input.
    * @returns The provider commit handle.
@@ -1025,15 +1070,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   ): EntityCommitStorage {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     const custom = this.#entityCreators.get(input.sourceType.typeName);
-    if (custom !== undefined) {
-      const bundle = custom(input, this.#client) as DatastoreEntityStorageHandle<I, S>;
-      const adapter: EntityCommitStorage = {
-        commit: (work) => bundle.commits.commit(work),
-        ...this.retainCleanup(bundle, () => this.#commits.delete(adapter)),
-      };
-      this.#commits.add(adapter);
-      return adapter;
-    }
+    if (custom !== undefined) return this.createCustomCommitStorage(input, custom);
     const openRecords: OpenEntityRecords = (recordSpec, group) =>
       this.createEntityRecordStorage(input.context, recordSpec, group);
     const commits = new DatastoreEntityCommitStorage(
@@ -1043,6 +1080,33 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     );
     this.#commits.add(commits);
     return commits;
+  }
+
+  /**
+   * Wraps a custom bundle while retaining its complete cleanup obligation.
+   * @param custom Registered custom Entity storage creator.
+   * @param input Captured Entity storage layout.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @returns The adapted custom commit handle.
+   */
+  private createCustomCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+    custom: CreateEntityStorage,
+  ): EntityCommitStorage {
+    const bundle = custom(input, this.#client) as DatastoreEntityStorageHandle<I, S>;
+    const unsupported = () =>
+      Promise.reject(
+        new Error("Custom Datastore Entity storage does not support native Agent transactions."),
+      );
+    const adapter: EntityCommitStorage = {
+      commit: (work) => bundle.commits.commit(work),
+      readAgentPreferences: unsupported,
+      commitAgent: unsupported,
+      ...this.retainCleanup(bundle, () => this.#commits.delete(adapter)),
+    };
+    this.#commits.add(adapter);
+    return adapter;
   }
 
   /**
@@ -1109,7 +1173,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Opens the built-in record provider for generated Entity families.
+   * Acquires the built-in record provider for generated Entity families.
    *
    * @typeParam I Record identifier type.
    * @typeParam R Stored record message type.
@@ -1123,12 +1187,16 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     recordSpec: RecordSpec<I, R>,
     group?: StorageGroup,
   ): RecordStorage<I, R> {
+    if (group?.name === AgentHistoryRecords.group.name)
+      return this.openNative(context, recordSpec, group, "spine_agent_history");
+    if (group?.name === AgentModelPreferences.group.name)
+      return this.openNative(context, recordSpec, group, "spine_agent_model_preferences");
     const resolved = this.resolve(recordSpec, group, false);
     return this.openNative(context, recordSpec, group, resolved.layout?.kind);
   }
 
   /**
-   * Opens one native record handle and retains its pure physical definition.
+   * Acquires one native record handle and retains its pure physical definition.
    * @typeParam I Record identifier type.
    * @typeParam R Stored record type.
    * @param context Complete tenant context.
@@ -1158,7 +1226,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Resolves the registered creator and physical layout for a record family.
+   * Finds the registered creator and physical layout for a record family.
    *
    * @typeParam I Record identifier type.
    * @typeParam R Stored record message type.

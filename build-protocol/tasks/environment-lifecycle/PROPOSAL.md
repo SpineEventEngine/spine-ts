@@ -330,6 +330,28 @@ completeSetup validates configuration, initializes shared facilities, checks sha
 
 The shared Inbox and other definitions known independently of Entity models can be prepared here. Model-dependent requirements are determined during Bounded Context assembly.
 
+TransportFactory gains a required `initialize(): Promise<void>` operation.
+The environment awaits it to initialize and check shared transport resources
+that can be established before channel identities are known. Memory validates
+its open state without creating channels or publishing messages. External
+adapters await their configured shared connections where applicable. A factory
+whose resources exist only per channel checks its local configuration here and
+documents that scope. No fake channel or signal is used as a probe.
+
+Initialization is idempotent and concurrent calls share an attempt. Direct
+standalone channel creation coordinates with the same initializer. Close fences
+new work, drains initialization and cleans partial acquisitions; a late completion
+cannot restore readiness. Initialization failure is reported with cleanup errors
+preserved. A runtime-supplied factory missing the method is rejected before setup
+I/O. Update the built-in factory, test doubles and public SPI documentation.
+
+Actual model-derived publishers, subscribers, consumers and control announcements
+remain part of awaited Bounded Context assembly, including lazy builds. Successful
+factory setup does not promise that every future channel exists or every channel
+permission has been checked. Log “Transport factory initialized” only after its
+operation completes; log overall setup only after all phases succeed. Actual
+channel setup failures still reject build under the startup failure policy.
+
 Keep standalone connection diagnostics on the factory:
 
 ```ts

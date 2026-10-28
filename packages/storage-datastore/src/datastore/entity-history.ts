@@ -13,6 +13,19 @@
  */
 
 import { clone, toBinary, type Message } from "@bufbuild/protobuf";
+import {
+  AgentHistoryEntrySchema,
+  type AgentHistoryEntry,
+  type ModelPreference,
+} from "@spine-event-engine/proto/agent";
+import {
+  AgentHistoryKeys,
+  AgentHistoryRecords,
+  AgentModelPreferences,
+  type PreferencesRecord,
+  type AgentCommitInput,
+} from "@spine-event-engine/storage/provider";
+import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import { AnyPacker } from "@spine-event-engine/core";
 import { type Timestamp } from "@bufbuild/protobuf/wkt";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
@@ -38,9 +51,12 @@ import { RecordSpec, type RecordStorage } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
 
 import { DatastoreRecordStorage, type DatastorePageCursor } from "./record-storage.js";
+import { AgentHistoryHash } from "./agent-history.js";
+import { first, isAborted, validateTransactionRows, type NativeRow } from "./agent-execution.js";
+import type { Datastore } from "@google-cloud/datastore";
 
 /**
- * Opens one generated record family with its resolved Datastore layout.
+ * Acquires one generated record family with its resolved Datastore layout.
  *
  * @typeParam I Record identifier type.
  * @typeParam R Stored Protobuf message type.
@@ -70,6 +86,20 @@ type CommitFamilies<I> = [
   CommitEventRecords | undefined,
   CommitEventRecords | undefined,
 ];
+
+/**
+ * Groups native record families in one live Agent transaction.
+ *
+ * @typeParam I Typed Entity identifier.
+ */
+interface AgentCommitRows<I> {
+  current: DatastoreRecordStorage<I, EntityRecord>;
+  states?: DatastoreRecordStorage<unknown, EntityRecord>;
+  diagnostics?: DatastoreRecordStorage<unknown, Event>;
+  events?: DatastoreRecordStorage<unknown, Event>;
+  history: DatastoreRecordStorage<string, AgentHistoryRecord>;
+  preferences: DatastoreRecordStorage<string, PreferencesRecord>;
+}
 
 /**
  * Groups Entity current and optional history record families.
@@ -173,12 +203,16 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
 
   #events: CommitEventRecords | undefined;
 
+  #history: DatastoreRecordStorage<string, AgentHistoryRecord> | undefined;
+
+  #preferences: DatastoreRecordStorage<string, PreferencesRecord> | undefined;
+
   /**
    * Synchronous idle-close result, including any cleanup failure.
    */
   #idleOutcome: { error?: Error } | undefined;
 
-  readonly #active = new Set<Promise<void>>();
+  readonly #active = new Set<Promise<unknown>>();
 
   #closing: Promise<void> | undefined;
 
@@ -207,6 +241,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    * @returns Completion after every requested record write.
    */
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void> {
+    if (!this.#open) return Promise.reject(new Error("Entity commit storage is closed."));
     return this.track(() => {
       this.validate(input);
       const prepared = EntityCommitSnapshots.capture(input);
@@ -219,11 +254,12 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    *
    * @param action The admitted provider operation.
    * @returns The admitted provider operation completion.
+   * @typeParam T Result type of the admitted provider operation.
    */
-  private track(action: () => Promise<void>): Promise<void> {
-    let complete!: () => void;
+  private track<T>(action: () => Promise<T>): Promise<T> {
+    let complete!: (value: T) => void;
     let fail!: (error: unknown) => void;
-    const work = new Promise<void>((resolve, reject) => {
+    const work = new Promise<T>((resolve, reject) => {
       complete = resolve;
       fail = reject;
     });
@@ -238,6 +274,390 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
       fail(error);
     }
     return work;
+  }
+
+  /**
+   * Reads a detached current preference image from native storage.
+   * @param entityId Typed Agent identifier.
+   * @returns Complete selections or absent record.
+   */
+  readAgentPreferences(entityId: unknown): Promise<readonly ModelPreference[] | undefined> {
+    if (!this.#open) return Promise.reject(new Error("Entity commit storage is closed."));
+    return this.track(async () => {
+      const key = AgentModelPreferences.key(this.input, entityId);
+      const rows = this.agentRows();
+      const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
+      const found = await rows.preferences.read(slot);
+      if (found === undefined) return undefined;
+      AgentModelPreferences.requireIdentity(found, key);
+      return AgentModelPreferences.copy(found.preferences);
+    });
+  }
+
+  /**
+   * Commits Agent state, final audit, and preferences in one native transaction.
+   * @param input Captured live Agent transition.
+   * @returns Completion after a conditional group commits.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   */
+  commitAgent<I, S extends Message>(input: AgentCommitInput<I, S>): Promise<void> {
+    if (!this.#open) return Promise.reject(new Error("Entity commit storage is closed."));
+    return this.track(async () => {
+      const id = this.input.id.clone(input.entityId);
+      const key = AgentModelPreferences.key(this.input, id);
+      const expected =
+        input.expectedPreferences === undefined
+          ? undefined
+          : AgentModelPreferences.copy(input.expectedPreferences);
+      const next = AgentModelPreferences.record(key, input.preferences);
+      const mutation = input.entityCommit && EntityCommitSnapshots.capture(input.entityCommit);
+      const history =
+        input.historyEntries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+      this.validateAgent(id, input.expectedVersion, mutation);
+      const rows = this.agentRows(mutation as never);
+      await this.agentTransaction(
+        rows,
+        id,
+        input.expectedVersion,
+        expected,
+        next,
+        mutation,
+        history,
+      );
+    });
+  }
+
+  /**
+   * Acquires every missing native family before publishing retained references.
+   * @param mutation Optional Entity mutation requiring history families.
+   * @returns Native handles for one Agent commit.
+   */
+  private agentRows(mutation?: EntityCommitInput<unknown, Message>): AgentCommitRows<unknown> {
+    const acquired: { close(): void }[] = [];
+    try {
+      const rows = this.acquireAgentRows(mutation, acquired);
+      this.retainAgentRows(rows);
+      return rows;
+    } catch (error) {
+      const failures = this.closeGroup(acquired);
+      if (failures.length)
+        throw new AggregateError(
+          [error, ...failures],
+          "Datastore Agent family acquisition failed.",
+        );
+      throw error;
+    }
+  }
+
+  /**
+   * Acquires only missing native Agent families without publishing partial acquisition.
+   * @param mutation Optional Entity mutation.
+   * @param acquired Collects newly opened handles for rollback.
+   * @returns Complete native family group.
+   */
+  private acquireAgentRows(
+    mutation: EntityCommitInput<unknown, Message> | undefined,
+    acquired: { close(): void }[],
+  ): AgentCommitRows<unknown> {
+    const current = this.native(
+      this.#current ?? this.openAgentRecord(this.input.recordSpec, undefined, acquired),
+    );
+    const { states, diagnostics, events } = this.agentMutationRows(mutation, acquired);
+    const history =
+      this.#history ??
+      this.openAgentRecord(
+        AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+        AgentHistoryRecords.group,
+        acquired,
+      );
+    const preferences =
+      this.#preferences ??
+      this.openAgentRecord(
+        AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
+        AgentModelPreferences.group,
+        acquired,
+      );
+    return {
+      current,
+      states,
+      diagnostics,
+      events,
+      history,
+      preferences,
+    } as AgentCommitRows<unknown>;
+  }
+
+  /**
+   * Acquires mutation families needed by the admitted Agent turn.
+   * @param mutation Optional changed Entity mutation.
+   * @param acquired Newly opened handles retained for rollback.
+   * @returns Optional mutation families.
+   */
+  private agentMutationRows(
+    mutation: EntityCommitInput<unknown, Message> | undefined,
+    acquired: { close(): void }[],
+  ): Pick<AgentCommitRows<unknown>, "states" | "diagnostics" | "events"> {
+    const stateLayout = stateHistorySpec(this.input.stateSchema);
+    const eventLayout = eventHistorySpec(this.input.stateSchema);
+    const states = mutation?.states?.length
+      ? this.native(
+          this.#states ?? this.openAgentRecord(stateLayout.spec, stateLayout.group, acquired),
+        )
+      : undefined;
+    const diagnostics = mutation?.diagnostics?.length
+      ? this.native(
+          this.#diagnostics ?? this.openAgentRecord(eventLayout.spec, eventLayout.group, acquired),
+        )
+      : undefined;
+    const events = mutation?.events?.length
+      ? this.native(this.#events ?? this.openAgentRecord(eventStoreRecordSpec, undefined, acquired))
+      : undefined;
+    return { states, diagnostics, events } as Pick<
+      AgentCommitRows<unknown>,
+      "states" | "diagnostics" | "events"
+    >;
+  }
+
+  /**
+   * Acquires one native record family and records its rollback obligation.
+   * @param spec Declarative record layout.
+   * @param group Optional physical family.
+   * @param acquired Newly opened handles.
+   * @returns Native record family.
+   * @typeParam Id Typed record identifier.
+   * @typeParam R Generated record.
+   */
+  private openAgentRecord<Id, R extends Message>(
+    spec: RecordSpec<Id, R>,
+    group: import("@spine-event-engine/storage").StorageGroup | undefined,
+    acquired: { close(): void }[],
+  ): DatastoreRecordStorage<Id, R> {
+    const port = this.openRecords(spec, group);
+    acquired.push(port);
+    return this.native(port);
+  }
+
+  /**
+   * Stores the complete acquired Agent group after every family succeeds.
+   * @param rows Complete native family group.
+   */
+  private retainAgentRows(rows: AgentCommitRows<unknown>): void {
+    this.#current ??= rows.current;
+    this.#states ??= rows.states as CommitStateRecords | undefined;
+    this.#diagnostics ??= rows.diagnostics as CommitEventRecords | undefined;
+    this.#events ??= rows.events as CommitEventRecords | undefined;
+    this.#history ??= rows.history;
+    this.#preferences ??= rows.preferences;
+  }
+
+  /**
+   * Checks the built-in native transaction capability.
+   * @param port Selected record family.
+   * @returns Native record family.
+   * @typeParam Id Typed record identifier.
+   * @typeParam R Generated record.
+   */
+  private native<Id, R extends Message>(port: RecordStorage<Id, R>): DatastoreRecordStorage<Id, R> {
+    if (!(port instanceof DatastoreRecordStorage))
+      throw new Error("Live Agent commit requires native Datastore transactions.");
+    return port as DatastoreRecordStorage<Id, R>;
+  }
+
+  /**
+   * Validates the Entity scope and exactly one next Version before I/O.
+   * @param id Captured Agent ID.
+   * @param version Initial Entity Version.
+   * @param mutation Optional prepared Entity mutation.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   */
+  private validateAgent<I, S extends Message>(
+    id: unknown,
+    version: number,
+    mutation?: EntityCommitInput<I, S>,
+  ): void {
+    if (!Number.isSafeInteger(version) || version < 0)
+      throw new TypeError("Agent commit requires a valid initial Entity Version.");
+    if (mutation === undefined) return;
+    this.validate(mutation);
+    if (
+      this.input.id.key(id) !== this.input.id.key(mutation.entityId) ||
+      mutation.next.version?.number !== version + 1
+    )
+      throw new Error("Agent commit requires the same Entity ID and one new Version.");
+  }
+
+  /**
+   * Executes a captured transition with the existing bounded native contention retry.
+   * @param rows Retained native families.
+   * @param id Captured Agent ID.
+   * @param version Initial Entity version.
+   * @param expected Initial preference image.
+   * @param next Complete replacement preferences.
+   * @param mutation Optional Entity mutation.
+   * @param history Final audit entries.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @returns Completion after the native transaction settles.
+   */
+  private async agentTransaction<I, S extends Message>(
+    rows: AgentCommitRows<unknown>,
+    id: unknown,
+    version: number,
+    expected: readonly ModelPreference[] | undefined,
+    next: PreferencesRecord,
+    mutation: EntityCommitInput<I, S> | undefined,
+    history: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const tx = rows.preferences.transaction();
+      try {
+        await tx.run();
+        const staged: NativeRow[] = [];
+        await this.agentLocked(tx, staged, rows, id, version, expected, next, mutation, history);
+        validateTransactionRows(staged);
+        for (const row of staged) tx.save(row);
+        await tx.commit();
+        return;
+      } catch (error) {
+        await tx.rollback().catch(() => undefined);
+        if (attempt < 2 && isAborted(error)) continue;
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Checks both current images and stages the complete final group.
+   * @param tx Native transaction.
+   * @param staged Rows saved only after all checks pass.
+   * @param rows Retained native families.
+   * @param id Captured Agent identifier.
+   * @param version Initial Entity Version.
+   * @param expected Initial preference image.
+   * @param next Replacement preference record.
+   * @param mutation Optional Entity mutation.
+   * @param history Final audit entries.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @returns Completion after all conditional rows are staged.
+   */
+  private async agentLocked<I, S extends Message>(
+    tx: ReturnType<Datastore["transaction"]>,
+    staged: NativeRow[],
+    rows: AgentCommitRows<unknown>,
+    id: unknown,
+    version: number,
+    expected: readonly ModelPreference[] | undefined,
+    next: PreferencesRecord,
+    mutation: EntityCommitInput<I, S> | undefined,
+    history: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    if (next.key === undefined) throw new Error("Agent preference identity is missing.");
+    const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(next.key))}`;
+    const prior = await this.agentRead(tx, rows.preferences, slot);
+    if (prior !== undefined) AgentModelPreferences.requireIdentity(prior, next.key);
+    if (!AgentModelPreferences.same(prior?.preferences, expected))
+      throw new Error("Agent model preferences changed during the live turn.");
+    const current = await this.agentRead(tx, rows.current, id);
+    if ((current?.version?.number ?? 0) !== version)
+      throw new Error("Agent initial Entity Version is no longer current.");
+    for (const record of mutation?.states ?? [])
+      await this.agentImmutable(tx, staged, this.requiredNative(rows.states), record);
+    for (const event of mutation?.diagnostics ?? [])
+      await this.agentImmutable(tx, staged, this.requiredNative(rows.diagnostics), event);
+    for (const event of mutation?.events ?? [])
+      await this.agentImmutable(tx, staged, this.requiredNative(rows.events), event);
+    if (mutation !== undefined) staged.push(rows.current.transactionEntity(mutation.next));
+    await this.appendAgentAudit(tx, staged, rows.history, id, history);
+    staged.push(rows.preferences.transactionEntity(next));
+  }
+
+  /**
+   * Records final Agent audit rows in the admitted native transaction.
+   * @param history Final Agent audit entries.
+   * @param id Captured typed Agent identifier.
+   * @param staged Rows staged for atomic commit.
+   * @param storage Retained provider record family.
+   * @param tx Active native transaction.
+   * @returns Completion after final audit rows are staged.
+   */
+  private async appendAgentAudit(
+    tx: ReturnType<Datastore["transaction"]>,
+    staged: NativeRow[],
+    storage: DatastoreRecordStorage<string, AgentHistoryRecord>,
+    id: unknown,
+    history: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    for (const entry of history) {
+      if (AgentHistoryKeys.indexValue(AgentHistoryKeys.fromEntry(entry)).length > 1500)
+        throw new RangeError("Agent history order exceeds Datastore indexed-value capacity.");
+      const record = AgentHistoryRecords.record(
+        this.input.stateSchema.typeName,
+        this.input.id.key(id),
+        entry,
+      );
+      await this.agentImmutable(tx, staged, storage, record);
+    }
+  }
+
+  /**
+   * Reads a native row within the Agent transaction.
+   * @param tx Active native transaction.
+   * @param storage Retained record family.
+   * @param id Typed record identifier.
+   * @returns Decoded row or absence.
+   * @typeParam Id Typed record identifier.
+   * @typeParam R Generated record.
+   */
+  private async agentRead<Id, R extends Message>(
+    tx: ReturnType<Datastore["transaction"]>,
+    storage: DatastoreRecordStorage<Id, R>,
+    id: Id,
+  ): Promise<R | undefined> {
+    const raw = first(
+      (await tx.get(storage.transactionKey(id), { wrapNumbers: true })) as unknown,
+    ) as Record<string | symbol, unknown> | undefined;
+    return raw === undefined ? undefined : storage.decodeTransactionEntity(raw);
+  }
+
+  /**
+   * Checks one immutable final record before staging it.
+   * @param tx Active native transaction.
+   * @param staged Collected native rows.
+   * @param storage Retained record family.
+   * @param record Proposed immutable record.
+   * @typeParam Id Typed record identifier.
+   * @typeParam R Generated record.
+   * @returns Completion after the immutable row is checked and staged.
+   */
+  private async agentImmutable<Id, R extends Message>(
+    tx: ReturnType<Datastore["transaction"]>,
+    staged: NativeRow[],
+    storage: DatastoreRecordStorage<Id, R>,
+    record: R,
+  ): Promise<void> {
+    const raw = first(
+      (await tx.get(storage.transactionEntity(record).key, { wrapNumbers: true })) as unknown,
+    ) as Record<string | symbol, unknown> | undefined;
+    if (raw === undefined) staged.push(storage.transactionEntity(record));
+    else if (!storage.matchesTransactionEntity(raw, record))
+      throw new Error("Immutable Agent history record has divergent content.");
+  }
+
+  /**
+   * Checks an enabled native history family.
+   * @param storage Optional native family.
+   * @returns Enabled native record family.
+   * @typeParam Id Typed record ID.
+   * @typeParam R Generated record.
+   */
+  private requiredNative<Id, R extends Message>(
+    storage: DatastoreRecordStorage<Id, R> | undefined,
+  ): DatastoreRecordStorage<Id, R> {
+    if (storage === undefined) throw new Error("Agent Entity history storage is disabled.");
+    return storage;
   }
 
   /**
@@ -410,12 +830,19 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    * @returns A cleanup failure, if any.
    */
   private closeRetained(): Error | undefined {
-    const ports = [this.#events, this.#diagnostics, this.#states, this.#current].filter(
-      (port) => port !== undefined,
-    );
+    const ports = [
+      this.#events,
+      this.#diagnostics,
+      this.#states,
+      this.#history,
+      this.#preferences,
+      this.#current,
+    ].filter((port) => port !== undefined);
     this.#events = undefined;
     this.#diagnostics = undefined;
     this.#states = undefined;
+    this.#history = undefined;
+    this.#preferences = undefined;
     this.#current = undefined;
     const failures = this.closeGroup(ports);
     if (failures.length === 1) return failures[0] as Error;
@@ -450,7 +877,6 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    * @param input Supplies the proposed commit.
    */
   private validate<I, S extends Message>(input: EntityCommitInput<I, S>): void {
-    if (!this.#open) throw new Error("Entity commit storage is closed.");
     if (
       input.entity.sourceType.typeName !== this.input.sourceType.typeName ||
       input.entity.stateSchema.typeName !== this.input.stateSchema.typeName ||

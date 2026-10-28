@@ -6709,3 +6709,55 @@ blocker, not a second whole-task architecture pass. Source evidence includes TS
 AgentHistoryRecords and SQL ID columns; JVM sharding hashes provide no Agent
 receipt precedent. No provider DDL, arbitrary new limit, collision bucket or
 execution recovery is introduced.
+
+## D-0154: Preserve live Agent conditional persistence without execution records
+
+Date: 2026-10-27. Status: accepted for M7b implementation.
+
+All current provider Agent completion paths atomically combine expected Entity
+version, optional Entity/state history, final Agent audit and model preferences.
+Generic EntityCommitStorage.commit explicitly permits prefix writes and cannot
+replace that operation. Preferences currently live only in the recovery head.
+
+Extend the existing retained provider-only EntityCommitStorage with
+readAgentPreferences and commitAgent. Store only current model selections and
+complete typed identity in a new inert preference record; do not read old heads
+or dual-write. Compare both initial Entity version and absent/present preference
+image in the native transaction, including no-op/preference-only completion.
+Capture inputs before awaiting. Preserve final audit/state/preferences atomicity,
+independent earlier interaction audit, native contention retries of captured
+storage input only, retained resources and coordinated close. Ordinary commit
+semantics remain unchanged. No new transaction framework, execution revision,
+status API, claim, backlog, output obligation or migration.
+
+Use D-0153's fixed-slot/full-identity principle with the preference-specific tuple
+and family. Make native transactional support part of Agent preparation, with no
+DDL in check mode. The inactive primitive can be reviewed before the coherent
+admission/scheduler switch. The detailed contract is recorded in
+[Agent live execution](tasks/environment-lifecycle/AGENT_LIVE_EXECUTION.md).
+
+## D-0155: Explicit shared transport factory initialization
+
+Date: 2026-10-27. Status: accepted for M8 implementation.
+
+TransportFactory in TS and the inspected JVM has channel creation and close but
+no awaitable shared-resource setup. Accepted environment setup cannot establish
+transport readiness by object construction or a fake channel. Add one required
+public SPI initialize(): Promise<void>, awaited by completeSetup. Memory validates
+its open local state without channels/timers/publications. External adapters await
+configured shared resources that do not depend on model channel identities.
+Actual context channel/consumer/control setup stays awaited in Bounded Context
+build; later dynamic channels remain ordinary runtime operations.
+
+Initialization coalesces concurrently and is idempotent after success. Closing
+fences new setup/channel work and drains/cleans partial or late acquisitions;
+late completion cannot reopen readiness. Preserve original and cleanup errors.
+Direct standalone channel creation coordinates with the same initializer. A
+missing method from a JavaScript-supplied factory is a configuration error before
+setup I/O. Environment failure latches unavailable and attempts cleanup, without
+process.exit or background retries.
+
+INFO reports only completed factory initialization and later actual context
+channel setup, never all future channels or permissions. This concrete TS API
+fulfills the human's explicit setup requirement; it is not claimed as a JVM API.
+No optional duck-typed success, generic lifecycle manager or synthetic probe.

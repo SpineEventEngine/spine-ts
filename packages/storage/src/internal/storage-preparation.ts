@@ -85,6 +85,19 @@ export interface StoragePreparation {
     input: AgentHistoryStorageInput<I>,
     mode: StoragePreparationMode,
   ): Promise<void>;
+
+  /**
+   * Prepares current Entity, enabled histories, final Agent audit, and model preferences.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   * @param input Declarative Agent Entity layout.
+   * @param mode Creation or read-only compatibility check.
+   * @returns Completion after native transactional requirements are checked.
+   */
+  prepareAgentCommit<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+    mode: StoragePreparationMode,
+  ): Promise<void>;
 }
 
 const preparations = new WeakMap<StorageFactory, StoragePreparation>();

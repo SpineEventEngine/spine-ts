@@ -894,3 +894,72 @@ previous build-backed LCOV and five live provider results remain current. All
 three technical concerns are clean/resolved; separate documentation N/A remains
 justified above. No unresolved accepted P0–P2. M7b runtime integration and final
 security/release acceptance remain pending.
+
+## M7b1 inactive conditional persistence review — awaiting freeze
+
+High-risk provider transaction and serialized contract slice, baseline77ec92e32.
+Review dispatch is pending final mechanical evidence and coverage inspection.
+Reserve the existing provider_reliability, repository_api_review and provider_style
+contexts, each explicit immutable gpt-6-sol/medium, and provider_documentation,
+explicit immutable gpt-6-luna/medium. Runtime metadata is unavailable. The first
+three technical concerns may run concurrently; documentation follows a free slot.
+All four concerns apply because the required provider SPI and atomic-write claims
+change. Final security remains M13. Read the full TASK human ledger and external
+agent-live-persistence-review-context.md, with exact frozen scope/evidence supplied
+at dispatch. No reviewer edits, checks or child delegation. Collect the full wave
+before one correction batch to the same implementer. Estimate0.5–1hour includes
+review, bounded corrections, checks and checkpoint publication. This does not
+accept active intermediate code or infer runtime removal from an inactive API.
+
+M7b1 frozen evidence accepted for review input (not milestone acceptance):
+external agent-live-persistence-evidence.md records 189/189 in11 selected suites,
+separate MySQL transaction5/5 and MariaDB2/2, successful generated build/tooling,
+ESLint/TSDoc/cleanup/docs/format/Proto/current/copyright/diff gates. Parent read the
+complete evidence and independently refreshed changed LCOV from
+m7b1-coverage-expanded/lcov.info. Residual changed cleanup acquisition failures,
+optional Event families and unsupported custom native commit paths are explicitly
+identified for reliability/API review, not silently waived. Focused zero thresholds
+only permit scoped measurement; final release90% is unchanged. Implementer explicit
+immutable Sol/medium dispatch confirmed, runtime metadata unavailable. Freeze has
+no runtime admission change. Dispatch the previously recorded four concerns using
+the frozen external evidence and review context; no source edits/checks/children.
+
+M7b1 full review wave collected. Reliability P2 accepted: MySQL Promise.all table
+preparation may reject while sibling preparation remains active, leaving commit
+tracking before shutdown can safely close children/pool. Await all started work
+(or sequence it), retain original/aggregate failure and prove close waits with a
+deterministic gate. Style P2 accepted: memory constructor eagerly binds Agent-only
+maps/queue for ordinary Entity handles; bind/cache on first Agent operation with
+same backend scope and no generic resource framework. API P3 accepted: qualify
+REFERENCE retry/prefix/interleaving sentences explicitly as ordinary commit.
+Documentation otherwise clean and deduplicates that paragraph. All four immutable
+configured profiles match recorded explicit dispatch; runtime metadata unavailable.
+Parent read reports and source triggers; no high-risk finding is waived. Return one
+batch to existing Sol/medium implementer. Estimate0.3–0.6hours for bounded fixes,
+focused behavioral/static/coverage proof and targeted reliability/style confirmation.
+API/docs deterministic wording fix can be checked by parent; no full lane reopening
+unless contracts change. Final release/security and full Agent cutover remain later.
+
+M7b1 correction frozen: new regressions failed before fixes and pass afterward.
+Fresh build-backed affected suites53/53 in4 files, MariaDB3/3; final generated
+build/tooling/docs/TSDoc/cleanup/ESLint/format/diff green. External correction
+evidence and m7b1-correction-coverage record current source; memory56/59 and
+MySQL118/138 changed executable lines. Parent inspected the reference paragraph,
+resolving API wording deterministically. Reuse provider_reliability and
+provider_style, same explicit immutable Sol/medium profiles, for their exact
+behavioral correction only. Runtime metadata unavailable. No API/Proto contract
+change, so API/docs lanes do not reopen. No edits/checks/children by reviewers.
+
+M7b1 accepted after targeted confirmations: reliability confirms all-started MySQL
+preparation drain and original/aggregate failures; style confirms lazy cached memory
+Agent bindings preserve shared data and avoid ordinary Entity allocation. Parent
+resolved documentation qualifier. All four concern dispositions clean/resolved;
+explicit immutable profiles match dispatch, runtime metadata unavailable. No
+remaining accepted P0–P2 in this slice. Final proof: expanded189/189 before bounded
+corrections, fresh affected53/53 and MariaDB3/3 afterward, final build/static/docs
+green, changed-line coverage inspected. Unchanged PG/Datastore evidence remains
+current. The API is inactive pending M7b runtime cutover. Neither known Agent
+runtime failure is waived and no full release/security claim is made. Stage only
+authored reviewed paths, source Proto checksum and parent task records; defer
+generation fingerprints to final convergence. Commit/push checkpoint, then continue
+same implementation context with coherent admission/Delivery/scheduler removal.

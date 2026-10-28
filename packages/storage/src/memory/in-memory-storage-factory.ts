@@ -39,6 +39,8 @@ import {
   type EntityCommitStorage,
 } from "../internal/entity-commit.js";
 import { AgentHistoryStorageFactories } from "../internal/agent-history.js";
+import { AgentHistoryRecords } from "../entity/agent-history-record-spec.js";
+import { AgentModelPreferences } from "../internal/agent-model-preferences.js";
 import {
   StoragePreparations,
   type EntityStoragePreparationInput,
@@ -89,6 +91,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
       prepareRecord: (context, spec, group) => this.prepareRecord(context, spec, group),
       prepareEntity: (input) => this.prepareEntity(input),
       prepareAgentHistory: (input) => this.prepareAgentHistory(input),
+      prepareAgentCommit: (input) => this.prepareAgentCommit(input),
     });
   }
 
@@ -167,6 +170,41 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     } catch (error) {
       return Promise.reject(
         error instanceof Error ? error : new Error("Memory preparation failed.", { cause: error }),
+      );
+    }
+  }
+
+  /**
+   * Creates the Agent's current, enabled history, audit, and preference families.
+   * @param input Complete declarative Agent Entity layout.
+   * @returns Completion after local compatibility validation.
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   */
+  private prepareAgentCommit<I, S extends Message>(
+    input: EntityStoragePreparationInput<I, S>,
+  ): Promise<void> {
+    try {
+      if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+      this.declareEntity(input);
+      this.declareRecord(
+        input.context,
+        AgentHistoryRecords.spec((value) => value),
+        AgentHistoryRecords.group,
+      );
+      this.declareRecord(
+        input.context,
+        AgentModelPreferences.spec((value) => value),
+        AgentModelPreferences.group,
+      );
+      if (input.stateSchema.typeName.trim().length === 0)
+        throw new TypeError("Agent state type is required.");
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error
+          ? error
+          : new Error("Memory Agent preparation failed.", { cause: error }),
       );
     }
   }
@@ -318,6 +356,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
       this.#entities,
       (context, spec, group) => this.tenantRecords(context, spec, group),
       input as unknown as EntityStorageInput<unknown, Message>,
+      this.#backend,
       () => this.#commits.delete(handle),
     );
     this.#commits.add(handle);
@@ -340,7 +379,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
   }
 
   /**
-   * Opens a durable Agent execution handle against this shared memory backend.
+   * Acquires a durable Agent execution handle against this shared memory backend.
    *
    * @typeParam I Typed Agent identifier.
    * @typeParam S Generated Agent state.

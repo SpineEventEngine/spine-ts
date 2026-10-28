@@ -12,8 +12,14 @@
  * the License.
  */
 
-import { toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, toBinary, type Message } from "@bufbuild/protobuf";
 import type { Event, EventId } from "@spine-event-engine/proto";
+import {
+  AgentHistoryEntrySchema,
+  type AgentHistoryEntry,
+  type ModelPreference,
+} from "@spine-event-engine/proto/agent";
+import type { AgentHistoryRecord } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -22,20 +28,25 @@ import type { EntityStateKey } from "@spine-event-engine/proto/generated/spine/s
 import { type RecordSpec, type StorageGroup } from "@spine-event-engine/storage";
 import {
   TenantBoundary,
+  AgentHistoryRecords,
+  AgentModelPreferences,
+  type PreferencesRecord,
   EntityCommitSnapshots,
   eventHistorySpec,
   eventStoreRecordSpec,
   stateHistorySpec,
+  type AgentCommitInput,
   type EntityCommitInput,
   type EntityCommitStorage,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
+import { AgentHistoryHash } from "./agent-history.js";
 import { PostgresStorageErrors, PostgresStorageOperationError } from "./errors.js";
 import { PostgresRecordStorage } from "./record-storage.js";
 import type { PoolClient } from "pg";
 
 /**
- * Opens one PostgreSQL record family used by an Entity commit.
+ * Acquires one PostgreSQL record family used by an Entity commit.
  *
  * @typeParam I Record identifier type.
  * @typeParam R Stored Protobuf record type.
@@ -46,7 +57,7 @@ type OpenRecords = <I, R extends Message>(
 ) => PostgresRecordStorage<I, R>;
 
 /**
- * Retains current and optional record families across commits on one handle.
+ * Stores current and optional record families across commits on one handle.
  *
  * @typeParam I Entity identifier type.
  * @typeParam S Entity state message type.
@@ -60,6 +71,10 @@ class PostgresCommitRecords<I, S extends Message> {
 
   events: PostgresRecordStorage<EventId, Event> | undefined;
 
+  history: PostgresRecordStorage<string, AgentHistoryRecord> | undefined;
+
+  preferences: PostgresRecordStorage<string, PreferencesRecord> | undefined;
+
   readonly #handles: PostgresRecordStorage<unknown, Message>[];
 
   /**
@@ -68,7 +83,7 @@ class PostgresCommitRecords<I, S extends Message> {
   #closed = false;
 
   /**
-   * Opens the current record family for one Entity scope.
+   * Acquires the current record family for one Entity scope.
    *
    * @param open Opens one record family.
    * @param entity The Entity persistence contract.
@@ -104,6 +119,41 @@ class PostgresCommitRecords<I, S extends Message> {
       const failures = this.closeGroup(acquired);
       if (failures.length)
         throw new AggregateError([error, ...failures], "PostgreSQL family acquisition failed.");
+      throw error;
+    }
+  }
+
+  /**
+   * Stores the two Agent record families, rolling back only failed acquisition.
+   * @param open Opens a private record family.
+   */
+  ensureAgent(open: OpenRecords): void {
+    const acquired: PostgresRecordStorage<unknown, Message>[] = [];
+    try {
+      const history =
+        this.history ??
+        open(
+          AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+          AgentHistoryRecords.group,
+        );
+      if (this.history === undefined) acquired.push(history as never);
+      const preferences =
+        this.preferences ??
+        open(
+          AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
+          AgentModelPreferences.group,
+        );
+      if (this.preferences === undefined) acquired.push(preferences as never);
+      this.history = history;
+      this.preferences = preferences;
+      this.#handles.push(...acquired);
+    } catch (error) {
+      const failures = this.closeGroup(acquired);
+      if (failures.length)
+        throw new AggregateError(
+          [error, ...failures],
+          "PostgreSQL Agent family acquisition failed.",
+        );
       throw error;
     }
   }
@@ -176,7 +226,7 @@ class PostgresCommitRecords<I, S extends Message> {
   }
 
   /**
-   * Opens the Entity state-history record family.
+   * Acquires the Entity state-history record family.
    *
    * @param input Describes the Entity state schema.
    * @param open Opens one record family.
@@ -195,7 +245,7 @@ class PostgresCommitRecords<I, S extends Message> {
   }
 
   /**
-   * Opens the Entity diagnostic-event history record family.
+   * Acquires the Entity diagnostic-event history record family.
    *
    * @param input Describes the Entity state schema.
    * @param open Opens one record family.
@@ -214,7 +264,7 @@ class PostgresCommitRecords<I, S extends Message> {
   }
 
   /**
-   * Opens the shared event-store record family.
+   * Acquires the shared event-store record family.
    *
    * @param open Opens one record family.
    * @param handles Collects handles that must close after the commit.
@@ -246,7 +296,7 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    */
   #idleOutcome: { error?: Error } | undefined;
 
-  readonly #active = new Set<Promise<void>>();
+  readonly #active = new Set<Promise<unknown>>();
 
   #closing: Promise<void> | undefined;
 
@@ -272,6 +322,8 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    * @returns Completion after every requested record write.
    */
   commit<Id, State extends Message>(input: EntityCommitInput<Id, State>): Promise<void> {
+    if (!this.#open)
+      return Promise.reject(new PostgresStorageOperationError("Entity commit storage is closed."));
     return this.track(() => {
       this.validate(input);
       const prepared = EntityCommitSnapshots.capture(input);
@@ -284,11 +336,12 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    *
    * @param action The admitted provider operation.
    * @returns The admitted provider operation completion.
+   * @typeParam T Result type of the admitted provider operation.
    */
-  private track(action: () => Promise<void>): Promise<void> {
-    let complete!: () => void;
+  private track<T>(action: () => Promise<T>): Promise<T> {
+    let complete!: (value: T) => void;
     let fail!: (error: unknown) => void;
-    const work = new Promise<void>((resolve, reject) => {
+    const work = new Promise<T>((resolve, reject) => {
       complete = resolve;
       fail = reject;
     });
@@ -303,6 +356,181 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
       fail(error);
     }
     return work;
+  }
+
+  /**
+   * Reads one detached preference image through the retained private family.
+   * @param entityId Typed Agent identifier.
+   * @returns Current complete image or absence.
+   */
+  readAgentPreferences(entityId: unknown): Promise<readonly ModelPreference[] | undefined> {
+    if (!this.#open)
+      return Promise.reject(new PostgresStorageOperationError("Entity commit storage is closed."));
+    return this.track(async () => {
+      const key = AgentModelPreferences.key(this.entity, entityId as I);
+      const records = this.agentRecords();
+      await records.prepare();
+      const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
+      const storage = records.preferences;
+      if (storage === undefined) throw new Error("Agent preference storage is unavailable.");
+      const found = await storage.read(slot);
+      if (found === undefined) return undefined;
+      AgentModelPreferences.requireIdentity(found, key);
+      return AgentModelPreferences.copy(found.preferences);
+    });
+  }
+
+  /**
+   * Commits state, final audit, and complete preferences in one native transaction.
+   * @param input Captured Agent transition and initial images.
+   * @returns Completion after the conditional group commits.
+   * @typeParam Id Typed Agent identifier.
+   * @typeParam State Generated Agent state.
+   */
+  commitAgent<Id, State extends Message>(input: AgentCommitInput<Id, State>): Promise<void> {
+    if (!this.#open)
+      return Promise.reject(new PostgresStorageOperationError("Entity commit storage is closed."));
+    return this.track(async () => {
+      const id = this.entity.id.clone(input.entityId as unknown as I);
+      const key = AgentModelPreferences.key(this.entity, id);
+      const expected =
+        input.expectedPreferences === undefined
+          ? undefined
+          : AgentModelPreferences.copy(input.expectedPreferences);
+      const next = AgentModelPreferences.record(key, input.preferences);
+      const mutation = input.entityCommit && EntityCommitSnapshots.capture(input.entityCommit);
+      const history =
+        input.historyEntries?.map((entry) => clone(AgentHistoryEntrySchema, entry)) ?? [];
+      this.validateAgent(id, input.expectedVersion, mutation);
+      const records = this.agentRecords();
+      if (mutation !== undefined) records.ensure(mutation as never, this.open);
+      await records.prepare();
+      await this.commitAgentPrepared(
+        records,
+        id,
+        input.expectedVersion,
+        expected,
+        next,
+        mutation,
+        history,
+      );
+    });
+  }
+
+  /**
+   * Acquires the retained current, Agent audit, and preference families.
+   *
+   * @returns The retained family group.
+   */
+  private agentRecords(): PostgresCommitRecords<I, S> {
+    const records = this.#records ?? new PostgresCommitRecords(this.entity, this.open);
+    try {
+      records.ensureAgent(this.open);
+      this.#records ??= records;
+      return records;
+    } catch (error) {
+      if (this.#records === undefined) {
+        try {
+          records.close();
+        } catch (cleanup) {
+          throw new AggregateError([error, cleanup], "PostgreSQL Agent family cleanup failed.");
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Checks the captured Entity scope and next version before native writes.
+   * @param id Captured Agent identifier.
+   * @param version Initial Entity version.
+   * @param mutation Optional prepared Entity mutation.
+   * @typeParam Id Typed Agent identifier.
+   * @typeParam State Generated Agent state.
+   */
+  private validateAgent<Id, State extends Message>(
+    id: I,
+    version: number,
+    mutation?: EntityCommitInput<Id, State>,
+  ): void {
+    if (!Number.isSafeInteger(version) || version < 0)
+      throw new TypeError("Agent commit requires a valid initial Entity Version.");
+    if (mutation === undefined) return;
+    this.validate(mutation);
+    if (
+      this.entity.id.key(id) !== this.entity.id.key(mutation.entityId as unknown as I) ||
+      mutation.next.version?.number !== version + 1
+    )
+      throw new Error("Agent commit requires the same Entity ID and one new Version.");
+  }
+
+  /**
+   * Applies one transaction lock even when preference and current rows are absent.
+   * @param records Retained families.
+   * @param id Captured Agent ID.
+   * @param version Initial Entity version.
+   * @param expected Initial preference image.
+   * @param next Complete replacement record.
+   * @param mutation Optional Entity mutation.
+   * @param history Final audit entries.
+   * @typeParam Id Typed Agent identifier.
+   * @typeParam State Generated Agent state.
+   * @returns Completion after the conditional Agent transaction commits.
+   */
+  private async commitAgentPrepared<Id, State extends Message>(
+    records: PostgresCommitRecords<I, S>,
+    id: I,
+    version: number,
+    expected: readonly ModelPreference[] | undefined,
+    next: PreferencesRecord,
+    mutation: EntityCommitInput<Id, State> | undefined,
+    history: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    const preferenceStorage = records.preferences;
+    const historyStorage = records.history;
+    if (preferenceStorage === undefined || historyStorage === undefined || next.key === undefined)
+      throw new Error("Agent commit storage is incomplete.");
+    const preferences = preferenceStorage.historyExecutor();
+    const key = next.key;
+    const slot = `v1:${AgentHistoryHash.value(AgentModelPreferences.text(key))}`;
+    await preferences.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock($1)", [
+        preferences.lock("agent-preferences", slot),
+      ]);
+      const prior = await preferences.read(client, slot, "for-update");
+      if (prior !== undefined) AgentModelPreferences.requireIdentity(prior, key);
+      if (!AgentModelPreferences.same(prior?.preferences, expected))
+        throw new Error("Agent model preferences changed during the live turn.");
+      if (mutation === undefined) {
+        const current = await records.current.historyExecutor().read(client, id, "for-update");
+        if ((current?.version?.number ?? 0) !== version)
+          throw new Error("Agent initial Entity Version is no longer current.");
+      } else await records.applyConditional(client, mutation as never, version);
+      await this.appendAgentHistory(client, historyStorage, id, history);
+      await preferences.write(client, next);
+    });
+  }
+
+  /**
+   * Adds final Agent audit through the admitted transaction client.
+   * @param client Active native transaction.
+   * @param storage Retained Agent history family.
+   * @param id Captured Agent identifier.
+   * @param history Final audit entries.
+   * @returns Completion after final audit rows are appended.
+   */
+  private async appendAgentHistory(
+    client: PoolClient,
+    storage: PostgresRecordStorage<string, AgentHistoryRecord>,
+    id: I,
+    history: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    const executor = storage.historyExecutor();
+    for (const entry of history)
+      await executor.appendImmutable(
+        client,
+        AgentHistoryRecords.record(this.entity.stateSchema.typeName, this.entity.id.key(id), entry),
+      );
   }
 
   /**
@@ -492,7 +720,6 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
    * @param input Defines the Entity records to validate.
    */
   private validate<Id, State extends Message>(input: EntityCommitInput<Id, State>): void {
-    if (!this.#open) throw new PostgresStorageOperationError("Entity commit storage is closed.");
     if (input.entity.sourceType.typeName !== this.entity.sourceType.typeName)
       throw new PostgresStorageOperationError("Entity commit source type is incompatible.");
     if (input.entity.stateSchema.typeName !== this.entity.stateSchema.typeName)

@@ -14,6 +14,7 @@
 
 import { clone, type Message } from "@bufbuild/protobuf";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
+import type { AgentHistoryEntry, ModelPreference } from "@spine-event-engine/proto/agent";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 import type { EntityRecord } from "../entity/entity-record.js";
@@ -25,8 +26,8 @@ import { TenantBoundary } from "./tenancy.js";
 /**
  * Describes one prepared provider mutation for an Entity commit.
  *
- * This provider-only contract combines current state, retained histories, and
- * framework delivery events. Providers write histories, diagnostic events,
+ * This provider-only ordinary `commit()` input combines current state, retained
+ * histories, and framework delivery events. Providers write histories, diagnostic events,
  * delivery events, then current state independently. A failed commit can leave
  * a completed prefix on every provider. Single-record conditional operations
  * remain atomic per storage slot; this port does not coordinate multiple records.
@@ -58,19 +59,57 @@ export interface EntityCommitInput<I, S extends Message> {
   readonly next: EntityRecord;
 
   /**
-   * Appends retained Entity state-history rows.
+   * Adds retained Entity state-history rows.
    */
   readonly states?: readonly EntityRecord[];
 
   /**
-   * Appends retained diagnostic Entity-event rows.
+   * Adds retained diagnostic Entity-event rows.
    */
   readonly diagnostics?: readonly Event[];
 
   /**
-   * Appends canonical framework delivery events.
+   * Adds canonical framework delivery events.
    */
   readonly events?: readonly Event[];
+}
+
+/**
+ * One live Agent transition and its captured initial provider image.
+ *
+ * @typeParam I Typed Agent identifier.
+ * @typeParam S Generated Agent state.
+ */
+export interface AgentCommitInput<I, S extends Message> {
+  /**
+   * Typed Agent identifier bound to this retained Entity commit handle.
+   */
+  readonly entityId: I;
+
+  /**
+   * Entity Version observed when the live turn began, including zero for absence.
+   */
+  readonly expectedVersion: number;
+
+  /**
+   * Absent record or complete preferences observed when the live turn began.
+   */
+  readonly expectedPreferences: readonly ModelPreference[] | undefined;
+
+  /**
+   * Complete preferences replacing the observed image.
+   */
+  readonly preferences: readonly ModelPreference[];
+
+  /**
+   * Optional changed current Entity and state-history mutation.
+   */
+  readonly entityCommit?: EntityCommitInput<I, S>;
+
+  /**
+   * Final Agent audit entries committed with state and preferences.
+   */
+  readonly historyEntries?: readonly AgentHistoryEntry[];
 }
 
 /**
@@ -127,9 +166,10 @@ export const EntityCommitSnapshots: Readonly<{
 /**
  * A provider handle for one bounded Entity scope.
  *
- * A commit may retain a completed prefix when a later record fails. Replaying
+ * An ordinary `commit()` may retain a completed prefix when a later record fails. Replaying
  * the same captured input reuses versions and Event IDs. An Event's presence
  * alone does not establish that current state was saved.
+ * `commitAgent()` conditionally commits the complete live Agent transition atomically.
  */
 export interface EntityCommitStorage {
   // prettier-ignore
@@ -143,6 +183,24 @@ export interface EntityCommitStorage {
    * @returns Resolves when the Entity mutation completes.
    */
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<void>;
+
+  /**
+   * Reads the current complete per-instance model selections.
+   *
+   * @param entityId Original typed Agent identifier.
+   * @returns Defensive preferences, or absence of the preference record.
+   */
+  readAgentPreferences(entityId: unknown): Promise<readonly ModelPreference[] | undefined>;
+
+  /**
+   * Commits conditionally current state, final audit, and model selections together.
+   *
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   * @param input Captured initial images and prepared mutation.
+   * @returns Completion after one provider-atomic conditional transition.
+   */
+  commitAgent<I, S extends Message>(input: AgentCommitInput<I, S>): Promise<void>;
 
   /**
    * Closes retained resources after admitted work settles.

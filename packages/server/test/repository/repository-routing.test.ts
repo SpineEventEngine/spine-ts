@@ -16031,6 +16031,8 @@ class RetainedEntityStorageFactory extends InMemoryStorageFactory {
     }
     const storage = super.createEntityCommitStorage(input);
     return {
+      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      commitAgent: (work) => storage.commitAgent(work),
       commit: (work) => storage.commit(work),
       close: () => {
         if (this.failCommitCloseSynchronously) {
@@ -16451,6 +16453,8 @@ class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
+      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      commitAgent: (work) => storage.commitAgent(work),
       commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         this.#reached();
         await this.#gate;
@@ -16472,6 +16476,8 @@ class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
+      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      commitAgent: (work) => storage.commitAgent(work),
       commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         if (this.#remainingFailures > 0) {
           this.#remainingFailures -= 1;
@@ -16530,6 +16536,8 @@ class FailingSourceDiagnosticStorageFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
+      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      commitAgent: (work) => storage.commitAgent(work),
       commit: async <I, S extends Message>(unit: EntityCommitInput<I, S>): Promise<void> => {
         if (this.#failCommit && (unit.diagnostics?.length ?? 0) > 0) {
           this.#failCommit = false;
@@ -16576,6 +16584,8 @@ class FailingProcessManagerProducedEventFactory extends InMemoryStorageFactory {
   ): EntityCommitStorage {
     const storage = super.createEntityCommitStorage(input);
     return {
+      readAgentPreferences: (id) => storage.readAgentPreferences(id),
+      commitAgent: (work) => storage.commitAgent(work),
       commit: async <T, R extends Message>(unit: EntityCommitInput<T, R>): Promise<void> => {
         if (this.#targetGroup === undefined)
           for (const event of unit.events ?? []) this.fail(event);

@@ -134,8 +134,11 @@ Entity commits use independent ordered records on InnoDB, MyISAM, and Aria.
 A failed operation can leave its completed prefix; an identical Entity retry
 reuses prepared versions and Event IDs. It supports primitive and structured
 storage IDs. Declared columns support strings, booleans, integral Protobuf
-numbers, enums, bytes, messages, `Timestamp`, and `Version`. Spine JVM JDBC
-does not support `float` or `double` record columns, so this adapter rejects
+numbers, enums, bytes, messages, `Timestamp`, and `Version`. The provider-only
+live Agent commit is a separate InnoDB transaction: it conditionally checks
+the initial Entity version and complete model preferences before committing
+any changed state, final audit, and preferences together. Spine JVM JDBC does
+not support `float` or `double` record columns, so this adapter rejects
 them too.
 
 Indexed `Timestamp` columns store epoch nanoseconds in signed 64-bit `BIGINT`.

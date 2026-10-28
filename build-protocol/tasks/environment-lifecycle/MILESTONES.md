@@ -61,7 +61,8 @@ a time; independent checks and relevant reviews may run concurrently. See the
 12. **Server and protocols:** gRPC-only Server, typed errors through native/browser/
     gateway/client surfaces, complete ingress coverage, lookup ambiguity before
     readiness, revised managed startup, BlackBox and examples. Finish ordinary
-    non-storage test/remote-app Any helper adoption from the residual audit;
+    non-storage test/remote-app Any helper adoption from the residual audit, plus
+    ordinary production integration wrapper packing;
     preserve intentional malformed, opaque and wire-compatibility inputs.
 13. **Convergence:** current public documentation, provider and reopening evidence,
     final specialist/security review, cheap preflight then release verification,
