@@ -17,6 +17,18 @@ import { describe, expect, it, vi } from "vitest";
 import { ManagedDeliveryGate } from "../../src/server/managed-delivery-gate.js";
 
 describe("ManagedDeliveryGate", () => {
+  it("starts a replacement supervisor in an already active process", async () => {
+    const gate = new ManagedDeliveryGate(false);
+    const first = vi.fn(() => Promise.resolve(undefined));
+    const replacement = vi.fn(() => Promise.resolve(undefined));
+
+    await gate.start(first);
+    await gate.start(replacement);
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(replacement).toHaveBeenCalledTimes(1);
+  });
+
   it("starts a deferred supervisor once on activation and preserves notifications", async () => {
     const gate = new ManagedDeliveryGate(true);
     const start = vi.fn(() => Promise.resolve(undefined));

@@ -3792,3 +3792,76 @@ executed before full verification. Stop on first failure, preserve raw logs and
 return evidence; no source edits or diagnostic full-suite loops. Estimate
 0.25–0.75 hours for gates and full-suite execution if no additional defect is
 exposed. Full coverage thresholds remain unchanged.
+
+M14 pushed as 89e6faafa0b6074572b621eab13f7f2e4e72a27b. GitHub Security
+workflow run 40711934273 succeeded on that exact SHA; metadata retained externally.
+Full mandatory preflight passed, including 153 focused tests. The subsequent
+single verify:release run passed all static/generated/policy gates but failed
+one new supervised same-shard test at its existing 15-second timeout. Totals:
+401 files (396 passed, 1 failed, 4 skipped), 6253 tests (6236 passed, 1 failed,
+16 skipped). No global coverage totals emitted. Worktree is clean.
+
+Return this exact failure to the existing Sol/medium implementer; reproduce in
+full repository-routing file and identify the actual sequencing/fixture/runtime
+cause. Do not raise timeouts or add arbitrary sleeps. Estimate 0.5–1.5 hours
+for diagnosis, focused correction, relevant review and mandatory preflight/full
+rerun. Mechanical Luna/low separately classifies the apparent testing-package
+child stdout failures against the final one-failure summary, using existing
+logs only. No full diagnostic rerun or broad review restart.
+
+Mechanical log classification located additional Node-spec failure output from
+black-box.contract.mjs interleaved with a temporary Todo registry fixture. It is
+not in Vitest's single-failure summary, but whether expected remains unproven.
+Escalate this bounded test-harness correctness question to the existing
+Sol/medium reliability reviewer, read-only, while the implementer investigates
+the actual supervised timeout. No overlapping writes or new architecture pass.
+Do not silently discard nested failures; establish invocation and exit handling.
+
+Confirmed P1 from existing Sol/medium reliability review: Vitest discovers
+packages/testing/test/black-box.node.test.mjs via its broad test glob, importing
+node:test cases whose 23 real failures appear only in nested output and are
+missing from Vitest totals. The neighboring Todo warnings were interleaved,
+not proof of an intentional fixture failure. Accept the finding. The same
+implementer must separate runner discovery and execute the Node contract with
+checked exit status/diagnostics, correcting its explicit environment setup where
+needed. Do not simply exclude these tests or accept a green Vitest summary.
+Relevant review will cover harness failure propagation and actual contract
+execution. Record new focused tests and update release-gate commands/doc claims
+if required. Runtime timeout investigation continues first; one writer only.
+
+Harness correction estimate adds 0.5–1 hour for runner separation, explicit Node
+contract setup, exit-status proof and focused review. The same defect may affect
+other node:test imports under Vitest globs (logging-containment output was also
+Node-formatted). Dispatch existing Luna/low mechanical function to enumerate
+all such files and existing enforced Node commands read-only; send exact
+inventory to the sole implementer rather than duplicating source exploration.
+Do not introduce a speculative runner abstraction or simply drop test files.
+
+Supervised timeout root cause established by full-file reproduction: 352 pass,
+1 timeout; isolated case passes. ManagedDeliveryGate retains a process-wide
+started marker across explicit test environment reset, preventing a later
+environment's supervisor startup. Authorize minimal per-environment lifecycle
+cache correction, focused red/green, full affected file and scoped coverage;
+review startup coalescing, reset, failure/retry and close behavior. No new public
+lifecycle or arbitrary timeout. Existing Sol/medium implementer continues.
+
+Luna/low exact runner inventory identifies four Vitest-discovered node:test
+files: BlackBox contract/lifecycle Node adapters, logging-containment tests, and
+JVM wire-compatibility tests. The JVM suite has a separate optional package
+command; the current release gate does not enforce it via that command. Three
+others have no explicit checked package/CI Node invocation. Pass exact inventory
+to implementer for the smallest enforced split; retain all contract cases.
+
+Supervisor startup fix is frozen and passes full affected suites/coverage.
+Proceed its independent reliability review while the same implementer corrects
+disjoint Node runner paths. Accepted minimal plan: exclude the exact four native
+Node files from Vitest discovery and enforce their Node runner in the release
+profile with checked failure status, adding explicit setup/reset to BlackBox
+adapters. Retain all cases and existing JVM command behavior; avoid duplicate
+fixture builds or a new generic runner framework. Focused failure-propagation
+proof and all four actual Node suites are required.
+
+Supervisor startup correction accepted after full affected tests/coverage,
+static checks, clean reliability review and frozen-hash confirmation. Checkpoint
+only managed-delivery-gate.ts and its focused test plus parent records; preserve
+the implementer's disjoint ongoing Node harness edits. Push immediately.

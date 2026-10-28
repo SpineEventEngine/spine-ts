@@ -14,9 +14,12 @@
 
 /**
  * Defers managed-child delivery startup until the parent activates the replica.
+ * An already active process can start a replacement environment's supervisor.
  * @internal
  */
 export class ManagedDeliveryGate {
+  readonly #managedChild: boolean;
+
   #activated: boolean;
 
   #cancelled = false;
@@ -30,12 +33,13 @@ export class ManagedDeliveryGate {
    * @param managedChild Whether parent activation is required.
    */
   constructor(managedChild: boolean) {
+    this.#managedChild = managedChild;
     this.#activated = !managedChild;
   }
 
   /**
-   * Starts the single retained supervisor after activation.
-   * @param start Starts the single retained supervisor.
+   * Starts the supplied supervisor after activation, coalescing managed-child calls.
+   * @param start Starts the current environment's retained supervisor.
    * @returns Startup when activated.
    */
   start(start: () => Promise<void>): Promise<void> {
@@ -44,7 +48,7 @@ export class ManagedDeliveryGate {
       this.#pending = start;
       return Promise.resolve();
     }
-    return (this.#started ??= start());
+    return this.#managedChild ? (this.#started ??= start()) : start();
   }
 
   /**

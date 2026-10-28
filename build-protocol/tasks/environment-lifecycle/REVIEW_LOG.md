@@ -1753,3 +1753,29 @@ address all 31 findings/23 advisories; old versions appear only as override
 selectors. New package entries carry SHA-512 integrity, with no new tarball/Git
 source or registry. Audit command, threshold and workflow are unchanged. Parent
 accepts the complete dependency/security review wave; no findings remain.
+
+Nested test-runner investigation: existing explicit Sol/medium reviewer confirms
+P1 failure masking in broad Vitest discovery of the Node contract adapter. Accept
+the source-backed finding in m13-nested-harness-review.md. Actual Node contract
+failures need their own checked execution and correct explicit setup; excluding
+them without another enforced run is unacceptable. Return to existing
+implementer, then mechanical evidence and focused reliability/style review.
+Actual runtime introspection unavailable; immutable profile confirmed.
+
+### Replacement environment supervisor startup
+
+Two-path gate correction frozen in m14-supervised-gate-correction-evidence.md.
+Focused regression red then green 3/3; complete routing file 353/353; combined
+coverage 356/356 with both changed branches exercised. Build/static checks pass.
+Existing explicit Sol/medium reliability reviewer checks ordinary-process
+replacement supervisor startup, same-supervisor idempotence, managed-child
+activation/coalescing, failure and cancellation. No public/serialized contract
+changes; parent inspects bounded style/TSDoc. Read-only, no tests/builds/edits
+or children. Node harness is a disjoint correction under the same implementer.
+
+Supervisor gate review clean: both hashes match and explicit Sol/medium profile
+is confirmed, runtime introspection unavailable. Environment.#supervisorStart
+still provides same-environment coalescing and propagates startup errors.
+Managed-child activation/cancel behavior is unchanged. Parent style/TSDoc review
+accepts the small internal change. No API/serialized/authentication change;
+other specialist lanes are N/A. Node harness review remains separate and pending.
