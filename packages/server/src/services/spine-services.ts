@@ -16,14 +16,7 @@ import { randomUUID } from "node:crypto";
 import type { ILogLayer } from "loglayer";
 
 import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
-import {
-  clone,
-  create,
-  ScalarType,
-  toBinary,
-  type DescField,
-  type Message,
-} from "@bufbuild/protobuf";
+import { clone, create, ScalarType, type DescField, type Message } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import {
   AnySchema,
@@ -43,8 +36,6 @@ import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import {
   CommandIdSchema,
   type Command,
-  type Event,
-  EventSchema,
   type TenantId,
   TenantIdSchema,
   ValidationErrorSchema,
@@ -72,9 +63,6 @@ import {
 } from "@spine-event-engine/proto/client";
 import { QueryService } from "@spine-event-engine/proto/client";
 import {
-  EntityStateUpdateSchema,
-  EntityUpdatesSchema,
-  EventUpdatesSchema,
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionUpdateSchema,
@@ -105,15 +93,12 @@ import { EffectiveTenants } from "../context/effective-tenant.js";
 import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
-import { type StandReadResult, type StandUpdate } from "../stand/stand.js";
+import { type StandReadResult } from "../stand/stand.js";
 import { QueryReader } from "./query-reader.js";
 import { RegisteredTargets } from "./registered-targets.js";
 import { emitServerError, emitServerWarning } from "../server/server-log.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
-import {
-  InMemorySubscriptionRegistry,
-  type StandSubscriptionRegistry,
-} from "../stand/subscription-registry.js";
+import { type StandSubscriptionRegistry } from "../stand/subscription-registry.js";
 
 const serviceLoggers = new WeakMap<SpineServices, ILogLayer>();
 const serviceInstances = new WeakSet<SpineServices>();
@@ -187,8 +172,6 @@ export class SpineServices {
   readonly #removals = new Map<string, SubscriptionRemoval>();
 
   readonly #unknownRemovals = new Set<string>();
-
-  readonly #testRegistries = new WeakMap<object, StandSubscriptionRegistry>();
 
   readonly #queueLimit: number;
 
@@ -465,7 +448,7 @@ export class SpineServices {
   #subscribe(topic: Topic): Promise<Subscription> {
     const route = this.#subscriptionRoute(topic);
     ServiceValues.validateTopic(topic);
-    const shape = ServiceValues.createSubscriptionShape(topic, route);
+    ServiceValues.createSubscriptionShape(topic, route);
     const tenantId = ServiceValues.topicTenant(topic);
     const tenantError = ServiceValues.tenantMismatch(
       route.context.isMultitenant,
@@ -487,11 +470,7 @@ export class SpineServices {
       throw new ConnectError("Subscription ID is required.", Code.InvalidArgument);
     }
 
-    void shape;
-    const registry = this.#subscriptionRegistry(route.context);
-    if (registry === undefined) {
-      throw new ConnectError("Subscription registry is unavailable.", Code.FailedPrecondition);
-    }
+    const registry = boundedContextAccess.subscriptionRegistry(route.context);
     return TenantStatuses.require(route.context, tenantId, async () => {
       await registry.create(subscription);
     }).then(() => clone(SubscriptionSchema, subscription));
@@ -567,15 +546,10 @@ export class SpineServices {
     id: string,
   ): Promise<SubscriptionRecord | undefined> {
     if (record.delivery.active) return undefined;
-    const activation = await this.#subscriptionRegistry(record.route.context)?.activate(
-      create(SubscriptionIdSchema, { value: id }),
-    );
-    if (
-      activation === undefined ||
-      activation.kind === "missing" ||
-      activation.kind === "expired" ||
-      record.delivery.closed
-    )
+    const activation = await boundedContextAccess
+      .subscriptionRegistry(record.route.context)
+      .activate(create(SubscriptionIdSchema, { value: id }));
+    if (activation.kind === "missing" || activation.kind === "expired" || record.delivery.closed)
       return undefined;
     try {
       this.#subscriptions.set(id, record);
@@ -668,78 +642,16 @@ export class SpineServices {
   }
 
   async #activateRecord(record: SubscriptionRecord): Promise<void> {
-    const registry = this.#subscriptionRegistry(record.route.context);
-    if (registry === undefined) {
-      this.#createSubscriptionAttachment(record);
-      managedChildSubscriptionAccess.installed(record.id);
-      return;
-    }
-    try {
-      const consumer = await boundedContextAccess.consumeSubscription(
-        record.route.context,
-        record.id,
-        (update) => {
-          record.delivery.push(update);
-          if (record.delivery.closed) {
-            this.#removeDetachedSubscription(record.id);
-          }
-        },
-      );
-      record.delivery.attach(consumer);
-    } catch (error) {
-      if (
-        !(error instanceof TypeError) ||
-        (!error.message.includes("requires a Stand instance") &&
-          !error.message.includes("requires a built BoundedContext instance"))
-      ) {
-        throw error;
-      }
-      this.#createSubscriptionAttachment(record);
-    }
-    managedChildSubscriptionAccess.installed(record.id);
-  }
-
-  #createSubscriptionAttachment(record: SubscriptionRecord): SubscriptionAttachment {
-    if (record.kind === "event") return this.#attachEventSubscription(record);
-
-    const stateRecord = record;
-    const standSubscription = stateRecord.route.context.stand().subscribe(
-      stateRecord.route.schema,
-      (update) => {
-        const subscriptionUpdate = ServiceValues.createEntityUpdate(stateRecord, update);
-        if (subscriptionUpdate !== undefined) {
-          stateRecord.delivery.push(subscriptionUpdate);
-        }
-        if (stateRecord.delivery.closed) {
-          this.#removeDetachedSubscription(stateRecord.id);
-        }
-      },
-      ServiceValues.tenantOptions(stateRecord.tenantId),
-    );
-    stateRecord.delivery.attach(standSubscription);
-    return standSubscription;
-  }
-
-  /**
-   * Attaches one filtered Event observer to its bounded context.
-   * @param record The tracked Event subscription.
-   * @returns The attached Event observer.
-   */
-  #attachEventSubscription(record: EventSubscriptionRecord): SubscriptionAttachment {
-    const eventSubscription = boundedContextAccess.subscribeToEvent(
+    const consumer = await boundedContextAccess.consumeSubscription(
       record.route.context,
-      record.route.typeUrl,
-      {
-        onEvent: (event) => {
-          if (!ServiceValues.eventTenantMatches(record, event)) return;
-          if (record.eventMatcher !== undefined && !record.eventMatcher(event)) return;
-          record.delivery.push(ServiceValues.createEventUpdate(record, event));
-          if (record.delivery.closed) this.#removeDetachedSubscription(record.id);
-        },
+      record.id,
+      (update) => {
+        record.delivery.push(update);
+        if (record.delivery.closed) this.#removeDetachedSubscription(record.id);
       },
     );
-    record.delivery.attach(eventSubscription);
-    return eventSubscription;
+    record.delivery.attach(consumer);
+    managedChildSubscriptionAccess.installed(record.id);
   }
 
   #removeSubscription(id: string): Promise<void> {
@@ -793,9 +705,9 @@ export class SpineServices {
   ): Promise<void> {
     try {
       if (record !== undefined) {
-        await this.#subscriptionRegistry(record.route.context)?.delete(
-          create(SubscriptionIdSchema, { value: id }),
-        );
+        await boundedContextAccess
+          .subscriptionRegistry(record.route.context)
+          .delete(create(SubscriptionIdSchema, { value: id }));
       } else {
         await this.#deleteUnknownSubscription(id);
       }
@@ -819,26 +731,22 @@ export class SpineServices {
    */
   async #deleteUnknownSubscription(id: string): Promise<void> {
     await Promise.all(
-      ServiceValues.uniqueContexts(this.#contexts).flatMap((context) => {
-        const registry = this.#subscriptionRegistry(context);
-        return registry === undefined
-          ? []
-          : [
-              this.#registryOperation(context, async () => {
-                await registry.delete(create(SubscriptionIdSchema, { value: id }));
-              }),
-            ];
-      }),
+      ServiceValues.uniqueContexts(this.#contexts).map((context) =>
+        this.#registryOperation(context, async () => {
+          await boundedContextAccess
+            .subscriptionRegistry(context)
+            .delete(create(SubscriptionIdSchema, { value: id }));
+        }),
+      ),
     );
   }
 
   async #findSubscription(id: string): Promise<SubscriptionRecord | undefined> {
     const subscriptionId = create(SubscriptionIdSchema, { value: id });
     for (const context of ServiceValues.uniqueContexts(this.#contexts)) {
-      const registry = this.#subscriptionRegistry(context);
       let entry: Awaited<ReturnType<StandSubscriptionRegistry["get"]>>;
       await this.#registryOperation(context, async () => {
-        entry = await registry?.get(subscriptionId);
+        entry = await boundedContextAccess.subscriptionRegistry(context).get(subscriptionId);
       });
       const subscription = entry?.subscription;
       const topic = subscription?.topic;
@@ -871,31 +779,7 @@ export class SpineServices {
    * @returns Completion before the selected registry may close.
    */
   #registryOperation(context: BoundedContext, onOperation: () => Promise<void>): Promise<void> {
-    const runtimeContext: unknown = context;
-    return runtimeContext instanceof BoundedContext
-      ? boundedContextAccess.admitServiceRegistryOperation(runtimeContext, onOperation)
-      : onOperation();
-  }
-
-  #subscriptionRegistry(
-    context: BoundedContext | undefined,
-  ): StandSubscriptionRegistry | undefined {
-    if (context === undefined) {
-      return undefined;
-    }
-    try {
-      return boundedContextAccess.subscriptionRegistry(context);
-    } catch {
-      // Direct route tests may use structural context doubles. Production
-      // contexts always provide their configured registry through the access seam.
-      const key = context as unknown as object;
-      let registry = this.#testRegistries.get(key);
-      if (registry === undefined) {
-        registry = new InMemorySubscriptionRegistry();
-        this.#testRegistries.set(key, registry);
-      }
-      return registry;
-    }
+    return boundedContextAccess.admitServiceRegistryOperation(context, onOperation);
   }
 }
 
@@ -1008,42 +892,22 @@ type SubscriptionRecord = EventSubscriptionRecord | StateSubscriptionRecord;
 interface EventSubscriptionRecord extends SubscriptionRecordBase {
   readonly kind: "event";
   readonly route: EventRoute;
-  readonly eventMatcher?: (event: Event) => boolean;
 }
 
 interface StateSubscriptionRecord extends SubscriptionRecordBase {
   readonly kind: "state";
   readonly route: StateRoute;
-
-  /**
-   * Supports isolated structural-context test doubles only.
-   */
-  readonly matcher?: SubscriptionMatcher;
 }
 
 type SubscriptionShape =
   | {
       readonly kind: "event";
       readonly route: EventRoute;
-      readonly eventMatcher?: (event: Event) => boolean;
     }
   | {
       readonly kind: "state";
       readonly route: StateRoute;
-      readonly matcher?: SubscriptionMatcher;
     };
-
-interface SubscriptionMatcher {
-  /**
-   * Matches one Stand update against a subscribed state filter.
-   *
-   * @param update State update to inspect.
-   * @returns Delivery kind, if the update affects the subscriber.
-   */
-  match(update: StandUpdate): SubscriptionMatch | undefined;
-}
-
-type SubscriptionMatch = "state" | "noLongerMatching";
 
 /**
  * Buffers subscription updates and wakes active stream readers.
@@ -1696,7 +1560,7 @@ function validateTopic(topic: Topic): void {
 }
 
 /**
- * Validates a topic and prepares complete state or event delivery.
+ * Validates a topic and returns its state or Event subscription shape.
  */
 function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): SubscriptionShape {
   const target = topic.target;
@@ -1704,8 +1568,8 @@ function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): Subscr
     throw new ConnectError("Subscription topic target is required.", Code.InvalidArgument);
   }
   if (route.kind === "event") {
-    const eventMatcher = validateEventSubscriptionTopic(target);
-    return { kind: "event", route, ...(eventMatcher === undefined ? {} : { eventMatcher }) };
+    validateEventSubscriptionTopic(target);
+    return { kind: "event", route };
   }
 
   switch (target.criterion.case) {
@@ -1716,13 +1580,10 @@ function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): Subscr
           Code.InvalidArgument,
         );
       }
-      return { kind: "state", route, matcher: { match: () => "state" } };
+      return { kind: "state", route };
     case "filters":
-      return {
-        kind: "state",
-        route,
-        matcher: createFilteredSubscriptionMatcher(target.criterion.value, route),
-      };
+      ServiceValues.validateFilteredSubscriptionTopic(target.criterion.value, route);
+      return { kind: "state", route };
     default:
       throw new ConnectError(
         "SubscriptionService.Subscribe requires filters or include_all = true.",
@@ -1734,7 +1595,7 @@ function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): Subscr
 /**
  * Checks the supported event topic criteria.
  */
-function validateEventSubscriptionTopic(target: Target): ((event: Event) => boolean) | undefined {
+function validateEventSubscriptionTopic(target: Target): void {
   switch (target.criterion.case) {
     case "includeAll":
       if (!target.criterion.value) {
@@ -1743,56 +1604,16 @@ function validateEventSubscriptionTopic(target: Target): ((event: Event) => bool
           Code.InvalidArgument,
         );
       }
-      return undefined;
+      return;
     case "filters":
-      return EventOriginFilters.compile(target.criterion.value);
+      EventOriginFilters.compile(target.criterion.value);
+      return;
     default:
       throw new ConnectError(
         "SubscriptionService.Subscribe requires filters or include_all = true.",
         Code.InvalidArgument,
       );
   }
-}
-
-/**
- * Matches complete state updates against a topic's ID and field filters.
- */
-function createFilteredSubscriptionMatcher(
-  filters: TargetFilters,
-  route: StateRoute,
-): SubscriptionMatcher {
-  ServiceValues.validateSubscriptionFilters(filters);
-  const idValues = filters.idFilter?.id.map((id) => decodeSubscriptionIdValue(id, route));
-  const statePredicate = createSubscriptionPredicate(filters.filter, route);
-
-  return {
-    /**
-     * Matches one state update against the topic's ID and field filters.
-     *
-     * @param update State update to inspect.
-     * @returns Delivery kind, if the update changes a matching state.
-     */
-    match(update) {
-      if (
-        idValues !== undefined &&
-        !idValues.some((id) => valuesEqual(update.id, id, route.idField.message))
-      ) {
-        return undefined;
-      }
-      if (statePredicate(update.state)) return "state";
-      if (update.previousState !== undefined && statePredicate(update.previousState))
-        return "noLongerMatching";
-      return undefined;
-    },
-  };
-}
-
-function createSubscriptionPredicate(
-  filters: readonly CompositeFilter[],
-  route: StateRoute,
-): (state: Message) => boolean {
-  const predicates = filters.map((filter) => createCompositePredicate(filter, route));
-  return (state) => predicates.every((predicate) => predicate(state));
 }
 
 function validateSubscriptionFilterTree(filters: readonly CompositeFilter[]): void {
@@ -1903,49 +1724,6 @@ interface SubscriptionFilterCounts {
   simpleCount: number;
 }
 
-function createCompositePredicate(
-  filter: CompositeFilter,
-  route: StateRoute,
-): (state: Message) => boolean {
-  const children = [
-    ...filter.filter.map((simple) => createSimplePredicate(simple, route)),
-    ...filter.compositeFilter.map((nested) => createCompositePredicate(nested, route)),
-  ];
-  if (children.length === 0) {
-    return () => true;
-  }
-
-  return filter.operator === CompositeFilter_CompositeOperator.ALL
-    ? (state) => children.every((predicate) => predicate(state))
-    : (state) => children.some((predicate) => predicate(state));
-}
-
-function createSimplePredicate(filter: Filter, route: StateRoute): (state: Message) => boolean {
-  if (filter.operator !== Filter_Operator.EQUAL) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe supports only EQUAL field filters.",
-      Code.InvalidArgument,
-    );
-  }
-  if (filter.value === undefined) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe field filter value is required.",
-      Code.InvalidArgument,
-    );
-  }
-
-  validateSubscriptionPath(filter.fieldPath?.fieldName ?? [], "field filter");
-  const resolved = resolveMessagePath(
-    route.schema,
-    filter.fieldPath?.fieldName ?? [],
-    "field filter",
-  );
-  const expected = decodeFieldFilterValue(filter.value, resolved.leafSchema);
-
-  return (state) =>
-    valuesEqual(readPathValue(state, resolved.localPath), expected, resolved.leafSchema);
-}
-
 /**
  * Checks a state filter path before resolving its fields.
  */
@@ -2036,7 +1814,6 @@ function decodeAnyValue(value: Any | undefined, schema?: MessageSchema): unknown
 }
 
 interface ResolvedMessagePath {
-  readonly localPath: readonly string[];
   readonly leafSchema?: MessageSchema;
 }
 
@@ -2054,7 +1831,6 @@ function resolveMessagePath(
   fieldPath: readonly string[],
   label: "field filter",
 ): ResolvedMessagePath {
-  const localPath: string[] = [];
   let currentSchema: MessageSchema | undefined = schema;
   let leafSchema: MessageSchema | undefined;
 
@@ -2067,7 +1843,6 @@ function resolveMessagePath(
       );
     }
 
-    localPath.push(field.localName);
     leafSchema = field.message;
     currentSchema = index === fieldPath.length - 1 ? undefined : field.message;
     if (currentSchema === undefined && index < fieldPath.length - 1) {
@@ -2079,7 +1854,6 @@ function resolveMessagePath(
   }
 
   return Object.freeze({
-    localPath,
     ...(leafSchema === undefined ? {} : { leafSchema }),
   });
 }
@@ -2093,43 +1867,12 @@ function findMessageField(
   return fields.find((field) => field.name === name || field.localName === name);
 }
 
-function readPathValue(value: unknown, path: readonly string[]): unknown {
-  let current = value;
-
-  for (const segment of path) {
-    if (typeof current !== "object" || current === null) {
-      return undefined;
-    }
-    current = Reflect.get(current, segment);
-  }
-
-  return current;
-}
-
-function valuesEqual(actual: unknown, expected: unknown, schema?: MessageSchema): boolean {
-  if (schema !== undefined && isMessage(actual) && isMessage(expected)) {
-    return bytesEqual(toBinary(schema, actual), toBinary(schema, expected));
-  }
-  if (isAny(actual) && isAny(expected)) {
-    return bytesEqual(toBinary(AnySchema, actual), toBinary(AnySchema, expected));
-  }
-  if (actual instanceof Uint8Array && expected instanceof Uint8Array) {
-    return bytesEqual(actual, expected);
-  }
-
-  return Object.is(actual, expected);
-}
-
 function isMessage(value: unknown): value is Message {
   return typeof value === "object" && value !== null && "$typeName" in value;
 }
 
 function isAny(value: unknown): value is Any {
   return isMessage(value) && value.$typeName === "google.protobuf.Any";
-}
-
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
 /**
@@ -2156,26 +1899,6 @@ function commandTenant(command: Command): TenantId | undefined {
 
 function topicTenant(topic: Topic | undefined): TenantId | undefined {
   return tenantValue(topic?.context?.tenantId);
-}
-
-function eventTenant(event: Event): TenantId | undefined {
-  switch (event.context?.origin.case) {
-    case "importContext":
-      return tenantValue(event.context.origin.value.tenantId);
-    case "pastMessage":
-      return tenantValue(event.context.origin.value.actorContext?.tenantId);
-    default:
-      return undefined;
-  }
-}
-
-function eventTenantMatches(record: SubscriptionRecord, event: Event): boolean {
-  const tenantId = eventTenant(event);
-  return (
-    record.tenantId === undefined ||
-    (tenantId !== undefined &&
-      TenantBoundary.from(tenantId).key === TenantBoundary.from(record.tenantId).key)
-  );
 }
 
 function tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
@@ -2386,10 +2109,6 @@ const InternalErrorFacts = Object.freeze({
   },
 });
 
-function tenantOptions(tenantId: TenantId | undefined): { readonly tenantId?: TenantId } {
-  return tenantId === undefined ? {} : { tenantId: clone(TenantIdSchema, tenantId) };
-}
-
 const VALUE_DECODERS = Object.freeze([
   (value: Any) => AnyPacker.tryUnpack(value, StringValueSchema)?.value,
   (value: Any) => AnyPacker.tryUnpack(value, BoolValueSchema)?.value,
@@ -2401,98 +2120,6 @@ const VALUE_DECODERS = Object.freeze([
   (value: Any) => AnyPacker.tryUnpack(value, DoubleValueSchema)?.value,
   (value: Any) => AnyPacker.tryUnpack(value, BytesValueSchema)?.value,
 ]);
-
-/**
- * Builds a subscription update with a complete state or a removal signal.
- */
-function createEntityUpdate(
-  record: StateSubscriptionRecord,
-  update: StandUpdate,
-): SubscriptionUpdate | undefined {
-  const matcher = record.matcher;
-  if (matcher === undefined) return undefined;
-  const match = matcher.match(update);
-  if (match === undefined) return undefined;
-  const kind =
-    match === "state"
-      ? {
-          case: "state" as const,
-          value: AnyPacker.pack(record.route.schema, clone(record.route.schema, update.state)),
-        }
-      : { case: "noLongerMatching" as const, value: true };
-
-  return create(SubscriptionUpdateSchema, {
-    subscription: clone(SubscriptionSchema, record.subscription),
-    response: okResponse(),
-    update: {
-      case: "entityUpdates",
-      value: create(EntityUpdatesSchema, {
-        update: [
-          create(EntityStateUpdateSchema, {
-            id: packEntityId(record.route, update.id),
-            kind,
-          }),
-        ],
-      }),
-    },
-  });
-}
-
-function createEventUpdate(record: SubscriptionRecord, event: Event): SubscriptionUpdate {
-  return create(SubscriptionUpdateSchema, {
-    subscription: clone(SubscriptionSchema, record.subscription),
-    response: okResponse(),
-    update: {
-      case: "eventUpdates",
-      value: create(EventUpdatesSchema, {
-        event: [cloneClientEvent(event)],
-      }),
-    },
-  });
-}
-
-function cloneClientEvent(event: Event): Event {
-  const clientEvent = clone(EventSchema, event);
-  const rejection = clientEvent.context?.rejection;
-
-  if (rejection !== undefined) {
-    rejection.command = undefined;
-    // Clear the legacy wire payload as part of client-side security redaction.
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    rejection.commandMessage = undefined;
-    rejection.stacktrace = "";
-  }
-  return clientEvent;
-}
-
-function packString(value: string): Any {
-  return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value }));
-}
-
-function packEntityId(route: StateRoute, id: unknown): Any | undefined {
-  if (isAny(id)) {
-    return clone(AnySchema, id);
-  }
-  if (route.idField.message !== undefined && isMessage(id)) {
-    return AnyPacker.pack(route.idField.message, id);
-  }
-  if (id instanceof Uint8Array) {
-    return AnyPacker.pack(BytesValueSchema, create(BytesValueSchema, { value: id }));
-  }
-
-  switch (typeof id) {
-    case "string":
-      return packString(id);
-    case "boolean":
-      return AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
-    case "number":
-      return AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
-    case "bigint":
-      return AnyPacker.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }));
-    default:
-      return undefined;
-  }
-}
 
 /**
  * Groups non-public service contract, query, and subscription operations.
@@ -2571,6 +2198,58 @@ const ServiceValues = Object.freeze({
   },
 
   /**
+   * Validates state ID and field filters before storing the topic.
+   *
+   * @param filters The topic's declared filters.
+   * @param route The registered state route.
+   */
+  validateFilteredSubscriptionTopic(filters: TargetFilters, route: StateRoute): void {
+    ServiceValues.validateSubscriptionFilters(filters);
+    for (const id of filters.idFilter?.id ?? []) decodeSubscriptionIdValue(id, route);
+    for (const filter of filters.filter) ServiceValues.validateCompositeFilter(filter, route);
+  },
+
+  /**
+   * Validates nested state filter values without retaining an observer predicate.
+   *
+   * @param filter A validated composite filter.
+   * @param route The registered state route.
+   */
+  validateCompositeFilter(filter: CompositeFilter, route: StateRoute): void {
+    for (const simple of filter.filter) ServiceValues.validateSimpleFilter(simple, route);
+    for (const nested of filter.compositeFilter)
+      ServiceValues.validateCompositeFilter(nested, route);
+  },
+
+  /**
+   * Validates one field path and packed comparison value.
+   *
+   * @param filter A simple field filter.
+   * @param route The registered state route.
+   */
+  validateSimpleFilter(filter: Filter, route: StateRoute): void {
+    if (filter.operator !== Filter_Operator.EQUAL) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe supports only EQUAL field filters.",
+        Code.InvalidArgument,
+      );
+    }
+    if (filter.value === undefined) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe field filter value is required.",
+        Code.InvalidArgument,
+      );
+    }
+    validateSubscriptionPath(filter.fieldPath?.fieldName ?? [], "field filter");
+    const resolved = resolveMessagePath(
+      route.schema,
+      filter.fieldPath?.fieldName ?? [],
+      "field filter",
+    );
+    decodeFieldFilterValue(filter.value, resolved.leafSchema);
+  },
+
+  /**
    * Checks that a state topic has a usable ID or field filter.
    *
    * @param filters The ID and field criteria from the subscription topic.
@@ -2611,8 +2290,6 @@ const ServiceValues = Object.freeze({
     return create(AckSchema, { messageId, status: errorStatus(type, message) });
   },
   commandTenant,
-  createEntityUpdate,
-  createEventUpdate,
   createReadPlan,
   createSubscriptionRecord,
   createSubscriptionRemoval,
@@ -2620,7 +2297,6 @@ const ServiceValues = Object.freeze({
   defaultQueueLimit: DEFAULT_QUEUE_LIMIT,
   defaultSubscriptionLimit: DEFAULT_SUBSCRIPTION_LIMIT,
   errorStatus,
-  eventTenantMatches,
   okResponse,
   okStatus,
   positiveInteger,
@@ -2630,7 +2306,6 @@ const ServiceValues = Object.freeze({
   stateRouteIdField,
   subscriptionLimit,
   tenantMismatch,
-  tenantOptions,
   tenantValue,
   topicTenant,
   uniqueContexts,

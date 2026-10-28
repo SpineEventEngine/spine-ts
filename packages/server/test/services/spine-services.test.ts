@@ -17,12 +17,10 @@ import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
 import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
-  BytesValueSchema,
   DoubleValueSchema,
   EmptySchema,
   FieldMaskSchema,
   Int32ValueSchema,
-  Int64ValueSchema,
   StringValueSchema,
   TimestampSchema,
   UInt32ValueSchema,
@@ -2434,58 +2432,48 @@ describe("SpineServices", () => {
   });
 
   it("treats subscription tenant domain and email variants as present", async () => {
-    const capturedTenantKeys: (TenantId | undefined)[] = [];
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const singleTenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      isMultitenant: false,
-    });
-    const multitenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      isMultitenant: true,
-      admittedTenants: [tenantEmail("tenant@example.test")],
-      subscribe: (_schema, callback, options) => {
-        deliverUpdate = callback;
-        capturedTenantKeys.push(options.tenantId);
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const singleHandlers = registeredSubscriptionHandlers(singleTenant);
-    const multiHandlers = registeredSubscriptionHandlers(multitenant);
-
-    await expect(
-      Promise.resolve().then(() =>
-        singleHandlers.subscribe(createTopic(tenantDomain("tenant.example"))),
-      ),
-    ).rejects.toMatchObject({
-      code: Code.InvalidArgument,
-    } satisfies Partial<ConnectError>);
-
-    const subscription = await multiHandlers.subscribe(
-      createTopic(tenantEmail("tenant@example.test")),
-    );
-    const iterator = multiHandlers.activate(subscription)[Symbol.asyncIterator]();
-    const pending = iterator.next();
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-tenant",
-      state: createState("task-tenant", "Tenant"),
-    });
-    await withTimeout(pending, "subscription tenant activation update");
-    await iterator.return?.();
-
-    expect(capturedTenantKeys).toEqual([tenantEmail("tenant@example.test")]);
+    const single = await buildStateSubscriptionContext("SingleTenantVariants");
+    try {
+      await expect(
+        Promise.resolve().then(() =>
+          registeredSubscriptionHandlers(single).subscribe(
+            createTopic(tenantDomain("tenant.example")),
+          ),
+        ),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument } satisfies Partial<ConnectError>);
+    } finally {
+      await single.close();
+    }
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const email = tenantEmail("tenant@example.test");
+    const multitenant = await BoundedContext.multitenant("MultiTenantVariants")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    try {
+      await index.keep(email);
+      const handlers = registeredSubscriptionHandlers(multitenant);
+      const subscription = await handlers.subscribe(createTopic(email));
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(multitenant, subscription);
+      await postEntityStateChanged(
+        multitenant,
+        ProjectOverviewStateSchema,
+        createState("task-tenant", "Tenant"),
+        undefined,
+        email,
+      );
+      expect(
+        unpackEntityState(
+          (await withTimeout(next, "subscription tenant update")).value as SubscriptionUpdate,
+        ),
+      ).toEqual(createState("task-tenant", "Tenant"));
+      await iterator.return?.();
+    } finally {
+      await multitenant.close();
+    }
   });
 
   it("returns QueryResponse errors for query tenant mismatches", async () => {
@@ -3141,148 +3129,67 @@ describe("SpineServices", () => {
   });
 
   it("matches subscription filters before delivering entity updates", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(
-      createFilteredTopic({ id: "task-1", name: "Open" }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      state: createState("task-1", "Closed"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-2",
-      state: createState("task-2", "Open"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      state: createState("task-1", "Open"),
-    });
-
-    const delivered = await withTimeout(first, "filtered subscription update");
-    const update = delivered.value as SubscriptionUpdate | undefined;
-
-    expect(delivered.done).toBe(false);
-    expect(unpackEntityState(update)).toEqual(createState("task-1", "Open"));
-    await iterator.return?.();
+    const context = await buildStateSubscriptionContext("FilteredProjectUpdates");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(
+        createFilteredTopic({ id: "task-1", name: "Open" }),
+      );
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const first = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-1", "Closed"),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-2", "Open"),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-1", "Open"),
+      );
+      const delivered = await withTimeout(first, "filtered subscription update");
+      expect(delivered.done).toBe(false);
+      expect(unpackEntityState(delivered.value as SubscriptionUpdate | undefined)).toEqual(
+        createState("task-1", "Open"),
+      );
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
   });
 
   it("emits no-longer-matching when a filtered subscription stops matching", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly previousState?: ProjectOverviewState;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createFilteredTopic({ name: "Open" }));
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      previousState: createState("task-1", "Open"),
-      state: createState("task-1", "Closed"),
-    });
-
-    const delivered = await withTimeout(next, "no-longer-matching subscription update");
-    const update = delivered.value as SubscriptionUpdate | undefined;
-
-    expect(delivered.done).toBe(false);
-    expect(entityUpdateKind(update)?.case).toBe("noLongerMatching");
-    expect(entityUpdateKind(update)?.value).toBe(true);
-    expect(
-      AnyPacker.tryUnpack(entityUpdateId(update) ?? packMissing(), StringValueSchema)?.value,
-    ).toBe("task-1");
-    await iterator.return?.();
-  });
-
-  it("ignores topic masks and delivers complete matching states", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly previousState?: ProjectOverviewState;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(
-      createFilteredTopic({ name: "Open", fieldMask: ["name"] }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      state: createState("task-1", "Open", 7),
-    });
-    const deliveredState = await withTimeout(first, "complete subscription state");
-    const second = iterator.next();
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      previousState: createState("task-1", "Open", 7),
-      state: createState("task-1", "Closed", 7),
-    });
-    const noLongerMatching = await withTimeout(second, "no-longer-matching update");
-
-    expect(unpackEntityState(deliveredState.value as SubscriptionUpdate | undefined)).toEqual(
-      createState("task-1", "Open", 7),
-    );
-    expect(entityUpdateKind(noLongerMatching.value as SubscriptionUpdate | undefined)?.case).toBe(
-      "noLongerMatching",
-    );
-    await iterator.return?.();
+    const context = await buildStateSubscriptionContext("NoLongerMatchingProjects");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createFilteredTopic({ name: "Open" }));
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-1", "Closed"),
+        createState("task-1", "Open"),
+      );
+      const delivered = await withTimeout(next, "no-longer-matching subscription update");
+      const update = delivered.value as SubscriptionUpdate | undefined;
+      expect(delivered.done).toBe(false);
+      expect(entityUpdateKind(update)?.case).toBe("noLongerMatching");
+      expect(entityUpdateKind(update)?.value).toBe(true);
+      expect(
+        AnyPacker.tryUnpack(entityUpdateId(update) ?? packMissing(), StringValueSchema)?.value,
+      ).toBe("task-1");
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
   });
 
   it("rejects unsupported subscription filters before activation attaches Stand delivery", async () => {
@@ -3391,39 +3298,26 @@ describe("SpineServices", () => {
     expect(subscribeCalls).toBe(0);
   });
 
-  it("ignores invalid wire field masks on state topics", () => {
-    const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
-    );
-    const cases = [
-      {
-        fieldMask: new Array(33).fill("name") as string[],
-      },
-      {
-        fieldMask: ["n".repeat(129)],
-      },
-      {
-        fieldMask: [".name"],
-      },
-      {
-        fieldMask: ["name."],
-      },
-      {
-        fieldMask: ["name..value"],
-      },
-      {
-        fieldMask: ["missing"],
-      },
-      {
-        fieldMask: ["name.value"],
-      },
-    ];
-
-    for (const { fieldMask } of cases) {
-      const topic = createTopic();
-      topic.fieldMask = create(FieldMaskSchema, { paths: fieldMask });
-
-      expect(() => handlers.subscribe(topic)).not.toThrow();
+  it("ignores invalid wire field masks on state topics", async () => {
+    const context = await buildStateSubscriptionContext("IgnoredStateMasks");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const cases = [
+        new Array(33).fill("name") as string[],
+        ["n".repeat(129)],
+        [".name"],
+        ["name."],
+        ["name..value"],
+        ["missing"],
+        ["name.value"],
+      ];
+      for (const fieldMask of cases) {
+        const topic = createTopic();
+        topic.fieldMask = create(FieldMaskSchema, { paths: fieldMask });
+        await expect(handlers.subscribe(topic)).resolves.toBeDefined();
+      }
+    } finally {
+      await context.close();
     }
   });
 
@@ -3546,123 +3440,82 @@ describe("SpineServices", () => {
   });
 
   it("keeps returned subscription mutation from changing activation tenant or topic", async () => {
-    const capturedTenantKeys: (TenantId | undefined)[] = [];
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      isMultitenant: true,
-      admittedTenants: [tenantValue("tenant-a")],
-      subscribe: (_schema, callback, options) => {
-        capturedTenantKeys.push(options.tenantId);
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic("tenant-a"));
-    if (subscription.topic === undefined) {
-      throw new Error("Expected returned subscription topic.");
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const context = await BoundedContext.multitenant("ClonedSubscriptionTenant")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    try {
+      await admitTenants(context, "tenant-a", "tenant-b");
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createTopic("tenant-a"));
+      const original = clone(SubscriptionSchema, subscription);
+      subscription.topic = createFilteredTopic({ name: "Never", tenantId: "tenant-b" });
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, original);
+      await awaitSubscriptionAttachment(context, original);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-cloned", "Delivered"),
+        undefined,
+        "tenant-a",
+      );
+      const delivered = (await withTimeout(next, "clone-isolated subscription update"))
+        .value as SubscriptionUpdate;
+      expect(delivered.subscription?.topic).toEqual(original.topic);
+      expect(unpackEntityState(delivered)).toEqual(createState("task-cloned", "Delivered"));
+      await iterator.return?.();
+    } finally {
+      await context.close();
     }
-    const originalSubscription = clone(SubscriptionSchema, subscription);
-    subscription.topic = createFilteredTopic({ name: "Never", tenantId: "tenant-b" });
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, originalSubscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-cloned",
-      state: createState("task-cloned", "Delivered"),
-    });
-    const delivered = await withTimeout(next, "clone-isolated subscription update");
-
-    expect(capturedTenantKeys).toEqual([tenantValue("tenant-a")]);
-    expect(unpackEntityState(delivered.value as SubscriptionUpdate | undefined)).toEqual(
-      createState("task-cloned", "Delivered"),
-    );
-    await iterator.return?.();
   });
 
   it("keeps delivered subscription metadata mutation from changing later updates", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-    const originalSubscriptionId = subscription.id?.value;
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = iterator.next();
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "first-delivered",
-      state: createState("first-delivered", "First"),
-    });
-    const firstDelivered = await withTimeout(
-      first,
-      "first clone-isolated subscription metadata update",
-    );
-    const firstUpdate = firstDelivered.value as SubscriptionUpdate | undefined;
-
-    expect(firstUpdate?.subscription?.id?.value).toBe(originalSubscriptionId);
-    if (firstUpdate?.subscription === undefined) {
-      throw new Error("Expected first delivered update to echo subscription metadata.");
+    const context = await buildStateSubscriptionContext("ClonedSubscriptionUpdates");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createTopic());
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const first = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("first-delivered", "First"),
+      );
+      const firstUpdate = (await withTimeout(first, "first subscription update"))
+        .value as SubscriptionUpdate;
+      expect(firstUpdate.subscription?.id?.value).toBe(subscription.id?.value);
+      if (firstUpdate.subscription?.id === undefined)
+        throw new Error("Expected subscription metadata.");
+      firstUpdate.subscription.id.value = "mutated-subscription";
+      firstUpdate.subscription.topic = createFilteredTopic({ name: "Mutated" });
+      const second = iterator.next();
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("second-delivered", "Second"),
+      );
+      const secondUpdate = (await withTimeout(second, "second subscription update"))
+        .value as SubscriptionUpdate;
+      expect(secondUpdate.subscription).toEqual(subscription);
+      expect(unpackEntityState(secondUpdate)).toEqual(createState("second-delivered", "Second"));
+      await iterator.return?.();
+    } finally {
+      await context.close();
     }
-    if (firstUpdate.subscription.id === undefined) {
-      throw new Error("Expected first delivered update to echo subscription ID.");
-    }
-    firstUpdate.subscription.id.value = "mutated-subscription";
-    firstUpdate.subscription.topic = createFilteredTopic({ name: "Mutated" });
-
-    const second = iterator.next();
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "second-delivered",
-      state: createState("second-delivered", "Second"),
-    });
-    const secondDelivered = await withTimeout(
-      second,
-      "second clone-isolated subscription metadata update",
-    );
-    const secondUpdate = secondDelivered.value as SubscriptionUpdate | undefined;
-
-    expect(secondUpdate?.subscription?.id?.value).toBe(originalSubscriptionId);
-    expect(secondUpdate?.subscription?.topic).toEqual(subscription.topic);
-    await iterator.return?.();
   });
 
-  it("coerces a non-positive subscription queue limit", () => {
-    const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
-      { queueLimit: 0 },
-    );
-
-    expect(() => handlers.subscribe(createTopic())).not.toThrow();
+  it("coerces a non-positive subscription queue limit", async () => {
+    const context = await buildStateSubscriptionContext("NormalizedSubscriptionQueue");
+    try {
+      const handlers = registeredSubscriptionHandlers(context, { queueLimit: 0 });
+      await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+    } finally {
+      await context.close();
+    }
   });
 
   it("keeps missing subscription IDs inert", async () => {
@@ -3738,114 +3591,91 @@ describe("SpineServices", () => {
   });
 
   it("delivers subscription updates matched by EITHER filters", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(
-      createFilteredTopicWithCriteria({
-        filter: [
-          create(CompositeFilterSchema, {
-            filter: [
-              create(FilterSchema, {
-                fieldPath: { fieldName: ["name"] },
-                value: packStringId("Closed"),
-                operator: Filter_Operator.EQUAL,
-              }),
-              create(FilterSchema, {
-                fieldPath: { fieldName: ["priority"] },
-                value: packInt32(7),
-                operator: Filter_Operator.EQUAL,
-              }),
-            ],
-            operator: CompositeFilter_CompositeOperator.EITHER,
-          }),
-        ],
-      }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      state: createState("task-1", "Open", 7),
-    });
-
-    const delivered = (await withTimeout(next, "either subscription")).value as
-      SubscriptionUpdate | undefined;
-
-    expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Open", 7));
-    await iterator.return?.();
+    const context = await buildStateSubscriptionContext("EitherFilteredProjects");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(
+        createFilteredTopicWithCriteria({
+          filter: [
+            create(CompositeFilterSchema, {
+              filter: [
+                create(FilterSchema, {
+                  fieldPath: { fieldName: ["name"] },
+                  value: packStringId("Closed"),
+                  operator: Filter_Operator.EQUAL,
+                }),
+                create(FilterSchema, {
+                  fieldPath: { fieldName: ["priority"] },
+                  value: packInt32(7),
+                  operator: Filter_Operator.EQUAL,
+                }),
+              ],
+              operator: CompositeFilter_CompositeOperator.EITHER,
+            }),
+          ],
+        }),
+      );
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-1", "Open", 7),
+      );
+      const delivered = (await withTimeout(next, "either subscription")).value as
+        SubscriptionUpdate | undefined;
+      expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Open", 7));
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
   });
 
   it("matches an Any-valued subscription column without unpacking its payload", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return { closed: false, unsubscribe: () => undefined };
-      },
-    });
-    const selected = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "selected" }));
-    const other = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "other" }));
-    const filter = create(FilterSchema, {
-      fieldPath: { fieldName: ["attachment"] },
-      value: selected,
-      operator: Filter_Operator.EQUAL,
-    });
-    const topic = createFilteredTopicWithCriteria({
-      filter: [
-        create(CompositeFilterSchema, {
-          filter: [filter],
-          operator: CompositeFilter_CompositeOperator.ALL,
+    const context = await buildStateSubscriptionContext("AnyFilteredProjects");
+    try {
+      const selected = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "selected" }));
+      const other = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "other" }));
+      const filter = create(FilterSchema, {
+        fieldPath: { fieldName: ["attachment"] },
+        value: selected,
+        operator: Filter_Operator.EQUAL,
+      });
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(
+        createFilteredTopicWithCriteria({
+          filter: [
+            create(CompositeFilterSchema, {
+              filter: [filter],
+              operator: CompositeFilter_CompositeOperator.ALL,
+            }),
+          ],
         }),
-      ],
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(topic);
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, subscription);
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      state: create(ProjectOverviewStateSchema, { id: "task-1", attachment: other }),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-2",
-      state: create(ProjectOverviewStateSchema, { id: "task-2", attachment: selected }),
-    });
-    expect(
-      unpackEntityState(
-        (await withTimeout(next, "Any column subscription")).value as
-          SubscriptionUpdate | undefined,
-      )?.id,
-    ).toBe("task-2");
-    await iterator.return?.();
+      );
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "task-1", attachment: other }),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "task-2", attachment: selected }),
+      );
+      expect(
+        unpackEntityState(
+          (await withTimeout(next, "Any column subscription")).value as
+            SubscriptionUpdate | undefined,
+        )?.id,
+      ).toBe("task-2");
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
   });
 
   it("matches declared Any Entity IDs in system-event subscription filters", async () => {
@@ -3904,91 +3734,6 @@ describe("SpineServices", () => {
     } finally {
       await context.close();
     }
-  });
-
-  it("delivers ID-only subscriptions and accepts unknown Any ID values", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const id = AnyPacker.pack(TopicIdSchema, create(TopicIdSchema, { value: "packed-id" }));
-    const subscription = await handlers.subscribe(
-      createFilteredTopicWithCriteria({ idFilter: { id: [id] } }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id,
-      state: createState("task-1", "Packed"),
-    });
-
-    const delivered = (await withTimeout(next, "id-only subscription")).value as
-      SubscriptionUpdate | undefined;
-
-    expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Packed"));
-    await iterator.return?.();
-  });
-
-  it("matches byte subscription ID filters by value", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const id = new Uint8Array([1, 2, 3]);
-    const subscription = await handlers.subscribe(
-      createFilteredTopicWithCriteria({ idFilter: { id: [packBytes(id)] } }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: new Uint8Array([9]),
-      state: createState("task-ignored", "Ignored"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: new Uint8Array(id),
-      state: createState("task-1", "Bytes"),
-    });
-
-    const delivered = (await withTimeout(next, "byte-id subscription")).value as
-      SubscriptionUpdate | undefined;
-
-    expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Bytes"));
-    await iterator.return?.();
   });
 
   it("matches message-typed subscription ID filters and packs delivered message IDs", async () => {
@@ -4329,109 +4074,6 @@ describe("SpineServices", () => {
     }
   });
 
-  it("releases subscription delivery when the activation iterator closes", async () => {
-    const activeStandSubscriptions: string[] = [];
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        activeStandSubscriptions.push("open");
-        deliverUpdate = callback;
-        return {
-          get closed() {
-            return activeStandSubscriptions.length === 0;
-          },
-          unsubscribe: () => {
-            activeStandSubscriptions.pop();
-          },
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-
-    expect(activeStandSubscriptions).toEqual([]);
-
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const pending = iterator.next();
-
-    await delay(25);
-    expect(activeStandSubscriptions).toEqual(["open"]);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-close",
-      state: createState("task-close", "Close"),
-    });
-    await withTimeout(pending, "first subscription update");
-    await iterator.return?.();
-
-    expect(activeStandSubscriptions).toEqual([]);
-  });
-
-  it("keeps duplicate activation inert after a subscription is active", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    let subscribeCalls = 0;
-    let unsubscribeCount = 0;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        subscribeCalls += 1;
-        deliverUpdate = callback;
-        return {
-          get closed() {
-            return unsubscribeCount > 0;
-          },
-          unsubscribe: () => {
-            unsubscribeCount += 1;
-          },
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-    const primaryIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const firstUpdate = primaryIterator.next();
-
-    await delay(25);
-    const duplicateIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const duplicateDone = await withTimeout(duplicateIterator.next(), "duplicate activation close");
-
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-primary",
-      state: createState("task-primary", "Primary"),
-    });
-    const delivered = await withTimeout(firstUpdate, "primary activation update");
-    await duplicateIterator.return?.();
-    const secondUpdate = primaryIterator.next();
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-still-active",
-      state: createState("task-still-active", "Still active"),
-    });
-    const stillActive = await withTimeout(secondUpdate, "primary activation after duplicate");
-
-    expect(duplicateDone.done).toBe(true);
-    expect(delivered.done).toBe(false);
-    expect(stillActive.done).toBe(false);
-    expect(subscribeCalls).toBe(1);
-    expect(unsubscribeCount).toBe(0);
-    await primaryIterator.return?.();
-    expect(unsubscribeCount).toBe(1);
-  });
-
   it("serializes simultaneous activation before the registry activation await", async () => {
     const registry = new GatedActivateRegistry();
     const context = await BoundedContext.singleTenant("ActivationRace")
@@ -4462,30 +4104,6 @@ describe("SpineServices", () => {
     expect(registry.activations).toBe(1);
     await first.return?.();
     await context.close();
-  });
-
-  it("removes inactive subscription records when activation attachment fails", async () => {
-    let subscribeCalls = 0;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: () => {
-        subscribeCalls += 1;
-        throw new Error("stand subscribe failed");
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-
-    await expect(iterator.next()).rejects.toThrow("stand subscribe failed");
-
-    const secondActivation = await withTimeout(
-      handlers.activate(subscription)[Symbol.asyncIterator]().next(),
-      "activation after failed attachment",
-    );
-
-    expect(secondActivation.done).toBe(true);
-    expect(subscribeCalls).toBe(1);
   });
 
   it("surfaces attachment setup and registry cleanup failures together during activation", async () => {
@@ -4572,254 +4190,47 @@ describe("SpineServices", () => {
     await context.close();
   });
 
-  it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
-    const unsubscribeCounts: number[] = [];
-    const callbacks: ((update: {
-      readonly typeUrl: string;
-      readonly id: unknown;
-      readonly state: ProjectOverviewState;
-    }) => void)[] = [];
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        const index = callbacks.length;
-        let closed = false;
-        callbacks.push(callback);
-        unsubscribeCounts.push(0);
-        return {
-          get closed() {
-            return closed;
-          },
-          unsubscribe: () => {
-            unsubscribeCounts[index] = (unsubscribeCounts[index] ?? 0) + 1;
-            closed = true;
-          },
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const firstSubscription = await handlers.subscribe(createTopic());
-    const secondSubscription = await handlers.subscribe(createTopic());
-    const firstIterator = handlers.activate(firstSubscription)[Symbol.asyncIterator]();
-    const secondIterator = handlers.activate(secondSubscription)[Symbol.asyncIterator]();
-    await expectActivationAcknowledgement(firstIterator, firstSubscription);
-    const firstNext = firstIterator.next();
-    const secondNext = nextBusinessUpdate(secondIterator, secondSubscription);
-
-    await delay(25);
-    await handlers.cancel(firstSubscription);
-    await handlers.cancel(firstSubscription);
-    await firstIterator.return?.();
-    callbacks[1]?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-second",
-      state: createState("task-second", "Second"),
-    });
-
-    const firstClosed = await withTimeout(firstNext, "canceled subscription close");
-    const secondDelivered = await withTimeout(secondNext, "second subscription update");
-
-    expect(firstSubscription.id?.value).not.toBe(secondSubscription.id?.value);
-    expect(firstClosed.done).toBe(true);
-    expect(secondDelivered.done).toBe(false);
-    expect(unsubscribeCounts).toEqual([1, 0]);
-    await handlers.cancel(secondSubscription);
-    await secondIterator.return?.();
-    expect(unsubscribeCounts).toEqual([1, 1]);
-  });
-
-  it("packs delivered subscription update IDs for supported ID shapes", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = nextBusinessUpdate(iterator, subscription);
-    const anyId = AnyPacker.pack(TopicIdSchema, create(TopicIdSchema, { value: "already-packed" }));
-    const bytesId = new Uint8Array([7, 8, 9]);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-first",
-      state: createState("task-first", "First"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: bytesId,
-      state: createState("task-bytes", "Bytes"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: anyId,
-      state: createState("task-any", "Any"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: true,
-      state: createState("task-bool", "Bool"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: 42,
-      state: createState("task-number", "Number"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: 9007199254740993n,
-      state: createState("task-bigint", "Bigint"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: { unsupported: true },
-      state: createState("task-object", "Object"),
-    });
-
-    const firstUpdate = await withTimeout(first, "first direct subscription update");
-    const secondUpdate = await withTimeout(iterator.next(), "queued direct subscription update");
-    const thirdUpdate = await withTimeout(iterator.next(), "packed Any subscription update");
-    const fourthUpdate = await withTimeout(iterator.next(), "boolean ID subscription update");
-    const fifthUpdate = await withTimeout(iterator.next(), "number ID subscription update");
-    const sixthUpdate = await withTimeout(iterator.next(), "bigint ID subscription update");
-    const seventhUpdate = await withTimeout(iterator.next(), "object ID subscription update");
-    const secondValue = secondUpdate.value as SubscriptionUpdate | undefined;
-    const thirdValue = thirdUpdate.value as SubscriptionUpdate | undefined;
-    const fourthValue = fourthUpdate.value as SubscriptionUpdate | undefined;
-    const fifthValue = fifthUpdate.value as SubscriptionUpdate | undefined;
-    const sixthValue = sixthUpdate.value as SubscriptionUpdate | undefined;
-    const seventhValue = seventhUpdate.value as SubscriptionUpdate | undefined;
-
-    expect(firstUpdate.done).toBe(false);
-    expect(secondUpdate.done).toBe(false);
-    expect(thirdUpdate.done).toBe(false);
-    expect(fourthUpdate.done).toBe(false);
-    expect(fifthUpdate.done).toBe(false);
-    expect(sixthUpdate.done).toBe(false);
-    expect(seventhUpdate.done).toBe(false);
-    const firstId = entityUpdateId(firstUpdate.value as SubscriptionUpdate);
-    const secondId = entityUpdateId(secondValue);
-    const thirdId = entityUpdateId(thirdValue);
-    const fourthId = entityUpdateId(fourthValue);
-    const fifthId = entityUpdateId(fifthValue);
-    const sixthId = entityUpdateId(sixthValue);
-    const seventhId = entityUpdateId(seventhValue);
-    if (
-      firstId === undefined ||
-      secondId === undefined ||
-      thirdId === undefined ||
-      fourthId === undefined ||
-      fifthId === undefined ||
-      sixthId === undefined
-    ) {
-      throw new Error("Expected packed update IDs.");
-    }
-    expect(AnyPacker.tryUnpack(firstId, StringValueSchema)).toEqual(
-      create(StringValueSchema, { value: "task-first" }),
-    );
-    expect(AnyPacker.tryUnpack(secondId, BytesValueSchema)).toEqual(
-      create(BytesValueSchema, { value: bytesId }),
-    );
-    expect(thirdId).toEqual(anyId);
-    expect(AnyPacker.tryUnpack(fourthId, BoolValueSchema)).toEqual(
-      create(BoolValueSchema, { value: true }),
-    );
-    expect(AnyPacker.tryUnpack(fifthId, DoubleValueSchema)).toEqual(
-      create(DoubleValueSchema, { value: 42 }),
-    );
-    expect(AnyPacker.tryUnpack(sixthId, Int64ValueSchema)).toEqual(
-      create(Int64ValueSchema, { value: 9007199254740993n }),
-    );
-    expect(seventhId).toBeUndefined();
-    await iterator.return?.();
-  });
-
   it("closes slow subscription consumers when the update queue limit is exceeded", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    let unsubscribeCount = 0;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          get closed() {
-            return unsubscribeCount > 0;
-          },
-          unsubscribe: () => {
-            unsubscribeCount += 1;
-          },
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context, {
-      queueLimit: 1,
-      subscriptionLimit: 1,
-    });
-    const subscription = await handlers.subscribe(createTopic());
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = iterator.next();
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-one",
-      state: createState("task-one", "One"),
-    });
-    await withTimeout(first, "first slow subscription update");
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-two",
-      state: createState("task-two", "Two"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-three",
-      state: createState("task-three", "Three"),
-    });
-
-    const next = await withTimeout(iterator.next(), "closed slow subscription");
-
-    expect(next.done).toBe(true);
-    expect(unsubscribeCount).toBe(1);
-    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
-  });
-
-  it("releases subscription capacity after activation attachment fails", async () => {
-    const handlers = registeredSubscriptionHandlers(
-      createFakeContext({
-        stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-        subscribe: () => {
-          throw new Error("activation failed");
-        },
-      }),
-      { subscriptionLimit: 1 },
-    );
-    const subscription = await handlers.subscribe(createTopic());
-
-    await expect(handlers.activate(subscription)[Symbol.asyncIterator]().next()).rejects.toThrow(
-      "activation failed",
-    );
-    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("SlowSubscriptionQueue")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    try {
+      const handlers = registeredSubscriptionHandlers(context, {
+        queueLimit: 1,
+        subscriptionLimit: 1,
+      });
+      const subscription = await handlers.subscribe(createTopic());
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const first = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-one", "One"),
+      );
+      await withTimeout(first, "first slow subscription update");
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-two", "Two"),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-three", "Three"),
+      );
+      expect(await withTimeout(iterator.next(), "closed slow subscription")).toMatchObject({
+        done: true,
+      });
+      if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+      expect(await registry.get(subscription.id)).toBeUndefined();
+      await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+    } finally {
+      await context.close();
+    }
   });
 
   it("fails unsupported subscription topics contractually", async () => {
@@ -5662,10 +5073,19 @@ function createState(id: string, name: string, priority = 1): ProjectOverviewSta
   });
 }
 
+async function buildStateSubscriptionContext(name: string): Promise<BoundedContext> {
+  return BoundedContext.singleTenant(name)
+    .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+    .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+    .build();
+}
+
 async function postEntityStateChanged(
   context: BoundedContext,
   schema: MessageSchema,
   state: Message,
+  oldState?: Message,
+  tenantId?: TenantInput,
 ): Promise<void> {
   const id = (state as Record<string, unknown>)[schema.fields[0]?.localName ?? "id"];
   const idSchema = schema.fields[0]?.message as MessageSchema | undefined;
@@ -5681,11 +5101,13 @@ async function postEntityStateChanged(
     context,
     create(EventSchema, {
       id: { value: `state-change-${String(++stateChangeSequence)}` },
+      ...(tenantId === undefined ? {} : { context: createEventContext("state-change", tenantId) }),
       message: AnyPacker.pack(
         EntityLog.EntityStateChangedSchema,
         create(EntityLog.EntityStateChangedSchema, {
           entity: { id: packedId, typeUrl: TypeUrls.derive(schema) },
           newState: AnyPacker.pack(schema, state),
+          ...(oldState === undefined ? {} : { oldState: AnyPacker.pack(schema, oldState) }),
           signalId: [
             {
               id: AnyPacker.pack(
@@ -5707,10 +5129,6 @@ function packStringId(id: string) {
 
 function packInt32(value: number) {
   return AnyPacker.pack(Int32ValueSchema, create(Int32ValueSchema, { value }));
-}
-
-function packBytes(value: Uint8Array) {
-  return AnyPacker.pack(BytesValueSchema, create(BytesValueSchema, { value }));
 }
 
 function unpackProjectOverviewState(state: Any | undefined) {

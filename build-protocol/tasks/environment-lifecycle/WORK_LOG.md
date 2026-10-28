@@ -4332,3 +4332,39 @@ invalid identifiers; unique mutation/filter/queue semantics need typed real
 fixtures. Revise estimate to another 1–2 hours before focused gates. Consolidate
 redundant/invalid cases, retain required behavior rather than mechanically
 recreating every old test. No new public contract or runtime blocker reported.
+
+M26 real-context conversion now passes 124 service tests: ten distinct successful
+subscription cases converted, nine redundant or domain-invalid fake-only cases
+retired. Existing supported runtime provides matching and redaction; service now
+validates topics without retaining unused matcher closures. Registry access and
+operation admission always use built contexts. Implementer is completing focused
+static/source-coverage evidence before freeze; no fresh global percentage yet.
+Parent will run one new global diagnostic after frozen preflight because M24 and
+M26 change branch definitions. No release gate until coverage/review converge.
+
+M26 frozen hashes match evidence m26-service-fallback-removal-evidence.md.
+Affected 188 tests, tooling TypeScript, ESLint, cleanup, TSDoc, format and diff
+checks pass. Necessity ledger deletes exactly 15 removed helper entries.
+Lightweight pre-review diff/current-record inspection found no stale public claim
+or new export. Three concern-specific reviewers dispatched (original API and
+reliability Sol/medium, existing style role m26_style_review explicitly Sol/medium,
+fork none); no children. Estimate 0.2–0.4 hours for review/global diagnostic and
+small corrections. Frozen whole Vitest coverage diagnostic is running with the
+unchanged 90% thresholds; release profile remains pending. No writer active.
+
+M26 verification correction: focused tooling typecheck did not emit current
+production packages. Parent detected older dist/services/spine-services.js than
+source; coverage includes dist and source, so the initial whole diagnostic was
+interrupted (exit130) and is not evidence. Parent runs production build before
+replacement global measurement. Scoped M26 LCOV is likewise non-authoritative;
+source-direct focused behavior tests remain useful. Always require matching emit
+before any mixed source/dist measurement. This is a verification mistake, not
+a runtime regression or grounds to change coverage configuration.
+
+M26 rebuilt full diagnostic passes 6,214 tests (16 skipped),393 files (4 skipped),
+107.84 seconds. Branches 20,549/22,986=89.39%,139 hits short; statements93.02%,
+functions95.03%,lines94.89%. Exit1 solely branch threshold. Valid result uses
+matching production emit. Source-direct focused packet plus complete independent
+wave accepted; parent fixes one same-line internal TSDoc claim after measurement.
+No runtime/instrumented-line change, no behavior rerun needed for comment.
+Commit/push M26 implementation and records, then meaningful coverage convergence.

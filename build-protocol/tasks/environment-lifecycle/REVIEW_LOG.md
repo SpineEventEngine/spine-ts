@@ -2297,3 +2297,37 @@ concerns resolved. Original explicit Sol/medium profile accepted, runtime
 self-metadata unavailable. Parent accepts test maintainability; all canonical
 concerns disposed. Commit/push frozen test packet and records while preserving
 M26 in-progress source/test edits. No global coverage claim.
+
+M26 review assignments prepared, dispatched only after frozen mechanical evidence:
+original adapter_api_review (TypeScript/API concern), explicit gpt-6-sol/medium,
+checks supported subscription contract and domain-correct replacement fixtures;
+original protocol_reliability_review, explicit gpt-6-sol/medium, checks activation,
+cancellation, registry admission/close and native redaction. Existing style
+reviewer role will be dispatched with explicit gpt-6-sol/medium for deleted
+fallback helpers, remaining validation and test maintainability. Immutable
+configured profiles are the available metadata; runtime introspection unavailable.
+No children, no code edits or repeated tests. Documentation completeness N/A:
+no public prose or supported behavior claim changes; removed path served invalid
+structural doubles only. TSDoc/cleanup checks cover changed internal descriptions.
+Security remains final release review, not a separate per-packet lane. Collect
+all relevant review results before returning one accepted correction batch.
+
+M26 API and reliability reviews clean; frozen hashes verified, supported
+subscription validation/tenant/redaction/lifecycle preserved. Supplied focused
+tests not rerun by reviewers. Style result pending before complete wave acceptance.
+Coverage evidence correction recorded in WORK_LOG; production build and fresh
+measurement pending, so no global acceptance claimed.
+
+M26 complete review wave: API and reliability clean. Style accepts ledger/test
+migration and identifies one P2 internal TSDoc claim: createSubscriptionShape
+now validates/returns shape, rather than preparing delivery. Accept single-line
+comment correction after active frozen measurement, estimate 0.05–0.1 hours
+including deterministic check. No substantive review reopening. P3 fake Stand
+callback counters in unchanged invalid-topic fixtures are deferred: error checks
+remain valid; no production change or necessary scope expansion. All explicit
+Sol/medium profiles accepted, metadata limitation unchanged.
+
+M26 P2 resolved with a same-line comment naming topic validation and returned
+subscription shape. Deterministic comment correction does not reopen reviewers.
+All canonical concerns disposed; current full tests pass, global branch gate
+still fails at89.39%. Accept bounded packet, not final release.
