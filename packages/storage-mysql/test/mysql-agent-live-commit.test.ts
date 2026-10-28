@@ -44,10 +44,11 @@ import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
 
 const url = process.env.SPINE_TS_MYSQL_URL;
 
-describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", () => {
+describe("MySQL Agent preparation without a database", () => {
   it("drains every started preparation after an earlier preparation fails", async () => {
-    if (url === undefined) throw new Error("Task MySQL URL is required.");
-    const factory = await MysqlStorageFactory.newBuilder().setOptions({ url }).build();
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/offline_agent_preparation" })
+      .build();
     const layout = entityInput() as unknown as EntityStorageInput<
       SupportReplyAgentId,
       SupportReplyAgentState
@@ -89,7 +90,9 @@ describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", (
       await factory.close();
     }
   });
+});
 
+describe.skipIf(url === undefined)("MySQL live Agent conditional persistence", () => {
   it("drains an admitted Agent commit when close starts in the ID callback", async () => {
     if (url === undefined) throw new Error("Task MySQL URL is required.");
     const registry = new StringifierRegistry();

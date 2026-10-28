@@ -2467,3 +2467,26 @@ acquisition and actual probe counts exactly once, while pool creation remains
 one. PostgreSQL probes schema availability; MySQL issues SELECT 1. Parent
 verified the deterministic assertion correction; 101 SQL tests and static checks
 pass, unchanged server evidence is reused. All canonical concerns are disposed.
+
+M34 frozen MySQL index-race cases: 36 affected tests and tooling/lint/cleanup/
+format/diff checks pass; eight incremental unchanged-source hits beyond M32.
+Evidence m34-mysql-index-evidence.md records hash and checks. Original API
+reviewer, explicitly configured Sol/medium, reviews fixture fidelity, physical
+metadata reread after duplicate CREATE, exact compatibility rejection, and repair
+retry without repeated DDL. Parent handles maintainability; no distinct runtime
+reliability contract change requires another lane. API/docs/security source
+changes N/A. No children or reruns; M35 changes disjoint test files only.
+
+M34 API review is clean. Parent maintainability removes two redundant assertions
+that compared only the fake's stored metadata to its own fixed fixture, plus the
+now-unused fixture accessors. Public preparation outcome and exact metadata/DDL
+counts retain the real behavior proof. Deterministic test-only cleanup requires
+the focused suite and static checks, not another specialist review wave.
+
+M34 deterministic cleanup passes 36 tests, tooling typecheck, scoped lint/format
+and diff checks. Parent maintainability is clean; all concerns disposed.
+M35 parent micro review confirms only the two local-preparation cases leave the
+native skip groups; genuine database close/reopen cases keep their guards and
+assertions. With service settings unset, 2 tests pass and 4 native cases skip.
+Type/lint/cleanup/format/diff pass. No new production/API/docs/security concerns;
+no specialist rerun needed for test classification alone.

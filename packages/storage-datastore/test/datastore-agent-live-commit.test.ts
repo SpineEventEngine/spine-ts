@@ -44,7 +44,7 @@ import { DatastoreStorageFactory } from "../src/index.js";
 
 const url = process.env.DATASTORE_EMULATOR_HOST;
 
-describe.skipIf(url === undefined)("Datastore live Agent conditional persistence", () => {
+describe("Datastore Agent preparation without an emulator", () => {
   it("rejects custom storage without invoking its creator during Agent preparation", async () => {
     const factory = DatastoreStorageFactory.newBuilder()
       .setClient(new Datastore({ projectId: "spine-env-lifecycle-datastore" }))
@@ -64,7 +64,9 @@ describe.skipIf(url === undefined)("Datastore live Agent conditional persistence
       await factory.close();
     }
   });
+});
 
+describe.skipIf(url === undefined)("Datastore live Agent conditional persistence", () => {
   it("drains an admitted Agent commit when close starts in the ID callback", async () => {
     const registry = new StringifierRegistry();
     registry.setTypeRegistry(new TypeRegistry([SupportReplyAgentIdSchema]));

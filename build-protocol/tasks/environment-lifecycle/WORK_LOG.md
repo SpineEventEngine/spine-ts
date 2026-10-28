@@ -4626,3 +4626,23 @@ c0eebaab6b17616635498da3c3185441ec25ff1a. M32 deterministic API correction
 passes 101 SQL tests and static checks; parent confirms exact fresh acquisition
 and probe assertions. Server test remains at its independently reviewed hash.
 Commit/push M32 before releasing its MySQL test file for M34.
+
+M35 micro test classification correction selected by parent inspection. Two
+existing cases are incorrectly enclosed by native-service skip groups despite
+requiring no database: Datastore custom Agent storage preparation rejects before
+creator/client use; MySQL preparation-drain case mocks every preparation and
+fails before transaction/pool acquisition. Move these existing cases into ordinary
+non-skipped describes within their current files, leaving actual database cases
+under skipIf and preserving all behavior assertions. For MySQL use an inert
+explicit URL instead of requiring the external-service environment variable;
+assert no pool use if the existing fixture permits without additional mocks.
+No extra tests, source changes, thresholds or infrastructure inventory changes.
+Sole explicit Sol/medium writer queues after M34 freezes. Estimate 0.1–0.2 hour
+for relocation, focused offline run and static checks. Parent mechanical review
+suffices for this micro classification fix; production/API/docs concerns N/A.
+
+M32 push confirmed at 94436cdc5077286bb6b68b33d6df5dcb7c0ab7a0. M34 and M35
+are now accepted: reviewed MySQL competing-index preparation tests (36 pass)
+and two existing offline preparation tests moved out of service skip groups
+(2 pass, 4 genuine native cases remain skipped). Static checks pass; production
+remains unchanged. Commit/push the three test files and records.

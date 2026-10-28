@@ -129,6 +129,35 @@ describe("MysqlStorageFactory builder contract", () => {
       await factory.close();
     }
   });
+  it("accepts a compatible competing Agent history index after duplicate-name creation", async () => {
+    const race = await agentIndexRace();
+    try {
+      await StoragePreparations.for(race.factory).prepareAgentHistory(scope, "create");
+      expect(race.metadataReads()).toBe(2);
+      expect(race.createAttempts()).toBe(1);
+    } finally {
+      await race.factory.close();
+    }
+  });
+
+  it("rejects an incompatible competing Agent index and retries after external repair", async () => {
+    const race = await agentIndexRace();
+    race.setCompatible(false);
+    try {
+      await expect(
+        StoragePreparations.for(race.factory).prepareAgentHistory(scope, "create"),
+      ).rejects.toThrow("index is incompatible");
+      expect(race.metadataReads()).toBe(2);
+      expect(race.createAttempts()).toBe(1);
+      race.setCompatible(true);
+      await StoragePreparations.for(race.factory).prepareAgentHistory(scope, "create");
+      expect(race.metadataReads()).toBe(3);
+      expect(race.createAttempts()).toBe(1);
+    } finally {
+      await race.factory.close();
+    }
+  });
+
   it("rolls back stale Agent admission and optional writes after a late audit failure", async () => {
     const rows = new Map<string, Uint8Array>();
     let staged: Map<string, Uint8Array> | undefined;
@@ -1620,6 +1649,70 @@ function agentMetadataQuery(sql: string, values: readonly unknown[], repaired: b
   if (repaired && sql.includes("table_name IN (?)"))
     return Promise.resolve([(values[0] as string[]).map(() => ({ engine: "InnoDB" })), []]);
   return mysqlQuery(sql);
+}
+
+function completeHistoryIndexMetadata(name: string) {
+  const columns = AgentHistoryIndexes.find(([indexName]) => indexName === name)?.[1];
+  if (columns === undefined) throw new Error("Missing declared Agent history index fixture.");
+  return columns.map((column_name, index) => ({
+    index_name: name,
+    column_name,
+    seq_in_index: index + 1,
+    non_unique: 1,
+    sub_part: null as number | null,
+    collation: "A",
+    index_type: "BTREE",
+  }));
+}
+
+function racingIndexQuery(
+  name: string,
+  completeMetadata: ReturnType<typeof completeHistoryIndexMetadata>,
+) {
+  const state = { appeared: false, compatible: true, metadata: [] as typeof completeMetadata };
+  const query = vi.fn((sql: string, values: readonly unknown[] = []) => {
+    if (sql.includes("AND index_name=?") && values[1] === name) {
+      state.metadata = !state.appeared
+        ? []
+        : state.compatible
+          ? completeMetadata
+          : completeMetadata.map((row, index) => (index === 0 ? { ...row, sub_part: 8 } : row));
+      return Promise.resolve([state.metadata, []]);
+    }
+    if (sql.startsWith(`CREATE INDEX \`${name}\``)) {
+      state.appeared = true;
+      return Promise.reject(
+        Object.assign(new Error("competing index create"), { code: "ER_DUP_KEYNAME" }),
+      );
+    }
+    return agentMetadataQuery(sql, values, true);
+  });
+  return { query, state };
+}
+
+async function agentIndexRace() {
+  const name = "agent_history_full";
+  const completeMetadata = completeHistoryIndexMetadata(name);
+  const { query, state } = racingIndexQuery(name, completeMetadata);
+  vi.mocked(createPool).mockReturnValue({
+    getConnection: vi.fn(() => Promise.resolve(mysqlConnection(query))),
+    end: vi.fn(() => Promise.resolve()),
+  } as never);
+  const factory = await MysqlStorageFactory.newBuilder()
+    .setOptions({ url: "mysql://db.example/agent_index_race" })
+    .build();
+  return {
+    factory,
+    setCompatible: (value: boolean) => {
+      state.compatible = value;
+    },
+    metadataReads: () =>
+      query.mock.calls.filter(
+        ([sql, values]) => sql.includes("AND index_name=?") && values?.[1] === name,
+      ).length,
+    createAttempts: () =>
+      query.mock.calls.filter(([sql]) => sql.startsWith(`CREATE INDEX \`${name}\``)).length,
+  };
 }
 
 function supportDraftedEvent(
