@@ -358,31 +358,6 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   }
 
   /**
-   * Commits one Agent transition under the Entity scope queue and Version fence.
-   *
-   * @typeParam I Entity identifier type.
-   * @typeParam S Entity state type.
-   * @param entity Configured Entity storage layout.
-   * @param entityId Typed Agent Entity identifier.
-   * @param expectedVersion Version read before the Agent handler ran.
-   * @param input Optional changed Entity state and history.
-   * @param extra Applies or restores the Agent execution record with the Entity state.
-   * @returns Completion after the fenced transition is stored.
-   */
-  commitAgentConditional<I, S extends Message>(
-    entity: EntityStorageInput<I, S>,
-    entityId: I,
-    expectedVersion: number,
-    input: EntityCommitInput<I, S> | undefined,
-    extra: { apply(): void; restore(): void },
-  ): Promise<void> {
-    this.requireOpen();
-    return this.track(() =>
-      this.runAgentConditional(entity, entityId, expectedVersion, input, extra),
-    );
-  }
-
-  /**
    * Performs the captured conditional Agent change.
    *
    * @param entity The Entity persistence contract.
@@ -428,7 +403,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
    * @param key Canonical Entity ID key.
    * @param expectedVersion Version read before handler execution.
    * @param snapshot Optional captured Entity state transition.
-   * @param extra Applies or restores the Agent execution record.
+   * @param extra Applies or restores Agent audit records and model preferences.
    * @returns Completion after the transition is stored.
    */
   private applyAgentConditional<I, S extends Message>(

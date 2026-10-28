@@ -609,34 +609,6 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   }
 
   /**
-   * Reads at most two indexed successor records inside the caller's transaction.
-   *
-   * @param filters Native indexed query predicates.
-   * @param orderProperty Native property containing the complete order key.
-   * @param transaction Current native transaction.
-   * @returns Earliest scoped rows in native order.
-   */
-  async queryTransactionSuccessors(
-    transaction: ReturnType<Datastore["transaction"]>,
-    filters: readonly DatastoreRangeFilter[],
-    orderProperty: string,
-  ): Promise<readonly R[]> {
-    const query = this.#codec.createQuery(this.client);
-    for (const filter of filters)
-      query.filter(
-        new PropertyFilter(
-          filter.property,
-          filter.operator,
-          this.#codec.columnValue(filter.property, filter.value),
-        ),
-      );
-    query.order(orderProperty);
-    query.limit(2);
-    const response = await transaction.runQuery(query, wrappedReadOptions);
-    return DatastoreResults.entities(response).map((entity) => this.#codec.decode(entity));
-  }
-
-  /**
    * Deletes a bounded group of provider entries.
    *
    * @param entries The entries selected by a preceding provider page.

@@ -80,27 +80,6 @@ export class AgentLiveAudit<Id> {
   }
 
   /**
-   * Calculates a complete persisted AgentHistoryRecord, including scope.
-   * @typeParam Schema Generated System payload descriptor.
-   * @param schema Generated System payload descriptor.
-   * @param payload Typed payload to measure.
-   * @returns Encoded complete history row bytes.
-   */
-  historyBytes<Schema extends MessageSchema>(
-    schema: Schema,
-    payload: MessageShape<Schema>,
-  ): number {
-    const event = AgentLiveInteractionEvents.envelope(
-      this.invocation,
-      this.metadata,
-      this.invocation.recipientId,
-      schema,
-      payload,
-    );
-    return AgentHistoryRecords.bytes(this.invocation.stateType, this.agentKey, this.entry(event));
-  }
-
-  /**
    * Commits the original System row with related conversation rows, then publishes it.
    * @typeParam Schema Generated System payload descriptor.
    * @param schema Generated System payload descriptor.

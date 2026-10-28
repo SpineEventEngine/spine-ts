@@ -4783,3 +4783,29 @@ review clean. Four newly covered unchanged-source outcomes, cumulative 46 since
 M26 through M39. M38 deletion changes PostgreSQL entity-commit branch keys, so
 that file is excluded from unchanged-tuple comparison; no new global percentage
 or exact post-deletion remaining count claimed. Commit/push tests and records.
+
+M41 selection accepted: standard paired SQL preparation test slice, estimate
+0.4–0.7 hour implementation, focused/static checks and independent API review.
+Same explicit Sol/medium implementer proceeds after M40 freeze. For each SQL
+adapter, state-only and event-only history configurations must request exactly
+current records, selected history and context EventStore, omit disabled history,
+and acquire no record handles. One coherent layout-column mismatch per adapter
+must reject before pool or SQL access. These cases differ from existing native
+both-history preparation and ordinary physical-record conflict checks. Reuse
+Task Entity declarations and existing metadata/creation hooks; no new fixture
+framework, production changes or broad flag matrix without evidence of a defect.
+
+M40 final diff accepted: three exact unused method deletions plus one surviving
+memory-helper TSDoc correction naming audit records/model preferences. Independent
+API selection confirmed no callers or supported exports; parent final diff
+matches. 89 affected tests pass, two native cases skip; generated build/tooling/
+lint/cleanup/TSDoc/format/diff pass. Deterministic comment correction passed
+TSDoc/format, with no additional behavior rerun. Evidence m40-removal-evidence.md.
+Security change is deletion of uncalled internals; live validation, persistence
+and public contracts stay unchanged. No security lane reopened. Commit/push.
+
+After M41 convergence, perform one fresh full Vitest coverage measurement: source
+helper deletions changed four files' branch identities, and 16 focused packets
+have accumulated since M26. This diagnostic is warranted to replace estimates;
+it is not the final release profile. Keep checked-in thresholds and service
+inventory unchanged. Final release verification still follows coverage convergence.

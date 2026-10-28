@@ -2531,3 +2531,10 @@ actual name is m39-lifecycle-evidence.md; review m39-reliability-review.md.
 Parent style inspection accepts reuse of existing gates and domain fixtures.
 No runtime, public API, documentation or security behavior changed. Original
 explicit Sol/medium configuration accepted; introspection unavailable.
+
+M40 accepted: independent API caller/export/retained-validation review clean;
+parent final diff exactly matches approved removals, with one accurate TSDoc
+wording correction. Focused 89 tests and static checks pass. Existing explicit
+Sol/medium reviewer profile confirmed, introspection unavailable. No architecture,
+serialized contract or security execution change. Broad review lanes N/A because
+only uncalled internal methods were deleted; live paths preserved and tested.
