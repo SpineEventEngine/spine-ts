@@ -4230,3 +4230,24 @@ Preserve startup failure semantics; use a fresh configured environment when the
 failed environment is closed/fenced, never add a revival API. No production
 changes, no arbitrary waits or unrelated malformed-input matrix. Parent records
 and read-only SQL compatibility analysis proceed independently.
+
+M23 two server files pass 491/491. Scoped coverage keysets match M19 (7,934
+server branch tuples), six new hits: three registry retry and three PM Event
+tenant guards. No production change. API scan identified one additional required
+client contract case: after successful subscription activation and stream end,
+reconnecting Subscribe receives structured TENANT_UNKNOWN and must terminate,
+cancel the old wire, notify failure and never issue a third Subscribe. Initial
+activation already has coverage; do not add a broad reconnect matrix. Add this
+single scenario to the same frozen batch before review, estimate additional
+0.1–0.2 hours for test/check/review scope. Original sole Sol/medium implementer,
+no children. Reuse server evidence since those files/source remain unchanged.
+
+M23 accepted after clean independent review. All598 affected tests and static
+checks pass, no sourcechanges. Fresh frozen whole-suite diagnostic now passes
+6,218 tests (16skipped),393files(fourskipped),112.98seconds; branchcoverage
+89.28%(20,613/23,086),165hits shortof90. Other dimensions pass: statements
+92.95%,functions94.95%,lines94.83%. This is not release acceptance; native
+Node chain and final-SHA Security remain pending. Raw m23-current-global-coverage
+log/LCOV. Commit/pushM23; continue coverage without thresholds/exclusions changes.
+Human status: ~95%overall estimate, agreedfeatures/reviewdone, remainingcoverage
+and finalverification. No known testfailure or unresolved productionfinding.

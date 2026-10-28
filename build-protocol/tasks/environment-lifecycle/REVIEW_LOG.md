@@ -2138,3 +2138,41 @@ M22 narrow confirmation clean: both accepted P2s resolved, replacement hashes
 match. Original explicit Sol/medium profile accepted; runtime metadata unavailable.
 Parent accepts test maintainability; no remaining findings, all canonical
 concerns disposed. Commit/push two tests and records.
+
+Read-only SQL schema selection completed: only declared PG default and unsupported
+MySQL engine cases remain worthwhile; no broader schema matrix justified. These
+small candidates are deferred. Existing explicit Sol/medium API reviewer next
+inspects browser-client subscription recovery/cancellation coverage, specifically
+connection interruption and TENANT_UNKNOWN terminal behavior under the shared
+environment lifecycle. Exclude unrelated UI and scalar-input branches; no edits,
+tests, builds or children. Recommend only missing end-to-end client behavior.
+
+Client API coverage selection complete, explicit Sol/medium reviewer: one useful
+TENANT_UNKNOWN-on-reconnect test; other EOF/read/cancel paths already covered.
+No production defect asserted and branch gain may be small. Parent accepts this
+contract case into M23 test-only scope, not a new retry policy. Direct response
+retained as assignment evidence; no source/tests edited by reviewer.
+
+M23 frozen three-file test packet: 491 server and 107 client tests pass, tooling,
+scoped ESLint/format, cleanup and diff pass. Existing original Sol/medium reliability
+reviewer checks tenant rejection before state/handler mutation, actual import retry
+and Command dispatch, and terminal reconnect cleanup/error observability. Parent
+handles test maintainability; API/docs/security reopening N/A since no source,
+public contract or prose changed. No children/builds/tests/edits by reviewer.
+
+M23 one fresh full Vitest diagnostic authorized while all source/tests are frozen:
+M21 changed runtime/export and removed substantial tests; old global M19 cannot
+prove current coverage or cross-suite isolation. Current M21 source/type/docs
+checks and M23 test/tooling/static checks are clean. Collect coverage even on
+failure, release timeout15s, unchanged thresholds, no build/proto regeneration.
+This is the first current whole-suite measurement since M21, not a release-profile
+pass or a coverage-threshold override. Parent retains final release gate until
+coverage/review convergence. Raw evidence outside Git, authors hold edits.
+
+M23 independent reliability review clean; all three hashes match. Same original
+explicit Sol/medium profile accepted, runtime metadata unavailable. Parent accepts
+test maintainability; all four canonical concerns disposed. No correction needed.
+Fresh full Vitest diagnostic: 393 files pass, four skipped; 6,218 tests pass,
+16 skipped, zero failures, 112.98 seconds. Branches20,613/23,086=89.28%,
+165 additional hits needed for90. Statements92.95%, functions94.95%, lines94.83%.
+Exit1 solely branch threshold; final release/native chain not run.

@@ -9776,6 +9776,73 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("rejects Process Manager Event replay with absent or foreign tenant before state changes", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const repository = createProcessManagerReactRepository();
+    const context = await BoundedContext.multitenant("Tasks").add(repository).build();
+    const tenantA = createTenantId("tenant-a");
+    await context.tenantIndex.keep(tenantA);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: tenantA },
+      storageFactory: factory,
+    });
+    const target = requireEntityInboxTarget(repository);
+    const receivedAt = new Date("2026-08-11T05:00:00.000Z");
+    const missingDelivery = await storePmInboxEvent(
+      delivery,
+      createProjectCreated("pm-event-no-delivery", "pm-event-replay", {
+        importTenantId: "tenant-a",
+      }),
+      receivedAt,
+      1n,
+    );
+    const missingStored = await storePmInboxEvent(
+      delivery,
+      createProjectCreated("pm-event-no-stored", "pm-event-replay"),
+      receivedAt,
+      2n,
+    );
+    const foreignStored = await storePmInboxEvent(
+      delivery,
+      createProjectCreated("pm-event-foreign", "pm-event-replay", {
+        importTenantId: "tenant-b",
+      }),
+      receivedAt,
+      3n,
+    );
+    try {
+      const beforeCalls = RoutingProcessManager.eventCalls;
+      const beforeState = await context.stand().read(ProjectQueueStateSchema, "pm-event-replay", {
+        tenantId: tenantA,
+      });
+      expect(beforeState).toBeUndefined();
+      await expect(target.replay(missingDelivery)).rejects.toThrow(/requires tenantId/);
+      await expect(target.replay(missingStored, tenantA)).rejects.toThrow(
+        "Entity Inbox replay requires stored event tenant metadata.",
+      );
+      await expect(target.replay(foreignStored, tenantA)).rejects.toThrow(
+        "Entity Inbox replay stored event tenant does not match.",
+      );
+      expect(RoutingProcessManager.eventCalls).toBe(beforeCalls);
+      await expect(
+        context.stand().read(ProjectQueueStateSchema, "pm-event-replay", {
+          tenantId: tenantA,
+        }),
+      ).resolves.toEqual(beforeState);
+      await target.replay(missingDelivery, tenantA);
+      expect(RoutingProcessManager.eventCalls).toBe(beforeCalls + 1);
+      await expect(
+        context.stand().read(ProjectQueueStateSchema, "pm-event-replay", {
+          tenantId: tenantA,
+        }),
+      ).resolves.toMatchObject({ queue: "Task reacted" });
+    } finally {
+      await context.close();
+    }
+  });
+
   it("guards repeated Process Manager inbox replay per target with the retained source event", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();

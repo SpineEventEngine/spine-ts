@@ -1727,6 +1727,69 @@ describe("Client", () => {
     await client.close();
   });
 
+  it("stops reconnecting when a previously accepted tenant becomes unknown", async () => {
+    const unknown = new ConnectError("Tenant is not registered.", Code.NotFound, undefined, [
+      { desc: ErrorSchema, value: create(ErrorSchema, { type: "TENANT_UNKNOWN" }) },
+    ]);
+    let subscribes = 0;
+    const cancelled: string[] = [];
+    const streamEnd = Promise.withResolvers<undefined>();
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              if (subscribes === 2) throw unknown;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "accepted-tenant" }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel")
+              cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+            return create(ResponseSchema);
+          },
+          undefined,
+          () =>
+            (async function* () {
+              await streamEnd.promise;
+              yield* emptyUpdates();
+            })(),
+        ),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    try {
+      await subscription.activate();
+      streamEnd.resolve(undefined);
+      await expect(updates.next()).rejects.toBe(unknown);
+      await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+      await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+      await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+      await expect(lifecycle.next()).resolves.toMatchObject({
+        value: { state: "failed", error: unknown },
+      });
+      expect(cancelled).toEqual(["accepted-tenant"]);
+      expect(subscribes).toBe(2);
+    } finally {
+      streamEnd.resolve(undefined);
+      await client.close();
+    }
+    expect(subscribes).toBe(2);
+  });
+
   it("cleans an initially accepted wire when Activate iterator setup fails before retrying", async () => {
     let subscribes = 0;
     const cancelled: string[] = [];

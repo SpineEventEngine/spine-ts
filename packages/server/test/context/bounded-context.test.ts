@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -2121,6 +2121,41 @@ describe("BoundedContext assembly", () => {
         .add(GeneratedTaskAggregate)
         .build(),
     ).rejects.toThrow("must exist and be readable");
+  });
+
+  it("retries a failed generated registry import from the same root and dispatches its Command", async () => {
+    const registry = createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
+    const original = readFileSync(registry.registryPath, "utf8");
+    writeFileSync(registry.registryPath, 'throw new Error("temporary registry import failure");\n');
+    const loader = vi.spyOn(GeneratedRegistryDiscovery.prototype, "load");
+    let context: BoundedContext | undefined;
+    try {
+      await expect(
+        BoundedContext.singleTenant("RegistryRetry")
+          .withGeneratedRegistryRoot(registry.root)
+          .add(ReplayTaskAggregate)
+          .build(),
+      ).rejects.toMatchObject({
+        code: "MODULE_IMPORT_FAILED",
+      });
+      expect(serverEnvironmentAccess.openContexts(ServerEnvironment.instance())).toEqual([]);
+      writeFileSync(registry.registryPath, original);
+      context = await BoundedContext.singleTenant("RegistryRetry")
+        .withGeneratedRegistryRoot(registry.root)
+        .add(ReplayTaskAggregate)
+        .build();
+      expect(loader.mock.calls.at(-1)?.[0].cacheBust).toBe("retry-1");
+      await context.commandBus().post(createAggregateCommand("registry-retry", "recovered-task"));
+      await expect(
+        context.stand().read(ProjectStateSchema, "recovered-task"),
+      ).resolves.toMatchObject({
+        name: "Task Ready",
+      });
+    } finally {
+      await context?.close();
+      loader.mockRestore();
+      removeGeneratedRegistry(registry);
+    }
   });
 
   it("fails clearly when generated metadata is missing for an entity class", async () => {
