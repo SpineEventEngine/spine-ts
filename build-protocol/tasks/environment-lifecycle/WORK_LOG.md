@@ -4502,3 +4502,121 @@ review confirms deterministic runtime-first overlap, one retained pool, no early
 close, and one final close. Parent accepts test maintainability. Coverage adds
 one new tuple beyond M28; MySQL adds distinct behavior proof without another
 tuple. No global result claimed. Commit/push both provider tests and records.
+
+M31 push confirmed: local and official feature ref both resolve to
+00e5a8e04a17ce34a32df571af4c2be6b4fcd15e; working tree was clean.
+
+M32 coverage selection continues in the existing worktree. Estimate 0.5–1 hour
+for selection, grouped meaningful lifecycle tests, focused checks, review and
+push; revise if the remaining branches mostly represent defensive checks.
+Reuse the existing API reviewer and reliability reviewer, each originally
+explicitly dispatched as gpt-6-sol / medium (immutable configured profiles;
+actual runtime metadata is unavailable). Their independent read-only assignments
+are SQL/Datastore retained factory lifecycle and context/environment/Delivery
+lifecycle respectively. Compare rebuilt M26 LCOV, changed-line inventory, and
+existing tests including native tests. Return only missing supported behaviors,
+not guard matrices or duplicate tests. No children, edits, or test runs. Parent
+checks Agent commit close/preference coverage separately. Sole implementer remains
+available for the selected batch. No new architectural decision is requested.
+
+M32 provider selection accepted: explicit shared connection checks after ordinary
+CRUD has established a retained pool are distinct from temporary checks and
+tenant preparation. Add one behavior case per SQL provider: transient probe
+failure surfaces, retains the existing pool, allows subsequent CRUD and a
+successful explicit retry, and releases the pool exactly once at factory close.
+Use existing fixtures; no extra concurrency solely for coverage. Original
+implementer gpt-6-sol / medium remains the sole test writer, explicit dispatch
+profile previously confirmed. Estimated 0.3–0.6 hour including focused checks,
+review and push, within the current pass estimate.
+
+Parent inspection rejects Agent commit post-close/preference-read additions:
+both SQL native live-commit suites already prove these behaviors. Any URL
+restoration gaps examined are defensive cases; no tests selected there.
+
+M32 server selection accepted in the same lifecycle batch: close the environment
+while remote Delivery.open() is pending, then allow it to succeed. Prove setup
+rejects before Delivery construction, close joins cleanup, resources close once,
+and no Delivery/context is usable. Existing cases cover rejection or transport
+setup closure separately. Sole implementer receives this case with the two SQL
+cases; combined estimate stays 0.5–1 hour. Independent API/reliability selectors
+completed with source evidence in m32-provider-selection.md and
+m32-server-lifecycle-selection.md; no further test groups from their scopes.
+
+M33 candidate inspection is separate from active M32 files: Datastore live Agent
+audit appendAll enforces existing provider record, entity-group and transaction
+payload limits. Parent found immutable persisted-row retries and rollback already
+covered, but no batch-capacity evidence. Original API reviewer (explicit
+Sol/medium profile) checks whether valid audit data can reach these limits and
+whether one concise atomic-rejection scenario is worthwhile, comparing native
+and fake-backend suites. No edits/check runs/children. Do not repeat single append
+ordering-key validation or add an arbitrary malformed-input matrix. Estimate
+0.1–0.2 hour selection; implementation estimate follows evidence.
+
+Parent identifies a separate live Agent atomicity candidate in memory: after a
+valid state/history/audit commit, another handle changes model preferences alone
+at the same Entity version. A later state/history/audit commit with the old
+preference image must fail and restore all existing records. Current memory
+live-commit tests cover stale Entity version, preference-only stale writes and
+concurrent preference-only winners, but not rollback after changed current/state
+history has been applied. Original reliability reviewer, explicit Sol/medium,
+checks this exact gap against existing tests before implementation. Read-only,
+no children or checks. This is normal live persistence, not execution recovery.
+
+M33 audit selection accepted with refinement: use the existing Datastore fake
+backend because the row-size check occurs before any native transaction. A valid
+typed GenerationResponse exceeds the published per-record capacity; submitting
+it after a small Event must reject before transactionCalls changes and persist
+nothing. A later valid batch on the same handle must persist/read exact entries.
+No 25-row or total-payload matrix: the live audit caller emits at most two rows.
+Original API reviewer confirmed this test placement avoids duplicating native
+SDK behavior. Estimated 0.2–0.4 hour including focused checks and review; queue
+after M32 freezes, same sole explicit Sol/medium implementer.
+
+M32 parent pre-freeze review requests an explicit successful close assertion and
+a rejection-safe settlement observer, because allSettled cleanup alone would
+hide a close rejection. Also establish that close is pending after scheduled
+continuations, rather than asserting an immediately unset flag. Writer received
+these bounded corrections before review; no production behavior changes.
+
+M33 memory atomicity selection confirmed by original reliability reviewer:
+existing tests do not exercise stale preferences after current and state-history
+writes. Add the public-handle stale-image rollback/retry scenario documented in
+m33-agent-commit-selection.md to storage/test/entity/agent-live-commit.test.ts.
+One sole writer handles both M33 files after M32 freezes. Combined M33 estimate
+0.4–0.7 hour including focused tests, static gates and independent review.
+
+M32 cumulative unchanged-source branch union is 24 new hits since rebuilt M26,
+with matching keys in every packet; estimated remaining count 115. This is
+planning evidence only; no new global rate is claimed.
+
+M33 Datastore assertion exposed synchronous admission validation in appendAll.
+No rejection-timing contract change is required: normal awaited application
+calls observe the same failure, and existing storage APIs also validate during
+admission. Keep production unchanged; an async test call wrapper asserts the
+failure while still proving no transaction or rows and a later valid append.
+This test does not establish a new promise-only failure guarantee.
+
+M34 bounded read-only selection: parent found MySQL Agent history index creation
+has explicit concurrent CREATE INDEX handling (ER_DUP_KEYNAME followed by exact
+metadata verification). Existing native history tests cover missing and invalid
+indexes, but initial search found no competing-creator case. Original API
+reviewer, explicit Sol/medium, checks this exact supported startup situation and
+whether one concise correct/incorrect competing-definition test is warranted.
+No edits, test runs or children. Estimate 0.1–0.2 hour selection; do not repeat
+native missing-index or schema-default cases already covered.
+
+M34 selection accepted: two MySQL public prepareAgentHistory(create) cases cover
+a competing index creator. A duplicate-name result must be followed by exact
+metadata verification: compatible definition succeeds; incompatible definition
+fails and a retry after external repair succeeds without another CREATE. Reuse
+existing metadata fixture and declared index definitions, no private mocks.
+Existing native tests concern pre-existing indexes, not the race window. Same
+sole explicit Sol/medium implementer proceeds after M32 correction and M33
+freeze. Estimate 0.3–0.5 hour for implementation, focused/static checks, review
+and push. Public contracts and production remain unchanged absent a proven bug.
+
+M33 accepted after both independent reviews: 56 affected tests and static checks
+pass. Oversized typed Datastore audit rejection and live memory stale-preference
+rollback/retry are proven without production changes. Three new baseline branch
+outcomes are recorded; no full-suite coverage result claimed. Commit/push this
+frozen pair while M32 deterministic SQL assertions are finalized separately.

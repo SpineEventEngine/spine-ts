@@ -24,12 +24,17 @@ import { describe, expect, it } from "vitest";
 import {
   SupportReplyAgentIdSchema,
   SupportReplyAgentStateSchema,
+  type SupportReplyAgentId,
+  type SupportReplyAgentState,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
 import { AgentHistoryStorageFactories } from "../../src/internal/agent-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
 import { InMemoryStorageBackend } from "../../src/memory/in-memory-storage-backend.js";
-import { MemoryEntityStorageFactory } from "../../src/memory/in-memory-entity-history.js";
+import {
+  InMemoryEntityStorage,
+  MemoryEntityStorageFactory,
+} from "../../src/memory/in-memory-entity-history.js";
 import { StoragePreparations } from "../../src/internal/storage-preparation.js";
 import { vi } from "vitest";
 import { entityInput } from "./agent-live-fixtures.js";
@@ -151,6 +156,98 @@ describe("live Agent conditional persistence", () => {
       history.close();
       await commits.close();
       await factory.close();
+    }
+  });
+
+  it("rolls back current, state history, and audit on a late preference conflict", async () => {
+    const backend = new InMemoryStorageBackend();
+    const firstFactory = new InMemoryStorageFactory(backend);
+    const secondFactory = new InMemoryStorageFactory(backend);
+    const layout = { ...entityInput(), stateHistory: true };
+    const first = EntityCommitStorageFactories.create(firstFactory, layout);
+    const second = EntityCommitStorageFactories.create(secondFactory, layout);
+    const states = firstFactory.createEntityStorage(layout) as InMemoryEntityStorage<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    const history = AgentHistoryStorageFactories.create(firstFactory, {
+      context: layout.context,
+      stateType: layout.stateSchema.typeName,
+      id: { key: (id: ReturnType<typeof createAgentId>) => id.ticketNumber },
+    });
+    const entityId = createAgentId();
+    const selection = [
+      create(ModelPreferenceSchema, {
+        kind: AiModelKind.GENERATION,
+        selection: { case: "inheritRepositoryDefault", value: create(EmptySchema) },
+      }),
+    ];
+    const firstAudit = conversation("first", "dialog", create(TimestampSchema, { seconds: 1n }));
+    const secondAudit = conversation("second", "dialog", create(TimestampSchema, { seconds: 2n }));
+    const state = (version: number, proposedReply: string) =>
+      create(EntityRecordSchema, {
+        entityId: layout.id.pack(entityId),
+        state: AnyPacker.pack(
+          SupportReplyAgentStateSchema,
+          create(SupportReplyAgentStateSchema, { id: entityId, proposedReply }),
+        ),
+        version: create(VersionSchema, { number: version }),
+      });
+    const v1 = state(1, "first");
+    const v2 = state(2, "second");
+    const proposed = {
+      entityId,
+      expectedVersion: 1,
+      historyEntries: [secondAudit],
+      entityCommit: {
+        context: layout.context,
+        entity: layout,
+        entityId,
+        next: v2,
+        states: [v2],
+      },
+    };
+    try {
+      await first.commitAgent({
+        entityId,
+        expectedVersion: 0,
+        expectedPreferences: undefined,
+        preferences: [],
+        entityCommit: { context: layout.context, entity: layout, entityId, next: v1, states: [v1] },
+        historyEntries: [firstAudit],
+      });
+      await second.commitAgent({
+        entityId,
+        expectedVersion: 1,
+        expectedPreferences: [],
+        preferences: selection,
+      });
+      await expect(
+        first.commitAgent({ ...proposed, expectedPreferences: [], preferences: [] }),
+      ).rejects.toThrow(/preference|conflict/i);
+      expect(await states.current.read(entityId)).toEqual(v1);
+      expect(await states.states.backward(entityId, 10)).toEqual([v1]);
+      expect((await history.read({ entityId, view: { kind: "full" }, count: 10 })).entries).toEqual(
+        [firstAudit],
+      );
+      expect(await first.readAgentPreferences(entityId)).toEqual(selection);
+      expect(await second.readAgentPreferences(entityId)).toEqual(selection);
+      await first.commitAgent({
+        ...proposed,
+        expectedPreferences: selection,
+        preferences: selection,
+      });
+      expect(await states.current.read(entityId)).toEqual(v2);
+      expect(await states.states.backward(entityId, 10)).toEqual([v2, v1]);
+      expect((await history.read({ entityId, view: { kind: "full" }, count: 10 })).entries).toEqual(
+        [secondAudit, firstAudit],
+      );
+      expect(await first.readAgentPreferences(entityId)).toEqual(selection);
+    } finally {
+      states.close();
+      history.close();
+      await Promise.all([first.close(), second.close()]);
+      await Promise.all([firstFactory.close(), secondFactory.close()]);
     }
   });
 

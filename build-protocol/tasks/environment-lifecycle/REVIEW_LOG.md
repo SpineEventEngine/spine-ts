@@ -2424,3 +2424,40 @@ M31 reliability review is clean and frozen hashes match. Both public-path tests
 exercise the pending runtime join with deterministic gate ordering. Parent
 maintainability is clean; API/docs N/A remains justified. All canonical concerns
 are disposed, source and security-review hashes remain unchanged.
+
+M32 frozen lifecycle batch: three files, 133 focused tests, build/tooling/lint/
+cleanup/format/diff checks pass. Evidence m32-lifecycle-evidence.md includes file
+hashes. Scoped coverage adds six new SQL factory tuples beyond earlier packets;
+it is not a global percentage. Original API reviewer (explicit gpt-6-sol/medium)
+reviews retained shared SQL check failure/retry semantics and cleanup. Original
+reliability reviewer (explicit gpt-6-sol/medium) reviews the environment close
+versus remote-open ordering and assertions. Parent handles maintainability;
+public API and documentation changes are N/A because production is unchanged.
+Collect both before any correction batch. No child spawning or repeated checks.
+M33 writer operates only in separate test files after M32 freeze.
+
+M32 complete review wave: reliability clean and frozen hash matches. API reviewer
+finds one accepted P2: successful retry must demonstrably issue another physical
+probe, rather than merely resolve. Add exact acquisition and SELECT 1 count
+changes around the retry in each SQL case, retaining the same pool assertions.
+Parent otherwise accepts maintainability. Same implementer receives one bounded
+correction batch; focused/static checks follow, parent verifies deterministic
+assertions without reopening specialist lanes. Estimate under 0.2 hour.
+
+M33 frozen two-file test batch: 56 focused tests and tooling/lint/cleanup/format/
+diff checks pass. Evidence m33-agent-evidence.md contains hashes and exact three
+new baseline branch hits. Original API reviewer (explicit Sol/medium) reviews
+Datastore typed oversize rejection before transaction and later valid append.
+Original reliability reviewer (explicit Sol/medium) reviews memory stale-
+preference rollback and exact successful retry through public storage handles.
+Parent checks maintainability. Public API/docs N/A: no production or prose
+contract changes. Current security source hashes remain unchanged. No child
+spawning or check reruns; collect both before one correction batch.
+
+M33 complete review wave is clean; both frozen hashes match. Parent accepts
+maintainability. Memory test proves rollback of current/state-history writes;
+the preference check precedes new audit staging, so its audit assertion proves
+unchanged audit history, not reversal of an already staged audit record. All
+canonical concerns are disposed. No production changes; security source hashes
+remain current. Commit the two test files and accepted records, preserving M32
+SQL correction files.

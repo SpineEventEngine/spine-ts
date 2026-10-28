@@ -17,6 +17,7 @@ import { AnySchema, EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt"
 import {
   AgentHistoryEntrySchema,
   AiModelKind,
+  GenerationResponseSchema,
   ModelPreferenceSchema,
 } from "@spine-event-engine/proto/agent";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
@@ -29,6 +30,7 @@ import {
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import {
+  AgentHistoryRecords,
   AgentHistoryStorageFactories,
   EntityCommitStorageFactories,
 } from "@spine-event-engine/storage/provider";
@@ -51,6 +53,7 @@ import {
   conversation,
   event as agentEvent,
   occurredAt,
+  response as agentResponse,
   scope as agentScope,
 } from "../../../storage/test/entity/agent-history-fixtures.js";
 // prettier-ignore
@@ -149,16 +152,61 @@ function draftedEvent(id: string, agent: SupportReplyAgentId, reply: string, ver
     },
   });
 }
-function factory(backend: HistoryDatastoreBackend) {
+function factory(backend: HistoryDatastoreBackend, client = backend.client()) {
   const stringifiers = new StringifierRegistry();
   stringifiers.setTypeRegistry(new TypeRegistry([TaskIdSchema, TaskSchema, TaskCreatedSchema]));
   return DatastoreStorageFactory.newBuilder()
-    .setClient(backend.client() as never)
+    .setClient(client as never)
     .setStringifierRegistry(stringifiers)
     .build();
 }
 
 describe("Datastore generated Entity records", () => {
+  it("rejects an oversized late Agent audit row before opening a transaction and permits retry", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const store = factory(backend, client);
+    const history = AgentHistoryStorageFactories.create(store, agentScope);
+    const small = agentEvent("capacity-first", occurredAt(1_789_200_010n), false);
+    const normal = agentResponse("capacity-response", "dialog", occurredAt(1_789_200_011n));
+    const oversized = fromBinary(
+      AgentHistoryEntrySchema,
+      toBinary(AgentHistoryEntrySchema, normal),
+    );
+    if (oversized.item.case !== "conversationRecord") throw new Error("Expected response fixture.");
+    const original = AnyPacker.tryUnpack(oversized.item.value.content, GenerationResponseSchema);
+    if (original === undefined) throw new Error("Expected GenerationResponse fixture.");
+    oversized.item.value.content = AnyPacker.pack(
+      GenerationResponseSchema,
+      create(GenerationResponseSchema, { ...original, rawOutput: "x".repeat(1_000_000) }),
+    );
+    expect(AgentHistoryRecords.bytes(agentScope.stateType, "ticket", oversized)).toBeGreaterThan(
+      1_000_000,
+    );
+    const before = client.transactionCalls;
+    try {
+      await expect(async () => {
+        await history.appendAll("ticket", [small, oversized]);
+      }).rejects.toThrow("Datastore entity limit");
+      expect(client.transactionCalls).toBe(before);
+      expect(backend.entities.size).toBe(0);
+      await history.appendAll("ticket", [small, normal]);
+      expect(client.transactionCalls).toBe(before + 1);
+      const page = await history.read({
+        entityId: "ticket",
+        view: { kind: "full" },
+        count: 3,
+        maxBytes: 100_000,
+      });
+      expect(page.entries.map((entry) => toBinary(AgentHistoryEntrySchema, entry))).toEqual(
+        [normal, small].map((entry) => toBinary(AgentHistoryEntrySchema, entry)),
+      );
+    } finally {
+      history.close();
+      await store.close();
+    }
+  });
+
   it("retries an Agent audit group after the commit applied but its result was lost", async () => {
     const backend = new HistoryDatastoreBackend();
     const store = factory(backend);
