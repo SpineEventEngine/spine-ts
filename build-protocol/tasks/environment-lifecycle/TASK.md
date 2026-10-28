@@ -30,9 +30,10 @@ preparation APIs are verified, independently reviewed and pushed. Protocol integ
 and remaining AnyPacker adoption are verified, independently reviewed and pushed.
 Final documentation, native evidence, specialist review and security review
 are accepted. The version-only commit for all 35 workspace manifests is pushed.
-Full-suite regression corrections are implemented, reviewed and pushed. The latest full diagnostic run passes all 6,218 tests (16 skipped) in 112.98
-seconds. Branch coverage is 89.28% (20,613/23,086), requiring another 165
-covered branches to reach 90%; the other three coverage measures pass.
+Full-suite regression corrections are implemented, reviewed and pushed. The latest full diagnostic run (M43 at 19549e68c) passes all 6,243 tests
+(14 skipped) in 107.31 seconds. Branch coverage is 89.65% (20,609/22,986),
+requiring another 79 covered branch outcomes to reach 90%; the other three
+coverage measures pass. This replaces the earlier M26 and pre-M26 measurements.
 M20 fixture isolation and M21 adapter recovery removal are verified and reviewed.
 Focused coverage work continues; final release acceptance remains pending.
 Exact-final-SHA remote CI remains pending. On 2026-10-28 the human additionally

@@ -1620,14 +1620,6 @@ export interface RepositoryAccess {
   producedEventSchemas(repository: RepositoryView): readonly MessageSchema[];
 
   /**
-   * Returns Command outcomes declared by generated handlers in this repository.
-   *
-   * @param repository Registered repository to inspect.
-   * @returns Generated Command outcome descriptors.
-   */
-  producedCommandSchemas(repository: RepositoryView): readonly MessageSchema[];
-
-  /**
    * Returns the Agent's registered live model policy.
    *
    * @param repository Agent repository registration.
@@ -1860,13 +1852,6 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     }
 
     return schemas;
-  },
-
-  producedCommandSchemas(repository: RepositoryView): readonly MessageSchema[] {
-    const routing = repositoryRoutings.get(repository);
-    if (routing === undefined)
-      throw new TypeError("Produced Command schemas require a Repository instance.");
-    return routing.producedCommandSchemas;
   },
 
   agentConfiguration(repository: RepositoryView) {
@@ -7985,13 +7970,6 @@ export const RepositoryStand = {
       lifecycle,
     });
   },
-
-  /**
-   * Maps one Event position to its Process Manager producer version.
-   *
-   * @param sequence One-based position among produced Events.
-   * @returns Producer sequence number for Event metadata.
-   */
 };
 Object.freeze(RepositoryStand);
 
@@ -7999,56 +7977,6 @@ Object.freeze(RepositoryStand);
  * Internal repository tenants operations.
  */
 const RepositoryTenants = {
-  /**
-   * Builds tenant-aware storage context for Entity inbox delivery.
-   *
-   * @param context Bounded context storage mode.
-   * @param tenantId Delivery tenant when multitenant.
-   * @returns Storage context for durable Entity inbox rows.
-   */
-  entityInboxDeliveryContext(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
-    if (!context.multitenant) {
-      return Object.freeze({ name: context.name, multitenant: false });
-    }
-
-    const tid = tenantId;
-    if (tid === undefined) {
-      throw new Error(`Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`);
-    }
-
-    return Object.freeze({
-      name: context.name,
-      multitenant: true,
-      tenantId: RepositoryTenants.require(tid),
-    });
-  },
-
-  /**
-   * Builds tenant-aware storage context for Projection inbox delivery.
-   *
-   * @param context Bounded context storage mode.
-   * @param tenantId Delivery tenant when multitenant.
-   * @returns Storage context for durable Projection inbox rows.
-   */
-  projectionDeliveryContext(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
-    if (!context.multitenant) {
-      return Object.freeze({ name: context.name, multitenant: false });
-    }
-
-    const tid = tenantId;
-    if (tid === undefined) {
-      throw new Error(
-        `Multitenant projection inbox handoff for "${context.name}" requires tenantId.`,
-      );
-    }
-
-    return Object.freeze({
-      name: context.name,
-      multitenant: true,
-      tenantId: RepositoryTenants.require(tid),
-    });
-  },
-
   /**
    * Validates an Event tenant before Projection inbox handoff.
    *

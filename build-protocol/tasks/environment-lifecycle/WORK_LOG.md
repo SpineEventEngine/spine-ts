@@ -4853,3 +4853,63 @@ M41 final accepted and frozen: 111 tests and scoped static gates pass after the
 two assertion/fixture corrections. No production changes. Current generated build
 passed before this test-only correction. Commit/push paired tests and records,
 then start M43 one fresh full diagnostic at the exact pushed revision.
+
+M43 accepted mechanical evidence: original explicit gpt-6-luna/low function,
+runtime introspection unavailable. Single current full run at 19549e68c:
+395 files pass, 2 skip; 6,243 tests pass, 14 skip; 107.31 seconds. Exit 1 solely
+for branch threshold. Statements 93.32% (34458/36921), branches 89.65%
+(20609/22986), functions 95.35% (8859/9291), lines 95.17% (31295/32882).
+Seventy-nine additional branch outcomes needed at this exact denominator.
+Task summary updated; fresh m43-changed-source-misses.json supersedes M30 and
+cumulative tuple estimates. Evidence outside Git; no full release run yet.
+
+M44 coverage selection uses current M43 evidence, not old tuple estimates. Parent
+intersected branch locations with actual changed line ranges into
+m43-changed-line-misses.json outside Git (M43's first inventory lists complete
+changed files). Two independent read-only selections: existing explicit
+Sol/medium API reviewer checks surviving live AI adapter/runtime behavior after
+replay removal; existing explicit Sol/medium reliability reviewer checks retained
+provider storage/Agent commit failure paths. Request a coherent batch of useful
+cases, reuse existing fixtures, and exclude duplicate native cases, private-state
+forcing and arbitrary malformed-input matrices. No tests, edits or children.
+Estimate 0.2–0.3 hour for selection and bounded implementation estimate afterward.
+Parent handles repository/event retention paths separately. Final release profile
+remains deferred until branch coverage reaches 90% under unchanged configuration.
+
+M45 standard bounded repository cleanup selected from fresh unhit-function and
+caller scans. Remove unused RepositoryTenants.entityInboxDeliveryContext and
+projectionDeliveryContext (old per-tenant Inbox construction, contradicted by
+approved shared single-tenant Inbox); remove internal repositoryAccess
+producedCommandSchemas method plus interface signature (old BoundedContext Agent
+recovery caller removed). Preserve routing.producedCommandSchemas data and live
+lookup uses. Also remove the orphan TSDoc immediately before RepositoryStand's
+closing brace, left after its described method was deleted. Do not expand into
+unrelated pre-existing executionTimestamp dead helper. Current source/test search
+finds no callers of the selected methods; origin/master proves their removed
+handoff/recovery callers. Sole existing explicit Sol/medium writer handles
+repository.ts only while M44 read-only selections continue independently.
+Estimate 0.2–0.4 hour for deletion, affected existing tests/build/static and
+focused independent maintainability/API disposition; no new behavior tests.
+
+Continuation status: approximately 95% complete; remaining estimate 2–4 hours
+for useful coverage, review, release verification and final-SHA Security run.
+Desktop supports explicit required child profiles; reuse the existing immutable
+Sol/medium assignments (both fields explicit in their original dispatch;
+runtime introspection unavailable). M45 independent API review now checks the
+frozen repository-only diff, active callers and supported surface. Parent
+maintainability review remains bounded to the same deletion.
+
+M46 standard test slice: sole existing implementer adds the M44 selected
+Datastore full-Agent preparation failure/retry and real live AI correction
+history test, in their existing test files only. Estimate 0.4–0.7 hour including
+focused tests/static checks and review. Preserve genuine domain fixtures and
+assert original failure, exact metadata families, retry and audit associations.
+No production changes without evidence. Independent reliability selection may
+inspect whole changed files for meaningful untested user behavior, rather than
+limiting to changed lines. Avoid duplicate native cases and defensive matrices.
+
+M45 accepted: independent API review clean, parent deletion diff review clean;
+521 focused tests and generated build/tooling/lint/cleanup/TSDoc/format/diff pass.
+Three uncalled internal helpers and orphan TSDoc removed. Current source hash
+matches frozen evidence. Commit and immediate push of cleanup plus current
+progress/review records; M46 test work continues in disjoint files.

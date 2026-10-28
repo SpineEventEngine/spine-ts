@@ -2560,3 +2560,16 @@ and truthful EntityRecord entity_id Any column are present in both test files.
 Parent final diff confirms the complete accepted batch; no substantive behavior
 or review concern changed. No specialist lane reopened. Original explicit
 Sol/medium reviewer profile accepted; runtime introspection unavailable.
+
+### M45 repository cleanup
+
+Independent TypeScript/API reviewer: existing adapter_api_review, original
+explicit gpt-6-sol/medium dispatch; configured profile confirmed, runtime
+introspection unavailable. Clean: no callers or supported exports of deleted
+helpers; shared Inbox tenant validation and live produced-Command schema data
+remain intact. Parent maintainability diff review confirms only 72 obsolete
+lines deleted, no replacement abstraction. Reliability disposition uses caller
+proof plus 521 passing affected tests; no new lifecycle behavior. Documentation
+is deletion of obsolete internal TSDoc only. Security delta removes unreachable
+code and does not alter active checks. No findings or correction batch.
+Evidence: m45-api-review.md and m45-repository-cleanup.md outside Git.
