@@ -4496,3 +4496,9 @@ files (two in its named Datastore source), while seven M30 hits repeat M27.
 Evidence: m30-cumulative-coverage-gain.json. This is incremental planning evidence,
 not a new full-suite percentage. Commit/push the three frozen server test files
 and records while preserving M31 provider edits.
+
+M31 accepted: 99 affected SQL tests and static checks pass. Independent reliability
+review confirms deterministic runtime-first overlap, one retained pool, no early
+close, and one final close. Parent accepts test maintainability. Coverage adds
+one new tuple beyond M28; MySQL adds distinct behavior proof without another
+tuple. No global result claimed. Commit/push both provider tests and records.

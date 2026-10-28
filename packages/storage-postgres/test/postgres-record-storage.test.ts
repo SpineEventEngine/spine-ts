@@ -474,6 +474,66 @@ describe("Postgres record storage", () => {
     expect(driver.end).toHaveBeenCalledOnce();
   });
 
+  it("joins explicit tenant checking to a pending runtime database without a second pool", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<{ url: string; schema: string }>();
+    const resolver = vi.fn(() => {
+      entered.resolve(undefined);
+      return release.promise;
+    });
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .setTenantResolver(resolver)
+      .build();
+    const context = { name: "tenant", multitenant: true as const, tenantId: tenantId("joined") };
+    const spec = recordSpec();
+    const records = factory.createRecordStorage(context, spec);
+    const reading = records.read("missing");
+    let readSettled = false;
+    void reading.then(
+      () => {
+        readSettled = true;
+      },
+      () => {
+        readSettled = true;
+      },
+    );
+    try {
+      await entered.promise;
+      const checking = StoragePreparations.for(factory).prepareRecord(
+        context,
+        spec,
+        undefined,
+        "check",
+      );
+      let checkSettled = false;
+      void checking.then(
+        () => {
+          checkSettled = true;
+        },
+        () => {
+          checkSettled = true;
+        },
+      );
+      expect(resolver).toHaveBeenCalledOnce();
+      expect(readSettled).toBe(false);
+      expect(checkSettled).toBe(false);
+      expect(driver.Pool).not.toHaveBeenCalled();
+      expect(driver.end).not.toHaveBeenCalled();
+      release.resolve({ url: "postgresql://db.example/tenant_joined", schema: "spine" });
+      await expect(reading).resolves.toBeUndefined();
+      await expect(checking).resolves.toBeUndefined();
+      expect(resolver).toHaveBeenCalledOnce();
+      expect(driver.Pool).toHaveBeenCalledOnce();
+      expect(driver.end).not.toHaveBeenCalled();
+    } finally {
+      release.resolve({ url: "postgresql://db.example/tenant_joined", schema: "spine" });
+      records.close();
+      await factory.close();
+    }
+    expect(driver.end).toHaveBeenCalledOnce();
+  });
+
   it("retries a failed tenant directory lookup on the next admitted operation", async () => {
     const resolver = vi
       .fn()

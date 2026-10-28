@@ -627,6 +627,74 @@ describe("MysqlStorageFactory builder contract", () => {
     records.close();
     await factory.close();
   });
+  it("joins explicit tenant checking to a pending runtime database without a second pool", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<{ url: string }>();
+    const resolver = vi.fn(() => {
+      entered.resolve(undefined);
+      return release.promise;
+    });
+    const end = vi.fn(() => Promise.resolve());
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(mysqlConnection(vi.fn(mysqlQuery)))),
+      end,
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
+      .setTenantResolver(resolver)
+      .build();
+    const context = { name: "tenant", multitenant: true as const, tenantId: tenant("joined") };
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (value) => value.value,
+    });
+    const records = factory.createRecordStorage(context, spec);
+    const reading = records.read("missing");
+    let readSettled = false;
+    void reading.then(
+      () => {
+        readSettled = true;
+      },
+      () => {
+        readSettled = true;
+      },
+    );
+    try {
+      await entered.promise;
+      const checking = StoragePreparations.for(factory).prepareRecord(
+        context,
+        spec,
+        undefined,
+        "check",
+      );
+      let checkSettled = false;
+      void checking.then(
+        () => {
+          checkSettled = true;
+        },
+        () => {
+          checkSettled = true;
+        },
+      );
+      expect(resolver).toHaveBeenCalledOnce();
+      expect(readSettled).toBe(false);
+      expect(checkSettled).toBe(false);
+      expect(createPool).not.toHaveBeenCalled();
+      expect(end).not.toHaveBeenCalled();
+      release.resolve({ url: "mysql://db.example/tenant_joined" });
+      await expect(reading).resolves.toBeUndefined();
+      await expect(checking).resolves.toBeUndefined();
+      expect(resolver).toHaveBeenCalledOnce();
+      expect(createPool).toHaveBeenCalledOnce();
+      expect(end).not.toHaveBeenCalled();
+    } finally {
+      release.resolve({ url: "mysql://db.example/tenant_joined" });
+      records.close();
+      await factory.close();
+    }
+    expect(end).toHaveBeenCalledOnce();
+  });
   it("exposes the JVM-style builder without a static create alias", () => {
     const builder: MysqlStorageFactoryBuilder = MysqlStorageFactory.newBuilder();
 

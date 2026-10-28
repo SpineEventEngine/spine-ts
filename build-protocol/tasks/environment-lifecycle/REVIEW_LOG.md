@@ -2419,3 +2419,8 @@ original reliability reviewer, explicitly configured Sol/medium, checks that the
 gates actually establish runtime-first overlap, one resolver/pool, and no early
 pool closure. Parent reviews test maintainability. API/docs are N/A for this
 test-only proof of the accepted lifecycle contract. No children or check reruns.
+
+M31 reliability review is clean and frozen hashes match. Both public-path tests
+exercise the pending runtime join with deterministic gate ordering. Parent
+maintainability is clean; API/docs N/A remains justified. All canonical concerns
+are disposed, source and security-review hashes remain unchanged.
