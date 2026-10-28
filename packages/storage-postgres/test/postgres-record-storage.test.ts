@@ -495,6 +495,43 @@ describe("Postgres record storage", () => {
     await factory.close();
   });
 
+  it("releases a failed tenant probe target so another tenant can bind it", async () => {
+    const ends: ReturnType<typeof vi.fn>[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      const end = vi.fn(() => Promise.resolve());
+      ends.push(end);
+      driver.Pool.mockImplementationOnce(function Pool() {
+        return { connect: driver.connect, end };
+      });
+    }
+    driver.connect.mockRejectedValueOnce(new Error("probe unavailable"));
+    const resolver = vi.fn(() => ({ url: "postgresql://db.example/reserved", schema: "spine" }));
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })
+      .setTenantResolver(resolver)
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const first = { name: "tenant", multitenant: true as const, tenantId: tenantId("a") };
+    const second = { name: "tenant", multitenant: true as const, tenantId: tenantId("b") };
+
+    await expect(
+      preparation.prepareRecord(first, recordSpec(), undefined, "check"),
+    ).rejects.toThrow("Unable to connect to PostgreSQL.");
+    await expect(
+      preparation.prepareRecord(second, recordSpec(), undefined, "check"),
+    ).resolves.toBeUndefined();
+    await expect(
+      preparation.prepareRecord(first, recordSpec(), undefined, "check"),
+    ).rejects.toThrow(/distinct physical databases/i);
+    expect(driver.Pool).toHaveBeenCalledTimes(3);
+    expect(driver.connect).toHaveBeenCalledTimes(3);
+    for (const end of ends) expect(end).toHaveBeenCalledOnce();
+    expect(driver.release).toHaveBeenCalledTimes(2);
+    expect(resolver).toHaveBeenCalledTimes(3);
+    await factory.close();
+    for (const end of ends) expect(end).toHaveBeenCalledOnce();
+  });
+
   it("rejects a shared and tenant family mapped to one unpartitioned table", async () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: "postgresql://db.example/shared", schema: "spine" })

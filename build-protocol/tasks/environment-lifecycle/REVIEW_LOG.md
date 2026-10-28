@@ -2343,3 +2343,61 @@ M27 reliability clean, frozen hash matches. Both tool-specific authorization
 outcomes and cancellation-before-connect lifecycle proved with deterministic
 gates. Parent accepts bounded fixture maintainability; all canonical concerns
 disposed. Original explicit Sol/medium reviewer accepted; no source changes.
+
+Final security follow-up dispatched on production-frozen6404c8512, covering the
+source/build delta since accepted security commit89e6faafa. Existing security
+reviewer role explicitly gpt-6-sol/high, Standard, fork none, no children/edits
+or check reruns. Review current human ledger and prior security evidence; focus
+Delivery failure classification/safe logging, subscription native redaction and
+tenancy after fallback removal, live Agent audit/auth/no-replay invariants, and
+verification command enforcement. M28/M29 tests may proceed in disjoint files;
+production remains frozen unless demonstrated defect. This is a final relevant
+delta review, not a duplicate whole-task wave. Record exact inspected source
+hashes and reuse only if no later substantive source changes. Final-SHA audit
+workflow remains separately required. Expected runtime metadata is unavailable,
+immutable explicit role/profile is acceptance evidence. Estimate0.2–0.4h review
+in parallel with test work; corrections assessed after full report.
+
+M28 frozen two provider tests:97affected tests and static checks pass; same-source
+BRDA keys match rebuilt M26, four additional hits, no current globalrateclaim.
+Original reliability reviewer explicit Sol/medium checks temporaryprobe cleanup,
+release-before-second-tenant and collision-after-success evidence. Parent test
+maintainability, API/docsN/A(test-only, existingcontract); no children/checkreruns.
+
+M28 complete review: accept one P2 test-fidelity correction. PostgreSQL shared
+end-spy count proves total calls, not disposal of each temporary pool; capture
+per-instance end spies as MySQL does. Other public sequence checks sound, parent
+maintainability clean. Original implementer receives single correction batch,
+estimate0.1h focused test/staticcheck; deterministic assertion correction need
+not reopen specialist lane. M29disjointwork may finish first.
+
+Final security delta review clean at6404c8512; explicit Sol/high configured role
+accepted, self-introspection unavailable. Report final-security-delta-review.md
+records production/build Git blob hashes. Verified concerns include exact
+post-handler validation observation, database failures outside monitor policy,
+fixed safe supervisor metadata, native subscription tenant/redaction, mandatory
+live audit/auth and replay removal, native Node failure enforcement. No checks
+rerun by reviewer. Reuse only for unchanged inspected source; final-SHA workflow
+and final release remain pending.
+
+M29 frozen Datastore test-only packet:49 tests/staticchecks pass, two additional
+unchanged-source missedBRDAhits, no globalrateclaim. Original API reviewer
+explicit Sol/medium performs targeted persisted-contract review: no-mutation
+audit/preference commit, identicalretry and divergentcollision rollback; inspect
+fake backend fidelity and exact history/preference/current assertions. Parent
+maintainability. PublicAPI/docsN/A(no source/claimchange). No children/checkreruns.
+M28 deterministic PGcorrection proceeds separately with sole implementer.
+
+M28 P2 resolved: PG captures three distinct end spies and asserts eachonce both
+before/after factoryclose.65PG tests/type/lint/cleanup/format pass; unchanged
+MySQLevidence reused. Parent confirms deterministic correction; allconcerns
+disposed. M29 complete review one acceptedP2: divergent immutableaudit is rejected
+before stagingwrites, so unchangedrowsalone do notprove txrollback. Add explicit
+backend.rollbacks+1 assertion (sameexistingneighborfixture); parentotherwise
+accepts maintainability. Originalwriter correction estimateunder0.1h, focused
+suite/static checks, no specialistreopen for deterministicassertion.
+
+M29 deterministic P2 correction verified: backend.rollback count increments
+exactlyonce after divergent audit rejection;49suite/type/lint/cleanup/formatpass.
+Parent verifies assertion, no specialistreopen needed. All canonicalconcerns
+disposed; sourceunchanged, securitydelta review remains current.

@@ -505,6 +505,52 @@ describe("MysqlStorageFactory builder contract", () => {
     for (const end of ends) expect(end).toHaveBeenCalledOnce();
   });
 
+  it("releases a failed tenant probe target so another tenant can bind it", async () => {
+    const ends: ReturnType<typeof vi.fn>[] = [];
+    const getConnections: ReturnType<typeof vi.fn>[] = [];
+    vi.mocked(createPool).mockImplementation(() => {
+      const end = vi.fn(() => Promise.resolve());
+      const getConnection = vi.fn(() => {
+        if (ends.length === 1) return Promise.reject(new Error("probe unavailable"));
+        return Promise.resolve(mysqlConnection(vi.fn(mysqlQuery)));
+      });
+      ends.push(end);
+      getConnections.push(getConnection);
+      return { getConnection, end } as never;
+    });
+    const resolver = vi.fn(() => ({ url: "mysql://db.example/reserved" }));
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/shared" })
+      .setTenantResolver(resolver)
+      .build();
+    const preparation = StoragePreparations.for(factory);
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const first = { name: "tenant", multitenant: true as const, tenantId: tenant("a") };
+    const second = { name: "tenant", multitenant: true as const, tenantId: tenant("b") };
+
+    await expect(preparation.prepareRecord(first, spec, undefined, "check")).rejects.toThrow(
+      "Unable to connect to MySQL.",
+    );
+    await expect(
+      preparation.prepareRecord(second, spec, undefined, "check"),
+    ).resolves.toBeUndefined();
+    await expect(preparation.prepareRecord(first, spec, undefined, "check")).rejects.toThrow(
+      /distinct physical databases/i,
+    );
+    expect(createPool).toHaveBeenCalledTimes(3);
+    expect(getConnections[0]).toHaveBeenCalledOnce();
+    expect(getConnections[1]).toHaveBeenCalledOnce();
+    expect(getConnections[2]).toHaveBeenCalledOnce();
+    expect(resolver).toHaveBeenCalledTimes(3);
+    for (const end of ends) expect(end).toHaveBeenCalledOnce();
+    await factory.close();
+    for (const end of ends) expect(end).toHaveBeenCalledOnce();
+  });
+
   it("does not cache a physical proof when temporary pool cleanup fails", async () => {
     const cleanup = vi
       .fn()

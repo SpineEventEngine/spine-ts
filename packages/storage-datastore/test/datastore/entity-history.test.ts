@@ -444,6 +444,82 @@ describe("Datastore generated Entity records", () => {
       await provider.close();
     }
   });
+  it("commits Agent preferences and immutable audit without Entity mutation", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(
+      new TypeRegistry([SupportReplyAgentIdSchema, SupportReplyAgentStateSchema]),
+    );
+    const provider = DatastoreStorageFactory.newBuilder()
+      .setClient(backend.client() as never)
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const layout = supportAgentInput() as unknown as EntityStorageInput<
+      SupportReplyAgentId,
+      SupportReplyAgentState
+    >;
+    const commits = EntityCommitStorageFactories.create(provider, layout);
+    const current = provider.createRecordStorage(layout.context, layout.recordSpec);
+    const history = AgentHistoryStorageFactories.create(provider, {
+      context: layout.context,
+      stateType: layout.stateSchema.typeName,
+      id: { key: (value: SupportReplyAgentId) => value.ticketNumber },
+    });
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-no-state" });
+    const preference = create(ModelPreferenceSchema, {
+      kind: AiModelKind.GENERATION,
+      selection: { case: "inheritRepositoryDefault", value: create(EmptySchema) },
+    });
+    const changedPreference = create(ModelPreferenceSchema, {
+      kind: AiModelKind.DECISION,
+      selection: { case: "inheritRepositoryDefault", value: create(EmptySchema) },
+    });
+    const time = create(TimestampSchema, { seconds: 7n });
+    const entry = conversation("audit-no-state", "support", time);
+    const conflicting = conversation("audit-no-state", "other-conversation", time);
+    const bytes = (value: typeof entry) => toBinary(AgentHistoryEntrySchema, value);
+    const first = {
+      entityId: id,
+      expectedVersion: 0,
+      expectedPreferences: undefined,
+      preferences: [preference],
+      historyEntries: [entry],
+    };
+    const readHistory = () => history.read({ entityId: id, view: { kind: "full" }, count: 10 });
+    try {
+      await commits.commitAgent(first);
+      await expect(current.read(id)).resolves.toBeUndefined();
+      await expect(commits.readAgentPreferences(id)).resolves.toEqual([preference]);
+      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(entry)]);
+
+      await commits.commitAgent({
+        ...first,
+        expectedPreferences: [preference],
+      });
+      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(entry)]);
+      expect(backend.entities.size).toBe(2);
+
+      const rollbacks = backend.rollbacks;
+      await expect(
+        commits.commitAgent({
+          ...first,
+          expectedPreferences: [preference],
+          preferences: [changedPreference],
+          historyEntries: [conflicting],
+        }),
+      ).rejects.toThrow("divergent");
+      expect(backend.rollbacks).toBe(rollbacks + 1);
+      await expect(commits.readAgentPreferences(id)).resolves.toEqual([preference]);
+      expect((await readHistory()).entries.map(bytes)).toEqual([bytes(entry)]);
+      await expect(current.read(id)).resolves.toBeUndefined();
+      expect(backend.entities.size).toBe(2);
+    } finally {
+      current.close();
+      history.close();
+      await commits.close();
+      await provider.close();
+    }
+  });
   it("retries an immutable history insert when a colliding row disappears before inspection", async () => {
     const compareAndSet = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const read = vi.fn().mockResolvedValue(undefined);

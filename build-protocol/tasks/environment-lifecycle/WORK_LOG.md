@@ -4406,3 +4406,32 @@ Exact unchanged-source BRDA comparison with rebuilt M26 gives seven additional
 hits, no key mismatches (m27-coverage-gain.json). This is diagnostic incremental
 evidence, not a fresh global percentage. Commit/push frozen MCPtest and records
 while preserving active M28 provider test files.
+
+While M28 is implemented, original API reviewer explicit Sol/medium inspects
+the already persisted m28-storage-postgres-entity-commit-misses.txt and
+m28-storage-datastore-entity-history-misses.txt for one coherent required Agent
+transaction/audit/preference lifecycle proof. Read-only bounded selection, no
+children/tests, no reconsideration of disproved closeIdle paths. Distinguish
+existing native/emulator coverage from genuinely missing behavior; no duplicate
+matrix or speculative API changes. Estimate0.1–0.2h selection, implementation
+only after concrete selection is accepted. Parent generation/core missed-line
+inspection mostly found typed-caller defensive checks and unrelated established
+scalar behavior; no additional tests selected from those.
+
+M29 selected after bounded API review: one Datastore Agent audit+preference
+transaction with no Entity mutation, byte-identical retry, then divergent audit
+key with proposed preference change. Require duplicate suppression/atomic
+rollback/unchanged preference and audit/absent Entity. Existing PostgreSQL test
+proves equivalent contract; no duplicate PGtest. Existing Datastore tests cover
+preference-only without audit and Entity mutation with divergent Event, not this
+case. Sole explicit Sol/medium implementer, test-only scope in existing fake
+Datastore backend suite. Estimate0.3–0.6h checks/review/push, no new source without
+proven defect, no children. M28 frozen tests reviewed concurrently.
+
+M28/M29 accepted after targeted test-fidelity corrections. M28 verifies each PG
+pool disposal (65PGpass; unchangedMySQLincludedprior97pass); M29 verifiesnative
+rollback after auditcollision (49pass). Staticchecks pass, no productionchange.
+Incremental unchanged-source evidence adds four providerreservation hits and
+two Datastoreaudit hits beyond M26; together with M27seven,13newhits. No fresh
+globalrateclaimed (lastfull89.39%); estimated126remainingbranchoutcomes with
+unchangedkeys. Commit/push three accepted provider testfiles plus records.
