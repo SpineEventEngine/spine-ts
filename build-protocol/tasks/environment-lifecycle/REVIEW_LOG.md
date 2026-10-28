@@ -2176,3 +2176,66 @@ Fresh full Vitest diagnostic: 393 files pass, four skipped; 6,218 tests pass,
 16 skipped, zero failures, 112.98 seconds. Branches20,613/23,086=89.28%,
 165 additional hits needed for90. Statements92.95%, functions94.95%, lines94.83%.
 Exit1 solely branch threshold; final release/native chain not run.
+
+M24 bounded read-only API inspection: existing adapter_api_review explicit
+gpt-6-sol/medium examines AgentLiveAiRuntime optional audit construction. Sole
+production constructor in Repository passes mandatory AgentLiveAudit, while the
+internal runtime accepts undefined. Determine whether this remains justified
+under mandatory history or only permits tests to bypass required audit. No edits,
+tests, builds or children; report concrete callers and safe scope, not a general
+cleanup. Parent found this during source inspection, not a coverage-only removal.
+
+M24 API investigation complete, original explicit Sol/medium profile accepted
+(runtime self-metadata unavailable). Sole production and all test callers supply
+audit; removing the optional mode is justified by mandatory audit history. Parent
+accepts narrow scope and the failed-write-before-provider-dispatch proof. No
+files changed by investigator; implementation dispatched to existing writer.
+
+Next read-only selection: original adapter_api_review Sol/medium examines retained
+SQL Entity-commit closeIdle failure semantics and Agent conditional commits. Use
+fresh M23 LCOV, existing tests and M17/M22 evidence; identify only missing public
+behavior with real cleanup/atomicity consequences. No broad invalid-input matrix,
+no duplicated provider scenarios, no edits/tests/builds/children.
+
+Storage follow-up initially recommended no tests because SQL closeIdle had no
+production callers. Parent rejects that premise: Repository.closeLifetimePortsIdle
+calls EntityCommitStorage.closeIdle at repository.ts:10021, and closePorts uses
+dynamic dispatch at 10184. Reviewer asked to reassess real assembly rollback
+reachability, including whether retained resources can exist there. Do not infer
+a new test requirement from raw missed guards; existing async close and atomic
+commit evidence remains valid. No implementation dispatched from this analysis.
+
+Corrected SQL reachability review accepted: generic production callers exist,
+but context assembly has not acquired commit handles; upgrade rollback can have
+a lazy SQL handle with no opened record families. Retained-family failures in
+that synchronous path would require artificial state. Existing repository idle
+cleanup and SQL asynchronous retained-resource cleanup cover real flows. No
+additional SQL closeIdle tests selected. Same explicit Sol/medium profile.
+
+Next read-only selection: existing API reviewer Sol/medium inspects live Agent
+capability behavior preserved after recovery removal: Decision model invocation
+through AgentLiveAiRuntime, concurrent/pending calls, stale facade use, and
+authorization/identity changes between selection and actual call. Parent search
+finds selection-only Decision tests and generation-only live integration. Use
+current tests/source to select meaningful missing lifecycle guarantees, not
+invalid-object matrices. No edits/builds/tests/children; writer finishing M24.
+
+M24 frozen packet, three paths in m24-lifecycle-audit-evidence.md. Fifty-one
+affected tests and production/tooling typechecks, lint, cleanup, TSDoc and
+formatting pass. Existing original protocol_reliability_review explicit
+gpt-6-sol/medium checks mandatory audit ordering, tool-free model behavior, and
+setup failure cleanup/error preservation. Parent handles narrow maintainability
+review (removal of unused optional mode only). Public API/docs N/A: internal
+class only, existing mandatory-audit claims unchanged. No children or reruns.
+Scoped LCOV adds no unchanged environment hits; changed Agent branch keyset
+requires a new full measurement later, so no new global rate is claimed.
+
+M24 independent reliability review clean, three hashes match. Original explicit
+Sol/medium profile accepted, runtime self-metadata unavailable. Parent accepts
+minimal type narrowing and test maintainability; all canonical concerns disposed.
+No corrections required.
+
+M25 read-only selection accepted from original explicit Sol/medium API reviewer:
+live Decision result/audit, pending/stale facade, and authorization drift are
+meaningful gaps distinct from existing unit/sequential/new-signal-denial tests.
+Dispatch these three to existing implementer; reviewer made no edits or checks.

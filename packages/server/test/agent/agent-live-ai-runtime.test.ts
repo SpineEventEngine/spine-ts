@@ -33,6 +33,7 @@ import {
   AiDiagnosticIdSchema,
   ModelToolCallSchema,
   AgentToolCallFinishedSchema,
+  AgentModelAttemptStartedSchema,
   ToolResponseSchema,
   type AgentHistoryEntry,
   type ToolResponse,
@@ -69,6 +70,7 @@ const ref = ModelRef.of("live-support-backend", "v1");
 
 describe("live Agent AI execution", () => {
   it("executes the same named call anew for two accepted signals and enforces physical credit", async () => {
+    const physicalRequests = vi.fn();
     const execute = vi.fn(async (execution: AiBackendExecution) => {
       if (!isMessage(execution.input, SupportTicketFactsSchema))
         throw new TypeError("Expected support ticket facts.");
@@ -82,7 +84,7 @@ describe("live Agent AI execution", () => {
           digest: create(AiContentDigestSchema, { value: "a".repeat(64) }),
         }),
       });
-      if ("kind" in request) throw new Error("Unexpected replay ticket.");
+      physicalRequests();
       await execution.control.reserveTransport(request.id, 20, 80);
       execution.control.onReceived(request.id, 24);
       if (execution.input.customerQuestion === "Unavailable") {
@@ -169,10 +171,21 @@ describe("live Agent AI execution", () => {
       context: metadata.commandContext({}),
     });
     const written: string[] = [];
+    const auditFailure = new Error("attempt start history unavailable");
+    let rejectAttemptStart = false;
     const history = {
       capacity: {},
-      appendAll: (_id: unknown, entries: readonly { item: { case: string } }[]) => {
-        written.push(...entries.map((entry) => entry.item.case));
+      appendAll: (_id: unknown, entries: readonly AgentHistoryEntry[]) => {
+        if (
+          rejectAttemptStart &&
+          entries.some(
+            (entry) =>
+              entry.item.case === "systemEvent" &&
+              entry.item.value.message?.typeUrl === TypeUrls.derive(AgentModelAttemptStartedSchema),
+          )
+        )
+          return Promise.reject(auditFailure);
+        written.push(...entries.map((entry) => entry.item.case ?? ""));
         return Promise.resolve();
       },
     } as unknown as AgentHistoryStorage<unknown>;
@@ -216,8 +229,14 @@ describe("live Agent AI execution", () => {
       }),
     ).resolves.toMatchObject({ ok: false, failure: { code: "UNAVAILABLE" } });
     expect(execute).toHaveBeenCalledTimes(3);
+    expect(physicalRequests).toHaveBeenCalledTimes(3);
     expect(written.filter((kind) => kind === "systemEvent")).toHaveLength(12);
     expect(written.filter((kind) => kind === "conversationRecord")).toHaveLength(6);
+
+    rejectAttemptStart = true;
+    await expect(make().invoke(model, request)).rejects.toBe(auditFailure);
+    expect(execute).toHaveBeenCalledTimes(4);
+    expect(physicalRequests).toHaveBeenCalledTimes(3);
   });
 
   it("connects only a completed model proposal to the configured MCP tool", async () => {
@@ -263,7 +282,6 @@ describe("live Agent AI execution", () => {
           digest: create(AiContentDigestSchema, { value: "a".repeat(64) }),
         }),
       });
-      if ("kind" in attempt) throw new Error("Unexpected replay.");
       await execution.control.reserveTransport(attempt.id, 20, 80);
       const proposal = create(ModelToolCallSchema, {
         providerCallId: "proposal-1",
@@ -469,7 +487,6 @@ describe("live Agent AI execution", () => {
           digest: create(AiContentDigestSchema, { value: "b".repeat(64) }),
         }),
       });
-      if ("kind" in attempt) throw new Error("Expected a new model attempt.");
       await execution.control.reserveTransport(attempt.id, 20, 80);
       await execution.control.finishAttempt({
         ticketId: attempt.id,

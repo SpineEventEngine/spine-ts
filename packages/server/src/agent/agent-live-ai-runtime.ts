@@ -103,7 +103,7 @@ export class AgentLiveAiRuntime implements AgentAi {
     signal: AbortSignal,
     private readonly deadlineEpochMs: number | undefined,
     private readonly onSelect: (kind: AiModelKind, model: ModelRef | undefined) => void,
-    private readonly audit: AgentLiveAudit<unknown> | undefined,
+    private readonly audit: AgentLiveAudit<unknown>,
     private readonly checkSession: () => Promise<void> = () => Promise.resolve(),
   ) {
     this.#signal = AbortSignal.any([signal, this.#controller.signal]);
@@ -244,13 +244,10 @@ export class AgentLiveAiRuntime implements AgentAi {
   ) {
     const { backend, selected } = this.selectedBackend(model);
     const operation = { operation: operationId, conversation: request.conversation };
-    const audit =
-      this.audit === undefined
-        ? undefined
-        : new AgentLiveAiAudit(this.audit, operation, selected, model);
+    const audit = new AgentLiveAiAudit(this.audit, operation, selected, model);
     const deadline = this.operationDeadline(model);
     const identity = await this.authorize(backend, selected, deadline);
-    await audit?.started(request.input);
+    await audit.started(request.input);
     return this.runAuthorized(
       model,
       request,
@@ -285,7 +282,7 @@ export class AgentLiveAiRuntime implements AgentAi {
     backend: AiBackendDefinition,
     identity: { provider: string; account: string; endpoint: string; model: string },
     operation: AgentOperationIdentity,
-    audit: AgentLiveAiAudit | undefined,
+    audit: AgentLiveAiAudit,
     deadline: number | undefined,
   ) {
     const attempts = new Map<string, LiveAttempt>();
@@ -320,10 +317,10 @@ export class AgentLiveAiRuntime implements AgentAi {
    * @param error Original operation or cleanup error.
    * @returns The recorded safe failure for an MCP setup error.
    */
-  private async setupFailure(error: unknown, audit: AgentLiveAiAudit | undefined) {
+  private async setupFailure(error: unknown, audit: AgentLiveAiAudit) {
     if (!(error instanceof AiMcpSetupFailure)) throw error;
     const outcome = { ok: false as const, failure: this.failure(error.code, false) };
-    await audit?.outcome(outcome);
+    await audit.outcome(outcome);
     return outcome;
   }
 
@@ -350,7 +347,7 @@ export class AgentLiveAiRuntime implements AgentAi {
     operationId: MessageShape<typeof AiOperationIdSchema>,
     backend: AiBackendDefinition,
     identity: { provider: string; account: string; endpoint: string; model: string },
-    audit: AgentLiveAiAudit | undefined,
+    audit: AgentLiveAiAudit,
     deadline: number | undefined,
     attempts: Map<string, LiveAttempt>,
     mcp: AgentLiveMcpRuntime | undefined,
@@ -368,7 +365,7 @@ export class AgentLiveAiRuntime implements AgentAi {
       advertised,
     );
     if (outcome.ok) Validate.check(model.definition.output, outcome.value as MessageShape<O>);
-    await audit?.outcome(outcome);
+    await audit.outcome(outcome);
     return outcome;
   }
 
@@ -413,13 +410,12 @@ export class AgentLiveAiRuntime implements AgentAi {
       operation: MessageShape<typeof AiOperationIdSchema>;
       conversation: MessageShape<typeof ConversationIdSchema>;
     },
-    audit: AgentLiveAiAudit | undefined,
+    audit: AgentLiveAiAudit,
     attempts: Map<string, LiveAttempt>,
     deadline: number | undefined,
   ) {
     const tools = model.definition.kind === "generation" ? (model.definition.tools ?? []) : [];
     if (!tools.length) return undefined;
-    if (audit === undefined) throw new Error("Agent MCP tools require live audit storage.");
     const host = new AgentLiveMcpControls({
       scope: this.scope,
       registry: this.registry,
@@ -653,7 +649,7 @@ export class AgentLiveAiRuntime implements AgentAi {
    */
   private control(
     model: Model,
-    audit: AgentLiveAiAudit | undefined,
+    audit: AgentLiveAiAudit,
     deadline: number | undefined,
     attempts: Map<string, LiveAttempt>,
     mcp: AgentLiveMcpRuntime | undefined,
@@ -713,7 +709,7 @@ export class AgentLiveAiRuntime implements AgentAi {
     model: Model,
     _request: AiAttemptRequest,
     number: number,
-    audit: AgentLiveAiAudit | undefined,
+    audit: AgentLiveAiAudit,
     deadline: number | undefined,
   ) {
     this.requireOpen();
@@ -724,12 +720,9 @@ export class AgentLiveAiRuntime implements AgentAi {
     )
       throw new Error("Agent physical model request budget is exhausted.");
     const id = randomUUID();
-    return (
-      audit
-        ?.attemptStarted(_request, id)
-        .then(() => this.newTicket(attempts, id, model, deadline)) ??
-      Promise.resolve(this.newTicket(attempts, id, model, deadline))
-    );
+    return audit
+      .attemptStarted(_request, id)
+      .then(() => this.newTicket(attempts, id, model, deadline));
   }
 
   /**
@@ -819,14 +812,14 @@ export class AgentLiveAiRuntime implements AgentAi {
   private async finishAttempt(
     attempts: Map<string, LiveAttempt>,
     completion: AiAttemptCompletion,
-    audit: AgentLiveAiAudit | undefined,
+    audit: AgentLiveAiAudit,
   ): Promise<void> {
     this.requireOpen();
     const attempt = attempts.get(completion.ticketId);
     if (attempt === undefined || attempt.completed)
       throw new Error("Agent model attempt is unknown or completed.");
     const ticket = this.ticket(attempts, completion.ticketId);
-    await audit?.attemptFinished(completion);
+    await audit.attemptFinished(completion);
     if (completion.receivedBytes !== undefined)
       this.budget.settlePhysical(ticket, completion.receivedBytes);
     attempt.response = completion.response;

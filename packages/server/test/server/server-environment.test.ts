@@ -242,6 +242,87 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await environment.close();
   });
 
+  it("stops setup at a failed storage check and closes every configured facility", async () => {
+    const events: string[] = [];
+    const failure = new Error("storage unavailable");
+    const storage = new InMemoryStorageFactory();
+    const closeStorage = storage.close.bind(storage);
+    vi.spyOn(storage, "checkConnection").mockRejectedValue(failure);
+    vi.spyOn(storage, "close").mockImplementation(() => {
+      events.push("storage");
+      return closeStorage();
+    });
+    const transport = new InMemoryTransportFactory();
+    const closeTransport = transport.close.bind(transport);
+    const initialize = vi.spyOn(transport, "initialize");
+    vi.spyOn(transport, "close").mockImplementation(() => {
+      events.push("transport");
+      return closeTransport();
+    });
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: storage,
+      integrationChannelFactory: transport,
+      delivery: { close: () => events.push("delivery") },
+      tracerFactory: { close: () => events.push("tracer") },
+    });
+    const environment = ServerEnvironment.instance();
+
+    await expect(environment.completeSetup()).rejects.toBe(failure);
+    expect(initialize).not.toHaveBeenCalled();
+    expect(events).toEqual(["delivery", "transport", "tracer", "storage"]);
+    expect(() => environment.delivery).toThrow("completeSetup");
+    await expect(BoundedContext.singleTenant("AfterFailedStorage").build()).rejects.toThrow(
+      "closed",
+    );
+  });
+
+  it("closes initialized facilities when a remote Delivery port fails to open", async () => {
+    const events: string[] = [];
+    const openFailure = new Error("remote Delivery unavailable");
+    const cleanupFailure = new Error("remote Delivery cleanup failed");
+    let cleanupAttempts = 0;
+    const storage = new InMemoryStorageFactory();
+    const closeStorage = storage.close.bind(storage);
+    vi.spyOn(storage, "close").mockImplementation(() => {
+      events.push("storage");
+      return closeStorage();
+    });
+    const transport = new InMemoryTransportFactory();
+    const closeTransport = transport.close.bind(transport);
+    const initialize = vi.spyOn(transport, "initialize");
+    vi.spyOn(transport, "close").mockImplementation(() => {
+      events.push("transport");
+      return closeTransport();
+    });
+    const remote = {
+      open: () => {
+        events.push("open");
+        return Promise.reject(openFailure);
+      },
+      close: () => {
+        events.push("delivery");
+        cleanupAttempts++;
+        return cleanupAttempts === 1 ? Promise.reject(cleanupFailure) : Promise.resolve();
+      },
+      inbox: {} as ServerEnvironmentDelivery["inbox"],
+      workRegistry: {} as ServerEnvironmentDelivery["workRegistry"],
+    };
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: storage,
+      integrationChannelFactory: transport,
+      delivery: remote,
+      tracerFactory: { close: () => events.push("tracer") },
+    });
+    const environment = ServerEnvironment.instance();
+
+    const error = await environment.completeSetup().catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toEqual([openFailure, cleanupFailure]);
+    expect(initialize).toHaveBeenCalledOnce();
+    expect(events).toEqual(["open", "delivery", "transport", "tracer", "storage"]);
+    expect(() => environment.delivery).toThrow("completeSetup");
+  });
+
   it("does not report readiness when close fences pending transport setup", async () => {
     const gate = Promise.withResolvers<undefined>();
     const factory = new InMemoryTransportFactory();

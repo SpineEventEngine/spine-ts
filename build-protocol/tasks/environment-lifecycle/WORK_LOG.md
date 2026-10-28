@@ -4251,3 +4251,48 @@ Node chain and final-SHA Security remain pending. Raw m23-current-global-coverag
 log/LCOV. Commit/pushM23; continue coverage without thresholds/exclusions changes.
 Human status: ~95%overall estimate, agreedfeatures/reviewdone, remainingcoverage
 and finalverification. No known testfailure or unresolved productionfinding.
+
+M24 coverage convergence begins on pushed e4ee577. Fresh global baseline is
+20,613/23,086 branches (89.28%), 165 hits short; 6,218 tests pass in 113 seconds.
+Estimate 0.5–1 hour for one coherent packet, checks, review and push. Existing
+sole implementer /root/storage_retention retains its explicit gpt-6-sol/medium
+profile. Inspect current missed paths in changed storage factory/context runtime
+for meaningful missing behavior, including obsolete paths from the accepted
+lifecycle replacement; do not manufacture malformed-input matrices or remove
+valid defenses for coverage. Record source-backed selection before edits. No
+children. Parent handles records/Git; other agents are read-only. Final release
+and final-SHA Security remain pending; no threshold or exclusion changes.
+
+M24 source-backed correction accepted: read-only API reviewer confirms the sole
+production AgentLiveAiRuntime constructor and all three test constructors supply
+AgentLiveAudit. Repository already rejects missing history. Remove the unused
+optional audit mode from this internal runtime so its type and behavior enforce
+mandatory audit. Preserve optional MCP sessions for tool-free models. Add one
+focused attempt-start audit-write failure proof: no ticket/provider dispatch can
+follow the failed write. Scope one runtime and its existing test file; no public
+contract, recovery behavior or storage redesign. Same sole Sol/medium implementer
+handles this after current selection; estimate 0.2–0.4 hours including checks and
+independent reliability review. This correction is requirement-driven, not removal
+of valid defensive checks to raise coverage.
+
+M24 accepted: 51 affected tests and build/tooling/lint/cleanup/TSDoc/format checks
+pass; independent reliability review clean, parent narrow maintainability clean.
+Audit remains mandatory, tool-free models remain supported, and failed setup
+preserves errors while attempting cleanup. No new server concept: prior JVM
+lifecycle inspection remains applicable; Agent AI has no corresponding JVM
+implementation, and its mandatory audit rule comes directly from the user.
+Commit/push three source/test paths with records. No new global rate claimed.
+
+M25 standard live Agent behavior packet selected through read-only API review.
+Estimate 0.5–1 hour including implementation, checks, review and push. Existing
+sole implementer /root/storage_retention retains explicit gpt-6-sol/medium; no
+children, parent handles records/Git. Three missing live transitions: Decision
+model invocation returns typed mapped result and physical/operation audit;
+overlapping calls and a handler returning with a pending call cannot leave a
+usable AI facade or commit late results; authorization/identity changes between
+selection and invocation prevent connection/execution. Existing tests cover
+selection/admission only, sequential calls, and denial before a fresh signal.
+Reuse domain-correct support fixtures and deterministic gates; capture pending
+rejections without sleeps. No new policy/production edit without demonstrated
+defect, no malformed-object matrix. Measure current changed-source coverage
+with relevant existing suites; no full release until convergence.
