@@ -20,7 +20,7 @@ import { DeliveryRunControl } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
 import type { ILogLayer } from "loglayer";
 
-import { emitServerWarning } from "../server/server-log.js";
+import { emitServerError, emitServerWarning } from "../server/server-log.js";
 
 const deliverySupervisorLoggers = new WeakMap<DeliverySupervisor, ILogLayer>();
 const deliverySupervisorAdmissions = new WeakMap<
@@ -520,12 +520,29 @@ export class DeliverySupervisor {
         signal: this.#controller.signal,
       });
       failed ||= result.status === "FAILED";
+    } catch (error) {
+      this.#reportTerminalRunFailure();
+      throw error;
     } finally {
       if (failed && !this.#closing) this.#failedObserved.add(key);
       this.#active.delete(key);
       this.#startNext(key);
       this.#settleIdle();
     }
+  }
+
+  /**
+   * Reports an escaping background run error without exposing its message.
+   *
+   */
+  #reportTerminalRunFailure(): void {
+    if (this.#closing || this.#controller.signal.aborted) return;
+    const logger = deliverySupervisorLoggers.get(this);
+    if (logger === undefined) return;
+    emitServerError(logger, "Delivery run failed.", {
+      operation: "delivery.run",
+      reasonCode: "failed",
+    });
   }
 
   #settleIdle(): void {

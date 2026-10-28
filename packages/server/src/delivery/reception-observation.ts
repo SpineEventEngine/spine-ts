@@ -29,7 +29,7 @@ export interface ReceptionObservation {
   entered: boolean;
 
   /**
-   * Exact values thrown or rejected by Entity handlers during this attempt.
+   * Exact handler and post-handler validation failures during this attempt.
    */
   readonly handlerFailures: unknown[];
 }
@@ -37,7 +37,7 @@ export interface ReceptionObservation {
 const attempts = new AsyncLocalStorage<ReceptionObservation>();
 
 /**
- * Distinguishes managed receptor failures from replay infrastructure failures.
+ * Distinguishes managed handler and output failures from replay infrastructure failures.
  */
 export const receptionObservation = {
   /**
@@ -70,7 +70,7 @@ export const receptionObservation = {
   },
 
   /**
-   * Records the exact value thrown or rejected by a handler.
+   * Records an exact failure from a handler or its output validation.
    *
    * @param error The raw handler failure.
    */
@@ -79,7 +79,19 @@ export const receptionObservation = {
   },
 
   /**
-   * Checks whether the dispatch rejection came from an endpoint receptor.
+   * Records a post-handler validation failure without changing its identity.
+   *
+   * @typeParam T The failure value.
+   * @param error The validation failure.
+   * @returns The same failure for propagation.
+   */
+  recordPostHandlerFailure<T>(error: T): T {
+    attempts.getStore()?.handlerFailures.push(error);
+    return error;
+  },
+
+  /**
+   * Checks whether rejection came from a handler or its output validation.
    *
    * @param attempt The attempted dispatch.
    * @param error The raw dispatch rejection.

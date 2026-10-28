@@ -27,17 +27,46 @@ preparation APIs are verified, independently reviewed and pushed. Protocol integ
 and remaining AnyPacker adoption are verified, independently reviewed and pushed.
 Final documentation, native evidence, specialist review and security review
 are accepted. The version-only commit for all 35 workspace manifests is pushed.
-The first full-suite execution exposed regression failures; bounded corrections
-and final release verification are in progress;
-exact-SHA remote CI remains pending. On 2026-10-28 the human additionally
+Full-suite regression corrections are implemented, reviewed and pushed. The latest
+release run passes all 6,239 Vitest tests, but global branch coverage is 88.22%
+against the required 90%; focused behavior-test additions are in progress.
+Exact-final-SHA remote CI remains pending. On 2026-10-28 the human additionally
 requested remediation of all findings from the scheduled Security workflow,
 including run 40632154594. Its dependency audit reports 31 vulnerabilities;
 remediation is implemented and independently reviewed, and both local audits
-report zero known vulnerabilities. Full release and feature-branch GitHub
-Security verification remain required before final acceptance. Remaining milestones follow
-MILESTONES.md. Existing
+report zero known vulnerabilities. Feature-branch Security CI passed at 89e6faafa;
+it will be refreshed on the final pushed revision. Full release/global coverage
+remain required before final acceptance. Remaining milestones follow MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.
+
+## Added Delivery validation regression
+
+2026-10-28: Human prioritizes fellow-developer feedback before further coverage.
+Snapshot .24 reportedly lets post-handler state/output validation errors bypass
+onReceptionFailure and failure counts; supervisor silence leaves the Inbox row
+pending, repeatedly runs handler effects and blocks later shard work. Investigate
+.24 and this branch, reproduce, and route these errors through onReceptionFailure
+so the existing monitor policy decides acknowledgement or retry. Preserve failure
+observability and ordinary delivery semantics. Ask only substantive unresolved
+questions after source investigation. This correction is implemented, verified and independently reviewed; resume coverage.
+
+Acceptance for this correction:
+
+- A handler's invalid resulting state or produced signal reaches
+  `onReceptionFailure` with the original error and increments `failed`.
+- The existing monitor decides whether to acknowledge or repeat. Successful
+  acknowledgement allows later work in the same shard and prevents automatic
+  repetition of that acknowledged message.
+- The default monitor's acknowledgement completes a local post normally, as it
+  already does for an exception thrown inside a handler. Tests must assert the
+  monitored validation error and unchanged persisted state, not merely replace
+  a rejection assertion with a successful post assertion.
+- Invalid input remains rejected before handler invocation; genuine storage and
+  shard-session failures must not become default-acknowledged receptions.
+- A genuine escaping background Delivery failure is observable through safe
+  logging. Do not duplicate returned/observed failure logs or log normal close
+  cancellation as an application failure.
 
 ## Human-Imposed Requirements Ledger
 
@@ -103,9 +132,10 @@ and dispatch evidence are kept outside version control in `/tmp/spine-environmen
 
 The ordered milestones are frozen in MILESTONES.md. Implementation and review
 are accepted for the completed slices. The scheduled security findings are fixed
-and reviewed. Complete the bounded Node runner review, mandatory cheap preflight
-and full release checks, refresh Security CI on the final pushed SHA, and report
-exact remote state. The common unused version has been committed separately. Do not create
+and reviewed. The Node runner and sequential Agent test corrections are accepted.
+Complete focused behavior coverage, review and mandatory cheap preflight, then
+pass the full release checks, refresh Security CI on the final pushed SHA, and
+report exact remote state. The common unused version has been committed separately. Do not create
 or merge a pull request without explicit human instruction.
 
 ## JVM source guardrail

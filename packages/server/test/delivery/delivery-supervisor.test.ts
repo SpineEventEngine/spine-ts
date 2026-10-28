@@ -183,9 +183,11 @@ describe("DeliverySupervisor", () => {
     }
   });
 
-  it("does not log returned failed delivery evidence as a terminal detached run", async () => {
+  it("logs one contained terminal error when a detached run rejects", async () => {
     const error = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ error })) };
+    const failure = new Error("delivery secret");
+    failure.name = "TenantSecret123";
     const supervisor = new DeliverySupervisor({
       source: {
         releaseExpired: () => Promise.resolve([]),
@@ -193,8 +195,42 @@ describe("DeliverySupervisor", () => {
         observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
       },
       delivery: qualifiedDelivery({
-        run: () => Promise.reject(new Error("delivery secret")),
+        run: () => Promise.reject(failure),
       }),
+      onMessage: () => Promise.resolve(),
+    });
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+
+    await supervisor.start();
+    supervisor.notify(newShard(0));
+    await supervisor.whenIdle();
+
+    expect(logger.withMetadata).toHaveBeenCalledOnce();
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "delivery.run",
+      reasonCode: "failed",
+    });
+    expect(error).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith("Delivery run failed.");
+    await supervisor.close();
+  });
+
+  it("does not log a returned failed run as a detached exception", async () => {
+    const error = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ error })) };
+    const registry = new OpenRegistry();
+    vi.spyOn(registry, "release").mockResolvedValue(false);
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
+      },
+      delivery: qualifiedDelivery(
+        { run: () => Promise.resolve({ status: "COMPLETED", pages: [] }) },
+        3,
+        registry,
+      ),
       onMessage: () => Promise.resolve(),
     });
     deliverySupervisorAccess.installLogger(supervisor, logger as never);
@@ -1682,13 +1718,14 @@ function qualifiedDelivery(
     run: (options: DeliveryRunOptions) => Promise<{ status: "COMPLETED"; pages: [] }>;
   },
   shardCount = 3,
+  registry: DeliveryWorkRegistry = new OpenRegistry(),
 ): Delivery {
   return new DeliveryBuilder()
     .withContext({ name: "supervisor-test", multitenant: false })
     .withStorageFactory(new InMemoryStorageFactory())
     .withStrategy(UniformAcrossAllShards.forNumber(shardCount))
     .withInbox(new RunnerInbox(delivery.run))
-    .withWorkRegistry(new OpenRegistry())
+    .withWorkRegistry(registry)
     .withNode("test-node")
     .build();
 }

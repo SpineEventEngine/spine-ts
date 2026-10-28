@@ -1823,3 +1823,77 @@ Delivery idle waits retained shard-session completion after exact-message post,
 consistent with D-0157. Every original assertion remains, with no runtime policy
 change. Explicit Sol/medium profile confirmed; runtime introspection unavailable.
 Parent accepts this three-line test correction. No outstanding finding remains.
+
+### Human-requested test value and runtime audit
+
+Frozen provider packet: m15-provider-coverage-slice-evidence.md, four cases across
+three existing provider test files. Assign existing style/maintainability reviewer
+and reliability reviewer with immutable explicit gpt-6-sol/medium profiles.
+Style concern: useless/duplicate cases, excessive fixture code, implementation
+coupling and whether observable behavior justifies maintenance cost. Reliability:
+transaction seams accurately demonstrate production no-partial-write/read-only
+contracts, genuine domain fixtures, assertions catch regressions rather than
+only testing the fake. Parent handles timing synthesis from existing logs;
+existing mechanical verification function retains explicit Luna/low for branch
+inventory and timing extraction. No tests/builds/edits or nested agents for these
+read-only assignments. Human ledger applies; superseded historical text is not a
+finding unless active claims adopt it. Runtime introspection unavailable; confirm
+immutable configured profiles. Complete wave before accepted finding batch.
+
+Provider value/fidelity wave complete; accept three P2 findings for correction
+after the priority Delivery regression: prove metadata recheck after repair;
+reject/assert all mutating SQL during read-only preparation (not only CREATE);
+make omitted rollback detectable before a second transaction can reset fake
+state. Four cases are useful and affected-suite timings do not show slowdown.
+Reports m15-provider-test-value-review.md and
+m15-provider-test-reliability-review.md, both explicit Sol/medium profiles and
+matching frozen hashes. Runtime metadata unavailable. Broader mechanical test
+inventory dispatch failed capacity and has not run; no result is claimed.
+
+### Delivery post-handler validation regression (M16)
+
+Pre-review evidence from existing explicit Sol/medium implementer: deterministic
+RED state-transition/terminal-log failures; final affected repository, supervisor,
+observation and worker tests 471/471 pass. Build, tooling, scoped lint, TSDoc,
+docs/API/snippets, containment and diff checks pass. Two cleanup diagnostics are
+in frozen provider tests and stay deferred to their accepted correction batch.
+Freeze/hash packet before dispatch. Relevant independent concerns: existing
+performance/reliability reviewer, gpt-6-sol/medium, for classification, monitor
+repeats/acknowledgement, persistence exclusions, Agent non-replay and terminal
+logging; existing TypeScript/API documentation reviewer, gpt-6-sol/medium, for
+local-post/service semantics and public claims. Both profiles must be explicit.
+Parent reviews bounded style/maintainability and documentation completeness;
+no new exports, dependencies or serialized contracts. Existing safe logger
+helper is reused without raw error-message logging; security re-review is N/A
+for this bounded correction, with final security evidence retained. Read-only
+review, no builds/tests/edits/children; collect complete wave before fixes.
+Runtime introspection unavailable; immutable configured profiles required.
+
+M16 frozen ten-file packet hashes match; parent style inspection finds no blocker.
+The correction reuses existing async observation, output packing, monitor policy
+and safe logging; no generic recovery abstraction, new public API or persisted
+record is introduced. Independent API review (explicit Sol/medium configured
+role, hashes confirmed, introspection unavailable) returns one accepted P2:
+docs/api/README.md transition-error paragraph still promises unconditional
+service mapping. Qualify it like the updated reference/architecture text. Report
+m16-delivery-api-review.md. Hold correction dispatch for reliability wave result.
+
+Complete M16 review wave: reliability confirms all frozen hashes and returns one
+accepted P2, arbitrary Error.name can disclose data despite format filtering.
+Report m16-delivery-reliability-review.md. Remove that metadata field; do not add
+a mapping abstraction. Make existing terminal-error test use a custom secret
+Error.name and assert fixed metadata/no payload. Other bounded classification,
+ack/repeat, output-before-persist, storage exclusion and Agent paths are clean.
+Combine with API paragraph correction in one return batch to same implementer.
+Both reviewers used explicitly configured Sol/medium; actual runtime metadata
+unavailable. Narrow re-review: safe logger correction plus corrected API paragraph;
+no unrelated lanes reopened. Parent accepts both findings as concrete/relevant.
+
+M16 targeted confirmation complete and clean. Both original reviewers confirmed
+replacement hashes and resolution of their sole P2. Terminal ERROR now contains
+only fixed operation/reasonCode; adversarial Error.name remains absent. API guide
+correctly qualifies monitor-handled versus service-escaped transition failures.
+Two focused logging tests and applicable static/docs checks pass after correction;
+prior 471-test result remains current for unchanged repository/worker behavior.
+Explicit configured Sol/medium profiles confirmed; runtime introspection unavailable.
+Parent accepts M16 for commit/push. No remaining M16 finding.

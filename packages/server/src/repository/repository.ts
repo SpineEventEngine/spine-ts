@@ -3174,13 +3174,15 @@ class AggregateCommandExecution {
       );
       const signals = this.#support.normalizeProducedSignals(produced);
       if (signals.length === 0)
-        throw new Error("Repository aggregate command handlers must return at least one event.");
+        throw receptionObservation.recordPostHandlerFailure(
+          new Error("Repository aggregate command handlers must return at least one event."),
+        );
       RepositoryHandlers.requireDeclaredOutputs(handler, signals);
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current, true),
       );
       if (commit.status === "rejected") {
-        throw new TransitionValidationError(commit.validation.error);
+        throw EntityInvocation.rejectedTransition(commit.validation.error);
       }
 
       return produced;
@@ -3254,7 +3256,7 @@ class AggregateCommandExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: RepositorySignals.packValidated(schema, message as never),
+      message: RepositorySignals.packProduced(schema, message as never),
       context: metadata.context,
     });
   }
@@ -3525,7 +3527,8 @@ class AggregateEventExecution {
     const commit = await commitFenced(entity, (current) =>
       transactionalEntityAccess.commit(current, producedEvents),
     );
-    if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
+    if (commit.status === "rejected")
+      throw EntityInvocation.rejectedTransition(commit.validation.error);
   }
 
   /**
@@ -3571,7 +3574,7 @@ class AggregateEventExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: RepositorySignals.packValidated(schema, signal as never),
+      message: RepositorySignals.packProduced(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
@@ -3937,7 +3940,7 @@ class ProjectionEventExecution {
         transactionalEntityAccess.commit(current),
       );
       if (commit.status === "rejected") {
-        throw new TransitionValidationError(commit.validation.error);
+        throw EntityInvocation.rejectedTransition(commit.validation.error);
       }
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
@@ -3972,8 +3975,10 @@ class ProjectionEventExecution {
       context,
     );
     if (result !== undefined)
-      throw new Error(
-        `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+      throw receptionObservation.recordPostHandlerFailure(
+        new Error(
+          `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+        ),
       );
   }
 
@@ -4002,15 +4007,17 @@ class ProjectionEventExecution {
           context,
         );
         if (result !== undefined)
-          throw new Error(
-            `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+          throw receptionObservation.recordPostHandlerFailure(
+            new Error(
+              `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+            ),
           );
       }
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current),
       );
       if (commit.status === "rejected")
-        throw new TransitionValidationError(commit.validation.error);
+        throw EntityInvocation.rejectedTransition(commit.validation.error);
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
       throw error;
@@ -5680,7 +5687,9 @@ class ProcessManagerCommandExecution {
       );
       const signals = this.#support.normalizeProducedSignals(produced);
       if (signals.length === 0)
-        throw new Error("Repository command handlers must return a signal.");
+        throw receptionObservation.recordPostHandlerFailure(
+          new Error("Repository command handlers must return a signal."),
+        );
       RepositoryHandlers.requireDeclaredOutputs(assignee.handler, signals);
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(
@@ -5688,10 +5697,8 @@ class ProcessManagerCommandExecution {
           assignee.handler.kind === "command-assignment" && signals.length > 0,
         ),
       );
-      if (commit.status === "rejected") {
-        throw new TransitionValidationError(commit.validation.error);
-      }
-
+      if (commit.status === "rejected")
+        throw EntityInvocation.rejectedTransition(commit.validation.error);
       return signals;
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
@@ -5741,7 +5748,7 @@ class ProcessManagerCommandExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: RepositorySignals.packValidated(schema, signal as never),
+      message: RepositorySignals.packProduced(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
@@ -5770,7 +5777,7 @@ class ProcessManagerCommandExecution {
         const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command);
         return create(CommandSchema, {
           id: metadata.id,
-          message: RepositorySignals.packValidated(schema, signal as never),
+          message: RepositorySignals.packProduced(schema, signal as never),
           context: metadata.context,
         });
       }),
@@ -6159,7 +6166,8 @@ class ProcessManagerEventExecution {
     const commit = await commitFenced(entity, (current) =>
       transactionalEntityAccess.commit(current, producedEvents),
     );
-    if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
+    if (commit.status === "rejected")
+      throw EntityInvocation.rejectedTransition(commit.validation.error);
   }
 
   /**
@@ -6204,7 +6212,7 @@ class ProcessManagerEventExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: RepositorySignals.packValidated(schema, signal as never),
+      message: RepositorySignals.packProduced(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
@@ -6236,7 +6244,7 @@ class ProcessManagerEventExecution {
 
         return create(CommandSchema, {
           id: metadata.id,
-          message: RepositorySignals.packValidated(schema, signal as never),
+          message: RepositorySignals.packProduced(schema, signal as never),
           context: metadata.context,
         });
       }),
@@ -6693,6 +6701,20 @@ Object.freeze(RepositoryIdentity);
  */
 const EntityInvocation = {
   /**
+   * Returns a rejected Entity transition as an exact reception failure.
+   *
+   * @param validationError The rejected transition detail.
+   * @returns The original transition error for propagation.
+   */
+  rejectedTransition(
+    validationError: ConstructorParameters<typeof TransitionValidationError>[0],
+  ): TransitionValidationError {
+    return receptionObservation.recordPostHandlerFailure(
+      new TransitionValidationError(validationError),
+    );
+  },
+
+  /**
    * Reads a generated message's type name or rejects malformed output.
    *
    * @param message Handler result to inspect.
@@ -7047,6 +7069,22 @@ Object.freeze(RepositoryEntities);
  * Internal repository signals operations.
  */
 const RepositorySignals = {
+  /**
+   * Packs one handler-produced signal and records only its validation failure.
+   *
+   * @typeParam Schema Generated schema for the signal.
+   * @param schema Generated schema for the signal.
+   * @param message Handler-produced message.
+   * @returns Validated packed signal.
+   */
+  packProduced<Schema extends MessageSchema>(schema: Schema, message: MessageShape<Schema>): Any {
+    try {
+      return RepositorySignals.packValidated(schema, message);
+    } catch (error) {
+      throw receptionObservation.recordPostHandlerFailure(error);
+    }
+  },
+
   /**
    * Packs a repository-produced value after checking its domain constraints.
    *
@@ -8240,10 +8278,15 @@ const RepositoryHandlers = {
   requireDeclaredOutputs(handler: HandlerMetadata, signals: readonly unknown[]): void {
     const schemas = HandlerMetadataValues.returnedSchemas(handler);
     for (const signal of signals) {
-      const typeName = EntityInvocation.messageTypeName(signal);
+      let typeName: string;
+      try {
+        typeName = EntityInvocation.messageTypeName(signal);
+      } catch (error) {
+        throw receptionObservation.recordPostHandlerFailure(error);
+      }
       if (!schemas.some((schema) => schema.typeName === typeName)) {
-        throw new Error(
-          `Handler "${handler.methodName}" returned undeclared message "${typeName}".`,
+        throw receptionObservation.recordPostHandlerFailure(
+          new Error(`Handler "${handler.methodName}" returned undeclared message "${typeName}".`),
         );
       }
     }

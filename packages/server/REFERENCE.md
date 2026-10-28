@@ -851,8 +851,10 @@ may correlate this fact with the original source through paged Agent history.
 before dispatcher or repository handler code runs. It raises the framework's
 command-validation failure, which `SpineServices` maps to
 `COMMAND_VALIDATION_ERROR` with a packed `spine.validation.ValidationError`.
-Entity transition validation failures map to
-`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with the same detail type.
+Entity transition validation failures that escape service processing map to
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with the same detail type. Managed
+reception of ordinary Entity work sends post-handler transition rejection to `DeliveryMonitor`;
+its default action acknowledges the failed input without storing invalid state.
 Framework-created runtime command and event metadata uses fresh Node secure
 UUIDs; fixed IDs belong only to existing source envelopes retained through the
 normal origin chain.
@@ -1137,6 +1139,11 @@ this behavior from its installed supervision; contexts have no attachment step o
 completion switch. Supplying custom ports without a source does not install remote
 supervision. Explicit `Delivery.run()` still returns the actual run result,
 including `SKIPPED` when another process is handling the shard.
+For ordinary Entity Inbox work, post-handler output and transition validation
+failures reach the reception monitor. Pre-handler input and routing errors and
+storage failures remain outside that monitor. Accepted Agent work has already
+acknowledged its Inbox row and does not enter this reception action. A detached
+run that throws emits a contained terminal error without exposing its message.
 
 `DeliveryBuilder` constructs a controlled `Delivery`; `DeliverySupervisor`
 receives `{ source, delivery, onMessage }`, manages bounded shard notifications

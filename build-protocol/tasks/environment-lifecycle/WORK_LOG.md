@@ -3906,3 +3906,135 @@ Sequential Agent test correction accepted after deterministic ordering evidence,
 34/34 affected tests, static checks, and clean independent reliability review.
 Checkpoint the three added completion waits and parent records, push immediately,
 then complete the refreshed cheap preflight before one full release attempt.
+
+Full release at b6e3f75f5 passed all 6239 Vitest tests (393 passed and 4 skipped
+files; 16 skipped tests), but the normal global branch-coverage gate failed:
+20582/23329 branches = 88.22%, required 90%. Statements 91.69%, functions 93.44%,
+lines 93.54%. Chained native Node tests correctly did not run. Preserve report
+final-verification-report-m15.md, full log final-verify-release-m15.log, and raw
+coverage before any focused coverage command overwrites it. No source/test
+failure remains in this run. Classify the next correction as standard focused
+behavior-test work unless uncovered behavior exposes a runtime/contract defect.
+Estimate 2–4 hours for branch inventory, meaningful behavior tests, relevant
+review, complete cheap preflight and one final verification. No threshold or
+coverage exclusion relaxation, arbitrary case matrix, production hooks, or
+large duplicate tests. Existing Luna/low mechanical function first extracts
+scripts-first changed-file branch evidence; same Sol/medium implementer will
+receive a bounded test plan after evidence is available. No full diagnostic loop.
+
+M15 LCOV is preserved with matching SHA in m15-global-coverage. Inventory shows
+415 additional branch hits needed at the current denominator; changed production
+files account for 1911 missing branches versus unchanged code above 90%. Start
+with bounded provider behavior coverage: MySQL factory preparation/tenant/cleanup,
+PostgreSQL conditional Agent commit and transaction failures, and Datastore
+conditional persistence/history. Existing native tests remain accepted evidence;
+new default-suite tests should target useful observable failures/ordering using
+existing provider seams, not recreate the native matrix or add generic fake
+infrastructure. Same explicit Sol/medium implementer is the sole writer, limited
+to provider test paths initially; send a concrete behavioral plan before edits.
+No production edits without demonstrating and reporting a defect first.
+
+Provider test plan accepted after LCOV/source inspection: use actual SupportReply
+Agent families to test MySQL read-only preparation refusing a missing audit index
+or nontransactional table, explicit creation repair and tenant scope; PostgreSQL
+preference-only conditional commit and final-audit rollback without partial writes;
+Datastore conditional atomicity, preference image and retained-family cleanup.
+Adapt existing fake driver/backend seams only. Begin with bounded meaningful
+cases per provider, then measure added branch tuples against preserved global
+LCOV before extending. No production edits or native matrix duplication.
+
+First provider coverage iteration passes 96/96 affected tests. The saved-global
+LCOV comparison reports 103 newly exercised branch tuples; projection 20685/23329
+(88.67%), not a global passing result. Preserve current tests and evidence. Finish
+static checks and propose the next meaningful provider scenarios from remaining
+gaps. Keep this as one provider coverage correction and collect the independent
+review wave after the coherent test set converges, avoiding a review per test.
+No full release diagnostic rerun, production change, or threshold relaxation.
+
+Provider iteration one static/build/tooling checks pass; packet saved externally
+as m15-provider-coverage-slice-evidence.md. Approve next bounded scenarios:
+PostgreSQL stale current version/preference conflict with no partial final audit;
+Datastore immutable-history conflict with atomic state/preference preservation;
+MySQL default-suite conditional Agent final commit, absent preference and stale
+version behavior through the existing mock transaction seam. Assert observable
+record images/no prefix, not only call counts. Measure the union of new branch
+hits against the preserved M15 baseline to avoid double counting. All remain
+provider tests with no production changes or threshold/exclusion adjustments.
+
+Human asks why work is taking so long and whether useless tests increased runtime;
+review, report and continue. Pause further test expansion for an explicit value
+and timing audit, not a task pause. Current provider packet frozen: four added
+cases in three existing files, 97/97 in 1.23s (scoped coverage 7.33s), +176 distinct
+baseline branch hits, projected 88.98%. Last full Vitest durations 108.94, 109.08,
+109.68s do not demonstrate suite slowdown; no pre-task baseline timing is known
+from these logs. Parent acknowledges too many small edit/check cycles. Existing
+style and reliability reviewers, explicit gpt-6-sol/medium, will assess current
+provider test value/fidelity and implementation dependence; mechanical Luna/low
+will inventory broader branch test changes and recorded timing without another
+suite run. Collect complete review wave before corrections or expansion.
+
+Human priority update: investigate/fix reported snapshot .24 delivery regression
+before coverage continuation. Post-handler validation errors allegedly bypass
+onReceptionFailure/counts and are silently contained by supervisor, causing
+repeated effects and shard blockage. Accepted requested direction is existing
+monitor decision for acknowledgement/retry, not a new framework delivery policy.
+Estimate 0.5–1.5 hours investigation, focused correction/tests/review; final full
+release remains combined with coverage completion. Preserve frozen provider tests
+and finish their read-only review wave; no further coverage expansion now. Parent
+starts source/JVM guardrail investigation before author edits. Treat as high-risk
+error/delivery behavior; require focused reliability review and real regression.
+
+Delivery source investigation confirms current and origin/master (.24) classify
+only exact errors recorded inside EntityInvocation.invokeEntityMethod. Result
+normalization/output validation and TransitionValidationError occur afterward,
+so bypass monitor/counts. JVM TargetDelivery.MonitoringDispatcher passes failed
+dispatch outcomes to DeliveryMonitor; default markDelivered matches TS. Preserve
+pre-dispatch validation, session loss and actual storage failures: current
+repository test deliberately keeps failed Projection storage commits pending and
+outside reception monitor. Do not blanket catch all dispatch errors as receptor
+errors. Existing supervisor terminal no-log rationale depended on normalized run
+failures; current DeliveryDrain.run can throw. Reproduce escaping terminal failure
+before changing safe logging/containment records. Same existing implementer,
+explicit gpt-6-sol/medium, handles bounded correction and deterministic regression,
+then relevant focused review. No new scheduler or retry policy. Test actual
+invalid Entity state and produced signals, monitor decisions, counts and later
+same-shard progress with minimal domain-correct fixtures.
+
+Parent completed scripts-first broader branch test inventory after failed child
+dispatch: 196 changed *.test/spec files, 17 added and 30 deleted; 143968 baseline
+lines versus 129920 current (-14048). Simple direct test declarations 3257 versus
+3087 (-170), not executed counts because parameterization/shared fixtures differ.
+Raw m16-branch-test-inventory.json. This does not prove faster runtime and no
+pre-task master timing exists; it does rule out describing this branch as merely
+adding a large new test suite. Latest provider packet independently remains
+useful with three accepted fidelity corrections deferred after Delivery.
+
+Implementer RED reproduces valid handler return followed by rejected Entity
+transition bypassing monitor. Existing TransitionViolatingAggregate fixture
+needed declared ProjectCreated output to reach its named transition failure;
+previously it stopped earlier on undeclared output. Preserve RED evidence and
+assert actual validation error, acknowledgement and same-shard continuation.
+Default monitor markDelivered intentionally makes local post complete normally,
+as already true for ordinary handler exceptions; input validation still rejects.
+Update narrow service/docs claims accordingly. Shared packValidated also handles
+source IDs and diagnostics, so tagging all its errors without provenance review
+would overbroaden monitor classification; explicit output/state sites required.
+Historical observation was introduced in f2dda5251; its parent package manifest
+is snapshot.23. No exact published .23 tag has been established.
+
+M16 complete: post-handler invalid state/output goes to existing reception
+monitor with original error; default acknowledgement permits same-shard progress,
+repeat stays monitor-controlled. Genuine DB commit failure remains pending and
+unmonitored; accepted Agent work remains non-replayable. Escaping detached runs
+log fixed safe ERROR metadata. 471 affected tests pass; final adversarial logging
+correction passes 2/2, build/types/lint/TSDoc/docs/snippets/format/containment pass.
+API and reliability review P2s resolved and independently confirmed; final ten-file
+packet m16-delivery-validation-correction-evidence.md. Commit/push this correction
+before resuming coverage. No unresolved user question remains for this bug.
+
+Resume paused provider packet next: accepted metadata-recheck, SQL read-only and
+rollback-fidelity findings plus two >120-character lines. Then complete meaningful
+coverage. Last actual full global branch coverage remains 88.22%; prior provider
+union projected 88.98% before M16 runtime edits and is no longer a final-source
+projection. Refresh source-aware diagnostic evidence before choosing final gates;
+never present scoped coverage or old-source union as a global passing result.

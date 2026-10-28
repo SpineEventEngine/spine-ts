@@ -271,6 +271,27 @@ afterEach(async () => {
   await ServerEnvironmentLifecycle.resetForTest();
 });
 
+async function expectMonitoredReception(
+  post: () => Promise<unknown>,
+  message: RegExp,
+): Promise<void> {
+  const failures: unknown[] = [];
+  const monitor = vi
+    .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+    .mockImplementation((reception) => {
+      failures.push(reception.error);
+      return reception.markDelivered();
+    });
+  try {
+    await expect(post()).resolves.toBeUndefined();
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toBeInstanceOf(Error);
+    expect((failures[0] as Error).message).toMatch(message);
+  } finally {
+    monitor.mockRestore();
+  }
+}
+
 async function configureStorage(factory: InMemoryStorageFactory): Promise<void> {
   await ServerEnvironmentLifecycle.resetForTest();
   ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
@@ -915,7 +936,7 @@ class GeneratedCommandingProcessManager extends ProcessManager<
     await GeneratedCommandingProcessManager.#commandProjectionCanFinish;
     return create(CreateFollowUpProjectSchema, {
       id: event.id,
-      name: `${event.name} command`,
+      name: event.name === "Invalid produced Command" ? "" : `${event.name} command`,
     });
   }
 }
@@ -1012,7 +1033,10 @@ class ValidatingProjectAggregate extends Aggregate<string, typeof ProjectSubmiss
         }),
       ),
     );
-    return create(ProjectSubmissionCreatedSchema, { id: command.id, name: command.name });
+    return create(ProjectSubmissionCreatedSchema, {
+      id: command.id,
+      name: command.name === "Invalid produced Event" ? "" : command.name,
+    });
   }
 }
 
@@ -1058,12 +1082,21 @@ class ValidatingProcessManager extends ProcessManager<string, typeof ProjectQueu
 }
 
 class TransitionViolatingAggregate extends Aggregate<string, typeof ProjectStateSchema> {
+  static calls = 0;
+  static rejectOnce = false;
+
   createProject(command: CreateProject): ProjectCreated {
+    TransitionViolatingAggregate.calls += 1;
+    const invalid = TransitionViolatingAggregate.rejectOnce;
+    TransitionViolatingAggregate.rejectOnce = false;
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectStateSchema, {
-          id: `${command.id}-changed`,
+          id:
+            !invalid && (command.name === "Valid follow-up" || command.name === "Repeat")
+              ? command.id
+              : `${command.id}-changed`,
           name: command.name,
           archived: false,
         }),
@@ -4582,6 +4615,44 @@ describe("repository signal routing", () => {
     );
   });
 
+  it("monitors a generated invalid Command without publishing it", async () => {
+    GeneratedCommandingProcessManager.reset();
+    const failures: unknown[] = [];
+    const commands: SpineCommand[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        failures.push(reception.error);
+        return reception.markDelivered();
+      });
+    const context = await BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedCommandingRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateFollowUpProjectSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.eventBus().post(
+          createProjectCreated("invalid-command-output", "invalid-command-output", {
+            name: "Invalid produced Command",
+          }),
+        ),
+      ).resolves.toBeUndefined();
+      expect(GeneratedCommandingProcessManager.commandProjectionStarted).toBe(1);
+      expect(failures).toHaveLength(1);
+      expect(commands).toEqual([]);
+    } finally {
+      monitor.mockRestore();
+      await context.close();
+    }
+  });
+
   it("wraps commands from generated command reactions with the source event origin", async () => {
     const commands: SpineCommand[] = [];
     const context = await BoundedContext.multitenant("Tasks")
@@ -4717,7 +4788,7 @@ describe("repository signal routing", () => {
     expect(event?.context?.version).toEqual(version);
   });
 
-  it("rejects managed aggregate handlers that return no domain event", async () => {
+  it("monitors managed aggregate handlers that return no domain event", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
     const context = await BoundedContext.singleTenant("Tasks")
@@ -4725,14 +4796,15 @@ describe("repository signal routing", () => {
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
-    await expect(
-      context.commandBus().post(createAggregateCommand("command-empty", "task-empty")),
-    ).rejects.toThrow();
+    await expectMonitoredReception(
+      () => context.commandBus().post(createAggregateCommand("command-empty", "task-empty")),
+      /must return at least one event/,
+    );
     await expect(eventStore.read()).resolves.toEqual([]);
     await expect(context.stand().read(ProjectStateSchema, "task-empty")).resolves.toBeUndefined();
   });
 
-  it("rejects empty Process Manager assignment before state and event commit", async () => {
+  it("monitors empty Process Manager assignment before state and event commit", async () => {
     RoutingProcessManager.reset();
     RoutingProcessManager.emptyAssignment = true;
     const factory = new InMemoryStorageFactory();
@@ -4750,9 +4822,10 @@ describe("repository signal routing", () => {
       stateSchema: ProjectQueueStateSchema,
     });
     try {
-      await expect(
-        context.commandBus().post(createAggregateCommand("empty-pm-assignment", "empty-pm")),
-      ).rejects.toThrow();
+      await expectMonitoredReception(
+        () => context.commandBus().post(createAggregateCommand("empty-pm-assignment", "empty-pm")),
+        /must return a signal/,
+      );
       expect(RoutingProcessManager.commandCalls).toBe(1);
       await expect(storage.readCurrent("empty-pm")).resolves.toBeUndefined();
       await expect(storage.readStates("empty-pm")).resolves.toEqual([]);
@@ -4766,7 +4839,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("rejects concrete Projection subscriber returns before committing state", async () => {
+  it("monitors concrete Projection subscriber returns before committing state", async () => {
     for (const result of [null, [], [undefined]]) {
       ManagedTaskProjection.reset();
       ManagedTaskProjection.result = result;
@@ -4781,9 +4854,11 @@ describe("repository signal routing", () => {
         stateSchema: ProjectOverviewStateSchema,
       });
       try {
-        await expect(
-          context.eventBus().post(createProjectCreated("subscriber-value", "subscriber-target")),
-        ).rejects.toThrow();
+        await expectMonitoredReception(
+          () =>
+            context.eventBus().post(createProjectCreated("subscriber-value", "subscriber-target")),
+          /must not return signals/,
+        );
         expect(ManagedTaskProjection.subscriberCalls).toBe(1);
         await expect(storage.readCurrent("subscriber-target")).resolves.toBeUndefined();
         await expect(storage.readStates("subscriber-target")).resolves.toEqual([]);
@@ -4794,7 +4869,7 @@ describe("repository signal routing", () => {
     ManagedTaskProjection.reset();
   });
 
-  it("rejects framework event envelopes returned by managed aggregate handlers", async () => {
+  it("monitors framework event envelopes returned by managed aggregate handlers", async () => {
     EnvelopeManagedAggregate.payloadMode = "declared";
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
@@ -4803,16 +4878,17 @@ describe("repository signal routing", () => {
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
-    await expect(
-      context.commandBus().post(createAggregateCommand("command-envelope", "task-envelope")),
-    ).rejects.toThrow();
+    await expectMonitoredReception(
+      () => context.commandBus().post(createAggregateCommand("command-envelope", "task-envelope")),
+      /undeclared message/,
+    );
     await expect(eventStore.read()).resolves.toEqual([]);
     await expect(
       context.stand().read(ProjectStateSchema, "task-envelope"),
     ).resolves.toBeUndefined();
   });
 
-  it("rejects an undeclared Event payload inside an Aggregate handler envelope", async () => {
+  it("monitors an undeclared Event payload inside an Aggregate handler envelope", async () => {
     EnvelopeManagedAggregate.payloadMode = "undeclared";
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
@@ -4821,11 +4897,13 @@ describe("repository signal routing", () => {
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     try {
-      await expect(
-        context
-          .commandBus()
-          .post(createAggregateCommand("command-wrong-envelope", "task-wrong-envelope")),
-      ).rejects.toThrow();
+      await expectMonitoredReception(
+        () =>
+          context
+            .commandBus()
+            .post(createAggregateCommand("command-wrong-envelope", "task-wrong-envelope")),
+        /undeclared message/,
+      );
       await expect(
         context.stand().read(ProjectStateSchema, "task-wrong-envelope"),
       ).resolves.toBeUndefined();
@@ -4836,7 +4914,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("rejects a malformed packed Event payload before Aggregate commit", async () => {
+  it("monitors a malformed packed Event payload before Aggregate commit", async () => {
     EnvelopeManagedAggregate.payloadMode = "malformed";
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
@@ -4845,11 +4923,13 @@ describe("repository signal routing", () => {
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     try {
-      await expect(
-        context
-          .commandBus()
-          .post(createAggregateCommand("command-bad-envelope", "task-bad-envelope")),
-      ).rejects.toThrow();
+      await expectMonitoredReception(
+        () =>
+          context
+            .commandBus()
+            .post(createAggregateCommand("command-bad-envelope", "task-bad-envelope")),
+        /./,
+      );
       await expect(
         context.stand().read(ProjectStateSchema, "task-bad-envelope"),
       ).resolves.toBeUndefined();
@@ -5120,18 +5200,32 @@ describe("repository signal routing", () => {
     expect((await eventStore.read())[0]?.id?.value).toMatch(UUID_PATTERN);
   });
 
-  it("rejects a returned framework envelope without a typed Event payload", async () => {
+  it("monitors a returned framework envelope without a typed Event payload", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
+    const failures: unknown[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        failures.push(reception.error);
+        return reception.markDelivered();
+      });
     const context = await BoundedContext.singleTenant("Tasks")
       .add(createMalformedEventRepository())
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
-    await expect(
-      context.commandBus().post(createAggregateCommand("command-malformed", "task-malformed")),
-    ).rejects.toThrow();
-    await expect(eventStore.read()).resolves.toEqual([]);
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("command-malformed", "task-malformed")),
+      ).resolves.toBeUndefined();
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toBeInstanceOf(Error);
+      await expect(eventStore.read()).resolves.toEqual([]);
+    } finally {
+      monitor.mockRestore();
+      await context.close();
+    }
   });
 
   it("rejects invalid aggregate command payloads before durable aggregate work", async () => {
@@ -5148,9 +5242,53 @@ describe("repository signal routing", () => {
     expect(ValidatingProjectAggregate.assigneeCalls).toBe(0);
   });
 
-  it("rejects state-transition validation failures before storing aggregate output", async () => {
+  it("monitors an invalid produced Event without persisting the Aggregate", async () => {
+    ValidatingProjectAggregate.reset();
+    const failures: unknown[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        failures.push(reception.error);
+        return reception.markDelivered();
+      });
+    const context = await BoundedContext.singleTenant("Tasks")
+      .add(createValidatingRepository())
+      .build();
+
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(
+            createValidatedCommand(
+              "invalid-produced-event",
+              "invalid-output",
+              "Invalid produced Event",
+            ),
+          ),
+      ).resolves.toBeUndefined();
+      expect(ValidatingProjectAggregate.assigneeCalls).toBe(1);
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toBeInstanceOf(Error);
+      await expect(
+        context.stand().read(ProjectSubmissionStateSchema, "invalid-output"),
+      ).resolves.toBeUndefined();
+    } finally {
+      monitor.mockRestore();
+      await context.close();
+    }
+  });
+
+  it("monitors state-transition validation failures before storing aggregate output", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
+    const failures: unknown[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        failures.push(reception.error);
+        return reception.markDelivered();
+      });
     const context = await BoundedContext.singleTenant("Tasks")
       .add(createTransitionViolatingRepository())
       .build();
@@ -5161,14 +5299,101 @@ describe("repository signal routing", () => {
       stateSchema: ProjectStateSchema,
     });
 
-    await expect(
-      context
-        .commandBus()
-        .post(createAggregateCommand("command-transition-invalid", "task-transition-invalid")),
-    ).rejects.toThrow();
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("command-transition-invalid", "task-transition-invalid")),
+      ).resolves.toBeUndefined();
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toMatchObject({
+        name: "TransitionValidationError",
+      });
+      await expect(eventStore.read()).resolves.toEqual([]);
+      await expect(storage.readCurrent("task-transition-invalid")).resolves.toBeUndefined();
+    } finally {
+      monitor.mockRestore();
+      await context.close();
+    }
+  });
 
-    await expect(eventStore.read()).resolves.toEqual([]);
-    await expect(storage.readCurrent("task-transition-invalid")).resolves.toBeUndefined();
+  it("monitors a post-handler invalid state once and continues the same shard", async () => {
+    TransitionViolatingAggregate.calls = 0;
+    TransitionViolatingAggregate.rejectOnce = false;
+    const failures: unknown[] = [];
+    const counts: number[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        failures.push(reception.error);
+        return reception.markDelivered();
+      });
+    const completed = vi
+      .spyOn(DeliveryMonitor.prototype, "onDeliveryCompleted")
+      .mockImplementation((statistics) => {
+        counts.push(statistics.failed);
+      });
+    const context = await BoundedContext.singleTenant("Tasks")
+      .add(createTransitionViolatingRepository())
+      .build();
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("invalid-state-first", "same-shard")),
+      ).resolves.toBeUndefined();
+      await expect(context.stand().read(ProjectStateSchema, "same-shard")).resolves.toBeUndefined();
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("valid-state-next", "same-shard", "Valid follow-up")),
+      ).resolves.toBeUndefined();
+      await expect(context.stand().read(ProjectStateSchema, "same-shard")).resolves.toMatchObject({
+        name: "Valid follow-up",
+      });
+      expect(failures).toHaveLength(1);
+      expect(TransitionViolatingAggregate.calls).toBe(2);
+      expect(counts).toContain(1);
+      await expect(
+        delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+      ).resolves.toContainEqual(expect.objectContaining({ signalId: "invalid-state-first" }));
+    } finally {
+      monitor.mockRestore();
+      completed.mockRestore();
+      await context.close();
+    }
+  });
+
+  it("lets the reception monitor repeat a post-handler transition rejection", async () => {
+    TransitionViolatingAggregate.calls = 0;
+    TransitionViolatingAggregate.rejectOnce = true;
+    const failures: unknown[] = [];
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((reception) => {
+        failures.push(reception.error);
+        return reception.repeatDispatching();
+      });
+    const context = await BoundedContext.singleTenant("Tasks")
+      .add(createTransitionViolatingRepository())
+      .build();
+
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("repeat-invalid-state", "repeat-id", "Repeat")),
+      ).resolves.toBeUndefined();
+      expect(failures).toHaveLength(1);
+      expect(TransitionViolatingAggregate.calls).toBe(2);
+      await expect(context.stand().read(ProjectStateSchema, "repeat-id")).resolves.toMatchObject({
+        name: "Repeat",
+      });
+    } finally {
+      monitor.mockRestore();
+      TransitionViolatingAggregate.rejectOnce = false;
+      await context.close();
+    }
   });
 
   it("clears rejected transition markers when a fresh transaction succeeds", async () => {
@@ -7828,9 +8053,11 @@ describe("repository signal routing", () => {
       .add(createBlankStateIdAggregateRepository())
       .build();
     try {
-      await expect(
-        aggregate.commandBus().post(createAggregateCommand("blank-aggregate", "aggregate-id")),
-      ).rejects.toThrow("Command state transition validation failed.");
+      await expectMonitoredReception(
+        () =>
+          aggregate.commandBus().post(createAggregateCommand("blank-aggregate", "aggregate-id")),
+        /Command state transition validation failed/,
+      );
       expect(BlankStateIdAggregate.calls).toBeGreaterThan(0);
       await expect(
         aggregate.stand().read(ProjectStateSchema, "aggregate-id"),
@@ -7843,9 +8070,10 @@ describe("repository signal routing", () => {
       .add(createBlankStateIdProcessManagerRepository())
       .build();
     try {
-      await expect(
-        processManager.commandBus().post(createAggregateCommand("blank-pm", "pm-id")),
-      ).rejects.toThrow();
+      await expectMonitoredReception(
+        () => processManager.commandBus().post(createAggregateCommand("blank-pm", "pm-id")),
+        /must return a signal/,
+      );
       expect(BlankStateIdProcessManager.calls).toBeGreaterThan(0);
       await expect(
         processManager.stand().read(ProjectQueueStateSchema, "pm-id"),
@@ -7858,9 +8086,10 @@ describe("repository signal routing", () => {
       .add(createBlankStateIdProjectionRepository())
       .build();
     try {
-      await expect(
-        projection.eventBus().post(createProjectCreated("blank-projection", "projection-id")),
-      ).rejects.toThrow();
+      await expectMonitoredReception(
+        () => projection.eventBus().post(createProjectCreated("blank-projection", "projection-id")),
+        /state transition validation failed/,
+      );
       expect(BlankStateIdProjection.calls).toBeGreaterThan(0);
       await expect(
         projection.stand().read(ProjectOverviewStateSchema, "projection-id"),
@@ -11310,9 +11539,10 @@ describe("repository signal routing", () => {
       })
       .build();
     try {
-      await expect(
-        context.commandBus().post(createAggregateCommand("rejected-change", "rejected-id")),
-      ).rejects.toThrow();
+      await expectMonitoredReception(
+        () => context.commandBus().post(createAggregateCommand("rejected-change", "rejected-id")),
+        /Command state transition validation failed/,
+      );
       await context.close();
       expect(changes).toEqual([]);
     } finally {
@@ -14496,10 +14726,18 @@ function createValidatingProcessManagerRepository(): Repository<typeof Validatin
 }
 
 function createTransitionViolatingRepository(): Repository<typeof TransitionViolatingAggregate> {
-  const handlers = EntityHandlers.define(
+  const handlers = HandlerMetadataValues.defineArity(
     TransitionViolatingAggregate,
     ProjectStateSchema,
     (builder) => [builder.assign(CreateProjectSchema, "createProject")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "createProject",
+        parameterCount: 1,
+        outcomes: handlerOutcomes([ProjectCreatedSchema]),
+      },
+    ],
   );
 
   return new Repository({

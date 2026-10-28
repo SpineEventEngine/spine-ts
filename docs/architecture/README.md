@@ -616,9 +616,12 @@ observe it. When posting fails, the internal signal publisher logs and contains
 the failure, the command client is not notified, and no retry is currently
 promised. Managed aggregate command handlers use
 `EntityTransaction.commit()` for transition validation. When
-that transaction is rejected, repository execution raises
+that transaction is rejected, repository execution raises a transition error
+before traceability events or latest state are stored. If it escapes command
+service processing, the service maps it to
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details before traceability events or latest state are stored. Legacy/internal
+details. Ordinary Entity Inbox reception instead passes the post-handler error to
+`DeliveryMonitor`, whose default action acknowledges the failed row. Legacy/internal
 validation failures remain internal and are sanitized as `COMMAND_POST_ERROR`;
 ordinary generated-registry aggregate loading uses the latest persisted state.
 Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.

@@ -246,9 +246,11 @@ including custom `addCommandDispatcher()` routes. For repository-backed
 aggregate dispatchers, validation still happens before route calculation,
 latest persisted state load, traceability event-journal append, latest-state
 write, or stored-event dispatch. Transition validation failures from the
-framework aggregate command transaction continue to surface as
+framework aggregate command transaction that escape service processing surface as
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details. Legacy/internal validation failures remain internal and are sanitized
+details. Managed reception of ordinary Entity work sends post-handler transition
+failures to `DeliveryMonitor`; its default action acknowledges the failed input
+without storing invalid state. Legacy/internal validation failures remain internal and are sanitized
 as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate loading uses the
 latest persisted state. Dispatcher-thrown `ValidationException` values and other unexpected
 command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
@@ -669,7 +671,9 @@ rescan, while other shards continue. Other processes can each make a failed
 attempt before applying their local suppression. The interval is not a
 per-message delivery deadline.
 
-`DeliveryMonitor` handles endpoint failures. Its default reception action
+`DeliveryMonitor` handles ordinary Entity handler failures and post-handler
+output or transition validation failures. Accepted Agent work is acknowledged
+before its live handler and does not use this reception action. The default action
 marks the row delivered; a custom monitor may repeat failed processing.
 Any selected reception action that completes normally leads to delivered
 acknowledgement; a rejected action leaves the row `TO_DELIVER` and propagates.
