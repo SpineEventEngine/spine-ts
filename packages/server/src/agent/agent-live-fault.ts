@@ -16,10 +16,7 @@
  * Safe category for a live Agent check that fails before persistence.
  */
 export type AgentLiveFaultReason =
-  | "READ_BUDGET_EXCEEDED"
-  | "MODEL_BUDGET_EXCEEDED"
-  | "MODEL_USE_DENIED"
-  | "TOOL_BUDGET_EXCEEDED";
+  "READ_BUDGET_EXCEEDED" | "MODEL_BUDGET_EXCEEDED" | "MODEL_USE_DENIED" | "TOOL_BUDGET_EXCEEDED";
 
 /**
  * Reports a local live Agent check with a nonsecret diagnostic.

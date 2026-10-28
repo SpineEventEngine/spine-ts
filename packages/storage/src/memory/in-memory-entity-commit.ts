@@ -22,7 +22,7 @@ import {
 } from "@spine-event-engine/proto/agent";
 import type { EntityStateKey } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { eventStoreRecordSpec } from "../event/event-store.js";
+import { eventStoreRecordSpec, EventStoreGroups } from "../event/event-store.js";
 import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
 import {
   EntityCommitSnapshots,
@@ -666,8 +666,9 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     input: EntityCommitInput<I, S>,
     acquired: { close(): void }[],
   ): InMemoryRecordStorage<EventId, Event> {
+    const group = EventStoreGroups.forContext(input.context.name);
     const records = new InMemoryRecordStorage(input.context, eventStoreRecordSpec, () =>
-      this.openRecords(input.context, eventStoreRecordSpec),
+      this.openRecords(input.context, eventStoreRecordSpec, group),
     );
     acquired.push(records);
     return records;

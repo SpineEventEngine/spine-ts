@@ -24,6 +24,14 @@ import { describe, expect, it } from "vitest";
 import { InMemoryTransportFactory } from "../../src/index.js";
 
 describe("InMemoryTransportFactory", () => {
+  it("initializes locally without creating channels and rejects initialization after close", async () => {
+    const factory = new InMemoryTransportFactory();
+    await expect(factory.initialize()).resolves.toBeUndefined();
+    await expect(factory.initialize()).resolves.toBeUndefined();
+    await factory.close();
+    await expect(factory.initialize()).rejects.toThrow("closed");
+  });
+
   it("keeps canonical typed-channel fan-out, stale, and close behavior", async () => {
     const factory = new InMemoryTransportFactory();
     const channel = create(ChannelIdSchema, { targetType: "type.spine.io/wave13.Conformance" });

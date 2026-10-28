@@ -3,6 +3,7 @@ import {
   InMemorySubscriptionRegistry,
   ManagedServerApplication,
   Server,
+  ServerEnvironment,
 } from "../../dist/index.js";
 import process from "node:process";
 
@@ -21,6 +22,7 @@ if (process.env.SPINE_MANAGED_REGISTRY === "custom")
     close: registry.close.bind(registry),
   });
 
+await ServerEnvironment.instance().completeSetup();
 await ManagedServerApplication.run({
   processCount: 1,
   port: 50_052,

@@ -38,6 +38,7 @@ import {
   Server,
   ServerEnvironment,
   ShardIndex,
+  UniformAcrossAllShards,
 } from "@spine-event-engine/server";
 import { EventStore } from "@spine-event-engine/storage";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
@@ -118,15 +119,19 @@ async function start(request) {
   if (settings.inboxTable !== undefined)
     storageBuilder.setTableName(InboxMessageSchema, settings.inboxTable);
   factory = await storageBuilder.build();
-  const environmentSettings = { logger: fileLogger(settings.logPath) };
+  const environmentSettings = {
+    logger: fileLogger(settings.logPath),
+    storageFactory: factory,
+    deliveryStrategy: UniformAcrossAllShards.forNumber(settings.shards),
+  };
   if (settings.deliveryEndpoint !== undefined) {
     delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryEndpoint });
     environmentSettings.delivery = delivery;
     ServerEnvironment.when(EnvironmentType.Local).use(environmentSettings);
-    await delivery.open();
   } else {
     ServerEnvironment.when(EnvironmentType.Local).use(environmentSettings);
   }
+  await ServerEnvironment.instance().completeSetup();
   let firstCandidateGated = false;
   context = projectWorkflow(
     settings.contextName,
@@ -164,8 +169,6 @@ async function start(request) {
         });
       }
     },
-    factory,
-    settings.shards,
   );
   running = await Server.atPort(0).add(context).start();
   commandClient = createClient(CommandService, createGrpcTransport({ baseUrl: running.baseUrl }));

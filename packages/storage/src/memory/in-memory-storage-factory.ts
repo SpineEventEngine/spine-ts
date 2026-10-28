@@ -15,6 +15,7 @@
 import type { Message } from "@bufbuild/protobuf";
 
 import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
+import { eventStoreRecordSpec, EventStoreGroups } from "../event/event-store.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageGroup } from "../record/storage-group.js";
@@ -226,6 +227,11 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
       const history = eventHistorySpec(input.stateSchema);
       this.declareRecord(input.context, history.spec, history.group);
     }
+    this.declareRecord(
+      input.context,
+      eventStoreRecordSpec,
+      EventStoreGroups.forContext(input.context.name),
+    );
   }
 
   /**

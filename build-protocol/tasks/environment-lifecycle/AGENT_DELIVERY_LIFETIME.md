@@ -33,6 +33,19 @@ only selection of the existing context/tenant storage facilities. Do not pull
 forward shared Inbox tenant extraction, global route consolidation, or the rest
 of environment setup in this slice.
 
+## M8 clarification: remote reception
+
+D0161 preserves the prior remote-supervised posting behavior when the shared
+environment Delivery replaces per-context attachment. Remote posting completes
+after successful Inbox reception and notification submission, without invoking a
+local exact-message drain. Processing may still be pending on another process.
+This does not create an Agent receipt or acknowledge its input. The local direct
+outcomes below remain unchanged, as do explicit Delivery.run terminal results.
+Receive RPC failures propagate. Local readiness notification failures after
+reception are diagnosed and rely on the existing observation/safety mechanism.
+The environment chooses this behavior once from installed supervision; there is
+no public completion option, per-context transition or fallback on SKIPPED.
+
 ## Exact internal contracts
 
 Introduce a package-internal handle around the existing DeliveryDrain:

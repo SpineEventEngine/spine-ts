@@ -34,6 +34,7 @@ import {
   EntityCommitSnapshots,
   eventHistorySpec,
   eventStoreRecordSpec,
+  EventStoreGroups,
   stateHistorySpec,
   type AgentCommitInput,
   type EntityCommitInput,
@@ -109,7 +110,7 @@ class PostgresCommitRecords<I, S extends Message> {
         ? (this.diagnostics ?? this.openDiagnostic(input, open, acquired))
         : undefined;
       const events = input.events?.length
-        ? (this.events ?? this.openEvents(open, acquired))
+        ? (this.events ?? this.openEvents(input, open, acquired))
         : undefined;
       this.states = states ?? this.states;
       this.diagnostics = diagnostics ?? this.diagnostics;
@@ -266,15 +267,17 @@ class PostgresCommitRecords<I, S extends Message> {
   /**
    * Acquires the shared event-store record family.
    *
+   * @param input Supplies the context and Event family.
    * @param open Opens one record family.
    * @param handles Collects handles that must close after the commit.
    * @returns The event-store record storage.
    */
   private openEvents(
+    input: EntityCommitInput<I, S>,
     open: OpenRecords,
     handles: PostgresRecordStorage<unknown, Message>[],
   ): PostgresRecordStorage<EventId, Event> {
-    const handle = open(eventStoreRecordSpec);
+    const handle = open(eventStoreRecordSpec, EventStoreGroups.forContext(input.context.name));
     handles.push(handle as never);
     return handle;
   }

@@ -530,6 +530,7 @@ const expectedStorageProviderDocumentedExports = [
   "EntityStorageConformance",
   "EntityStorageInput",
   "EntityStoragePreparationInput",
+  "EventStoreGroups",
   "PreferencesRecord",
   "StoragePreparation",
   "StoragePreparationMode",

@@ -140,7 +140,7 @@ import { RoutingDeclarations, type RoutingDeclarationSnapshot } from "./routing-
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
-import { Delivery } from "../delivery/delivery.js";
+import type { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
 import { commitFenced, withDeliveryCommitFence } from "./commit-fence.js";
 import { AgentHistoryReads, type AgentHistoryScope } from "../agent/agent-history.js";
@@ -2244,6 +2244,7 @@ interface RepositoryRuntime {
   readonly publishAgentEvent: (event: Event) => Promise<void>;
   readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
   readonly agentReceipts: AgentAcceptanceReceipts;
+  readonly agentSignal: AbortSignal;
   readonly reserveAgent: (key: string, signal: AbortSignal) => AgentCapacityReservation | undefined;
   readonly deferAgent: (message: InboxMessage, tenantId: TenantId | undefined) => void;
 }
@@ -11452,8 +11453,9 @@ const InboxReplay = {
   ): Promise<void> {
     const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
     const input = RepositoryStorage.entityStorageInput(repository, context);
-    const cancellation = AgentDeliveryScope.signal();
-    if (cancellation === undefined) throw new Error("Agent admission requires delivery scope.");
+    const deliverySignal = AgentDeliveryScope.signal();
+    if (deliverySignal === undefined) throw new Error("Agent admission requires delivery scope.");
+    const cancellation = AbortSignal.any([deliverySignal, runtime.agentSignal]);
     const key = InboxReplay.capacityKeyFor(repository, input.context, input.id.key(entityId));
     const reservation = runtime.reserveAgent(key, cancellation);
     if (reservation === undefined) {
@@ -11542,9 +11544,11 @@ const InboxReplay = {
       discard: () => {
         reservation.release();
       },
-      run: (fence, checkSession) =>
-        reservation.run(() =>
-          withDeliveryCommitFence(checkSession, () =>
+      run: (fence, checkSession) => {
+        const cancellation = AbortSignal.any([fence, runtime.agentSignal]);
+        const checkAgentSession = InboxReplay.agentSessionGuard(cancellation, checkSession);
+        return reservation.run(() =>
+          withDeliveryCommitFence(checkAgentSession, () =>
             new AgentLiveRunner(
               repository,
               runtime,
@@ -11552,12 +11556,30 @@ const InboxReplay = {
               entityId,
               invocation,
               handlers,
-              fence,
-              checkSession,
+              cancellation,
+              checkAgentSession,
             ).run(),
           ),
-        ),
+        );
+      },
     });
+  },
+
+  /**
+   * Verifies context cancellation on both sides of asynchronous shard validation.
+   * @param cancellation Combined context and shard cancellation signal.
+   * @param checkSession Validates the current shard session.
+   * @returns A guard for live Agent effects and commits.
+   */
+  agentSessionGuard(
+    cancellation: AbortSignal,
+    checkSession: () => Promise<void>,
+  ): () => Promise<void> {
+    return async () => {
+      cancellation.throwIfAborted();
+      await checkSession();
+      cancellation.throwIfAborted();
+    };
   },
 
   /**
@@ -12110,11 +12132,7 @@ const InboxHandoff = {
     const commandId = RepositorySignals.requireCommandId(command);
     const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireCommandTenant(runtime.context, command);
-    const delivery = new Delivery({
-      context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
-      storageFactory: runtime.storageFactory,
-      strategy: runtime.entityInbox.strategy(),
-    });
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
     await runtime.entityInbox.receive(
       delivery,
@@ -12151,10 +12169,7 @@ const InboxHandoff = {
     const eventId = RepositorySignals.requireEventId(event);
     const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireProjectionTenant(runtime.context, event);
-    const delivery = new Delivery({
-      context: RepositoryTenants.projectionDeliveryContext(runtime.context, deliveryTenantId),
-      storageFactory: runtime.storageFactory,
-    });
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
     await runtime.projectionInbox.receive(
       delivery,
@@ -12192,11 +12207,7 @@ const InboxHandoff = {
     const eventId = RepositorySignals.requireEventId(event);
     const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
-    const delivery = new Delivery({
-      context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
-      storageFactory: runtime.storageFactory,
-      strategy: runtime.entityInbox.strategy(),
-    });
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
     await runtime.entityInbox.receive(
       delivery,
@@ -12223,11 +12234,7 @@ const InboxHandoff = {
     const eventId = RepositorySignals.requireEventId(event);
     const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
-    const delivery = new Delivery({
-      context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
-      storageFactory: runtime.storageFactory,
-      strategy: runtime.entityInbox.strategy(),
-    });
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
     for (let start = 0; start < entityIds.length; start += 1_000) {
       const inputs = entityIds
         .slice(start, start + 1_000)

@@ -32,6 +32,8 @@ import {
 import {
   StoragePreparations,
   TenantBoundary,
+  EventStoreGroups,
+  eventStoreRecordSpec,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
@@ -435,7 +437,7 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       ProjectStateSchema.typeName,
       `${ProjectStateSchema.typeName}_EntityRecord`,
       `${ProjectStateSchema.typeName}_Event`,
-      EventSchema.typeName,
+      `${EventStoreGroups.forContext(contextA.name).name}_Event`,
     ];
 
     try {
@@ -479,6 +481,36 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       await Promise.all([deliveryA.close(), deliveryB.close(), handleA.close(), handleB.close()]);
       await Promise.all(
         kinds.flatMap((kind) => [deleteKind(client, kind, "Va"), deleteKind(client, kind, "Vb")]),
+      );
+    }
+  }, 30_000);
+
+  it("keeps distinct context Event kinds and checks each declared kind", async () => {
+    const client = new Datastore({ projectId: unique("event-group-project").toLowerCase() });
+    const firstContext = { name: unique("event-first"), multitenant: false } as const;
+    const secondContext = { name: unique("event-second"), multitenant: false } as const;
+    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const preparation = StoragePreparations.for(factory);
+    for (const scope of [firstContext, secondContext]) {
+      const group = EventStoreGroups.forContext(scope.name);
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "create");
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "check");
+    }
+    const first = new EventStore(firstContext, factory);
+    const second = new EventStore(secondContext, factory);
+    const id = unique("shared-event");
+    try {
+      await first.append(projectEvent(id, 1));
+      await second.append(projectEvent(id, 2));
+      expect((await first.read())[0]?.message).toEqual(projectEvent(id, 1).message);
+      expect((await second.read())[0]?.message).toEqual(projectEvent(id, 2).message);
+      await expect(first.append(projectEvent(id, 3))).rejects.toThrow(/unique event IDs/);
+    } finally {
+      await Promise.all([first.close(), second.close(), factory.close()]);
+      await Promise.all(
+        [firstContext, secondContext].map((scope) =>
+          deleteKind(client, `${EventStoreGroups.forContext(scope.name).name}_Event`),
+        ),
       );
     }
   }, 30_000);

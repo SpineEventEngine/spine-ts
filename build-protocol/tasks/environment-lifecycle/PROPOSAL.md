@@ -47,6 +47,23 @@ Retaining an object does not require keeping a physical connection open for ever
 
 A compatibility result describes a successful check, not a permanent guarantee against later external database changes.
 
+### EventStores with a shared factory
+
+Each logical Bounded Context stores its Events separately. For example, when
+Shipping imports an Event from Orders, both EventStores may retain the original
+Event ID. A shared StorageFactory must preserve both copies.
+
+Use the existing StorageGroup to distinguish EventStores by the exact context name
+and their domain or System role. Construction, atomic Entity writes, history reads
+and structure preparation must select the same group. Equal names and roles denote
+the same logical EventStore across restarts; different names or roles select
+separate stores. The compact stable mapping and provider checks are specified in
+D-0160. Entity families and the shared Inbox retain their existing identity rules.
+
+This does not relax the registration rule below: two distinct open domain contexts
+cannot register the same Entity state type, even when their names are equal.
+No existing-data migration or fallback read is included.
+
 ## 3. One domain Bounded Context per Entity state type
 
 Adopt [JVM PR #1698](https://github.com/SpineEventEngine/core-jvm/pull/1698), inspected at final revision 728e7654a711.
@@ -127,7 +144,7 @@ After normal closure another Bounded Context may register the type. Cleanup afte
 
 ## 4. Shared Delivery and single-tenant InboxStorage
 
-All Bounded Contexts use the environment Delivery. It exists from the outset, including the cached local default. Server does not attach a different Delivery later.
+All Bounded Contexts use the environment Delivery. Explicit environment setup makes the configured instance or cached local default available before any context builds. Server does not attach a different Delivery later.
 
 Current TS constructs Delivery in repository handoffs and changes from direct delivery to an environment-attached path. Remove those constructions and that change of mode. Configure Delivery and sharding policy through the environment. [Current handoff](https://github.com/SpineEventEngine/spine-ts/blob/ff6c8669537a016c47f012150306500d3b52b5d1/packages/server/src/repository/repository.ts#L12513)
 
@@ -150,6 +167,27 @@ Commands obtain tenant information through CommandContext/ActorContext. Events u
 Validate tenant membership before new Inbox persistence. Recheck before dispatching saved work because membership may have changed. A malformed packed signal must not execute under a guessed tenant or be acknowledged as delivered.
 
 The execution context must be restored after processing so concurrent tenants do not affect each other.
+
+### When posting a signal finishes
+
+With local Delivery, posting waits for the existing delivery result for that
+signal. For an Agent, this means accepting and acknowledging its input; its live
+handler may still be running. An Agent with no available execution capacity leaves
+the signal pending and reports the existing command-posting error.
+
+With configured remote Delivery and its environment supervisor, posting finishes
+when the remote Inbox accepts the signal and the shard notification is submitted.
+Another application process may still be handling that shard. Processing can
+therefore finish later. This preserves the existing remote behavior; it does not
+mark the signal delivered or start an Agent merely because its record was saved.
+A failed Inbox write still rejects the call. A later local notification failure is
+logged, and the existing delivery notifications and safety scan can find the work.
+
+The environment selects this behavior from its installed Delivery facilities.
+There is no context-level switch or attachment step. Calling Delivery.run directly
+still returns its actual result, including SKIPPED when another process is working
+on the shard. Context closure waits for its admitted operations; it does not wait
+indefinitely for every pending record on every remote process.
 
 ### Notification-driven dispatch
 
@@ -327,6 +365,8 @@ await environment.completeSetup();
 ```
 
 completeSetup validates configuration, initializes shared facilities, checks shared storage, prepares known framework structures, initializes transport/Delivery resources, and checks usable TenantIndex/AI configuration. A healthy empty index is valid. It does not make model calls to test AI or execute saved business work before its recipients exist.
+
+Bounded Context construction does not initiate environmental setup. It awaits an already explicitly started setup attempt, or rejects with a clear instruction to call `completeSetup()` if setup has never started. This also applies to lazy context builds. Testing helpers may explicitly complete setup during their assembly; Server does not perform it.
 
 The shared Inbox and other definitions known independently of Entity models can be prepared here. Model-dependent requirements are determined during Bounded Context assembly.
 

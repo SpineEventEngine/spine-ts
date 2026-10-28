@@ -214,15 +214,17 @@ try {
   if (deliveryMode === "shared-memory") {
     deliveryServer = await new DeliveryServer({ port: 0 }).start();
     remoteDelivery = RemoteDelivery.connectTo({ endpoint: deliveryServer.baseUrl });
-    ServerEnvironment.when(EnvironmentType.Local).use({ delivery: remoteDelivery });
-    await remoteDelivery.open();
   }
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    storageFactory: factory,
+    ...(remoteDelivery === undefined ? {} : { delivery: remoteDelivery }),
+  });
+  await ServerEnvironment.instance().completeSetup();
   const organization = `subscription-${database}`;
   const ids = projectWorkflowIds(organization, 1);
   context = projectWorkflow(
     `ProjectSubscription_${database}`,
     (entry) => entries.push(entry),
-    factory,
   );
   const services = new SpineServices({ contexts: [context] });
   server = http2.createServer(

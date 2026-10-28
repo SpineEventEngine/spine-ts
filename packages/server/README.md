@@ -27,8 +27,9 @@ this shape appropriate for tests and hosts that manage shutdown themselves.
 <!-- docs-snippet-path: packages/server/test/server/server-environment.test.ts -->
 
 ```ts
-import { BoundedContext, Server } from "@spine-event-engine/server";
+import { BoundedContext, Server, ServerEnvironment } from "@spine-event-engine/server";
 
+await ServerEnvironment.instance().completeSetup();
 const context = await BoundedContext.singleTenant("Tasks").build();
 const running = await new Server({ contexts: [context], port: 0 }).start();
 try {
@@ -280,9 +281,9 @@ class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateS
 Configure the registry outside the Entity. The Bounded Context requires persisted System
 Events, and the Agent registration supplies its permitted capabilities. The
 [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
-assembles these settings with the generated handler registry. A server-wide
-`withAi()` default can be supplied when building Bounded Contexts through `Server`;
-Bounded Context configuration can provide its registry directly.
+assembles these settings with the generated handler registry. Supply the registry
+through `BoundedContextBuilder.withAi()` before building the context; the server
+uses that context's configuration.
 
 Posting a Command awaits acceptance. Model work and the resulting domain Event
 arrive asynchronously afterward. The handling operation can await a model without

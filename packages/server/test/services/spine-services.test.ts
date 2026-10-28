@@ -99,7 +99,7 @@ import {
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ILogLayer } from "loglayer";
 
 import {
@@ -150,12 +150,27 @@ import {
 } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
 import { ReviewProjectStateSchema } from "../../test-fixtures/generated/validation-refusal/project_states_pb.js";
 
+beforeEach(async () => {
+  const { ServerEnvironment } = await import("../../src/server/server-environment.js");
+  await ServerEnvironment.instance().completeSetup();
+});
+
 afterEach(async () => {
-  const { ServerEnvironment, serverEnvironmentAccess } =
+  const { ServerEnvironment, ServerEnvironmentLifecycle, serverEnvironmentAccess } =
     await import("../../src/server/server-environment.js");
   const environment = ServerEnvironment.instance();
   for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
+  await ServerEnvironmentLifecycle.resetForTest();
 });
+
+async function configureStorage(storageFactory: InMemoryStorageFactory): Promise<void> {
+  const { ServerEnvironment, ServerEnvironmentLifecycle } =
+    await import("../../src/server/server-environment.js");
+  const { EnvironmentType } = await import("../../src/server/environment.js");
+  await ServerEnvironmentLifecycle.resetForTest();
+  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+  await ServerEnvironment.instance().completeSetup();
+}
 
 const GeneratedTaskIdSchema = TaskIdSchema;
 let stateChangeSequence = 0;
@@ -1775,9 +1790,9 @@ describe("SpineServices", () => {
 
   it("accepts a domain rejection and stores its typed event asynchronously", async () => {
     const storageFactory = new InMemoryStorageFactory();
+    await configureStorage(storageFactory);
     const context = await BoundedContext.singleTenant("Tasks")
       .add(createRejectingRepository())
-      .withStorageFactory(storageFactory)
       .build();
     const handlers = registeredCommandHandlers(context);
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
@@ -2079,6 +2094,7 @@ describe("SpineServices", () => {
         createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
+    await multitenant.tenantIndex.keep(tenantEmail("tenant@example.test"));
     const singleServer = await startServices(singleTenant);
 
     try {
@@ -2464,8 +2480,8 @@ describe("SpineServices", () => {
 
   it("activates a registry definition from another service instance", async () => {
     const storageFactory = new InMemoryStorageFactory();
+    await configureStorage(storageFactory);
     const firstContext = await BoundedContext.singleTenant("SharedSubscriptions")
-      .withStorageFactory(storageFactory)
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
@@ -2709,7 +2725,7 @@ describe("SpineServices", () => {
     const context = await BoundedContext.multitenant("CommandOriginEvents")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
-    await admitTenants(context, "tenant-a");
+    await admitTenants(context, "tenant-a", "tenant-b");
     const handlers = registeredSubscriptionHandlers(context);
     const alice = createCommandOrigin("command-alice", "alice", "tenant-a");
     const bob = createCommandOrigin("command-bob", "bob", "tenant-a");

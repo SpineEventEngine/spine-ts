@@ -33,6 +33,21 @@ import { createMessage } from "./inbox-message-fixture.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("direct InboxMessage storage", () => {
+  it("retains one record handle for repeated reads and writes until close", async () => {
+    const factory = new InMemoryStorageFactory();
+    const opened = vi.spyOn(factory, "createRecordStorage");
+    const storage = new InboxStorage({
+      context: { name: "RetainedInbox", multitenant: false },
+      storageFactory: factory,
+    });
+    const message = createMessage("retained", "signal", 1n);
+    await storage.write(message);
+    await storage.readMessage(message.id);
+    expect(opened).toHaveBeenCalledTimes(1);
+    await storage.close();
+    await expect(storage.readMessage(message.id)).rejects.toThrow("closed");
+  });
+
   it("preserves microsecond order across an Inbox page anchor", async () => {
     const storage = new InboxStorage({
       context: { name: "Precise", multitenant: false },

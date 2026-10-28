@@ -33,7 +33,7 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
+import { eventStoreRecordSpec, EventStoreGroups } from "@spine-event-engine/storage/provider";
 import {
   disabledEventHistoryPort,
   disabledStateHistoryPort,
@@ -411,7 +411,14 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
         )
       : undefined;
     const events = mutation?.events?.length
-      ? this.native(this.#events ?? this.openAgentRecord(eventStoreRecordSpec, undefined, acquired))
+      ? this.native(
+          this.#events ??
+            this.openAgentRecord(
+              eventStoreRecordSpec,
+              EventStoreGroups.forContext(this.input.context.name),
+              acquired,
+            ),
+        )
       : undefined;
     return { states, diagnostics, events } as Pick<
       AgentCommitRows<unknown>,
@@ -702,7 +709,11 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
         : undefined;
       if (diagnostics !== undefined && this.#diagnostics === undefined) acquired.push(diagnostics);
       const events = input.events?.length
-        ? (this.#events ?? this.openRecords(eventStoreRecordSpec))
+        ? (this.#events ??
+          this.openRecords(
+            eventStoreRecordSpec,
+            EventStoreGroups.forContext(this.input.context.name),
+          ))
         : undefined;
       if (events !== undefined && this.#events === undefined) acquired.push(events);
       this.#current = current;

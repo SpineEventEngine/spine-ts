@@ -59,6 +59,13 @@ export interface DeliveryControls {
    * @returns The active Delivery wake callback, if one is registered.
    */
   waker(delivery: Delivery): ((shard: ShardIndex) => void) | undefined;
+
+  /**
+   * Registers the environment's single retained core for supervised runs.
+   * @param core Actual retained Delivery runtime.
+   * @returns The controlled facade for that same runtime.
+   */
+  supervised(core: CoreDelivery): Delivery;
 }
 
 /**
@@ -77,6 +84,9 @@ export const deliveryControls: DeliveryControls = Object.freeze({
   },
   waker(delivery: Delivery): ((shard: ShardIndex) => void) | undefined {
     return controlledDeliveryWakers.get(delivery);
+  },
+  supervised(core: CoreDelivery): Delivery {
+    return new BuiltDelivery(core);
   },
 });
 
@@ -584,5 +594,21 @@ const DeliveryValues = Object.freeze({
       nodeId: Object.freeze({ value: nodeId.value }),
       value: worker.value,
     }) as WorkerId;
+  },
+});
+
+/**
+ * Package-local validated strategy snapshot for the environment Delivery.
+ */
+export const deliveryStrategyAccess: Readonly<{
+  snapshot(strategy: DeliveryStrategy): DeliveryStrategy;
+}> = Object.freeze({
+  /**
+   * Captures one environment strategy before any context routes targets.
+   * @param strategy Configured strategy.
+   * @returns Detached target-safe strategy.
+   */
+  snapshot(strategy: DeliveryStrategy): DeliveryStrategy {
+    return DeliveryValues.snapshotStrategy(strategy);
   },
 });

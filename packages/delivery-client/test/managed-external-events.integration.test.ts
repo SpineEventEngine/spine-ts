@@ -14,7 +14,7 @@
 
 import { fork, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, watch, writeFile } from "node:fs/promises";
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -30,6 +30,7 @@ import {
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { UserIdSchema } from "@spine-event-engine/proto";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import {
   CommandService,
   SubscriptionService,
@@ -43,6 +44,8 @@ import { ProjectOverviewStateSchema } from "@spine-event-engine/server-test-fixt
 import { DeliveryAssembly } from "@spine-event-engine/delivery-server/testing";
 import { SignalMetadata } from "@spine-event-engine/server";
 import { afterEach, expect, it } from "vitest";
+import { RemoteDelivery } from "../src/index.js";
+import { ShardIndex } from "@spine-event-engine/server";
 
 const childPath = fileURLToPath(
   new URL("../test-fixtures/managed-external-events-application.mjs", import.meta.url),
@@ -129,7 +132,7 @@ it(
   "RED-19 imports a ThirdParty Event through the local broker and reaches the same " +
     "Delivery-backed subscription",
   async () => {
-    const { directory, endpoint } = await start();
+    const { directory, endpoint, delivery } = await start();
     const transport = createGrpcTransport({ baseUrl: endpoint });
     const subscriptions = createClient(SubscriptionService, transport);
     const subscription = await subscriptions.subscribe(externalStateTopic());
@@ -140,7 +143,24 @@ it(
       [Symbol.asyncIterator]();
     await expectActivationAck(updates);
 
-    await writeFile(join(directory, "third-party-request"), "");
+    const holder = RemoteDelivery.connectTo({ endpoint: delivery.baseUrl });
+    await holder.open();
+    const held = await holder.workRegistry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "test-process" }, value: "third-party-held" }),
+    );
+    if (held === undefined) throw new Error("Expected the remote shard to be available.");
+    try {
+      const completed = fileAppears(directory, "third-party-complete");
+      await writeFile(join(directory, "third-party-request"), "");
+      await bounded(completed, "remote ThirdParty reception completion");
+      const pending = await holder.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] });
+      expect(pending).toHaveLength(1);
+      expect(typeof pending[0]?.signalId).toBe("string");
+    } finally {
+      await holder.workRegistry.release(held);
+      await holder.close();
+    }
     const thirdParty = await bounded(updates.next(), "third-party external state update");
     if (thirdParty.done) throw new Error("ThirdParty Project update was missing.");
     expect(externalState(thirdParty.value)).toEqual({
@@ -171,6 +191,7 @@ function externalState(update: SubscriptionUpdate): { id: string; name: string }
 
 async function start(): Promise<{
   readonly child: ChildProcess;
+  readonly delivery: DeliveryListener;
   readonly directory: string;
   readonly endpoint: string;
 }> {
@@ -190,7 +211,21 @@ async function start(): Promise<{
   child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(chunk));
   const ready = await receive(child, "managed-ready");
   expect(ready.members).toHaveLength(2);
-  return { child, directory, endpoint: String(ready.endpoint) };
+  return { child, delivery, directory, endpoint: String(ready.endpoint) };
+}
+
+async function fileAppears(directory: string, name: string): Promise<void> {
+  const pending = watch(directory);
+  try {
+    try {
+      await access(join(directory, name));
+      return;
+    } catch {
+      for await (const event of pending) if (event.filename === name) return;
+    }
+  } finally {
+    if (pending.return !== undefined) await pending.return();
+  }
 }
 
 function externalStateTopic() {

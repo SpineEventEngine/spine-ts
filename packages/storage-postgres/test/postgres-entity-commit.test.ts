@@ -770,7 +770,7 @@ function columns(sql: string) {
       column_default: null,
     },
   ];
-  if (sql === "spine_core_event") {
+  if (sql === "spine_core_event" || /^es_[a-z0-9]{50}_event$/.test(sql)) {
     return [
       ...base,
       {

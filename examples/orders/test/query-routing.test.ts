@@ -17,8 +17,13 @@ import type { Any } from "@bufbuild/protobuf/wkt";
 import { AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { BoundedContext, SignalMetadata } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { InMemoryStorageBackend, InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+afterEach(async () => {
+  await ServerTests.resetEnvironment();
+});
 
 import {
   CreateOrderSchema,
@@ -111,6 +116,7 @@ describe("Orders query routing example", () => {
       );
       // Closing drains accepted Event delivery before either negative assertion.
       await context.close();
+      await ServerTests.resetEnvironment();
       const inspection = await OrderCardContext.create(new InMemoryStorageFactory(backend));
       try {
         const after = (await inspection.stand().readAllVersioned(OrderCardSchema)).toSorted(

@@ -17,7 +17,7 @@ import { AgentLiveFault } from "./agent-live-fault.js";
 
 /**
  * One reserved physical response credit within a live invocation.
-*/
+ */
 export interface AgentPhysicalTicket {
   /**
    * Identity of one admitted physical attempt.
@@ -37,7 +37,7 @@ interface PhysicalReceipt {
 
 /**
  * Counts one live invocation without durable replay or unacknowledged writes.
-*/
+ */
 export class AgentLiveBudget {
   readonly #tickets = new Map<symbol, PhysicalReceipt>();
 
@@ -57,12 +57,12 @@ export class AgentLiveBudget {
    * Captures application limits for the complete accepted signal.
    *
    * @param limits Configured resource limits.
-  */
+   */
   constructor(private readonly limits: AiInvocationLimits) {}
 
   /**
    * Acquires one named AI operation before entering user or provider code.
-  */
+   */
   reserveOperation(): void {
     this.#operations = this.count(
       this.#operations,
@@ -74,7 +74,7 @@ export class AgentLiveBudget {
 
   /**
    * Acquires one external tool call before dispatch.
-  */
+   */
   reserveToolCall(): void {
     this.#toolCalls = this.count(
       this.#toolCalls,
@@ -86,7 +86,7 @@ export class AgentLiveBudget {
 
   /**
    * Acquires one complete history or projection read before provider work.
-  */
+   */
   reserveRead(): void {
     this.#reads = this.count(
       this.#reads,
@@ -102,7 +102,7 @@ export class AgentLiveBudget {
    * @param requestedOutputBytes Maximum response bytes requested from the adapter.
    * @param kind Whether the send is a model request or MCP protocol message.
    * @returns A ticket whose credit remains charged until a measured response settles it.
-  */
+   */
   reservePhysical(
     inputBytes: number,
     requestedOutputBytes: number | undefined,
@@ -135,17 +135,14 @@ export class AgentLiveBudget {
    * Rejects a decoded chunk that would exceed the physical ticket's credit.
    * @param ticket Original physical reservation.
    * @param bytes Newly received decoded response bytes.
-  */
+   */
   onReceived(ticket: AgentPhysicalTicket, bytes: number): void {
     this.bytes(bytes);
     const receipt = this.#tickets.get(ticket.id);
     if (receipt === undefined) throw new Error("Agent physical ticket is no longer active.");
     const observed = receipt.observed + BigInt(bytes);
     if (receipt.reserved !== undefined && observed > receipt.reserved)
-      throw new AgentLiveFault(
-        "MODEL_BUDGET_EXCEEDED",
-        "Agent response byte credit was exceeded.",
-      );
+      throw new AgentLiveFault("MODEL_BUDGET_EXCEEDED", "Agent response byte credit was exceeded.");
     receipt.observed = observed;
   }
 
@@ -155,7 +152,7 @@ export class AgentLiveBudget {
    * @param inputBytes Measured input payload bytes.
    * @param requestedOutputBytes Requested output byte allowance.
    * @returns The full reserved credit for an unknown model response.
-  */
+   */
   private credit(inputBytes: number, requestedOutputBytes: number | undefined): number | undefined {
     if (
       this.limits.totalInputBytes !== undefined &&
@@ -190,17 +187,14 @@ export class AgentLiveBudget {
    * Replaces unknown credit with measured response bytes after a confirmed result.
    * @param ticket Original physical request reservation.
    * @param receivedBytes Complete measured response size.
-  */
+   */
   settlePhysical(ticket: AgentPhysicalTicket, receivedBytes: number): void {
     this.bytes(receivedBytes);
     const receipt = this.#tickets.get(ticket.id);
     if (receipt === undefined) throw new Error("Agent physical ticket is no longer active.");
     const reserved = receipt.reserved;
     if (reserved !== undefined && BigInt(receivedBytes) > reserved)
-      throw new AgentLiveFault(
-        "MODEL_BUDGET_EXCEEDED",
-        "Agent response byte credit was exceeded.",
-      );
+      throw new AgentLiveFault("MODEL_BUDGET_EXCEEDED", "Agent response byte credit was exceeded.");
     if (receipt.observed !== 0n && receipt.observed !== BigInt(receivedBytes))
       throw new Error("Agent response receipt byte counts disagree.");
     this.#tickets.delete(ticket.id);
@@ -215,7 +209,7 @@ export class AgentLiveBudget {
    * @param reason Cause of cancellation or failure.
    * @param value Typed value being processed.
    * @returns The count after validation against the configured ceiling.
-  */
+   */
   private count(
     value: number,
     limit: number | undefined,
@@ -231,7 +225,7 @@ export class AgentLiveBudget {
    * Rejects negative, fractional, or unsafe byte counts.
    *
    * @param value Typed value being processed.
-  */
+   */
   private bytes(value: number): void {
     if (!Number.isSafeInteger(value) || value < 0)
       throw new RangeError("Agent byte count must be a nonnegative safe integer.");

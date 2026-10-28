@@ -488,14 +488,14 @@ surface:
   starting context assembly;
 - `ContextSpec` is an immutable framework value exposed through
   `builder.spec` and `context.spec`; it carries the validated bounded-context
-  name, tenant mode, and event-storage metadata used when
-  `withStorageFactory()` creates the context `EventStore`;
+  name, tenant mode, and event-storage metadata used when the environment
+  factory creates the context `EventStore`;
 - `BoundedContextBuilder.addCommandDispatcher()` /
   `removeCommandDispatcher()` and `addEventDispatcher()` /
   `removeEventDispatcher()` collect dispatchers for the context being built;
-- `BoundedContextBuilder.withStorageFactory(factory)` selects the
-  `StorageFactory` used to create the context `EventStore` and repository state
-  storage, plus direct `Stand`/read-side state storage;
+- `ServerEnvironment.when(type).use({ storageFactory })` selects the shared
+  `StorageFactory` used for context `EventStore`, repository state storage, and
+  direct `Stand` reads after explicit environment setup;
 - `BoundedContextBuilder.add(repository)` and `remove(repository)` maintain the
   context repository registration list;
 - `BoundedContextBuilder.build()` is the only supported path for constructing a

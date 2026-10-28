@@ -64,6 +64,16 @@ export class InboxStorage {
 
   readonly #now: () => Date;
 
+  #retained: RecordStorage<WireInboxMessageId, WireInboxMessage> | undefined;
+
+  #active = 0;
+
+  #closing = false;
+
+  #drained: (() => void) | undefined;
+
+  #closeAttempt: Promise<void> | undefined;
+
   /**
    * Opens direct inbox storage.
    *
@@ -106,7 +116,7 @@ export class InboxStorage {
       });
       return Object.freeze(rows.map((row) => InboxRecords.read(row.record, row.id)));
     } finally {
-      storage.close();
+      this.#finish();
     }
   }
 
@@ -123,7 +133,7 @@ export class InboxStorage {
       const record = await storage.read(wireId);
       return record === undefined ? undefined : InboxRecords.read(record, wireId);
     } finally {
-      storage.close();
+      this.#finish();
     }
   }
 
@@ -148,7 +158,7 @@ export class InboxStorage {
       }
       throw new InboxMessageError("Inbox message ID already exists.");
     } finally {
-      storage.close();
+      this.#finish();
     }
   }
 
@@ -181,7 +191,7 @@ export class InboxStorage {
         ? InboxRecords.read(successor, id)
         : undefined;
     } finally {
-      storage.close();
+      this.#finish();
     }
   }
 
@@ -230,7 +240,7 @@ export class InboxStorage {
       if (!isActive()) return false;
       return await storage.delete(Values.id(message.id));
     } finally {
-      storage.close();
+      this.#finish();
     }
   }
 
@@ -249,7 +259,39 @@ export class InboxStorage {
   }
 
   #storage(): RecordStorage<WireInboxMessageId, WireInboxMessage> {
-    return this.#storageFactory.createRecordStorage(Values.context(this.#context), inboxRecordSpec);
+    if (this.#closing) throw new Error("Inbox storage is closed.");
+    this.#active++;
+    try {
+      return (this.#retained ??= this.#storageFactory.createRecordStorage(
+        Values.context(this.#context),
+        inboxRecordSpec,
+      ));
+    } catch (error) {
+      this.#finish();
+      throw error;
+    }
+  }
+
+  #finish(): void {
+    this.#active--;
+    if (this.#active === 0) this.#drained?.();
+  }
+
+  /**
+   * Closes the retained physical record handle after admitted work drains.
+   *
+   * @returns The shared close completion.
+   */
+  close(): Promise<void> {
+    if (this.#closeAttempt !== undefined) return this.#closeAttempt;
+    this.#closing = true;
+    const drained =
+      this.#active === 0
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            this.#drained = resolve;
+          });
+    return (this.#closeAttempt = drained.then(() => this.#retained?.close()));
   }
 }
 

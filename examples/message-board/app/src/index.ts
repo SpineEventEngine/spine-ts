@@ -22,9 +22,11 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
+  EnvironmentType,
   EventRouting,
   Projection,
   Server,
+  ServerEnvironment,
   Subscribe,
   Throws,
   Where,
@@ -207,18 +209,21 @@ export class MessageBoardApplication {
     deliveryStrategy?: DeliveryStrategy,
     subscriptionRegistry?: StandSubscriptionRegistry,
   ): Promise<BoundedContext> {
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory,
+      ...(deliveryStrategy === undefined ? {} : { deliveryStrategy }),
+    });
+    await ServerEnvironment.instance().completeSetup();
     const announcementRouting = EventRouting.create<BoardId>().route(
       MessagePostedSchema,
       (event) =>
         event.board?.value === "announcements" ? [clone(BoardIdSchema, event.board)] : [],
     );
     const builder = BoundedContext.singleTenant("MessageBoard")
-      .withStorageFactory(storageFactory)
       .withGeneratedRegistryRoot(new URL("..", import.meta.url))
       .add(BoardMessageAggregate)
       .add(BoardViewProjection)
       .add(AnnouncementBoardProjection, { eventRouting: announcementRouting });
-    if (deliveryStrategy !== undefined) builder.withDeliveryStrategy(deliveryStrategy);
     if (subscriptionRegistry !== undefined) builder.withSubscriptionRegistry(subscriptionRegistry);
     return builder.build();
   }
@@ -305,13 +310,16 @@ export class MessageBoardApplication {
     deliveryStrategy?: DeliveryStrategy,
     subscriptionRegistry?: StandSubscriptionRegistry,
   ): Promise<Server> {
+    const context = await this.createContext(
+      storageFactory,
+      deliveryStrategy,
+      subscriptionRegistry,
+    );
     const server = Server.atPort(browser ? 0 : (options.port ?? 0), {
       host: browser ? "127.0.0.1" : (options.host ?? "127.0.0.1"),
       services: { subscriptionLimit: 1_000 },
     });
-    return server.add(
-      await this.createContext(storageFactory, deliveryStrategy, subscriptionRegistry),
-    );
+    return server.add(context);
   }
 
   #browserOptions(options: BoardServerOptions): BrowserServerOptions {

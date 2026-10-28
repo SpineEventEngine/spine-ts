@@ -153,9 +153,17 @@ ServerEnvironment.when(EnvironmentType.Production).use({
   storageFactory,
   typeRegistry,
 });
+await ServerEnvironment.instance().completeSetup();
 ```
 
-`storageFactory` supplies records and events. `typeRegistry` is the complete
+Call `completeSetup()` explicitly before building any Bounded Context. It
+checks the storage connection, initializes integration transport, and opens the
+shared Delivery. Concurrent callers join one setup attempt; a failed attempt
+closes acquired facilities and prevents context assembly. Building a context
+does not start setup. The environment logs an INFO message after each successful
+phase without implying that every Entity model has been prepared.
+
+`storageFactory` supplies records and events to every context. `typeRegistry` is the complete
 application schema universe used by `ThirdPartyContext` to encode outgoing
 imported events. An optional `integrationChannelFactory` overrides the
 process-wide private
@@ -285,8 +293,8 @@ callbacks receive that scope as their third argument while they run.
 
 For contexts registered with one `Server`, the target Entity's type URL selects
 its context. No context name or network request is required. The Server rejects
-duplicate Entity type registrations before starting delivery recovery or
-listening, identifying the type and both contexts. Contexts used without a
+duplicate Entity type registrations before opening the listener, identifying
+the type and both contexts. Contexts used without a
 Server retain local querying; separate Servers do not share query routes.
 
 Cross-context targets must declare `query` or `full` visibility. This applies
@@ -558,7 +566,8 @@ path, so handler effects must be replay-safe.
 
 Create a context with `BoundedContext.singleTenant(name)` or
 `BoundedContext.multitenant(name)`. Names are immutable. Use
-`withStorageFactory(factory)` to supply record/event storage.
+`ServerEnvironment.when(type).use({ storageFactory: factory })` before explicit
+environment setup to supply record/event storage to all contexts.
 `withTenantIndex(index)` selects a different live membership directory for one
 context; `context.tenantIndex` and `ServerEnvironment.instance().tenantIndex`
 return the configured objects. Closing a context does not close either index.
@@ -685,16 +694,15 @@ registration with these options.
 
 Configuration has these scopes:
 
-| Scope           | Setting                                  | Effect                                                                   |
-| --------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
-| Server          | `Server.withAi(registry)`                | Default registry for Bounded Context builders assembled by that server.  |
-| Bounded Context | `BoundedContextBuilder.withAi(registry)` | Explicit registry replacing the server default for that Bounded Context. |
-| Repository      | `ai.defaultModels`                       | Generation and decision defaults before the registry's defaults.         |
-| Repository      | `ai.allowedModels`                       | Deployment references the Agent may use.                                 |
-| Repository      | `ai.resolveModel`                        | Optional accepted-source choice before the Agent handler.                |
-| Repository      | `ai.authorizeSelection`                  | Authorizes explicit choices and staged preference changes.               |
-| Repository      | `ai.invocationLimits`                    | Limits that can narrow the registry's whole-signal limits.               |
-| Instance        | `this.ai.select(kind, ref)`              | A saved preference applied to later accepted signals.                    |
+| Scope           | Setting                                  | Effect                                                           |
+| --------------- | ---------------------------------------- | ---------------------------------------------------------------- |
+| Bounded Context | `BoundedContextBuilder.withAi(registry)` | Registry used by Agents in that Bounded Context.                 |
+| Repository      | `ai.defaultModels`                       | Generation and decision defaults before the registry's defaults. |
+| Repository      | `ai.allowedModels`                       | Deployment references the Agent may use.                         |
+| Repository      | `ai.resolveModel`                        | Optional accepted-source choice before the Agent handler.        |
+| Repository      | `ai.authorizeSelection`                  | Authorizes explicit choices and staged preference changes.       |
+| Repository      | `ai.invocationLimits`                    | Limits that can narrow the registry's whole-signal limits.       |
+| Instance        | `this.ai.select(kind, ref)`              | A saved preference applied to later accepted signals.            |
 
 A prebuilt Bounded Context already has its registry; adding it to a server does not
 reconfigure it. An instance preference takes precedence over its repository
@@ -737,8 +745,9 @@ The signal's matching handlers share one Entity draft. Each handler can await
 `this.ai.invoke()` through the protected Spine facade. Calls in one handler
 must be sequential and finish before it returns. Requests, results, and
 validation failures are saved as audited history while work progresses. The
-final accepted state, Version, preference changes, Agent history, and outgoing
-Command obligations use an atomic live Agent commit. Emitted domain Events
+final accepted state, Version, preference changes, and Agent history use an
+atomic live Agent commit. Outgoing Commands enter ordinary command delivery;
+there is no saved Agent-private list to finish after a restart. Emitted domain Events
 enter immutable Agent history before normal EventBus publication. A no-op or
 preference-only turn can commit without a state Version increase. Waiting for a
 provider does not hold a database transaction open.
@@ -1047,24 +1056,48 @@ without an atomic compare-and-delete guarantee from this client. Pending,
 retryable, non-delivered, and still-protected rows are skipped by cleanup. There
 is no additional retention configuration, timer, or scheduler.
 
-`BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
-immutable strategy for its Entity Inbox; the default is one shard. For example,
-use the public builder chain:
+Configure one Delivery strategy for the environment before setup. It maps
+targets to shards across all contexts; the default is one shard. For example:
 
 ```ts
-import { BoundedContext, UniformAcrossAllShards } from "@spine-event-engine/server";
+import {
+  BoundedContext,
+  EnvironmentType,
+  ServerEnvironment,
+  UniformAcrossAllShards,
+} from "@spine-event-engine/server";
 
-const context = await BoundedContext.singleTenant("Tasks")
-  .withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))
-  .build();
+ServerEnvironment.when(EnvironmentType.Local).use({
+  deliveryStrategy: UniformAcrossAllShards.forNumber(3),
+});
+await ServerEnvironment.instance().completeSetup();
+const context = await BoundedContext.singleTenant("Tasks").build();
 ```
 
 Aggregate commands and Process Manager or Agent commands/events derive their target shard
 internally and persist their envelope in the target Entity Inbox before any
-handler runs. Local intake can directly drain the persisted Inbox in the
-current request path. Attached `ServerEnvironment` ports acknowledge admission
-and delivery workers replay it through the same path. Projection rows remain
-separate.
+handler runs. Projection input uses the same environment Delivery and shared
+Inbox, with its separate recipient identity.
+
+Local posting waits for the result of that signal's delivery attempt. For an
+Agent, successful acceptance and Inbox acknowledgement let posting finish while
+the live handler continues. If Agent execution capacity is unavailable, the input
+stays pending and the local call reports the existing command-posting error.
+
+With remote Delivery and its environment supervisor, posting completes after the
+remote Inbox accepts the input and the shard notification is submitted. Processing
+may still be pending on another process. For example, importing an Event can return
+while another process holds its shard; the Projection update arrives after that
+process can dispatch the Event. Reception alone does not acknowledge delivery,
+create an Agent acceptance receipt, or prove that a handler ran.
+
+A rejected remote receive operation rejects posting. If a local notification
+observer fails after reception succeeds, the failure is logged and the existing
+notifications and safety scan can find the pending work. The environment selects
+this behavior from its installed supervision; contexts have no attachment step or
+completion switch. Supplying custom ports without a source does not install remote
+supervision. Explicit `Delivery.run()` still returns the actual run result,
+including `SKIPPED` when another process is handling the shard.
 
 `DeliveryBuilder` constructs a controlled `Delivery`; `DeliverySupervisor`
 receives `{ source, delivery, onMessage }`, manages bounded shard notifications
@@ -1129,33 +1162,30 @@ work, and then closes buses, subscriptions, Stands, and repository bindings.
 Cleanup failures are aggregated and may be retried. A committed Entity Event,
 reactor or Process Manager Event, and System Event receives one first-publication
 attempt; a contained failure is logged and does not schedule publication again.
-Persisted System Events use a separate fixed storage group. Command acceptance
+Persisted System Events use a storage group derived from their System Context
+name and role, separate from domain Event history. Command acceptance
 alone does not promise recipient completion. Processing retries for Inbox rows
 and acknowledgement recovery remain separate Delivery behavior.
 
 `Environment` resolves the Node `local` or `production` profile once from
 `NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that
-profile and exposes its `storageFactory`, optional `delivery`, optional
-`tracerFactory`, `nodeId`, and `close()` lifecycle. Applications do
-not manage internal server attachments through this public API. Neither API
-authenticates requests or supplies a production scheduler, remote topology,
-storage adapter, or deployment policy.
+profile and exposes its `storageFactory`, `tenantIndex`, `nodeId`, and
+`close()` lifecycle. After explicit `completeSetup()`, its `delivery` property
+is the usable shared public `Delivery` facade. A Bounded Context cannot build
+before setup, and a server does not start setup on the application's behalf.
+Neither API authenticates requests or supplies remote topology or a deployment
+policy.
 
-`ServerEnvironmentDelivery` extends the existing closeable facility shape with
-`open()` plus generic `inbox` and `workRegistry` ports. After readiness, the
-environment supplies those ports to both existing delivery paths: direct finite
-`Delivery` construction and the supervisor's `DeliveryBuilder`. The environment
-invokes `open()` once before attachment admission and coalesces concurrent
-callers; rejection admits no attachment and a later attempt retries open. A
-close-only local delivery remains source-compatible. After attachments retire,
-environment close runs delivery, tracer, then storage and preserves retry
-checkpoints for failed phases.
-
-`ServerEnvironmentDelivery.source` is optional. When present, its Admin source
-is used by the environment supervisor for remote snapshots and
-shard-update hints; when absent, the existing local source remains the fallback.
-Applications configure and close only the delivery facility through the
-environment: attachment supervisors and their source reads belong to that facility.
+`ServerEnvironmentDelivery` supplies an optional remote facility with `open()`,
+`inbox`, and `workRegistry` ports. Setup opens it once before creating the
+shared Delivery; failure closes acquired facilities. Its optional `source`
+supports remote shard snapshots and notifications through the environment's
+single supervisor. Local Delivery uses the environment's configured storage
+factory for its shared Inbox and work registry; the default factory is in-memory.
+Contexts register recipients with the same Delivery and never close that shared
+facility individually. Environment shutdown stops intake, drains local admitted
+work, then closes shared Delivery and configured facilities. Pending remote rows
+do not make a closing context wait indefinitely for other processes to finish.
 
 ## Signal identity and Aggregate semantics
 

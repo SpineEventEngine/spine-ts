@@ -139,8 +139,15 @@ describe("live Agent audit", () => {
     const publish = vi.fn(() => Promise.resolve());
     const lost = new Error("session lost");
     const audit = new AgentLiveAudit(
-      invocation, SupportReplyAgentStateSchema, "T-audit", "T-audit", history,
-      metadata, () => undefined, publish, () => Promise.reject(lost),
+      invocation,
+      SupportReplyAgentStateSchema,
+      "T-audit",
+      "T-audit",
+      history,
+      metadata,
+      () => undefined,
+      publish,
+      () => Promise.reject(lost),
     );
     await expect(audit.save(AgentModelSelectionChangedSchema, payload)).rejects.toBe(lost);
     expect(appendAll).not.toHaveBeenCalled();
@@ -158,8 +165,14 @@ describe("live Agent audit", () => {
     } as unknown as AgentHistoryStorage<string>;
     const failed = new Error("System publication failed");
     const audit = new AgentLiveAudit(
-      invocation, SupportReplyAgentStateSchema, "T-audit", "T-audit", history,
-      metadata, () => undefined, () => Promise.reject(failed),
+      invocation,
+      SupportReplyAgentStateSchema,
+      "T-audit",
+      "T-audit",
+      history,
+      metadata,
+      () => undefined,
+      () => Promise.reject(failed),
     );
     await expect(audit.save(AgentModelSelectionChangedSchema, payload)).rejects.toBe(failed);
     expect(retained).toHaveLength(1);
@@ -168,17 +181,26 @@ describe("live Agent audit", () => {
 
   it.each(["append", "publish"])("preserves model denial when audit %s fails", async (phase) => {
     const failure = new Error(`${phase} failed`);
-    const appendAll = vi.fn(() => phase === "append" ? Promise.reject(failure) : Promise.resolve());
+    const appendAll = vi.fn(() =>
+      phase === "append" ? Promise.reject(failure) : Promise.resolve(),
+    );
     const history = { capacity: {}, appendAll } as unknown as AgentHistoryStorage<string>;
     const denial = new Error("Selected model use denied");
     const audit = new AgentLiveAudit(
-      invocation, SupportReplyAgentStateSchema, "T-audit", "T-audit", history,
-      metadata, () => undefined,
-      () => phase === "publish" ? Promise.reject(failure) : Promise.resolve(),
+      invocation,
+      SupportReplyAgentStateSchema,
+      "T-audit",
+      "T-audit",
+      history,
+      metadata,
+      () => undefined,
+      () => (phase === "publish" ? Promise.reject(failure) : Promise.resolve()),
     );
     const fact = create(AgentInvocationTerminatedSchema, {
-      agent: payload.agent, sourceSignal: payload.sourceSignal,
-      reason: "MODEL_USE_DENIED", terminatedAt: payload.changedAt,
+      agent: payload.agent,
+      sourceSignal: payload.sourceSignal,
+      reason: "MODEL_USE_DENIED",
+      terminatedAt: payload.changedAt,
     });
     await expect(audit.saveDenial(fact, denial)).rejects.toMatchObject({
       errors: [denial, failure],

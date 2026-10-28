@@ -57,7 +57,7 @@ import {
 } from "@spine-event-engine/storage/provider";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
-import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
+import { eventStoreRecordSpec, EventStoreGroups } from "@spine-event-engine/storage/provider";
 import type { Event, TenantId } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -784,6 +784,12 @@ export class MysqlStorageFactory extends StorageFactory {
         const history = eventHistorySpec(input.stateSchema);
         await this.prepareRecordAdmitted(input.context, history.spec, history.group, mode);
       }
+      await this.prepareRecordAdmitted(
+        input.context,
+        eventStoreRecordSpec,
+        EventStoreGroups.forContext(input.context.name),
+        mode,
+      );
     });
   }
 
@@ -892,6 +898,7 @@ export class MysqlStorageFactory extends StorageFactory {
       AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
       AgentModelPreferences.group,
     ]);
+    specs.push([eventStoreRecordSpec as never, EventStoreGroups.forContext(input.context.name)]);
     return specs;
   }
 
@@ -990,7 +997,13 @@ export class MysqlStorageFactory extends StorageFactory {
    * @returns The private Event record family.
    */
   private createCommitEvents(context: StorageContext, boundary: TenantBoundary) {
-    return this.createMysqlRecordStorage(context, eventStoreRecordSpec, undefined, boundary, false);
+    return this.createMysqlRecordStorage(
+      context,
+      eventStoreRecordSpec,
+      EventStoreGroups.forContext(context.name),
+      boundary,
+      false,
+    );
   }
 
   /**

@@ -28,7 +28,12 @@ import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { AiTestBackend, BlackBox } from "@spine-event-engine/testing";
 import type { BoundedContext } from "@spine-event-engine/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { ServerTests } from "@spine-event-engine/server/testing";
+
+afterEach(async () => {
+  await ServerTests.resetEnvironment();
+});
 
 import {
   CancelReleaseGenerationSchema,

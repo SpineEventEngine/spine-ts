@@ -350,74 +350,30 @@ describe("LocalEntityInbox", () => {
     ]);
   });
 
-  it("buffers persisted rows while direct drain ownership transfers", async () => {
+  it("remote supervised Entity single and batch writes notify without local replay", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+      context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const readiness = new DeliveryReadiness();
+    const onWake = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, delivery, onWake, true);
     const inbox = new LocalEntityInbox("Tasks", readiness);
-    const replayStarted = Promise.withResolvers<undefined>();
-    const releaseReplay = Promise.withResolvers<undefined>();
-    const replayed: string[] = [];
-    const routed: unknown[] = [];
-    inbox.register({
-      targetTypeUrl,
-      labels: ["HANDLE_COMMAND"],
-      async replay(message) {
-        replayed.push(targetValue(message));
-        if (targetValue(message) === "admitted") {
-          replayStarted.resolve(undefined);
-          await releaseReplay.promise;
-        }
-      },
-    });
+    const replay = vi.fn(() => Promise.resolve(undefined));
+    inbox.register({ targetTypeUrl: TaskSchema.typeName, labels: ["HANDLE_COMMAND"], replay });
 
-    const admitted = inbox.receive(
-      delivery,
-      processInput(targetTypeUrl, "admitted"),
-      tenant("tenant-a"),
-    );
-    await replayStarted.promise;
-    const transition = readiness.transition(
-      [
-        {
-          tenantId: tenant("tenant-a"),
-          label: "HANDLE_COMMAND",
-          targetTypeUrl,
-          shard: ShardIndex.single(),
-        },
-      ],
-      (scope) => routed.push(scope),
-    );
+    const batch = await inbox.receiveAll(delivery, [
+      taskCommandInput("first"),
+      taskCommandInput("second"),
+    ]);
+    const single = await inbox.receive(delivery, taskCommandInput("third"));
 
-    await expect(
-      inbox.receiveAll(
-        delivery,
-        ["buffered-a", "buffered-b"].map((targetId) => processInput(targetTypeUrl, targetId)),
-        tenant("tenant-a"),
-      ),
-    ).resolves.toHaveLength(2);
-    expect(replayed).toEqual(["admitted"]);
-    expect(routed).toEqual([]);
-
-    releaseReplay.resolve(undefined);
-    await Promise.all([admitted, transition]);
-    expect(routed).toHaveLength(1);
-
-    await expect(
-      inbox.receive(delivery, processInput(targetTypeUrl, "routed"), tenant("tenant-a")),
-    ).resolves.toBeDefined();
-    expect(replayed).toEqual(["admitted"]);
-    expect(routed).toHaveLength(2);
+    expect(batch).toHaveLength(2);
+    expect(single.signalId).toBe("command-third");
+    expect(onWake).toHaveBeenCalledTimes(3);
+    expect(replay).not.toHaveBeenCalled();
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toMatchObject([
-      { signalId: "signal-buffered-a" },
-      { signalId: "signal-buffered-b" },
-      { signalId: "signal-routed" },
-    ]);
+    ).resolves.toHaveLength(3);
   });
 
   it("emits readiness after persistence before exact drain settles", async () => {
@@ -1814,6 +1770,35 @@ function processInput(targetTypeUrl: string, targetId: string): ReceiveInput {
     inboxId: { targetId: typedTarget(targetId), targetTypeUrl },
     signalId: `signal-${targetId}`,
     signal: commandSignal(),
+    label: "HANDLE_COMMAND",
+    status: "TO_DELIVER",
+  };
+}
+
+function taskCommandInput(id: string): ReceiveInput {
+  const taskId = create(TaskIdSchema, { value: id });
+  return {
+    inboxId: { targetId: AnyPacker.pack(TaskIdSchema, taskId), targetTypeUrl: TaskSchema.typeName },
+    signalId: `command-${id}`,
+    signal: AnyPacker.pack(
+      CommandSchema,
+      create(CommandSchema, {
+        id: create(CommandIdSchema, { uuid: `command-${id}` }),
+        context: create(CommandContextSchema, {
+          actorContext: create(ActorContextSchema, {
+            actor: create(UserIdSchema, { value: "remote-test-user" }),
+          }),
+        }),
+        message: AnyPacker.pack(
+          CreateTaskSchema,
+          create(CreateTaskSchema, {
+            id: taskId,
+            taskListId: create(TaskListIdSchema, { value: "remote-test-list" }),
+            title: `Task ${id}`,
+          }),
+        ),
+      }),
+    ),
     label: "HANDLE_COMMAND",
     status: "TO_DELIVER",
   };

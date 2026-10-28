@@ -36,6 +36,8 @@ import {
   EntityCommitStorageFactories,
   AgentHistoryStorageFactories,
   StoragePreparations,
+  EventStoreGroups,
+  eventStoreRecordSpec,
   eventHistorySpec,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
@@ -178,6 +180,29 @@ describe("PostgreSQL live storage acceptance", () => {
     } finally {
       await first.close();
       await second.close();
+    }
+  });
+
+  it("keeps context Event groups separate and prepares their exact physical families", async () => {
+    const firstContext = context("event_group_first");
+    const secondContext = context("event_group_second");
+    const preparation = StoragePreparations.for(factory);
+    for (const scope of [firstContext, secondContext]) {
+      const group = EventStoreGroups.forContext(scope.name);
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "create");
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "check");
+    }
+    const first = new EventStore(firstContext, factory);
+    const second = new EventStore(secondContext, factory);
+    const eventId = `shared-${run}`;
+    try {
+      await first.append(event(eventId, "task-first"));
+      await second.append(event(eventId, "task-second"));
+      expect((await first.read())[0]?.message).toEqual(event(eventId, "task-first").message);
+      expect((await second.read())[0]?.message).toEqual(event(eventId, "task-second").message);
+      await expect(first.append(event(eventId, "conflict"))).rejects.toThrow(/unique event IDs/);
+    } finally {
+      await Promise.all([first.close(), second.close()]);
     }
   });
 

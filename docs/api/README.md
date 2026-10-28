@@ -256,9 +256,9 @@ The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains an immutable framework value surfaced through
 `builder.spec` and `context.spec`; the builder collects command and event
-dispatchers; `withStorageFactory(factory)` selects the storage factory used for
-the context event store, repository state storage, and direct read-side stand;
-and `build()` returns a
+dispatchers; the explicitly configured `ServerEnvironment` supplies storage
+for the context event store, repository state storage, and direct read-side
+stand after `completeSetup()`; and `build()` returns a
 `BoundedContext` that contains mutable `CommandBus` and `EventBus` instances
 internally while exposing a post-only `CommandEndpoint` and an event
 listing/posting `EventEndpoint` through `commandBus()` and `eventBus()`, plus a
@@ -535,14 +535,14 @@ live streams durable: active streams and their bounded queues remain
 process-local and are not replayed after restart. `InMemorySubscriptionRegistry`
 is valid for development and tests. A context using it emits a warning only
 when attached to a production `ServerEnvironment`.
-`Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
-owner for hosting those routes over Node HTTP/2. `Environment`, `EnvironmentType`,
+`Server`, `ServerOptions`, and `RunningServer` host those routes over Node HTTP/2.
+`Environment`, `EnvironmentType`,
 `ServerEnvironment`, and `ServerEnvironmentSettings` select one process-wide
 storage, integration-channel, optional delivery, and optional tracing facility set through
-`ServerEnvironment.when(type).use(settings)`. `Server`
-accepts built contexts and `BoundedContextBuilder` values; builders added
-through `Server` use the environment storage factory unless
-`withStorageFactory()` already selected a more specific local factory.
+`ServerEnvironment.when(type).use(settings)`. Applications await
+`ServerEnvironment.instance().completeSetup()` before building contexts.
+`Server` accepts built contexts and `BoundedContextBuilder` values; all
+builders use the shared environment storage factory.
 `Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
 explicit through `ServerOptions`. All servers share the lazily resolved
 singleton; production configuration requires `storageFactory` and `typeRegistry`
@@ -550,10 +550,10 @@ before first resolution, and production selection itself requires
 `NODE_ENV=production` before that first resolution. `RunningServer` exposes
 `host`, `port`, `baseUrl`, and
 idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
-closes service intake and drains accepted work, then detaches and
-quiesces environment delivery before closing contexts and explicit resources.
-Shared facilities remain open when a server closes. Network or context-intake
-close failure is a hard gate: delivery detach and dependency cleanup do not begin
+closes service intake, drains accepted work, then closes contexts and explicit
+resources. Shared Delivery remains available to sibling contexts until the
+environment closes. Network or context-intake close failure is a hard gate:
+context and dependency cleanup do not begin
 until a later `close()` retry completes that step. After the hard gate,
 remaining phases are attempted in order; failures are combined, and a later
 close retries only unfinished cleanup. The API deliberately hides private child

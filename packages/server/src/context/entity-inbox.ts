@@ -18,6 +18,7 @@ import { Time } from "@spine-event-engine/core/time";
 
 import type { TenantId } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
+import { deliveryTenantKey } from "../delivery/delivery-tenant.js";
 
 import { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
@@ -59,6 +60,14 @@ export class LocalEntityInbox implements EntityInbox {
   readonly #acknowledgedMessageIds = new Set<string>();
 
   readonly #followUps = new Map<string, Promise<void>>();
+
+  /**
+   * Waits for exact local handoff callbacks already scheduled by this Inbox.
+   * @returns Completion after all scheduled callbacks settle.
+   */
+  async whenFollowUpsIdle(): Promise<void> {
+    while (this.#followUps.size > 0) await Promise.allSettled([...this.#followUps.values()]);
+  }
 
   readonly #followUpScope = new AsyncLocalStorage<symbol>();
 
@@ -409,9 +418,10 @@ export class LocalEntityInbox implements EntityInbox {
 
   #acceptsDrainedMessage(next: InboxMessage, received: InboxMessage): boolean {
     return (
-      InboxHandoff.sameMessageId(next.id, received.id) ||
-      ((next.label === "HANDLE_COMMAND" || next.label === "REACT_UPON_EVENT") &&
-        this.#targets.get(next.inboxId.targetTypeUrl)?.labels.includes(next.label) === true)
+      deliveryTenantKey(next) === deliveryTenantKey(received) &&
+      (InboxHandoff.sameMessageId(next.id, received.id) ||
+        ((next.label === "HANDLE_COMMAND" || next.label === "REACT_UPON_EVENT") &&
+          this.#targets.get(next.inboxId.targetTypeUrl)?.labels.includes(next.label) === true))
     );
   }
 

@@ -35,6 +35,8 @@ import {
 import {
   AgentHistoryRecords,
   AgentModelPreferences,
+  eventStoreRecordSpec,
+  EventStoreGroups,
   eventHistorySpec,
   stateHistorySpec,
 } from "@spine-event-engine/storage/provider";
@@ -637,6 +639,13 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
         const history = eventHistorySpec(input.stateSchema);
         await this.prepareRecordAdmitted(input.context, history.spec, history.group, mode, false);
       }
+      await this.prepareRecordAdmitted(
+        input.context,
+        eventStoreRecordSpec,
+        EventStoreGroups.forContext(input.context.name),
+        mode,
+        false,
+      );
     });
   }
 
@@ -688,19 +697,35 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
         const layout = eventHistorySpec(input.stateSchema);
         await this.prepareRecordAdmitted(input.context, layout.spec, layout.group, mode, false);
       }
-      await this.prepareNative(
+      await this.prepareRecordAdmitted(
         input.context,
-        AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
-        AgentHistoryRecords.group,
-        "spine_agent_history",
+        eventStoreRecordSpec,
+        EventStoreGroups.forContext(input.context.name),
+        mode,
+        false,
       );
-      await this.prepareNative(
-        input.context,
-        AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
-        AgentModelPreferences.group,
-        "spine_agent_model_preferences",
-      );
+      await this.prepareAgentMetadata(input.context);
     });
+  }
+
+  /**
+   * Checks the two native Agent audit families after current Entity declarations.
+   * @param context Complete tenant context.
+   * @returns Completion after both families are accessible.
+   */
+  private async prepareAgentMetadata(context: StorageContext): Promise<void> {
+    await this.prepareNative(
+      context,
+      AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+      AgentHistoryRecords.group,
+      "spine_agent_history",
+    );
+    await this.prepareNative(
+      context,
+      AgentModelPreferences.spec((value) => AgentHistoryHash.value(value)),
+      AgentModelPreferences.group,
+      "spine_agent_model_preferences",
+    );
   }
 
   /**
@@ -836,6 +861,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
         this.#stringifiers.forMessage(column.type.message as GenMessage<Message>);
     const signature = JSON.stringify([
       spec.sourceType.typeName,
+      group?.name ?? null,
       spec.recordType.typeName,
       typeof spec.idType === "string" ? spec.idType : spec.idType.typeName,
       this.columnSignature(spec.columns),

@@ -41,17 +41,23 @@ import {
   MessageIdSchema,
   TenantIdSchema,
 } from "@spine-event-engine/proto";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
 import type {
   AgentHistoryStorage,
   AgentHistoryStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import { Repository } from "../../src/repository/repository.js";
 import { repositoryAccess } from "../../src/repository/repository.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import {
+  ServerEnvironment,
+  ServerEnvironmentLifecycle,
+  serverEnvironmentAccess,
+} from "../../src/server/server-environment.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import {
   SupportReplyAgentIdSchema,
@@ -246,14 +252,26 @@ async function collectHistoryIds<T>(
   throw new Error("Agent history did not reach an older-page boundary.");
 }
 
+async function configureStorage(factory: StorageFactory): Promise<void> {
+  await ServerEnvironmentLifecycle.resetForTest();
+  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
+  await ServerEnvironment.instance().completeSetup();
+}
+
+afterEach(async () => {
+  const environment = ServerEnvironment.instance();
+  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
+  await ServerEnvironmentLifecycle.resetForTest();
+});
+
 describe("Agent registration readiness", () => {
   it("drains protected Agent history reads and rejects an old Agent after rebind", async () => {
     const factory = new GatedProtectedAgentHistoryFactory();
+    await configureStorage(factory);
     const configured = waitingRepository();
     const context = await BoundedContext.singleTenant("ProtectedAgentHistory")
       .withAi(ai())
       .persistSystemEvents()
-      .withStorageFactory(factory)
       .add(configured)
       .build();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-protected-history" });
@@ -283,7 +301,6 @@ describe("Agent registration readiness", () => {
     const rebound = await BoundedContext.singleTenant("ProtectedAgentHistory")
       .withAi(ai())
       .persistSystemEvents()
-      .withStorageFactory(factory)
       .add(configured)
       .build();
     try {
@@ -295,11 +312,11 @@ describe("Agent registration readiness", () => {
 
   it("closes retained Agent history after public reads fail", async () => {
     const factory = new FailingAgentReadFactory();
+    await configureStorage(factory);
     const configured = waitingRepository();
     const context = await BoundedContext.singleTenant("FailingAgentReads")
       .withAi(ai())
       .persistSystemEvents()
-      .withStorageFactory(factory)
       .add(configured)
       .build();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-failing" });
@@ -321,11 +338,11 @@ describe("Agent registration readiness", () => {
 
   it("shares retained Agent audit history across public and testing reads by tenant", async () => {
     const factory = new CountingAgentHistoryFactory();
+    await configureStorage(factory);
     const configured = waitingRepository();
     const context = await BoundedContext.multitenant("SharedAgentHistory")
       .withAi(ai())
       .persistSystemEvents()
-      .withStorageFactory(factory)
       .add(configured)
       .build();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared-history" });
@@ -364,11 +381,11 @@ describe("Agent registration readiness", () => {
 
   it("retries Agent audit-history creation after a failed first acquisition", async () => {
     const factory = new CountingAgentHistoryFactory();
+    await configureStorage(factory);
     const configured = waitingRepository();
     const context = await BoundedContext.singleTenant("RetryAgentHistory")
       .withAi(ai())
       .persistSystemEvents()
-      .withStorageFactory(factory)
       .add(configured)
       .build();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-retry-history" });
@@ -390,11 +407,11 @@ describe("Agent registration readiness", () => {
 
   it("isolates public Agent history by tenant and detaches returned entries", async () => {
     const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
     const configured = waitingRepository();
     const context = await BoundedContext.multitenant("TenantAgentReads")
       .withAi(ai())
       .persistSystemEvents()
-      .withStorageFactory(factory)
       .add(configured)
       .build();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared" });
@@ -525,11 +542,11 @@ describe("Agent registration readiness", () => {
 
   it("pages more than 100 retained typed entries across every public history view", async () => {
     const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
     const configured = waitingRepository();
     const context = await BoundedContext.singleTenant("PagedAgentReads")
       .withAi(ai())
       .persistSystemEvents()
-      .withStorageFactory(factory)
       .add(configured)
       .build();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-paged" });

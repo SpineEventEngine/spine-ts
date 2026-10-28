@@ -93,14 +93,41 @@ describe("shared Agent execution capacity", () => {
     expect(started).toBe(true);
   });
 
-  it("frees a reserved slot when cancellation precedes acknowledgement", () => {
+  it("settles a reserved slot when cancellation precedes acknowledgement", async () => {
     const capacity = AgentExecutionCapacity.for(registry(1, 0));
     const abort = new AbortController();
     const reserved = capacity.reserve("cancelled", abort.signal);
     expect(reserved).toBeDefined();
     abort.abort();
+    await expect(reserved?.completed).resolves.toBeUndefined();
     expect(capacity.reserve("next", new AbortController().signal)).toBeDefined();
     expect(() => reserved?.run(() => Promise.resolve())).toThrow(/no longer available/);
+  });
+
+  it("cancels a waiting context without delaying a sibling after active work settles", async () => {
+    const capacity = AgentExecutionCapacity.for(registry(1, 2));
+    const release = Promise.withResolvers<undefined>();
+    const first = capacity.reserve("active", new AbortController().signal);
+    const active = first?.run(() => release.promise);
+    const closing = new AbortController();
+    const waiting = capacity.reserve("closing-context", closing.signal);
+    let cancelledRan = false;
+    const cancelled = waiting?.run(() => {
+      cancelledRan = true;
+      return Promise.resolve();
+    });
+    closing.abort();
+    await expect(waiting?.completed).resolves.toBeUndefined();
+    const sibling = capacity.reserve("sibling-context", new AbortController().signal);
+    let siblingRan = false;
+    const siblingWork = sibling?.run(() => {
+      siblingRan = true;
+      return Promise.resolve();
+    });
+    release.resolve(undefined);
+    await Promise.all([active, cancelled, siblingWork]);
+    expect(cancelledRan).toBe(false);
+    expect(siblingRan).toBe(true);
   });
   it("starts independent work without an application concurrency ceiling", async () => {
     const capacity = AgentExecutionCapacity.for(AiRegistry.create({ defaultModels: {} }));

@@ -31,6 +31,20 @@ import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("direct ShardSessionRecord storage", () => {
+  it("retains one record handle across shard operations until close", async () => {
+    const factory = new InMemoryStorageFactory();
+    const opened = vi.spyOn(factory, "createRecordStorage");
+    const shards = registry(factory, () => new Date(0), "RetainedShards");
+    const shard = ShardIndex.single();
+    const current = await shards.pickUp(shard, worker("node", "retained"));
+    expect(current).toBeDefined();
+    if (current === undefined) throw new Error("Expected the shard session.");
+    await shards.renew(current);
+    expect(opened).toHaveBeenCalledTimes(1);
+    await shards.close();
+    await expect(shards.pickUp(shard, worker("node", "new"))).rejects.toThrow("closed");
+  });
+
   it("uses the generated session record and shard index directly", () => {
     expect(shardSessionRecordSpec.sourceType).toBe(ShardSessionRecordSchema);
     expect(shardSessionRecordSpec.recordType).toBe(ShardSessionRecordSchema);
@@ -234,6 +248,8 @@ describe("direct ShardSessionRecord storage", () => {
     await expect(shards.pickUp(ShardIndex.single(), worker("node", "worker"))).rejects.toThrow(
       "does not match its storage ID",
     );
+    expect(handle.close).not.toHaveBeenCalled();
+    await shards.close();
     expect(handle.close).toHaveBeenCalledOnce();
   });
 

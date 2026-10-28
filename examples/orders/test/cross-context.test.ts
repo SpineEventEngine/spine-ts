@@ -17,7 +17,12 @@ import { AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { Server, SignalMetadata } from "@spine-event-engine/server";
-import { describe, expect, it, vi } from "vitest";
+import { ServerTests } from "@spine-event-engine/server/testing";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+afterEach(async () => {
+  await ServerTests.resetEnvironment();
+});
 
 import {
   CreateOrderSchema,

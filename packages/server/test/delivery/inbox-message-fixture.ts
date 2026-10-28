@@ -26,13 +26,24 @@ import { TaskListSchema } from "../../../../examples/todo/generated/spine/exampl
 import type { InboxMessage } from "../../src/delivery/inbox.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 
+/**
+ * Creates a pending Task Event for one generated TaskList recipient.
+ *
+ * @param id Task identifier in the domain Event.
+ * @param signalId Event identifier in the delivery row.
+ * @param version Initial Inbox row version.
+ * @param whenReceived Timestamp of durable reception.
+ * @param targetId TaskList identifier shared by the Event and Inbox target.
+ * @returns A domain-correct pending Inbox message.
+ */
 export function createMessage(
   id: string,
   signalId: string,
   version: bigint,
   whenReceived = new Date("2026-07-02T08:00:00.000Z"),
+  targetId = "list-1",
 ): InboxMessage {
-  const taskListId = create(TaskListIdSchema, { value: "list-1" });
+  const taskListId = create(TaskListIdSchema, { value: targetId });
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: signalId }),
     message: AnyPacker.pack(

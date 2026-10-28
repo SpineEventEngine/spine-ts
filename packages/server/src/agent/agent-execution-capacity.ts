@@ -20,6 +20,11 @@ import { registryOptions } from "@spine-event-engine/ai/spi/runtime";
  */
 export interface AgentCapacityReservation {
   /**
+   * Settles after this reservation releases or its admitted turn finishes.
+   */
+  readonly completed: Promise<void>;
+
+  /**
    * Starts work after Inbox acknowledgement and the Agent turn become available.
    *
    * @param onRun Callback to run after capacity admission.
@@ -156,6 +161,7 @@ export class AgentExecutionCapacity {
       this.#active.add(entry);
     else this.#waiting.push(entry);
     return {
+      completed: entry.completion.promise,
       run: (onRun) => this.#run(entry, onRun),
       release: () => {
         this.#cancelWaiting(entry);

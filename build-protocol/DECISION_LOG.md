@@ -6836,3 +6836,142 @@ UI busy waits without releasing trusted account locks on unknown work. Existing
 Wait/Stop-and-close remains available; no app recovery mechanism or new limits.
 Detailed scope, error windows and focused evidence are in
 [completion audit](tasks/environment-lifecycle/AGENT_COMPLETION_AUDIT.md).
+
+## D-0159: Context construction requires explicit environment setup
+
+Date: 2026-10-28. Status: clarification of the accepted human startup sequence.
+
+The TASK ledger and PROPOSAL §1 require explicit environmental setup. A Bounded
+Context build must not call completeSetup to begin hidden database checks. It may
+await setup already explicitly started by application code. If no attempt exists,
+reject before setup I/O with an instruction to call environment.completeSetup.
+A failed or closing environment cannot become ready through a context build.
+This applies to every eager/lazy build combination. BlackBox and test assembly
+helpers may explicitly complete setup as part of their documented construction;
+Server stays gRPC-centric and does not initiate environmental preparation.
+
+This preserves the accepted API and makes its ordering error explicit; no new
+public activation/readiness API or automatic environment replacement is introduced.
+The initial M8 auto-start regression was invalid and is replaced with explicit
+setup-in-progress and missing-setup behavior tests before caller migration.
+
+## D-0160: Context-specific EventStore groups in the shared factory
+
+Date: 2026-10-28. Status: accepted after a reproduced M8 storage collision.
+
+One shared factory exposed a producer/importer collision: both Bounded Contexts
+stored the same Event ID in the ungrouped Event family. Preserve Event identity,
+uniqueness within each EventStore and the shared factory. Select an explicit stable
+StorageGroup for each logical context name and EventStore role (domain or system).
+This is an EventStore-only exception to diagnostic context names; Entity storage,
+Inbox identity and strict actual-context state reservations do not change.
+
+Use one provider-accessible EventStoreGroups.forContext helper. Hash the UTF-8
+JSON array ["spine.EventStoreGroup/v1", role, contextName] with full SHA-256,
+encode unsigned digest in base36 padded to50 characters and prefix es_. The
+53-byte group fits existing SQL mappings (59-byte default table). Preserve exact
+validated names; no sanitization, model hash, random suffix or build-order identity.
+Equal names and roles intentionally denote the same logical EventStore, consistent
+with integration origin identity. System stores use their actual System spec name
+and the explicit system role. No new context-name uniqueness rule is introduced.
+
+Default EventStore construction, all provider atomic delivery-Event writes,
+preparation, catch-up and testing reads must use this same derivation. Explicit
+standalone EventStore group overrides retain their existing meaning. Datastore's
+native preparation declaration must include group identity, so incompatible custom
+physical aliases reject as SQL mappings already do. Never certify an ungrouped
+family while runtime writes a grouped one. No migration, fallback reads or dual
+writes are introduced.
+
+JVM EventStore describes context-local Events but its memory provider allocates
+isolated handles and ignores groups. It supplies no portable grouping algorithm;
+this is a TS shared-factory correction, not a claimed JVM naming convention.
+The bounded architecture assignment used explicit Astra/high, no source edits or
+tests; actual runtime metadata was unavailable. Accepted proof requirements cover
+producer/importer isolation, retained same-name history, role/tenant separation,
+all native commit paths and matching check-only preparation.
+
+## D-0161: Remote-supervised Inbox reception completes before processing
+
+Date: 2026-10-28. Status: accepted after the managed two-process RED-19 failure.
+
+Preserve established remote routed posting semantics from environment setup onward:
+a successful remote Inbox reception followed by readiness notification submission
+completes posting while processing may remain pending. Baseline c64e82cdb's routed
+DeliveryReadiness.claim returned settledHandoff; complete did not drain. The shared
+M8 core incorrectly retained direct draining, so a peer holding the shard caused a
+pending-row SKIPPED failure. Do not change SKIPPED into acknowledgement.
+
+Select remote-supervised completion once through the package-internal fact that
+the environment installed a supervisor from its configured source and ports. No
+public selector, per-context attachment or transition, local-drain fallback,
+completion protocol, queue or polling mechanism. Source-less custom ports retain
+their established direct behavior. Every context writes through the same core;
+Entity, Projection, batch and imported Event reception use the same notification
+and completion rule. Preserve context admission/close tracking, without another
+Delivery instance.
+
+Local direct posting retains D0157 exact-message outcomes, including capacity
+COMMAND_POST_ERROR with a pending row and no receipt or acknowledgement. Explicit
+Delivery.run and supervisor runs retain actual terminal results, including SKIPPED.
+Remote posting success never creates an Agent receipt, acknowledges the row,
+executes a handler, fabricates output or implies every replica has finished work.
+
+A rejected receive RPC still rejects posting, including an uncertain write outcome
+or remote transition-publication failure. A local readiness observer failure after
+successful reception is diagnosed without reversing that reception; existing
+notifications and safety scans handle later work. Do not suppress detached errors.
+Close fences input, settles admitted receives and drains local active runs before
+closing the facility; pending remote rows cannot force indefinite local shutdown.
+
+Bounded architecture analysis used the existing explicit Astra/high profile;
+actual runtime metadata unavailable. Baseline source and JVM notifying-writer/shard
+contention behavior support this correction; no new product decision is needed.
+Required proof covers contested two-process import/subscription delivery, no remote
+onDrain or synthetic acknowledgement, receive versus observer failure, local
+capacity/error behavior, explicit SKIPPED, both local acquisition orderings,
+late-write notifications and managed shutdown.
+
+## D-0162: Shared Delivery and individual-context shutdown
+
+Date:2026-10-28. Status:accepted after the complete M8 review wave.
+
+Track every admitted core drain by operation identity from before pickup through
+release, including explicit public custom-callback runs. Retain the existing
+per-shard map solely for joinable default replay. Public callbacks cannot silently
+join a different callback or overwrite its wake/release state. Valid environment
+close fences core admission synchronously, stops acquired drains and awaits all
+admitted operations before closing retained stores and factories. Preserve actual
+terminal outcomes, original release errors and attempt-all cleanup; whenIdle uses
+the same terminal operation set. No new dispatcher or generic resource registry.
+
+Each context has an internal Agent-only abort signal combined with the shared
+session signal for both capacity reservation and live execution. Check that signal
+before and after awaited session validation in the existing effect/commit guard.
+Track reservations through receipt/ack/run settlement using existing capacity
+completion promises. Context close cannot abort sibling sessions, synthesize audit
+facts, delete acceptance receipts or resume accepted work. Cancellation remains
+cooperative; late framework effects are fenced, external effects cannot be undone.
+
+At beginClose remove only fresh recipient entries, retaining strict state
+reservations until safe cleanup. Track already-entered shared replay through its
+full callback and drain it. Existing exact local pending entries remain selectable
+through #directPending even after normal recipient removal; they preserve locally
+admitted bus work and ordinary internal follow-ups. Include existing follow-up
+promises in context drain and stabilize buses again. Never await a sibling's whole
+shard run to close this context. A merely received remote row stays pending under
+D0161 and cannot impose a remote completion wait.
+
+Recheck effective admission immediately before endpoint invocation and on retries,
+with no intervening await. A private not-admitted result bypasses acknowledgement,
+Agent receipt and FailedReception policy, leaving the row pending. It is not a
+new public delivery policy or capacity deferral. Cleanup waits admitted replay,
+Agent reservations and follow-ups before stores/Stand close; preserve original
+operation and cleanup failures. No new queue, timer, public lifecycle API, per-context
+Delivery, migration or recovery mechanism.
+
+Detailed source seams, ordering and focused race tests are recorded in
+[shared Delivery close](tasks/environment-lifecycle/SHARED_DELIVERY_CLOSE.md).
+Existing requirements-splitter ran explicit immutable Astra/high, read-only; runtime
+metadata unavailable. Local JVM Repository unregisters its Inbox before storage
+close, but supplies no claimed analogue for TypeScript Agent async cancellation.

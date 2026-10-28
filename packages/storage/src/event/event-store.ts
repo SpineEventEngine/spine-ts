@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { createHash } from "node:crypto";
 import { clone, create, equals, ScalarType } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId, TenantId } from "@spine-event-engine/proto";
@@ -22,12 +23,32 @@ import { ColumnTypes } from "../record/column-type.js";
 import type { RecordQuery } from "../record/record-query.js";
 import { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
-import type { StorageGroup } from "../record/storage-group.js";
+import { StorageGroup } from "../record/storage-group.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
 import { TenantBoundary } from "../internal/tenancy.js";
 
 const idleClosers = new WeakMap<EventStore, () => void>();
+
+/**
+ * Stable physical Event record family for one logical context and store role.
+ */
+export const EventStoreGroups: Readonly<{
+  forContext(contextName: string, role?: "domain" | "system"): StorageGroup;
+}> = Object.freeze({
+  /**
+   * Derives the portable group name from the exact context name and role.
+   *
+   * @param contextName Framework-validated logical context name.
+   * @param role Domain or paired System Event store.
+   * @returns Stable physical Event family selector.
+   */
+  forContext(contextName: string, role: "domain" | "system" = "domain"): StorageGroup {
+    const logical = JSON.stringify(["spine.EventStoreGroup/v1", role, contextName]);
+    const digest = createHash("sha256").update(logical, "utf8").digest("hex");
+    return new StorageGroup(`es_${BigInt(`0x${digest}`).toString(36).padStart(50, "0")}`);
+  },
+});
 
 /**
  * Framework event store backed by record storage.
@@ -49,7 +70,7 @@ export class EventStore {
   readonly #factory: StorageFactory;
 
   /**
-   * Optional record family selector independent of the diagnostic context name.
+   * Record family selected by the logical context and store role.
    */
   readonly #group: StorageGroup | undefined;
 
@@ -88,7 +109,7 @@ export class EventStore {
   constructor(context: EventStoreContext, factory: StorageFactory, group?: StorageGroup) {
     this.#context = EventContexts.base(context);
     this.#factory = factory;
-    this.#group = group;
+    this.#group = group ?? EventStoreGroups.forContext(this.#context.name);
     idleClosers.set(this, () => {
       this.#closeIdle();
     });

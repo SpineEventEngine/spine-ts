@@ -16,7 +16,6 @@ import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import type { AiRegistry } from "@spine-event-engine/ai";
 
 import {
   BoundedContext,
@@ -31,10 +30,6 @@ import {
   type SpineServicesOptions,
 } from "../services/spine-services.js";
 import { RegisteredTargets } from "../services/registered-targets.js";
-import type {
-  EnvironmentAttachmentHandle,
-  EnvironmentOwnership,
-} from "./environment-attachment.js";
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
@@ -45,6 +40,7 @@ const defaultMessageMaxBytes = 4_194_304;
 const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
+type EnvironmentOwnership = "caller" | "server";
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
 const serverHosts = new WeakMap<Server, string>();
 const assemblingStands = new WeakMap<Stand, object>();
@@ -73,10 +69,9 @@ export interface ListenerLifecycle {
 /**
  * Configures and starts local Spine Connect/gRPC-compatible services.
  *
- * A server assembles its bounded contexts, completes finite environment
- * delivery recovery, and opens its generated services before accepting network
- * requests. It also owns the ordered cleanup of contexts and resources added
- * to this assembly.
+ * A server assembles its bounded contexts and opens generated services before
+ * accepting network requests. It closes its contexts and added resources in
+ * order while environment Delivery remains available to sibling contexts.
  */
 export class Server {
   readonly #host: string;
@@ -88,8 +83,6 @@ export class Server {
   readonly #writeMaxBytes: number;
 
   readonly #contexts: ServerContext[] = [];
-
-  #aiRegistry: AiRegistry | undefined;
 
   readonly #resources: { close(): unknown }[] = [];
 
@@ -148,28 +141,15 @@ export class Server {
   /**
    * Adds one bounded context or builder to the assembly.
    *
-   * Builders assemble during {@link start} before recovery and listener open.
-   * They use {@link ServerEnvironment.storageFactory} unless a more specific
-   * `withStorageFactory(...)` factory is selected. The running server owns and
-   * closes added contexts only after services, sessions, and active work stop.
+   * Builders assemble during {@link start} before the listener opens.
+   * They use {@link ServerEnvironment.storageFactory}. The running server closes
+   * added contexts after services, sessions, and active work stop.
    *
    * @param context Supplies the context or builder to expose.
    * @returns This server builder.
    */
   add(context: BoundedContext | BoundedContextBuilder): this {
     this.#contexts.push(context);
-    return this;
-  }
-
-  /**
-   * Sets the default AI registry for Bounded Context builders added to this server.
-   * An explicit Bounded Context registry takes precedence.
-   *
-   * @param registry Factory-created deployment registry.
-   * @returns This server builder.
-   */
-  withAi(registry: AiRegistry): this {
-    this.#aiRegistry = registry;
     return this;
   }
 
@@ -199,15 +179,13 @@ export class Server {
   }
 
   /**
-   * Starts the server after completing assembly and delivery recovery.
+   * Starts the server after assembling contexts and services.
    *
-   * Built contexts attach to delivery in deterministic input order before the
-   * generated services and listener open. A failed assembly or listener open
-   * leaves no listener and closes acquired resources. Network cleanup is a hard
-   * gate before delivery or dependencies close.
-   * It shares only a caller-managed active environment generation, rejects
-   * while run-managed ownership is active, installs no signal handlers, and
-   * never closes the environment.
+   * Built contexts register recipients before generated services and the listener
+   * open. A failed assembly or listener open leaves no listener and closes acquired
+   * resources. Network cleanup is a hard gate before context or dependency cleanup.
+   * Caller-managed startup shares the active environment, rejects during a managed
+   * server run, installs no signal handlers, and never closes the environment.
    * A later call after incomplete cleanup retries only that cleanup and leaves
    * this server terminal. A fresh server may reuse the singleton environment.
    * Concurrent callers share one start or cleanup attempt.
@@ -239,7 +217,7 @@ export class Server {
       lifecycle !== undefined
         ? this.#retryFailedListenerLifecycle(lifecycle)
         : cleanup === undefined
-          ? this.#startOnce(ownership)
+          ? this.#startOnce()
           : this.#retryFailedStartCleanup(cleanup);
     this.#starting = starting;
     this.#startingOwnership = ownership;
@@ -296,14 +274,14 @@ export class Server {
   /**
    * Builds contexts, attaches delivery, and opens the listener for one start attempt.
    *
-   * @param ownership Whether the environment is managed by this Server.
    * @returns The running listener after lifecycle startup.
    */
-  async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
+  async #startOnce(): Promise<RunningServer> {
+    await serverEnvironmentAccess.awaitSetup(this.#environment);
     const admission: ContextAdmission = { token: {}, contexts: [] };
     const contexts = await this.#prepareContexts(admission);
-    const { attachment, routes } = await this.#attachContexts(contexts, ownership, admission);
-    const running = await this.#openListener(contexts, attachment, routes);
+    const routes = await this.#installContexts(contexts, admission);
+    const running = await this.#openListener(contexts, routes);
     await this.#startLifecycles(running);
     return running;
   }
@@ -312,13 +290,11 @@ export class Server {
    * Opens the service listener with retryable cleanup for every preparation phase.
    *
    * @param contexts Contexts exposed by the listener.
-   * @param attachment Active environment delivery attachment.
    * @param routes Routes installed for these contexts.
    * @returns The prepared running listener.
    */
   async #openListener(
     contexts: readonly BoundedContext[],
-    attachment: EnvironmentAttachmentHandle,
     routes: RegisteredTargets,
   ): Promise<RunningHttp2Server> {
     const closeables = [...contexts, ...this.#resources];
@@ -327,12 +303,10 @@ export class Server {
         closeables,
         "Server start cleanup failed while closing owned contexts/resources.",
       ),
-      attachment,
       routes,
-      failedStartRollback: undefined,
     };
     try {
-      return await this.#prepareListener(contexts, attachment, routes, closeables, cleanup);
+      return await this.#prepareListener(contexts, routes, closeables, cleanup);
     } catch (error) {
       this.#failedStartCleanup = cleanup;
       return this.#cleanupFailedListenerStart(cleanup, error);
@@ -343,7 +317,6 @@ export class Server {
    * Constructs services and the HTTP adapter, then binds the listener.
    *
    * @param contexts Contexts exposed by this Server.
-   * @param attachment Active delivery attachment.
    * @param routes Installed state routes.
    * @param closeables Contexts and resources for eventual shutdown.
    * @param cleanup Retained cleanup state if preparation fails.
@@ -351,7 +324,6 @@ export class Server {
    */
   async #prepareListener(
     contexts: readonly BoundedContext[],
-    attachment: EnvironmentAttachmentHandle,
     routes: RegisteredTargets,
     closeables: readonly unknown[],
     cleanup: FailedStartCleanup,
@@ -370,7 +342,6 @@ export class Server {
       server: httpServer,
       sessions,
       environment: this.#environment,
-      attachment,
       routes,
       services,
       host,
@@ -440,18 +411,14 @@ export class Server {
       if (conflicted) throw conflict;
       for (const entry of this.#contexts) {
         const context = boundedContextAccess.isBuilder(entry)
-          ? await boundedContextAccess.build(
-              entry,
-              this.#environment.storageFactory,
-              this.#aiRegistry,
-            )
+          ? await boundedContextAccess.build(entry)
           : entry;
         if (boundedContextAccess.isBuilder(entry)) this.#admitContext(context, admission);
         contexts.push(context);
       }
       return contexts;
     } catch (error) {
-      await this.#cleanupFailedAttachment(admission.contexts, undefined, error, admission);
+      await this.#cleanupFailedRegistration(admission.contexts, undefined, error, admission);
       throw error;
     }
   }
@@ -486,18 +453,16 @@ export class Server {
   }
 
   /**
-   * Validates state routes before delivery recovery can invoke handlers.
+   * Installs state routes for the assembled contexts.
    *
    * @param contexts Built contexts for this Server.
-   * @param ownership Environment attachment mode.
-   * @param admission Reservations transferred to installed routes before attachment.
-   * @returns The environment attachment and its installed routes.
+   * @param admission Reservations transferred to installed routes.
+   * @returns The installed routes.
    */
-  async #attachContexts(
+  async #installContexts(
     contexts: readonly BoundedContext[],
-    ownership: EnvironmentOwnership,
     admission: ContextAdmission,
-  ): Promise<{ attachment: EnvironmentAttachmentHandle; routes: RegisteredTargets }> {
+  ): Promise<RegisteredTargets> {
     const freshContexts = contexts.filter(
       (context) => RegisteredTargets.forStand(context.stand()) === undefined,
     );
@@ -511,26 +476,22 @@ export class Server {
         boundedContextAccess.installLogger(context, logger);
         serverEnvironmentAccess.warnVolatileRegistry(this.#environment, context);
       }
-      const attachment = await serverEnvironmentAccess.attach(this.#environment, {
-        ownership,
-        descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
-      });
-      return { attachment, routes };
+      return routes;
     } catch (error) {
-      await this.#cleanupFailedAttachment(freshContexts, routes, error, admission);
+      await this.#cleanupFailedRegistration(freshContexts, routes, error, admission);
       throw error;
     }
   }
 
   /**
-   * Retains retryable cleanup when route validation or attachment fails.
+   * Retains retryable cleanup when route installation fails.
    *
    * @param contexts Fresh contexts to close after failure.
    * @param routes Routes installed by this attempt, if any.
-   * @param error Original route or attachment failure.
+   * @param error Original route failure.
    * @param admission Reservations retained until context cleanup succeeds.
    */
-  async #cleanupFailedAttachment(
+  async #cleanupFailedRegistration(
     contexts: readonly BoundedContext[],
     routes: RegisteredTargets | undefined,
     error: unknown,
@@ -540,20 +501,11 @@ export class Server {
       [...contexts, ...this.#resources],
       "Server start cleanup failed while closing owned contexts/resources.",
     );
-    if (serverEnvironmentAccess.failedStartRetryPending(this.#environment, error)) {
-      this.#failedStartCleanup = {
-        closeGroup,
-        failedStartRollback: { rejection: error },
-        routes,
-        admission,
-      };
-      return;
-    }
     try {
       await closeGroup.close();
     } catch (cleanupError) {
-      this.#failedStartCleanup = { closeGroup, failedStartRollback: undefined, routes, admission };
-      throw ServerValues.attachmentCleanupError(error, cleanupError);
+      this.#failedStartCleanup = { closeGroup, routes, admission };
+      throw ServerValues.registrationCleanupError(error, cleanupError);
     }
     routes?.release();
     if (admission !== undefined) this.#releaseAdmission(admission);
@@ -609,10 +561,6 @@ export class Server {
   }
 
   async #advanceFailedStartCleanup(cleanup: FailedStartCleanup, errors: unknown[]): Promise<void> {
-    if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
-      return;
-    }
-    await this.#retryFailedStartRollback(cleanup, errors);
     let closeFailed = false;
     try {
       await cleanup.closeGroup.close();
@@ -620,43 +568,12 @@ export class Server {
       closeFailed = true;
       CloseErrors.collect(error, errors);
     }
-    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
+    if (!closeFailed && this.#failedStartCleanup === cleanup) {
       cleanup.routes?.release();
       if (cleanup.admission !== undefined) this.#releaseAdmission(cleanup.admission);
       if (cleanup.services !== undefined) spineServicesAccess.clearLogger(cleanup.services);
       this.#failedStartCleanup = undefined;
       this.#failedStartConsumed = true;
-    }
-  }
-
-  /**
-   * Retries environment rollback before closing contexts from a failed start.
-   *
-   * @param cleanup Retained failed-start state.
-   * @param errors Errors collected across cleanup phases.
-   */
-  async #retryFailedStartRollback(cleanup: FailedStartCleanup, errors: unknown[]): Promise<void> {
-    const failedStartRollback = cleanup.failedStartRollback;
-    if (
-      failedStartRollback !== undefined &&
-      serverEnvironmentAccess.failedStartRetryPending(
-        this.#environment,
-        failedStartRollback.rejection,
-      )
-    ) {
-      try {
-        await serverEnvironmentAccess.retryFailedStart(this.#environment);
-      } catch (error) {
-        if (
-          serverEnvironmentAccess.failedStartRetryPending(
-            this.#environment,
-            failedStartRollback.rejection,
-          )
-        ) {
-          throw error;
-        }
-        CloseErrors.collect(error, errors);
-      }
     }
   }
 
@@ -675,35 +592,6 @@ export class Server {
     }
   }
 
-  async #advanceFailedStartAttachment(
-    cleanup: FailedStartCleanup,
-    errors: unknown[],
-  ): Promise<boolean> {
-    const attachment = cleanup.attachment;
-    if (attachment === undefined) {
-      return true;
-    }
-    try {
-      if (serverEnvironmentAccess.detachRetryPending(this.#environment, attachment)) {
-        await serverEnvironmentAccess.retryDetach(this.#environment, attachment);
-      } else {
-        await serverEnvironmentAccess.detach(this.#environment, attachment);
-      }
-      delete cleanup.attachment;
-      return true;
-    } catch (error) {
-      CloseErrors.collect(error, errors);
-    }
-    try {
-      if (serverEnvironmentAccess.endpointSafe(this.#environment, attachment)) {
-        return true;
-      }
-    } catch (error) {
-      CloseErrors.collect(error, errors);
-    }
-    return false;
-  }
-
   #finishStart(starting: Promise<RunningServer>): void {
     if (this.#starting === starting) {
       this.#starting = undefined;
@@ -714,21 +602,15 @@ export class Server {
 
 interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
-  readonly failedStartRollback: FailedStartRollbackCapability | undefined;
   readonly routes?: RegisteredTargets | undefined;
   readonly admission?: ContextAdmission | undefined;
   services?: SpineServices;
   network?: FailedStartNetwork;
-  attachment?: EnvironmentAttachmentHandle;
 }
 
 interface ContextAdmission {
   readonly token: object;
   readonly contexts: BoundedContext[];
-}
-
-interface FailedStartRollbackCapability {
-  readonly rejection: unknown;
 }
 
 interface FailedStartNetwork {
@@ -790,11 +672,10 @@ export interface ServerOptions {
   readonly writeMaxBytes?: number;
 
   /**
-   * Built bounded contexts or builders owned by this server assembly.
+   * Built bounded contexts or builders registered with this server assembly.
    *
    * Builders in this list are assembled during {@link Server.start} before
-   * listener open. They use {@link ServerEnvironment.storageFactory} unless
-   * `withStorageFactory(...)` already selected a more specific local factory.
+   * listener open. They use {@link ServerEnvironment.storageFactory}.
    */
   readonly contexts?: readonly (BoundedContext | BoundedContextBuilder)[];
 
@@ -831,17 +712,17 @@ export interface RunningServer {
   readonly baseUrl: string;
 
   /**
-   * Closes intake, delivery, contexts, and owned resources.
+   * Closes intake, admitted work, contexts, and added resources.
    *
    * It stops network intake and sessions, then drains
-   * accepted work before detaching delivery. A failed intake close blocks later
+   * accepted work before closing contexts. A failed intake close blocks later
    * phases until a retry. Sibling servers remain available. Caller-managed
    * servers leave process-wide facilities available; closing the final
    * run-managed server closes its environment. Concurrent calls share one
    * attempt; later calls retry only unfinished cleanup, preserving stable
    * flattened failure order.
    *
-   * @returns A promise that settles after server-owned cleanup completes.
+   * @returns A promise that settles after this server's cleanup completes.
    */
   close(): Promise<void>;
 }
@@ -868,7 +749,7 @@ export interface RunningServerAccess {
    * Returns completion after draining Delivery before managed network close.
    *
    * @param server Supplies the local running server.
-   * @returns Completion after its Delivery attachment drains.
+   * @returns Completion after admitted Delivery work for this server drains.
    */
   drainDelivery(server: RunningServer): Promise<void>;
 }
@@ -907,8 +788,6 @@ class RunningHttp2Server implements RunningServer {
 
   readonly #environment: ServerEnvironment;
 
-  readonly #attachment: EnvironmentAttachmentHandle;
-
   readonly #routes: RegisteredTargets;
 
   readonly #services: SpineServices;
@@ -922,8 +801,6 @@ class RunningHttp2Server implements RunningServer {
   #closed: Promise<void> | undefined;
 
   #networkClosed = false;
-
-  #attachmentDetached = false;
 
   readonly #closeGroup: RetryableCloseGroup;
 
@@ -939,7 +816,6 @@ class RunningHttp2Server implements RunningServer {
     this.#contexts = options.contexts;
     this.#listenerLifecycles = options.listenerLifecycles;
     this.#environment = options.environment;
-    this.#attachment = options.attachment;
     this.#routes = options.routes;
     this.#services = options.services;
     this.host = options.host;
@@ -998,18 +874,12 @@ class RunningHttp2Server implements RunningServer {
   }
 
   /**
-   * Completes the server's Delivery detachment while network sessions remain available.
+   * Waits for the environment's admitted Delivery work.
    *
-   * @returns Completion after the attachment drains.
+   * @returns Completion after active shard runs settle.
    */
-  async drainDelivery(): Promise<void> {
-    if (this.#attachmentDetached) return;
-    if (serverEnvironmentAccess.detachRetryPending(this.#environment, this.#attachment)) {
-      await serverEnvironmentAccess.retryDetach(this.#environment, this.#attachment);
-    } else {
-      await serverEnvironmentAccess.detach(this.#environment, this.#attachment);
-    }
-    this.#attachmentDetached = true;
+  drainDelivery(): Promise<void> {
+    return serverEnvironmentAccess.whenDeliveryIdle(this.#environment);
   }
 
   /**
@@ -1019,7 +889,6 @@ class RunningHttp2Server implements RunningServer {
    */
   async #closeOnce(): Promise<void> {
     await this.#closeListenerAndNetwork();
-    const { detachErrors, detachRejected } = await this.#detachDelivery();
     const errors: unknown[] = [];
     try {
       await this.#drainContexts();
@@ -1032,15 +901,6 @@ class RunningHttp2Server implements RunningServer {
     } catch (error) {
       errors.push(error);
     }
-    if (detachRejected) {
-      if (errors.length === 0) ServerValues.throwRunningDetachErrors(detachErrors);
-      const combined = [...detachErrors];
-      for (const error of errors) CloseErrors.collect(error, combined);
-      throw new AggregateError(
-        combined,
-        "Server close failed while draining contexts and resources.",
-      );
-    }
     if (errors.length > 1)
       throw new AggregateError(
         errors,
@@ -1051,7 +911,7 @@ class RunningHttp2Server implements RunningServer {
   }
 
   /**
-   * Closes lifecycle attachments and network intake before delivery detachment.
+   * Closes lifecycle callbacks and network intake before context cleanup.
    *
    * @returns Completion after the listener and sessions close.
    */
@@ -1069,41 +929,6 @@ class RunningHttp2Server implements RunningServer {
   }
 
   /**
-   * Completes Delivery detachment while retaining errors for safe endpoint cleanup.
-   *
-   * @returns Detachment errors and whether detachment itself was rejected.
-   */
-  async #detachDelivery(): Promise<{ detachErrors: unknown[]; detachRejected: boolean }> {
-    const detachErrors: unknown[] = [];
-    let detachRejected = false;
-    if (!this.#attachmentDetached) {
-      try {
-        if (serverEnvironmentAccess.detachRetryPending(this.#environment, this.#attachment)) {
-          await serverEnvironmentAccess.retryDetach(this.#environment, this.#attachment);
-        } else {
-          await serverEnvironmentAccess.detach(this.#environment, this.#attachment);
-        }
-        this.#attachmentDetached = true;
-      } catch (error) {
-        detachRejected = true;
-        CloseErrors.collect(error, detachErrors);
-      }
-      if (detachRejected) {
-        let endpointSafe = false;
-        try {
-          endpointSafe = serverEnvironmentAccess.endpointSafe(this.#environment, this.#attachment);
-        } catch (error) {
-          CloseErrors.collect(error, detachErrors);
-        }
-        if (!endpointSafe) {
-          ServerValues.throwRunningDetachErrors(detachErrors);
-        }
-      }
-    }
-    return { detachErrors, detachRejected };
-  }
-
-  /**
    * Waits for every context's accepted work before any Stand closes.
    *
    * @returns Completion after all context work drains.
@@ -1113,7 +938,10 @@ class RunningHttp2Server implements RunningServer {
     const drained = await Promise.allSettled(
       this.#contexts.map((context) => boundedContextAccess.drainWork(context)),
     );
-    const drainErrors = drained.flatMap((result) =>
+    const delivery = await Promise.allSettled([
+      serverEnvironmentAccess.whenDeliveryIdle(this.#environment),
+    ]);
+    const drainErrors = [...drained, ...delivery].flatMap((result) =>
       result.status === "rejected" ? [result.reason as unknown] : [],
     );
     if (drainErrors.length > 0) {
@@ -1129,7 +957,6 @@ interface RunningHttp2ServerOptions {
   readonly contexts: readonly BoundedContext[];
   readonly listenerLifecycles: readonly ListenerLifecycle[];
   readonly environment: ServerEnvironment;
-  readonly attachment: EnvironmentAttachmentHandle;
   readonly routes: RegisteredTargets;
   readonly services: SpineServices;
   readonly host: string;
@@ -1203,19 +1030,19 @@ const ServerValues = Object.freeze({
   },
 
   /**
-   * Collects attachment and immediate cleanup failures for startup reporting.
+   * Collects route registration and immediate cleanup failures for startup reporting.
    *
-   * @param startError Attachment or duplicate registration failure.
+   * @param startError Route or duplicate registration failure.
    * @param cleanupError Failure while closing prepared resources.
    * @returns Both failures in one AggregateError.
    */
-  attachmentCleanupError(startError: unknown, cleanupError: unknown): AggregateError {
+  registrationCleanupError(startError: unknown, cleanupError: unknown): AggregateError {
     const errors: unknown[] = [];
     CloseErrors.collect(startError, errors);
     CloseErrors.collect(cleanupError, errors);
     return new AggregateError(
       errors,
-      "Server attachment failed and immediate dependency cleanup also failed.",
+      "Server registration failed and immediate dependency cleanup also failed.",
     );
   },
 
@@ -1252,19 +1079,6 @@ const ServerValues = Object.freeze({
       errors,
       "Server start failed while opening listener and cleanup also failed.",
     );
-  },
-
-  /**
-   * Throws one delivery-detachment error or groups several.
-   *
-   * @param errors Delivery-detachment failures.
-   * @returns Never; this method throws.
-   */
-  throwRunningDetachErrors(errors: readonly unknown[]): never {
-    if (errors.length === 1) {
-      throw errors[0];
-    }
-    throw new AggregateError(errors, "Server close failed while detaching delivery.");
   },
 
   /**

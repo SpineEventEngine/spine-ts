@@ -21,7 +21,12 @@ import { TargetSchema, TopicIdSchema, TopicSchema } from "@spine-event-engine/pr
 import { SignalMetadata } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { AiTestBackend, BlackBox } from "@spine-event-engine/testing";
-import { expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
+import { ServerTests } from "@spine-event-engine/server/testing";
+
+afterEach(async () => {
+  await ServerTests.resetEnvironment();
+});
 import {
   CancelReleaseGenerationSchema,
   ChangeReleaseInputsSchema,

@@ -50,7 +50,7 @@ import {
 } from "@spine-event-engine/storage";
 import { InboxMessageSchema } from "@spine-event-engine/proto/delivery";
 import { type EntityRecordStorage } from "@spine-event-engine/storage/provider";
-import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   Aggregate,
@@ -78,15 +78,15 @@ import {
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { TenantIndexes } from "../../src/context/tenant-index.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
-import { Delivery } from "../../src/delivery/delivery.js";
 import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
-import type { InboxMessage } from "../../src/delivery/inbox.js";
+import { Inbox, type InboxMessage } from "../../src/delivery/inbox.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import {
   ServerEnvironment,
   ServerEnvironmentLifecycle,
 } from "../../src/server/server-environment.js";
+import { EnvironmentType } from "../../src/server/environment.js";
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Stand } from "../../src/stand/stand.js";
@@ -109,10 +109,30 @@ import {
 } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
 import { tenant } from "../tenant-fixture.js";
 
+beforeEach(async () => {
+  await ServerEnvironment.instance().completeSetup();
+});
+
 afterEach(async () => {
   const environment = ServerEnvironment.instance();
   for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
+  await ServerEnvironmentLifecycle.resetForTest();
 });
+
+async function configureStorage(storageFactory: StorageFactory): Promise<void> {
+  await ServerEnvironmentLifecycle.resetForTest();
+  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+  await ServerEnvironment.instance().completeSetup();
+}
+
+async function configureDelivery(
+  storageFactory: StorageFactory,
+  strategy: DeliveryStrategy,
+): Promise<void> {
+  await ServerEnvironmentLifecycle.resetForTest();
+  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory, deliveryStrategy: strategy });
+  await ServerEnvironment.instance().completeSetup();
+}
 
 interface InternalSystemPairing {
   readonly domain: {
@@ -132,10 +152,6 @@ interface InternalTenantIndex {
   keep(tenantId: TenantId): Promise<void>;
 }
 
-interface InternalDeliveryScope {
-  readonly tenantId?: TenantId;
-}
-
 interface InternalDeliveryEndpoint {
   readonly label: "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
   readonly targetTypeUrl: string;
@@ -143,13 +159,8 @@ interface InternalDeliveryEndpoint {
 }
 
 interface InternalDeliveryDescriptor {
-  readonly storageFactory: StorageFactory;
-  startupScopes(): Promise<readonly InternalDeliveryScope[]>;
-  storageContext(scope: InternalDeliveryScope): StorageContext;
   endpoints(): readonly InternalDeliveryEndpoint[];
   replay(message: InboxMessage, tenantId?: string): Promise<void>;
-  onReady(onReady: (ready: unknown) => void): () => void;
-  transition(scopes: readonly unknown[], onReady: (ready: unknown) => void): Promise<void>;
 }
 
 type ProjectState = Message<"ProjectState"> & {
@@ -474,18 +485,6 @@ describe("BoundedContext assembly", () => {
     );
   });
 
-  it("rejects private delivery transition validation through its promise", async () => {
-    const context = await BoundedContext.singleTenant("Tasks").build();
-    let transition: Promise<void> | undefined;
-
-    expect(() => {
-      transition = internalDeliveryDescriptor(context).transition([], () => undefined);
-    }).not.toThrow();
-    await expect(transition).rejects.toThrow(
-      "Delivery readiness transition requires configured scopes.",
-    );
-  });
-
   it("rejects empty or blank context names", () => {
     expect(() => BoundedContext.singleTenant("\t\n")).toThrow(BoundedContextNameError);
     expect(() => BoundedContext.multitenant("")).toThrow(BoundedContextNameError);
@@ -537,8 +536,8 @@ describe("BoundedContext assembly", () => {
 
   it("defers event record storage until an event operation selects its tenant", async () => {
     const storageFactory = new ObservingStorageFactory([]);
+    await configureStorage(storageFactory);
     const context = await BoundedContext.singleTenant("AcquisitionOrder")
-      .withStorageFactory(storageFactory)
       .persistSystemEvents()
       .build();
 
@@ -569,9 +568,9 @@ describe("BoundedContext assembly", () => {
 
   it("stores multitenant index entries through the configured storage factory", async () => {
     const storageFactory = new InMemoryStorageFactory();
+    await configureStorage(storageFactory);
     const selectedIndex = TenantIndexes.fromFactory(storageFactory);
     const first = await BoundedContext.multitenant("Customers")
-      .withStorageFactory(storageFactory)
       .withTenantIndex(selectedIndex)
       .build();
     const firstIndex = internalTenantIndex(first);
@@ -585,7 +584,6 @@ describe("BoundedContext assembly", () => {
     await expect(firstIndex.all()).resolves.toEqual([tenant("tenant-a"), tenant("tenant-b")]);
 
     const recovered = await BoundedContext.multitenant("Customers")
-      .withStorageFactory(storageFactory)
       .withTenantIndex(selectedIndex)
       .build();
     const recoveredIndex = internalTenantIndex(recovered);
@@ -593,38 +591,24 @@ describe("BoundedContext assembly", () => {
     await expect(recoveredIndex.all()).resolves.toEqual([tenant("tenant-a"), tenant("tenant-b")]);
   });
 
-  it("describes actual delivery storage and tenant startup scopes through internal access", async () => {
+  it("uses the environment delivery and tenant index across sibling contexts", async () => {
     const storageFactory = new InMemoryStorageFactory();
+    await configureStorage(storageFactory);
     const selectedIndex = TenantIndexes.fromFactory(storageFactory);
-    const single = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
-      .build();
+    const single = await BoundedContext.singleTenant("Tasks").build();
     const multitenant = await BoundedContext.multitenant("Customers")
-      .withStorageFactory(storageFactory)
       .withTenantIndex(selectedIndex)
       .build();
 
     await internalTenantIndex(multitenant).keep(tenant("tenant-b"));
     await internalTenantIndex(multitenant).keep(tenant("tenant-a"));
 
-    expect(internalDeliveryDescriptor(single).storageFactory).toBe(storageFactory);
-    await expect(internalDeliveryDescriptor(single).startupScopes()).resolves.toEqual([{}]);
-    expect(internalDeliveryDescriptor(single).storageContext({})).toEqual({
-      name: "Tasks",
-      multitenant: false,
-    });
-    expect(internalDeliveryDescriptor(multitenant).storageFactory).toBe(storageFactory);
-    await expect(internalDeliveryDescriptor(multitenant).startupScopes()).resolves.toEqual([
-      { tenantId: tenant("tenant-a") },
-      { tenantId: tenant("tenant-b") },
+    expect(ServerEnvironment.instance().storageFactory).toBe(storageFactory);
+    expect(single.tenantIndex).toBe(ServerEnvironment.instance().tenantIndex);
+    await expect(multitenant.tenantIndex.all()).resolves.toEqual([
+      tenant("tenant-a"),
+      tenant("tenant-b"),
     ]);
-    expect(
-      internalDeliveryDescriptor(multitenant).storageContext({ tenantId: tenant("tenant-a") }),
-    ).toEqual({
-      name: "Customers",
-      multitenant: true,
-      tenantId: tenant("tenant-a"),
-    });
   });
 
   it("describes configured supported delivery endpoints and their shards", async () => {
@@ -675,36 +659,14 @@ describe("BoundedContext assembly", () => {
       },
     ]);
 
-    const ready: unknown[] = [];
-    const stopObserving = internalDeliveryDescriptor(context).onReady((scope) => ready.push(scope));
     await context.commandBus().post(createAggregateCommand("command-ready"));
-    stopObserving();
 
-    expect(ready).toEqual([
-      {
-        label: "HANDLE_COMMAND",
-        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
-        shard: { index: 0, ofTotal: 1 },
-      },
-      {
-        label: "UPDATE_SUBSCRIBER",
-        targetTypeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-        shard: { index: 0, ofTotal: 1 },
-      },
-    ]);
-
-    const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.instance(), {
-      ownership: "caller",
-      descriptors: [boundedContextAccess.delivery(context)],
-    });
-    expect(attachment.startup.scopes).toHaveLength(2);
     await context.commandBus().post(createAggregateCommand("command-attached", "task-attached"));
     await waitForCondition(
       async () =>
         (await context.stand().read(ProcessManagerStateSchema, "task-attached")) !== undefined,
-      "attached environment delivery",
+      "shared environment delivery",
     );
-    await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
   });
 
   it("passes custom routing when adding an Entity class with generated handlers", async () => {
@@ -1007,6 +969,7 @@ describe("BoundedContext assembly", () => {
 
   it("drains an ordinary Entity Command handed off before close", async () => {
     const backend = new InMemoryStorageBackend();
+    await configureStorage(new InMemoryStorageFactory(backend));
     const registryRoot = createStandaloneGeneratedRegistryRoot([
       standaloneReceiver(
         StandaloneCommander,
@@ -1023,12 +986,22 @@ describe("BoundedContext assembly", () => {
     ]);
     const build = () =>
       BoundedContext.singleTenant("OrdinaryHandoffClose")
-        .withStorageFactory(new InMemoryStorageFactory(backend))
         .withGeneratedRegistryRoot(registryRoot)
         .addCommandDispatcher(new StandaloneCommander())
         .add(ReplayTaskAggregate)
         .build();
     const first = await build();
+    const durable = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const receiveStarted = Promise.withResolvers<undefined>();
+    const releaseReceive = Promise.withResolvers<undefined>();
+    const receive = Inbox.prototype.receive.bind(durable.inbox);
+    const delayedReceive = vi
+      .spyOn(Inbox.prototype, "receive")
+      .mockImplementation(async (input) => {
+        receiveStarted.resolve(undefined);
+        await releaseReceive.promise;
+        return receive(input);
+      });
     let closing: Promise<void> | undefined;
     const observer = boundedContextAccess.observeProducedSignals(first, {
       onCommand: () => {
@@ -1036,7 +1009,11 @@ describe("BoundedContext assembly", () => {
       },
     });
     try {
-      await first.commandBus().post(createScheduleReviewTask("pending", "pending-task"));
+      const posted = first.commandBus().post(createScheduleReviewTask("pending", "pending-task"));
+      await receiveStarted.promise;
+      expect(closing).toBeDefined();
+      releaseReceive.resolve(undefined);
+      await posted;
       await closing;
       const reopened = await build();
       try {
@@ -1047,6 +1024,8 @@ describe("BoundedContext assembly", () => {
         await reopened.close();
       }
     } finally {
+      releaseReceive.resolve(undefined);
+      delayedReceive.mockRestore();
       observer.close();
       await first.close();
     }
@@ -1148,6 +1127,8 @@ describe("BoundedContext assembly", () => {
   });
 
   it("enumerates every configured entity inbox shard from the context delivery strategy", async () => {
+    const strategy = UniformAcrossAllShards.forNumber(3);
+    await configureDelivery(new InMemoryStorageFactory(), strategy);
     const registryRoot = createGeneratedRegistryRoot([
       {
         entityType: GeneratedTaskProcessManager,
@@ -1164,7 +1145,6 @@ describe("BoundedContext assembly", () => {
       },
     ]);
     const context = await BoundedContext.singleTenant("Tasks")
-      .withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))
       .withGeneratedRegistryRoot(registryRoot)
       .add(GeneratedTaskProcessManager)
       .build();
@@ -1180,6 +1160,14 @@ describe("BoundedContext assembly", () => {
 
   it("protects durable target bytes from a custom delivery strategy", async () => {
     const storageFactory = new InMemoryStorageFactory();
+    const strategy: DeliveryStrategy = {
+      shardCount: 1,
+      shardFor: (targetId) => {
+        targetId.value.fill(0);
+        return ShardIndex.single();
+      },
+    };
+    await configureDelivery(storageFactory, strategy);
     const registryRoot = createGeneratedRegistryRoot([
       {
         entityType: GeneratedTaskProcessManager,
@@ -1196,25 +1184,13 @@ describe("BoundedContext assembly", () => {
       },
     ]);
     const context = await BoundedContext.singleTenant("StrategyClone")
-      .withStorageFactory(storageFactory)
-      .withDeliveryStrategy({
-        shardCount: 1,
-        shardFor: (targetId) => {
-          targetId.value.fill(0);
-          return ShardIndex.single();
-        },
-      })
       .withGeneratedRegistryRoot(registryRoot)
       .add(GeneratedTaskProcessManager)
       .build();
 
     try {
       await context.commandBus().post(createAggregateCommand("strategy-clone", "original-id"));
-      const descriptor = internalDeliveryDescriptor(context);
-      const rows = await new Delivery({
-        context: descriptor.storageContext({}),
-        storageFactory,
-      }).inbox.read(ShardIndex.single());
+      const rows = await ServerEnvironment.instance().delivery.inbox.read(ShardIndex.single());
 
       expect(rows.map((row) => Identifiers.unpack("string", row.inboxId.targetId))).toContain(
         "original-id",
@@ -1227,13 +1203,12 @@ describe("BoundedContext assembly", () => {
   it("replays nonzero-shard Aggregate and Process Manager descriptor rows", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const strategy = UniformAcrossAllShards.forNumber(3);
+    await configureDelivery(storageFactory, strategy);
     const registry = createGeneratedRegistryFixture([
       aggregateReplayRegistry(ReplayTaskAggregate),
       replayProcessManagerRegistry(ReplayTaskProcessManager),
     ]);
     const context = await BoundedContext.singleTenant("DescriptorReplay")
-      .withStorageFactory(storageFactory)
-      .withDeliveryStrategy(strategy)
       .withGeneratedRegistryRoot(registry.root)
       .add(ReplayTaskAggregate)
       .add(ReplayTaskProcessManager)
@@ -1309,13 +1284,12 @@ describe("BoundedContext assembly", () => {
   it("rejects forged Aggregate and Process Manager descriptor shards before handlers run", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const strategy = UniformAcrossAllShards.forNumber(3);
+    await configureDelivery(storageFactory, strategy);
     const registry = createGeneratedRegistryFixture([
       aggregateReplayRegistry(ReplayTaskAggregate),
       replayProcessManagerRegistry(ReplayTaskProcessManager),
     ]);
     const context = await BoundedContext.singleTenant("ForgedDescriptorShard")
-      .withStorageFactory(storageFactory)
-      .withDeliveryStrategy(strategy)
       .withGeneratedRegistryRoot(registry.root)
       .add(ReplayTaskAggregate)
       .add(ReplayTaskProcessManager)
@@ -1373,6 +1347,7 @@ describe("BoundedContext assembly", () => {
   it("recovers every configured Process Manager shard and label through a fresh descriptor", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const strategy = UniformAcrossAllShards.forNumber(3);
+    await configureDelivery(storageFactory, strategy);
     const contextName = "FreshMultiShardDescriptor";
     const registry = createGeneratedRegistryFixture([
       replayProcessManagerRegistry(ReplayTaskProcessManager),
@@ -1382,8 +1357,6 @@ describe("BoundedContext assembly", () => {
 
     try {
       first = await BoundedContext.singleTenant(contextName)
-        .withStorageFactory(storageFactory)
-        .withDeliveryStrategy(strategy)
         .withGeneratedRegistryRoot(registry.root)
         .add(ReplayTaskProcessManager)
         .build();
@@ -1422,8 +1395,6 @@ describe("BoundedContext assembly", () => {
       first = undefined;
 
       recovered = await BoundedContext.singleTenant(contextName)
-        .withStorageFactory(storageFactory)
-        .withDeliveryStrategy(strategy)
         .withGeneratedRegistryRoot(registry.root)
         .add(ReplayTaskProcessManager)
         .build();
@@ -1438,11 +1409,7 @@ describe("BoundedContext assembly", () => {
           })),
         ),
       );
-      const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.instance(), {
-        ownership: "caller",
-        descriptors: [boundedContextAccess.delivery(recoveryContext)],
-      });
-      try {
+      {
         await waitForCondition(
           async () =>
             (
@@ -1461,14 +1428,11 @@ describe("BoundedContext assembly", () => {
         );
         for (const row of rows) {
           await expect(
-            new Delivery({
-              context: descriptor.storageContext({}),
-              storageFactory,
-            }).inbox.readMessage(row.id),
+            serverEnvironmentAccess
+              .coreDelivery(ServerEnvironment.instance())
+              .inbox.readMessage(row.id),
           ).resolves.toBeUndefined();
         }
-      } finally {
-        await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
       }
     } finally {
       await first?.close();
@@ -1479,6 +1443,7 @@ describe("BoundedContext assembly", () => {
 
   it("retains a dynamic-tenant row after an Inbox read fault for fresh-runtime recovery", async () => {
     const storageFactory = new FailingInboxReadStorageFactory();
+    await configureDelivery(storageFactory, UniformAcrossAllShards.singleShard());
     const selectedIndex = TenantIndexes.fromFactory(storageFactory);
     const tenantId = tenant("tenant-first-row");
     const contextName = "FreshRecoveryTasks";
@@ -1494,7 +1459,6 @@ describe("BoundedContext assembly", () => {
     try {
       await selectedIndex.keep(tenantId);
       first = await BoundedContext.multitenant(contextName)
-        .withStorageFactory(storageFactory)
         .withTenantIndex(selectedIndex)
         .withGeneratedRegistryRoot(firstRegistry.root)
         .add(FreshRecoveryProcessManager)
@@ -1507,11 +1471,7 @@ describe("BoundedContext assembly", () => {
           .commandBus()
           .post(createAggregateCommand("dynamic-command", "dynamic-task", "tenant-first-row")),
       ).rejects.toBe(inboxReadFailure);
-      const firstDescriptor = internalDeliveryDescriptor(first);
-      const durable = new Delivery({
-        context: firstDescriptor.storageContext({ tenantId }),
-        storageFactory,
-      });
+      const durable = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
       const pending = await durable.inbox.read(ShardIndex.single(), {
         statuses: ["TO_DELIVER"],
       });
@@ -1528,21 +1488,11 @@ describe("BoundedContext assembly", () => {
       first = undefined;
 
       recovered = await BoundedContext.multitenant(contextName)
-        .withStorageFactory(storageFactory)
         .withTenantIndex(selectedIndex)
         .withGeneratedRegistryRoot(recoveryRegistry.root)
         .add(FreshRecoveryProcessManager)
         .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
         .build();
-      const descriptor = internalDeliveryDescriptor(recovered);
-
-      await expect(descriptor.startupScopes()).resolves.toEqual([{ tenantId }]);
-      const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.instance(), {
-        ownership: "caller",
-        descriptors: [boundedContextAccess.delivery(recovered)],
-      });
-
-      expect(attachment.startup.scopes).toHaveLength(1);
       await waitForCondition(
         async () =>
           (await recovered
@@ -1554,12 +1504,8 @@ describe("BoundedContext assembly", () => {
         recovered.stand().read(ProcessManagerStateSchema, "dynamic-task", { tenantId }),
       ).resolves.toMatchObject({ queue: "Task Ready recovered" });
       await expect(
-        new Delivery({
-          context: descriptor.storageContext({ tenantId }),
-          storageFactory,
-        }).inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+        durable.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
       ).resolves.toHaveLength(1);
-      await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
     } finally {
       await first?.close();
       await recovered?.close();
@@ -1577,8 +1523,8 @@ describe("BoundedContext assembly", () => {
 
   it("keeps tenant discovery in the factory catalog without a TenantId record family", async () => {
     const storageFactory = new ObservingStorageFactory([]);
+    await configureStorage(storageFactory);
     const customers = await BoundedContext.multitenant("Customers")
-      .withStorageFactory(storageFactory)
       .withTenantIndex(TenantIndexes.fromFactory(storageFactory))
       .build();
     const tenantIndex = internalTenantIndex(customers);
@@ -1785,11 +1731,11 @@ describe("BoundedContext assembly", () => {
   it("stores events in the context EventStore before dispatch", async () => {
     const observed: string[] = [];
     const storageFactory = new ObservingStorageFactory(observed);
+    await configureStorage(storageFactory);
     const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
       observed.push(`dispatch:${event.id?.value ?? "missing"}`);
     });
     const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
       .addEventDispatcher(dispatcher)
       .build();
 
@@ -1800,6 +1746,7 @@ describe("BoundedContext assembly", () => {
 
   it("rejects event dispatcher classification before acquiring event storage", async () => {
     const storageFactory = new ObservingStorageFactory([]);
+    await configureStorage(storageFactory);
     const dispatcher = createEventDispatcher([ReviewTaskAssignedSchema], () => undefined);
     const brokenDispatcher = {
       messageSchemas: () => {
@@ -1810,7 +1757,6 @@ describe("BoundedContext assembly", () => {
 
     await expect(
       BoundedContext.singleTenant("Tasks")
-        .withStorageFactory(storageFactory)
         .addEventDispatcher(dispatcher)
         .addEventDispatcher(brokenDispatcher)
         .build(),
@@ -1821,6 +1767,7 @@ describe("BoundedContext assembly", () => {
 
   it("does not acquire an event store before dispatcher classification fails", async () => {
     const storageFactory = new ObservingStorageFactory([], [1]);
+    await configureStorage(storageFactory);
     const brokenDispatcher = {
       messageSchemas: () => {
         throw new Error("Cannot read event schemas.");
@@ -1830,10 +1777,7 @@ describe("BoundedContext assembly", () => {
 
     let thrown: unknown;
     try {
-      await BoundedContext.singleTenant("Tasks")
-        .withStorageFactory(storageFactory)
-        .addEventDispatcher(brokenDispatcher)
-        .build();
+      await BoundedContext.singleTenant("Tasks").addEventDispatcher(brokenDispatcher).build();
     } catch (error) {
       thrown = error;
     }
@@ -1844,14 +1788,12 @@ describe("BoundedContext assembly", () => {
 
   it("registers repositories added to the builder with the built context", async () => {
     const storageFactory = new ObservingStorageFactory([]);
+    await configureStorage(storageFactory);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
-      .add(repository)
-      .build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
 
     const firstRepositories = context.registeredRepositories();
     const secondRepositories = context.registeredRepositories();
@@ -1983,6 +1925,7 @@ describe("BoundedContext assembly", () => {
 
   it("advertises producer-only event schemas without creating external routes", async () => {
     const storageFactory = new InMemoryStorageFactory();
+    await configureStorage(storageFactory);
     const registryRoot = createGeneratedRegistryRoot([
       {
         entityType: GeneratedTaskProcessManager,
@@ -2000,7 +1943,6 @@ describe("BoundedContext assembly", () => {
     ]);
     const context = await BoundedContext.singleTenant("Tasks")
       .withGeneratedRegistryRoot(registryRoot)
-      .withStorageFactory(storageFactory)
       .add(GeneratedTaskProcessManager)
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
@@ -2195,12 +2137,12 @@ describe("BoundedContext assembly", () => {
 
   it("keeps repeated add of the same repository idempotent for one built context", async () => {
     const storageFactory = new ObservingStorageFactory([]);
+    await configureStorage(storageFactory);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
     const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
       .add(repository)
       .add(repository)
       .build();
@@ -2412,11 +2354,9 @@ describe("BoundedContext assembly", () => {
       schema: ProjectStateSchema,
     });
     const storageFactory = new ObservingStorageFactory([]);
+    await configureStorage(storageFactory);
 
-    const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
-      .add(repository)
-      .build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
 
     expect(context.registeredRepositories()).toHaveLength(1);
     expect(storageFactory.creationsFor(ProjectStateSchema.typeName)).toEqual([]);
@@ -2424,11 +2364,9 @@ describe("BoundedContext assembly", () => {
 
   it("returns only this context's exact registered repository without opening storage", async () => {
     const storageFactory = new ObservingStorageFactory([]);
+    await configureStorage(storageFactory);
     const repository = new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
-      .add(repository)
-      .build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     expectTypeOf(context.getRepository(TaskAggregate)).toEqualTypeOf<
       Repository<typeof TaskAggregate>
     >();
@@ -2535,13 +2473,13 @@ describe("BoundedContext assembly", () => {
     }
 
     const storageFactory = new ObservingStorageFactory([]);
+    await configureStorage(storageFactory);
     const spoofingRepository = new SpoofingRepository();
     const projectionRepository = new Repository({
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
     const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
       .add(spoofingRepository)
       .add(projectionRepository)
       .build();
@@ -2558,6 +2496,7 @@ describe("BoundedContext assembly", () => {
 
   it("defers repository provider failures until an operation selects storage", async () => {
     const storageFactory = new FailingStorageFactory(6, ProjectOverviewStateSchema.typeName);
+    await configureStorage(storageFactory);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
@@ -2568,7 +2507,6 @@ describe("BoundedContext assembly", () => {
     });
 
     const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
       .add(aggregateRepository)
       .add(projectionRepository)
       .build();
@@ -2581,6 +2519,7 @@ describe("BoundedContext assembly", () => {
   it("aborts retained domain and System buses when dispatcher registration throws", async () => {
     for (const schema of [ProjectOverviewStateSchema, EntityLog.EntityStateChangedSchema]) {
       const storageFactory = new ObservingStorageFactory([]);
+      await configureStorage(storageFactory);
       let schemaReads = 0;
       const dispatcher: EventDispatcher = {
         messageSchemas: () => {
@@ -2592,10 +2531,7 @@ describe("BoundedContext assembly", () => {
       };
 
       await expect(
-        BoundedContext.singleTenant("Tasks")
-          .withStorageFactory(storageFactory)
-          .addEventDispatcher(dispatcher)
-          .build(),
+        BoundedContext.singleTenant("Tasks").addEventDispatcher(dispatcher).build(),
       ).rejects.toThrow(`Registration failed for ${schema.typeName}.`);
       expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
     }
@@ -2603,6 +2539,7 @@ describe("BoundedContext assembly", () => {
 
   it("preserves a dispatcher registration failure without opening System event storage", async () => {
     const storageFactory = new ObservingStorageFactory([], [1]);
+    await configureStorage(storageFactory);
     const primary = new Error("System dispatcher registration failed.");
     let schemaReads = 0;
     const dispatcher: EventDispatcher = {
@@ -2618,7 +2555,6 @@ describe("BoundedContext assembly", () => {
     try {
       await BoundedContext.singleTenant("Tasks")
         .persistSystemEvents()
-        .withStorageFactory(storageFactory)
         .addEventDispatcher(dispatcher)
         .build();
     } catch (error) {
@@ -2654,7 +2590,6 @@ describe("BoundedContext assembly", () => {
       try {
         await BoundedContext.singleTenant("Tasks")
           .persistSystemEvents()
-          .withStorageFactory(new InMemoryStorageFactory())
           .addEventDispatcher(dispatcher)
           .build();
       } catch (error) {
@@ -2672,6 +2607,7 @@ describe("BoundedContext assembly", () => {
 
   it("builds without preparing storage for every registered repository", async () => {
     const storageFactory = new FailingStorageFactory(7, ProcessManagerStateSchema.typeName, [5]);
+    await configureStorage(storageFactory);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
@@ -2686,7 +2622,6 @@ describe("BoundedContext assembly", () => {
     });
 
     const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
       .add(aggregateRepository)
       .add(projectionRepository)
       .add(processManagerRepository)
@@ -2712,14 +2647,12 @@ describe("BoundedContext assembly", () => {
 
   it("closes owned buses, stand, event store, repository storage, and tenant index once", async () => {
     const storageFactory = new ObservingStorageFactory([]);
+    await configureStorage(storageFactory);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
-    const context = await BoundedContext.multitenant("Tasks")
-      .withStorageFactory(storageFactory)
-      .add(repository)
-      .build();
+    const context = await BoundedContext.multitenant("Tasks").add(repository).build();
 
     await context.close();
     await context.close();
@@ -2737,13 +2670,13 @@ describe("BoundedContext assembly", () => {
 
   it("keeps the provider tenant catalog independent of repository registration", async () => {
     const storageFactory = new FailingStorageFactory(6, ProjectStateSchema.typeName);
+    await configureStorage(storageFactory);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
 
     const context = await BoundedContext.multitenant("Tasks")
-      .withStorageFactory(storageFactory)
       .withTenantIndex(TenantIndexes.fromFactory(storageFactory))
       .add(repository)
       .build();
@@ -2792,14 +2725,12 @@ describe("BoundedContext assembly", () => {
 
   it("waits for in-flight direct Stand updates before closing subscriptions", async () => {
     const storageFactory = new DelayingStorageFactory();
+    await configureStorage(storageFactory);
     const repository = new Repository({
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
-      .add(repository)
-      .build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     const deliveries: string[] = [];
     context.stand().subscribe(ProjectOverviewStateSchema, (update) => {
       deliveries.push(update.state.name);
@@ -2835,16 +2766,91 @@ describe("BoundedContext assembly", () => {
     ).rejects.toThrow("Stand is closed.");
   });
 
+  it("keeps state reserved and resources open until an entered shared replay settles", async () => {
+    await configureStorage(new InMemoryStorageFactory());
+    const repository = new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema });
+    const context = await BoundedContext.singleTenant("EnteredReplayClose").add(repository).build();
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const replay = boundedContextAccess.trackReplay(context, async () => {
+      entered.resolve(undefined);
+      await release.promise;
+    });
+    await entered.promise;
+    const closing = context.close();
+    let settled = false;
+    void closing.then(() => {
+      settled = true;
+    });
+    try {
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      await expect(
+        BoundedContext.singleTenant("SameStateWhileClosing")
+          .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
+          .build(),
+      ).rejects.toThrow("already registered");
+    } finally {
+      release.resolve(undefined);
+      await Promise.all([replay, closing]);
+    }
+  });
+
+  it("leaves a newly notified shared row pending while one recipient closes", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const registry = createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
+    const closingContext = await BoundedContext.singleTenant("ClosingRecipient")
+      .withGeneratedRegistryRoot(registry.root)
+      .add(ReplayTaskAggregate)
+      .build();
+    const sibling = await BoundedContext.singleTenant("HealthySibling")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const durable = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
+    const row = await persistDescriptorRow({
+      descriptor: internalDeliveryDescriptor(closingContext),
+      storageFactory: factory,
+      targetTypeUrl: TypeUrls.derive(ProjectStateSchema),
+      targetId: "pending-close",
+      signalId: "pending-close-command",
+      label: "HANDLE_COMMAND",
+      signal: AnyPacker.pack(
+        CommandSchema,
+        createAggregateCommand("pending-close-command", "pending-close"),
+      ),
+      shard: ShardIndex.single(),
+    });
+    const release = Promise.withResolvers<undefined>();
+    const closeStand = vi.spyOn(Stand.prototype, "close").mockImplementation(() => release.promise);
+    const closing = closingContext.close();
+    try {
+      durable.wake(row.shard);
+      await durable.whenIdle();
+      expect(
+        (await durable.inbox.read(row.shard, { statuses: ["TO_DELIVER"] })).some(
+          (message) => message.id.value === row.id.value,
+        ),
+      ).toBe(true);
+      expect(
+        await sibling.stand().read(ProjectOverviewStateSchema, "pending-close"),
+      ).toBeUndefined();
+    } finally {
+      release.resolve(undefined);
+      await closing;
+      closeStand.mockRestore();
+      await sibling.close();
+    }
+  });
+
   it("attempts every bounded-context close and reports aggregate failure", async () => {
     const storageFactory = new ObservingStorageFactory([], [1, 2]);
+    await configureStorage(storageFactory);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: ProjectStateSchema,
     });
-    const context = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
-      .add(repository)
-      .build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
 
     const closeFailure = await context.close().then(
       () => {
@@ -2896,6 +2902,7 @@ describe("BoundedContext assembly", () => {
   it("closes Stand before the registry without an internal tenant-record storage", async () => {
     const order: string[] = [];
     const storageFactory = new OrderedStorageFactory(order);
+    await configureStorage(storageFactory);
     const registry = new OrderedFailingRegistry(order);
     const closeStand = vi.spyOn(Stand.prototype, "close").mockImplementation(async function () {
       order.push("stand");
@@ -2903,7 +2910,6 @@ describe("BoundedContext assembly", () => {
       throw new Error("Stand close failed.");
     });
     const context = await BoundedContext.multitenant("Tasks")
-      .withStorageFactory(storageFactory)
       .withSubscriptionRegistry(registry)
       .add(new Repository({ entityType: TaskAggregate, schema: ProjectStateSchema }))
       .build();
@@ -2925,6 +2931,7 @@ describe("BoundedContext assembly", () => {
     const systemHandleFailure = new Error("System Stand close failed");
     const registryFailure = new Error("registry close failed");
     const storageFactory = new OrderedStorageFactory(order);
+    await configureStorage(storageFactory);
     const registry = new OrderedFailingRegistry(order, registryFailure);
     let releaseCommand!: () => void;
     const commandReleased = new Promise<void>((resolve) => {
@@ -2979,7 +2986,6 @@ describe("BoundedContext assembly", () => {
       return Promise.reject(role === "domain" ? domainHandleFailure : systemHandleFailure);
     });
     const context = await BoundedContext.multitenant("Tasks")
-      .withStorageFactory(storageFactory)
       .withSubscriptionRegistry(registry)
       .addCommandDispatcher(commandDispatcher)
       .addEventDispatcher(systemDispatcher)
@@ -3596,22 +3602,21 @@ async function persistDescriptorRow(input: {
   readonly signal: Any;
   readonly shard: ShardIndex;
 }): Promise<InboxMessage> {
-  const written = await new Delivery({
-    context: input.descriptor.storageContext({}),
-    storageFactory: input.storageFactory,
-  }).inbox.receive({
-    inboxId: {
-      targetTypeUrl: input.targetTypeUrl,
-      targetId: Identifiers.pack("string", input.targetId),
-    },
-    signalId: input.signalId,
-    label: input.label,
-    signal: input.signal,
-    shard: input.shard,
-    status: "TO_DELIVER",
-    whenReceived: timestampFromDate(new Date("2026-08-04T12:00:00.000Z")),
-    version: 1n,
-  });
+  const written = await serverEnvironmentAccess
+    .coreDelivery(ServerEnvironment.instance())
+    .inbox.receive({
+      inboxId: {
+        targetTypeUrl: input.targetTypeUrl,
+        targetId: Identifiers.pack("string", input.targetId),
+      },
+      signalId: input.signalId,
+      label: input.label,
+      signal: input.signal,
+      shard: input.shard,
+      status: "TO_DELIVER",
+      whenReceived: timestampFromDate(new Date("2026-08-04T12:00:00.000Z")),
+      version: 1n,
+    });
   if (written.outcome !== "WRITTEN") {
     throw new Error("Expected descriptor fixture row to be written.");
   }

@@ -47,9 +47,38 @@ import {
   type StorageContext,
 } from "../../src/index.js";
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
-import { eventStoreAccess } from "../../src/provider.js";
+import { eventStoreAccess, EventStoreGroups } from "../../src/provider.js";
 
 describe("EventStore", () => {
+  it("derives stable portable groups without normalizing context spelling or store role", () => {
+    expect(EventStoreGroups.forContext("Orders").name).toBe(
+      "es_4xhqwdzej2o5yfauwhqkxxgzy4n3qe84mhds2mew1dawug10ip",
+    );
+    const variants = ["Orders", "orders", "Café", "Cafe\u0301", "Order:Draft"];
+    const groups = variants.map((name) => EventStoreGroups.forContext(name).name);
+    expect(new Set(groups).size).toBe(variants.length);
+    expect(groups.every((name) => /^es_[0-9a-z]{50}$/.test(name))).toBe(true);
+    expect(EventStoreGroups.forContext("Orders_System", "system").name).not.toBe(
+      EventStoreGroups.forContext("Orders_System").name,
+    );
+  });
+
+  it("separates contexts sharing a factory while retaining each original Event ID", async () => {
+    const factory = new InMemoryStorageFactory(new InMemoryStorageBackend());
+    const event = createEvent("same-id", "created", 1n);
+    const imported = createEvent("same-id", "renamed", 1n);
+    const orders = new EventStore({ name: "Orders", multitenant: false }, factory);
+    const billing = new EventStore({ name: "Billing", multitenant: false }, factory);
+
+    await orders.append(event);
+    await billing.append(imported);
+    expect(await orders.read()).toEqual([event]);
+    expect(await billing.read()).toEqual([imported]);
+    expect(EventStoreGroups.forContext("Orders").name).not.toBe(
+      EventStoreGroups.forContext("Billing").name,
+    );
+    await Promise.all([orders.close(), billing.close()]);
+  });
   it("keeps synchronous assembly cleanup off the public EventStore instance", () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
@@ -643,14 +672,14 @@ describe("EventStore", () => {
     }
   });
 
-  it("atomically rejects concurrent duplicate IDs across factories sharing a backend", async () => {
+  it("atomically rejects concurrent duplicate IDs across factories for one logical context", async () => {
     const backend = new InMemoryStorageBackend();
     const first = new EventStore(
       { name: "First", multitenant: false },
       new InMemoryStorageFactory(backend),
     );
     const second = new EventStore(
-      { name: "Second", multitenant: false },
+      { name: "First", multitenant: false },
       new InMemoryStorageFactory(backend),
     );
 

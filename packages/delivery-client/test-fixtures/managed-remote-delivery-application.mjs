@@ -86,7 +86,11 @@ const storageFactory =
     : new HandlerGateStorageFactory(handlerGate);
 
 if (isManagedChild) {
-  ServerEnvironment.when(EnvironmentType.Local).use({ delivery });
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    delivery,
+    deliveryStrategy: strategy,
+    ...(storageFactory === undefined ? {} : { storageFactory }),
+  });
 }
 
 const managed = await ManagedServerApplication.run({
@@ -94,14 +98,13 @@ const managed = await ManagedServerApplication.run({
   port: 0,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
+    await ServerEnvironment.instance().completeSetup();
     const server = Server.atPort(port, { host });
     const { InMemorySubscriptionRegistry } = await import("@spine-event-engine/server");
     server.add(
       await createManagedProjectContext({
         includeProjection: true,
-        deliveryStrategy: strategy,
         subscriptionRegistry: new InMemorySubscriptionRegistry(),
-        ...(storageFactory === undefined ? {} : { storageFactory }),
       }),
     );
     const running = await server.start();

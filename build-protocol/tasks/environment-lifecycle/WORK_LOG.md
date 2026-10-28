@@ -1923,3 +1923,693 @@ spaces in agent-live-audit.ts/agent-live-mcp-controls.ts and final blank line in
 agent-live-fixtures.ts. No executable changes or review reopening; staged diff
 and scoped formatting checks are required before checkpoint commit. Future cheap
 preflight must inspect newly added files explicitly.
+
+M7b checkpoint c64e82cdb committed and pushed successfully to official origin
+(environment-lifecycle). Final source whitespace/format correction and staged diff
+checks passed; no executable behavior changed after accepted focused tests.
+
+## M8 shared environment and Delivery — active
+
+High-risk lifecycle/concurrency/public-contract milestone. Estimate2–4hours includes
+one shared Delivery/factories/setup implementation, necessary caller migration,
+focused behavior and cheap checks, relevant independent review/correction and
+checkpoint push. Broad caller changes and delivery/shutdown races dominate risk.
+Reuse sole implementer storage_retention, explicitly configured gpt-6-sol/medium;
+no parallel production writer or children. Desktop supports explicit profiles;
+runtime introspection unavailable. Existing approved architecture and D0155/D0157
+apply; no repeat architecture pass absent a material blocker.
+
+Acceptance: environment supplies one actual cached Delivery, StorageFactory and
+TransportFactory from first context use; only TenantIndex/AI remain context
+overrides; Server performs gRPC work. completeSetup coalesces explicit shared
+initialization, validates required configuration, logs completed phases and
+fences/cleans failed startup. Shared Inbox/shard stores are always single-tenant,
+retained and drained before close; tenant from packed signals drives membership
+checks before persistence/dispatch and tenant-qualified logical identity. Committed
+writes notify delivery immediately, safety scans only supplement. Closing one
+context preserves other contexts/shared facilities, while environment shutdown
+fences producers and drains/releases before storage/factory closure. Preserve M6
+strict state reservation and M7 live Agent/no-recovery/delivery error invariants.
+
+External implementation brief environment-delivery-implementation-brief.md and
+shared-environment-review-context.md define exact scope; D0155 transport decision
+requires initialize with truthful shared readiness and awaited actual context
+receiving channels. M9–M11 timing/monitor/all-tenant APIs remain later unless a
+concrete dependency requires cohesive pull-forward. No Application, migration,
+compatibility fallback, duplicate-state switch, or additional recovery queue.
+
+While M8 implementation proceeds, reuse the existing documentation reviewer in a
+bounded read-only documentation inventory function, explicit immutable Luna/medium.
+Map current human/agent guides and executable snippets requiring final environment
+startup/API updates under accepted PROPOSAL §§7–12. No edits, tests, runtime review,
+or children. Reuse existing source notes rather than repeat implementation scans.
+Output external M13 documentation handoff so broad prose waits for stabilized APIs.
+
+Luna/medium read-only documentation inventory complete. Parent saved returned map
+as external final-environment-documentation-inventory.md. Main targets are server
+README/REFERENCE, USER_GUIDE, API/architecture guides and deployment/startup snippets;
+M9–M11 timing/tenant/monitor prose waits for stabilized runtime. Profile matches
+explicit dispatch; no tests/source edits/children. Implementation continues.
+
+M8 first setup slice: required TransportFactory.initialize and memory/recording
+implementations, coalesced completeSetup, cleanup failure preservation and close
+versus gated initialization regressions pass44/44 in environment/transport suites.
+The full milestone is not frozen or accepted. The implementer confirms existing
+per-context DeliveryReadiness transfer, attachment generations and per-operation
+Inbox/shard storage are intertwined; remaining implementation/migration/review
+estimate revised to4–6hours. This is scope complexity already covered by accepted
+architecture, not a new product decision or blocker. Continue retained shared
+storage and recipient cutover; remove obsolete transfer machinery in final diff.
+
+M8 retained-store progress: InboxStorage and ShardedWorkRegistry each retain one
+RecordStorage, fence/drain admitted work, and Delivery.close attempts retained
+storage closes after runs while keeping factory usable. Four affected suites113/113
+pass. No separate review checkpoint because shared dispatcher continues changing
+same Delivery paths; final M8 review will include a bounded retention subsection
+using this recorded evidence. No production acceptance inferred from partial checks.
+
+M8 shared dispatcher/tenant routing provisional wiring is active. New two-tenant
+Inbox regression is red: implementer reports correct tenant before write, neutral
+after read. Investigating actual codec/packed-context seam before acceptance.
+Parent reiterated physical shared storage stays neutral while dispatch tenant comes
+from packed signal; use shared AnyPacker, no per-tenant label or key workaround.
+Retained-store113/113 remains earlier evidence, not proof of new wiring.
+
+M8 tenant regression diagnosis corrected: generated TenantId uses kind, while the
+new test incorrectly read value. Packed signal survived storage unchanged; no
+codec or AnyPacker workaround was introduced. Corrected domain fixture assertions
+pass2/2 for same signal/target across two tenants in one shared Inbox. Continue
+recipient cutover; provisional source still not frozen.
+
+M8 parent contract inspection caught implicit setup in a new direct-build test.
+Implementer confirmed it relied on auto-start, inconsistent with explicit startup
+ledger/PROPOSAL §1. D0159 records clarification: build awaits an already started
+setup, never initiates it; no attempt yields a clear pre-I/O error. Test assembly
+helpers explicitly call setup; Server does not. Correct now before broad caller
+migration. No new public API or human product decision required.
+
+M8 source question resolved without new subsystem: preserve configured remote
+DeliverySource via one existing environment-level DeliverySupervisor around the
+same cached core used for direct acknowledgements. Reuse builder facade/control
+registration, never instantiate a second core or widen public forged-lookalike
+admission. Register recipient predicate before starting source activity; snapshots,
+watch/release-expired behavior remain safety mechanisms alongside notifications.
+
+Some configured remote getters become valid only after open resolves. Construct
+shared core/facade after awaited remote open in completeSetup, with mandatory actual
+Delivery available to every context afterward. Pre-setup access reports clear
+ordering error; public surface must not expose an optional/close-only placeholder.
+Private cleanup delegation handles eventual acquisition, then shared core closes
+before supplied ports/factories with attempt-all failure handling. D0159 means no
+context may build before explicit setup. Final M8 review must cover this sequencing.
+
+M8 shared core/supervisor wiring now passes focused remote-open ordering, explicit
+setup ordering and listener-close/reuse checks; server tsc build passes. Server
+start/close no longer attaches/detaches per-context Delivery generations. Remaining
+obsolete attachment API/tests and broad caller migration are not yet clean.
+Managed-server-application still uses IPC activate/cancel to defer old supervisor;
+preserve that existing process admission gate at the new environment supervisor,
+with no public active/inactive context API or Server-start delivery initialization.
+Gate opening must not lose queued work; cancellation must prevent startup. Add
+focused managed-process proof before deleting old worker access.
+
+M8 public-type inspection: environment.delivery initially exposed the unexported
+core Delivery class instead of the root public builder-facade Delivery interface.
+Corrected before freeze: one cached public facade, same core through package-local
+access; supervisor uses same pair. Server tsc and3focused lifecycle cases pass.
+No second dispatcher or public alias introduced. Final API review must verify
+assignability to the existing public Delivery type.
+
+Shared-factory environment test reports possible producer/consumer EventStore ID
+collision. Its StringValue-as-Event fixture is invalid under domain-fixture rules;
+replace with genuine generated Event before diagnosing runtime. Preserve shared
+factory and Event identity. Only concrete existing context/spec/family evidence can
+justify storage-contract correction; no workaround or migration authorized.
+
+M8 demonstrated storage-contract blocker: genuine generated ServerStarted Event
+reproduces cross-context EventStore duplicate. createEventStore omits StorageGroup;
+EventStore passes undefined to createRecordStorage; memory family identity is Event
+state type + group + tenant and intentionally ignores diagnostic context.name.
+Producer/consumer EventStores collide under shared factory. Existing System group
+shows supported grouping seam. Parent dispatches existing requirements splitter
+application_architecture, explicit immutable gpt-6-astra/high, for bounded JVM/
+StorageGroup/provider-contract decision. Estimate0.25–0.5hour, independent caller
+migration continues. No per-context factory, Event-ID rewriting or migration.
+Scope includes stable context identity versus equal names, native physical group
+constraints and preservation of System behavior; no broad architecture replanning.
+
+M8 bounded architecture pass completed under the explicitly dispatched Astra/high
+profile; runtime self-introspection unavailable. Parent accepts D0160 after actual
+shared-factory producer/importer collision: EventStore-only stable name/role group,
+consistent all-provider atomic writes/read/preparation, no Entity namespace or
+migration. Full external implementation decision: event-store-context-group-decision.md.
+Existing implementer receives the complete decision; no second production writer.
+Equal names retain logical integration-origin semantics and strict duplicate-state
+registration still compares actual context objects without a bypass.
+
+M8 remote-supervisor fixture now uses genuine Project Aggregate/Command with explicit
+setup:5/5 tests pass (replacement fencing, two-process Admin fan-out, restart snapshot,
+watch overflow recovery included). Sibling listener regression1/1 proves one listener
+close preserves the other context/shared Delivery. Remaining estimate2–4hours for
+grouping, obsolete-source deletion, caller/API migration, focused checks and review;
+not a claim that the broader environment task is almost finished.
+
+D0160 implementation checkpoint: reproduced same-EventId/distinct-context regression
+red before grouping; helper/default, System reads, four provider commit paths and
+preparation declarations now implemented. Storage plus reported environment suites
+63/63 pass; affected storage/PG/MySQL/Datastore/server TypeScript builds pass.
+Native grouped-provider behavior and remaining M8 caller cleanup continue; this is
+partial evidence, not frozen source or milestone acceptance.
+
+M8 parent caught unnecessary EventStoreGroups root export during active edits;
+implementer moved it to provider/internal-only seam as accepted. Commit storage
+suites report111/111 across memory/PG/MySQL/Datastore (includes mocks; not native
+provider proof). Context suite86/92 after explicit setup; six attachment/strategy
+assumptions or possible regressions remain under investigation and are not waived.
+
+M8 context suite now92/92 after explicit setup/shared Inbox/environment strategy
+migration. Actual callback mutation defect found: configured strategy could mutate
+persisted target Any; implementer reused validated strategy snapshot. Process Manager
+querying attachment hooks and public context/server facility override removal remain.
+Final review includes this strategy input-isolation correction and surviving query
+close/failure guarantees; no acceptance of deleted tests solely by removal.
+
+M8 Process Manager query migration41/41 and tooling typecheck pass. Replaced explicit
+attachment startup/fault assumptions with explicit setup/per-test environment reset.
+Retained foreign queries, recipient release, retryable cleanup, paused cross-context
+read during shutdown and saved shared-Inbox row behavior. Removed old recovery
+recipient-enumeration assertion only. Context/Server facility API removal and callers
+remain next; implementer will provide deleted-test dispositions at freeze.
+
+M8 remaining estimate revised3–5hours from current checkpoint: repository-routing
+contains172 context factory overrides and47 per-context Delivery fixtures. After
+explicit setup/reset316/352 pass;36 failures remain, mostly old per-context Inbox
+assertions plus12 missing-setup cases outside first describe. Keep behavior tests
+while moving fixtures to single shared Inbox. No waiver or new architectural blocker.
+Estimate includes remaining caller migration, native proof, cheap checks and review.
+
+M8 repository-routing checkpoint341/352 after replacing old Inbox readers with actual
+shared Delivery. Remaining11 span fixture/lifecycle assumptions, remote batching,
+System Event groups, tenant registration and possible semantics. Targeted diagnosis
+continues; no missing-setup or semantic failures are accepted as baseline exclusions.
+
+M8 repository-routing352/352 now passes (external m8-repository-routing-green.log).
+Fixtures use environment Inbox, D0160 System groups and preclaim before recipient
+startup. Distinct blank-ID model cases run sequentially to avoid sibling fan-out.
+Remote batch uses actual configured environment port/existing bound and verifies
+999 earlier rows with fixed clock. No new limit introduced. Remaining: facility
+API/caller removal, setup INFO/TSDoc, native group proof and frozen cheap checks.
+Parent proposal now explains EventStore grouping and explicit setup availability;
+strict Entity-state registration remains unchanged.
+
+M8 setup logging checkpoint: INFO emitted only after each successful storage,
+transport and Delivery phase using contained logger helper. Environment suite27/27
+and tooling typecheck pass; repository-routing352/352 remains prior focused evidence.
+Public context/Server facility removal and caller migration continue before freeze.
+
+M8 repository-routing builder migration complete; current Vitest log reports352/352
+(m8-routing-final-builder-green.log). Command wrapper then attempted zsh read-only
+status assignment and returned1; this is not recorded as a clean whole-command exit.
+Use task-specific variable next time and fresh frozen checks before acceptance.
+Separate manual stores are replay-source fixtures only; actual context dispatch uses
+environment factory/Delivery. Broader test/example caller migration continues.
+
+M8 routing tooling typecheck subsequently passed. Bounded-context factory-builder
+migration92/92 passes (m8-context-builder-migration.log); no withStorageFactory calls
+remain in that suite. Custom/shared-backend factories are configured before explicit
+setup. Service/Agent and remaining caller migration continues before API deletion.
+
+M8 Agent registration6/6 and services126/126 pass after environment-first factory
+migration. Service fixtures explicitly keep email/tenant-b IDs required by M5b;
+no admission weakening. Logs: m8-agent-registration-builder-migration.log and
+m8-services-builder-migration.log. Remaining callers and API removal continue.
+
+M8 subsequent builder migration: Process Manager41/41 and Agent AI4/4 pass with
+explicit setup and environment factory selection. Server factory-precedence assertion
+is obsolete under accepted no-Server-injection rule; replace with current environment
+behavior/API evidence while migrating Server/examples. No frozen acceptance yet.
+
+M8 Server environment-factory replacement proof1/1 passes for two distinct contexts.
+Full server.test has76/152 failures while fixtures still omit explicit completeSetup;
+not accepted green or waived. Caller migration and narrow changed API/docs/snippets
+remain before freeze. Broad future eager/lazy guide still waits for M9–M13.
+
+M8 Server suite153/153 now passes with environment-first configured fixtures and
+mixed-mode sibling listener evidence. To overlap independent validation with caller
+migration, dispatch one read-only mechanical-check function, explicit gpt-6-luna/low,
+no source edits/builds/children, for targeted existing native EventStore/Entity-commit
+checks on task-local PG/MySQL/MariaDB/Datastore. Expected0.25–0.5hour. Reuse built
+outputs; persist commands/logs outside VCS, report stale fixture/group assertions
+without fixing. This is diagnostic native evidence, not M8 freeze acceptance or
+proof of new cross-context cases not yet present. Desktop supports required profile.
+
+M8 source cutover now removes BoundedContextBuilder.withStorageFactory and
+withDeliveryStrategy plus Server.withAi. Context selection uses environment storage
+and actual public Delivery strategy. Server source tsc passes; remaining callers are
+being discovered with tooling diagnostics. Native mechanical assignment reuses the
+previously explicitly dispatched immutable Luna/low context (surface rejects duplicate
+agent name); no profile inheritance or new role. Writer defers native DB tests while
+that independent diagnostic batch runs.
+
+M8 independent native diagnostics complete (m8-native-retention-tests.md). Immutable
+Luna/low matches prior explicit dispatch; actual runtime metadata unavailable. PG
+EventStore/Entity history2passed and Agent reopen1passed; MySQL/Maria EventStore
+retry1passed each; Agent commit/reopen1passed on each of all4providers. Native runner
+initially used spine_env_test instead of assigned spine_env_provider_correction for
+MySQL/Maria concurrent Entity case. Corrected exact selection passes1/1 on each;
+earlier collisions remain setup-limited diagnostics and are not runtime findings.
+
+Confirmed Datastore stale assertion: deliveryA.read succeeds, but raw kinds array
+still selects ungrouped EventSchema.typeName, giving final family count0. Update
+expected and cleanup kind using D0160 group, then rerun. This bounded batch does not
+replace native cross-context/group/preparation regression proof. Return findings to
+same writer; no code edits/builds by mechanical function. Native reservation released.
+
+Agent AI BlackBox caller migration12/12 passes. Capacity BlackBox5/7 with2 Command
+post failures remains unresolved: consumer imports compiled server output predating
+API edits. Writer now fresh-builds and reruns before runtime diagnosis; temporary
+diagnostics removed. No acceptance from stale declarations or compiled outputs.
+
+M8 fresh partial build passes. Capacity BlackBox7/7 after replacing2 obsolete `ok`
+expectations with unsuccessful direct Delivery outcomes. Parent independently checked
+accepted AGENT_DELIVERY_LIFETIME.md83–85: capacity defer explicitly leaves pending
+row/no receipt or ack and reports the existing direct-handoff error. This is an
+accepted contract correction, not merely stale-dist recovery. Preserve eventual two
+outputs and alternate-model preference; strengthen exact error assertion where
+practical. Full reliability review includes these paths.
+
+Datastore native grouped-kind expectation/cleanup corrected using provider
+EventStoreGroups; targeted emulator1/1 passes (7unselected). Initial non-exported
+internal subpath import failed before tests and was replaced by provider export.
+Current proof covers matching physical kind and cleanup, not new cross-context
+isolation. No native key workaround or data migration.
+
+M8 capacity proof strengthened:7/7 with exact COMMAND_POST_ERROR and one TO_DELIVER
+row before release, retaining eventual delivery/preference assertions. Root tsc -b
+passes after project-workflow/worker/subscription-transport migration to explicit
+environment facilities. This is incremental build evidence; final clean generated
+build/static/docs/coverage remains required before review. JavaScript callers and
+focused fixture behavior are next.
+
+M8 project-workflow2/2 passes using public ServerTests.resetEnvironment test API.
+Tooling first exposed11 remaining example factory calls, then2 MCP BlackBox calls;
+all are now migrated and pnpm typecheck:tooling passes. Examples include Orders,
+Message Board, Support, To-Do and Release Notes. Example runtime startup/reset tests
+are next; compile success is not runtime acceptance.
+
+M8 selected example runtime checks pass: Orders/Support14/14, To-Do47/47,
+Release Notes9/9 and Message Board16/16. Orders and Message Board exposed evaluation
+order where Server.atPort resolved environment before configuration; context assembly
+now precedes it. Datastore fake explicitly implements read-only probe key() required
+by checkConnection. Managed-process JavaScript caller/residual API/docs checks remain.
+
+M8 managed remote readiness passes; external-event selection3/4 with RED-19 failure.
+Full trace exposes real same-core concurrency gap: supervisor calls normal run while
+drainMessage starts activeDirect run, competing for same remote lease; SKIPPED leaves
+exact row TO_DELIVER and rejects IntegrationBroker. This is not merely setup or yet a
+cross-process acknowledgement-policy question. Parent cites existing D0157 contract:
+one retained run per shard, exact observer before wake, public/supervisor terminal
+completion. Same writer unifies trusted environment runner entry points preserving
+supervisor options/cancel/session/logger. No fabricated ack, polling or lease bypass.
+Escalate bounded architecture only if actual existing-seam ambiguity remains.
+
+M8 same-core run correction: deterministic supervisor-first/direct-first gates each
+reproduced2acquisitions; CoreDelivery.runControlled now joins retained direct shard
+run and both pass2/2. Full fencing suite23/23 passes. Fresh build/RED-19 end-to-end
+pending, so no remote issue closure yet. Final reliability scope includes options,
+exact outcomes, full lifetime and both entry orderings under this correction.
+
+M8 fresh managed RED-19 still fails after same-process run coalescing. Concrete next
+case: two managed replicas share remote Delivery; other process holds shard lease,
+ThirdPartyContext.emittedEvent post sees SKIPPED/pending and unhandled rejection
+crashes source child. Do not merely swallow fixture error or fabricate acknowledgement.
+Demonstrated cross-process handoff contract ambiguity justifies bounded existing
+architecture role Astra/high, explicit immutable profile, no source edits/tests or
+children. Estimate0.25–0.5hour; compare baseline routed readiness acceptance, current
+D0157 local exact-message rules, existing remote ports/source and JVM reactive Inbox.
+Preserve ordinary delivery policy; no new remote receipt protocol/polling/queue.
+Writer can continue independent native group/docs work while decision is pending.
+
+D0160 new native group/preparation proof passes1/1 on each task provider: PG62812,
+MySQL62813, Maria62899, Datastore62981. Cases cover same Event ID in distinct groups,
+same-group conflict and matching create/check definitions. External logs
+m8-{pg,mysql,mariadb,datastore}-event-groups-live.log. This supersedes the earlier
+statement that new native group proof is missing; it does not close RED-19 handoff.
+Independent API/docs cleanup continues while bounded architecture decision is pending.
+
+M8 bounded remote-handoff decision accepted as D0161. Existing explicit Astra/high
+requirements splitter read baseline/current source; no source edits/tests/children,
+runtime metadata unavailable. Parent independently confirmed baseline routed claim
+returns settledHandoff and contains notification observer failure. Same Sol/medium
+writer instructed to preserve this completion from environment setup while removing
+old transitions. Local D0157 and explicit terminal runs unchanged. Focused tests
+include contested RED-19, receipt/notification failures, local capacity and managed
+shutdown. Updated PROPOSAL and AGENT_DELIVERY_LIFETIME with the distinction.
+
+M8 documentation checkpoint: generated API docs, changed-source/docs formatting and
+diff checks passed. Obsolete attachment/generation-only records/coordinator/parked
+obligations and suites removed after no-production-import proof. Server typecheck
+and logging containment passed. Evidence remains diagnostic until the M8 freeze;
+remote correction, final cheap checks and specialist review continue.
+
+M8 remaining estimate1.5–3hours for implementation/preflight plus0.5–1hour review
+and corrections, reflecting broad caller migration already complete and D0161 now
+resolved. Reuse mechanical_checks as read-only orchestrator-dispatched checks,
+immutable explicit gpt-6-luna/low; no child agents, edits, builds or tests while the
+writer completes readiness. Run static cleanup/TSDoc/copyright/time/dependency and
+ESLint checks, persist complete exit-code evidence externally. Findings on active
+files remain provisional; this is not the final frozen cheap gate or review.
+
+D0161 first implementation proof: supervised readiness test red (missing wake/direct
+drain) then green; fresh server+delivery-client build passes. Managed external
+RED-19 now1/1 with correct ordinary Vitest configuration (external
+m8-managed-external-red19-d0161.log). Initial infrastructure-config selection found
+no files and is not test evidence. Deterministic contested-shard ordering, error
+location tests, readiness simplification and affected regression checks continue.
+
+M8 provisional static diagnostics complete under explicit immutable Luna/low;
+runtime metadata unavailable. Copyright and production-dependency checks pass.
+Cleanup, TSDoc, time-read and ESLint fail (24 lint errors); exact complete logs and
+path findings saved in external m8-static-report.md. Parent inspected and returned
+one mechanical batch to the same writer. Active readiness paths remain provisional;
+no specialist invoked for deterministic errors. Final freeze checks still required.
+
+D0161 deterministic managed RED-19 proof passes1/1: test holds the remote shard;
+child imports a valid ThirdParty Event and emits a completion marker while the row
+remains TO_DELIVER; release produces the actual external subscription update.
+Initial malformed WorkerId fixture was corrected to generated WorkerIdSchema before
+this result (external m8-managed-external-barrier.log). Failure-path proof and
+readiness simplification continue. Parent residual duplicate-state scan found no
+runtime/test/example disabling switch; current proposal explicitly prohibits one.
+
+M8 D0161 remote Entity/Projection focused paths pass; readiness transfer/descriptor
+logic simplified. Remaining old transfer expectations are removed with obsolete
+behavior; shared Inbox assertions must distinguish actual retained DELIVERED rows
+from the exact pending target by signal/tenant/type identity. Parent requires
+continued held-shard TO_DELIVER/no-synthetic-ack proof, not generic row-presence
+assertions. Same writer continues focused tests, static corrections and freeze map.
+
+M8 Projection/Delivery-fencing focused suites37/37 pass after exact completed-signal
+status checks replace three obsolete empty-Inbox expectations; two transition-only
+tests removed. Existing live Agent close wait and original release-failure behavior
+remain covered. Held-shard RED-19 separately asserts the new target stays TO_DELIVER
+until release. Failure-location checks and final static preflight continue.
+
+M8 affected handoff selection84/84 passes across local readiness, Entity Inbox,
+Projection Inbox and Delivery fencing. This overlaps prior37/37 and is not added
+to it. Remote pending-target and exact completed-Projection status assertions are
+separate. Remaining receive/observer errors and static/freeze checks continue.
+
+M8 remaining pre-review estimate refreshed1.5–3hours plus0.5–1hour review/corrections:
+removed descriptor.transition still appears in one repository batching fixture;
+replace with environment remote supervision while preserving1,000-row first batch
+and Event-ID snapshot assertions. Current lint refresh has34diagnostics across WIP.
+No new runtime contract decision; same writer completes behavior and static work.
+Parent current git diff --check passes; this is not the final frozen preflight.
+
+Parent took only packages/server/REFERENCE.md and docs/USER_GUIDE.md prose after
+writer explicitly released them. Added D0161 local-result versus remote-reception
+explanation and failure/shutdown details. Corrected stale attachment text, fixed
+System Event group claim (D0160 context+role), always-in-memory local fallback claim,
+and Agent outgoing Command obligation claim. Current AgentCommitInput and repository
+commit source confirm only state/preferences/history, followed by ordinary output
+publication. Guide distinguishes ordinary redelivery from accepted Agent non-replay.
+Formatting passes for both files; writer retains all production/TSDoc/test changes.
+
+D0161 notification-observer failure proof1/1 passes: warning emitted, exact received
+row remains TO_DELIVER. Existing Entity Inbox receive/write failure proof rejects
+before readiness notification. Test-local factory close corrected; final combined
+preflight still pending. Repository supervised batching replacement passes1/1 with
+original1,000-row persistence, later failure and Event-ID snapshot assertions.
+
+M8 static correction checkpoint: callable-length and standalone-function necessity
+checks now pass after bounded environment/Datastore method splits and exact recorded
+dispositions. Two overlong lines remain in a test and memory transport. Remaining
+lint/TSDoc/typecheck and final combined behavior/coverage evidence are pending;
+no review freeze yet. Prior behavior counts remain overlapping, not accumulated.
+
+M8 current tooling typecheck passes, including repository batching and notification
+failure fixtures. Notification test uses actual CoreDelivery Inbox and checks WARN
+plus exact pending row after observer throws. Lint/TSDoc/cleanup, broader focused
+suites, coverage and docs gates continue before frozen specialist review.
+
+Parent residual API scan finds no old descriptor transition/attachment/generation
+class references in packages/examples/docs. Remaining withStorageFactory calls
+belong to standalone DeliveryBuilder. Firestore extension analysis has old context
+injection guidance; added precise lines to M13 documentation inventory for current
+versus historical claim disposition. No production change required by this scan.
+
+M8 lint:tsdoc passes after transport private-method documentation, managed gate,
+Delivery lifecycle and PG Event-group parameter corrections. This pass changes no
+runtime behavior. Final format/ESLint/cleanup/time gates and combined affected
+suites/coverage remain before review freeze.
+
+M8 lint:cleanup now passes on current formatted source. Two extracted-method
+TSDoc openers corrected; fresh ESLint/TSDoc/time and affected tests are next. No
+frozen acceptance or full-release claim; exact logs remain external m8-*.log.
+
+M8 six focused suites114/114 pass; overlaps earlier handoff evidence. TSDoc,
+cleanup and time-read gates pass. Production Delivery renewal uses Time; the
+platform-policy subprocess fixture retains its test-only31-second reopen clock
+shift through Date.now (no arbitrary sleep). Remaining ESLint, persistent fixture,
+changed-code coverage and review freeze evidence continue.
+
+M8 fresh typecheck:build:generated and ESLint pass. PostgreSQL infrastructure Agent
+interruption proof executes2configured cut cases successfully after clock-fixture
+change. Vitest reports6/6 but4unconfigured provider cases return early; count only
+2actual native cases, no implied MySQL/MariaDB/Datastore rerun. Time/TSDoc/cleanup
+also pass. Final docs/format/coverage and deleted-suite review mapping remain.
+
+M8 docs:check:generated passes (API inventory, audience and snippets). Initial format
+check flagged16changed files; reformatted and recheck running. Current build/tooling,
+ESLint, cleanup/TSDoc/time and114/114focused tests are green as scoped above.
+Changed-production LCOV inspection and immutable freeze/test-disposition manifest
+are next; no specialist review has begun.
+
+M8 final format:check passes. Writer rebuilding formatted source before scoped
+LCOV and frozen path/deleted-suite mapping, so coverage line references match the
+reviewed files. No change of runtime contract and no review acceptance yet.
+
+M8 post-format build passes. Scoped LCOV runs13affected suites covering environment,
+context, Delivery/Inbox, EventStore, transport and repository routing. Thresholds
+are disabled only for changed-line inspection, not release acceptance. Writer holds
+source edits during coverage and will classify uncovered changed branches before
+freeze. Final whole-repository release coverage remains required after M13.
+
+M8 scoped coverage run:621selected tests pass,4bounded-context tests still call
+removed descriptor transition/storageFactory/onReady/storageContext methods. Not a
+green coverage run; migrate to actual shared environment guarantees, no compatibility
+seam, then rerun affected suite and LCOV. Explicit untracked-file check found3files
+missed by default format selection; formatted. Final manifest must include all
+untracked files so preflight/review do not omit them.
+
+M8 bounded-context correction91/91 passes: removed one transition-only test and
+migrated three obsolete descriptor assertions to shared factory/index, recipient
+routing and Inbox byte behavior. Authored-package residual scan finds no removed
+transition/storageContext/onReady/startupScopes or attachment/transfer helper calls.
+Final build-backed coverage and cheap gates continue; prior failed LCOV not accepted.
+
+M8 final scoped coverage run passes13/13suites and624/624tests after current generated
+build. External m8-final-changed-coverage.txt records changed-line coverage plus expected
+non-source no-LCOV entries; final production summary will filter those entries; pending BRDA disposition must distinguish native-only provider lines and
+defensive setup/close branches using concrete separate evidence. Post-migration
+static gates continue. This replaces the earlier failed625-test scoped run and is
+not full release coverage or a sum with prior selections.
+
+M8 expanded current LCOV selection15/15suites and656/656tests passes. This replaces,
+not adds to,624/624. Production-only line/branch reports are external
+m8-final-production-coverage.txt and m8-final-changed-branches.txt. Post-migration
+build/tooling, ESLint, cleanup/TSDoc, format, time, docs/API/audience/snippets,
+copyright, production dependencies, logging containment, explicit untracked Prettier
+and diffcheck all pass. Native/provider/managed infrastructure suites are outside
+this LCOV selection and retain separately scoped live evidence. Writer preparing
+exact evidence/dispositions/immutable manifest, then source freeze for review.
+
+M8 source/tests/public docs frozen by sole writer; final docs:check:generated and
+diffcheck pass (m8-final-docs.log). Parent inspected implementation evidence and
+coverage limits; no full release claim. Review/correction estimate0.5–1hour.
+Before reviewers, reuse existing explicit immutable Luna/low mechanical function
+to hash complete tracked/untracked changed files and record deletions, excluding
+only mutable parent WORK_LOG/REVIEW_LOG. No builds/tests/source edits/children.
+Then dispatch four existing concern reviewers under recorded profiles and collect
+one batch; writer waits without edits.
+
+M8 review wave dispatched to existing reliability/API/style Sol/medium contexts;
+original explicit profiles retained, no new inherited dispatch. Documentation lane
+waits for capacity. Source/tests/docs frozen with no writer activity. Parent carries
+D0161 into existing M9–M11 handoff: reception completion cannot skip membership/lazy
+preparation before a new Inbox write, nor turn failed saved-work preparation into
+acknowledgement. This preserves accepted ingress rules, no new public policy.
+
+M8 review complete with3lifecycle defects,3deduplicated doc-contract issues and1dead
+helper finding; accepted single correction batch. Estimate revised2–4hours for
+bounded close-design check, same-writer fixes, focused regressions/static evidence
+and targeted re-review. Existing Astra/high architecture assignment resolves only
+public-run shutdown tracking and per-context cancel/admission with sibling continuity
+and ordinary accepted follow-ups. No public policy change, new Delivery or queue.
+Writer may first correct independent docs/dead helpers, then apply accepted ruling.
+
+M8 independent D1–D3/S1 corrections applied by same writer: shared Delivery startup/
+close docs, required transport initialize lifecycle, configured facility TSDoc;
+zero-caller configuredScopes/snapshotDeliveryStrategy removed with imports. No
+R1–R3 lifecycle production edits yet. Focused static/build checks running while
+bounded architect resolves context close/admission race and complete-run tracking.
+
+M8 independent D/S correction checks pass: tooling/TSDoc/cleanup/format/generated
+API-audience-snippets/diffcheck (m8-review-independent-*.log). Runtime fixes still
+await exact architect decision. Parent requested explicit selection path for locally
+admitted exact handoffs/internal follow-ups after removing normal context recipients,
+and private non-ack skip semantics at endpoint/retry; no implied bypass, payload
+queue, synthetic success, FailedReception or sibling cancellation.
+
+M8 additional Delivery-builder regression selection150/158 passes;8fail because
+shared synthetic Inbox fixtures omit packed signal and new deliveryTenant rejects
+before monitor behavior. Same writer replacing fixture with domain-correct generated
+signal, no R1–R3 production edit or fabricated tenant fallback. Rerun required.
+Architecture still resolves local admitted handoff selection and post-ack ordinary
+follow-up lifetime without awaiting unrelated sibling whole-shard work.
+
+M8 follow-on fixture inventory: reuse explicit immutable Luna/low read-only scanning
+function while sole writer fixes Delivery-builder fixture. Scan authored direct
+InboxMessage fixture construction without packed signal across tests/examples;
+report concrete candidates and distinguish deliberate malformed-message tests or
+spread-provided signals. No tests/builds/source edits/children or production redesign.
+Purpose is preventing another mechanical fixture omission at final gate; writer
+classifies and fixes only confirmed normal-delivery fixtures.
+
+M8 Delivery-builder fixture correction32/32passes: genuine generated Task Event,
+matching TaskList target and current Timestamp. Initial8missing-signal failures and
+intermediate timestamp-type mistake are superseded by green log
+m8-review-delivery-builder-fixture.log. No lifecycle production edit. Independent
+Luna scan excludes this fixed helper and writer avoids duplicating its inventory.
+
+M8 bounded close design accepted as D0162 after source-backed Astra/high decision.
+Full ruling persisted in SHARED_DELIVERY_CLOSE.md. Parent verified existing exact
+pending-row and follow-up mechanisms are retained; no second Delivery/queue or
+new public cancellation policy. Same writer authorized R1 first, then R2/R3 with
+focused races. R1 regression already RED: held public callback while environment
+close prematurely calls factory.close (m8-review-r1-red.log). Gate released in
+finally;1failing selected test,28unselected. No lifecycle production edit preceded
+accepted ruling. Independent4suite158/158green; residual Luna fixture scan found
+no additional normal-delivery omissions, only deliberate malformed/control stubs
+and wire messages using payload. Explicit profiles/metadata limitations confirmed.
+
+D0162 parent clarification before R1 edits: capture closing operations at the
+synchronous core admission fence, not only later core.close after asynchronous
+supervisor cleanup. Otherwise an explicit run can settle/release-fail and disappear
+from active Set before close records its failure. Same close-attempt snapshot
+preserves evidence without unbounded completed-run history. Writer instructed and
+durable close decision refined; focused delayed-cleanup/release failure proof added.
+
+M8 R1 held-public-run red→green1/1 after every physical drain is tracked and valid
+environment.close fences core synchronously. Next delayed supervisor-cleanup versus
+release failure proof then R2/R3. Parent reminder: new context lifetime observation
+must not reclassify monitor-contained endpoint errors or expected cooperative Agent
+cancellation as cleanup failures; preserve actual release/store/cleanup errors.
+Already-entered shared replay must be captured at beginClose; local admitted
+follow-ups retain existing lifetime without a sibling whole-shard wait.
+
+M8 R2 context AbortSignal wired into capacity reservation and live runner with
+reservation completion retained for close. Initial typecheck caught missing
+registration-to-runtime field, corrected; no subsequent full typecheck claim yet.
+R3 replay admission fence and focused races next. R1 focused gate remains green.
+
+M8 initial R2/R3 wiring typechecks: Agent-only controller, reservation settlement,
+early recipient fence, tracked shared replay/local follow-ups and final predicate
+private not-admitted sentinel. Behavior race tests remain pending; unlike R1 this
+wiring preceded focused regressions, so no behavior-first/red-green claim for R2/R3.
+Parent required immediate meaningful regressions before further expansion, and
+red evidence against available pre-fix snapshot or narrowly withheld new controls
+with exact restore in sole writer's isolated copy. No parallel writer/test mirroring.
+
+M8 focused correction checkpoint: public-run and delayed-release failure tests
+green; context Agent abort, final admission recheck and early recipient-fence tests
+green and each relevant control withheld for meaningful red evidence. These R2/R3
+checks are post-implementation counterfactual proofs, not retroactive TDD. Delivery
+fencing24/24green. Cheap static checks found mechanical TSDoc/lint/function-length
+issues; sole writer correcting before remaining capacity/ack/local-follow-up/sibling
+races. Parent carried D0162 admitted ordinary-work and operation-level close rules
+into inactive M9–M11 implementation/review briefs to prevent first-input gating from
+invalidating already-admitted exact handoffs. No production edits by parent.
+
+M8 correction four-suite run150/150green after R1–R3. Held public callback,
+release failure surviving beginClose/later close, separate custom-vs-shared callback,
+late Agent output cancellation and fresh-recipient/final-predicate pending-row
+proofs pass. Remaining estimate1–2hours, within previously announced2–4hourcorrection.
+Parent reiterates same-shard healthy sibling while closing held acknowledged Agent
+is required, not optional. Receipt/ack/capacity gaps and exact local follow-up drain
+remain before static/coverage freeze and targeted reliability re-review. External
+m8-close-rereview-brief.md prepared; no reviewer dispatched before freeze.
+
+Independent read-only M12 preparation while M8 sole writer completes close tests:
+reuse existing mechanical_checks function, explicit immutable gpt-6-luna/low from
+original dispatch. Refresh only concrete ordinary Any candidates in earlier
+any-production/fixture-adoption-audit.md against current files; classify completed,
+deleted or still outstanding and preserve prior deliberate malformed/opaque cases.
+No new broad audit, edits/tests/builds/children. This avoids assigning deleted M8
+attachment suites as future work and supplies current line references to M12.
+
+M12 candidate refresh accepted from existing explicit Luna/low function; runtime
+metadata unavailable. External m12-any-candidate-refresh.md reports ordinary typed
+integration-wrapper/test candidates still pending, remote-environment-app converted,
+environment-attachment tests deleted, Todo AnyMessages already migrated. No tests or
+source edits. This refresh supersedes stale line/deleted-file entries only and does
+not reinterpret intentional opaque/malformed exclusions; final migration stays M12.
+
+M8 further close tests pass: acknowledged FollowupAgent closes while a distinct
+ServerStatusProjection receives domain ServerStarted on the same shared shard;
+sibling executes and late Agent Event is absent. Receipt-in-flight test leaves true
+acceptance receipt with no late output/persisted state after close/reopen. That test
+also passes with context abort withheld due to prior acknowledgement/close guards,
+so it is contract coverage, not isolated red-green proof; parent accepts honest
+classification and prohibits artificial distortion for red. Capacity-wait cancellation
+and sibling progress primitive passes; locally admitted receive finishing after
+beginClose retains ordinary Entity follow-up and reopening assertion. Sole writer
+continues remaining meaningful gaps and static/coverage freeze.
+
+M8 D0162 focused verification5suites160/160green; toolingtypecheck, TSDoc,
+cleanup/35-line and scopedESLintgreen. Exact local receive barrier occurs after
+ordinary output Command admission; close starts, receive releases, follow-up commit
+survives reopening. Held Agent+sibling uses distinct generated SupportReplyAgentState
+and ServerStatusProjection on same shared shard. Build-backed changed coverage and
+final immutable freeze evidence next; no verify:release or full-task completion claim.
+
+M8 monitor-repeat regression found a real R3 gap: an inner retry rejected by final
+recipient admission could return to an outer attempt that still acknowledged its
+row. Sole writer added per-attempt notAdmitted state; focused red acknowledges1,
+green acknowledges0. All161 affected tests pass. Generatedbuild, TSDoc, cleanup,
+toolingtypecheck, scopedESLint, format and docs pass. Post-fix LCOV/evidence refreshing
+before freeze. This is within accepted R3 no-ack-on-rejection contract; no new public
+policy or architecture wave. Targeted reliability review must inspect nested/repeated
+attempt outcome propagation, not only the final predicate itself.
+
+M8 correction frozen by sole writer; no source/test/doc edits pending review.
+Final focused coverage run: five suites, 161/161 passing. Build, tooling typecheck,
+TSDoc, cleanup, scoped ESLint, format, generated/API/snippet docs and diff checks
+pass. Full evidence in m8-review-correction-evidence.md; complete path inventory in
+m8-close-correction-path-inventory.txt. Delivery changed lines57/58 covered; remaining
+moved Agent discard branch explicitly disclosed. R1 test-first, R2/R3 post-implementation
+withheld-control proofs accurately distinguished. Estimate0.5–1hour for frozen hash
+snapshot, targeted review, bounded corrections if needed, and commit/push. No release
+profile or full-task completion yet.
+
+Before review, dispatch existing mechanical_checks read-only function under its
+original explicit immutable gpt-6-luna/low profile: refresh complete changed-file
+manifest with SHA256/deletions, excluding mutable WORK_LOG/REVIEW_LOG content only;
+verify inventory/evidence references. No tests/builds/edits/children. Source remains
+frozen. Parent then reuses reliability reviewer with exact bounded R1–R3 brief.
+
+While targeted M8 review runs, the same existing Sol/medium implementer may read
+inactive M9–M11 briefs and current seams only, with no source/test/doc edits or
+checks. Provide concrete bounded next-slice estimate/dependencies, especially the
+minimal awaited monitor pass needed for coherent eager flags. This is routine
+implementation handoff preparation under the accepted proposal, not a fresh design
+wave or authorization to begin M9 before M8 acceptance. No children. External
+notes only; preserve frozen M8 hashes.
+
+M8 accepted: targeted reliability re-review resolves all R1–R3, with 109/109 frozen
+hashes unchanged and no further findings/public API effects. Parent inspected report;
+explicit immutable Sol/medium confirmed, runtime metadata unavailable. Preparing
+record-only status update and cheap diff/format check, then one M8 feature commit and
+immediate push to official origin/environment-lifecycle. Repository origin and branch
+reconfirmed. No master/PR action. M9 preparation proceeds after durable checkpoint.

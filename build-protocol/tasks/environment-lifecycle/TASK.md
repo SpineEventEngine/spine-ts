@@ -18,8 +18,11 @@ complete. Public live TenantIndex configuration and native membership are review
 and complete. Tenant admission and identifiable errors are reviewed and complete.
 Unconditional duplicate-state registration and the unified asynchronous build API
 are verified, independently reviewed and pushed. Immutable Agent acceptance receipts and
-conditional live Agent persistence are reviewed; runtime recovery removal is in progress. Remaining
-milestones follow MILESTONES.md. Existing
+conditional live Agent persistence and complete runtime recovery removal are reviewed and pushed.
+Shared environment setup and Delivery consolidation are reviewed and complete,
+including context-specific shutdown and retained shared dispatch lifetimes.
+Bounded Context eager/lazy initialization is next. Remaining milestones follow
+MILESTONES.md. Existing
 behavior descriptions in the proposal refer to the baseline; proposed APIs become
 supported only after implementation.
 

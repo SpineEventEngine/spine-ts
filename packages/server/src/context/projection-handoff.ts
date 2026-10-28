@@ -14,6 +14,7 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import type { TenantId } from "@spine-event-engine/proto";
+import { deliveryTenantKey } from "../delivery/delivery-tenant.js";
 
 import { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
@@ -184,8 +185,9 @@ export class LocalProjectionInbox implements ProjectionInbox {
       node: this.#contextName,
       onReplay: (next) => this.#replay(next, deliveryTenantId),
       acceptMessage: (next) =>
-        InboxHandoff.sameMessageId(next.id, message.id) ||
-        (next.label === "UPDATE_SUBSCRIBER" && this.#targets.has(next.inboxId.targetTypeUrl)),
+        deliveryTenantKey(next) === deliveryTenantKey(message) &&
+        (InboxHandoff.sameMessageId(next.id, message.id) ||
+          (next.label === "UPDATE_SUBSCRIBER" && this.#targets.has(next.inboxId.targetTypeUrl))),
       onResolved: (next) => {
         this.#recordAcknowledgement(next);
       },

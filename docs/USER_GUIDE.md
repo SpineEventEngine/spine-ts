@@ -74,8 +74,9 @@ application uses `start()` and closes the server itself.
 <!-- docs-snippet-path: packages/server/test/context/bounded-context.test.ts -->
 
 ```ts
-import { BoundedContext } from "@spine-event-engine/server";
+import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
 
+await ServerEnvironment.instance().completeSetup();
 const context = await BoundedContext.singleTenant("MessageBoard").build();
 await context.close();
 ```
@@ -606,10 +607,27 @@ records help diagnose lifecycle, warnings, and failures; they are not a durable
 record of a domain fact. Put business facts in events or storage, and keep
 secrets and credential values out of application logs.
 
+All Bounded Contexts use the Delivery configured in `ServerEnvironment`. With
+local Delivery, posting waits for the signal's delivery result. An Agent's input
+can be accepted before its live handler finishes. With remote Delivery and its
+environment supervisor, posting returns after the remote Inbox accepts the signal
+and the notification is submitted. Processing may happen afterward on another
+application process. For example, a successful Command submission can precede the
+Projection update that your UI is waiting for; use a query or subscription to
+observe that update.
+
+A failed Inbox write rejects the posting call. A notification failure after a
+successful write is logged, and ordinary delivery can find the pending signal
+through its existing notifications and safety scan.
+
 Durable delivery stores pending and delivered Inbox rows. A shard lease prevents
 concurrent delivery, but a handler effect and the delivered transition are not
-one transaction. A lost acknowledgement can redeliver after restart, so make
-downstream effects idempotent. The framework does not add attempt history,
+one transaction. A lost acknowledgement can redeliver ordinary Aggregate,
+Process Manager or Projection work after restart, so make downstream effects
+idempotent. Agents retain an additional acceptance receipt: once an Agent input
+is accepted, interruption does not cause its handler to run again. Its saved
+history remains readable; a fresh signal can start new work.
+The framework does not add attempt history,
 quarantine records, scheduled retry policy, or exactly-once side effects.
 Local and remote delivery removes a pending duplicate when its signal ID and
 typed Inbox target match a delivered row in the current page or a recent local

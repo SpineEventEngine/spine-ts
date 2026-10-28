@@ -26,10 +26,15 @@ import { TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { SignalMetadata } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import type { Datastore } from "@google-cloud/datastore";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+afterEach(async () => {
+  await ServerTests.resetEnvironment();
+});
 
 import {
   CreateOrderSchema,
@@ -260,6 +265,7 @@ function disconnectedDatastore(): Datastore {
     },
   };
   return {
+    key: ({ path }: { path: readonly (string | number)[] }) => path,
     createQuery: () => query,
     runQuery: () => Promise.resolve([[]]),
   } as unknown as Datastore;

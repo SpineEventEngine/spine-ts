@@ -18,19 +18,19 @@ import { InMemoryTransportFactory, type TransportFactory } from "@spine-event-en
 import { spineCoreRegistry, type TypeRegistryLookup } from "@spine-event-engine/core";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
-import { emitServerWarning } from "./server-log.js";
+import { Delivery as CoreDelivery } from "../delivery/delivery.js";
+import { deliveryControls, deliveryStrategyAccess } from "../delivery/delivery-builder.js";
+import { DeliverySupervisor, deliverySupervisorAccess } from "../delivery/delivery-supervisor.js";
+import type { InboxMessage } from "../delivery/inbox.js";
+import { deliveryTenant } from "../delivery/delivery-tenant.js";
+import type { Delivery as PublicDelivery, DeliveryStrategy } from "../delivery/delivery-builder.js";
+import { emitServerInfo, emitServerWarning } from "./server-log.js";
+import { managedDeliveryGate } from "./managed-delivery-gate.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import { TenantIndexes, type TenantIndex } from "../context/tenant-index.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import type { DeliverySource } from "../delivery/delivery-supervisor.js";
-import { EnvironmentDeliveryWorker } from "./environment-delivery-worker.js";
-import {
-  EnvironmentAttachments,
-  type EnvironmentAttachOptions,
-  type EnvironmentAttachmentHandle,
-  type EnvironmentGenerationWorker,
-} from "./environment-attachment.js";
 import { Environment, EnvironmentTests, EnvironmentType } from "./environment.js";
 
 /**
@@ -48,25 +48,25 @@ export interface ServerEnvironmentCloseable {
 }
 
 /**
- * A closeable environment facility that must open before attachment admission.
+ * A closeable environment facility that opens before shared Delivery setup.
  */
 export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
   // prettier-ignore
 
   /**
-   * Opens the facility before the environment admits attachments.
+   * Opens the facility before the environment starts shared Delivery.
    *
    * @returns An optional asynchronous open operation.
    */
   open(): unknown;
 
   /**
-   * Supplies the inbox port used by environment delivery generations.
+   * Supplies the Inbox port used by shared environment Delivery.
    */
   readonly inbox: DeliveryInbox;
 
   /**
-   * Supplies the shard work-registry port used by environment delivery generations.
+   * Supplies the shard work-registry port used by shared environment Delivery.
    */
   readonly workRegistry: DeliveryWorkRegistry;
 
@@ -107,9 +107,16 @@ export interface ServerEnvironmentSettings {
   readonly typeRegistry?: TypeRegistryLookup;
 
   /**
-   * Optional closeable delivery owner for durable delivery seams.
+   * Optional closeable Delivery port facility supplied during environment setup.
+   * A remote facility may also provide `open`, `inbox`, `workRegistry`, and `source`.
+   * The environment constructs its shared public Delivery separately.
    */
   readonly delivery?: ServerEnvironmentCloseable;
+
+  /**
+   * Maps targets to shards for every context in this environment.
+   */
+  readonly deliveryStrategy?: DeliveryStrategy;
 
   /**
    * Optional tracing factory placeholder for later tracing adapters.
@@ -175,9 +182,19 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly typeRegistry: TypeRegistryLookup;
 
   /**
-   * Optional closeable delivery owner selected for this environment.
+   * Optional closeable remote delivery facility selected for this environment.
    */
-  readonly delivery: ServerEnvironmentCloseable | undefined;
+  readonly #remoteDelivery: ServerEnvironmentCloseable | undefined;
+
+  /**
+   * Returns the actual shared Delivery after explicit environment setup.
+   * @returns The one public Delivery facade for this environment.
+   */
+  get delivery(): PublicDelivery {
+    if (this.#publicDelivery === undefined)
+      throw new Error("ServerEnvironment.completeSetup() must finish before Delivery use.");
+    return this.#publicDelivery;
+  }
 
   /**
    * Optional tracing factory selected for this environment.
@@ -188,11 +205,25 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 
   readonly #closeGroup: RetryableCloseGroup;
 
+  readonly #deliveryCloseGroup: RetryableCloseGroup;
+
+  readonly #deliveryStrategy: DeliveryStrategy | undefined;
+
+  #delivery: CoreDelivery | undefined;
+
+  #publicDelivery: PublicDelivery | undefined;
+
+  #supervisor: DeliverySupervisor | undefined;
+
+  #supervisorStart: Promise<void> | undefined;
+
   #close: Promise<void> | undefined;
 
   #deliveryOpen: Promise<void> | undefined;
 
   #deliveryOpened = false;
+
+  #closing = false;
 
   /**
    * Initializes resolved environment facilities.
@@ -207,33 +238,42 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.tenantIndex = settings.tenantIndex ?? TenantIndexes.fromFactory(settings.storageFactory);
     this.integrationChannelFactory = settings.integrationChannelFactory;
     this.typeRegistry = settings.typeRegistry;
-    this.delivery = settings.delivery;
+    this.#remoteDelivery = settings.delivery;
+    this.#deliveryStrategy = settings.deliveryStrategy;
     this.tracerFactory = settings.tracerFactory;
-    environmentLoggers.set(this, settings.logger);
-    environmentContexts.set(this, new EnvironmentContextRegistrations());
-    this.#ownedCloseables = ServerEnvironmentValues.facilitiesToClose(settings);
-    warnedVolatileRegistries.set(this, new WeakSet());
+    this.#registerRuntimeHooks(settings.logger);
+    this.#deliveryCloseGroup = new RetryableCloseGroup(
+      [
+        { close: () => this.#supervisor?.close() },
+        { close: () => this.#delivery?.close() },
+        this.#remoteDelivery,
+      ],
+      "Environment Delivery close failed.",
+    );
+    this.#ownedCloseables = ServerEnvironmentValues.facilitiesToClose(
+      settings,
+      this.#deliveryCloseGroup,
+    );
     this.#closeGroup = new RetryableCloseGroup(
       this.#ownedCloseables,
       "ServerEnvironment close failed.",
     );
-    environmentAttachments.set(
-      this,
-      new EnvironmentAttachments({
-        logger: ServerEnvironmentValues.loggerFor(this),
-        createWorker: () => {
-          const ports = ServerEnvironmentValues.ports(this.delivery);
-          return new EnvironmentDeliveryWorker({
-            ...(ports === undefined ? {} : { ports }),
-            nodeId: this.nodeId,
-          });
-        },
-        deliveryPorts: () => ServerEnvironmentValues.ports(this.delivery),
-      }),
-    );
-    deliveryOpeners.set(this, () => this.#openDelivery());
-    testAttachmentsInstallable.add(this);
     Object.freeze(this);
+  }
+
+  /**
+   * Registers package-local callbacks for this environment's runtime.
+   * @param logger Receives diagnostics from these callbacks.
+   */
+  #registerRuntimeHooks(logger: ILogLayer): void {
+    environmentLoggers.set(this, logger);
+    environmentContexts.set(this, new EnvironmentContextRegistrations());
+    warnedVolatileRegistries.set(this, new WeakSet());
+    supervisorStarters.set(this, () => this.#startSupervisor());
+    deliveryNotifiers.set(this, (shard) => {
+      this.#notifyDelivery(shard);
+    });
+    deliveryIdlers.set(this, () => this.#whenDeliveryIdle());
   }
 
   /**
@@ -277,7 +317,57 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   }
 
   /**
-   * Closes this environment after all attached servers retire.
+   * Checks shared storage and initializes transport and Delivery before context startup.
+   *
+   * @returns The coalesced setup attempt for this environment lifetime.
+   */
+  completeSetup(): Promise<void> {
+    if (this.#closing) return Promise.reject(new Error("ServerEnvironment is closed."));
+    const current = environmentSetups.get(this);
+    if (current !== undefined) return current;
+    const started = this.#completeSetup();
+    environmentSetups.set(this, started);
+    return started;
+  }
+
+  async #completeSetup(): Promise<void> {
+    try {
+      if (typeof this.integrationChannelFactory.initialize !== "function")
+        throw new TypeError("TransportFactory.initialize is required.");
+      await this.storageFactory.checkConnection();
+      emitServerInfo(
+        ServerEnvironmentValues.loggerFor(this),
+        "Environment storage connection checked.",
+        { operation: "server.setup_storage" },
+      );
+      await this.integrationChannelFactory.initialize();
+      emitServerInfo(
+        ServerEnvironmentValues.loggerFor(this),
+        "Environment transport initialized.",
+        { operation: "server.setup_transport" },
+      );
+      await this.#openDelivery();
+      if (this.#closing) throw new Error("ServerEnvironment closed during setup.");
+      emitServerInfo(ServerEnvironmentValues.loggerFor(this), "Environment Delivery initialized.", {
+        operation: "server.setup_delivery",
+      });
+    } catch (error) {
+      this.#closing = true;
+      const cleanup = await Promise.allSettled([this.#closeGroup.close()]);
+      const failures = cleanup.flatMap((result) => {
+        if (result.status !== "rejected") return [];
+        return result.reason instanceof AggregateError
+          ? (result.reason.errors as unknown[])
+          : [result.reason as unknown];
+      });
+      if (failures.length)
+        throw new AggregateError([error, ...failures], "Environment setup failed.");
+      throw error;
+    }
+  }
+
+  /**
+   * Closes this environment after all Bounded Contexts close.
    *
    * Admission permanently closes the environment and prevents reuse. If it is
    * in use, closure rejects without owned-facility teardown. Failed facility
@@ -287,9 +377,17 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    *
    */
   close(): Promise<void> {
-    testAttachmentsInstallable.delete(this);
-    this.#close ??= this.#attachments()
-      .admitPermanentClose()
+    if (EnvironmentContextRegistrations.forEnvironment(this).active)
+      return Promise.reject(
+        new Error("Cannot close ServerEnvironment with active Bounded Contexts."),
+      );
+    this.#closing = true;
+    this.#delivery?.beginClose();
+    this.#close ??= Promise.resolve()
+      .then(async () => {
+        const setup = environmentSetups.get(this);
+        if (setup !== undefined) await Promise.allSettled([setup]);
+      })
       .then(() => this.#closeGroup.close())
       .catch((error: unknown) => {
         this.#close = undefined;
@@ -301,12 +399,11 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   #openDelivery(): Promise<void> {
     if (this.#deliveryOpened) return Promise.resolve();
     const opening = (this.#deliveryOpen ??= Promise.resolve()
-      .then(() => {
-        const delivery = ServerEnvironmentValues.openableDelivery(this.delivery);
-        if (delivery !== undefined) {
-          return delivery.open();
-        }
-        return undefined;
+      .then(async () => {
+        const remote = ServerEnvironmentValues.openableDelivery(this.#remoteDelivery);
+        if (remote !== undefined) await remote.open();
+        if (this.#closing) throw new Error("ServerEnvironment closed during Delivery setup.");
+        this.#constructDelivery(ServerEnvironmentValues.ports(this.#remoteDelivery));
       })
       .then(() => {
         this.#deliveryOpened = true;
@@ -318,12 +415,95 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     return opening;
   }
 
-  #attachments(): EnvironmentAttachments {
-    const attachments = environmentAttachments.get(this);
-    if (attachments === undefined) {
-      throw new Error("ServerEnvironment attachments are not available.");
+  /**
+   * Constructs the one environment Delivery after configured ports open.
+   * @param ports Open remote ports when configured.
+   */
+  #constructDelivery(ports?: EnvironmentDeliveryPorts): void {
+    const delivery = new CoreDelivery({
+      context: { name: "__System_Delivery__", multitenant: false },
+      storageFactory: this.storageFactory,
+      node: this.nodeId,
+      ...(this.#deliveryStrategy === undefined
+        ? {}
+        : { strategy: deliveryStrategyAccess.snapshot(this.#deliveryStrategy) }),
+      ...(ports ?? {}),
+    });
+    delivery.setReplay(
+      (message) => this.#replayMessage(message),
+      (message) => this.#acceptsMessage(message),
+    );
+    this.#delivery = delivery;
+    environmentDeliveryCores.set(this, delivery);
+    this.#publicDelivery = deliveryControls.supervised(delivery);
+    if (ports?.source !== undefined) this.#installSupervisor(this.#publicDelivery, ports.source);
+  }
+
+  #acceptsMessage(message: InboxMessage): boolean {
+    return (
+      EnvironmentContextRegistrations.forEnvironment(this).recipient(
+        message.inboxId.targetTypeUrl,
+      ) !== undefined
+    );
+  }
+
+  #installSupervisor(delivery: PublicDelivery, source: DeliverySource): void {
+    const supervisor = new DeliverySupervisor({
+      source,
+      delivery,
+      onMessage: (message) => this.#replayMessage(message),
+    });
+    deliverySupervisorAccess.installAdmission(supervisor, (message) =>
+      this.#acceptsMessage(message),
+    );
+    deliverySupervisorAccess.installLogger(supervisor, ServerEnvironmentValues.loggerFor(this));
+    this.#supervisor = supervisor;
+    remoteSupervisedEnvironments.add(this);
+  }
+
+  #startSupervisor(): Promise<void> {
+    const supervisor = this.#supervisor;
+    return supervisor === undefined
+      ? Promise.resolve()
+      : managedDeliveryGate.start(() => (this.#supervisorStart ??= supervisor.start()));
+  }
+
+  #notifyDelivery(shard: import("../delivery/shard-index.js").ShardIndex): void {
+    if (this.#supervisor === undefined) {
+      this.#delivery?.wake(shard);
+      return;
     }
-    return attachments;
+    try {
+      this.#supervisor.notify(shard);
+    } catch {
+      emitServerWarning(ServerEnvironmentValues.loggerFor(this), "Delivery notification failed.", {
+        operation: "delivery.notify",
+        reasonCode: "failed",
+      });
+    }
+  }
+
+  async #whenDeliveryIdle(): Promise<void> {
+    const settled = await Promise.allSettled([
+      this.#supervisor?.whenIdle(),
+      this.#delivery?.whenIdle(),
+    ]);
+    const failures = settled.flatMap((result): unknown[] =>
+      result.status === "rejected" ? [result.reason as unknown] : [],
+    );
+    if (failures.length === 1) throw failures[0];
+    if (failures.length)
+      throw new AggregateError(failures, "Environment Delivery idle wait failed.");
+  }
+
+  async #replayMessage(message: InboxMessage): Promise<void> {
+    const context = EnvironmentContextRegistrations.forEnvironment(this).recipient(
+      message.inboxId.targetTypeUrl,
+    );
+    if (context === undefined) throw new Error("No open Bounded Context serves the Inbox target.");
+    await boundedContextAccess.trackReplay(context, () =>
+      boundedContextAccess.delivery(context).replay(message, deliveryTenant(message)),
+    );
   }
 }
 
@@ -333,6 +513,7 @@ interface RequiredFacilities {
   readonly integrationChannelFactory: TransportFactory;
   readonly typeRegistry: TypeRegistryLookup;
   readonly delivery: ServerEnvironmentCloseable | undefined;
+  readonly deliveryStrategy: DeliveryStrategy | undefined;
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
   readonly logger: ILogLayer;
 }
@@ -380,6 +561,44 @@ export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<
 
 interface ServerEnvironmentAccess {
   /**
+   * Returns the retained runtime behind the public Delivery facade.
+   * @param environment Resolved environment after explicit setup.
+   * @returns The one shared Delivery core.
+   */
+  coreDelivery(environment: ServerEnvironment): CoreDelivery;
+
+  /**
+   * Returns whether setup installed a remote Delivery supervisor.
+   * @param environment Resolved environment after setup.
+   * @returns True only for a supervised remote source.
+   */
+  remoteSupervised(environment: ServerEnvironment): boolean;
+
+  /**
+   * Waits for admitted environment Delivery work without closing the facility.
+   * @param environment Resolved environment.
+   * @returns Completion after active shard runs settle.
+   */
+  whenDeliveryIdle(environment: ServerEnvironment): Promise<void>;
+
+  /**
+   * Notifies the single environment Delivery about a newly eligible shard.
+   * @param environment Resolved environment.
+   * @param shard Physical shared shard.
+   */
+  notifyDelivery(
+    environment: ServerEnvironment,
+    shard: import("../delivery/shard-index.js").ShardIndex,
+  ): void;
+
+  /**
+   * Waits for explicitly started shared setup before a context assembles.
+   * @param environment Resolved environment.
+   * @returns Shared setup completion or a missing-setup error.
+   */
+  awaitSetup(environment: ServerEnvironment): Promise<void>;
+
+  /**
    * Records a build before asynchronous model discovery.
    *
    * @param environment Resolved environment.
@@ -400,8 +619,9 @@ interface ServerEnvironmentAccess {
    *
    * @param environment Resolved environment.
    * @param context Ready context.
+   * @returns Completion after recipient registration and supervisor start.
    */
-  completeContext(environment: ServerEnvironment, context: BoundedContext): void;
+  completeContext(environment: ServerEnvironment, context: BoundedContext): Promise<void>;
 
   /**
    * Registers a state type and returns a conflicting domain context, if any.
@@ -416,6 +636,13 @@ interface ServerEnvironmentAccess {
     context: BoundedContext,
     typeUrl: string,
   ): BoundedContext | undefined;
+
+  /**
+   * Stops only this context's fresh shared-recipient selection.
+   * @param environment Environment registering recipients.
+   * @param context Context entering close.
+   */
+  stopRecipients(environment: ServerEnvironment, context: BoundedContext): void;
 
   /**
    * Removes a context after its recipients have stopped.
@@ -443,112 +670,6 @@ interface ServerEnvironmentAccess {
   openContexts(environment: ServerEnvironment): readonly BoundedContext[];
 
   /**
-   * Attaches a context delivery generation.
-   *
-   * @param environment Resolved server environment.
-   * @param options Delivery attachment options.
-   * @returns Installed attachment handle.
-   */
-  attach(
-    environment: ServerEnvironment,
-    options: EnvironmentAttachOptions,
-  ): Promise<EnvironmentAttachmentHandle>;
-
-  /**
-   * Checks whether startup failure remains pending.
-   *
-   * @param environment Resolved server environment.
-   * @returns Whether startup failure remains pending.
-   */
-  failedStartPending(environment: ServerEnvironment): boolean;
-
-  /**
-   * Checks whether failed-start retry remains pending.
-   *
-   * @param environment Resolved server environment.
-   * @param error Failure to inspect.
-   * @returns Whether retry remains pending.
-   */
-  failedStartRetryPending(environment: ServerEnvironment, error: unknown): boolean;
-
-  /**
-   * Retries failed startup.
-   *
-   * @param environment Resolved server environment.
-   * @returns Retry completion.
-   */
-  retryFailedStart(environment: ServerEnvironment): Promise<void>;
-
-  /**
-   * Removes one delivery attachment.
-   *
-   * @param environment Resolved server environment.
-   * @param attachment Attachment to remove.
-   * @returns Detach completion.
-   */
-  detach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle): Promise<void>;
-
-  /**
-   * Retries a failed detach.
-   *
-   * @param environment Resolved server environment.
-   * @param attachment Attachment to retry.
-   * @returns Retry completion.
-   */
-  retryDetach(
-    environment: ServerEnvironment,
-    attachment: EnvironmentAttachmentHandle,
-  ): Promise<void>;
-
-  /**
-   * Checks whether detach retry remains pending.
-   *
-   * @param environment Resolved server environment.
-   * @param attachment Attachment to inspect.
-   * @returns Whether retry remains pending.
-   */
-  detachRetryPending(
-    environment: ServerEnvironment,
-    attachment: EnvironmentAttachmentHandle,
-  ): boolean;
-
-  /**
-   * Checks whether an attachment endpoint can be used.
-   *
-   * @param environment Resolved server environment.
-   * @param attachment Attachment to inspect.
-   * @returns Whether endpoint use is safe.
-   */
-  endpointSafe(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle): boolean;
-
-  /**
-   * Stops environment delivery.
-   *
-   * @param environment Resolved server environment.
-   * @returns Delivery shutdown completion.
-   */
-  stopDelivery(environment: ServerEnvironment): Promise<void>;
-
-  /**
-   * Retries environment delivery shutdown.
-   *
-   * @param environment Resolved server environment.
-   * @returns Delivery shutdown retry completion.
-   */
-  retryDeliveryStop(environment: ServerEnvironment): Promise<void>;
-
-  /**
-   * Sets deterministic test attachment workers before lifecycle use.
-   *
-   * @param environment Resolved server environment.
-   * @param createWorker Worker constructor.
-   */
-  installTestAttachments(
-    environment: ServerEnvironment,
-    createWorker: () => EnvironmentGenerationWorker,
-  ): void;
-
-  /**
    * Returns the environment logger.
    *
    * @param environment Resolved server environment.
@@ -565,10 +686,16 @@ interface ServerEnvironmentAccess {
   warnVolatileRegistry(environment: ServerEnvironment, context: BoundedContext): void;
 }
 
-const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
+const environmentSetups = new WeakMap<ServerEnvironment, Promise<void>>();
+const environmentDeliveryCores = new WeakMap<ServerEnvironment, CoreDelivery>();
+const remoteSupervisedEnvironments = new WeakSet<ServerEnvironment>();
 const environmentLoggers = new WeakMap<ServerEnvironment, ILogLayer>();
-const deliveryOpeners = new WeakMap<ServerEnvironment, () => Promise<void>>();
-const testAttachmentsInstallable = new WeakSet<ServerEnvironment>();
+const supervisorStarters = new WeakMap<ServerEnvironment, () => Promise<void>>();
+const deliveryNotifiers = new WeakMap<
+  ServerEnvironment,
+  (shard: import("../delivery/shard-index.js").ShardIndex) => void
+>();
+const deliveryIdlers = new WeakMap<ServerEnvironment, () => Promise<void>>();
 const warnedVolatileRegistries = new WeakMap<ServerEnvironment, WeakSet<BoundedContext>>();
 const environmentContexts = new WeakMap<ServerEnvironment, EnvironmentContextRegistrations>();
 
@@ -581,6 +708,8 @@ class EnvironmentContextRegistrations {
   readonly #completed = new Set<BoundedContext>();
 
   readonly #states = new Map<string, BoundedContext>();
+
+  readonly #recipients = new Map<string, BoundedContext>();
 
   #builds = 0;
 
@@ -638,6 +767,17 @@ class EnvironmentContextRegistrations {
   complete(context: BoundedContext): void {
     if (!this.#contexts.has(context)) throw new Error("Context completed after cleanup.");
     this.#completed.add(context);
+    for (const endpoint of boundedContextAccess.delivery(context).endpoints())
+      this.#recipients.set(endpoint.targetTypeUrl, context);
+  }
+
+  /**
+   * Finds the completed context registered for a delivery target.
+   * @param typeUrl Identifies the target message type.
+   * @returns The matching context, if one completed registration.
+   */
+  recipient(typeUrl: string): BoundedContext | undefined {
+    return this.#recipients.get(typeUrl);
   }
 
   /**
@@ -662,9 +802,19 @@ class EnvironmentContextRegistrations {
   remove(context: BoundedContext): void {
     this.#contexts.delete(context);
     this.#completed.delete(context);
+    this.stopRecipients(context);
     for (const [typeUrl, registered] of this.#states) {
       if (registered === context) this.#states.delete(typeUrl);
     }
+  }
+
+  /**
+   * Removes fresh delivery endpoints while retaining state reservations.
+   * @param context Context entering close.
+   */
+  stopRecipients(context: BoundedContext): void {
+    for (const [typeUrl, recipient] of this.#recipients)
+      if (recipient === context) this.#recipients.delete(typeUrl);
   }
 
   /**
@@ -694,16 +844,48 @@ class EnvironmentContextRegistrations {
  * @internal
  */
 export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
+  coreDelivery(environment: ServerEnvironment): CoreDelivery {
+    const core = environmentDeliveryCores.get(environment);
+    if (core === undefined)
+      throw new Error("ServerEnvironment.completeSetup() must finish before Delivery use.");
+    return core;
+  },
+  remoteSupervised(environment: ServerEnvironment): boolean {
+    return remoteSupervisedEnvironments.has(environment);
+  },
+  whenDeliveryIdle(environment: ServerEnvironment): Promise<void> {
+    return deliveryIdlers.get(environment)?.() ?? Promise.resolve();
+  },
+  notifyDelivery(
+    environment: ServerEnvironment,
+    shard: import("../delivery/shard-index.js").ShardIndex,
+  ): void {
+    deliveryNotifiers.get(environment)?.(shard);
+  },
+  awaitSetup(environment: ServerEnvironment) {
+    return (
+      environmentSetups.get(environment) ??
+      Promise.reject(
+        new Error("Await ServerEnvironment.completeSetup() before building a Bounded Context."),
+      )
+    );
+  },
   beginContextBuild: (environment: ServerEnvironment) =>
     EnvironmentContextRegistrations.forEnvironment(environment).beginBuild(),
   addContext: (environment: ServerEnvironment, context: BoundedContext) => {
     EnvironmentContextRegistrations.forEnvironment(environment).add(context);
   },
-  completeContext: (environment: ServerEnvironment, context: BoundedContext) => {
+  completeContext: async (environment: ServerEnvironment, context: BoundedContext) => {
     EnvironmentContextRegistrations.forEnvironment(environment).complete(context);
+    const endpoints = boundedContextAccess.delivery(context).endpoints();
+    if (endpoints.length > 0) await supervisorStarters.get(environment)?.();
+    for (const endpoint of endpoints) deliveryNotifiers.get(environment)?.(endpoint.shard);
   },
   reserveState: (environment: ServerEnvironment, context: BoundedContext, typeUrl: string) =>
     EnvironmentContextRegistrations.forEnvironment(environment).reserve(context, typeUrl),
+  stopRecipients: (environment: ServerEnvironment, context: BoundedContext) => {
+    EnvironmentContextRegistrations.forEnvironment(environment).stopRecipients(context);
+  },
   removeContext: (environment: ServerEnvironment, context: BoundedContext) => {
     EnvironmentContextRegistrations.forEnvironment(environment).remove(context);
   },
@@ -711,106 +893,6 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     EnvironmentContextRegistrations.forEnvironment(environment).serving(typeUrl),
   openContexts: (environment: ServerEnvironment) =>
     EnvironmentContextRegistrations.forEnvironment(environment).openContexts(),
-  attach(environment: ServerEnvironment, options: EnvironmentAttachOptions) {
-    testAttachmentsInstallable.delete(environment);
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
-    }
-    const openDelivery = deliveryOpeners.get(environment);
-    if (openDelivery === undefined) {
-      return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
-    }
-    return openDelivery().then(() => attachments.attach(options));
-  },
-  failedStartPending(environment: ServerEnvironment) {
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      throw new TypeError("Failed-start observation requires a ServerEnvironment instance.");
-    }
-    return attachments.failedStartPending;
-  },
-  failedStartRetryPending(environment: ServerEnvironment, error: unknown) {
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      throw new TypeError("Failed-start retry observation requires a ServerEnvironment instance.");
-    }
-    return attachments.failedStartRetryPending(error);
-  },
-  retryFailedStart(environment: ServerEnvironment) {
-    testAttachmentsInstallable.delete(environment);
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      return Promise.reject(new TypeError("Rollback retry requires a ServerEnvironment instance."));
-    }
-    return attachments.retryFailedStart();
-  },
-  detach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
-    testAttachmentsInstallable.delete(environment);
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      return Promise.reject(new TypeError("Detach requires a ServerEnvironment instance."));
-    }
-    return attachments.detach(attachment);
-  },
-  retryDetach(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
-    testAttachmentsInstallable.delete(environment);
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      return Promise.reject(new TypeError("Detach retry requires a ServerEnvironment instance."));
-    }
-    return attachments.retryDetach(attachment);
-  },
-  detachRetryPending(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      throw new TypeError("Detach-retry observation requires a ServerEnvironment instance.");
-    }
-    return attachments.detachRetryPending(attachment);
-  },
-  endpointSafe(environment: ServerEnvironment, attachment: EnvironmentAttachmentHandle) {
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      throw new TypeError("Endpoint-safety observation requires a ServerEnvironment instance.");
-    }
-    return attachments.endpointSafe(attachment);
-  },
-  stopDelivery(environment: ServerEnvironment) {
-    testAttachmentsInstallable.delete(environment);
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      return Promise.reject(new TypeError("Delivery stop requires a ServerEnvironment instance."));
-    }
-    return attachments.stopDelivery();
-  },
-  retryDeliveryStop(environment: ServerEnvironment) {
-    testAttachmentsInstallable.delete(environment);
-    const attachments = environmentAttachments.get(environment);
-    if (attachments === undefined) {
-      return Promise.reject(
-        new TypeError("Delivery stop retry requires a ServerEnvironment instance."),
-      );
-    }
-    return attachments.retryDeliveryStop();
-  },
-  installTestAttachments(
-    environment: ServerEnvironment,
-    createWorker: () => EnvironmentGenerationWorker,
-  ) {
-    if (!environmentAttachments.has(environment)) {
-      throw new TypeError("Test attachments require a ServerEnvironment instance.");
-    }
-    if (!testAttachmentsInstallable.delete(environment)) {
-      throw new Error("Test attachments may only be installed before environment lifecycle use.");
-    }
-    environmentAttachments.set(
-      environment,
-      new EnvironmentAttachments({
-        logger: ServerEnvironmentValues.loggerFor(environment),
-        createWorker,
-      }),
-    );
-  },
   loggerFor(environment: ServerEnvironment): ILogLayer {
     return ServerEnvironmentValues.loggerFor(environment);
   },
@@ -891,11 +973,15 @@ const ServerEnvironmentValues = Object.freeze({
    * Lists facilities closed by the environment.
    *
    * @param options Resolved facilities.
+   * @param deliveryCloseGroup Closes the shared Delivery before other facilities.
    * @returns Facilities in shutdown order.
    */
-  facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
+  facilitiesToClose(
+    options: RequiredFacilities,
+    deliveryCloseGroup: RetryableCloseGroup,
+  ): readonly unknown[] {
     return Object.freeze([
-      ...(options.delivery === undefined ? [] : [options.delivery]),
+      deliveryCloseGroup,
       options.integrationChannelFactory,
       ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.storageFactory,
@@ -950,6 +1036,7 @@ const ServerEnvironmentValues = Object.freeze({
           settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
         typeRegistry: settings.typeRegistry,
         delivery: settings.delivery,
+        deliveryStrategy: settings.deliveryStrategy,
         tracerFactory: settings.tracerFactory,
         logger: ServerEnvironmentValues.logger(settings.logger),
       };
@@ -961,6 +1048,7 @@ const ServerEnvironmentValues = Object.freeze({
         settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
       typeRegistry: settings.typeRegistry ?? spineCoreRegistry,
       delivery: settings.delivery,
+      deliveryStrategy: settings.deliveryStrategy,
       tracerFactory: settings.tracerFactory,
       logger: ServerEnvironmentValues.logger(settings.logger),
     };

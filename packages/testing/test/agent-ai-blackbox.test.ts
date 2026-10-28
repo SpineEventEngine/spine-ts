@@ -49,16 +49,21 @@ import {
   HandlerRegistryIngestor,
   Projection,
   Repository,
+  EnvironmentType,
+  ServerEnvironment,
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { agentHistoryView } from "@spine-event-engine/server/testing";
+import {
+  agentHistoryView,
+  resetServerEnvironmentForTest,
+} from "@spine-event-engine/server/testing";
 import type {
   AgentHistoryCapacity,
   AgentHistoryStorage,
   AgentHistoryStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { AiTestBackend, BlackBox } from "../src/index.js";
 import {
   SupportReplyAgentIdSchema,
@@ -89,6 +94,16 @@ import {
   ProjectOverviewSchema,
   ProjectSchema,
 } from "../test-fixtures/generated/project_states_pb.js";
+
+async function configureStorage(factory: InMemoryStorageFactory): Promise<void> {
+  await resetServerEnvironmentForTest();
+  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
+  await ServerEnvironment.instance().completeSetup();
+}
+
+afterEach(async () => {
+  await resetServerEnvironmentForTest();
+});
 
 const proposal = AiModel.define({
   name: "draft-support-reply",
@@ -299,11 +314,11 @@ async function configuredBox(
   }).register(backend.registration);
   if (alternate !== undefined) registry = registry.register(alternate.registration);
   const factory = new RecordingHistoryFactory(limits);
+  await configureStorage(factory);
   const repository = draftingRepository();
   const builder = BoundedContext.singleTenant("AiSupport")
     .withAi(registry)
     .persistSystemEvents()
-    .withStorageFactory(factory)
     .add(repository);
   if (projection) {
     builder.add(
@@ -502,11 +517,11 @@ async function configuredToolBox(closeFailure?: "throw" | "never") {
     .register(registration)
     .registerTools(tools);
   const factory = new RecordingHistoryFactory();
+  await configureStorage(factory);
   const repository = draftingRepository();
   const context = await BoundedContext.singleTenant("AiToolSupport")
     .withAi(registry)
     .persistSystemEvents()
-    .withStorageFactory(factory)
     .add(repository)
     .build();
   return {

@@ -17,26 +17,26 @@ import type { DatastoreRecordStorage } from "./record-storage.js";
 
 /**
  * One native row staged for a Datastore transaction.
-*/
+ */
 export type NativeRow = ReturnType<DatastoreRecordStorage<string, Message>["transactionEntity"]>;
 
 /**
  * Provider transaction checks shared by ordinary and Agent Entity commits.
-*/
+ */
 interface NativeTransactionChecks {
   /**
    * Returns the first native entity when Datastore supplies an array.
    *
    * @param value Typed value being processed.
    * @returns The first native Entity value supplied by Datastore.
-  */
+   */
   first(value: unknown): unknown;
 
   /**
    * Checks native mutation, entity-group, and payload limits before committing.
    *
    * @param rows Complete provider rows for this operation.
-  */
+   */
   validateRows(rows: readonly NativeRow[]): void;
 
   /**
@@ -44,24 +44,24 @@ interface NativeTransactionChecks {
    *
    * @param error Original operation or cleanup error.
    * @returns Whether the native error represents retryable transaction contention.
-  */
+   */
   isAborted(error: unknown): boolean;
 }
 
 /**
  * Native transaction helpers for Entity persistence.
-*/
+ */
 export const NativeTransactions: NativeTransactionChecks = Object.freeze({
   /**
    * Returns the first native entity when Datastore supplies an array.
-  */
+   */
   first(value: unknown): unknown {
     return Array.isArray(value) ? value[0] : value;
   },
 
   /**
    * Checks native mutation, entity-group, and payload limits before committing.
-  */
+   */
   validateRows(rows: readonly NativeRow[]): void {
     const keys = rows.map((row) => JSON.stringify(row.key));
     if (rows.length > 500) throw new Error("Datastore transaction mutation limit exceeded.");
@@ -82,13 +82,12 @@ export const NativeTransactions: NativeTransactionChecks = Object.freeze({
         ),
       0,
     );
-    if (bytes > 9 * 1024 * 1024)
-      throw new Error("Datastore transaction payload limit exceeded.");
+    if (bytes > 9 * 1024 * 1024) throw new Error("Datastore transaction payload limit exceeded.");
   },
 
   /**
    * Identifies native write contention eligible for a bounded retry.
-  */
+   */
   isAborted(error: unknown): boolean {
     return typeof error === "object" && error !== null && Reflect.get(error, "code") === 10;
   },

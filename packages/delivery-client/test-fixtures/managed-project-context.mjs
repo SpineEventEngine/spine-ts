@@ -33,11 +33,14 @@ import {
  * Handles project creation in managed-server integration fixtures.
  */
 class ManagedProjectAggregate extends Aggregate {
+  static onCreateProject;
+
   /**
    *
    * Creates a project and records its creation event.
    */
-  createProject(command) {
+  async createProject(command) {
+    await ManagedProjectAggregate.onCreateProject?.(command);
     this.update((draft) => {
       Object.assign(draft, create(ProjectStateSchema, { id: command.id, name: command.name }));
     });
@@ -71,6 +74,7 @@ class ManagedProjectProjection extends Projection {
  * @returns The assembled project context.
  */
 export async function createManagedProjectContext(options = {}) {
+  ManagedProjectAggregate.onCreateProject = options.onCreateProject;
   const registry = await createRegistry(options.includeProjection === true);
   try {
     const builder = BoundedContext.singleTenant("ManagedProjects")
@@ -81,14 +85,8 @@ export async function createManagedProjectContext(options = {}) {
         eventRouting: EventRouting.create().route(ProjectCreatedSchema, (event) => [event.id]),
       });
     }
-    if (options.deliveryStrategy !== undefined) {
-      builder.withDeliveryStrategy(options.deliveryStrategy);
-    }
     if (options.subscriptionRegistry !== undefined) {
       builder.withSubscriptionRegistry(options.subscriptionRegistry);
-    }
-    if (options.storageFactory !== undefined) {
-      builder.withStorageFactory(options.storageFactory);
     }
     return await builder.build();
   } finally {

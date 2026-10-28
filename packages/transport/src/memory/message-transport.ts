@@ -33,6 +33,15 @@ export class InMemoryTransportFactory implements TransportFactory {
   readonly #state = new MemoryTransportState();
 
   /**
+   * Checks local factory readiness without creating a channel.
+   *
+   * @returns Completion when the factory remains open.
+   */
+  initialize(): Promise<void> {
+    return this.#state.initialize();
+  }
+
+  /**
    * Creates a publisher for a validated channel identity.
    *
    * @param id Identifies the typed channel.
@@ -62,12 +71,40 @@ export class InMemoryTransportFactory implements TransportFactory {
   }
 }
 
+/**
+ * Coordinates local publishers and subscribers for one factory lifetime.
+ */
 class MemoryTransportState {
   readonly #subscribers = new Map<string, Set<MemorySubscriber>>();
+
   readonly #publishers = new Set<MemoryPublisher>();
+
   #closed = false;
+
   #close: Promise<void> | undefined;
 
+  /**
+   * Checks the local factory state without opening a channel.
+   * @returns Completion when the factory remains open.
+   */
+  initialize(): Promise<void> {
+    try {
+      this.#assertOpen();
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error
+          ? error
+          : new Error("Transport initialization failed.", { cause: error }),
+      );
+    }
+  }
+
+  /**
+   * Creates and retains a publisher for a channel.
+   * @param id Identifies the channel.
+   * @returns The new publisher.
+   */
   createPublisher(id: ChannelId): Promise<Publisher> {
     return Promise.resolve().then(() => {
       this.#assertOpen();
@@ -76,6 +113,12 @@ class MemoryTransportState {
       return publisher;
     });
   }
+
+  /**
+   * Creates and retains a subscriber for a channel.
+   * @param id Identifies the channel.
+   * @returns The new subscriber.
+   */
   createSubscriber(id: ChannelId): Promise<Subscriber> {
     return Promise.resolve().then(() => {
       this.#assertOpen();
@@ -86,12 +129,22 @@ class MemoryTransportState {
       return subscriber;
     });
   }
+
+  /**
+   * Closes the factory after accepted publications and handles settle.
+   * @returns Completion after all accepted publications and handles settle.
+   */
   close(): Promise<void> {
     if (this.#close) return this.#close;
     this.#closed = true;
     this.#close = this.#closeAll();
     return this.#close;
   }
+
+  /**
+   * Closes every retained handle and records all failures.
+   * @returns Completion after every retained handle closes.
+   */
   async #closeAll(): Promise<void> {
     const publishers = [...this.#publishers];
     const subscribers = [...this.#subscribers.values()].flatMap((group) => [...group]);
@@ -109,46 +162,104 @@ class MemoryTransportState {
     if (failures.length > 0)
       throw new AggregateError(failures, "Failed to close in-memory message transport.");
   }
+
+  /**
+   * Delivers one copied frame to current subscribers.
+   * @param targetType Selects the channel subscribers.
+   * @param id Identifies the external message.
+   * @param message Contains the external message.
+   * @returns Completion after all subscriber callbacks settle.
+   */
   async dispatch(targetType: string, id: Any, message: ExternalMessage): Promise<void> {
     validateFrame(id, message);
     const snapshot = clone(ExternalMessageSchema, message);
     for (const subscriber of [...(this.#subscribers.get(targetType) ?? [])])
       await subscriber.receive(snapshot);
   }
+
+  /**
+   * Removes a publisher after it completes close.
+   * @param publisher Publisher that completed its close.
+   */
   removePublisher(publisher: MemoryPublisher): void {
     this.#publishers.delete(publisher);
   }
+
+  /**
+   * Removes a subscriber after it completes close.
+   * @param subscriber Subscriber that completed its close.
+   */
   removeSubscriber(subscriber: MemorySubscriber): void {
     const group = this.#subscribers.get(subscriber.targetType);
     if (!group) return;
     group.delete(subscriber);
     if (group.size === 0) this.#subscribers.delete(subscriber.targetType);
   }
+
+  /**
+   * Rejects admission after factory close begins.
+   */
   #assertOpen(): void {
     if (this.#closed) throw new Error("In-memory message transport is closed.");
   }
 }
 
+/**
+ * Serializes publication for one local channel.
+ */
 class MemoryPublisher implements Publisher {
   #closing = false;
+
   #tail: Promise<void> = Promise.resolve();
+
   readonly #failures: unknown[] = [];
+
   #close: Promise<void> | undefined;
+
   readonly #targetType: string;
+
   readonly #factory: MemoryTransportState;
+
+  /**
+   * Returns the generated channel identity.
+   * @returns The generated channel identity.
+   */
   get id(): ChannelId {
     return create(ChannelIdSchema, { targetType: this.#targetType });
   }
+
+  /**
+   * Captures the channel and its retaining factory state.
+   * @param id Identifies the channel.
+   * @param factory Coordinates publications and close.
+   */
   constructor(id: ChannelId, factory: MemoryTransportState) {
     this.#targetType = id.targetType;
     this.#factory = factory;
   }
+
+  /**
+   * Returns the canonical target type URL.
+   * @returns The canonical target type URL.
+   */
   get targetType(): string {
     return this.#targetType;
   }
+
+  /**
+   * Checks whether close fenced new publications.
+   * @returns True after close fences new publications.
+   */
   isStale(): boolean {
     return this.#closing;
   }
+
+  /**
+   * Publishes a copied external frame in channel order.
+   * @param id Identifies the external message.
+   * @param message Contains the external message.
+   * @returns Completion after subscriber delivery.
+   */
   async publish(id: Any, message: ExternalMessage): Promise<void> {
     if (this.#closing) throw new Error("Message publisher is closed.");
     const copiedId = create(AnySchema, { typeUrl: id.typeUrl, value: new Uint8Array(id.value) });
@@ -161,12 +272,22 @@ class MemoryPublisher implements Publisher {
     });
     return accepted;
   }
+
+  /**
+   * Closes this publisher after admitted publications settle.
+   * @returns Completion after admitted publications settle.
+   */
   close(): Promise<void> {
     if (this.#close) return this.#close;
     this.#closing = true;
     this.#close = this.#closeAfterDrain();
     return this.#close;
   }
+
+  /**
+   * Waits for the publication tail and reports retained errors.
+   * @returns Completion after the publication tail and retained errors settle.
+   */
   async #closeAfterDrain(): Promise<void> {
     try {
       await this.#tail;
@@ -178,24 +299,57 @@ class MemoryPublisher implements Publisher {
   }
 }
 
+/**
+ * Delivers local channel messages to its registered consumers.
+ */
 class MemorySubscriber implements Subscriber {
   readonly #consumers = new Set<ExternalMessageConsumer>();
+
   #closed = false;
+
   readonly #targetType: string;
+
   readonly #factory: MemoryTransportState;
+
+  /**
+   * Returns the generated channel identity.
+   * @returns The generated channel identity.
+   */
   get id(): ChannelId {
     return create(ChannelIdSchema, { targetType: this.#targetType });
   }
+
+  /**
+   * Captures the channel and its retaining factory state.
+   * @param id Identifies the channel.
+   * @param factory Coordinates subscribers and close.
+   */
   constructor(id: ChannelId, factory: MemoryTransportState) {
     this.#targetType = id.targetType;
     this.#factory = factory;
   }
+
+  /**
+   * Returns the canonical target type URL.
+   * @returns The canonical target type URL.
+   */
   get targetType(): string {
     return this.#targetType;
   }
+
+  /**
+   * Checks whether this subscriber is closed or lacks consumers.
+   * @returns True when closed or without active consumers.
+   */
   isStale(): boolean {
     return this.#closed || this.#consumers.size === 0;
   }
+
+  /**
+   * Registers one consumer until its returned handle closes.
+   * @param consumer Receives matching external messages.
+   * @returns A handle for removing the consumer.
+   */
   addConsumer(consumer: ExternalMessageConsumer): Promise<ConsumerHandle> {
     return Promise.resolve().then(() => {
       if (this.#closed) throw new Error("Message subscriber is closed.");
@@ -211,11 +365,22 @@ class MemorySubscriber implements Subscriber {
       };
     });
   }
+
+  /**
+   * Sends a copied frame to each current consumer.
+   * @param message Contains the external message.
+   * @returns Completion after consumer callbacks settle.
+   */
   async receive(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
     for (const consumer of [...this.#consumers])
       await consumer(clone(ExternalMessageSchema, message));
   }
+
+  /**
+   * Closes this subscriber and removes its consumers.
+   * @returns Completion after the subscriber stops receiving messages.
+   */
   close(): Promise<void> {
     if (this.#closed) return Promise.resolve();
     this.#closed = true;

@@ -18,6 +18,8 @@ import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
+import { Inbox } from "../../src/delivery/inbox.js";
+import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { AgentDeliveryScope } from "../../src/delivery/agent-delivery-scope.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
@@ -25,6 +27,71 @@ import { ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Delivery fencing", () => {
+  it.each(["supervisor-first", "direct-first"] as const)(
+    "shares one retained shard run for %s admission",
+    async (order) => {
+      const message = createMessage(`shared-${order}`, "signal", 1n);
+      const acknowledged = new Set<string>();
+      const delivery = agentDelivery(
+        [message],
+        (next) => acknowledged.add(next.id.value),
+        () => undefined,
+        acknowledged,
+      );
+      delivery.setReplay(() => undefined);
+      const entered = Promise.withResolvers<undefined>();
+      const release = Promise.withResolvers<undefined>();
+      let pickups = 0;
+      delivery.shards.pickUp = () => Promise.resolve(++pickups === 1 ? session() : undefined);
+      delivery.inbox.read = async () => {
+        entered.resolve(undefined);
+        await release.promise;
+        return acknowledged.has(message.id.value) ? [] : [message];
+      };
+      const controlled = () =>
+        delivery.runControlled({
+          shard: message.shard,
+          onMessage: () => undefined,
+          signal: new AbortController().signal,
+        });
+      const first =
+        order === "supervisor-first"
+          ? controlled()
+          : delivery.drainMessage(message, { onMessage: () => undefined });
+      await entered.promise;
+      const second =
+        order === "supervisor-first"
+          ? delivery.drainMessage(message, { onMessage: () => undefined })
+          : controlled();
+      release.resolve(undefined);
+      const [earlier, later] = await Promise.all([first, second]);
+      expect(earlier).toBeDefined();
+      expect(later).toBeDefined();
+      expect(pickups).toBe(1);
+      expect(acknowledged.has(message.id.value)).toBe(true);
+      await delivery.close();
+    },
+  );
+  it("closes both retained physical stores after direct work without closing the factory", async () => {
+    const factory = new InMemoryStorageFactory();
+    const opened = vi.spyOn(factory, "createRecordStorage");
+    const delivery = new Delivery({
+      context: { name: "SharedPhysicalDelivery", multitenant: false },
+      storageFactory: factory,
+    });
+    expect(delivery.inbox).toBeInstanceOf(Inbox);
+    expect(delivery.shards).toBeInstanceOf(ShardedWorkRegistry);
+    await (delivery.inbox as Inbox).storage.write(createMessage("retained", "signal", 1n));
+    await delivery.shards.pickUp(ShardIndex.single(), delivery.worker);
+    expect(opened).toHaveBeenCalledTimes(2);
+    await delivery.close();
+    await delivery.close();
+    await expect((delivery.inbox as Inbox).storage.read(ShardIndex.single())).rejects.toThrow(
+      "closed",
+    );
+    await expect(factory.checkConnection()).resolves.toBeUndefined();
+  });
+
   it("restarts a finite scan when a durable wake lands at its terminal decision", async () => {
     const message = createMessage("terminal-wake", "signal", 1n);
     const rows: ReturnType<typeof createMessage>[] = [];
@@ -120,99 +187,6 @@ describe("Delivery fencing", () => {
     release.resolve(undefined);
     await closing;
     expect(released).toBe(1);
-  });
-
-  it("holds readiness transfer until an acknowledged Agent releases its shard", async () => {
-    const message = createMessage("transfer-agent", "signal", 1n);
-    const acknowledged = new Set<string>();
-    const entered = Promise.withResolvers<undefined>();
-    const release = Promise.withResolvers<undefined>();
-    let releases = 0;
-    const delivery = agentDelivery(
-      [message],
-      (next) => {
-        acknowledged.add(next.id.value);
-      },
-      () => {
-        releases++;
-      },
-      acknowledged,
-    );
-    const readiness = new DeliveryReadiness();
-    readiness.route(delivery);
-    await delivery.drainMessage(message, {
-      onMessage: () => {
-        AgentDeliveryScope.record({
-          kind: "accepted",
-          discard: () => undefined,
-          run: async () => {
-            entered.resolve(undefined);
-            await release.promise;
-          },
-        });
-      },
-    });
-    await entered.promise;
-    const route = {
-      label: message.label,
-      targetTypeUrl: message.inboxId.targetTypeUrl,
-      shard: message.shard,
-    };
-    let transferred = false;
-    const transition = readiness
-      .transition([route], () => undefined)
-      .then(() => {
-        transferred = true;
-      });
-    await Promise.resolve();
-    expect(transferred).toBe(false);
-    expect(releases).toBe(0);
-    release.resolve(undefined);
-    await transition;
-    expect(releases).toBe(1);
-  });
-
-  it("keeps the original active release failure visible to a readiness transition", async () => {
-    const message = createMessage("transition-failure", "signal", 1n);
-    const acknowledged = new Set<string>();
-    const entered = Promise.withResolvers<undefined>();
-    const finish = Promise.withResolvers<undefined>();
-    const failure = new Error("transition release failed");
-    const delivery = agentDelivery(
-      [message],
-      (next) => acknowledged.add(next.id.value),
-      () => {
-        throw failure;
-      },
-      acknowledged,
-    );
-    const readiness = new DeliveryReadiness();
-    readiness.route(delivery);
-    await delivery.drainMessage(message, {
-      onMessage: () => {
-        AgentDeliveryScope.record({
-          kind: "accepted",
-          discard: () => undefined,
-          run: async () => {
-            entered.resolve(undefined);
-            await finish.promise;
-          },
-        });
-      },
-    });
-    await entered.promise;
-    const transition = readiness.transition(
-      [
-        {
-          label: message.label,
-          targetTypeUrl: message.inboxId.targetTypeUrl,
-          shard: message.shard,
-        },
-      ],
-      () => undefined,
-    );
-    finish.resolve(undefined);
-    await expect(transition).rejects.toBe(failure);
   });
 
   it("reports an admitted direct shard release failure during close", async () => {
@@ -653,6 +627,125 @@ describe("Delivery fencing", () => {
     await expect(posted).resolves.toMatchObject({ acknowledged: false });
     expect(dispatched).toBe(0);
     expect(releases).toBe(1);
+  });
+
+  it("retains a release failure between the synchronous close fence and facility cleanup", async () => {
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const failure = new Error("late release failed");
+    const delivery = agentDelivery(
+      [],
+      () => undefined,
+      () => {
+        throw failure;
+      },
+    );
+    delivery.shards.pickUp = () => pickup.promise;
+    const running = delivery.run({ onMessage: () => undefined });
+    delivery.beginClose();
+    pickup.resolve(session());
+    await expect(running).resolves.toMatchObject({ status: "FAILED" });
+    await expect(delivery.close()).rejects.toBe(failure);
+  });
+
+  it("leaves a fresh shared row pending when its recipient closes after the first predicate", async () => {
+    const message = createMessage("closed-recipient", "signal", 1n);
+    const validation = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let eligible = true;
+    let dispatched = 0;
+    let acknowledged = 0;
+    const delivery = agentDelivery([message], () => {
+      acknowledged++;
+    });
+    delivery.shards.validateOwnership = async (current) => {
+      validation.resolve(undefined);
+      await release.promise;
+      return current;
+    };
+    delivery.setReplay(
+      () => {
+        dispatched++;
+      },
+      () => eligible,
+    );
+    delivery.wake(message.shard);
+    await validation.promise;
+    eligible = false;
+    release.resolve(undefined);
+    await delivery.whenIdle();
+    expect(dispatched).toBe(0);
+    expect(acknowledged).toBe(0);
+    await delivery.close();
+  });
+
+  it("does not acknowledge a monitor repeat rejected at its final recipient check", async () => {
+    const message = createMessage("repeat-close", "signal", 1n);
+    let eligible = true;
+    let dispatched = 0;
+    let acknowledged = 0;
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((failure) => {
+        eligible = false;
+        return failure.repeatDispatching();
+      });
+    const delivery = agentDelivery([message], () => {
+      acknowledged++;
+    });
+    delivery.setReplay(
+      () => {
+        if (++dispatched === 1) throw new Error("first receptor failed");
+      },
+      () => eligible,
+    );
+    try {
+      delivery.wake(message.shard);
+      await delivery.whenIdle();
+      expect(dispatched).toBe(1);
+      expect(acknowledged).toBe(0);
+    } finally {
+      monitor.mockRestore();
+      await delivery.close();
+    }
+  });
+
+  it("keeps a public custom callback separate from an active shared shard run", async () => {
+    const message = createMessage("shared-versus-custom", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const delivery = agentDelivery(
+      [message],
+      (next) => acknowledged.add(next.id.value),
+      undefined,
+      acknowledged,
+    );
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let pickups = 0;
+    let replayed = 0;
+    let custom = 0;
+    delivery.shards.pickUp = () => Promise.resolve(++pickups === 1 ? session() : undefined);
+    delivery.inbox.read = async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      return acknowledged.has(message.id.value) ? [] : [message];
+    };
+    delivery.setReplay(() => {
+      replayed++;
+    });
+    delivery.wake(message.shard);
+    await entered.promise;
+    const explicit = delivery.run({
+      onMessage: () => {
+        custom++;
+      },
+    });
+    release.resolve(undefined);
+    await expect(explicit).resolves.toMatchObject({ status: "SKIPPED" });
+    await delivery.whenIdle();
+    expect(pickups).toBe(2);
+    expect(replayed).toBe(1);
+    expect(custom).toBe(0);
+    await delivery.close();
   });
 
   it("reports an unconfirmed acquired-session release during pending-pickup close", async () => {

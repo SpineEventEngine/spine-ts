@@ -1519,5 +1519,32 @@
     "name": "agentHistoryView",
     "disposition": "necessity",
     "reason": "TypeScript testing boundary: agentHistoryView validates a context-issued repository view when framework conformance checks cannot retain the application repository's generic ID type."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/server-log.ts",
+    "kind": "function-declaration",
+    "identity": "emitServerInfo()#1",
+    "name": "emitServerInfo",
+    "disposition": "necessity",
+    "reason": "TypeScript logging boundary: emitServerInfo stays standalone alongside warning and error emission so completed setup phases use the same allowlisted fault-contained logger."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery-tenant.ts",
+    "kind": "function-declaration",
+    "identity": "deliveryTenant()#1",
+    "name": "deliveryTenant",
+    "disposition": "necessity",
+    "reason": "TypeScript Inbox boundary: deliveryTenant decodes the canonical tenant from the persisted Command or Event envelope for both dispatch and storage routing."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery-tenant.ts",
+    "kind": "function-declaration",
+    "identity": "deliveryTenantKey()#1",
+    "name": "deliveryTenantKey",
+    "disposition": "necessity",
+    "reason": "TypeScript Inbox boundary: deliveryTenantKey gives the same canonical tenant scope to retained delivery and duplicate coordination call sites."
   }
 ]

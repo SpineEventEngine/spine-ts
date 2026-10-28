@@ -44,7 +44,7 @@ import {
   EntityCommitStorageFactories,
   StoragePreparations,
 } from "@spine-event-engine/storage/provider";
-import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
+import { eventStoreRecordSpec, EventStoreGroups } from "@spine-event-engine/storage/provider";
 import {
   ColumnTypes,
   EventStore,
@@ -186,6 +186,51 @@ live("MySQL-family record layout", () => {
     } finally {
       await first.close();
       await second.close();
+    }
+  });
+
+  it("separates context Event groups while explicit preparation checks their exact tables", async () => {
+    const firstContext = { name: `mysql_event_first_${randomUUID()}`, multitenant: false } as const;
+    const secondContext = {
+      name: `mysql_event_second_${randomUUID()}`,
+      multitenant: false,
+    } as const;
+    const preparation = StoragePreparations.for(factory);
+    for (const scope of [firstContext, secondContext]) {
+      const group = EventStoreGroups.forContext(scope.name);
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "create");
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "check");
+    }
+    const first = new EventStore(firstContext, factory);
+    const second = new EventStore(secondContext, factory);
+    const id = `shared-${randomUUID()}`;
+    const make = (task: string) =>
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: id }),
+        context: {
+          producerId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: task })),
+        },
+        message: AnyPacker.pack(
+          TaskCreatedSchema,
+          create(TaskCreatedSchema, {
+            id: create(TaskIdSchema, { value: task }),
+            taskListId: create(TaskListIdSchema, { value: "list" }),
+            title: task,
+          }),
+        ),
+      });
+    try {
+      await first.append(make("first"));
+      await second.append(make("second"));
+      expect((await first.read()).map((entry) => toBinary(EventSchema, entry))).toEqual([
+        toBinary(EventSchema, make("first")),
+      ]);
+      expect((await second.read()).map((entry) => toBinary(EventSchema, entry))).toEqual([
+        toBinary(EventSchema, make("second")),
+      ]);
+      await expect(first.append(make("conflict"))).rejects.toThrow(/unique event IDs/);
+    } finally {
+      await Promise.all([first.close(), second.close()]);
     }
   });
 

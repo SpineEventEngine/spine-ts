@@ -21,7 +21,6 @@ import type { ILogLayer } from "loglayer";
 import { clone, create, getOption, hasOption, type Message } from "@bufbuild/protobuf";
 import type { AiRegistry } from "@spine-event-engine/ai";
 import { freezeRegistry, isAiModel, registryOptions } from "@spine-event-engine/ai/spi/runtime";
-import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   EventSchema,
@@ -36,20 +35,16 @@ import { SPI_type, internal_all, internal_type } from "@spine-event-engine/proto
 import {
   ColumnTypes,
   EventStore,
-  InMemoryStorageFactory,
   RecordColumn,
-  StorageGroup,
   type StorageContext,
   type StorageFactory,
   type StorageMode,
 } from "@spine-event-engine/storage";
-import { AgentHistoryStorageFactories, TenantBoundary } from "@spine-event-engine/storage/provider";
-
-/**
- * Storage family shared by paired System Event publication and trusted reads.
- * @internal
- */
-export const systemEventGroup: StorageGroup = new StorageGroup("spine_system_events");
+import {
+  AgentHistoryStorageFactories,
+  EventStoreGroups,
+  TenantBoundary,
+} from "@spine-event-engine/storage/provider";
 
 import { CommandBus, commandBusAccess } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
@@ -61,12 +56,7 @@ import {
   type EventSubscription,
 } from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
-import {
-  type DeliveryEndpoint,
-  DeliveryReadiness,
-  type DeliveryReady,
-  type OnDeliveryReady,
-} from "./local-inbox-handoff.js";
+import { type DeliveryEndpoint, DeliveryReadiness } from "./local-inbox-handoff.js";
 import { LocalEntityInbox } from "./entity-inbox.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
 import { TenantAdmissions } from "./tenant-unknown-error.js";
@@ -119,9 +109,8 @@ import {
   type StandSubscriptionRegistry,
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
-import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
-import { InboxTargets, type InboxMessage } from "../delivery/inbox.js";
-import { ShardIndex } from "../delivery/shard-index.js";
+import type { DeliveryStrategy } from "../delivery/delivery-builder.js";
+import type { InboxMessage } from "../delivery/inbox.js";
 import { IntegrationBroker } from "../integration/integration-broker.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../server/server-environment.js";
 import { SignalPublisher } from "../runtime/signal-publisher.js";
@@ -260,6 +249,11 @@ interface RepositoryRegistration {
   readonly reserveAgent: (key: string, signal: AbortSignal) => AgentCapacityReservation | undefined;
 
   /**
+   * Cancels only this context's admitted Agent work.
+   */
+  readonly agentSignal: AbortSignal;
+
+  /**
    * Retains a capacity-deferred shard hint for the next available slot.
    */
   readonly deferAgent: (message: InboxMessage, tenantId: TenantId | undefined) => void;
@@ -297,6 +291,13 @@ interface RepositoryRegistration {
 
 interface RegisteredEntityInbox extends EntityInbox {
   /**
+   * Waits for callbacks already accepted by exact local handoffs.
+   *
+   * @returns Completion after all accepted callbacks settle.
+   */
+  whenFollowUpsIdle(): Promise<void>;
+
+  /**
    * Registers an Aggregate or Process Manager target for local delivery.
    *
    * @param target Target delivery metadata.
@@ -328,42 +329,10 @@ interface PrjInbox extends ProjectionInbox {
 }
 
 /**
- * Selects a tenant-specific delivery startup scope.
- */
-export interface DeliveryTenantScope {
-  // prettier-ignore
-
-  /**
-   * Identifies the tenant, or is absent for the single-tenant scope.
-   */
-  readonly tenantId?: TenantId;
-}
-
-/**
  * Gives delivery infrastructure access to one built bounded context.
  */
 export interface ContextDeliveryDescriptor {
   // prettier-ignore
-
-  /**
-   * Creates storage used by the context's delivery routes.
-   */
-  readonly storageFactory: StorageFactory;
-
-  /**
-   * Lists tenant scopes that existing delivery work may require at startup.
-   *
-   * @returns Resolves to immutable tenant delivery scopes.
-   */
-  startupScopes(): Promise<readonly DeliveryTenantScope[]>;
-
-  /**
-   * Creates the storage context for a delivery scope.
-   *
-   * @param scope Selects the tenant scope to represent.
-   * @returns Returns the matching storage context.
-   */
-  storageContext(scope: DeliveryTenantScope): StorageContext;
 
   /**
    * Lists delivery endpoints registered by the context's local inboxes.
@@ -380,31 +349,6 @@ export interface ContextDeliveryDescriptor {
    * @returns A promise that resolves after the message is replayed.
    */
   replay(message: DeliveryEndpointMessage, tenantId?: TenantId): Promise<void>;
-
-  /**
-   * Sets the observer for newly ready delivery routes.
-   *
-   * @param onReady Observes each route made ready by persistence.
-   * @returns Returns a function that removes the observer.
-   */
-  onReady(onReady: OnDeliveryReady): () => void;
-
-  /**
-   * Routes readiness notifications through the configured delivery routes.
-   *
-   * @param scopes Lists routes that may receive buffered readiness.
-   * @param onReady Observes readiness after routing changes.
-   * @param options Allows an empty route set when `allowEmpty` is true.
-   * @returns A promise that resolves after the readiness transition completes.
-   */
-  transition(
-    scopes: readonly DeliveryReady[],
-    onReady: OnDeliveryReady,
-    options?: {
-      readonly allowEmpty?: boolean;
-      readonly ports?: import("./local-inbox-handoff.js").EnvironmentDeliveryPorts;
-    },
-  ): Promise<void>;
 }
 
 interface RegistrationSnapshot {
@@ -599,19 +543,29 @@ const issuedRepositoryViews = new WeakMap<
 const closingContexts = new WeakSet<BoundedContext>();
 const contextClosePhases = new WeakMap<
   BoundedContext,
-  { readonly begin: () => void; readonly drain: () => Promise<void> }
+  {
+    readonly begin: () => void;
+    readonly drain: () => Promise<void>;
+    readonly trackReplay: (onReplay: () => Promise<void>) => Promise<void>;
+  }
 >();
 const contextIntegrations = new WeakMap<
   BoundedContext,
   { readonly broker: IntegrationBroker; readonly ready: Promise<void> }
 >();
 const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
-const builderBuilds = new WeakMap<
-  BoundedContextBuilder,
-  (defaultStorageFactory: StorageFactory, defaultAi?: AiRegistry) => Promise<BoundedContext>
->();
+const builderBuilds = new WeakMap<BoundedContextBuilder, () => Promise<BoundedContext>>();
 
 interface BoundedContextAccess {
+  /**
+   * Registers an entered shared replay through its complete callback.
+   *
+   * @param context Selected Bounded Context.
+   * @param onReplay Complete replay callback.
+   * @returns Completion of the captured callback.
+   */
+  trackReplay(context: BoundedContext, onReplay: () => Promise<void>): Promise<void>;
+
   /**
    * Resolves an original or Bounded Context-issued copy-safe repository view.
    *
@@ -645,18 +599,12 @@ interface BoundedContextAccess {
   isBuilder(value: unknown): value is BoundedContextBuilder;
 
   /**
-   * Builds a registered context builder with supplied default storage.
+   * Builds a registered context builder using the configured environment.
    *
    * @param builder Registered builder to build.
-   * @param defaultStorageFactory Storage used when the builder has none.
-   * @param defaultAi AI registry used when the builder has none.
    * @returns Promise resolving to a bounded context.
    */
-  build(
-    builder: BoundedContextBuilder,
-    defaultStorageFactory: StorageFactory,
-    defaultAi?: AiRegistry,
-  ): Promise<BoundedContext>;
+  build(builder: BoundedContextBuilder): Promise<BoundedContext>;
 
   /**
    * Subscribes to a public event type on a built context.
@@ -916,8 +864,6 @@ export class BoundedContext {
 
   readonly #projectionInbox: PrjInbox;
 
-  readonly #deliveryStrategy: DeliveryStrategy;
-
   readonly #deliveryReadiness: DeliveryReadiness;
 
   #stopAgentAvailability: (() => void) | undefined;
@@ -939,6 +885,12 @@ export class BoundedContext {
   readonly #subscriptionRuntime: SubscriptionRuntime;
 
   readonly #agentReceipts: AgentAcceptanceReceipts;
+
+  readonly #agentController = new AbortController();
+
+  readonly #agentReservations = new Set<Promise<void>>();
+
+  readonly #activeReplays = new Set<Promise<void>>();
 
   #closed: Promise<void> | undefined;
 
@@ -975,7 +927,6 @@ export class BoundedContext {
     this.#environment = ServerEnvironment.instance();
     this.#ai = input.ai;
     this.#installTenantAdmission(input.tenantIndex);
-    this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(input.deliveryStrategy);
     this.#commandEndpoint = Object.freeze({
       acceptedCommandTypes: () => this.#commandBus.acceptedCommandTypes(),
       post: (command: Command) => this.#commandBus.post(command),
@@ -1040,11 +991,7 @@ export class BoundedContext {
    * @returns Inboxes, tenant index, and readiness signal.
    */
   #createDelivery(tenantIndex: TenantIndex): ContextDeliveryParts {
-    const deliveryReadiness = new DeliveryReadiness();
-    if (this.#ai !== undefined)
-      this.#stopAgentAvailability = AgentExecutionCapacity.for(this.#ai).onAvailable(() => {
-        deliveryReadiness.retryDeferred();
-      });
+    const deliveryReadiness = this.#createReadiness();
     const onAdmit = (tenantId: TenantId) =>
       TenantAdmissions.require(
         tenantIndex,
@@ -1056,7 +1003,7 @@ export class BoundedContext {
       this.#snapshot.name.value,
       deliveryReadiness,
       onAdmit,
-      this.#deliveryStrategy,
+      this.#environment.delivery.strategy,
     );
     const projectionInbox = new LocalProjectionInbox(
       this.#snapshot.name.value,
@@ -1069,6 +1016,26 @@ export class BoundedContext {
         : entityInbox.replay(message, tenantId),
     );
     return { deliveryReadiness, tenantIndex, entityInbox, projectionInbox };
+  }
+
+  /**
+   * Creates readiness for the shared Delivery and this context's Agent capacity.
+   * @returns Shared readiness with the Agent capacity wake installed.
+   */
+  #createReadiness(): DeliveryReadiness {
+    const readiness = new DeliveryReadiness(
+      undefined,
+      serverEnvironmentAccess.coreDelivery(this.#environment),
+      (shard) => {
+        serverEnvironmentAccess.notifyDelivery(this.#environment, shard);
+      },
+      serverEnvironmentAccess.remoteSupervised(this.#environment),
+    );
+    if (this.#ai !== undefined)
+      this.#stopAgentAvailability = AgentExecutionCapacity.for(this.#ai).onAvailable(() => {
+        readiness.retryDeferred();
+      });
+    return readiness;
   }
 
   /**
@@ -1097,17 +1064,11 @@ export class BoundedContext {
         this.#beginClose();
       },
       drain: () => this.#drainWork(),
+      trackReplay: (onReplay) => this.#trackReplay(onReplay),
     });
     contextDeliveryDescriptors.set(
       this,
-      ContextParts.createDeliveryDescriptor(
-        this.#snapshot,
-        input.storageFactory,
-        delivery.tenantIndex,
-        this.#entityInbox,
-        this.#projectionInbox,
-        delivery.deliveryReadiness,
-      ),
+      ContextParts.createDeliveryDescriptor(this.#entityInbox, this.#projectionInbox),
     );
   }
 
@@ -1181,9 +1142,18 @@ export class BoundedContext {
    * Reserves shared-registry capacity before Agent receipt admission.
    */
   #reserveAgent(key: string, signal: AbortSignal): AgentCapacityReservation | undefined {
-    return this.#ai === undefined
-      ? undefined
-      : AgentExecutionCapacity.for(this.#ai).reserve(key, signal);
+    const reservation =
+      this.#ai === undefined
+        ? undefined
+        : AgentExecutionCapacity.for(this.#ai).reserve(key, signal);
+    if (reservation !== undefined) {
+      this.#agentReservations.add(reservation.completed);
+      void reservation.completed.then(
+        () => this.#agentReservations.delete(reservation.completed),
+        () => this.#agentReservations.delete(reservation.completed),
+      );
+    }
+    return reservation;
   }
 
   /**
@@ -1209,6 +1179,7 @@ export class BoundedContext {
       publishAgentEvent: (event) => this.#publishAgentEvent(event),
       publishAgentSystemEvent: (event) => this.#publisher.publishSystemEvent(event),
       agentReceipts: this.#agentReceipts,
+      agentSignal: this.#agentController.signal,
       reserveAgent: (key, signal) => this.#reserveAgent(key, signal),
       deferAgent: (message, tenantId) => {
         this.#deferAgent(message, tenantId);
@@ -1467,6 +1438,8 @@ export class BoundedContext {
    */
   #beginClose(): void {
     closingContexts.add(this);
+    serverEnvironmentAccess.stopRecipients(this.#environment, this);
+    this.#agentController.abort(new Error("Bounded Context closed."));
     this.#publisher.beginClose();
     commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
@@ -1507,6 +1480,7 @@ export class BoundedContext {
     this.#stopAgentAvailability = undefined;
 
     await this.#closePart(() => this.#drainWork(), errors);
+    await this.#drainAdmittedContextWork(errors);
     await this.#closePart(() => this.#deliveryReadiness.close(), errors);
     await this.#closePart(
       () =>
@@ -1530,6 +1504,22 @@ export class BoundedContext {
       throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
     }
     ContextParts.clearContextMetadata(this);
+  }
+
+  /**
+   * Settles entered replay, local follow-ups, and reserved Agent turns.
+   * @param errors Collects independent close failures.
+   */
+  async #drainAdmittedContextWork(errors: unknown[]): Promise<void> {
+    await this.#closePart(
+      () => Promise.allSettled([...this.#activeReplays]).then(() => undefined),
+      errors,
+    );
+    await this.#closePart(() => this.#entityInbox.whenFollowUpsIdle(), errors);
+    await this.#closePart(
+      () => Promise.allSettled([...this.#agentReservations]).then(() => undefined),
+      errors,
+    );
   }
 
   /**
@@ -1565,6 +1555,21 @@ export class BoundedContext {
   }
 
   /**
+   * Registers an entered shared replay through its complete follow-up callback.
+   * @param onReplay Complete replay callback.
+   * @returns Completion of the captured callback.
+   */
+  #trackReplay(onReplay: () => Promise<void>): Promise<void> {
+    const replay = Promise.resolve().then(onReplay);
+    this.#activeReplays.add(replay);
+    void replay.then(
+      () => this.#activeReplays.delete(replay),
+      () => this.#activeReplays.delete(replay),
+    );
+    return replay;
+  }
+
+  /**
    * Calls a close action and collects its failure before later cleanup.
    * @param work Close action.
    * @param errors Collects close failures.
@@ -1578,6 +1583,13 @@ export class BoundedContext {
  * Exposes framework-only operations for built contexts and their builders.
  */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  trackReplay(context: BoundedContext, onReplay: () => Promise<void>): Promise<void> {
+    const phase = contextClosePhases.get(context);
+    if (phase === undefined)
+      return Promise.reject(new TypeError("Replay requires a built context."));
+    return phase.trackReplay(onReplay);
+  },
+
   /**
    * Resolves a view only within the Bounded Context that issued it.
    *
@@ -1644,18 +1656,14 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     );
   },
 
-  build(
-    builder: BoundedContextBuilder,
-    defaultStorageFactory: StorageFactory,
-    defaultAi?: AiRegistry,
-  ): Promise<BoundedContext> {
+  build(builder: BoundedContextBuilder): Promise<BoundedContext> {
     const build = builderBuilds.get(builder);
 
     if (build === undefined) {
       throw new TypeError("Builder access requires a BoundedContextBuilder instance.");
     }
 
-    return build(defaultStorageFactory, defaultAi);
+    return build();
   },
 
   subscribeToEvent(
@@ -1838,10 +1846,6 @@ export class BoundedContextBuilder {
 
   readonly #generatedRepositoryOptions = new Map<RepositoryEntityType, object>();
 
-  #deliveryStrategy: DeliveryStrategy = UniformAcrossAllShards.singleShard();
-
-  #storageFactory: StorageFactory | undefined;
-
   #aiRegistry: AiRegistry | undefined;
 
   #tenantIndex: TenantIndex | undefined;
@@ -1872,9 +1876,7 @@ export class BoundedContextBuilder {
       "BoundedContextBuilder instances are framework-owned.",
     );
     this.#specSnapshot = ContextParts.cloneSpecSnapshot(specSnapshot);
-    builderBuilds.set(this, (defaultStorageFactory, defaultAi) =>
-      this.#buildAsyncWith(defaultStorageFactory, defaultAi),
-    );
+    builderBuilds.set(this, () => this.#buildAsyncWith());
     Object.freeze(this);
   }
 
@@ -2063,17 +2065,6 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets a storage factory for event, repository-state, and Stand storage.
-   *
-   * @param storageFactory Creates the context's persistent storage.
-   * @returns Returns this builder for further configuration.
-   */
-  withStorageFactory(storageFactory: StorageFactory): this {
-    this.#storageFactory = storageFactory;
-    return this;
-  }
-
-  /**
    * Sets a live tenant index for this Bounded Context.
    *
    * @param tenantIndex Application membership index.
@@ -2123,17 +2114,6 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets how Entity Inbox targets are assigned to shards.
-   *
-   * @param strategy Selects the durable shard for Aggregate and Process Manager targets.
-   * @returns Returns this builder for further configuration.
-   */
-  withDeliveryStrategy(strategy: DeliveryStrategy): this {
-    this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(strategy);
-    return this;
-  }
-
-  /**
    * Sets a trusted compiled application root for generated handler metadata.
    *
    * @param root Names the compiled package or application root.
@@ -2153,13 +2133,12 @@ export class BoundedContextBuilder {
     return this.#buildAsyncWith();
   }
 
-  async #buildAsyncWith(
-    defaultStorageFactory?: StorageFactory,
-    defaultAi?: AiRegistry,
-  ): Promise<BoundedContext> {
-    const finishBuild = serverEnvironmentAccess.beginContextBuild(ServerEnvironment.instance());
+  async #buildAsyncWith(): Promise<BoundedContext> {
+    const environment = ServerEnvironment.instance();
+    const finishBuild = serverEnvironmentAccess.beginContextBuild(environment);
     try {
-      return await this.#buildAsyncReady(defaultStorageFactory, defaultAi);
+      await serverEnvironmentAccess.awaitSetup(environment);
+      return await this.#buildAsyncReady();
     } finally {
       finishBuild();
     }
@@ -2168,26 +2147,21 @@ export class BoundedContextBuilder {
   /**
    * Loads generated metadata and finishes one asynchronous context assembly.
    *
-   * @param defaultStorageFactory Storage used when the builder has none.
-   * @param defaultAi AI registry used when the builder has none.
    * @returns The integrated context.
    */
-  async #buildAsyncReady(
-    defaultStorageFactory?: StorageFactory,
-    defaultAi?: AiRegistry,
-  ): Promise<BoundedContext> {
+  async #buildAsyncReady(): Promise<BoundedContext> {
     const generated = await this.#loadGeneratedArtifacts([...this.#entityTypes]);
     const repositories = [...this.#repositories, ...generated.repositories];
 
     const context = await this.#buildWithResources(
       repositories,
-      this.#storageFactory ?? defaultStorageFactory ?? new InMemoryStorageFactory(),
+      ServerEnvironment.instance().storageFactory,
       generated.standalone,
-      this.#aiRegistry ?? defaultAi,
+      this.#aiRegistry,
     );
     try {
       await ContextParts.integrationReady(context);
-      serverEnvironmentAccess.completeContext(ServerEnvironment.instance(), context);
+      await serverEnvironmentAccess.completeContext(ServerEnvironment.instance(), context);
     } catch (error) {
       try {
         await context.close();
@@ -2355,7 +2329,11 @@ export class BoundedContextBuilder {
   ): ContextSystemBuses {
     const systemSpec = ContextParts.createSystemSpec(this.#specSnapshot, this.#persistSystemEvents);
     const systemEventStore = systemSpec.storesEvents
-      ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory, systemEventGroup)
+      ? new EventStore(
+          ContextParts.createStorageMode(systemSpec),
+          storageFactory,
+          EventStoreGroups.forContext(systemSpec.name.value, "system"),
+        )
       : undefined;
     if (systemEventStore !== undefined) resources.systemEventStore = systemEventStore;
     const systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
@@ -2457,7 +2435,7 @@ export class BoundedContextBuilder {
       this.#specSnapshot,
       storageFactory,
       repositories,
-      this.#deliveryStrategy,
+      ServerEnvironment.instance().delivery.strategy,
       buses,
       running,
       ai,
@@ -2927,37 +2905,6 @@ const ContextParts = Object.freeze({
     return Object.freeze({
       name: `${specSnapshot.name.value}:subscriptions`,
       multitenant: false,
-    });
-  },
-
-  /**
-   * Captures the shard count and validates later shard results.
-   *
-   * @param strategy Configured delivery strategy.
-   * @returns Immutable delivery strategy snapshot.
-   */
-  snapshotDeliveryStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
-    if (!Number.isSafeInteger(strategy.shardCount) || strategy.shardCount <= 0) {
-      throw new Error("Delivery strategy shard count must be a positive safe integer.");
-    }
-    const shardCount = strategy.shardCount;
-    return Object.freeze({
-      shardCount,
-
-      /**
-       * Returns a target shard after verifying the captured shard total.
-       *
-       * @param targetId Inbox target identifier.
-       * @param targetType Inbox target type.
-       * @returns Validated shard index.
-       */
-      shardFor(targetId: Any, targetType: string): ShardIndex {
-        const shard = strategy.shardFor(InboxTargets.clone(targetId), targetType);
-        if (shard.ofTotal !== shardCount) {
-          throw new Error("Delivery strategy shard total must equal its resolved shard count.");
-        }
-        return new ShardIndex(shard.index, shard.ofTotal);
-      },
     });
   },
 
@@ -3871,81 +3818,22 @@ const ContextParts = Object.freeze({
   },
 
   /**
-   * Creates delivery operations from the context inboxes and readiness state.
+   * Creates delivery operations from the context inboxes.
    *
-   * @param context Built context snapshot.
-   * @param storageFactory Context storage provider.
-   * @param tenantIndex Tenant index for startup scopes.
    * @param entityInbox Registered Entity inbox.
    * @param projections Projection inbox.
-   * @param readiness Delivery readiness coordinator.
    * @returns Delivery descriptor.
    */
   createDeliveryDescriptor(
-    context: BoundedContextSnapshot,
-    storageFactory: StorageFactory,
-    tenantIndex: TenantIndex,
     entityInbox: RegisteredEntityInbox,
     projections: PrjInbox,
-    readiness: DeliveryReadiness,
   ): ContextDeliveryDescriptor {
     return Object.freeze<ContextDeliveryDescriptor>({
-      storageFactory,
-      startupScopes: () => ContextParts.deliveryStartupScopes(context, tenantIndex),
-      storageContext: (scope) => ContextParts.deliveryStorageContext(context, scope),
       endpoints: () => Object.freeze([...entityInbox.endpoints(), ...projections.endpoints()]),
       replay: (message, tenantId) =>
         message.label === "UPDATE_SUBSCRIBER"
           ? projections.replay(message, tenantId)
           : entityInbox.replay(message, tenantId),
-      onReady: (onReady) => readiness.onReady(onReady),
-      transition: (scopes, onReady, options) => readiness.transition(scopes, onReady, options),
-    });
-  },
-
-  /**
-   * Lists delivery startup scopes, one per tenant in multitenant contexts.
-   *
-   * @param context Context model setting selecting single or multitenant scopes.
-   * @param tenantIndex Tenant index supplying configured scopes.
-   * @returns Frozen startup scope list.
-   */
-  async deliveryStartupScopes(
-    context: BoundedContextSnapshot,
-    tenantIndex: TenantIndex,
-  ): Promise<readonly DeliveryTenantScope[]> {
-    if (context.tenantMode === "single-tenant") {
-      return Object.freeze([Object.freeze({})]);
-    }
-
-    return Object.freeze((await tenantIndex.all()).map((tenantId) => Object.freeze({ tenantId })));
-  },
-
-  /**
-   * Creates tenant-validated storage context for a delivery scope.
-   *
-   * @param context Built context snapshot.
-   * @param scope Selected startup scope.
-   * @returns Storage context for the selected tenant.
-   */
-  deliveryStorageContext(
-    context: BoundedContextSnapshot,
-    scope: DeliveryTenantScope,
-  ): StorageContext {
-    if (context.tenantMode === "single-tenant") {
-      if (scope.tenantId !== undefined) {
-        throw new Error(`Single-tenant context "${context.name.value}" does not accept tenantId.`);
-      }
-      return Object.freeze({ name: context.name.value, multitenant: false });
-    }
-    const tenantId = scope.tenantId;
-    if (tenantId === undefined) {
-      throw new Error(`Multitenant context "${context.name.value}" requires tenantId.`);
-    }
-    return Object.freeze({
-      name: context.name.value,
-      multitenant: true,
-      tenantId: TenantBoundary.from(tenantId).tenantId,
     });
   },
 
@@ -4091,6 +3979,7 @@ const ContextParts = Object.freeze({
       publishAgentEvent: registration.publishAgentEvent,
       publishAgentSystemEvent: registration.publishAgentSystemEvent,
       agentReceipts: registration.agentReceipts,
+      agentSignal: registration.agentSignal,
       reserveAgent: registration.reserveAgent,
       deferAgent: registration.deferAgent,
     });

@@ -13,7 +13,14 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { BoundedContext, EventRouting, Projection, Subscribe } from "@spine-event-engine/server";
+import {
+  BoundedContext,
+  EnvironmentType,
+  EventRouting,
+  Projection,
+  ServerEnvironment,
+  Subscribe,
+} from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 import { OrderAggregate, SkuAggregate } from "./index.js";
@@ -81,6 +88,8 @@ export const OrderCardContext: Readonly<{
    * @returns A context ready for server registration or local commands.
    */
   async create(storageFactory) {
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+    await ServerEnvironment.instance().completeSetup();
     const routes = EventRouting.create(OrderCard)
       .route(OrderCreatedSchema, (event) => [event.id])
       .route(SkuRegisteredSchema, async (event, _context, repository) => {
@@ -91,7 +100,6 @@ export const OrderCardContext: Readonly<{
         return cards.filter((card) => card.needsSkuName(event.displayName)).map((card) => card.id);
       });
     return BoundedContext.singleTenant("Order cards")
-      .withStorageFactory(storageFactory)
       .withGeneratedRegistryRoot(new URL("..", import.meta.url))
       .add(OrderAggregate)
       .add(SkuAggregate)

@@ -22,10 +22,14 @@ import {
   BoundedContext,
   HandlerRegistryIngestor,
   Repository,
+  EnvironmentType,
+  ServerEnvironment,
+  ShardIndex,
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, it } from "vitest";
+import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AiTestBackend, BlackBox } from "../src/index.js";
 import {
   SupportReplyAgentIdSchema,
@@ -45,6 +49,17 @@ import {
   ProposedSupportReplySchema,
   SupportReplyFactsSchema,
 } from "../test-fixtures/generated/support_ai_types_pb.js";
+
+beforeEach(async () => {
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    storageFactory: new InMemoryStorageFactory(),
+  });
+  await ServerEnvironment.instance().completeSetup();
+});
+
+afterEach(async () => {
+  await resetServerEnvironmentForTest();
+});
 
 const model = AiModel.define({
   name: "capacity-support-reply",
@@ -262,11 +277,7 @@ async function contextBox(
   escalated = false,
   selfReact = false,
 ) {
-  const storage = new InMemoryStorageFactory();
-  const builder = BoundedContext.singleTenant(name)
-    .withAi(ai)
-    .persistSystemEvents()
-    .withStorageFactory(storage);
+  const builder = BoundedContext.singleTenant(name).withAi(ai).persistSystemEvents();
   const context = await (
     escalated ? builder.add(escalationRepository()) : builder.add(repository(entityType, selfReact))
   ).build();
@@ -310,7 +321,13 @@ describe("shared Agent registry capacity through BlackBox", () => {
         () => backend.requests(),
         (requests) => requests.length === 1,
       );
-      expect((await post(second.box, "T-B")).kind).toBe("ok");
+      const deferred = await post(second.box, "T-B");
+      expect(deferred).toMatchObject({ kind: "error", error: { type: "COMMAND_POST_ERROR" } });
+      expect(
+        await ServerEnvironment.instance().delivery.inbox.read(ShardIndex.single(), {
+          statuses: ["TO_DELIVER"],
+        }),
+      ).toHaveLength(1);
       expect(backend.requests()).toHaveLength(1);
       gate.release();
       await produced(first.box, 1);
@@ -479,7 +496,13 @@ describe("shared Agent registry capacity through BlackBox", () => {
         (requests) => requests.length === 1,
       );
       expect(alternate.requests()).toHaveLength(0);
-      expect((await post(box, "T-P", "After preference")).kind).toBe("ok");
+      const deferred = await post(box, "T-P", "After preference");
+      expect(deferred).toMatchObject({ kind: "error", error: { type: "COMMAND_POST_ERROR" } });
+      expect(
+        await ServerEnvironment.instance().delivery.inbox.read(ShardIndex.single(), {
+          statuses: ["TO_DELIVER"],
+        }),
+      ).toHaveLength(1);
       expect(primary.requests()).toHaveLength(1);
       expect(alternate.requests()).toHaveLength(0);
       gate.release();

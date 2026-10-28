@@ -13,10 +13,11 @@
  */
 
 import { create, equals, isMessage } from "@bufbuild/protobuf";
+import { rmSync } from "node:fs";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type AiScope } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
-import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AgentAiResultAdmittedSchema,
   AgentAiOperationFailedSchema,
@@ -35,11 +36,19 @@ import {
   CommandContextSchema,
   UserIdSchema,
   EventSchema,
+  EventContextSchema,
 } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
+import { AgentAcceptanceReceipts } from "../../src/agent/agent-acceptance-receipts.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import {
+  ServerEnvironment,
+  ServerEnvironmentLifecycle,
+  serverEnvironmentAccess,
+} from "../../src/server/server-environment.js";
 import { HandlerRegistryIngestor } from "../../src/handler/generated-handler-registry.js";
 import type { EntityHandlersMetadata } from "../../src/handler/handler-metadata.js";
 import { Repository } from "../../src/repository/repository.js";
@@ -61,11 +70,32 @@ import {
   type ReviewSupportReply,
 } from "../../test-fixtures/generated/entity-metadata/support_agent_commands_pb.js";
 import { SupportReplyDraftedSchema } from "../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js";
+import { ServerStartedSchema } from "../../test-fixtures/generated/server-lifecycle/events_pb.js";
+import {
+  ServerStatusProjection,
+  serverStatusRegistry,
+} from "../server/generated-server-registry-fixture.js";
 import {
   ProposedSupportReplySchema,
   SupportTicketFactsSchema,
   SupportTicketNumberSchema,
 } from "../../test-fixtures/generated/entity-metadata/support_ai_types_pb.js";
+
+beforeEach(async () => {
+  await ServerEnvironment.instance().completeSetup();
+});
+
+afterEach(async () => {
+  const environment = ServerEnvironment.instance();
+  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
+  await ServerEnvironmentLifecycle.resetForTest();
+});
+
+async function configureStorage(factory: InMemoryStorageFactory): Promise<void> {
+  await ServerEnvironmentLifecycle.resetForTest();
+  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
+  await ServerEnvironment.instance().completeSetup();
+}
 
 const proposal = AiModel.define({
   name: "draft-support-reply",
@@ -285,10 +315,10 @@ describe("Agent repository source integration", () => {
     const authorizeSelection = vi.fn(() => allowSelection);
     const repository = draftingRepository({ authorizeSelection });
     const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
     const context = await BoundedContext.singleTenant("SourceDrafting")
       .withAi(registry)
       .persistSystemEvents()
-      .withStorageFactory(factory)
       .add(repository)
       .build();
     const produced: string[] = [];
@@ -533,10 +563,10 @@ describe("Agent repository source integration", () => {
       allowedModels: { generation: [ref] },
     });
     const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
     const context = await BoundedContext.singleTenant("LateSourceModel")
       .withAi(registry)
       .persistSystemEvents()
-      .withStorageFactory(factory)
       .add(repository)
       .build();
     registry.register(
@@ -614,7 +644,6 @@ describe("Agent repository source integration", () => {
     const context = await BoundedContext.singleTenant("SelfFollowupCommand")
       .withAi(ai)
       .persistSystemEvents()
-      .withStorageFactory(new InMemoryStorageFactory())
       .add(followupRepository())
       .build();
     const outputs: string[] = [];
@@ -661,9 +690,18 @@ describe("Agent repository source integration", () => {
     const context = await BoundedContext.singleTenant("SelfFollowupClose")
       .withAi(ai)
       .persistSystemEvents()
-      .withStorageFactory(new InMemoryStorageFactory())
       .add(followupRepository())
       .build();
+    const siblingRegistry = serverStatusRegistry();
+    const sibling = await BoundedContext.singleTenant("SiblingDuringAgentClose")
+      .withGeneratedRegistryRoot(siblingRegistry.root)
+      .add(ServerStatusProjection)
+      .build();
+    const siblingHandler = vi.spyOn(ServerStatusProjection.prototype, "onServerStarted");
+    const outputs: string[] = [];
+    const observer = observeProducedSignals(context, {
+      onEvent: (event) => outputs.push(event.message?.typeUrl ?? ""),
+    });
     try {
       const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-close" });
       await context.commandBus().post(
@@ -680,13 +718,88 @@ describe("Agent repository source integration", () => {
       });
       await Promise.resolve();
       expect(closed).toBe(false);
+      await sibling.eventBus().post(
+        SignalEnvelopes.event({
+          context: create(EventContextSchema, {
+            producerId: Identifiers.pack("string", "sibling-start"),
+          }),
+          schema: ServerStartedSchema,
+          message: create(ServerStartedSchema, { id: "sibling-start", name: "Sibling" }),
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(siblingHandler).toHaveBeenCalledOnce();
+      });
       release.resolve(undefined);
       await closing;
       expect(closed).toBe(true);
+      expect(outputs).not.toContain(TypeUrls.derive(SupportReplyDraftedSchema));
     } finally {
+      observer.close();
+      siblingHandler.mockRestore();
+      await sibling.close();
+      rmSync(siblingRegistry.directory, { recursive: true, force: true });
       release.resolve(undefined);
       FollowupAgent.gate = undefined;
       await context.close();
     }
   }, 15_000);
+
+  it("keeps accepted receipt evidence but starts no Agent effects after context close", async () => {
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-receipt-gap" });
+    const context = await BoundedContext.singleTenant("ReceiptCloseGap")
+      .withAi(AiRegistry.create({ defaultModels: {} }))
+      .persistSystemEvents()
+      .add(followupRepository())
+      .build();
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const original = Object.getOwnPropertyDescriptor(AgentAcceptanceReceipts.prototype, "accept")
+      ?.value as AgentAcceptanceReceipts["accept"];
+    let accepted = false;
+    const spy = vi
+      .spyOn(AgentAcceptanceReceipts.prototype, "accept")
+      .mockImplementation(async function (this: AgentAcceptanceReceipts, ...args) {
+        entered.resolve(undefined);
+        await release.promise;
+        accepted = await original.apply(this, args);
+        return accepted;
+      });
+    const output: string[] = [];
+    const observer = observeProducedSignals(context, {
+      onEvent: (event) => {
+        output.push(event.message?.typeUrl ?? "");
+      },
+    });
+    try {
+      const posted = context.commandBus().post(
+        SignalEnvelopes.command({
+          schema: DraftSupportReplySchema,
+          message: create(DraftSupportReplySchema, { agent: id, question: "Close gap" }),
+          context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
+        }),
+      );
+      await entered.promise;
+      const closing = context.close();
+      release.resolve(undefined);
+      await Promise.allSettled([posted, closing]);
+      expect(accepted).toBe(true);
+      expect(output).toEqual([]);
+      const reopened = await BoundedContext.singleTenant("ReceiptCloseGap")
+        .withAi(AiRegistry.create({ defaultModels: {} }))
+        .persistSystemEvents()
+        .add(followupRepository())
+        .build();
+      try {
+        expect(await reopened.stand().read(SupportReplyAgentStateSchema, id)).toBeUndefined();
+      } finally {
+        await reopened.close();
+      }
+    } finally {
+      release.resolve(undefined);
+      spy.mockRestore();
+      observer.close();
+      await context.close();
+    }
+  });
 });

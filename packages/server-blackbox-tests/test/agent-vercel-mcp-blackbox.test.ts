@@ -30,13 +30,16 @@ import {
 } from "@spine-event-engine/proto/agent";
 import {
   BoundedContext,
+  EnvironmentType,
   HandlerRegistryIngestor,
   Repository,
+  ServerEnvironment,
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { BlackBox } from "@spine-event-engine/testing";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DraftRecoverySupportReplySchema } from "../generated/spine/server/testing/support_recovery_commands_pb.js";
 import { SupportReplyDraftedSchema } from "../generated/spine/server/testing/support_agent_events_pb.js";
 import { SupportRecoveryStateSchema } from "../generated/spine/server/testing/support_recovery_states_pb.js";
@@ -538,13 +541,22 @@ const supportBox = async (
   const context = BoundedContext.singleTenant("RealVercelMcpSupport")
     .withAi(registry)
     .persistSystemEvents()
-    .withStorageFactory(new InMemoryStorageFactory())
     .add(repository)
     .build();
   return { box: await BlackBox.from(await context, { timeoutMs: 10_000 }), repository };
 };
 
 describe("Agent with real Vercel Responses and MCP transports", () => {
+  beforeEach(async () => {
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    await ServerEnvironment.instance().completeSetup();
+  });
+
+  afterEach(async () => {
+    await ServerTests.resetEnvironment();
+  });
   it.each(["input", "output"] as const)(
     "records unsupported %s tool schema before provider inference",
     async (schema) => {
@@ -847,7 +859,6 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
     const context = BoundedContext.singleTenant("RealVercelMcpSupport")
       .withAi(registry)
       .persistSystemEvents()
-      .withStorageFactory(new InMemoryStorageFactory())
       .add(repository)
       .build();
     const box = await BlackBox.from(await context, { timeoutMs: 10_000 });

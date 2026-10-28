@@ -14,8 +14,10 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { Identifiers } from "@spine-event-engine/core";
-import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
+import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { CommandSchema, EventContextSchema, EventSchema } from "@spine-event-engine/proto";
+import { ProjectCreatedSchema } from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
@@ -77,98 +79,38 @@ describe("LocalProjectionInbox", () => {
     expect(replay).toHaveBeenCalledOnce();
   });
 
-  it("settles persisted rows after ownership transfer", async () => {
+  it("remote supervised Projection reception notifies without local dispatch", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+      context: { name: "ExternalProjects", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const targetTypeUrl = "type.example.dev/Tasks.Projection";
-    const readiness = new DeliveryReadiness();
-    const inbox = new LocalProjectionInbox("Tasks", readiness);
-    const replayStarted = Promise.withResolvers<undefined>();
-    const releaseReplay = Promise.withResolvers<undefined>();
-    const replayed: string[] = [];
-    const routed: unknown[] = [];
-    inbox.register({
-      targetTypeUrl,
-      async replay(message) {
-        replayed.push(targetValue(message));
-        if (targetValue(message) === "admitted") {
-          replayStarted.resolve(undefined);
-          await releaseReplay.promise;
-        }
-      },
+    const wake = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, delivery, wake, true);
+    const inbox = new LocalProjectionInbox("ExternalProjects", readiness);
+    const replay = vi.fn(() => Promise.resolve());
+    const targetTypeUrl = TypeUrls.derive(ProjectOverviewStateSchema);
+    inbox.register({ targetTypeUrl, replay });
+    const project = create(ProjectCreatedSchema, { id: "project-remote", name: "Remote" });
+    const event = SignalEnvelopes.event({
+      context: create(EventContextSchema),
+      schema: ProjectCreatedSchema,
+      message: project,
     });
-
-    const admitted = inbox.receive(
-      delivery,
-      projectionInput(targetTypeUrl, "admitted"),
-      tenant("tenant-a"),
-    );
-    await replayStarted.promise;
-    const transition = readiness.transition(
-      [
-        {
-          tenantId: tenant("tenant-b"),
-          label: "UPDATE_SUBSCRIBER",
-          targetTypeUrl,
-          shard: ShardIndex.single(),
-        },
-      ],
-      (scope) => routed.push(scope),
-    );
-
-    await expect(
-      inbox.receive(delivery, projectionInput(targetTypeUrl, "buffered"), tenant("tenant-a")),
-    ).resolves.toBeDefined();
-    expect(replayed).toEqual(["admitted"]);
-    expect(routed).toEqual([]);
-
-    releaseReplay.resolve(undefined);
-    await admitted;
-    await expect(transition).rejects.toThrow(
-      "Delivery readiness transition received an unconfigured scope.",
-    );
-    expect(routed).toEqual([]);
-    await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toEqual([]);
-    const delivered = await delivery.inbox.read(ShardIndex.single(), {
-      statuses: ["DELIVERED"],
-    });
-    expect(delivered).toEqual([]);
-
-    await expect(
-      inbox.receive(delivery, projectionInput(targetTypeUrl, "routed"), tenant("tenant-a")),
-    ).resolves.toBeDefined();
-    expect(replayed).toEqual(["admitted", "buffered"]);
-    expect(routed).toEqual([]);
-
-    await expect(
-      readiness.transition(
-        [
-          {
-            tenantId: tenant("tenant-a"),
-            label: "UPDATE_SUBSCRIBER",
-            targetTypeUrl,
-            shard: ShardIndex.single(),
-          },
-        ],
-        (scope) => routed.push(scope),
-      ),
-    ).resolves.toBeUndefined();
-    expect(routed).toEqual([]);
-    await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toMatchObject([{ inboxId: { targetId: Identifiers.pack("string", "routed") } }]);
-
-    const recovery = await new DeliveryLoop({
-      delivery,
+    const message = await inbox.receive(delivery, {
+      inboxId: { targetId: Identifiers.pack("string", project.id), targetTypeUrl },
+      signalId: event.id?.value ?? "",
+      signal: AnyPacker.pack(EventSchema, event),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
       shard: ShardIndex.single(),
-      onMessage: (message) => inbox.replay(message, tenant("tenant-a")),
-    }).run();
-    expect(recovery.delivered).toBe(1);
-    expect(replayed).toEqual(["admitted", "buffered", "routed"]);
+    });
+
+    expect(message.status).toBe("TO_DELIVER");
+    expect(wake).toHaveBeenCalledExactlyOnceWith(ShardIndex.single());
+    expect(replay).not.toHaveBeenCalled();
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toHaveLength(1);
   });
 
   it("matches receive readiness without rebuilding the global endpoint snapshot", async () => {
@@ -341,7 +283,7 @@ describe("LocalProjectionInbox", () => {
     });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toEqual([]);
+    ).resolves.toMatchObject([{ signalId: "event-1", status: "DELIVERED" }]);
   });
 
   it("rejects non-pending replay snapshots before projection handlers run", async () => {
@@ -430,7 +372,9 @@ describe("LocalProjectionInbox", () => {
 
     expect(duplicateMessage.id).toEqual(firstMessage.id);
     expect(seen).toHaveLength(1);
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      { signalId: "event-duplicate", status: "DELIVERED" },
+    ]);
   });
 
   it("contains a fresh-delivery duplicate replay failure", async () => {
@@ -698,7 +642,9 @@ describe("LocalProjectionInbox", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
     });
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      { signalId: "event-1", status: "DELIVERED" },
+    ]);
   });
 });
 
@@ -711,12 +657,6 @@ function projectionInput(targetTypeUrl: string, targetId: string) {
     status: "TO_DELIVER" as const,
     shard: ShardIndex.single(),
   };
-}
-
-function targetValue(message: Pick<InboxMessage, "inboxId">): string {
-  const value = Identifiers.unpack("string", message.inboxId.targetId);
-  if (value === undefined) throw new Error("Expected a string Inbox target fixture.");
-  return value;
 }
 
 function eventSignal() {

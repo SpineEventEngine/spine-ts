@@ -600,15 +600,12 @@ function build(): DeliveryBuilder {
   return new DeliveryBuilder().withStorageFactory(new InMemoryStorageFactory());
 }
 function message(signalId: string, targetId: string, shard: ShardIndex) {
+  const domainMessage = createMessage(signalId, signalId, 1n, undefined, targetId);
   return {
+    ...domainMessage,
     id: { value: signalId, shard },
-    inboxId: { targetId: Identifiers.pack("string", targetId), targetTypeUrl: "type" },
-    signalId,
-    label: "UPDATE_SUBSCRIBER" as const,
-    status: "TO_DELIVER" as const,
     shard,
     whenReceived: Time.currentTime(),
-    version: 1n,
   };
 }
 function registry(shard: ShardIndex) {

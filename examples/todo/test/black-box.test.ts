@@ -49,11 +49,14 @@ import { SubscriptionService } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
   DeliveryBuilder,
+  EnvironmentType,
   EventRouting,
   InMemorySubscriptionRegistry,
   SignalMetadata,
+  ServerEnvironment,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { BlackBox, type BlackBoxScope } from "@spine-event-engine/testing";
 import {
   cpSync,
@@ -116,6 +119,7 @@ const ownedBlackBoxes = new Set<BlackBox>();
 afterEach(async () => {
   await Promise.all([...ownedBlackBoxes].map((blackBox) => blackBox.close()));
   ownedBlackBoxes.clear();
+  await ServerTests.resetEnvironment();
 });
 
 describe("@spine-event-engine/example-todo", () => {
@@ -882,10 +886,11 @@ describe("@spine-event-engine/example-todo", () => {
         event.taskListId === undefined ? [] : [event.taskListId],
     );
     const firstStorage = new InMemoryStorageFactory(storageBackend);
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: firstStorage });
+    await ServerEnvironment.instance().completeSetup();
     const firstRouting = EventRouting.create<TaskListId>();
     firstRouting.route(TaskEvent, firstRoute);
     const first = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(firstStorage)
       .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
@@ -915,6 +920,7 @@ describe("@spine-event-engine/example-todo", () => {
     } finally {
       await first.close();
     }
+    await ServerTests.resetEnvironment();
 
     const targetId = AnyPacker.pack(TaskListIdSchema, listId);
     const targetTypeUrl = TypeUrls.derive(TaskListSchema);
@@ -957,8 +963,11 @@ describe("@spine-event-engine/example-todo", () => {
     });
     const replayRouting = EventRouting.create<TaskListId>();
     replayRouting.route(TaskEvent, replayRoute);
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new InMemoryStorageFactory(storageBackend),
+    });
+    await ServerEnvironment.instance().completeSetup();
     const replay = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(new InMemoryStorageFactory(storageBackend))
       .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
@@ -1639,6 +1648,7 @@ describe("@spine-event-engine/example-todo", () => {
     const routing = EventRouting.create<MessageShape<typeof UserIdSchema>>()
       .route(TaskAssignmentEvent, assignmentRoute)
       .route(routedTaskReassignedSchema, reassignmentRoute);
+    await ServerEnvironment.instance().completeSetup();
     const context = await BoundedContext.singleTenant("Rejected assignment routing")
       .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)

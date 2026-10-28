@@ -33,6 +33,7 @@ import { Inbox, InboxTargets, type InboxMessage } from "./inbox.js";
 import { InboxStorage, InboxStorageClock } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
+import { deliveryTenantKey } from "./delivery-tenant.js";
 import { withDeliveryCommitFence } from "../repository/commit-fence.js";
 import { receptionObservation, type ReceptionObservation } from "./reception-observation.js";
 import { AgentDeliveryScope, type AgentDeliveryOutcome } from "./agent-delivery-scope.js";
@@ -205,6 +206,24 @@ export interface DeliveryFailure {
 /**
  * Executes direct Inbox delivery for one complete worker identity.
  */
+interface ActiveDeliveryRun {
+  completed: Promise<DeliveryRun>;
+  readonly shared: boolean;
+  drain?: DeliveryDrain;
+  releaseFailure?: unknown;
+}
+
+const dispatchNotAdmitted = Symbol("Delivery recipient closed before dispatch");
+
+interface DeliveryAcknowledgement {
+  completed: boolean;
+  exhausted: boolean;
+  notAdmitted?: boolean;
+}
+
+/**
+ * Runs one retained direct-delivery worker and its durable Inbox.
+ */
 export class Delivery {
   // prettier-ignore
 
@@ -254,8 +273,10 @@ export class Delivery {
 
   readonly #activeDirect = new Map<
     string,
-    { readonly completed: Promise<DeliveryRun>; releaseFailure?: unknown; wake(): void }
+    { readonly completed: Promise<DeliveryRun>; wake(): void }
   >();
+
+  readonly #activeRuns = new Set<ActiveDeliveryRun>();
 
   readonly #directDrains = new Map<string, DeliveryDrain>();
 
@@ -263,18 +284,24 @@ export class Delivery {
 
   #replay: OnDeliveryMessage | undefined;
 
+  #acceptReplay: ((message: InboxMessage) => boolean) | undefined;
+
   #closing = false;
 
   #closeAttempt: Promise<void> | undefined;
+
+  #closingRuns: readonly ActiveDeliveryRun[] | undefined;
 
   /**
    * Sets the complete direct fallback dispatcher before receiving work.
    *
    * @internal
    * @param onReplay Callback that replays a ready Inbox route.
+   * @param onAccept Reports whether a live recipient currently serves the row.
    */
-  setReplay(onReplay: OnDeliveryMessage): void {
+  setReplay(onReplay: OnDeliveryMessage, onAccept?: (message: InboxMessage) => boolean): void {
     this.#replay = onReplay;
+    this.#acceptReplay = onAccept;
   }
 
   /**
@@ -285,8 +312,8 @@ export class Delivery {
    */
   async whenIdle(): Promise<void> {
     const failures: unknown[] = [];
-    while (this.#activeDirect.size > 0) {
-      const active = [...this.#activeDirect.values()];
+    while (this.#activeRuns.size > 0) {
+      const active = [...this.#activeRuns];
       const settled = await Promise.allSettled(active.map(({ completed }) => completed));
       settled.forEach((outcome, index) => {
         const failure = active[index]?.releaseFailure;
@@ -306,22 +333,39 @@ export class Delivery {
    */
   close(): Promise<void> {
     if (this.#closeAttempt !== undefined) return this.#closeAttempt;
-    this.#closing = true;
-    const active = [...this.#activeDirect.values()];
-    for (const drain of this.#directDrains.values()) drain.stop(new Error("Delivery closed."));
+    this.beginClose();
+    const active = this.#closingRuns ?? [];
     this.#closeAttempt = Promise.allSettled(active.map(({ completed }) => completed)).then(
-      (settled) => {
+      async (settled) => {
         const failures: unknown[] = [];
         settled.forEach((result, index) => {
           const releaseFailure = active[index]?.releaseFailure;
           if (releaseFailure !== undefined) failures.push(releaseFailure);
           if (result.status === "rejected") failures.push(result.reason);
         });
+        const storage = await Promise.allSettled([
+          this.inbox instanceof Inbox ? this.inbox.storage.close() : Promise.resolve(),
+          this.shards instanceof ShardedWorkRegistry ? this.shards.close() : Promise.resolve(),
+        ]);
+        for (const result of storage)
+          if (result.status === "rejected") failures.push(result.reason);
         if (failures.length === 1) throw failures[0];
         if (failures.length) throw new AggregateError(failures, "Delivery close failed.");
       },
     );
     return this.#closeAttempt;
+  }
+
+  /**
+   * Closes admission synchronously and retains admitted release outcomes.
+   *
+   * @internal
+   */
+  beginClose(): void {
+    if (this.#closing) return;
+    this.#closing = true;
+    this.#closingRuns = [...this.#activeRuns];
+    for (const active of this.#closingRuns) active.drain?.stop(new Error("Delivery closed."));
   }
 
   /**
@@ -401,14 +445,14 @@ export class Delivery {
    */
   runControlled(options: DeliveryControlledRun): Promise<DeliveryResult> {
     const shard = options.shard;
-    const drainOptions: DeliveryDrainOptions = {
-      onMessage: options.onMessage,
-      ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
-      operation: { signal: options.signal },
-    };
+    const drainOptions = this.#controlledOptions(options);
     if (options.onMessageSettled !== undefined)
       controlledMessageSettlers.set(drainOptions, options.onMessageSettled);
-    return this.drain(shard, drainOptions)
+    const completed =
+      this.#replay === undefined
+        ? this.drain(shard, drainOptions)
+        : this.#startShared(shard, drainOptions);
+    return completed
       .then((run) => {
         options.onDrainResult?.(run);
         return Object.freeze({
@@ -425,6 +469,21 @@ export class Delivery {
       .finally(() => {
         controlledMessageSettlers.delete(drainOptions);
       });
+  }
+
+  /**
+   * Builds the exact controlled options for an endpoint or retained replay run.
+   * @param options Controlled run input.
+   * @returns The options passed to one physical shard drain.
+   */
+  #controlledOptions(options: DeliveryControlledRun): DeliveryDrainOptions {
+    return this.#replay === undefined
+      ? {
+          onMessage: options.onMessage,
+          ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
+          operation: { signal: options.signal },
+        }
+      : { ...this.#directOptions(), operation: { signal: options.signal } };
   }
 
   /**
@@ -492,7 +551,12 @@ export class Delivery {
   }
 
   static #messageKey(message: InboxMessage): string {
-    return JSON.stringify([message.id.value, message.id.shard.index, message.id.shard.ofTotal]);
+    return JSON.stringify([
+      deliveryTenantKey(message),
+      message.id.value,
+      message.id.shard.index,
+      message.id.shard.ofTotal,
+    ]);
   }
 
   /**
@@ -500,13 +564,23 @@ export class Delivery {
    */
   #startDirect(shard: ShardIndex): Promise<DeliveryRun> {
     if (this.#closing) return Promise.resolve(result("STOPPED"));
+    return this.#startShared(shard, this.#directOptions());
+  }
+
+  /**
+   * Starts or joins the one retained shard run used by local posts and supervision.
+   * @param shard Shard selected by the accepted message or supervisor.
+   * @param options Complete drain callbacks for a newly admitted run.
+   * @returns The terminal run shared by both entry paths.
+   */
+  #startShared(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const key = shard.key();
     const active = this.#activeDirect.get(key);
     if (active !== undefined) {
       active.wake();
       return active.completed;
     }
-    const completed = this.drain(shard, this.#directOptions());
+    const completed = this.#trackDrain(shard, options, true);
     this.#activeDirect.set(key, {
       completed,
       wake: () => {
@@ -539,7 +613,7 @@ export class Delivery {
       acceptMessage: (message) => {
         const selected = request(message);
         return selected === undefined
-          ? this.#replay !== undefined
+          ? this.#replay !== undefined && (this.#acceptReplay?.(message) ?? true)
           : (selected.input.acceptMessage?.(message) ?? true);
       },
       onDelivered: (message) => request(message)?.input.onDelivered?.(message),
@@ -555,7 +629,43 @@ export class Delivery {
    * @param options The endpoint and optional operation signal.
    * @returns The terminal direct-delivery result.
    */
-  async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
+  drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
+    return this.#trackDrain(shard, options, false);
+  }
+
+  /**
+   * Tracks one complete physical drain before opening its shard session.
+   * @param shard Selected shard.
+   * @param options Complete drain callbacks.
+   * @param shared Whether the run serves the shared replay route.
+   * @returns Completion after shard release.
+   */
+  #trackDrain(
+    shard: ShardIndex,
+    options: DeliveryDrainOptions,
+    shared: boolean,
+  ): Promise<DeliveryRun> {
+    if (this.#closing) return Promise.resolve(result("STOPPED"));
+    const completion = Promise.withResolvers<DeliveryRun>();
+    const active: ActiveDeliveryRun = { completed: completion.promise, shared };
+    this.#activeRuns.add(active);
+    void this.#drainAdmitted(shard, options, active).then(completion.resolve, completion.reject);
+    void active.completed.finally(() => this.#activeRuns.delete(active)).catch(() => undefined);
+    return active.completed;
+  }
+
+  /**
+   * Completes shard acquisition, callbacks, and release for an admitted run.
+   * @param shard Selected shard.
+   * @param options Complete drain callbacks.
+   * @param active Admitted run record.
+   * @returns Terminal result after release.
+   */
+  async #drainAdmitted(
+    shard: ShardIndex,
+    options: DeliveryDrainOptions,
+    active: ActiveDeliveryRun,
+  ): Promise<DeliveryRun> {
     if (this.#shouldStop(options)) return result("STOPPED");
     let session;
     try {
@@ -572,31 +682,28 @@ export class Delivery {
       );
       return result("SKIPPED");
     }
-    if (this.#shouldStop(options)) return this.#releaseStoppedSession(shard, session);
-    return this.#runSession(shard, options, session);
+    if (this.#shouldStop(options)) return this.#releaseStoppedSession(session, active);
+    return this.#runSession(shard, options, session, active);
   }
 
   /**
    * Releases a session acquired after direct admission closed.
    *
-   * @param shard The shard whose active close tracks release failure.
    * @param session The acquired session to release.
+   * @param active The admitted run retaining release failure.
    * @returns The stopped or failed direct-delivery result.
    */
   async #releaseStoppedSession(
-    shard: ShardIndex,
     session: DeliveryWorkSession,
+    active: ActiveDeliveryRun,
   ): Promise<DeliveryRun> {
-    const active = this.#activeDirect.get(shard.key());
     try {
       const released = await this.shards.release(session);
-      if (!released && active !== undefined)
-        active.releaseFailure = new Error("Shard release was not confirmed.");
+      if (!released) active.releaseFailure = new Error("Shard release was not confirmed.");
       return result(released ? "STOPPED" : "FAILED");
     } catch (error) {
-      if (active !== undefined)
-        active.releaseFailure =
-          error instanceof Error ? error : new Error("Shard release failed.", { cause: error });
+      active.releaseFailure =
+        error instanceof Error ? error : new Error("Shard release failed.", { cause: error });
       return result("FAILED");
     }
   }
@@ -615,6 +722,7 @@ export class Delivery {
     shard: ShardIndex,
     options: DeliveryDrainOptions,
     session: DeliveryWorkSession,
+    active: ActiveDeliveryRun,
   ): Promise<DeliveryRun> {
     const drain = new DeliveryDrain({
       inbox: this.inbox,
@@ -625,15 +733,18 @@ export class Delivery {
       shards: this.shards,
       shard,
     });
-    this.#directDrains.set(shard.key(), drain);
-    if (this.#pendingDirectWake.delete(shard.key())) drain.wake();
+    active.drain = drain;
+    if (active.shared) {
+      this.#directDrains.set(shard.key(), drain);
+      if (this.#pendingDirectWake.delete(shard.key())) drain.wake();
+    }
     const completed = drain.run().finally(() => {
-      const active = this.#activeDirect.get(shard.key());
-      if (active !== undefined) active.releaseFailure = drain.releaseFailure;
+      active.releaseFailure = drain.releaseFailure;
     });
     void completed
       .finally(() => {
-        if (this.#directDrains.get(shard.key()) === drain) this.#directDrains.delete(shard.key());
+        if (active.shared && this.#directDrains.get(shard.key()) === drain)
+          this.#directDrains.delete(shard.key());
       })
       .catch(() => undefined);
     return completed;
@@ -753,7 +864,10 @@ class DeliveryDrain {
     const life = this.#current.expiresAt.getTime() - this.#current.pickedUpAt.getTime();
     const delay = Math.max(
       1,
-      Math.min(Math.floor(life / 2), this.#current.expiresAt.getTime() - Date.now() - 1),
+      Math.min(
+        Math.floor(life / 2),
+        this.#current.expiresAt.getTime() - Time.currentTimeMillis() - 1,
+      ),
     );
     this.#renewalTimer = setTimeout(() => {
       void this.#renewLease();
@@ -1009,7 +1123,11 @@ class DeliveryDrain {
    * @returns The target type and ID key.
    */
   #targetKey(message: InboxMessage): string {
-    return `${message.inboxId.targetTypeUrl}:${InboxTargets.key(message.inboxId.targetId)}`;
+    return JSON.stringify([
+      deliveryTenantKey(message),
+      message.inboxId.targetTypeUrl,
+      InboxTargets.key(message.inboxId.targetId),
+    ]);
   }
 
   /**
@@ -1053,7 +1171,7 @@ class DeliveryDrain {
    * @returns Whether processing may continue.
    */
   async #deliver(message: InboxMessage, target: string): Promise<boolean> {
-    const acknowledgement = { completed: false, exhausted: false };
+    const acknowledgement: DeliveryAcknowledgement = { completed: false, exhausted: false };
     await this.#processAttempt(message, target, acknowledgement);
     this.#reportOutcome(message);
     return !this.#ownershipLost && !this.input.options.operation?.signal?.aborted;
@@ -1079,13 +1197,17 @@ class DeliveryDrain {
   async #processAttempt(
     message: InboxMessage,
     target: string,
-    acknowledgement: { completed: boolean; exhausted: boolean },
+    acknowledgement: DeliveryAcknowledgement,
   ): Promise<void> {
     const observation = receptionObservation.create();
     const generation = this.#wakeGeneration;
     try {
-      this.#statistics.accepted += 1;
       const agent = await this.#dispatch(message, observation);
+      if (agent === dispatchNotAdmitted) {
+        acknowledgement.notAdmitted = true;
+        return;
+      }
+      this.#statistics.accepted += 1;
       if (agent?.kind === "deferred") {
         this.#recordDeferred(message, target, generation);
         return;
@@ -1096,11 +1218,7 @@ class DeliveryDrain {
         return;
       }
       if (agent?.kind === "accepted") {
-        await this.#completeAttempt(message, target, acknowledgement);
-        if (acknowledgement.completed) {
-          this.#messageOutcomes.set(message, { kind: "acknowledged", agent: true });
-          this.#startAgent(message, agent);
-        } else agent.discard();
+        await this.#completeAgentAttempt(message, target, acknowledgement, agent);
         return;
       }
     } catch (error) {
@@ -1108,6 +1226,27 @@ class DeliveryDrain {
       if (this.#ownershipLost || this.input.options.operation?.signal?.aborted) return;
     }
     await this.#completeAttempt(message, target, acknowledgement);
+  }
+
+  /**
+   * Completes acknowledgement before starting an admitted Agent handler.
+   * @param message Persisted Inbox row.
+   * @param target Canonical target key.
+   * @param acknowledgement Status shared with immediate repeats.
+   * @param agent Admitted handler awaiting durable acknowledgement.
+   * @returns Completion after acknowledgement and handler start or discard.
+   */
+  async #completeAgentAttempt(
+    message: InboxMessage,
+    target: string,
+    acknowledgement: DeliveryAcknowledgement,
+    agent: Extract<AgentDeliveryOutcome, { kind: "accepted" }>,
+  ): Promise<void> {
+    await this.#completeAttempt(message, target, acknowledgement);
+    if (acknowledgement.completed) {
+      this.#messageOutcomes.set(message, { kind: "acknowledged", agent: true });
+      this.#startAgent(message, agent);
+    } else agent.discard();
   }
 
   /**
@@ -1135,7 +1274,7 @@ class DeliveryDrain {
   async #handleReceptionFailure(
     message: InboxMessage,
     target: string,
-    acknowledgement: { completed: boolean; exhausted: boolean },
+    acknowledgement: DeliveryAcknowledgement,
     observation: ReceptionObservation,
     error: unknown,
   ): Promise<void> {
@@ -1166,11 +1305,12 @@ class DeliveryDrain {
   async #completeAttempt(
     message: InboxMessage,
     target: string,
-    acknowledgement: { completed: boolean; exhausted: boolean },
+    acknowledgement: DeliveryAcknowledgement,
   ): Promise<void> {
     if (
       acknowledgement.completed ||
       acknowledgement.exhausted ||
+      acknowledgement.notAdmitted ||
       this.input.options.operation?.signal?.aborted
     )
       return;
@@ -1193,7 +1333,7 @@ class DeliveryDrain {
    */
   async #acknowledgeWithRetry(
     message: InboxMessage,
-    acknowledgement: { completed: boolean; exhausted: boolean },
+    acknowledgement: DeliveryAcknowledgement,
   ): Promise<void> {
     let firstError: unknown;
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1228,7 +1368,7 @@ class DeliveryDrain {
    */
   async #acknowledgeOnce(
     message: InboxMessage,
-    acknowledgement: { completed: boolean; exhausted: boolean },
+    acknowledgement: DeliveryAcknowledgement,
   ): Promise<void> {
     if (acknowledgement.completed) return;
     await this.#acknowledge(message);
@@ -1245,13 +1385,14 @@ class DeliveryDrain {
   async #dispatch(
     message: InboxMessage,
     observation: ReceptionObservation,
-  ): Promise<AgentDeliveryOutcome | undefined> {
+  ): Promise<AgentDeliveryOutcome | typeof dispatchNotAdmitted | undefined> {
     const operation = this.input.options.operation?.signal;
     const signal =
       operation === undefined
         ? this.#agentController.signal
         : AbortSignal.any([this.#agentController.signal, operation]);
-    return AgentDeliveryScope.run(
+    const admission = { rejected: false };
+    const outcome = await AgentDeliveryScope.run(
       () =>
         receptionObservation.run(observation, () =>
           withDeliveryCommitFence(
@@ -1259,6 +1400,10 @@ class DeliveryDrain {
               if (!(await this.#validate())) throw new Error("Shard ownership was lost.");
             },
             () => {
+              if (this.input.options.acceptMessage?.(message) === false) {
+                admission.rejected = true;
+                return Promise.resolve();
+              }
               observation.entered = true;
               return Promise.resolve(this.input.options.onMessage(message));
             },
@@ -1266,6 +1411,7 @@ class DeliveryDrain {
         ),
       signal,
     );
+    return admission.rejected ? dispatchNotAdmitted : outcome;
   }
 
   /**
@@ -1747,6 +1893,7 @@ class RecentDeliveries {
    */
   static key(message: InboxMessage): string {
     return JSON.stringify([
+      deliveryTenantKey(message),
       message.signalId,
       message.inboxId.targetTypeUrl,
       InboxTargets.key(message.inboxId.targetId),

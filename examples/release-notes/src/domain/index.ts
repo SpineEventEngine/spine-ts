@@ -21,8 +21,10 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
+  EnvironmentType,
   Projection,
   React,
+  ServerEnvironment,
   Subscribe,
   Throws,
   type RepositoryOptions,
@@ -551,6 +553,9 @@ export const ReleaseNotesContext: Readonly<{
     storage?: StorageFactory,
     options: ReleaseContextOptions = {},
   ): Promise<BoundedContext> {
+    if (storage !== undefined)
+      ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
+    await ServerEnvironment.instance().completeSetup();
     const builder = BoundedContext.singleTenant("ReleaseNotes")
       .withGeneratedRegistryRoot(options.registryRoot ?? new URL("../..", import.meta.url))
       .withAi(ai)
@@ -563,7 +568,6 @@ export const ReleaseNotesContext: Readonly<{
         },
       })
       .add(ReleaseDraftProjection);
-    if (storage !== undefined) builder.withStorageFactory(storage);
     return builder.build();
   },
 });

@@ -38,6 +38,8 @@ import {
   StoragePreparations,
   stateHistorySpec,
   eventHistorySpec,
+  eventStoreRecordSpec,
+  EventStoreGroups,
   type EntityStoragePreparationInput,
   type StoragePreparationMode,
 } from "@spine-event-engine/storage/provider";
@@ -495,6 +497,12 @@ export class PostgresStorageFactory extends StorageFactory {
         const history = eventHistorySpec(input.stateSchema);
         await this.prepareRecordAdmitted(input.context, history.spec, history.group, mode);
       }
+      await this.prepareRecordAdmitted(
+        input.context,
+        eventStoreRecordSpec,
+        EventStoreGroups.forContext(input.context.name),
+        mode,
+      );
     });
   }
 
@@ -563,6 +571,12 @@ export class PostgresStorageFactory extends StorageFactory {
         const layout = eventHistorySpec(input.stateSchema);
         await this.prepareRecordAdmitted(input.context, layout.spec, layout.group, mode);
       }
+      await this.prepareRecordAdmitted(
+        input.context,
+        eventStoreRecordSpec,
+        EventStoreGroups.forContext(input.context.name),
+        mode,
+      );
       const audit = AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value));
       await this.prepareRecordAdmitted(input.context, audit, AgentHistoryRecords.group, mode);
       await this.prepareAudit(input.context, audit, mode);

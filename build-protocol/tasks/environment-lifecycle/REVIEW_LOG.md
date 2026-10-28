@@ -1065,3 +1065,150 @@ atomic appendAll native PG/MySQL/MariaDB/Datastore and memory evidence as scoped
 handoff. Counts overlap and are not summed. No remaining accepted high-risk finding.
 Stage reviewed source/tests/docs/Proto/manifests and task records, commit and push
 checkpoint, then proceed automatically to M8. No PR/master/publication operation.
+
+## M8 shared environment and Delivery — review preparation
+
+Base c64e82cdb9b8784bd9f50e7b25b3ca42982c7819. Review remains pending until
+current cheap checks, changed-production coverage inspection and complete frozen
+path manifest pass. Include untracked files and explicit deletions. Parent work/review
+logs remain mutable; production/tests/public docs freeze throughout the review wave.
+External m8-review-dispatch-plan.md and shared-environment-review-context.md define
+concern-specific scope and reference the full TASK human ledger plus D0155 and
+D0157–D0161. Strict duplicate-state rejection applies in every test and BlackBox.
+
+Expected existing reviewer profiles: performance/reliability gpt-6-sol/medium;
+TypeScript/API docs gpt-6-sol/medium; style/maintainability gpt-6-sol/medium;
+documentation gpt-6-luna/medium. Reuse original explicit immutable dispatches where
+available; otherwise spawn with both fields explicit and fork none. Record dispatch
+and runtime metadata availability before accepting results. No child delegation,
+source edits or independent test reruns. Collect the full wave before one correction
+batch returns to the same implementation context. Security stays deferred to the
+mandatory M13 final release-readiness review; no per-milestone security invocation.
+
+M8 freeze received after656/656scoped tests and all cheap gates. Mechanical manifest
+assignment reuses explicitly configured Luna/low; expected profile confirmed from
+original dispatch, runtime introspection unavailable. Exact tracked/untracked content
+hashes and deletions will supplement writer path inventory before review. Production
+and public prose are frozen; only WORK_LOG/REVIEW_LOG may change as review proceeds.
+
+M8 mechanical freeze accepted:116paths match writer inventories;103existing changed
+files hashed,11deletions recorded, and only2mutable parent logs excluded from hash.
+All5untracked hashes match and cited evidence exists. No discrepancy; explicit
+immutable Luna/low profile confirmed, runtime metadata unavailable.
+
+Dispatch first review group using existing live_reliability_review,
+live_api_review, live_style_review contexts where available: each originally
+explicit gpt-6-sol/medium, existing performance/reliability, TypeScript/API docs,
+and style/maintainability functions respectively. Read frozen manifest and their
+concern-specific section of m8-review-dispatch-plan.md. No edits/test reruns/children.
+Documentation Luna/medium follows as capacity permits within the same review wave.
+All findings wait for one aggregate batch; writer remains frozen.
+
+M8 reliability interim confirmed candidate: public environment.delivery.run uses
+CoreDelivery.run/drain without joining #activeDirect; close snapshots only that
+map and can close retained stores before a held public run finishes/release settles.
+Reviewer proposes complete-run tracking plus held explicit-run/environment-close
+proof, preserving exact-message completion distinction. No fix dispatched mid-wave;
+review continues and final batch awaits all concerns. User informed immediately.
+
+M8 API review complete (explicit immutable Sol/medium; runtime metadata unavailable):
+three doc-contract findings, no signature/export mismatch. Stale API/Server.start
+attachment/recovery claims; transport REFERENCE omits required initialize lifecycle;
+ServerEnvironmentSettings.delivery TSDoc misidentifies configured facility as actual
+shared Delivery. Report external m8-api-review.md. No edits/tests; findings held.
+
+M8 reliability second candidate: context close awaits early-ack handoffs and repository
+live work without canceling/fencing its acknowledged Agent when shared Delivery
+remains alive for siblings. Review asks held Agent + live sibling close proof and
+context-specific stop through existing execution controls, not another Delivery.
+Await final review and parent classification; no mid-wave correction dispatch.
+
+Dispatch documentation lane now using existing live_documentation_review, explicit
+immutable gpt-6-luna/medium documentation profile from prior dispatch. Scope only
+changed human prose/examples and D0155/D0159/D0161 claims; known API report supplied
+to avoid duplicate discovery. No edits/tests/children. Full wave still collects
+before corrections.
+
+M8 style review complete: one P3 stale-helper finding, InboxHandoff.configuredScopes
+and its removed transition error plus ContextParts.snapshotDeliveryStrategy have no
+callers. Remove helpers/unused imports rather than preserve obsolete contracts.
+No other confirmed maintainability/domain-fixture issue; standalone direct-readiness
+support remains necessary for D0157. Explicit immutable Sol/medium confirmed,
+runtime metadata unavailable; no edits/tests/children. Report m8-style-review.md.
+
+Reliability clarification: repository close fences lifetime but only waits live work;
+AgentDeliveryScope signal is shared Delivery-session scoped. No existing context-local
+cancellation controller found. A context-scoped cancellation/fence at recipient
+admission may be needed to close one context without stopping siblings; no second
+Delivery/global stop. Await final wave, then assess bounded architecture trigger.
+
+M8 documentation review complete under explicit immutable Luna/medium; runtime
+metadata unavailable. No new changed-prose contradiction; confirms accurate explicit
+setup, shared facilities, remote reception vs local results and future-channel
+initialization limit. Deduplicated against three API findings; adds stale delivery
+recovery wording at server/REFERENCE296 to same batch. Parent saved external report
+because reviewer interpreted no-edits as excluding report creation. No source/test
+changes. Reliability remains active; hold all fixes until complete wave.
+
+M8 full review wave complete. Parent accepts all3reliability findings after inspecting
+public run/close and context beginClose/cleanup code, all3deduplicated API/doc findings
+including REFERENCE296, and1stale-helper finding. Profiles match explicit original
+Sol/medium or Luna/medium dispatches; no runtime introspection available and no
+child edits/tests. Security remains M13. Single correction batch is external
+m8-review-correction-batch.md; same writer handles all accepted corrections.
+
+R2/R3 lack existing context-specific cancellation and interact with accepted ordinary
+follow-up draining. This is a demonstrated concurrency/close architecture blocker,
+not routine replanning. Reuse existing requirements-splitter application_architecture,
+explicit immutable gpt-6-astra/high, read-only bounded R1–R3 decision. No source edits,
+tests or children. Independent D/S fixes may proceed under same writer while lifecycle
+changes await ruling. Expected model/reasoning confirmed from original dispatch.
+
+R1–R3 architecture correction accepted as D0162; full durable ruling in
+SHARED_DELIVERY_CLOSE.md. Explicit immutable Astra/high confirmed, no edits/tests/
+children, runtime metadata unavailable. Implementation can proceed in same Sol/medium
+context under single accepted batch. Focused re-review will cover all-run release,
+context-only cancellation and atomic replay admission, including exact admitted
+local work/follow-ups and healthy siblings. Doc/helper deterministic fixes already
+pass relevant checks; no unrelated review lanes reopened.
+
+D0162 correction review disposition before freeze: reliability re-review required
+for R1–R3. API/doc/helper corrections use deterministic checks from the accepted
+batch. Parent inspected new RepositoryRegistration/RepositoryRuntime agentSignal
+and AgentCapacityReservation.completed: these remain implementation internals,
+with no package entry-point export or new application configuration. No separate
+full API lane is reopened solely for those fields. Existing reliability reviewer
+will flag any discovered substantive public contract effect for targeted escalation.
+Final security remains M13.
+
+M8 correction re-review prepared: existing live_reliability_review, original explicit
+gpt-6-sol/medium profile, senior performance/reliability concern. Read frozen D0162
+close decisions and current m8-review-correction-evidence.md plus external targeted
+m8-close-rereview-brief.md. Scope only accepted R1–R3 and monitor retry propagation,
+including shared/explicit run release and sibling context continuity. No edits/tests/
+children. Await refreshed manifest before actual dispatch. Canonical documentation,
+API and style concerns retain original reviewed dispositions plus deterministic
+D1–D3/S1 checks; final security remains M13. Runtime metadata limitation unchanged.
+
+M8 correction manifest verified by existing explicit Luna/low function:122entries,
+109existing hashes,11deletions,only WORK_LOG/REVIEW_LOG content excluded; exact writer
+inventory match, all evidence references exist, HEAD remains c64e82cdb. Runtime
+metadata unavailable; original explicit immutable profile confirmed. No edits/tests.
+Targeted reliability re-review now dispatched under recorded Sol/medium profile,
+with m8-close-frozen-manifest.json as exact input. No source edits until findings.
+
+M8 correction accepted after targeted independent reliability re-review. Existing
+explicit Sol/medium reviewer reports R1–R3 resolved, no further confirmed defect or
+substantive public API effect. All 109 frozen hashes match; HEAD remains c64e82cdb.
+Report: m8-close-reliability-rereview.md. Configured profile confirmed; actual runtime
+metadata unavailable. No child edits/tests/builds. Parent inspected report and accepts
+operation lifetime/release, per-context Agent cancellation, fresh-recipient rejection
+and admitted ordinary-work drain. Monitor retry rejection cannot acknowledge the row.
+
+Canonical M8 concern dispositions: reliability accepted after corrections; API and
+documentation accepted with deterministic D1–D3 corrections; maintainability accepted
+with deterministic S1 removal. Final security and full release remain M13. The 161-test
+correction selection and earlier 656-test M8 selection overlap and are not summed;
+native-provider and managed tests remain separately scoped. R2/R3 test ordering lapse
+and receipt-gap non-isolating proof remain disclosed. M8 is ready for feature commit
+and immediate origin push; no PR or master action authorized.

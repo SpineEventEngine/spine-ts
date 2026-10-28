@@ -21,7 +21,6 @@ import {
   EventSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { expect, it } from "vitest";
 
 import {
@@ -31,6 +30,7 @@ import {
   ProcessManager,
   Repository,
 } from "../../src/index.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
 import {
   ProjectCreatedSchema,
   type ProjectCreated,
@@ -115,6 +115,7 @@ async function startCpuProfile(
 }
 
 async function measure(count: number, label: string): Promise<number> {
+  await ServerEnvironment.instance().completeSetup();
   const ids = Array.from({ length: count }, (_, index) => `queue-${String(index)}`);
   const handlers = EntityHandlers.define(RoutedQueue, ProjectQueueStateSchema, (builder) => [
     builder.react(ProjectCreatedSchema, "react"),
@@ -127,7 +128,6 @@ async function measure(count: number, label: string): Promise<number> {
   });
   const context = await BoundedContext.singleTenant(`DeliveryBenchmark${String(count)}`)
     .add(repository)
-    .withStorageFactory(new InMemoryStorageFactory())
     .build();
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: "queue-created" }),

@@ -81,7 +81,7 @@ const failureCodes: Readonly<Record<AiFailure["code"], AiFailureCode>> = Object.
 
 /**
  * Emits exact live AI audit facts with paired conversation rows.
-*/
+ */
 export class AgentLiveAiAudit {
   #lastAttempt: { id: string; outcome: AiOutcome } | undefined;
 
@@ -92,7 +92,7 @@ export class AgentLiveAiAudit {
    * @param model Selected AI model for this invocation.
    * @param operation Current AI operation identity.
    * @param selected Models or selection retained for this invocation.
-  */
+   */
   constructor(
     private readonly audit: AgentLiveAudit<unknown>,
     private readonly operation: AgentOperationIdentity,
@@ -105,7 +105,7 @@ export class AgentLiveAiAudit {
    *
    * @param input Typed input for this operation.
    * @returns Completion after the start history is saved.
-  */
+   */
   async started(input: object): Promise<void> {
     const digest = createHash("sha256")
       .update(toBinary(this.model.definition.input, input as never))
@@ -138,7 +138,7 @@ export class AgentLiveAiAudit {
    * @param id Typed identifier of the requested item.
    * @param request Typed request for the current operation.
    * @returns Completion after the physical request and input history are saved.
-  */
+   */
   async attemptStarted(request: AiAttemptRequest, id: string): Promise<void> {
     const content =
       request.kind === "generation"
@@ -165,7 +165,7 @@ export class AgentLiveAiAudit {
    *
    * @param completion Completed provider attempt or operation.
    * @returns Completion after the measured response history is saved.
-  */
+   */
   async attemptFinished(completion: AiAttemptCompletion): Promise<void> {
     const response = completion.response;
     const generation = response.$typeName === GenerationResponseSchema.typeName;
@@ -193,7 +193,7 @@ export class AgentLiveAiAudit {
    *
    * @param result Completed operation result.
    * @returns Completion after the logical outcome history is saved.
-  */
+   */
   async outcome(result: AiBackendOutcome): Promise<void> {
     if (result.ok) {
       const digest = createHash("sha256")
@@ -236,7 +236,7 @@ export class AgentLiveAiAudit {
    * @param invocation Captured live Agent invocation.
    * @param request Typed request for the current operation.
    * @returns Completion after the tool request and conversation input are saved.
-  */
+   */
   async toolStarted(invocation: AiToolInvocation, request: ToolRequest): Promise<void> {
     if (request.call === undefined) throw new Error("Agent tool audit requires its call ID.");
     const digest = createHash("sha256").update(request.argumentsJson).digest("hex");
@@ -262,7 +262,7 @@ export class AgentLiveAiAudit {
    * @param history Retained history entries or history port.
    * @param response Typed response from the provider.
    * @returns Completion after the tool response and conversation row are saved.
-  */
+   */
   async toolFinished(response: ToolResponse, history: AgentHistoryEntry): Promise<void> {
     await this.audit.save(
       ToolFinishedSchema,
@@ -286,7 +286,7 @@ export class AgentLiveAiAudit {
    * @param callId Exact MCP tool call identifier.
    * @param content Typed model content.
    * @returns The typed conversation record for one tool exchange.
-  */
+   */
   private toolConversation(
     callId: string,
     content: ReturnType<typeof AnyPacker.pack>,
@@ -314,7 +314,7 @@ export class AgentLiveAiAudit {
    * @param content Typed model content.
    * @param id Typed identifier of the requested item.
    * @returns The typed conversation record for one physical exchange.
-  */
+   */
   private conversation(
     id: string,
     content: ReturnType<typeof AnyPacker.pack>,
@@ -340,7 +340,7 @@ export class AgentLiveAiAudit {
    * Creates current capability limits for a genuine start audit.
    *
    * @returns The current configured limits for the start audit.
-  */
+   */
   private limits() {
     const limits = this.model.definition.limits;
     return create(AiOperationLimitsSchema, {

@@ -361,6 +361,7 @@ export class SpineServices {
    * @param error The internal failure, retained for diagnostic classification only.
    */
   #logCommandPostFailure(route: CommandRoute, command: Command, error: unknown): void {
+    console.error("M8_POST_FAILURE", error);
     if (error instanceof TransitionValidationError || error instanceof CommandValidationError)
       return;
     const logger = serviceLoggers.get(this);
