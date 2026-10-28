@@ -2642,3 +2642,15 @@ checks, not a new full native matrix. All profiles explicit as dispatched,
 runtime introspection unavailable. Reports m52-m53-api-review.md,
 m52-m53-reliability-review.md, m52-m53-security-review.md; evidence
 m52-m53-evidence.md. Prior broad security review remains accepted plus this delta.
+
+### M55 deterministic provider arrival
+
+Existing explicit Sol/medium reliability review clean; frozen test hash matches.
+Original M54 failure exceeded default one-second polling after accepted receipt;
+fixture arrival is a distinct asynchronous event. Promise resolves with increment
+in the same listener callback, exact-once assertions remain, existing test timeout
+bounds missing arrival, and finally releases response/closes fixtures. Parent
+style review clean. Seven tests/tooling/lint/format pass. No production, public
+API, domain fixture, documentation or security change; those lanes N/A. Evidence
+m55-reliability-review.md and m55 logs outside Git. Runtime introspection unavailable;
+configured explicit implementer/reviewer Sol/medium profiles accepted.

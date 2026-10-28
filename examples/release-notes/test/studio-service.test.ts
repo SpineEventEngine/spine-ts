@@ -869,10 +869,12 @@ it("retains uncertain accepted admission and locks account switching without a d
   const responseGate = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  const providerArrived = Promise.withResolvers<undefined>();
   let providerRequests = 0;
   const server = createServer((request, response) => {
     void (async () => {
       providerRequests++;
+      providerArrived.resolve(undefined);
       for await (const chunk of request) {
         void chunk;
         /* consume body */
@@ -1008,7 +1010,8 @@ it("retains uncertain accepted admission and locks account switching without a d
     expect(studio.session().generations[first.id]).toBe(generation);
     await expect(studio.requestGeneration(second.id, "Another release")).rejects.toThrow("Wait");
     expect((await studio.readDraft(second.id)).generationStatus).toBe("");
-    await expect.poll(() => providerRequests).toBe(1);
+    await providerArrived.promise;
+    expect(providerRequests).toBe(1);
 
     const closeEvents: string[] = [];
     let closeHandler: (() => Promise<"close" | "cancel">) | undefined;

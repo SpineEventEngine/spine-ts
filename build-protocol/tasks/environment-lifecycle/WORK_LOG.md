@@ -5067,3 +5067,62 @@ will use explicitly dispatched gpt-6-luna/low, Standard speed, no edits/children
 run once, preserve complete logs/LCOV and exact four coverage ratios/test totals.
 Refresh missed changed-source inventory. Not verify:release; that remains after
 coverage convergence and final cheap preflight. Expected diagnostic0.05–0.1 hour.
+
+M54 measured at cfc835d8b: 6254 passed,14 skipped,1 failed;394 files passed,2
+skipped,1 failed;114.46s. Branches20677/22984=89.96%, nine outcomes short of90%.
+Statements34519/36907,functions8880/9287,lines31343/32868. Explicit Luna/low
+mechanical dispatch accepted; introspection unavailable. Raw full log/LCOV and
+whole changed-source inventory outside Git. Cheap cleanup/TSDoc/audience/logging/
+dependency checks pass; format/generated cleanliness in progress.
+
+M55 standard bounded test correction: studio-service.test.ts accepted-admission
+case failed on polling providerRequests expected1/observed0. Investigate original
+request progression and polling deadline before changing anything; systematic-
+debugging skill read/applied. Do not assume a runtime bug or mask one by increasing
+timeouts. Sole explicit gpt-6-sol/medium implementer handles this test file only,
+records causal evidence, uses deterministic existing request synchronization if
+appropriate, verifies complete file and matching M54 scoped coverage. The failed
+case skipped later assertions, so restore its real coverage before adding new
+cases for nine outcomes. Parent review plus existing reliability lane if timing
+semantics change. No production change without a confirmed defect and separate
+recorded scope. No children, source/threshold changes, arbitrary sleeps, commits
+or pushes by implementer. Expected0.5–1 hour for investigation/correction and any
+remaining meaningful gaps plus review; final release/CI follow convergence.
+
+M55 investigation: original focused case passes622ms; M54 sole failure timed out
+at default one-second expect.poll after successful receipt/account-lock checks.
+Accepted Command receipt precedes asynchronous Agent provider invocation, so
+receipt is not a provider-arrival signal. Replace poll with fixture arrival
+Promise, keep exact-once assertion and existing overall test timeout. No runtime
+change indicated. Parent compared M43/M54 same-key covered branches: none lost,
+so restoring the case is not expected to close the nine-outcome gap by itself.
+
+Read-only remaining selection assigned to existing explicitly Sol/medium
+reliability reviewer. Use fresh M54 inventory and existing m46-runtime-selection;
+identify smallest genuine unverified user behavior in current task, preferably
+one coherent slice, not defensive type matrices or already proved native cases.
+No edits/tests or new architecture. Parent will freeze selection before sole
+implementer receives subsequent test scope. Runtime metadata unavailable.
+
+M55 frozen:7/7 final tests, TypeScript tooling, lint,format,diff pass. Exact
+22984 branch keys are identical to M54;
+zero recovered misses. Source unaffected. Final hash4c16f7c093718067391303adfe2b8ce9e42f4b225b9f91b444ae8be9559c9523.
+Parent review confirms request-arrival Promise, retainedexact-once assertions,
+unchanged overall timeout. Relevant independent reliability review pending.
+
+M56 standard test-only selected from independent m56-runtime-selection.md:
+late subscription attachment after concurrent cancellation and tenant-scoped
+preparation with single-tenant sibling. Expected three meaningful uncovered
+outcomes; no claim to close all nine. Same sole explicit Sol/medium implementer
+now handles packages/server/test/services/spine-services.test.ts and
+packages/server/test/context/bounded-context.test.ts only. Preserve production,
+fixtures, all domain states uniqueness; deterministic promise gates, no sleeps,
+no private-map mutation. Focused/full affected files, tooling/lint/format and
+same-key coverage comparison to M54. Parent style + existing reliability review
+once frozen. Existing0.5–1h estimate covers these cases; new independent
+read-only Delivery safety-net selection may inform remaining gap.
+
+M55 accepted after clean independent reliability and parent style review. Seven
+final tests and static checks pass. Commit/push test correction and records while
+M56 writes only its separate two server test files. Format/generated cleanliness
+passed at cfc835d8b; no generated output changed since.
