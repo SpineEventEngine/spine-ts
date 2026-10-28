@@ -579,39 +579,6 @@ export class PostgresEntityCommitStorage<I, S extends Message> implements Entity
   }
 
   /**
-   * Prepares one Agent-fenced Entity mutation for its existing transaction client.
-   *
-   * @typeParam Id Typed Entity identifier.
-   * @typeParam State Entity state message type.
-   * @param input Changed Entity state and immutable history.
-   * @returns A transaction-bound conditional mutation and its close callback.
-   */
-  async prepareAgentConditional<Id, State extends Message>(
-    input: EntityCommitInput<Id, State>,
-  ): Promise<{
-    apply(client: PoolClient, expectedVersion: number): Promise<void>;
-    close(): void;
-  }> {
-    this.validate(input);
-    const snapshot = EntityCommitSnapshots.capture(input);
-    const records = new PostgresCommitRecords(snapshot.entity, this.open);
-    try {
-      records.ensure(snapshot, this.open);
-      await records.prepare();
-    } catch (error) {
-      records.close();
-      throw error;
-    }
-    return {
-      apply: (client, expectedVersion) =>
-        records.applyConditional(client, snapshot, expectedVersion),
-      close: () => {
-        records.close();
-      },
-    };
-  }
-
-  /**
    * Determines whether a driver serialization failure occurred through provider error causes.
    *
    * @param error Supplies the operation failure.

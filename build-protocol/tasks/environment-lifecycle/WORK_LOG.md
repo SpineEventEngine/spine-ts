@@ -4730,3 +4730,21 @@ M36 accepted after independent API review and parent maintainability inspection.
 105 tests and static checks pass, no production defect. Two additional unchanged
 baseline branch outcomes are covered (cumulative 42 before M38 source deletion).
 Commit/push the paired provider tests and records; keep M38 source edit separate.
+
+M36 push verified at 13138b36da27ffa82e6d5a1839f3c24ef7a855e4. Next M39
+standard focused shutdown test slice, estimate 0.3–0.6 hour for two behavior cases,
+static/coverage inspection and independent reliability review. After M38 freezes,
+the same explicit Sol/medium implementer edits only subscription-runtime.test.ts
+and delivery-fencing.test.ts. Assert first-pass subscription close drains and
+never schedules a timer; assert Delivery preserves both an admitted release
+failure and a retained-store close failure while attempting both store closes.
+Use existing gates/fake timers/domain fixtures. No arbitrary sleeps, additional
+mixed-tenant companion, defensive matrix or production changes absent a defect.
+
+M38 accepted: exact obsolete method/TSDoc deletion, no replacement behavior.
+Independent API caller/export disposition from m36-api-review.md applies; parent
+confirms final diff matches that advice. 21 PostgreSQL commit tests pass, two
+native cases skip in this focused invocation. Build/tooling/lint/cleanup/TSDoc/
+format/diff pass; evidence m38-removal-evidence.md. Security delta is deletion
+of an uncalled recovery-only helper; live transaction logic is unchanged. No
+additional security lane reopened. Commit/push before M39 test integration.

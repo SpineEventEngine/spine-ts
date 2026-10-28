@@ -2512,3 +2512,9 @@ Sol/medium performance/reliability reviewer; actual metadata unavailable. Two
 useful gaps: subscription close during first pass, and Delivery close combining
 an admitted release failure with retained-store cleanup failure. No broad guard
 matrix selected. Evidence next-coverage-selection.md outside Git.
+
+M38 final removal matches independently reviewed caller/export evidence. Parent
+confirms only obsolete method plus TSDoc removed; retained commitAgent and
+applyConditional unchanged. API/reliability concern resolved by removal, style
+and documentation clean by scoped checks, security unchanged execution paths.
+No tests added for deleted behavior. Build and 21 focused commit tests pass.
