@@ -1802,3 +1802,24 @@ confirms enforced native failure propagation and setup/selection behavior;
 style confirms the bounded runner split and unchanged shared contract cases.
 No findings remain. Actual runtime model introspection is unavailable; immutable
 explicit profiles match the dispatched functions. Parent accepts the correction.
+
+### Sequential Agent integration test completion
+
+One test-only file is frozen in m14-agent-inbox-sequential-correction-evidence.md.
+Three waits use existing tracked Delivery completion between sequential commands;
+all original assertions remain. Deterministic temporary gate demonstrates model
+observation and completed post while Delivery remains active and state is still
+uncommitted; removed before freeze. Focused Agent/Delivery tests 34/34 and static
+checks pass. Existing explicit gpt-6-sol/medium reliability reviewer checks that
+completion waits reflect the accepted Agent lifecycle and preserve behavior
+coverage, with no production relaxation. Read-only, no tests/builds/edits/children.
+Parent style inspection accepts the three-line change; public API/docs concerns
+N/A because no production/public claim changes. Human ledger applies; superseded
+historical text alone is not a finding. Runtime introspection unavailable;
+immutable explicit reviewer profile remains required.
+
+Sequential Agent test reliability review clean: frozen hash matches; existing
+Delivery idle waits retained shard-session completion after exact-message post,
+consistent with D-0157. Every original assertion remains, with no runtime policy
+change. Explicit Sol/medium profile confirmed; runtime introspection unavailable.
+Parent accepts this three-line test correction. No outstanding finding remains.

@@ -3878,3 +3878,31 @@ Both bounded Node harness reviews are clean; accept the correction and checkpoin
 its six paths with these records. Push immediately, then execute the refreshed
 complete cheap-preflight plan and one full release profile with normal global
 thresholds. Security CI will be refreshed on the final pushed revision.
+
+Full release at 9ccf497f5 failed after clean complete cheap preflight and all
+canonical generated/build/tooling/static/doc gates. Vitest: 392 passed, 1 failed,
+4 skipped files; 6238 passed, 1 failed, 16 skipped tests. Failure is Agent source
+integration `commits a model reply and retains original Agent/System audit copies`:
+local-inbox-handoff.ts:497 reports the target Inbox row was not reached before
+local drain finished (entity-inbox.ts:358). No global coverage table; chained
+Node suite correctly did not start. Preserve final-verify-release-m14.log. Return
+the exact failure to the same explicit Sol/medium implementer for bounded cause
+analysis and focused reproduction, not another full suite diagnostic run. Estimate
+0.5–1.5 hours for cause, correction, focused checks, relevant review, complete
+cheap preflight and final verification. No scope or threshold relaxation.
+
+Bounded source analysis finds the sequential Agent test observes model/history
+progress before the retained live invocation necessarily releases capacity.
+Focused file and 20 isolated reproduction attempts pass; the parallel release
+failure remains the observed red. No production defect is established. Accept
+test-only synchronization at sequential command boundaries using the existing
+serverEnvironmentAccess.whenDeliveryIdle mechanism, preserving every audit,
+state and output assertion. Require deterministic ordering evidence (existing
+applicable gated test or temporary diagnostic barrier) before acceptance; do not
+present isolated green repeats as proof. No sleeps, test retries, enlarged
+timeouts, capacity-counter polling, or production lifecycle changes authorized.
+
+Sequential Agent test correction accepted after deterministic ordering evidence,
+34/34 affected tests, static checks, and clean independent reliability review.
+Checkpoint the three added completion waits and parent records, push immediately,
+then complete the refreshed cheap preflight before one full release attempt.

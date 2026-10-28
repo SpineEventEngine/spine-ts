@@ -340,6 +340,7 @@ describe("Agent repository source integration", () => {
         }),
       });
       await context.commandBus().post(failed);
+      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
       await vi.waitFor(async () => {
         expect(
           (await readAgentHistoryPage(context, repository, id, { pageSize: 50 })).items.some(
@@ -368,6 +369,7 @@ describe("Agent repository source integration", () => {
         }),
       });
       await context.commandBus().post(command);
+      await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
       await vi.waitFor(() => {
         expect(physical).toHaveBeenCalledTimes(1);
       });
@@ -426,6 +428,7 @@ describe("Agent repository source integration", () => {
           }),
         });
         await context.commandBus().post(next);
+        await serverEnvironmentAccess.whenDeliveryIdle(ServerEnvironment.instance());
         return next;
       };
       await runNext("Prefer alternate");
