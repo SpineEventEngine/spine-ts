@@ -4809,3 +4809,28 @@ helper deletions changed four files' branch identities, and 16 focused packets
 have accumulated since M26. This diagnostic is warranted to replace estimates;
 it is not the final release profile. Keep checked-in thresholds and service
 inventory unchanged. Final release verification still follows coverage convergence.
+
+M42 micro AnyPacker consistency fix: final authored-source scan found one direct
+protobuf anyPack import/call in client-react.test.ts. Human requirement is to use
+Spine AnyPacker everywhere; replace this test fixture call with AnyPacker.pack.
+Parent handles this single disjoint test file while implementer edits only M41
+SQL tests. Estimate under 0.1 hour for existing client React suite and scoped
+static checks; no new tests or production/dependency changes expected.
+
+M42 first focused run/static failed during import resolution: client-react has
+no declared core dependency. Add core as a development-only workspace dependency
+for the test's AnyPacker import and update lockfile through offline pnpm with
+scripts disabled. This is required explicit dependency declaration, not a relative
+source-import workaround. No production dependency or version change. Hold new
+writer test/build starts while workspace links refresh; existing source edits
+can continue. Rerun only the failed React file/static gates afterward.
+
+M42 accepted after correcting explicit test dependency: 38 React tests pass in
+3.22 seconds; scoped format/ESLint/diff and production-dependency check pass.
+Offline pnpm adds only client-react core workspace devDependency and its importer
+link, no external package or production dependency changes. Complete authored
+TS/TSX/JS/MJS scan under packages/examples/scripts/compatibility-tests now has no
+raw anyPack/anyUnpack/anyUnpackTo occurrences. Parent micro review confirms the
+ProjectCreated Event fixture and all assertions unchanged. No specialist/security
+lane needed for test call substitution plus existing workspace dev link. M41
+shared tooling check will include the new resolved test import. Commit/push now.
