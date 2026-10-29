@@ -93,13 +93,29 @@ Do not merge or push to `master` without explicit human instruction.
 
 ## Storage guide revision
 
-Organize the storage guide as two complete sections: single-tenant and multitenant.
-Each uses the same small domain example, enumerates exact physical structures and
-their purposes for every provider, and includes detailed application provisioning
-checklists, including Datastore indexes. Explain full-message serialization, query
-column conversions, message-valued fields, and Entity identifier conversions with
-concrete examples. Explain the complete Agent persistence lifecycle and the contents
-of its records, beyond merely naming model preferences. Retain gateway/auth coverage.
+Organize the storage guide into four chapters, following the latest human direction:
+single-tenant mode, multitenant mode, common value conversion and customization,
+and startup sequence. Each mode starts with the same small domain example and an
+explanation of its layout, then treats every provider separately. Within each
+provider, explain each domain table followed by each framework table, then give
+the required human configuration checklist. End the multitenant chapter with
+adding tenants and the resulting preparation and first-use behavior.
+
+For each physical table or Datastore kind, list every column/property, its database
+type, the exact source Protobuf field or whole serialized record, and an example
+value. Show supported configuration/override code directly below the structure it
+affects; say plainly when a component cannot be configured. Distinguish native
+Datastore keys from properties and in-memory collections from physical tables.
+Include example-defined Entity states, all enabled framework records, optional
+histories, Agent audit/receipts/preferences, gateway bindings and node leases.
+Keep authentication requirements and complete Datastore index instructions.
+
+Explain the physical mapping through the example application, rather than giving
+a catalogue of familiar framework Protobuf messages. Use patient, beginner-friendly
+prose with concrete examples. Move shared conversion rules into their own chapter,
+including message-valued fields, Entity identifiers and conversion overrides, with
+provider subsections for actual differences. Show startup code and explain the
+order of creation/checks, monitoring and input, including eager/lazy preparation.
 This is a documentation revision; existing runtime behavior and tests remain unchanged.
 
 The final CI run must also pass the delivery-server process shutdown checks.
