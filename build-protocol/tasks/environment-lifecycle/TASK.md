@@ -93,10 +93,11 @@ Do not merge or push to `master` without explicit human instruction.
 
 ## Storage guide revision
 
-Organize the storage guide into four chapters, following the latest human direction:
+Organize the storage guide into six chapters, following the latest human direction:
 single-tenant mode, multitenant mode, common value conversion and customization,
-and startup sequence. Each mode starts with the same small domain example and an
-explanation of its layout, then treats every provider separately. Within each
+Agent storage, gateway/authentication storage, and startup sequence. Each mode
+starts with the same small domain example and an explanation of its layout,
+then treats every provider separately. Within each
 provider, explain each domain table followed by each framework table, then give
 the required human configuration checklist. End the multitenant chapter with
 adding tenants and the resulting preparation and first-use behavior.
@@ -104,11 +105,19 @@ adding tenants and the resulting preparation and first-use behavior.
 For each physical table or Datastore kind, list every column/property, its database
 type, the exact source Protobuf field or whole serialized record, and an example
 value. Show supported configuration/override code directly below the structure it
-affects; say plainly when a component cannot be configured. Distinguish native
-Datastore keys from properties and in-memory collections from physical tables.
+affects; use fenced code examples, including imports where needed, instead of prose
+instructions to import schemas or invoke builder methods. State beside every
+table who creates it and when. Distinguish framework-created SQL tables,
+Datastore kinds appearing on first write, and infrastructure/indexes that humans
+must provision. Say plainly when a component cannot be configured. Distinguish
+native Datastore keys from properties and in-memory collections from physical tables.
 Include example-defined Entity states, all enabled framework records, optional
 histories, Agent audit/receipts/preferences, gateway bindings and node leases.
 Keep authentication requirements and complete Datastore index instructions.
+Place the detailed Agent and gateway/authentication explanations after value
+conversion, in separate chapters. Remove their essays and additional application
+checklist from the tenancy-mode introductions. Explain each through concrete
+storage examples, with patient paragraphs instead of densely packed summaries.
 
 Explain the physical mapping through the example application, rather than giving
 a catalogue of familiar framework Protobuf messages. Use patient, beginner-friendly

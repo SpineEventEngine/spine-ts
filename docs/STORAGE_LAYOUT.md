@@ -4,13 +4,14 @@ This guide shows the physical records produced by a Support application using
 PostgreSQL, MySQL/MariaDB, Google Cloud Datastore or in-memory storage. Read the
 single-tenant or multitenant chapter for your deployment. Each provider lists
 all ten domain/Agent families and five shared framework families, with the
-actual fields beside the corresponding default table or kind. The last two
-chapters explain conversion/customization and startup timing.
+actual fields beside the corresponding default table or kind. The later chapters explain conversion, Agent and gateway storage, and startup timing.
 
 - [1. Single-tenant mode](#1-single-tenant-mode)
 - [2. Multitenant mode](#2-multitenant-mode)
 - [3. Value conversion and customization](#3-value-conversion-and-customization)
-- [4. Startup sequence](#4-startup-sequence)
+- [4. Agent storage](#4-agent-storage)
+- [5. Gateway and authentication storage](#5-gateway-and-authentication-storage)
+- [6. Startup sequence](#6-startup-sequence)
 
 “Creates a table” below means inside infrastructure the application has already
 provisioned. The framework does not create SQL databases, Google Cloud projects,
@@ -120,172 +121,21 @@ those components. Omitting the Agent removes its state/audit/receipt/preference
 requirements; omitting optional Ticket state history removes that history
 family. Enabling further Entity repositories adds their corresponding families.
 
-#### Agent history contents and restart behavior
-
-An Agent adds four different kinds of persisted information. For
-`ReplyAssistantId { value: "assistant-7" }`, follow a Command that asks it to
-draft a reply:
-
-1. Spine records acceptance of that original Command for this Agent and action.
-   The receipt contains the typed recipient ID and original Command ID. A later
-   duplicate cannot restart the same accepted execution.
-2. During a model interaction, Spine appends typed conversation records to the
-   Agent audit. The request and result have a conversation ID, operation ID,
-   occurrence time, and, when applicable, attempt/tool-call identifiers.
-3. Successful normal processing persists the new `ReplyAssistant` Entity state,
-   such as `last_draft`, and the resulting domain/System Events. The current
-   state has its ordinary Entity record; audit records remain separately readable.
-4. If authorized code changes this Agent's model selection, the committed model
-   preferences retain that choice for subsequent new signals.
-
-Here is what the conversation content can actually contain:
-
-| Recorded content                   | Retained values                                                                                                                                                                             |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Generation request                 | Typed input facts (`Any`), rendered developer instructions, output schema JSON, prepared conversation/prompt JSON including advertised tool definitions, correction-attempt link and digest |
-| Generation response                | Exact raw output, outcome, valid typed output when available, usage, digest, safe diagnostic ID, provider model name, proposed tool calls and their exact argument text                     |
-| Provider-specific response content | Anthropic text/tool arguments/thinking text/signatures/redacted-thinking bytes; OpenAI text/refusals/reasoning summaries/encrypted continuation fields, where supplied by that provider     |
-| Decision request                   | Typed input, questions, alternatives/instructions and digest                                                                                                                                |
-| Decision response                  | Received answers, distributions/confidence, admitted typed output, outcome, usage, safe diagnostic ID and rounding information                                                              |
-| Tool request                       | Validated canonical argument JSON, tool server/name, effect, and call identifier                                                                                                            |
-| Tool response                      | Returned text and structured JSON, outcome, tool error flag, safe diagnostic ID and call identifier                                                                                         |
-| System Event                       | Operational facts such as selected ModelRef, safe connection identity, capability revision, input/result digests, limits, usage, outcome and model-selection changes                        |
-| Domain Event                       | The original Event envelope and packed domain payload produced by the Agent                                                                                                                 |
-
-A conversation record's `content: Any` holds a typed content message. It is not
-limited to one string or to a model name. The full binary audit payload retains
-these objects. Search columns hold identity, category and ordering values;
-there is no SQL column for every prompt fragment or tool argument.
-
-**Prompts, inputs, model output and tool results can contain sensitive data.**
-Provider credentials are configured separately and are not intentionally part
-of these records. Safe diagnostic IDs replace raw provider exception bodies.
-That does not mean arbitrary application text or returned tool content is
-redacted. Apply the same access controls to Agent history as to the facts and
-conversations it contains.
-
-##### What model preferences mean
-
-Preferences are per Agent instance and per supported kind: `GENERATION` or
-`DECISION`. A `ModelRef` contains a deployment name and an application-assigned
-revision. For example, an instance may select generation model
-`support-drafter`, revision `v2`, and leave decision selection inherited.
-Its stored image then contains one explicit generation preference. It does not
-contain a copy of model weights, an API key, a suspended request or a program
-counter.
-
-An explicit instance preference takes precedence over the repository default;
-then the configured AI defaults/registry selection apply. Selecting
-`inherit_repository_default` removes that kind's explicit override. It does
-not copy today's default into the record. The preference family may retain an
-empty preference image after all overrides are removed.
-
-A selection staged during an Agent handler is committed with successful normal
-processing. If that handler is interrupted before its commit, the previously
-committed preference remains. A future new Command uses the last committed
-preference and the application's current authorization, model configuration
-and credentials.
-
-##### Restart and history access
-
-Suppose the model returned a draft, its response was recorded, and the process
-stopped before the handler saved `last_draft`. After restart, the response is
-still readable, while the Entity state is the last successfully persisted
-state. Spine does not rerun the handler, reuse that response to finish the work,
-call the model again, or send unfinished outgoing Commands from an Agent-private
-backlog. A new Command may start new work.
-
-`repository.agentHistory(...)` exposes four paged views:
-
-- `fullHistory`: all retained Agent entries.
-- `conversationHistory`: entries for a typed conversation identifier.
-- `systemEventHistory`: the Agent's System Events.
-- `domainEventHistory`: the Agent's domain Events.
-
-They read newest first and use opaque continuations tied to the selected view.
-History reads do not resume work. A logical Entity deletion flag does not purge
-history. The current history API exposes no per-Agent purge operation, and
-there is no automatic cascade from deleting a current-state row to deleting
-Agent audit, receipt and preference families. Do not implement data erasure by
-assuming those records disappeared with the state row.
-
-Sources: [typed interaction content](../packages/proto/proto/spine/ts/agent/content.proto),
-[conversation/history schema](../packages/proto/proto/spine/ts/agent/history.proto),
-[model selection types](../packages/proto/proto/spine/ts/agent/model.proto),
-[live AI audit](../packages/server/src/agent/agent-live-ai-audit.ts),
-[Agent model selection](../packages/server/src/agent/agent-model-selection.ts).
-
-#### Gateway and authentication responsibilities
-
-The durable subscription binding above is the main gateway-specific framework
-record. Authentication also uses state that does **not** automatically become
-Spine storage tables or Datastore kinds.
-
-| Component                                                  | Where state lives                                                              | What the application must supply                                                                                                        |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `OpaqueSessions`                                           | Process-local maps of credentials and session records                          | Its settings and lifetime; a different session implementation if sessions must be shared or survive restart                             |
-| `SignedSessions`                                           | Session data in signed credentials; configured keys in the running instance    | Signing and verification keys, key rotation, and an optional application revocation implementation                                      |
-| Signed-session revocation                                  | Behind the application-supplied revocation contract                            | Shared/durable revocation storage if required; the framework supplies no revocation table schema                                        |
-| `OidcFlow`                                                 | Process-local pending login transactions and one-time grants                   | Provider configuration, identity mapping, session issuance, and deployment routing that can complete a login in the appropriate process |
-| Provider JWKS cache                                        | Per-verifier in-memory cache                                                   | Provider settings and HTTP access; keys are fetched again after cache expiry or restart                                                 |
-| Browser session wrapper                                    | Client-side runtime state; cookies are handled by the browser where configured | Cookie/HTTP/session behavior selected by the application; no automatic Spine database storage                                           |
-| Authorization policies and trusted Actor/Tenant resolution | Application collaborators                                                      | Any user directory, permissions store, or identity-provider integration those collaborators require                                     |
-| Live subscription streams and pending gateway operations   | Memory and network connections                                                 | Hosting lifecycle; durable definitions do not preserve a network stream across restart                                                  |
-
-`OidcFlow` retains nonce, PKCE and redirect information during a login and
-consumes one-time state/grants during completion. Those values are not written
-to `StorageFactory`. `OpaqueSessions` likewise does not become persistent just
-because the application configured PostgreSQL in `ServerEnvironment`.
-
-The same distinction applies to multitenancy. An authenticated session or
-trusted Actor context can identify a tenant, but that does not create a
-per-tenant session table. If application code stores users, roles, sessions,
-revocation information, or identity-provider tokens, it decides their tenancy,
-schemas, persistence, and provisioning.
-
-The gateway authenticates and authorizes requests using supplied collaborators.
-It does not create a user database, password table, signing-key table, refresh-token
-store, or permissions database. Supply sensitive configuration through the
-application's deployment and secret-management facilities.
-
-Sources: [authentication package](../packages/auth/README.md),
-[session implementations](../packages/auth/src),
-[OIDC flow](../packages/auth/src/oidc/index.ts),
-[provider key cache](../packages/auth/src/providers/index.ts),
-[browser authentication guide](BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
-
-##### Additional application checklist
-
-- [ ] Configure `DurableSubscriptionBindings` with the environment's factory,
-      ID generation and cleanup callback; include its initial storage access and
-      restoration in gateway startup. The diagnostic `namespace` option does not
-      select a separate physical schema, database or Datastore namespace.
-- [ ] If using `LeasedNodeRegistry`, give it the same factory and manage its
-      registration/renewal/close lifetime. Include its first storage access in startup.
-- [ ] Choose whether sessions may be process-local. If they must survive restart
-      or be shared across gateway instances, provide the appropriate session and/or
-      revocation implementation and provision its storage separately.
-- [ ] Supply identity-provider configuration, signing/verification keys, rotation,
-      Actor/Tenant mapping and authorization collaborators. Provision any user,
-      permission or token stores those collaborators use; none appears automatically
-      in the 15-family inventory.
-- [ ] Arrange OIDC login completion and live subscription connections for the
-      deployment's process routing. Durable subscription definitions do not persist
-      sockets, pending login transactions or local callbacks.
-
 ### PostgreSQL
 
 These are the default physical names for the Support example. The three example-defined Entity state families come first; framework-managed layouts for histories, Events, Agent records and services follow. Framework-managed describes the layout, not its tenant destination. `bytes` holds a complete binary Protobuf record; the table shows a short decoded view so the example value is readable.
 
 The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
 
-In the complete PostgreSQL factory setup below, assign the chain beginning with `PostgresStorageFactory.newBuilder()` to `builder`, apply any inline table setting, then call `await builder.build()`.
+The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
 
 #### Domain Entity state tables
 
 ##### Ticket current state: `spine.example_support_ticket`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the Ticket repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                    | Example value                                                                                                                                                                                                      |
 | ------------------ | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -302,11 +152,25 @@ In the complete PostgreSQL factory setup below, assign the chain beginning with 
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
-**Change this layout:** `builder.setTableName(TicketSchema, "support_ticket")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(TicketSchema, "support_ticket");
+```
 
 ##### TicketList current state: `spine.example_support_ticketlist`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the TicketList repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                            | Example value                                                                                                                        |
 | ------------------ | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -318,11 +182,25 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.setTableName(TicketListSchema, "support_ticket_list")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(TicketListSchema, "support_ticket_list");
+```
 
 ##### ReplyAssistant current state: `spine.example_support_replyassistant`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                                    | Example value                                                                                                                          |
 | ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -334,13 +212,27 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.setTableName(ReplyAssistantSchema, "support_reply_assistant")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
+```
 
 #### Framework tables for Events, histories and services
 
 ##### Ticket state history: `spine.example_support_ticket_entityrecord`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Ticket repository with `stateHistory: true`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                               |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -352,11 +244,26 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
-**Change this layout:** `builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history")` selects this grouped table.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
+```
 
 ##### Ticket diagnostic Event history: `spine.example_support_ticket_event`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Ticket Aggregate repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                                                         |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -374,6 +281,8 @@ This is a diagnostic history for the Aggregate, distinct from the domain Event s
 
 **Table location:** `support` database, `spine` schema.
 
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the domain Event store. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
+
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                     |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
@@ -388,6 +297,8 @@ The packed Event payload and its context stay in bytes; no table appears for eac
 ##### Support System Events: `spine.es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_event`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                         |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -404,6 +315,8 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Table location:** `support` database, `spine` schema.
 
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
+
 | Physical field        | Database type           | Exact source                                                                                       | Example value                                                                                                                                                    |
 | --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
@@ -418,11 +331,24 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot. PostgreSQL indexes `order_key` with binary `C` collation.
 
-**Change this table:** Import `AgentHistoryEntrySchema` from `@spine-event-engine/proto/agent` and `AgentHistoryRecordSchema` from `@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js`. Call `builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history")` before building the factory. Keep its name distinct from the other tables.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
+import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history");
+```
 
 ##### Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                              |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -431,11 +357,27 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
-**Change this layout:** `builder.setTableName(AgentAcceptanceReceiptSchema, AgentAcceptanceReceiptSchema, "support_agent_receipts")` selects this grouped receipt family.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(
+  AgentAcceptanceReceiptSchema,
+  AgentAcceptanceReceiptSchema,
+  "support_agent_receipts",
+);
+```
 
 ##### Agent model preferences: `spine.spine_agent_model_preferences_agentmodelpreferencesrecord`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                        | Example value                                                                                                                                     |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -444,11 +386,27 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
-**Change this table:** Import `AgentModelPreferencesRecordSchema` from `@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js`. Call `builder.setTableName(AgentModelPreferencesRecordSchema, AgentModelPreferencesRecordSchema, "support_agent_preferences")` before building the factory. Keep its name distinct from the other tables.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(
+  AgentModelPreferencesRecordSchema,
+  AgentModelPreferencesRecordSchema,
+  "support_agent_preferences",
+);
+```
 
 ##### Subscription registry: `spine.spine_client_subscriptionrecord`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares or starts persistent subscription monitoring. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field            | Database type           | Exact source                                                                      | Example value                                                                                                                                     |
 | ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -459,11 +417,23 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
-**Change this layout:** `builder.setTableName(SubscriptionRecordSchema, "support_subscriptions")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
+```
 
 ##### Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
 | Physical field     | Database type           | Exact source                                                                | Example value                                                                                                                                                           |
 | ------------------ | ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -480,11 +450,23 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 
 Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
 
-**Change this layout:** `builder.setTableName(InboxMessageSchema, "support_inbox_messages")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(InboxMessageSchema, "support_inbox_messages");
+```
 
 ##### Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first shard-session storage use, normally when Delivery picks up a shard. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                          |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -493,11 +475,23 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
-**Change this layout:** `builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
+```
 
 ##### Gateway authenticated bindings: `spine.spine_auth_gatewayauthenticatedsubscription`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table on the first binding storage operation after the application constructs `DurableSubscriptionBindings`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
 | Physical field     | Database type           | Exact source                                                                                    | Example value                                                                                                                        |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -507,11 +501,23 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
-**Change this layout:** `builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
+```
 
 ##### Application node leases: `spine.spine_deployment_applicationnodelease`
 
 **Table location:** `support` database, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table on the first lease storage operation after the application constructs `LeasedNodeRegistry`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                                                   |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -520,7 +526,17 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
-**Change this layout:** `builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
+```
 
 #### Factory setup
 
@@ -613,13 +629,15 @@ These are the default physical names for the Support example. The three example-
 
 The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
 
-In the complete MySQL factory setup below, assign the chain beginning with `MysqlStorageFactory.newBuilder()` to `builder`, apply any inline table setting, then call `await builder.build()`.
+The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
 
 #### Domain Entity state tables
 
 ##### Ticket current state: `example_support_Ticket`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the Ticket repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                    | Example value                                                                                                                                                                                                      |
 | ------------------ | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -636,11 +654,25 @@ In the complete MySQL factory setup below, assign the chain beginning with `Mysq
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
-**Change this layout:** `builder.setTableName(TicketSchema, "support_ticket")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(TicketSchema, "support_ticket");
+```
 
 ##### TicketList current state: `example_support_TicketList`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the TicketList repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                            | Example value                                                                                                                        |
 | ------------------ | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -652,11 +684,25 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.setTableName(TicketListSchema, "support_ticket_list")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(TicketListSchema, "support_ticket_list");
+```
 
 ##### ReplyAssistant current state: `example_support_ReplyAssistant`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                                    | Example value                                                                                                                          |
 | ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -668,13 +714,27 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.setTableName(ReplyAssistantSchema, "support_reply_assistant")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
+```
 
 #### Framework tables for Events, histories and services
 
 ##### Ticket state history: `example_support_Ticket_EntityRecord`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Ticket repository with `stateHistory: true`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                               |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -686,11 +746,26 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
-**Change this layout:** `builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history")` selects this grouped table.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
+```
 
 ##### Ticket diagnostic Event history: `example_support_Ticket_Event`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Ticket Aggregate repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                                                         |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -708,6 +783,8 @@ This is a diagnostic history for the Aggregate, distinct from the domain Event s
 
 **Table location:** `support` database.
 
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the domain Event store. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
+
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                     |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
@@ -722,6 +799,8 @@ The packed Event payload and its context stay in bytes; no table appears for eac
 ##### Support System Events: `es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_Event`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                         |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -738,6 +817,8 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Table location:** `support` database.
 
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
+
 | Physical field        | Database type           | Exact source                                                                                       | Example value                                                                                                                                                    |
 | --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
@@ -752,11 +833,24 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
-**Change this table:** Import `AgentHistoryEntrySchema` from `@spine-event-engine/proto/agent` and `AgentHistoryRecordSchema` from `@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js`. Call `builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history")` before building the factory. Keep its name distinct from the other tables.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
+import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history");
+```
 
 ##### Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                              |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -765,11 +859,27 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
-**Change this layout:** `builder.setTableName(AgentAcceptanceReceiptSchema, AgentAcceptanceReceiptSchema, "support_agent_receipts")` selects this grouped receipt family.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(
+  AgentAcceptanceReceiptSchema,
+  AgentAcceptanceReceiptSchema,
+  "support_agent_receipts",
+);
+```
 
 ##### Agent model preferences: `spine_agent_model_preferences_AgentModelPreferencesRecord`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                        | Example value                                                                                                                                     |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -778,11 +888,27 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
-**Change this table:** Import `AgentModelPreferencesRecordSchema` from `@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js`. Call `builder.setTableName(AgentModelPreferencesRecordSchema, AgentModelPreferencesRecordSchema, "support_agent_preferences")` before building the factory. Keep its name distinct from the other tables.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(
+  AgentModelPreferencesRecordSchema,
+  AgentModelPreferencesRecordSchema,
+  "support_agent_preferences",
+);
+```
 
 ##### Subscription registry: `spine_client_SubscriptionRecord`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares or starts persistent subscription monitoring. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field            | Database type           | Exact source                                                                      | Example value                                                                                                                                     |
 | ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -793,11 +919,23 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
-**Change this layout:** `builder.setTableName(SubscriptionRecordSchema, "support_subscriptions")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
+```
 
 ##### Entity Inbox messages: `spine_server_delivery_InboxMessage`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
 | Physical field     | Database type           | Exact source                                                                | Example value                                                                                                                                                           |
 | ------------------ | ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -814,11 +952,23 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 
 Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
 
-**Change this layout:** `builder.setTableName(InboxMessageSchema, "support_inbox_messages")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(InboxMessageSchema, "support_inbox_messages");
+```
 
 ##### Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first shard-session storage use, normally when Delivery picks up a shard. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                          |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -827,11 +977,23 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
-**Change this layout:** `builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
+```
 
 ##### Gateway authenticated bindings: `spine_auth_GatewayAuthenticatedSubscription`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table on the first binding storage operation after the application constructs `DurableSubscriptionBindings`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
 | Physical field     | Database type           | Exact source                                                                                    | Example value                                                                                                                        |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -841,11 +1003,23 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
-**Change this layout:** `builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
+```
 
 ##### Application node leases: `spine_deployment_ApplicationNodeLease`
 
 **Table location:** `support` database.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table on the first lease storage operation after the application constructs `LeasedNodeRegistry`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                                                   |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -854,7 +1028,17 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
-**Change this layout:** `builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
+```
 
 #### Factory setup
 
@@ -881,13 +1065,15 @@ These are the default physical names for the Support example. The three example-
 
 The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
 
-In the complete Datastore factory setup below, assign the chain beginning with `DatastoreStorageFactory.newBuilder()` to `builder`, apply any inline kind setting, then call `builder.build()`.
+The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
 
 #### Domain Entity state kinds
 
 ##### Ticket current state: `example.support.Ticket`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Ticket state write after Support prepares its repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type       | Exact source                                                    | Example value                                                                                                                                                                                                      |
 | ---------------------------------- | ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -904,11 +1090,25 @@ In the complete Datastore factory setup below, assign the chain beginning with `
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
-**Change this layout:** `builder.organizeRecords(TicketSchema, { kind: "support_ticket" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(TicketSchema, { kind: "support_ticket" });
+```
 
 ##### TicketList current state: `example.support.TicketList`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first TicketList state write after Support prepares its repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                            | Example value                                                                                                                        |
 | ---------------------------------- | ------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -920,11 +1120,25 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" });
+```
 
 ##### ReplyAssistant current state: `example.support.ReplyAssistant`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first ReplyAssistant state write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                                    | Example value                                                                                                                          |
 | ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -936,13 +1150,27 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" });
+```
 
 #### Framework kinds for Events, histories and services
 
 ##### Ticket state history: `example.support.Ticket_EntityRecord`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Ticket history write after Support prepares the repository with `stateHistory: true`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type       | Exact source                                                                              | Example value                                                                                                               |
 | ---------------------------------- | ------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -954,11 +1182,26 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
-**Change this layout:** `builder.organizeRecords(TicketSchema, EntityRecordSchema, { kind: "support_ticket_history" })` selects this grouped kind. Deploy corresponding indexes under the new kind.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(TicketSchema, EntityRecordSchema, { kind: "support_ticket_history" });
+```
 
 ##### Ticket diagnostic Event history: `example.support.Ticket_Event`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Ticket diagnostic Event write after Support prepares the Aggregate repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type       | Exact source                                                  | Example value                                                                                                                                         |
 | ---------------------------------- | ------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -970,11 +1213,26 @@ This historical EntityRecord keeps the complete Ticket state and lifecycle flags
 
 This is a diagnostic history for the Aggregate, distinct from the domain Event store.
 
-**Change this layout:** `builder.organizeRecords(TicketSchema, EventSchema, { kind: "support_ticket_events" })` selects this grouped kind. Deploy corresponding indexes under the new kind.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+import { EventSchema } from "@spine-event-engine/proto";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(TicketSchema, EventSchema, { kind: "support_ticket_events" });
+```
 
 ##### Support domain Events: `es_3zg7bqc0wuwdwaja0pfjqoalpwiatoj1us9z4hxitwvoy9ke7n_Event`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first domain Event write after Support prepares its Event store. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                  | Example value                                                                                                     |
 | ---------------------------------- | ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -991,6 +1249,8 @@ The packed Event payload and its context stay in bytes; no table appears for eac
 
 **Kind location:** namespace `support`.
 
+**Created by:** The Datastore adapter makes this kind visible on the first System Event write after Support prepares the Event store enabled by `persistSystemEvents()`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
+
 | Physical field                     | Database type      | Exact source                                                  | Example value                                                                                                         |
 | ---------------------------------- | ------------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                                                                                          |
@@ -1005,6 +1265,8 @@ This separately grouped Event family also retains Agent interaction Events insid
 ##### Agent audit: `spine_agent_history`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Agent audit write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                                                       | Example value                                                                                                                                                    |
 | ---------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1026,6 +1288,8 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 **Kind location:** namespace `support`.
 
+**Created by:** The Datastore adapter makes this kind visible on the first Agent receipt write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
+
 | Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                                              |
 | ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Native key name (no `ID` property) | Datastore key name | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894`                                                                      |
@@ -1033,11 +1297,23 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
-**Change this layout:** `builder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" })` selects this grouped kind.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
+```
 
 ##### Agent model preferences: `spine_agent_model_preferences`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Agent model-preference write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                                        | Example value                                                                                                                                     |
 | ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1052,6 +1328,8 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 **Kind location:** namespace `support`.
 
+**Created by:** The Datastore adapter makes this kind visible on the first subscription-registry write after Support prepares or starts subscription monitoring. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
+
 | Physical field                     | Database type                | Exact source                                                                      | Example value                                                                                                                                     |
 | ---------------------------------- | ---------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Native key name (no `ID` property) | Datastore key name           | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                               |
@@ -1061,11 +1339,23 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
-**Change this layout:** `builder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions" });
+```
 
 ##### Entity Inbox messages: `spine.server.delivery.InboxMessage`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Inbox message write, normally when an Entity Inbox receives a routed signal. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
 | Physical field                     | Database type       | Exact source                                                                | Example value                                                                                                                                                           |
 | ---------------------------------- | ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1082,11 +1372,23 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 
 Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
 
-**Change this layout:** `builder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" });
+```
 
 ##### Delivery shard sessions: `spine.server.delivery.ShardSessionRecord`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first shard-session write, normally when Delivery picks up a shard. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
 | Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                          |
 | ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -1095,11 +1397,23 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
-**Change this layout:** `builder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_sessions" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_sessions" });
+```
 
 ##### Gateway authenticated bindings: `spine.auth.GatewayAuthenticatedSubscription`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first binding write after the application constructs `DurableSubscriptionBindings`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build does not construct this component.
 
 | Physical field                     | Database type                | Exact source                                                                                    | Example value                                                                                                                        |
 | ---------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1109,11 +1423,25 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
-**Change this layout:** `builder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, { kind: "support_gateway_bindings" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, {
+  kind: "support_gateway_bindings",
+});
+```
 
 ##### Application node leases: `spine.deployment.ApplicationNodeLease`
 
 **Kind location:** namespace `support`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first lease write after the application constructs `LeasedNodeRegistry`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build does not construct this component.
 
 | Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                                                                   |
 | ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1122,7 +1450,17 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
-**Change this layout:** `builder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases" });
+```
 
 #### Factory setup
 
@@ -1439,13 +1777,15 @@ These are the default physical names for the Support example. The three example-
 
 The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
 
-In the complete PostgreSQL factory setup below, assign the chain beginning with `PostgresStorageFactory.newBuilder()` to `builder`, apply any inline table setting, then call `await builder.build()`.
+The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
 
 #### Domain Entity state tables
 
 ##### Ticket current state: `spine.example_support_ticket`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the Ticket repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                    | Example value                                                                                                                                                                                                      |
 | ------------------ | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1462,11 +1802,25 @@ In the complete PostgreSQL factory setup below, assign the chain beginning with 
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
-**Change this layout:** `builder.setTableName(TicketSchema, "support_ticket")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(TicketSchema, "support_ticket");
+```
 
 ##### TicketList current state: `spine.example_support_ticketlist`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the TicketList repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                            | Example value                                                                                                                        |
 | ------------------ | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1478,11 +1832,25 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.setTableName(TicketListSchema, "support_ticket_list")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(TicketListSchema, "support_ticket_list");
+```
 
 ##### ReplyAssistant current state: `spine.example_support_replyassistant`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                                    | Example value                                                                                                                          |
 | ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1494,13 +1862,27 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.setTableName(ReplyAssistantSchema, "support_reply_assistant")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
+```
 
 #### Framework tables for Events, histories and services
 
 ##### Ticket state history: `spine.example_support_ticket_entityrecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Ticket repository with `stateHistory: true`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                               |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -1512,11 +1894,26 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
-**Change this layout:** `builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history")` selects this grouped table.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
+```
 
 ##### Ticket diagnostic Event history: `spine.example_support_ticket_event`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Ticket Aggregate repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                                                         |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1534,6 +1931,8 @@ This is a diagnostic history for the Aggregate, distinct from the domain Event s
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
 
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the domain Event store. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
+
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                     |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
@@ -1548,6 +1947,8 @@ The packed Event payload and its context stay in bytes; no table appears for eac
 ##### Support System Events: `spine.es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_event`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                         |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -1564,6 +1965,8 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
 
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
+
 | Physical field        | Database type           | Exact source                                                                                       | Example value                                                                                                                                                    |
 | --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
@@ -1578,11 +1981,24 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot. PostgreSQL indexes `order_key` with binary `C` collation.
 
-**Change this table:** Import `AgentHistoryEntrySchema` from `@spine-event-engine/proto/agent` and `AgentHistoryRecordSchema` from `@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js`. Call `builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history")` before building the factory. Keep its name distinct from the other tables.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
+import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history");
+```
 
 ##### Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                              |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1591,11 +2007,27 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
-**Change this layout:** `builder.setTableName(AgentAcceptanceReceiptSchema, AgentAcceptanceReceiptSchema, "support_agent_receipts")` selects this grouped receipt family.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(
+  AgentAcceptanceReceiptSchema,
+  AgentAcceptanceReceiptSchema,
+  "support_agent_receipts",
+);
+```
 
 ##### Agent model preferences: `spine.spine_agent_model_preferences_agentmodelpreferencesrecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                        | Example value                                                                                                                                     |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1604,11 +2036,27 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
-**Change this table:** Import `AgentModelPreferencesRecordSchema` from `@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js`. Call `builder.setTableName(AgentModelPreferencesRecordSchema, AgentModelPreferencesRecordSchema, "support_agent_preferences")` before building the factory. Keep its name distinct from the other tables.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(
+  AgentModelPreferencesRecordSchema,
+  AgentModelPreferencesRecordSchema,
+  "support_agent_preferences",
+);
+```
 
 ##### Subscription registry: `spine.spine_client_subscriptionrecord`
 
 **Table location:** one in `support_shared`, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table when Support prepares or starts persistent subscription monitoring. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field            | Database type           | Exact source                                                                      | Example value                                                                                                                                     |
 | ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1619,11 +2067,23 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
-**Change this layout:** `builder.setTableName(SubscriptionRecordSchema, "support_subscriptions")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
+```
 
 ##### Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`
 
 **Table location:** one in `support_shared`, `spine` schema.
+
+**Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
 | Physical field     | Database type           | Exact source                                                                | Example value                                                                                                                                                           |
 | ------------------ | ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1640,11 +2100,23 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 
 Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
 
-**Change this layout:** `builder.setTableName(InboxMessageSchema, "support_inbox_messages")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(InboxMessageSchema, "support_inbox_messages");
+```
 
 ##### Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`
 
 **Table location:** one in `support_shared`, `spine` schema.
+
+**Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first shard-session storage use, normally when Delivery picks up a shard. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                          |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -1653,11 +2125,23 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
-**Change this layout:** `builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
+```
 
 ##### Gateway authenticated bindings: `spine.spine_auth_gatewayauthenticatedsubscription`
 
 **Table location:** one in `support_shared`, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table on the first binding storage operation after the application constructs `DurableSubscriptionBindings`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
 | Physical field     | Database type           | Exact source                                                                                    | Example value                                                                                                                        |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1667,11 +2151,23 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
-**Change this layout:** `builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
+```
 
 ##### Application node leases: `spine.spine_deployment_applicationnodelease`
 
 **Table location:** one in `support_shared`, `spine` schema.
+
+**Created by:** The PostgreSQL adapter creates and checks this table on the first lease storage operation after the application constructs `LeasedNodeRegistry`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                                                   |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1680,7 +2176,17 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
-**Change this layout:** `builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
+
+const builder = PostgresStorageFactory.newBuilder();
+builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
+```
 
 #### Factory setup
 
@@ -1793,13 +2299,15 @@ These are the default physical names for the Support example. The three example-
 
 The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
 
-In the complete MySQL factory setup below, assign the chain beginning with `MysqlStorageFactory.newBuilder()` to `builder`, apply any inline table setting, then call `await builder.build()`.
+The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
 
 #### Domain Entity state tables
 
 ##### Ticket current state: `example_support_Ticket`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the Ticket repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                    | Example value                                                                                                                                                                                                      |
 | ------------------ | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1816,11 +2324,25 @@ In the complete MySQL factory setup below, assign the chain beginning with `Mysq
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
-**Change this layout:** `builder.setTableName(TicketSchema, "support_ticket")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(TicketSchema, "support_ticket");
+```
 
 ##### TicketList current state: `example_support_TicketList`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the TicketList repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                            | Example value                                                                                                                        |
 | ------------------ | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1832,11 +2354,25 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.setTableName(TicketListSchema, "support_ticket_list")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(TicketListSchema, "support_ticket_list");
+```
 
 ##### ReplyAssistant current state: `example_support_ReplyAssistant`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type                  | Exact source                                                                    | Example value                                                                                                                          |
 | ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1848,13 +2384,27 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.setTableName(ReplyAssistantSchema, "support_reply_assistant")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
+```
 
 #### Framework tables for Events, histories and services
 
 ##### Ticket state history: `example_support_Ticket_EntityRecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Ticket repository with `stateHistory: true`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                               |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -1866,11 +2416,26 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
-**Change this layout:** `builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history")` selects this grouped table.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
+```
 
 ##### Ticket diagnostic Event history: `example_support_Ticket_Event`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Ticket Aggregate repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                                                         |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1888,6 +2453,8 @@ This is a diagnostic history for the Aggregate, distinct from the domain Event s
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
 
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the domain Event store. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
+
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                     |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
@@ -1902,6 +2469,8 @@ The packed Event payload and its context stay in bytes; no table appears for eac
 ##### Support System Events: `es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_Event`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                  | Example value                                                                                                         |
 | ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -1918,6 +2487,8 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
 
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
+
 | Physical field        | Database type           | Exact source                                                                                       | Example value                                                                                                                                                    |
 | --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
@@ -1932,11 +2503,24 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
-**Change this table:** Import `AgentHistoryEntrySchema` from `@spine-event-engine/proto/agent` and `AgentHistoryRecordSchema` from `@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js`. Call `builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history")` before building the factory. Keep its name distinct from the other tables.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
+import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history");
+```
 
 ##### Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                              |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1945,11 +2529,27 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
-**Change this layout:** `builder.setTableName(AgentAcceptanceReceiptSchema, AgentAcceptanceReceiptSchema, "support_agent_receipts")` selects this grouped receipt family.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(
+  AgentAcceptanceReceiptSchema,
+  AgentAcceptanceReceiptSchema,
+  "support_agent_receipts",
+);
+```
 
 ##### Agent model preferences: `spine_agent_model_preferences_AgentModelPreferencesRecord`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field     | Database type           | Exact source                                                                        | Example value                                                                                                                                     |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1958,11 +2558,27 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
-**Change this table:** Import `AgentModelPreferencesRecordSchema` from `@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js`. Call `builder.setTableName(AgentModelPreferencesRecordSchema, AgentModelPreferencesRecordSchema, "support_agent_preferences")` before building the factory. Keep its name distinct from the other tables.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(
+  AgentModelPreferencesRecordSchema,
+  AgentModelPreferencesRecordSchema,
+  "support_agent_preferences",
+);
+```
 
 ##### Subscription registry: `spine_client_SubscriptionRecord`
 
 **Table location:** one in `support_shared`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares or starts persistent subscription monitoring. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
 | Physical field            | Database type           | Exact source                                                                      | Example value                                                                                                                                     |
 | ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1973,11 +2589,23 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
-**Change this layout:** `builder.setTableName(SubscriptionRecordSchema, "support_subscriptions")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
+```
 
 ##### Entity Inbox messages: `spine_server_delivery_InboxMessage`
 
 **Table location:** one in `support_shared`.
+
+**Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
 | Physical field     | Database type           | Exact source                                                                | Example value                                                                                                                                                           |
 | ------------------ | ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1994,11 +2622,23 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 
 Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
 
-**Change this layout:** `builder.setTableName(InboxMessageSchema, "support_inbox_messages")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(InboxMessageSchema, "support_inbox_messages");
+```
 
 ##### Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`
 
 **Table location:** one in `support_shared`.
+
+**Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first shard-session storage use, normally when Delivery picks up a shard. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                          |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -2007,11 +2647,23 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
-**Change this layout:** `builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
+```
 
 ##### Gateway authenticated bindings: `spine_auth_GatewayAuthenticatedSubscription`
 
 **Table location:** one in `support_shared`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table on the first binding storage operation after the application constructs `DurableSubscriptionBindings`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
 | Physical field     | Database type           | Exact source                                                                                    | Example value                                                                                                                        |
 | ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -2021,11 +2673,23 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
-**Change this layout:** `builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
+```
 
 ##### Application node leases: `spine_deployment_ApplicationNodeLease`
 
 **Table location:** one in `support_shared`.
+
+**Created by:** The MySQL/MariaDB adapter creates and checks this table on the first lease storage operation after the application constructs `LeasedNodeRegistry`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
 | Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                                                   |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2034,7 +2698,17 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
-**Change this layout:** `builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases")` selects this table. Keep each resolved name distinct.
+**Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
+
+const builder = MysqlStorageFactory.newBuilder();
+builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
+```
 
 #### Factory setup
 
@@ -2138,13 +2812,15 @@ These are the default physical names for the Support example. The three example-
 
 The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
 
-In the complete Datastore factory setup below, assign the chain beginning with `DatastoreStorageFactory.newBuilder()` to `builder`, apply any inline kind setting, then call `builder.build()`.
+The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
 
 #### Domain Entity state kinds
 
 ##### Ticket current state: `example.support.Ticket`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Ticket state write after Support prepares its repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type       | Exact source                                                    | Example value                                                                                                                                                                                                      |
 | ---------------------------------- | ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -2161,11 +2837,25 @@ In the complete Datastore factory setup below, assign the chain beginning with `
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
-**Change this layout:** `builder.organizeRecords(TicketSchema, { kind: "support_ticket" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(TicketSchema, { kind: "support_ticket" });
+```
 
 ##### TicketList current state: `example.support.TicketList`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first TicketList state write after Support prepares its repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                            | Example value                                                                                                                        |
 | ---------------------------------- | ------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -2177,11 +2867,25 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" });
+```
 
 ##### ReplyAssistant current state: `example.support.ReplyAssistant`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first ReplyAssistant state write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                                    | Example value                                                                                                                          |
 | ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2193,13 +2897,27 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
-**Change this layout:** `builder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" });
+```
 
 #### Framework kinds for Events, histories and services
 
 ##### Ticket state history: `example.support.Ticket_EntityRecord`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Ticket history write after Support prepares the repository with `stateHistory: true`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type       | Exact source                                                                              | Example value                                                                                                               |
 | ---------------------------------- | ------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -2211,11 +2929,26 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
-**Change this layout:** `builder.organizeRecords(TicketSchema, EntityRecordSchema, { kind: "support_ticket_history" })` selects this grouped kind. Deploy corresponding indexes under the new kind.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(TicketSchema, EntityRecordSchema, { kind: "support_ticket_history" });
+```
 
 ##### Ticket diagnostic Event history: `example.support.Ticket_Event`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Ticket diagnostic Event write after Support prepares the Aggregate repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type       | Exact source                                                  | Example value                                                                                                                                         |
 | ---------------------------------- | ------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2227,11 +2960,26 @@ This historical EntityRecord keeps the complete Ticket state and lifecycle flags
 
 This is a diagnostic history for the Aggregate, distinct from the domain Event store.
 
-**Change this layout:** `builder.organizeRecords(TicketSchema, EventSchema, { kind: "support_ticket_events" })` selects this grouped kind. Deploy corresponding indexes under the new kind.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
+import { EventSchema } from "@spine-event-engine/proto";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(TicketSchema, EventSchema, { kind: "support_ticket_events" });
+```
 
 ##### Support domain Events: `es_3zg7bqc0wuwdwaja0pfjqoalpwiatoj1us9z4hxitwvoy9ke7n_Event`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first domain Event write after Support prepares its Event store. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                  | Example value                                                                                                     |
 | ---------------------------------- | ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -2248,6 +2996,8 @@ The packed Event payload and its context stay in bytes; no table appears for eac
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
 
+**Created by:** The Datastore adapter makes this kind visible on the first System Event write after Support prepares the Event store enabled by `persistSystemEvents()`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
+
 | Physical field                     | Database type      | Exact source                                                  | Example value                                                                                                         |
 | ---------------------------------- | ------------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                                                                                          |
@@ -2262,6 +3012,8 @@ This separately grouped Event family also retains Agent interaction Events insid
 ##### Agent audit: `spine_agent_history`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Agent audit write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                                                       | Example value                                                                                                                                                    |
 | ---------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2283,6 +3035,8 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
 
+**Created by:** The Datastore adapter makes this kind visible on the first Agent receipt write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
+
 | Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                                              |
 | ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Native key name (no `ID` property) | Datastore key name | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894`                                                                      |
@@ -2290,11 +3044,23 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
-**Change this layout:** `builder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" })` selects this grouped kind.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
+```
 
 ##### Agent model preferences: `spine_agent_model_preferences`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Agent model-preference write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
 | Physical field                     | Database type      | Exact source                                                                        | Example value                                                                                                                                     |
 | ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2309,6 +3075,8 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 **Kind location:** namespace `support_shared`.
 
+**Created by:** The Datastore adapter makes this kind visible on the first subscription-registry write after Support prepares or starts subscription monitoring. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
+
 | Physical field                     | Database type                | Exact source                                                                      | Example value                                                                                                                                     |
 | ---------------------------------- | ---------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Native key name (no `ID` property) | Datastore key name           | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                               |
@@ -2318,11 +3086,23 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
-**Change this layout:** `builder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions" });
+```
 
 ##### Entity Inbox messages: `spine.server.delivery.InboxMessage`
 
 **Kind location:** namespace `support_shared`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first Inbox message write, normally when an Entity Inbox receives a routed signal. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
 | Physical field                     | Database type       | Exact source                                                                | Example value                                                                                                                                                           |
 | ---------------------------------- | ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2339,11 +3119,23 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 
 Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
 
-**Change this layout:** `builder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" });
+```
 
 ##### Delivery shard sessions: `spine.server.delivery.ShardSessionRecord`
 
 **Kind location:** namespace `support_shared`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first shard-session write, normally when Delivery picks up a shard. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
 | Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                          |
 | ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -2352,11 +3144,23 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
-**Change this layout:** `builder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_sessions" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_sessions" });
+```
 
 ##### Gateway authenticated bindings: `spine.auth.GatewayAuthenticatedSubscription`
 
 **Kind location:** namespace `support_shared`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first binding write after the application constructs `DurableSubscriptionBindings`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build does not construct this component.
 
 | Physical field                     | Database type                | Exact source                                                                                    | Example value                                                                                                                        |
 | ---------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -2366,11 +3170,25 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
-**Change this layout:** `builder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, { kind: "support_gateway_bindings" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, {
+  kind: "support_gateway_bindings",
+});
+```
 
 ##### Application node leases: `spine.deployment.ApplicationNodeLease`
 
 **Kind location:** namespace `support_shared`.
+
+**Created by:** The Datastore adapter makes this kind visible on the first lease write after the application constructs `LeasedNodeRegistry`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build does not construct this component.
 
 | Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                                                                   |
 | ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2379,7 +3197,17 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
-**Change this layout:** `builder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases" })` selects this kind; update any composite indexes that refer to it.
+**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
+
+const builder = DatastoreStorageFactory.newBuilder();
+builder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases" });
+```
 
 #### Factory setup
 
@@ -3002,7 +3830,7 @@ no `ID` property. A searchable Timestamp is a native Datastore timestamp.
 mapping of tenant IDs to namespaces. Neither changes the record's declared
 properties. The built-in provider stores complete records in an unindexed Blob;
 Datastore's codec does not preserve unknown Protobuf fields. A custom
-`useRecordStorage()` or `useEntityStorage()` provider must implement its own
+`useRecordStorage()` or `useEntityStorage()` provider must provide matching
 ID, column, tenant and preparation behavior; those hooks are not naming-only
 settings. The custom callback does not automatically receive the builder's
 stringifier registry or namespace converter.
@@ -3014,7 +3842,183 @@ It has no SQL key text, Datastore kind or physical column conversion to
 configure. Closing the backend loses those records unless the application
 provides a different durable provider.
 
-## 4. Startup sequence
+## 4. Agent storage
+
+### Current Agent state
+
+Suppose `ReplyAssistant` with ID `assistant-7` receives a Command asking for a
+reply to Ticket `billing/T-42`. Its latest state is an `EntityRecord` in the
+ReplyAssistant table: PostgreSQL `spine.example_support_replyassistant`, MySQL
+`example_support_ReplyAssistant`, or Datastore kind
+`example.support.ReplyAssistant`. The table has `ID`, `bytes`, and lifecycle
+search fields. A successful handler can save `last_draft` inside the binary
+state in `bytes`. There is no separate `last_draft` column in this example.
+
+### Acceptance receipt
+
+Before that work starts, the Agent stores an acceptance receipt for the
+original Command and delivery action. Its `bytes` value retains the typed
+Agent ID and original Command ID. The physical key is a digest of that identity.
+The receipt has no prompt or executable backlog. It prevents the same accepted
+work from restarting after interruption. In the single-tenant example, the
+receipt table is PostgreSQL
+`spine.spine_agent_acceptance_agentacceptancereceipt`, MySQL
+`spine_agent_acceptance_AgentAcceptanceReceipt`, or Datastore kind
+`spine_agent_acceptance_AgentAcceptanceReceipt`.
+
+### Audit trail for a reply
+
+As the Agent calls a model, it appends audit entries. They go to the Agent
+audit table, not to `ReplyAssistant` state. For PostgreSQL the table is
+`spine.agent_history_agenthistoryrecord`; for MySQL it is
+`agent_history_AgentHistoryRecord`; for Datastore it is `spine_agent_history`.
+The full `AgentHistoryRecord` is in `bytes`. Suppose the Agent drafts “I can
+help with your invoice” for conversation `conversation-5`. The audit record can
+save the typed input facts, the rendered developer instructions, the JSON
+prompt sent to the provider, and the requested output schema. The response
+can save that draft as raw text alongside the validated typed result, model
+name and token usage. The table does not create a prompt column or a token
+column: these values remain inside the binary record.
+
+Searchable copies answer a different question: _which entries belong to this
+Agent and conversation, and in what order?_ The `agent_key`, scope digest,
+conversation digest, category and ordering fields shown in the physical tables
+support that lookup. Reading conversation `conversation-5` selects those rows
+first, then decodes each complete record from `bytes`.
+
+Other audit entries can preserve the details needed to understand a decision:
+
+| Entry                    | Facts retained inside the binary record                                                                                                                                                                                                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Model request            | Advertised tool definitions, prompt JSON, developer instructions and output schema JSON.                                                                                                                                                                                                  |
+| Model response           | Proposed tool calls and exact argument text, raw output, typed result, usage and model name. Anthropic content may include thinking text/signatures or redacted thinking bytes; OpenAI content may include refusals, reasoning summaries or encrypted continuation fields, when supplied. |
+| Decision and tool work   | Questions, answers, confidence or distributions, tool request arguments, tool results, outcomes and safe diagnostic IDs.                                                                                                                                                                  |
+| System and domain Events | Operational facts such as selected ModelRef, capability revision, digests, limits and usage; the original domain Event and packed domain payload.                                                                                                                                         |
+
+### Model preferences
+
+An authorized model change updates the separate preferences record.
+It is PostgreSQL
+`spine.spine_agent_model_preferences_agentmodelpreferencesrecord`, MySQL
+`spine_agent_model_preferences_AgentModelPreferencesRecord`, or Datastore kind
+`spine_agent_model_preferences`. Its `bytes` contains the typed Agent key and
+explicit selections, such as generation model `support-drafter` revision `v2`.
+There are no extra search columns. A selection staged in a handler becomes
+durable only after successful normal processing. A missing `GENERATION` or
+`DECISION` selection means the Agent inherits the repository setting, then the
+effective AI registry default. `.withAi(ai)` selects the Bounded Context's
+registry; without it, the Bounded Context inherits the `ServerEnvironment` AI
+registry. `inherit_repository_default` removes that kind's explicit choice. The record contains no model weights, API key, paused request or
+program counter.
+
+In multitenant mode, each tenant's ReplyAssistant state, receipts, audit and
+preferences go to that tenant's SQL database or Datastore namespace. The
+physical table or kind names repeat within those separate destinations.
+
+### Restart and history reads
+
+If a model response was audited but the process stopped before `last_draft`
+was saved, the audit response remains readable and current Entity state stays
+at its last committed version. The framework does not replay that handler,
+reuse the response to finish it, or send a private backlog after restart.
+A later new Command can begin new work.
+
+`repository.agentHistory(...)` provides `fullHistory`, `conversationHistory`,
+`systemEventHistory` and `domainEventHistory`. Each pages newest first with an
+opaque continuation for that view. Reading history does not resume work.
+Marking the Agent Entity deleted does not purge audit, acceptance or preference
+records. The current API has no per-Agent history purge or automatic cascade.
+
+Prompts, model output and tool results can contain sensitive information.
+Provider credentials are configured separately and are not intentionally
+recorded, and safe diagnostic IDs replace raw provider exception bodies.
+Application text and tool results are not automatically redacted. Apply access
+controls appropriate to the facts in these records.
+
+Sources: [typed interaction content](../packages/proto/proto/spine/ts/agent/content.proto),
+[conversation/history schema](../packages/proto/proto/spine/ts/agent/history.proto),
+[model selection types](../packages/proto/proto/spine/ts/agent/model.proto),
+[live AI audit](../packages/server/src/agent/agent-live-ai-audit.ts),
+[Agent model selection](../packages/server/src/agent/agent-model-selection.ts).
+
+## 5. Gateway and authentication storage
+
+### A browser subscription after authentication
+
+When a browser subscribes to TicketList updates, the application first
+authenticates the caller and checks the requested Actor and Tenant context.
+`DurableSubscriptionBindings` can then save an authenticated binding. It
+uses the shared PostgreSQL table
+`spine.spine_auth_gatewayauthenticatedsubscription`, MySQL table
+`spine_auth_GatewayAuthenticatedSubscription`, or Datastore kind
+`spine.auth.GatewayAuthenticatedSubscription`. Its key is the Subscription ID;
+`bytes` holds the approved subscription, including Actor/Tenant context, and
+`when_expires` is copied for expiry queries. The backend's separate
+`SubscriptionRecord` table tracks the subscription lifecycle. A live socket
+and local callback remain in the running gateway process, not in either row.
+
+The application constructs `DurableSubscriptionBindings` explicitly with the
+storage factory, ID generation and cleanup callback. Its first storage use
+prepares the SQL table; Bounded Context build does not. The `namespace` option
+is a diagnostic label and does not select a SQL database/schema or Datastore
+namespace. The binding family remains in the shared destination even when the
+approved subscription names a tenant.
+
+### Node discovery
+
+If the deployment uses `LeasedNodeRegistry`, application code constructs it
+with the same factory and manages registration, renewal and close. It saves
+`ApplicationNodeLease` records in PostgreSQL
+`spine.spine_deployment_applicationnodelease`, MySQL
+`spine_deployment_ApplicationNodeLease`, or Datastore kind
+`spine.deployment.ApplicationNodeLease`. The key is the Node ID; `bytes`
+retains the endpoint, expiry and registration ID. There is no separate expiry
+search column. The registry's first storage operation prepares its SQL table.
+Its `namespace` argument is also a diagnostic label, not physical isolation.
+
+### Sessions do not add these tables
+
+Authentication itself creates no user, password, signing-key, refresh-token or
+permissions table in this inventory. The storage choice is visible if Ada logs
+in and then the process restarts:
+
+| Component               | Where the login data is kept                                 | Consequence for this inventory                                                                                           |
+| ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `OpaqueSessions`        | Credentials and session records in process memory.           | No SQL table or Datastore kind. Choose another implementation if sessions must survive restart or work across instances. |
+| `SignedSessions`        | Session claims inside signed credentials held by the client. | No session table. The application supplies signing and verification keys, rotation, and any revocation store it needs.   |
+| Browser session wrapper | Client memory and browser state.                             | No server storage table.                                                                                                 |
+
+### OIDC and trusted identity
+
+While Ada completes an OIDC login, `OidcFlow` keeps the pending nonce, PKCE
+verifier, redirect and one-time grant in process memory. Its provider JWKS
+cache is local too; keys are fetched again after expiry or restart. These
+pieces do not create a framework SQL table or Datastore kind. Arrange login
+completion so a process can find the pending flow state.
+
+The application supplies trusted Actor/Tenant resolution and authorization
+policies. If those collaborators use a directory, permissions database, token
+store or shared revocation store, the application provisions and secures that
+storage separately. A trusted Tenant in a session does not create a tenant
+session table. Live subscription streams remain network/process state; the
+saved gateway binding can restore a subscription definition, not its socket.
+
+- [ ] Include the first binding and node-registry storage operations in startup
+      when those components are enabled; handle restoration and registration failures.
+- [ ] Supply identity-provider settings, signing/verification keys, rotation,
+      Actor/Tenant mapping and authorization collaborators.
+- [ ] Decide whether sessions and revocation need shared durable storage, and
+      provision any application-specific stores they require.
+- [ ] Route OIDC completion and live subscriptions to processes that can finish
+      those operations.
+
+Sources: [authentication package](../packages/auth/README.md),
+[session implementations](../packages/auth/src),
+[OIDC flow](../packages/auth/src/oidc/index.ts),
+[provider key cache](../packages/auth/src/providers/index.ts),
+[browser authentication guide](BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+
+## 6. Startup sequence
 
 ### Build and preparation order
 
@@ -3140,9 +4144,8 @@ SQL creation uses `CREATE TABLE IF NOT EXISTS` followed by compatibility checks.
 It does not automatically alter an incompatible table. A successful read-only
 compatibility check also establishes that the family is ready, avoiding later
 creation SQL for that family. This read-only setup path applies to the families
-exposed through the Bounded Context/environment preparation APIs. Separately
-constructed gateway bindings and node registries expose no equivalent public
-check; their first SQL storage use still issues `CREATE TABLE IF NOT EXISTS`
+exposed through the Bounded Context/environment preparation APIs. Delivery tables, separately constructed gateway bindings, and node
+registries expose no equivalent public check; their first SQL storage use still issues `CREATE TABLE IF NOT EXISTS`
 and then validates the table, even when administrators have precreated it.
 Provide the privileges needed for that first-use path and exercise it at startup.
 Do not assume a CRUD-only role works for every component in this example.
