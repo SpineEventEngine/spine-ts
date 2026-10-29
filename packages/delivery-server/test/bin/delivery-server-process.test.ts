@@ -62,7 +62,10 @@ describe("spine-delivery-server executable", () => {
   });
 
   it("keeps terminal signals handled through process exit", async () => {
-    const script = `await import(${JSON.stringify(pathToFileURL(executable).href)}); process.once("exit", () => process.kill(process.pid, "SIGINT"));`;
+    const script = [
+      `await import(${JSON.stringify(pathToFileURL(executable).href)});`,
+      'process.once("exit", () => process.kill(process.pid, "SIGINT"));',
+    ].join("\n");
     const child = spawn(process.execPath, ["--input-type=module", "--eval", script], {
       env: { ...process.env, PORT: "0" },
       stdio: ["ignore", "pipe", "pipe"],
