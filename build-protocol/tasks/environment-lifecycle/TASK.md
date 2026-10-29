@@ -107,3 +107,15 @@ Repeated-signal tests must coordinate with a running child process and distingui
 normal shutdown handling from signals sent after its JavaScript runtime has stopped.
 Preserve normal graceful shutdown and listener release; do not hide failures with
 additional sleeps, larger timeouts, or retries.
+
+## Event storage naming investigation
+
+Compare domain and optional System Event persistence directly with Spine JVM.
+Explain why TS introduced logical groups and hashed physical names, identify the
+actual isolation requirements, and determine whether JVM's simpler naming/storage
+approach can be used. Do not treat the present TS design as a required constraint.
+
+Also compare `StringifierRegistry` with the JVM singleton and investigate whether
+build-generated knowledge of Protobuf schemas can configure the default TS registry
+automatically, instead of requiring application code to assemble it manually.
+Include the findings in the explanation to the user.

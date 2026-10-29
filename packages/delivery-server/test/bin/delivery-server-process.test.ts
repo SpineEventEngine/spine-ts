@@ -42,8 +42,11 @@ describe("spine-delivery-server executable", () => {
   });
 
   it.each(signalSequences)("releases its listener after signal sequence %j", async (...signals) => {
+    const deliveryServerModule = pathToFileURL(
+      resolve("packages/delivery-server/dist/server/delivery-server.js"),
+    ).href;
     const script = [
-      `const { DeliveryServer } = await import(${JSON.stringify(pathToFileURL(resolve("packages/delivery-server/dist/server/delivery-server.js")).href)});`,
+      `const { DeliveryServer } = await import(${JSON.stringify(deliveryServerModule)});`,
       "let shuttingDown = false;",
       "let closeCalls = 0;",
       "const emit = process.emit;",
@@ -57,7 +60,9 @@ describe("spine-delivery-server executable", () => {
       "DeliveryServer.prototype.close = function () {",
       "  closeCalls++;",
       "  const closing = close.call(this);",
-      `  if (process.listenerCount(${JSON.stringify(signals[1])}) === 0) throw new Error("Delivery server signal handler missing during shutdown.");`,
+      `  if (process.listenerCount(${JSON.stringify(signals[1])}) === 0) {`,
+      '    throw new Error("Delivery server signal handler missing during shutdown.");',
+      "  }",
       "  shuttingDown = true;",
       '  process.stdout.write("Delivery server shutdown started\\n");',
       "  return new Promise((resolve, reject) => {",
