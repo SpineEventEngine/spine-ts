@@ -249,7 +249,7 @@ fit the exact signed 64-bit MySQL range. PostgreSQL is provided separately by
 Factory construction validates configuration without connecting. Explicit preparation
 or first use checks the selected record families; it does not scan unrelated
 tables. Existing tables must satisfy the expected layout. See the
-[storage layout reference](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/STORAGE_LAYOUT.md#mysql-and-mariadb) for
+[storage layout reference](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/STORAGE_LAYOUT.md#15-mysql-and-mariadb-exact-tables-and-human-checklist) for
 creation and compatibility-check timing.
 
 ## 🔗 Learn more

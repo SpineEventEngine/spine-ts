@@ -90,3 +90,14 @@ runtime review is clear. Final release and remote checks cover this correction.
 feature branch. Exact-revision Build and Security workflow results are the final
 remote checks; earlier repository audits reported zero known vulnerabilities.
 Do not merge or push to `master` without explicit human instruction.
+
+## Storage guide revision
+
+Organize the storage guide as two complete sections: single-tenant and multitenant.
+Each uses the same small domain example, enumerates exact physical structures and
+their purposes for every provider, and includes detailed application provisioning
+checklists, including Datastore indexes. Explain full-message serialization, query
+column conversions, message-valued fields, and Entity identifier conversions with
+concrete examples. Explain the complete Agent persistence lifecycle and the contents
+of its records, beyond merely naming model preferences. Retain gateway/auth coverage.
+This is a documentation revision; existing runtime behavior and tests remain unchanged.
