@@ -248,7 +248,7 @@ weight and adds the result to its stored counter. Register it like this:
 <!-- docs-snippet-path: examples/projects/test/topology.test.ts -->
 
 ```ts
-import { BoundedContext } from "@spine-event-engine/server";
+import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
 import { TaskAssignment, type AssignmentWeightService } from "../src/index.js";
 
 // Set up the service once, before the context starts receiving messages.
@@ -263,6 +263,8 @@ const builder = BoundedContext.singleTenant("Assignments")
     onCreate: (options) => new TaskAssignment(options, weights),
   });
 
+// Complete environment setup before building this Bounded Context.
+await ServerEnvironment.instance().completeSetup();
 // build() loads the generated handler registry for this application.
 const context = await builder.build();
 await context.close();

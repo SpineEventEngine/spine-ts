@@ -350,12 +350,14 @@ describe("direct ShardSessionRecord storage", () => {
     now = 1_000;
     await expect(first.release(session)).resolves.toBe(false);
 
-    const defaultLease = new ShardedWorkRegistry({
-      context: { name: "Tenanted", multitenant: true, tenantId: tenant("tenant-a") },
-      storageFactory: storage,
-      now: () => new Date(0),
-    });
-    await expect(defaultLease.pickUp(shard, worker("node-c", "worker-c"))).resolves.toBeTruthy();
+    expect(
+      () =>
+        new ShardedWorkRegistry({
+          context: { name: "Tenanted", multitenant: true, tenantId: tenant("tenant-a") },
+          storageFactory: storage,
+          now: () => new Date(0),
+        }),
+    ).toThrow("Shard registry requires a single-tenant Delivery context.");
   });
 });
 

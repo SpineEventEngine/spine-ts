@@ -289,6 +289,8 @@ export class DeliveryBuilder {
    * @returns This builder.
    */
   withContext(context: StorageContext): this {
+    if (context.multitenant)
+      throw new TypeError("Delivery requires a single-tenant storage context.");
     this.#context = DeliveryValues.snapshotContext(context);
     return this;
   }

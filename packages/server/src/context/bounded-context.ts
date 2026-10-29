@@ -2641,7 +2641,7 @@ export class BoundedContextBuilder {
       repositories,
       environment.storageFactory,
       generated.standalone,
-      this.#aiRegistry,
+      this.#aiRegistry ?? environment.ai,
     );
     try {
       await this.#integrateBuiltContext(context, options, environment);

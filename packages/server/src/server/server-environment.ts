@@ -18,6 +18,7 @@ import { TenantBoundary, type StoragePreparationMode } from "@spine-event-engine
 import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { InMemoryTransportFactory, type TransportFactory } from "@spine-event-engine/transport";
 import { spineCoreRegistry, type TypeRegistryLookup } from "@spine-event-engine/core";
+import type { AiRegistry } from "@spine-event-engine/ai";
 
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { Delivery as CoreDelivery } from "../delivery/delivery.js";
@@ -91,6 +92,11 @@ export interface ServerEnvironmentSettings {
   readonly tenantIndex?: TenantIndex;
 
   /**
+   * Default AI registry for Bounded Contexts without a local override.
+   */
+  readonly ai?: AiRegistry;
+
+  /**
    * Storage facility selected for server assembly, including server-added context builders.
    */
   readonly storageFactory?: StorageFactory;
@@ -114,7 +120,7 @@ export interface ServerEnvironmentSettings {
    * A remote facility may also provide `open`, `inbox`, `workRegistry`, and `source`.
    * The environment constructs its shared public Delivery separately.
    */
-  readonly delivery?: ServerEnvironmentCloseable;
+  readonly delivery?: ServerEnvironmentCloseable | ServerEnvironmentDelivery;
 
   /**
    * Maps targets to shards for every context in this environment.
@@ -169,6 +175,11 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    * Live default tenant membership index.
    */
   readonly tenantIndex: TenantIndex;
+
+  /**
+   * Default AI registry selected for Bounded Context assembly, when configured.
+   */
+  readonly ai: AiRegistry | undefined;
 
   /**
    * Message-channel factory selected for private bounded-context integration.
@@ -247,6 +258,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.nodeId = crypto.randomUUID();
     this.storageFactory = settings.storageFactory;
     this.tenantIndex = settings.tenantIndex ?? TenantIndexes.fromFactory(settings.storageFactory);
+    this.ai = settings.ai;
     this.integrationChannelFactory = settings.integrationChannelFactory;
     this.typeRegistry = settings.typeRegistry;
     this.#remoteDelivery = settings.delivery;
@@ -614,6 +626,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       context: { name: "__System_Delivery__", multitenant: false },
       storageFactory: this.storageFactory,
       node: this.nodeId,
+      ...(ports?.source === undefined ? { logger: ServerEnvironmentValues.loggerFor(this) } : {}),
       ...(this.#deliveryStrategy === undefined
         ? {}
         : { strategy: deliveryStrategyAccess.snapshot(this.#deliveryStrategy) }),
@@ -700,6 +713,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly tenantIndex: TenantIndex | undefined;
+  readonly ai: AiRegistry | undefined;
   readonly integrationChannelFactory: TransportFactory;
   readonly typeRegistry: TypeRegistryLookup;
   readonly delivery: ServerEnvironmentCloseable | undefined;
@@ -1320,15 +1334,13 @@ const ServerEnvironmentValues = Object.freeze({
     settings: ServerEnvironmentSettings,
   ): RequiredFacilities {
     if (type === EnvironmentType.Production) {
-      if (settings.storageFactory === undefined) {
-        throw new Error("Production ServerEnvironment requires storageFactory.");
-      }
       if (settings.typeRegistry === undefined) {
         throw new Error("Production ServerEnvironment requires typeRegistry.");
       }
       return {
-        storageFactory: settings.storageFactory,
+        storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
         tenantIndex: settings.tenantIndex,
+        ai: settings.ai,
         integrationChannelFactory:
           settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
         typeRegistry: settings.typeRegistry,
@@ -1341,6 +1353,7 @@ const ServerEnvironmentValues = Object.freeze({
     return {
       storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
       tenantIndex: settings.tenantIndex,
+      ai: settings.ai,
       integrationChannelFactory:
         settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
       typeRegistry: settings.typeRegistry ?? spineCoreRegistry,

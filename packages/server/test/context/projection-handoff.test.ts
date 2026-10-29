@@ -32,7 +32,7 @@ import { tenant } from "../tenant-fixture.js";
 describe("LocalProjectionInbox", () => {
   it("checks a multitenant descriptor tenant before inbox persistence", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-dynamic") },
+      context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const admitted = Promise.withResolvers<undefined>();

@@ -38,23 +38,18 @@ describe("ServerEnvironment singleton", () => {
     try {
       expect(production.Environment.instance().type).toBe(production.EnvironmentType.Production);
       expect(() => production.ServerEnvironment.instance()).toThrow(
-        "Production ServerEnvironment requires storageFactory.",
+        "Production ServerEnvironment requires typeRegistry.",
       );
 
       const { InMemoryStorageFactory: ProductionMemoryFactory } =
         await import("@spine-event-engine/storage");
-      const storageFactory = new ProductionMemoryFactory();
       production.ServerEnvironment.when(production.EnvironmentType.Production).use({
-        storageFactory,
-      });
-      production.ServerEnvironment.when(production.EnvironmentType.Production).use({
-        storageFactory,
         typeRegistry: spineCoreRegistry,
       });
       const environment = production.ServerEnvironment.instance();
 
       expect(environment.environment.type).toBe(production.EnvironmentType.Production);
-      expect(environment.storageFactory).toBe(storageFactory);
+      expect(environment.storageFactory).toBeInstanceOf(ProductionMemoryFactory);
       await environment.completeSetup();
 
       const running = await production.Server.atPort(0)

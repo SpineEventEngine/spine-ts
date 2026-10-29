@@ -139,7 +139,8 @@ valid event with no interested external receptor is simply not delivered.
 ## Server environment facilities
 
 `ServerEnvironment.instance()` is a process-wide singleton. Production
-resolution requires storage and the complete application schema registry:
+resolution requires the complete application schema registry; storage defaults to
+in-memory when `storageFactory` is omitted:
 
 ```ts
 import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
@@ -733,15 +734,16 @@ registration with these options.
 
 Configuration has these scopes:
 
-| Scope           | Setting                                  | Effect                                                           |
-| --------------- | ---------------------------------------- | ---------------------------------------------------------------- |
-| Bounded Context | `BoundedContextBuilder.withAi(registry)` | Registry used by Agents in that Bounded Context.                 |
-| Repository      | `ai.defaultModels`                       | Generation and decision defaults before the registry's defaults. |
-| Repository      | `ai.allowedModels`                       | Deployment references the Agent may use.                         |
-| Repository      | `ai.resolveModel`                        | Optional accepted-source choice before the Agent handler.        |
-| Repository      | `ai.authorizeSelection`                  | Authorizes explicit choices and staged preference changes.       |
-| Repository      | `ai.invocationLimits`                    | Limits that can narrow the registry's whole-signal limits.       |
-| Instance        | `this.ai.select(kind, ref)`              | A saved preference applied to later accepted signals.            |
+| Scope           | Setting                                    | Effect                                                           |
+| --------------- | ------------------------------------------ | ---------------------------------------------------------------- |
+| Environment     | `ServerEnvironment.when(type).use({ ai })` | Default registry for Bounded Contexts.                           |
+| Bounded Context | `BoundedContextBuilder.withAi(registry)`   | Overrides environment AI for one Bounded Context.                |
+| Repository      | `ai.defaultModels`                         | Generation and decision defaults before the registry's defaults. |
+| Repository      | `ai.allowedModels`                         | Deployment references the Agent may use.                         |
+| Repository      | `ai.resolveModel`                          | Optional accepted-source choice before the Agent handler.        |
+| Repository      | `ai.authorizeSelection`                    | Authorizes explicit choices and staged preference changes.       |
+| Repository      | `ai.invocationLimits`                      | Limits that can narrow the registry's whole-signal limits.       |
+| Instance        | `this.ai.select(kind, ref)`                | A saved preference applied to later accepted signals.            |
 
 A prebuilt Bounded Context already has its registry; adding it to a server does not
 reconfigure it. An instance preference takes precedence over its repository
@@ -1059,7 +1061,9 @@ delivery, global update ordering, nor cluster-complete notification delivery.
 ## Delivery and environment
 
 `Inbox`, `InboxStorage`, `ShardIndex`, and `ShardedWorkRegistry` provide the
-local durable-row abstraction. Read limits are 1–1000; work leases are
+local durable-row abstraction. Inbox and shard storage require a single-tenant
+Delivery storage context shared by all tenants; the packed signal supplies
+the dispatch tenant. Read limits are 1–1000; work leases are
 1000–2147483647 ms. Framework replay supports command handling, projection
 updates, and process-manager reactions. Callbacks are at-least-once/replay-safe:
 lost renewal can prevent stale finalization but cannot undo a callback already

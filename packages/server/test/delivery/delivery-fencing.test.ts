@@ -13,6 +13,7 @@
  */
 
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import type { ILogLayer } from "loglayer";
 import { create } from "@bufbuild/protobuf";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it, vi } from "vitest";
@@ -28,6 +29,155 @@ import { ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Delivery fencing", () => {
+  it("reports one safe detached failure for a burst of wakes during shard pickup", async () => {
+    const row = createMessage("burst-failure", "signal", 1n);
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const entered = Promise.withResolvers<undefined>();
+    const logs: string[] = [];
+    const metadata: Record<string, unknown>[] = [];
+    const logger = {
+      withMetadata: (facts: Record<string, unknown>) => {
+        metadata.push(facts);
+        return { error: (message: string) => logs.push(message) };
+      },
+    };
+    const delivery = agentDelivery(
+      [],
+      () => undefined,
+      undefined,
+      new Set(),
+      logger as unknown as ILogLayer,
+    );
+    let pickups = 0;
+    delivery.shards.pickUp = () => {
+      if (++pickups === 1) {
+        entered.resolve(undefined);
+        return pickup.promise;
+      }
+      return Promise.resolve(undefined);
+    };
+    const sensitive = { secret: "background read details" };
+    delivery.inbox.read = vi.fn().mockRejectedValue(sensitive);
+    delivery.setReplay(() => undefined);
+    for (let count = 0; count < 4; count++) delivery.wake(row.shard);
+    await entered.promise;
+    pickup.resolve(session());
+    await delivery.whenIdle().catch(() => undefined);
+    expect(logs).toEqual(["Background Delivery failed."]);
+    expect(metadata).toEqual([{ shardId: row.shard.key(), errorName: "UnknownError" }]);
+    await delivery.close().catch(() => undefined);
+  });
+
+  it("does not log a failed background run joined by an exact handoff", async () => {
+    const row = createMessage("mixed-failure", "signal", 1n);
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const entered = Promise.withResolvers<undefined>();
+    const failure = new Error("background read failed");
+    const logs: string[] = [];
+    const logger = { withMetadata: () => ({ error: (message: string) => logs.push(message) }) };
+    const delivery = agentDelivery(
+      [],
+      () => undefined,
+      undefined,
+      new Set(),
+      logger as unknown as ILogLayer,
+    );
+    let pickups = 0;
+    delivery.shards.pickUp = () => {
+      if (++pickups === 1) {
+        entered.resolve(undefined);
+        return pickup.promise;
+      }
+      return Promise.resolve(undefined);
+    };
+    delivery.inbox.read = () => Promise.reject(failure);
+    delivery.setReplay(() => undefined);
+    delivery.wake(row.shard);
+    await entered.promise;
+    const handoff = delivery.drainMessage(row, { onMessage: () => undefined });
+    pickup.resolve(session());
+    await expect(handoff).resolves.toMatchObject({
+      acknowledged: false,
+      outcome: { kind: "failed", error: failure },
+    });
+    await delivery.whenIdle().catch(() => undefined);
+    expect(logs).toEqual([]);
+    await delivery.close().catch(() => undefined);
+  });
+
+  it("logs a later shard failure after the exact row was acknowledged", async () => {
+    const row = createMessage("later-failure", "signal", 1n);
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const entered = Promise.withResolvers<undefined>();
+    const acknowledged = new Set<string>();
+    const logs: string[] = [];
+    const logger = { withMetadata: () => ({ error: (message: string) => logs.push(message) }) };
+    const delivery = agentDelivery(
+      [row],
+      (message) => acknowledged.add(message.id.value),
+      undefined,
+      acknowledged,
+      logger as unknown as ILogLayer,
+    );
+    let pickups = 0;
+    delivery.shards.pickUp = () => {
+      if (++pickups === 1) {
+        entered.resolve(undefined);
+        return pickup.promise;
+      }
+      return Promise.resolve(undefined);
+    };
+    delivery.inbox.read = () =>
+      acknowledged.has(row.id.value)
+        ? Promise.reject(new Error("later inbox read failed"))
+        : Promise.resolve([row]);
+    delivery.setReplay(() => undefined);
+    delivery.wake(row.shard);
+    await entered.promise;
+    const handoff = delivery.drainMessage(row, { onMessage: () => undefined });
+    pickup.resolve(session());
+    await expect(handoff).resolves.toMatchObject({ acknowledged: true });
+    await delivery.whenIdle().catch(() => undefined);
+    expect(logs).toEqual(["Background Delivery failed."]);
+    await delivery.close().catch(() => undefined);
+  });
+
+  it("settles concurrent handoffs for the same row after one dispatch", async () => {
+    const message = createMessage("same-row", "signal", 1n);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const acknowledged = new Set<string>();
+    const delivery = agentDelivery(
+      [message],
+      (next) => acknowledged.add(next.id.value),
+      undefined,
+      acknowledged,
+    );
+    delivery.shards.pickUp = () => Promise.resolve(session());
+    delivery.inbox.read = async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      return acknowledged.has(message.id.value) ? [] : [message];
+    };
+    let dispatched = 0;
+    const first = delivery.drainMessage(message, {
+      onMessage: () => {
+        dispatched++;
+      },
+    });
+    await entered.promise;
+    const second = delivery.drainMessage(message, {
+      onMessage: () => {
+        dispatched++;
+      },
+    });
+    release.resolve(undefined);
+    const outcomes = await Promise.all([first, second]);
+    expect(outcomes.map((outcome) => outcome.acknowledged)).toEqual([true, true]);
+    expect(dispatched).toBe(1);
+    await delivery.close();
+  });
+
   it.each(["supervisor-first", "direct-first"] as const)(
     "shares one retained shard run for %s admission",
     async (order) => {
@@ -1004,10 +1154,12 @@ function agentDelivery(
   onMark: (message: ReturnType<typeof createMessage>) => void,
   onRelease: () => void = () => undefined,
   acknowledged = new Set<string>(),
+  logger?: ILogLayer,
 ): Delivery {
   return new Delivery({
     context: { name: "AgentDelivery", multitenant: false },
     storageFactory: new InMemoryStorageFactory(),
+    ...(logger === undefined ? {} : { logger }),
     inbox: {
       sessionKind: "LEASED",
       receive: () => Promise.reject(new Error("unused")),

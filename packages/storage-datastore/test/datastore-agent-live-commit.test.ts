@@ -29,7 +29,7 @@ import {
   StoragePreparations,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Datastore } from "@google-cloud/datastore";
 
 import {
@@ -41,10 +41,35 @@ import {
 import { entityInput } from "../../storage/test/entity/agent-live-fixtures.js";
 import { conversation } from "../../storage/test/entity/agent-history-fixtures.js";
 import { DatastoreStorageFactory } from "../src/index.js";
+import { DatastoreEntityCommitStorage } from "../src/datastore/entity-history.js";
 
 const url = process.env.DATASTORE_EMULATOR_HOST;
 
 describe("Datastore Agent preparation without an emulator", () => {
+  it("propagates one native Agent transaction abort after rollback", async () => {
+    const failure = Object.assign(new Error("native contention"), { code: 10 });
+    const transaction = {
+      run: vi.fn().mockResolvedValue(undefined),
+      save: vi.fn(),
+      commit: vi.fn().mockRejectedValue(failure),
+      rollback: vi.fn().mockResolvedValue(undefined),
+    };
+    const preferences = { transaction: vi.fn(() => transaction) };
+    const commits = new DatastoreEntityCommitStorage(entityInput() as never, () => {
+      throw new Error("unused");
+    });
+    const internal = commits as unknown as {
+      agentLocked: () => Promise<void>;
+      agentTransaction: (...args: unknown[]) => Promise<void>;
+    };
+    vi.spyOn(internal, "agentLocked").mockResolvedValue(undefined);
+    await expect(
+      internal.agentTransaction({ preferences }, "agent", 0, undefined, {}, undefined, []),
+    ).rejects.toBe(failure);
+    expect(preferences.transaction).toHaveBeenCalledOnce();
+    expect(transaction.rollback).toHaveBeenCalledOnce();
+  });
+
   it("rejects custom storage without invoking its creator during Agent preparation", async () => {
     const factory = DatastoreStorageFactory.newBuilder()
       .setClient(new Datastore({ projectId: "spine-env-lifecycle-datastore" }))
@@ -249,11 +274,34 @@ describe.skipIf(url === undefined)("Datastore live Agent conditional persistence
             preferences: [],
           }),
         ]);
-        expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-        expect(outcomes.filter((result) => result.status === "rejected")).toHaveLength(1);
-        expect(await contenderA.readAgentPreferences(raceId)).toEqual(
-          await contenderB.readAgentPreferences(raceId),
+        const successful = outcomes.filter((result) => result.status === "fulfilled");
+        expect(successful.length).toBeLessThanOrEqual(1);
+        for (const outcome of outcomes) {
+          if (outcome.status !== "rejected") continue;
+          expect(outcome.reason).toBeInstanceOf(Error);
+          const failure = outcome.reason as Error & { code?: number };
+          expect(
+            failure.code === 10 ||
+              failure.message.includes("Agent model preferences changed during the live turn."),
+          ).toBe(true);
+        }
+        const persisted = await contenderA.readAgentPreferences(raceId);
+        expect(persisted).toEqual(await contenderB.readAgentPreferences(raceId));
+        expect(persisted).toEqual(
+          outcomes[0].status === "fulfilled"
+            ? [preference]
+            : outcomes[1].status === "fulfilled"
+              ? []
+              : undefined,
         );
+        const nextPreferences = persisted?.length === 1 ? [] : [preference];
+        await contenderA.commitAgent({
+          entityId: raceId,
+          expectedVersion: 0,
+          expectedPreferences: persisted,
+          preferences: nextPreferences,
+        });
+        await expect(contenderB.readAgentPreferences(raceId)).resolves.toEqual(nextPreferences);
       } finally {
         await Promise.all([contenderA.close(), contenderB.close()]);
       }

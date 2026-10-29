@@ -80,6 +80,8 @@ export class InboxStorage {
    * @param options Configures the storage context, factory, and optional clock.
    */
   constructor(options: InboxStorageOptions) {
+    if (options.context.multitenant)
+      throw new TypeError("Inbox storage requires a single-tenant Delivery context.");
     this.#context = Values.snapshotContext(options.context);
     this.#storageFactory = options.storageFactory;
     this.#now = options.now ?? (() => new Date(Time.currentTimeMillis()));

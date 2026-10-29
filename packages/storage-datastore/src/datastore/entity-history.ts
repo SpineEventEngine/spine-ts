@@ -496,7 +496,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
   }
 
   /**
-   * Executes a captured transition with the existing bounded native contention retry.
+   * Executes a captured Agent transition in one native transaction.
    * @param rows Retained native families.
    * @param id Captured Agent ID.
    * @param version Initial Entity version.
@@ -517,21 +517,17 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     mutation: EntityCommitInput<I, S> | undefined,
     history: readonly AgentHistoryEntry[],
   ): Promise<void> {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const tx = rows.preferences.transaction();
-      try {
-        await tx.run();
-        const staged: NativeRow[] = [];
-        await this.agentLocked(tx, staged, rows, id, version, expected, next, mutation, history);
-        NativeTransactions.validateRows(staged);
-        for (const row of staged) tx.save(row);
-        await tx.commit();
-        return;
-      } catch (error) {
-        await tx.rollback().catch(() => undefined);
-        if (attempt < 2 && NativeTransactions.isAborted(error)) continue;
-        throw error;
-      }
+    const tx = rows.preferences.transaction();
+    try {
+      await tx.run();
+      const staged: NativeRow[] = [];
+      await this.agentLocked(tx, staged, rows, id, version, expected, next, mutation, history);
+      NativeTransactions.validateRows(staged);
+      for (const row of staged) tx.save(row);
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => undefined);
+      throw error;
     }
   }
 

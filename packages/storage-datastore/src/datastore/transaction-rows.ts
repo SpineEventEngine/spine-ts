@@ -38,14 +38,6 @@ interface NativeTransactionChecks {
    * @param rows Complete provider rows for this operation.
    */
   validateRows(rows: readonly NativeRow[]): void;
-
-  /**
-   * Checks native write contention eligible for a bounded retry.
-   *
-   * @param error Original operation or cleanup error.
-   * @returns Whether the native error represents retryable transaction contention.
-   */
-  isAborted(error: unknown): boolean;
 }
 
 /**
@@ -83,12 +75,5 @@ export const NativeTransactions: NativeTransactionChecks = Object.freeze({
       0,
     );
     if (bytes > 9 * 1024 * 1024) throw new Error("Datastore transaction payload limit exceeded.");
-  },
-
-  /**
-   * Identifies native write contention eligible for a bounded retry.
-   */
-  isAborted(error: unknown): boolean {
-    return typeof error === "object" && error !== null && Reflect.get(error, "code") === 10;
   },
 });

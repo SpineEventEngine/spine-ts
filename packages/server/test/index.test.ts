@@ -40,6 +40,9 @@ import {
   EnvironmentType,
   ServerEnvironment,
   type ServerEnvironmentSettings,
+  type ServerEnvironmentCloseable,
+  type ServerEnvironmentDelivery,
+  type DeliveryWorkRegistry,
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
@@ -264,8 +267,16 @@ describe("@spine-event-engine/server", () => {
       ((message: InboxMessage, options?: DeliveryOperationOptions) => Promise<boolean>) | undefined
     >();
     expectTypeOf<ServerEnvironmentSettings["delivery"]>().toEqualTypeOf<
-      { close(): unknown } | undefined
+      ServerEnvironmentCloseable | ServerEnvironmentDelivery | undefined
     >();
+    expectTypeOf<{
+      delivery: {
+        open(): unknown;
+        close(): unknown;
+        readonly inbox: DeliveryInbox;
+        readonly workRegistry: DeliveryWorkRegistry;
+      };
+    }>().toExtend<ServerEnvironmentSettings>();
     expect(Environment.instance()).toBe(Environment.instance());
     expect(ServerEnvironment.when.bind(ServerEnvironment)).toBeTypeOf("function");
     expect(EnvironmentType.Local).toBe("local");

@@ -72,6 +72,69 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("accepts an inline remote Delivery facility", async () => {
+    const ports = new CoreDelivery({
+      context: { name: "InlineRemote", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      delivery: {
+        open: () => undefined,
+        close: () => ports.close(),
+        inbox: ports.inbox,
+        workRegistry: ports.shards,
+      },
+    });
+    const environment = ServerEnvironment.instance();
+    await environment.completeSetup();
+    expect(environment.delivery.inbox).toBe(ports.inbox);
+    await environment.close();
+  });
+
+  it("logs one escaping local background Delivery failure", async () => {
+    const logged = Promise.withResolvers<string>();
+    const errors: string[] = [];
+    const child = {
+      withMetadata: () => ({
+        info: () => undefined,
+        warn: () => undefined,
+        error: (message: string) => {
+          errors.push(message);
+          logged.resolve(message);
+        },
+      }),
+    };
+    const ports = new CoreDelivery({
+      context: { name: "BackgroundFailure", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new Proxy(ports.inbox, {
+      get(target, property) {
+        if (property === "read") return () => Promise.reject(new Error("background read failed"));
+        const value: unknown = Reflect.get(target, property);
+        return typeof value === "function"
+          ? (value as (...args: unknown[]) => unknown).bind(target)
+          : value;
+      },
+    });
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      logger: { child: () => child } as unknown as ILogLayer,
+      delivery: {
+        open: () => undefined,
+        close: () => ports.close(),
+        inbox,
+        workRegistry: ports.shards,
+      },
+    });
+    const environment = ServerEnvironment.instance();
+    await environment.completeSetup();
+    const delivery = serverEnvironmentAccess.coreDelivery(environment);
+    delivery.wake(ShardIndex.single());
+    await expect(logged.promise).resolves.toBe("Background Delivery failed.");
+    expect(errors).toEqual(["Background Delivery failed."]);
+    await environment.close().catch(() => undefined);
+  });
+
   it("completes shared setup before a direct context becomes available", async () => {
     const storage = new InMemoryStorageFactory();
     const check = vi.spyOn(storage, "checkConnection");

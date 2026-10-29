@@ -342,9 +342,22 @@ describe("direct InboxMessage storage", () => {
     ).resolves.toEqual([second]);
   });
 
-  it("validates direct read bounds, clock output, and multitenant storage context", async () => {
+  it("rejects a tenant-specific Inbox before opening storage", () => {
+    const factory = new InMemoryStorageFactory();
+    const opened = vi.spyOn(factory, "createRecordStorage");
+    expect(
+      () =>
+        new InboxStorage({
+          context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+          storageFactory: factory,
+        }),
+    ).toThrow("Inbox storage requires a single-tenant Delivery context.");
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it("validates direct read bounds and clock output", async () => {
     const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+      context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
       now: () => new Date(Number.NaN),
     });

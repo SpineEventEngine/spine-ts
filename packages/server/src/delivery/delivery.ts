@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
+import type { ILogLayer } from "loglayer";
 
 import type { DeliveryControlledRun } from "./delivery-run-control.js";
 import {
@@ -38,6 +39,7 @@ import { withDeliveryCommitFence } from "../repository/commit-fence.js";
 import { receptionObservation, type ReceptionObservation } from "./reception-observation.js";
 import { AgentDeliveryScope, type AgentDeliveryOutcome } from "./agent-delivery-scope.js";
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
+import { emitServerError } from "../server/server-log.js";
 
 const deliveryFailureLimit = 100;
 const controlledMessageSettlers = new WeakMap<
@@ -68,7 +70,8 @@ interface DirectDrainInput {
 interface DirectPending {
   readonly shardKey: string;
   readonly input: DirectDrainInput;
-  readonly settle: (outcome: DeliveryMessageOutcome) => void;
+  readonly settle: (outcome: DeliveryMessageOutcome) => boolean;
+  readonly completed: Promise<DeliveryDirectRun>;
 }
 
 type DirectDrainRequest =
@@ -272,6 +275,12 @@ export class Delivery {
 
   readonly #directPending = new Map<string, DirectPending>();
 
+  readonly #logger: ILogLayer | undefined;
+
+  readonly #backgroundObserved = new WeakSet<Promise<DeliveryRun>>();
+
+  readonly #callerObserved = new WeakSet<Promise<DeliveryRun>>();
+
   readonly #activeDirect = new Map<
     string,
     { readonly completed: Promise<DeliveryRun>; wake(): void }
@@ -395,7 +404,7 @@ export class Delivery {
       if (!drain.wake()) this.#pendingDirectWake.add(shard.key());
       return;
     }
-    if (this.#replay !== undefined) void this.#startDirect(shard);
+    if (this.#replay !== undefined) this.#observeBackground(this.#startDirect(shard), shard);
   }
 
   /**
@@ -404,6 +413,8 @@ export class Delivery {
    * @param options The delivery configuration.
    */
   constructor(options: DeliveryOptions) {
+    if (options.context.multitenant)
+      throw new TypeError("Delivery requires a single-tenant storage context.");
     if (
       options.worker !== undefined &&
       options.node !== undefined &&
@@ -412,6 +423,7 @@ export class Delivery {
       throw new Error("Delivery worker node must match the configured delivery node.");
     }
     this.context = Delivery.#contextSnapshot(options.context);
+    this.#logger = options.logger;
     this.storageFactory = options.storageFactory;
     this.strategy = options.strategy ?? { shardCount: 1, shardFor: () => ShardIndex.single() };
     this.worker =
@@ -528,14 +540,22 @@ export class Delivery {
   }
 
   async #drainDirect(message: InboxMessage, input: DirectDrainInput): Promise<DeliveryDirectRun> {
-    const selected = Promise.withResolvers<DeliveryDirectRun>();
     const key = Delivery.#messageKey(message);
-    const settle = (outcome: DeliveryMessageOutcome): void => {
-      if (this.#directPending.get(key)?.settle !== settle) return;
+    const pending = this.#directPending.get(key);
+    if (pending !== undefined) return pending.completed;
+    const selected = Promise.withResolvers<DeliveryDirectRun>();
+    const settle = (outcome: DeliveryMessageOutcome): boolean => {
+      if (this.#directPending.get(key)?.settle !== settle) return false;
       this.#directPending.delete(key);
       selected.resolve(Object.freeze({ acknowledged: outcome.kind === "acknowledged", outcome }));
+      return true;
     };
-    this.#directPending.set(key, { shardKey: message.shard.key(), input, settle });
+    this.#directPending.set(key, {
+      shardKey: message.shard.key(),
+      input,
+      settle,
+      completed: selected.promise,
+    });
     const completed = this.#startDirect(message.shard);
     this.#observeSelectedRun(message.shard, key, completed, settle);
     return selected.promise;
@@ -559,7 +579,7 @@ export class Delivery {
         } else settle({ kind: "unresolved", run });
       },
       (error: unknown) => {
-        settle({ kind: "failed", error });
+        if (settle({ kind: "failed", error })) this.#callerObserved.add(completed);
       },
     );
   }
@@ -618,10 +638,31 @@ export class Delivery {
       .finally(() => {
         this.#activeDirect.delete(key);
         this.#directDrains.delete(key);
-        if (this.#pendingDirectWake.delete(key) && !this.#closing) void this.#startDirect(shard);
+        if (this.#pendingDirectWake.delete(key) && !this.#closing)
+          this.#observeBackground(this.#startDirect(shard), shard);
       })
       .catch(() => undefined);
     return completed;
+  }
+
+  /**
+   * Reports a detached local shard failure without changing its result.
+   * @param completed Detached shard run.
+   * @param shard Failed shard.
+   */
+  #observeBackground(completed: Promise<DeliveryRun>, shard: ShardIndex): void {
+    if (this.#backgroundObserved.has(completed)) return;
+    this.#backgroundObserved.add(completed);
+    void completed.catch(async (error: unknown) => {
+      // Give exact-row observers of this rejection a chance to settle first.
+      await Promise.resolve();
+      if (this.#closing || this.#logger === undefined || this.#callerObserved.has(completed))
+        return;
+      emitServerError(this.#logger, "Background Delivery failed.", {
+        shardId: shard.key(),
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+    });
   }
 
   /**
@@ -1641,6 +1682,11 @@ export interface DeliveryOptions {
    * Supplies durable record storage.
    */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Receives contained diagnostics for detached local shard runs.
+   */
+  readonly logger?: ILogLayer;
 
   /**
    * Supplies direct shard ownership when customized.

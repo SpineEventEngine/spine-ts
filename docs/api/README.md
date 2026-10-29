@@ -551,9 +551,9 @@ storage, integration-channel, optional delivery, and optional tracing facility s
 builders use the shared environment storage factory.
 `Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
 explicit through `ServerOptions`. All servers share the lazily resolved
-singleton; production configuration requires `storageFactory` and `typeRegistry`
-before first resolution, and production selection itself requires
-`NODE_ENV=production` before that first resolution. `RunningServer` exposes
+singleton; production configuration requires `typeRegistry` before first resolution.
+Without a configured `storageFactory`, the environment uses in-memory storage.
+Production selection requires `NODE_ENV=production` before first resolution. `RunningServer` exposes
 `host`, `port`, `baseUrl`, and
 idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
 closes service intake, drains accepted work, then closes contexts and explicit
@@ -842,6 +842,7 @@ import {
 import {
   BoundedContext,
   Command,
+  ServerEnvironment,
   type EntityHandlersMetadata,
   HandlerRegistryIngestor,
   ProcessManager,
@@ -905,6 +906,7 @@ const repository = new Repository({
   schema: CoordinationStateSchema,
   handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
 });
+await ServerEnvironment.instance().completeSetup();
 const context = await BoundedContext.singleTenant("Projects").add(repository).build();
 await context.commandBus().post(
   SignalEnvelopes.command({

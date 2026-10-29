@@ -1,83 +1,26 @@
 # Shared environment and storage lifecycle
 
-## Scope and status
+## Status and decisions
 
-Implementation authorized 2026-10-27. High-risk: shared runtime lifecycle,
-persistence, concurrency, public and serialized contracts across providers.
-Branch: `environment-lifecycle`. Baseline: freshly fetched official
+The high-risk `environment-lifecycle` feature branch started from official
 `origin/master` at `ff6c8669537a016c47f012150306500d3b52b5d1`.
-Worktree: `/Users/armiol/.codex/worktrees/environment-lifecycle/spine-ts`.
-The accepted [proposal](PROPOSAL.md) includes the complete Agent recovery-removal
-task. Implementation and required local release verification are complete. Repository/EventStore retention, shared AnyPacker,
-provider commit-storage retention and awaitable shutdown are reviewed and pushed.
-Shared preparation contracts and the memory implementation are complete, as is
-PostgreSQL offline assembly, tenant resolution and physical structure preparation.
-MySQL/MariaDB offline connection lifecycle and physical structure preparation are
-reviewed and complete. Datastore native/custom preparation is also reviewed and
-complete. Public live TenantIndex configuration and native membership are reviewed
-and complete. Tenant admission and identifiable errors are reviewed and complete.
-Unconditional duplicate-state registration and the unified asynchronous build API
-are verified, independently reviewed and pushed. Immutable Agent acceptance receipts and
-conditional live Agent persistence and server recovery removal are reviewed and pushed.
-M21 removal of the remaining AI-adapter replay SPI and saved-response paths is
-verified and independently reviewed, including preservation of live corrections
-and typed audit records.
-Shared environment setup and Delivery consolidation are reviewed and complete,
-including context-specific shutdown and retained shared dispatch lifetimes.
-Bounded Context eager/lazy initialization is reviewed and pushed.
-Subscription monitoring is reviewed and pushed. Explicit context and environment
-preparation APIs are verified, independently reviewed and pushed. Protocol integration
-and remaining AnyPacker adoption are verified, independently reviewed and pushed.
-Final documentation, native evidence, specialist review and security review
-are accepted. The version-only commit for all 35 workspace manifests is pushed.
-Full-suite regression corrections and focused behavior coverage are complete and
-independently reviewed. The final full release run (M60 at
-`00295e669213dbf7531dddc62426fc68ef26976d`) passed in 373 seconds with all original
-gates and thresholds unchanged: 6,258 Vitest tests passed, 14 skipped, and all
-39 Node tests passed. Coverage passed for statements (93.55%), branches (90.00%,
-20,686/22,984), functions (95.64%), and lines (95.37%). This supersedes M54 and
-earlier diagnostic measurements. Build, tooling, lint, generated-code,
-documentation and release-readiness checks passed in the same run.
+The [accepted proposal](PROPOSAL.md) includes the full Agent recovery-removal
+requirement. The detailed [factory preparation](FACTORY_PREPARATION.md),
+[Agent live execution](AGENT_LIVE_EXECUTION.md),
+[Agent delivery lifetime](AGENT_DELIVERY_LIFETIME.md),
+[Agent completion audit](AGENT_COMPLETION_AUDIT.md),
+[shared Delivery close](SHARED_DELIVERY_CLOSE.md), and
+[fatal initialization](FATAL_INITIALIZATION.md) decisions remain applicable.
+The common workspace version is `2.0.0-snapshot.25` in a separate version-only commit.
 
-All accepted specialist findings are resolved. The scheduled Security workflow's
-31 dependency vulnerabilities have been remediated and independently reviewed;
-both local audits report zero known vulnerabilities. Feature-branch Security CI
-passed at `89e6faafa`. After pushing this final evidence-only update, refresh that
-workflow on the exact final branch SHA and record its result in the final handoff
-and external evidence, avoiding a self-referential record-only commit. No further
-implementation, coverage or local release work remains. The historical behavior
-descriptions in the proposal refer to the baseline; current supported behavior
-is documented in the updated framework guides and API documentation.
+Fresh independent review corrections are complete. The changes include environment
+AI inheritance, the Production storage default, shared Inbox enforcement,
+Delivery failure reporting and concurrent handoffs, one native Datastore Agent
+transaction attempt, and corrected public configuration examples. Required
+review concerns are clear; focused checks include native Datastore transactions
+and shared-Delivery tenant and shard behavior.
 
-## Added Delivery validation regression
-
-2026-10-28: Human prioritizes fellow-developer feedback before further coverage.
-Snapshot .24 reportedly lets post-handler state/output validation errors bypass
-onReceptionFailure and failure counts; supervisor silence leaves the Inbox row
-pending, repeatedly runs handler effects and blocks later shard work. Investigate
-.24 and this branch, reproduce, and route these errors through onReceptionFailure
-so the existing monitor policy decides acknowledgement or retry. Preserve failure
-observability and ordinary delivery semantics. Ask only substantive unresolved
-questions after source investigation. This correction is implemented, verified and independently reviewed; resume coverage.
-
-Acceptance for this correction:
-
-- A handler's invalid resulting state or produced signal reaches
-  `onReceptionFailure` with the original error and increments `failed`.
-- The existing monitor decides whether to acknowledge or repeat. Successful
-  acknowledgement allows later work in the same shard and prevents automatic
-  repetition of that acknowledged message.
-- The default monitor's acknowledgement completes a local post normally, as it
-  already does for an exception thrown inside a handler. Tests must assert the
-  monitored validation error and unchanged persisted state, not merely replace
-  a rejection assertion with a successful post assertion.
-- Invalid input remains rejected before handler invocation; genuine storage and
-  shard-session failures must not become default-acknowledged receptions.
-- A genuine escaping background Delivery failure is observable through safe
-  logging. Do not duplicate returned/observed failure logs or log normal close
-  cancellation as an application failure.
-
-## Human-Imposed Requirements Ledger
+## Binding requirements
 
 - First priority: retain Storage objects for their runtime lifetime.
 - ServerEnvironment supplies storage, transport and Delivery; no Application.
@@ -103,55 +46,25 @@ Acceptance for this correction:
 - Preserve independent Bounded Context operation during other context builds.
 - Address all scheduled security dependency findings after lifecycle work; retain
   the existing audit thresholds and checks.
+- Environment AI is optional and inherited unless `withAi()` overrides it;
+  no configured AI remains valid for Bounded Contexts without Agents.
+- InboxStorage, ShardedWorkRegistry, and Delivery accept only a shared
+  single-tenant storage context, including lower-level public construction.
+  Packed signals retain tenant identity for dispatch.
+- Production retains the complete application `typeRegistry` requirement and
+  uses an in-memory StorageFactory if none is configured.
+- Native Datastore Agent commits use one transaction and propagate failure
+  after rollback; configured live AI correction settings are unchanged.
 
-## Workflow
+## Verification and handoff
 
-Desktop supports explicit required child model/reasoning profiles. Standard
-speed; no boost. Architecture assignment: existing requirements_splitter,
-`gpt-6-astra` / `high`, explicit immutable profile. Implementation and relevant
-technical reviews: existing Sol roles, `gpt-6-sol` / `medium`. Documentation:
-`gpt-6-luna` / `medium`. Mechanical checks: orchestrator-dispatched Luna function.
-Actual runtime metadata is recorded when available; otherwise configured
-profiles and that limitation suffice. Children must not delegate.
+Local release verification passes: 6,269 Vitest tests and 39 Node tests, with
+14 optional tests skipped and branch coverage at the unchanged 90% threshold.
+The native Datastore Agent tests also pass. The release stages were resumed
+after staging intended document deletions and correcting obsolete test fixtures.
+All accepted independent-review findings are resolved.
 
-Skill applicability: session inventory, repository expected-skill manifest,
-`rg --files ~/.agents/skills -g SKILL.md`, and readable
-`~/.agents/.skill-lock.json` were inspected. Apply `using-git-worktrees`,
-`test-driven-development`, and `verification-before-completion`; their local
-SKILL.md sources were read before governed actions. Repository workflow governs
-review batching and autonomous continuation. `executing-plans` is not applied:
-the repository already specifies its implementation/review cycle.
-Generic backend, CQRS and API-design skills add no task-specific instructions;
-Spine JVM source and the accepted design supply the domain contracts.
-
-## Verification and review
-
-Focused behavior tests precede runtime changes. Cheap preflight precedes
-specialist review and expensive gates. Use the release profile after convergence
-because shared runtime is affected. Every canonical review concern applies to
-the full task: maintainability, documentation, TypeScript/API and reliability.
-The lifecycle and dependency security reviews are accepted. Both dependency
-audits are clean, and the feature-branch Security workflow passed at 89e6faafa. Baseline build and
-tooling typechecks, baseline tests and focused retention checks passed. Bounded
-reviews are recorded in REVIEW_LOG.md; release verification passed at M60.
-Exact-final-SHA Security CI is the remaining handoff check. WORK_LOG.md records the current evidence. Raw command outputs
-and dispatch evidence are kept outside version control in `/tmp/spine-environment-lifecycle-20261027`.
-
-## Remaining work
-
-Implementation, coverage, native provider checks, specialist reviews, security
-corrections and the mandatory full release checks are accepted. Push this final
-evidence update, refresh Security CI on its exact SHA, and report the verified
-remote state. The common unused version `2.0.0-snapshot.25` was committed
-separately for all 35 workspace manifests in `ac64c730a`. Do not create or merge
-a pull request without explicit human instruction.
-
-## JVM source guardrail
-
-Read `spine-jvm-docs/spine-server-runtime-and-bounded-context.md` storage paths
-and local `core-jvm/server/.../entity/Repository.java` storage()/close(), plus
-`delivery/Delivery.java` retained InboxStorage. Repository.storage() creates once
-when absent; Delivery retains its InboxStorage. The first TS slice follows this
-lifetime without introducing common caching infrastructure or a new dependency.
-Library selection is N/A for this domain-specific lifecycle correction: reuse the
-existing provider interfaces, maps and runtime shutdown paths.
+[Draft PR #20](https://github.com/SpineEventEngine/spine-ts/pull/20) contains the
+feature branch. Exact-revision Build and Security workflow results are the final
+remote checks; earlier repository audits reported zero known vulnerabilities.
+Do not merge or push to `master` without explicit human instruction.

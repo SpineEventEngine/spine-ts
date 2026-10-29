@@ -301,8 +301,8 @@ Configure the registry outside the Entity. The Bounded Context requires persiste
 Events, and the Agent registration supplies its permitted capabilities. The
 [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
 assembles these settings with the generated handler registry. Supply the registry
-through `BoundedContextBuilder.withAi()` before building the context; the server
-uses that context's configuration.
+through `ServerEnvironment.when(type).use({ ai: registry })` as a default, or
+`BoundedContextBuilder.withAi(registry)` for one Bounded Context.
 
 Posting a Command awaits acceptance. Model work and the resulting domain Event
 arrive asynchronously afterward. The handling operation can await a model without

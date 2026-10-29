@@ -265,6 +265,37 @@ afterEach(async () => {
 });
 
 describe("Agent registration readiness", () => {
+  it("inherits environment AI and accepts a Bounded Context override", async () => {
+    const inherited = ai();
+    const override = ai();
+    await ServerEnvironmentLifecycle.resetForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({ ai: inherited });
+    const environment = ServerEnvironment.instance();
+    expect(environment.ai).toBe(inherited);
+    await environment.completeSetup();
+    const first = await BoundedContext.singleTenant("InheritedAgentAi")
+      .persistSystemEvents()
+      .add(waitingRepository())
+      .build();
+    await first.close();
+    const second = await BoundedContext.singleTenant("OverriddenAgentAi")
+      .withAi(override)
+      .persistSystemEvents()
+      .add(waitingRepository())
+      .build();
+    await second.close();
+  });
+
+  it("still rejects Agent registration without environment or Bounded Context AI", async () => {
+    await configureStorage(new InMemoryStorageFactory());
+    await expect(
+      BoundedContext.singleTenant("MissingAgentAi")
+        .persistSystemEvents()
+        .add(waitingRepository())
+        .build(),
+    ).rejects.toThrow("Agent registration requires an AI registry.");
+  });
+
   it("drains protected Agent history reads and rejects an old Agent after rebind", async () => {
     const factory = new GatedProtectedAgentHistoryFactory();
     await configureStorage(factory);

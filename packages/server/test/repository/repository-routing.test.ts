@@ -5245,11 +5245,17 @@ describe("repository signal routing", () => {
   it("monitors an invalid produced Event without persisting the Aggregate", async () => {
     ValidatingProjectAggregate.reset();
     const failures: unknown[] = [];
+    const counts: number[] = [];
     const monitor = vi
       .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
       .mockImplementation((reception) => {
         failures.push(reception.error);
         return reception.markDelivered();
+      });
+    const completed = vi
+      .spyOn(DeliveryMonitor.prototype, "onDeliveryCompleted")
+      .mockImplementation((statistics) => {
+        counts.push(statistics.failed);
       });
     const context = await BoundedContext.singleTenant("Tasks")
       .add(createValidatingRepository())
@@ -5270,11 +5276,15 @@ describe("repository signal routing", () => {
       expect(ValidatingProjectAggregate.assigneeCalls).toBe(1);
       expect(failures).toHaveLength(1);
       expect(failures[0]).toBeInstanceOf(Error);
+      expect((failures[0] as Error).message).toContain("returned undeclared message");
+      await serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance()).whenIdle();
+      expect(counts).toContain(1);
       await expect(
         context.stand().read(ProjectSubmissionStateSchema, "invalid-output"),
       ).resolves.toBeUndefined();
     } finally {
       monitor.mockRestore();
+      completed.mockRestore();
       await context.close();
     }
   });
@@ -7793,7 +7803,7 @@ describe("repository signal routing", () => {
     const repository = createProcessManagerAssignRepository();
     await BoundedContext.multitenant("Tasks").add(repository).build();
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
+      context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
@@ -8324,7 +8334,7 @@ describe("repository signal routing", () => {
     const repository = createProcessManagerAssignRepository();
     await BoundedContext.multitenant("Tasks").add(repository).build();
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
+      context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
@@ -8352,7 +8362,7 @@ describe("repository signal routing", () => {
     const repository = createProcessManagerAssignRepository();
     await BoundedContext.multitenant("Tasks").add(repository).build();
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
+      context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
@@ -9785,8 +9795,8 @@ describe("repository signal routing", () => {
     const tenantA = createTenantId("tenant-a");
     await context.tenantIndex.keep(tenantA);
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: tenantA },
-      storageFactory: factory,
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
     });
     const target = requireEntityInboxTarget(repository);
     const receivedAt = new Date("2026-08-11T05:00:00.000Z");
@@ -12472,8 +12482,8 @@ describe("repository signal routing", () => {
     const context = await BoundedContext.multitenant("Tasks").add(repository).build();
     await context.tenantIndex.keep(createTenantId("tenant-a"));
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
-      storageFactory: factory,
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
     });
     const target = requireProjectionInboxTarget(repository);
     const event = createProjectCreated("event-projection-replay", "projection-replay", {

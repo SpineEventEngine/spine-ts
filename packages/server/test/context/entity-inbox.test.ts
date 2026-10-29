@@ -139,7 +139,7 @@ describe("LocalEntityInbox", () => {
 
   it("checks one multitenant descriptor tenant before batch persistence", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-dynamic") },
+      context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const admitted = Promise.withResolvers<undefined>();
@@ -400,7 +400,7 @@ describe("LocalEntityInbox", () => {
 
   it("emits readiness after persistence before exact drain settles", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+      context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const ready: unknown[] = [];
@@ -1725,12 +1725,8 @@ describe("LocalEntityInbox", () => {
 
   it("does not block a different tenant or shard behind a gated follow-up", async () => {
     const strategy = twoShardStrategy();
-    const blockedDelivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
-      storageFactory: new InMemoryStorageFactory(),
-    });
-    const freeDelivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-b") },
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     const inbox = new LocalEntityInbox("Tasks", undefined, undefined, strategy);
@@ -1746,9 +1742,9 @@ describe("LocalEntityInbox", () => {
       },
     });
 
-    await inbox.receive(blockedDelivery, processInput(targetTypeUrl, "even"), tenant("tenant-a"));
+    await inbox.receive(delivery, processInput(targetTypeUrl, "even"), tenant("tenant-a"));
     await expect(
-      inbox.receive(freeDelivery, processInput(targetTypeUrl, "odd"), tenant("tenant-b")),
+      inbox.receive(delivery, processInput(targetTypeUrl, "odd"), tenant("tenant-b")),
     ).resolves.toMatchObject({ shard: { index: 1, ofTotal: 2 } });
     gate.resolve(undefined);
   });

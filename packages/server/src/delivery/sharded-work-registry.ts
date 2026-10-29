@@ -87,6 +87,8 @@ export class ShardedWorkRegistry {
    * @param options Configures durable storage, lease duration, and clock.
    */
   constructor(options: ShardedWorkRegistryOptions) {
+    if (options.context.multitenant)
+      throw new TypeError("Shard registry requires a single-tenant Delivery context.");
     this.#context = copy(options.context);
     this.#factory = options.storageFactory;
     this.#lease = DeliveryLeases.requireMs("ShardedWorkRegistry", options.leaseMs ?? leaseDefault);
