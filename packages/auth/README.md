@@ -1,6 +1,6 @@
 # Authentication gateway contracts
 
-See [storage layout and database preparation](../../docs/STORAGE_LAYOUT.md) for
+See [storage layout and database preparation](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/STORAGE_LAYOUT.md) for
 physical structures, tenant placement, prerequisites, and customization.
 
 `@spine-event-engine/auth` supplies provider-neutral building blocks for an

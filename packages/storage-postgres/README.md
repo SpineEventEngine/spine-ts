@@ -1,6 +1,6 @@
 # PostgreSQL storage for Spine TS
 
-See [storage layout and database preparation](../../docs/STORAGE_LAYOUT.md) for
+See [storage layout and database preparation](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/STORAGE_LAYOUT.md) for
 physical structures, tenant placement, prerequisites, and customization.
 
 `@spine-event-engine/storage-postgres` stores Spine TS records in PostgreSQL.

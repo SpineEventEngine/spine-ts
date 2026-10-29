@@ -69,8 +69,9 @@ existing-data migrations outside scope.
 The [storage layout reference](../../../docs/STORAGE_LAYOUT.md) includes gateway
 and authentication storage requirements, including runtime-only state and
 persistence delegated to application-provided implementations. Native PostgreSQL
-tests cover eager and lazy first subscriptions, shared registry placement, and
-tenant-specific state updates for the same Entity ID. This follow-up changes
+tests use the public gRPC service to cover eager and lazy first subscriptions,
+shared registry placement, and tenant-specific state updates for the same Entity ID.
+This follow-up changes
 tests and documentation only; it uses the bounded `verify:task` profile plus
 native integration tests. The PR Build workflow runs full release verification.
 
