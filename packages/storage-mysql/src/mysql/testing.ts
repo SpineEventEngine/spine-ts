@@ -15,7 +15,7 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { EventSchema } from "@spine-event-engine/proto";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
   eventHistorySpec,
@@ -32,6 +32,8 @@ import { MysqlIdColumn } from "./id-column.js";
  * Resolves the default table name for a record-family integration test.
  *
  * @internal
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored record message type.
  * @param spec Describes the record family.
  * @param group Identifies an optional storage group.
  * @returns The default physical table name.
@@ -52,6 +54,8 @@ export function mysqlRecordTableName<I, R extends Message>(
  * Resolves the default tables used by an Entity-family integration test.
  *
  * @internal
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  * @param input Describes the Entity family and enabled histories.
  * @returns The current and enabled history table names.
  */
@@ -81,6 +85,8 @@ export function mysqlEntityTables<I, S extends Message>(
  * Reads the current Entity record for a provider integration test.
  *
  * @internal
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  * @param pool Queries the test database.
  * @param input Identifies the Entity family.
  * @param id Identifies the current Entity row.
@@ -91,7 +97,7 @@ export async function mysqlCurrentRecord<I, S extends Message>(
   pool: Pool,
   input: EntityStorageInput<I, S>,
   id: I,
-  stringifiers: StringifierRegistry = new StringifierRegistry(),
+  stringifiers: StringifierRegistry = defaultStringifierRegistry,
 ): Promise<
   | import("@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js").EntityRecord
   | undefined
@@ -109,6 +115,8 @@ export async function mysqlCurrentRecord<I, S extends Message>(
  * Returns retained state and diagnostic record counts for one Entity in a provider test.
  *
  * @internal
+ * @typeParam I Entity identifier type.
+ * @typeParam S Entity state message type.
  * @param pool Queries the test database.
  * @param input Identifies the Entity family.
  * @param id Identifies the Entity whose histories are counted.
@@ -141,6 +149,19 @@ export async function mysqlHistoryCounts<I, S extends Message>(
   return { states, events };
 }
 
+/**
+ * Reads record payloads from a selected test family.
+ *
+ * @typeParam I Entity identifier type.
+ * @typeParam J Record identifier type.
+ * @typeParam R Stored record message type.
+ * @typeParam S Entity state message type.
+ * @param pool MySQL connection pool.
+ * @param input Entity storage contract.
+ * @param spec Record family contract.
+ * @param group Physical record group.
+ * @returns Stored payload bytes.
+ */
 async function recordBytes<I, J, R extends Message, S extends Message>(
   pool: Pool,
   input: EntityStorageInput<I, S>,

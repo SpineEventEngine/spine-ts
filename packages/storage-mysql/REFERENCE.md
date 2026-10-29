@@ -31,9 +31,12 @@ mode reads physical metadata without creating tables or indexes. Its `create`
 mode creates missing structures and verifies their complete layout. Both modes
 reuse a bound runtime pool or release temporary pools, and compatible results
 are shared with later ordinary use. A failed attempt remains retryable.
-`setStringifierRegistry(registry)` configures reversible mappings for
-message-valued IDs and ordinary message columns; the builder snapshots the
-registry so later caller changes do not alter stored or queried values.
+The default shared registry converts message-valued IDs and ordinary message
+columns using generated descriptors registered on module import.
+`setStringifierRegistry(registry)` accepts a custom registry; the builder
+snapshots it so later caller changes do not alter stored or queried values.
+`setEventStoreTable(contextName, table, role?)` selects one physical Event Store
+table for the exact bounded-context name and domain or system role.
 `Identifiers` choose the storage ID representation; the configured
 `StringifierRegistry` supplies the matching reversible representation for
 message-valued IDs and declared message columns. `RecordQuery<I>` statically

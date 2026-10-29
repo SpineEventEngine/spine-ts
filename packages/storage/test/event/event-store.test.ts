@@ -50,17 +50,12 @@ import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage
 import { eventStoreAccess, EventStoreGroups } from "../../src/provider.js";
 
 describe("EventStore", () => {
-  it("derives stable portable groups without normalizing context spelling or store role", () => {
-    expect(EventStoreGroups.forContext("Orders").name).toBe(
-      "es_4xhqwdzej2o5yfauwhqkxxgzy4n3qe84mhds2mew1dawug10ip",
-    );
-    const variants = ["Orders", "orders", "Café", "Cafe\u0301", "Order:Draft"];
-    const groups = variants.map((name) => EventStoreGroups.forContext(name).name);
-    expect(new Set(groups).size).toBe(variants.length);
-    expect(groups.every((name) => /^es_[0-9a-z]{50}$/.test(name))).toBe(true);
-    expect(EventStoreGroups.forContext("Orders_System", "system").name).not.toBe(
-      EventStoreGroups.forContext("Orders_System").name,
-    );
+  it("uses the selected Bounded Context name while retaining the Event Store role", () => {
+    expect(EventStoreGroups.forContext("Orders").name).toBe("Orders");
+    expect(EventStoreGroups.forContext("Orders_System", "system").name).toBe("Orders_System");
+    expect(
+      EventStoreGroups.identity(EventStoreGroups.forContext("Orders_System", "system")),
+    ).not.toBe(EventStoreGroups.identity(EventStoreGroups.forContext("Orders_System")));
   });
 
   it("separates contexts sharing a factory while retaining each original Event ID", async () => {
@@ -309,6 +304,28 @@ describe("EventStore", () => {
     if (groupedId === undefined) throw new Error("Expected a generated Event ID.");
     expect(await domain.read({ ids: [groupedId] })).toEqual([]);
     expect(await system.read({ ids: [groupedId] })).toEqual([groupedOnly]);
+  });
+
+  it("separates equal domain and System names across factories sharing memory", async () => {
+    const backend = new InMemoryStorageBackend();
+    const context = { name: "Support_System", multitenant: false } as const;
+    const domain = new EventStore(
+      context,
+      new InMemoryStorageFactory(backend),
+      EventStoreGroups.forContext(context.name),
+    );
+    const system = new EventStore(
+      context,
+      new InMemoryStorageFactory(backend),
+      EventStoreGroups.forContext(context.name, "system"),
+    );
+    const first = createEvent("same-id", "created", 1n);
+    const second = createEvent("same-id", "renamed", 1n);
+
+    await domain.append(first);
+    await system.append(second);
+    expect(await domain.read()).toEqual([first]);
+    expect(await system.read()).toEqual([second]);
   });
 
   it("persists generated Spine events through record storage", async () => {

@@ -15,7 +15,7 @@
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { and, Datastore, PropertyFilter } from "@google-cloud/datastore";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import {
   RecordStorage,
   StorageFactory,
@@ -56,6 +56,7 @@ import {
   type OpenEntityRecords,
 } from "./entity-history.js";
 import { DatastoreRecordStorage } from "./record-storage.js";
+import { RecordKinds } from "./record-kind.js";
 import { DatastoreIdColumn } from "./id-column.js";
 import { DatastoreAgentHistory, AgentHistoryHash } from "./agent-history.js";
 import {
@@ -267,6 +268,16 @@ export interface DatastoreStorageFactoryBuilder {
   setStringifierRegistry(registry: StringifierRegistry): this;
 
   /**
+   * Sets the kind for one named domain or System Event Store.
+   *
+   * @param boundedContextName Actual selected Bounded Context name.
+   * @param kind Physical Datastore kind.
+   * @param role Domain or System Event Store role.
+   * @returns This builder.
+   */
+  setEventStoreKind(boundedContextName: string, kind: string, role?: "domain" | "system"): this;
+
+  /**
    * Sets a physical kind for every use of a record type.
    *
    * @typeParam R Stored record message type.
@@ -396,6 +407,8 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    */
   readonly #prepared = new Map<string, NativePreparation>();
 
+  readonly #namespaces = new Map<string | symbol, string>();
+
   /**
    * Complete admitted preparation and connection-check operations.
    */
@@ -415,6 +428,8 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    * Message-valued ID and column conversion registry.
    */
   readonly #stringifiers: StringifierRegistry;
+
+  readonly #eventStoreKinds: ReadonlyMap<string, string>;
 
   /**
    * Native tenant namespace catalog.
@@ -437,6 +452,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
         entityPreparers,
         namespaceConverter,
         stringifiers,
+        eventStoreKinds,
       ) =>
         new DatastoreStorageFactory(
           client,
@@ -447,6 +463,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
           entityPreparers,
           namespaceConverter,
           stringifiers,
+          eventStoreKinds,
         ),
     );
   }
@@ -462,6 +479,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    * @param entityPreparers Declarative preparation callbacks by Entity type.
    * @param namespaceConverter Converts complete tenants to native namespaces.
    * @param stringifiers Converts message-valued IDs and columns.
+   * @param eventStoreKinds Explicit native kinds by Event Store identity.
    * @internal
    */
   private constructor(
@@ -473,6 +491,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     entityPreparers: ReadonlyMap<string, PrepareDatastoreEntityStorage>,
     namespaceConverter: NamespaceConverter,
     stringifiers: StringifierRegistry,
+    eventStoreKinds: ReadonlyMap<string, string>,
   ) {
     super();
     this.#client = client;
@@ -482,7 +501,9 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     this.#entityCreators = entityCreators;
     this.#entityPreparers = entityPreparers;
     this.#namespaceConverter = new NamespaceAssignments(namespaceConverter);
-    this.#stringifiers = new StringifierRegistry(stringifiers);
+    const shared = stringifiers === defaultStringifierRegistry;
+    this.#stringifiers = shared ? stringifiers : new StringifierRegistry(stringifiers);
+    this.#eventStoreKinds = eventStoreKinds;
     this.#catalog = new DatastoreTenantCatalog(client, this.#namespaceConverter);
     StoragePreparations.register(this, {
       prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
@@ -846,12 +867,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   ): { namespace: string; kind: string; signature: string } {
     const namespace =
       mapping === undefined ? this.nativeNamespace(context) : (mapping.namespace ?? "");
-    const kind =
-      mapping?.kind ??
-      explicitKind ??
-      (group === undefined
-        ? spec.sourceType.typeName
-        : `${group.name}_${spec.recordType.typeName.split(".").at(-1) ?? ""}`);
+    const kind = mapping?.kind ?? this.selectedKind(spec, group, explicitKind);
     if (!kind.trim() || Buffer.byteLength(kind, "utf8") > 1_500)
       throw new Error("Datastore record kind must be non-blank and at most 1,500 bytes.");
     new DatastoreIdColumn(spec.idType, this.#stringifiers);
@@ -861,12 +877,35 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
         this.#stringifiers.forMessage(column.type.message as GenMessage<Message>);
     const signature = JSON.stringify([
       spec.sourceType.typeName,
-      group?.name ?? null,
+      group === undefined ? null : (EventStoreGroups.identity(group) ?? group.name),
       spec.recordType.typeName,
       typeof spec.idType === "string" ? spec.idType : spec.idType.typeName,
       this.columnSignature(spec.columns),
     ]);
     return { namespace, kind, signature };
+  }
+
+  /**
+   * Returns a configured or default native record kind.
+   *
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored record message type.
+   * @param spec Declared record family.
+   * @param group Optional physical group.
+   * @param explicitKind Kind from a record layout.
+   * @returns The selected native kind.
+   */
+  private selectedKind<I, R extends Message>(
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+    explicitKind?: string,
+  ): string {
+    const identity = group === undefined ? undefined : EventStoreGroups.identity(group);
+    return (
+      (identity === undefined ? undefined : this.#eventStoreKinds.get(identity)) ??
+      explicitKind ??
+      RecordKinds.of(spec.sourceType.typeName, spec.recordType.typeName, group)
+    );
   }
 
   /**
@@ -876,11 +915,14 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
    */
   private nativeNamespace(context: StorageContext): string {
     const boundary = TenantBoundary.of(context);
-    return boundary.single
-      ? (this.#client.namespace ?? "")
-      : this.#namespaceConverter.toNamespace(
-          boundary.tenantId as NonNullable<typeof boundary.tenantId>,
-        );
+    if (boundary.single) return this.#client.namespace ?? "";
+    const cached = this.#namespaces.get(boundary.key);
+    if (cached !== undefined) return cached;
+    const namespace = this.#namespaceConverter.toNamespace(
+      boundary.tenantId as NonNullable<typeof boundary.tenantId>,
+    );
+    this.#namespaces.set(boundary.key, namespace);
+    return namespace;
   }
 
   /**
@@ -1126,17 +1168,23 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     group?: StorageGroup,
     kind?: string,
   ): DatastoreRecordStorage<I, R> {
+    const selectedKind = this.selectedKind(spec, group, kind);
+    const mapping = this.nativeDefinition(context, spec, group, selectedKind);
+    this.declareNative(context, spec, group, selectedKind, {
+      namespace: mapping.namespace,
+      kind: mapping.kind,
+    });
     const storage = new DatastoreRecordStorage(
       context,
       spec,
       this.#client,
       maxClientSideScan,
       group,
-      kind,
+      selectedKind,
       this.#namespaceConverter,
       this.#stringifiers,
+      mapping.namespace,
     );
-    this.declareNative(context, spec, group, kind, storage.nativeMapping());
     return storage;
   }
 
@@ -1275,7 +1323,9 @@ class Builder implements DatastoreStorageFactoryBuilder {
   /**
    * Converter for message-valued IDs and columns.
    */
-  #stringifiers = new StringifierRegistry();
+  #stringifiers = defaultStringifierRegistry;
+
+  #eventStoreKinds = new Map<string, string>();
 
   /**
    * Creates a builder with the selected factory constructor.
@@ -1292,6 +1342,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
       entityPreparers: ReadonlyMap<string, PrepareDatastoreEntityStorage>,
       namespaceConverter: NamespaceConverter,
       stringifiers: StringifierRegistry,
+      eventStoreKinds: ReadonlyMap<string, string>,
     ) => DatastoreStorageFactory,
   ) {}
 
@@ -1324,7 +1375,29 @@ class Builder implements DatastoreStorageFactoryBuilder {
    * @returns This builder.
    */
   setStringifierRegistry(registry: StringifierRegistry): this {
-    this.#stringifiers = new StringifierRegistry(registry);
+    this.#stringifiers =
+      registry === defaultStringifierRegistry ? registry : new StringifierRegistry(registry);
+    return this;
+  }
+
+  /**
+   * Sets the kind for one exact domain or system Event Store.
+   *
+   * @param boundedContextName Logical bounded-context name.
+   * @param kind Physical Datastore kind.
+   * @param role Domain or system Event Store role.
+   * @returns This builder.
+   */
+  setEventStoreKind(
+    boundedContextName: string,
+    kind: string,
+    role: "domain" | "system" = "domain",
+  ): this {
+    checkedLayout({ kind });
+    const group = EventStoreGroups.forContext(boundedContextName, role);
+    const identity = EventStoreGroups.identity(group);
+    if (identity === undefined) throw new Error("Event Store identity is missing.");
+    this.#eventStoreKinds.set(identity, kind);
     return this;
   }
 
@@ -1417,6 +1490,7 @@ class Builder implements DatastoreStorageFactoryBuilder {
       new Map(this.#entityPreparers),
       this.#namespaceConverter,
       this.#stringifiers,
+      new Map(this.#eventStoreKinds),
     );
   }
 }

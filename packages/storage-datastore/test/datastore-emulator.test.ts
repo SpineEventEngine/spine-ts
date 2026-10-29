@@ -372,7 +372,7 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
         rows(client, ProjectStateSchema.typeName),
         rows(client, `${ProjectStateSchema.typeName}_EntityRecord`),
         rows(client, `${ProjectStateSchema.typeName}_Event`),
-        rows(client, `${EventStoreGroups.forContext(context.name).name}_Event`),
+        rows(client, `${EventStoreGroups.forContext(context.name).name}-Event`),
       ]);
       expect(kinds.map((value) => value.length)).toEqual([1, 1, 1, 1]);
       expect(kinds.flat().every((row) => row.bytes instanceof Uint8Array)).toBe(true);
@@ -397,7 +397,7 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
         deleteKind(client, ProjectStateSchema.typeName),
         deleteKind(client, `${ProjectStateSchema.typeName}_EntityRecord`),
         deleteKind(client, `${ProjectStateSchema.typeName}_Event`),
-        deleteKind(client, `${EventStoreGroups.forContext(context.name).name}_Event`),
+        deleteKind(client, `${EventStoreGroups.forContext(context.name).name}-Event`),
       ]);
     }
   }, 30_000);
@@ -437,7 +437,7 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       ProjectStateSchema.typeName,
       `${ProjectStateSchema.typeName}_EntityRecord`,
       `${ProjectStateSchema.typeName}_Event`,
-      `${EventStoreGroups.forContext(contextA.name).name}_Event`,
+      `${EventStoreGroups.forContext(contextA.name).name}-Event`,
     ];
 
     try {
@@ -509,7 +509,7 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       await Promise.all([first.close(), second.close(), factory.close()]);
       await Promise.all(
         [firstContext, secondContext].map((scope) =>
-          deleteKind(client, `${EventStoreGroups.forContext(scope.name).name}_Event`),
+          deleteKind(client, `${EventStoreGroups.forContext(scope.name).name}-Event`),
         ),
       );
     }

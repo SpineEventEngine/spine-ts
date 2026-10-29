@@ -15,7 +15,7 @@
 import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import type {
   ColumnMapping,
   NormalizedQueryPlan,
@@ -212,7 +212,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     private readonly onClose: () => void,
     private readonly createOperation?: () => string,
     tableSpec?: MysqlTableSpec<I, R>,
-    stringifiers: StringifierRegistry = new StringifierRegistry(),
+    stringifiers: StringifierRegistry = defaultStringifierRegistry,
     private readonly publicHandle = false,
   ) {
     super(context, recordSpec);

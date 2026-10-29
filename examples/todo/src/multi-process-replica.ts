@@ -17,7 +17,7 @@
  */
 
 import { Datastore } from "@google-cloud/datastore";
-import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { TypeRegistry } from "@spine-event-engine/core";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
   EnvironmentType,
@@ -64,11 +64,8 @@ export async function createTodoReplica(
   endpoint: { readonly host: string; readonly port: number },
 ): Promise<TodoReplica> {
   const typeRegistry = TypeRegistry.from(todoProtoModule);
-  const stringifiers = new StringifierRegistry();
-  stringifiers.setTypeRegistry(typeRegistry);
   const storageFactory = DatastoreStorageFactory.newBuilder()
     .setClient(new Datastore({ projectId: settings.projectId }))
-    .setStringifierRegistry(stringifiers)
     .build();
   const delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryServerUrl });
   ServerEnvironment.when(EnvironmentType.Production).use({

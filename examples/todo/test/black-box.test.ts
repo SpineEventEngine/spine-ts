@@ -132,6 +132,13 @@ describe("@spine-event-engine/example-todo", () => {
         join(fixture, "node_modules"),
         "dir",
       );
+      const fixtureProtoModule = join(fixture, "generated/proto-module.js");
+      rmSync(fixtureProtoModule);
+      symlinkSync(
+        fileURLToPath(new URL("../dist/generated/proto-module.js", import.meta.url)),
+        fixtureProtoModule,
+        "file",
+      );
       const fixtureModule: unknown = await import(
         pathToFileURL(join(fixture, "src/index.js")).href
       );

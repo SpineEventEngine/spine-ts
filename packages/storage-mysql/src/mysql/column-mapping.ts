@@ -14,7 +14,7 @@
 
 import { ScalarType, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import type {
   ColumnMapping,
   ColumnTypeMapping,
@@ -35,8 +35,11 @@ export class MysqlColumnMapping implements ColumnMapping<unknown> {
    *
    * @param stringifiers The schema-bound message stringifiers.
    */
-  constructor(stringifiers: StringifierRegistry = new StringifierRegistry()) {
-    this.#stringifiers = new StringifierRegistry(stringifiers);
+  constructor(stringifiers: StringifierRegistry = defaultStringifierRegistry) {
+    this.#stringifiers =
+      stringifiers === defaultStringifierRegistry
+        ? stringifiers
+        : new StringifierRegistry(stringifiers);
   }
 
   // prettier-ignore
@@ -44,6 +47,7 @@ export class MysqlColumnMapping implements ColumnMapping<unknown> {
   /**
    * Returns the conversion for one generated column type.
    *
+   * @typeParam V Protobuf column value type.
    * @param type The generated Protobuf column type.
    * @returns The JVM-compatible MySQL parameter conversion.
    */
@@ -77,6 +81,13 @@ export class MysqlColumnMapping implements ColumnMapping<unknown> {
 }
 
 const MysqlMappings = Object.freeze({
+  /**
+   * Maps a scalar column to a MySQL parameter.
+   *
+   * @typeParam V Scalar value type.
+   * @param type Protobuf scalar kind.
+   * @returns The scalar conversion.
+   */
   scalar<V>(type: ScalarType): ColumnTypeMapping<V, unknown> {
     switch (type) {
       case ScalarType.STRING:
@@ -99,11 +110,23 @@ const MysqlMappings = Object.freeze({
     }
   },
 
+  /**
+   * Converts a timestamp to epoch nanoseconds.
+   *
+   * @param value Protobuf timestamp value.
+   * @returns Epoch nanoseconds.
+   */
   timestamp(value: unknown): bigint {
     const timestamp = value as { readonly seconds: bigint; readonly nanos: number };
     return timestamp.seconds * 1_000_000_000n + BigInt(timestamp.nanos);
   },
 
+  /**
+   * Converts a version to its integer number.
+   *
+   * @param value Protobuf version value.
+   * @returns Version number.
+   */
   version(value: unknown): number {
     return (value as { readonly number: number }).number;
   },

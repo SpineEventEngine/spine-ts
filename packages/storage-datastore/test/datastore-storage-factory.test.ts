@@ -23,6 +23,8 @@ import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-even
 import { describe, expect, it } from "vitest";
 import {
   StoragePreparations,
+  EventStoreGroups,
+  eventStoreRecordSpec,
   type EntityStoragePreparationInput,
 } from "@spine-event-engine/storage/provider";
 import { TenantIdSchema } from "@spine-event-engine/proto";
@@ -45,6 +47,30 @@ import {
 import { DatastoreQueryLimitError, DatastoreStorageFactory } from "../src/index.js";
 
 describe("DatastoreStorageFactory", () => {
+  it("uses readable Event Store kinds and isolates a System role through a precise override", async () => {
+    const client = new MetadataClient();
+    const context = { name: "Support_System", multitenant: false } as const;
+    const domain = EventStoreGroups.forContext(context.name);
+    const system = EventStoreGroups.forContext(context.name, "system");
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .build();
+    const prepare = StoragePreparations.for(factory);
+
+    await prepare.prepareRecord(context, eventStoreRecordSpec, domain, "check");
+    await expect(
+      prepare.prepareRecord(context, eventStoreRecordSpec, system, "check"),
+    ).rejects.toThrow(/Support_System-Event.*incompatible/u);
+
+    const separated = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .setEventStoreKind(context.name, "Support_Audit", "system")
+      .build();
+    const separate = StoragePreparations.for(separated);
+    await separate.prepareRecord(context, eventStoreRecordSpec, domain, "check");
+    await separate.prepareRecord(context, eventStoreRecordSpec, system, "check");
+  });
+
   it("checks the exact shared namespace metadata key without creating application records", async () => {
     const client = new MetadataClient();
     const factory = DatastoreStorageFactory.newBuilder()

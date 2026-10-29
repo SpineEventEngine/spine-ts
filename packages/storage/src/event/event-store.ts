@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { createHash } from "node:crypto";
 import { clone, create, equals, ScalarType } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId, TenantId } from "@spine-event-engine/proto";
@@ -29,24 +28,36 @@ import type { StorageFactory } from "../storage/storage-factory.js";
 import { TenantBoundary } from "../internal/tenancy.js";
 
 const idleClosers = new WeakMap<EventStore, () => void>();
+const eventStoreSelections = new WeakMap<
+  StorageGroup,
+  { name: string; role: "domain" | "system" }
+>();
 
 /**
  * Stable physical Event record family for one logical context and store role.
  */
 export const EventStoreGroups: Readonly<{
   forContext(contextName: string, role?: "domain" | "system"): StorageGroup;
+  identity(group: StorageGroup): string | undefined;
 }> = Object.freeze({
   /**
-   * Derives the portable group name from the exact context name and role.
+   * Selects the readable Bounded Context name and retains the Event Store role.
    *
    * @param contextName Framework-validated logical context name.
    * @param role Domain or paired System Event store.
    * @returns Stable physical Event family selector.
    */
   forContext(contextName: string, role: "domain" | "system" = "domain"): StorageGroup {
-    const logical = JSON.stringify(["spine.EventStoreGroup/v1", role, contextName]);
-    const digest = createHash("sha256").update(logical, "utf8").digest("hex");
-    return new StorageGroup(`es_${BigInt(`0x${digest}`).toString(36).padStart(50, "0")}`);
+    const group = new StorageGroup(contextName);
+    eventStoreSelections.set(group, { name: contextName, role });
+    return group;
+  },
+
+  identity(group: StorageGroup): string | undefined {
+    const selection = eventStoreSelections.get(group);
+    return selection === undefined
+      ? undefined
+      : JSON.stringify(["EventStore", selection.role, selection.name]);
   },
 });
 

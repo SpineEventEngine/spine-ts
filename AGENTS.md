@@ -44,6 +44,14 @@ Use “Bounded Context” when naming the DDD boundary. Do not shorten it to
 “context”: Command contexts, Event contexts, Actor contexts, storage contexts,
 and System Context name different concepts. Preserve actual API identifiers.
 
+## Documentation Language
+
+Use the same direct, conversational language in documentation as in user-facing
+chat. Explain from real code examples, one step at a time. Do not use fictional
+person narratives or compress several concepts into dense summary paragraphs.
+Do not apply documentation-writing skills. Independent documentation review must
+assess reader comprehension as well as completeness and factual accuracy.
+
 ## Pull Request Descriptions
 
 Write pull request descriptions for human framework users. Explain the concrete

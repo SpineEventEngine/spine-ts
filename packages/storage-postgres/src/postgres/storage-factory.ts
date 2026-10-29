@@ -14,7 +14,7 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import type { TenantId } from "@spine-event-engine/proto";
 import {
   StorageFactory,
@@ -288,6 +288,20 @@ export interface PostgresStorageFactoryBuilder {
   setStringifierRegistry(registry: StringifierRegistry): this;
 
   /**
+   * Sets the table for one named domain or System Event Store.
+   *
+   * @param boundedContextName Actual selected Bounded Context name.
+   * @param tableName Physical PostgreSQL table name.
+   * @param role Domain or System Event Store role.
+   * @returns This builder.
+   */
+  setEventStoreTable(
+    boundedContextName: string,
+    tableName: string,
+    role?: "domain" | "system",
+  ): this;
+
+  /**
    * Sets the ungrouped table name for a record-family source type.
    *
    * @typeParam S The source Protobuf message type.
@@ -459,6 +473,7 @@ export class PostgresStorageFactory extends StorageFactory {
       group?.name,
       undefined,
       spec.recordType.typeName,
+      group === undefined ? undefined : EventStoreGroups.identity(group),
     ).tableName;
     const binding = await this.resolveBinding(boundary);
     const table = this.tableSpec(boundary, name, binding.schema, spec, group);
@@ -846,6 +861,7 @@ export class PostgresStorageFactory extends StorageFactory {
       group?.name,
       undefined,
       recordSpec.recordType.typeName,
+      group === undefined ? undefined : EventStoreGroups.identity(group),
     );
     const operation = this.operation;
     const handle = new PostgresRecordStorage(
@@ -1399,7 +1415,7 @@ class Builder implements PostgresStorageFactoryBuilder {
 
   #operationFactory: PostgresCreateOperationFactory | undefined;
 
-  #stringifiers = new StringifierRegistry();
+  #stringifiers = defaultStringifierRegistry;
 
   readonly #resolver = new PostgresTableResolver();
 
@@ -1449,7 +1465,28 @@ class Builder implements PostgresStorageFactoryBuilder {
    * @returns This builder.
    */
   setStringifierRegistry(registry: StringifierRegistry): this {
-    this.#stringifiers = new StringifierRegistry(registry);
+    this.#stringifiers =
+      registry === defaultStringifierRegistry ? registry : new StringifierRegistry(registry);
+    return this;
+  }
+
+  /**
+   * Sets the table for one exact domain or system Event Store.
+   *
+   * @param boundedContextName Logical bounded-context name.
+   * @param tableName Physical table name.
+   * @param role Domain or system Event Store role.
+   * @returns This builder.
+   */
+  setEventStoreTable(
+    boundedContextName: string,
+    tableName: string,
+    role: "domain" | "system" = "domain",
+  ): this {
+    const group = EventStoreGroups.forContext(boundedContextName, role);
+    const identity = EventStoreGroups.identity(group);
+    if (identity === undefined) throw new Error("Event Store identity is missing.");
+    this.#resolver.setEventStoreName(identity, tableName);
     return this;
   }
 
@@ -1546,7 +1583,7 @@ class Builder implements PostgresStorageFactoryBuilder {
         this.assemble(
           entries,
           this.#tenantResolver,
-          this.#resolver,
+          this.#resolver.copy(),
           this.#operationFactory,
           this.#stringifiers,
         ),

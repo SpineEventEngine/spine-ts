@@ -24,6 +24,54 @@ import { PostgresTableSpecs } from "../src/postgres/table-spec.js";
 import { PostgresTableResolver } from "../src/postgres/table-resolver.js";
 
 describe("PostgreSQL table foundation", () => {
+  it("folds readable Event Store names and rejects physical role collisions", () => {
+    const resolver = new PostgresTableResolver();
+    const domain = JSON.stringify(["EventStore", "domain", "Support_System"]);
+    const system = JSON.stringify(["EventStore", "system", "Support_System"]);
+
+    expect(
+      resolver.resolve("spine.core.Event", "Support_System", undefined, "spine.core.Event", domain)
+        .tableName,
+    ).toBe("support_system_event");
+    expect(() =>
+      resolver.resolve("spine.core.Event", "Support_System", undefined, "spine.core.Event", system),
+    ).toThrow(/support_system_event.*domain.*system/u);
+    resolver.setEventStoreName(system, "support_audit");
+    const copy = resolver.copy();
+    expect(
+      copy.resolve("spine.core.Event", "Support_System", undefined, "spine.core.Event", system)
+        .tableName,
+    ).toBe("support_audit");
+    resolver.setEventStoreName(system, "later_audit");
+    expect(
+      copy.resolve("spine.core.Event", "Support_System", undefined, "spine.core.Event", system)
+        .tableName,
+    ).toBe("support_audit");
+  });
+
+  it("rejects normalized Event Store collisions and names beyond the PostgreSQL limit", () => {
+    const resolver = new PostgresTableResolver();
+    resolver.resolve(
+      "spine.core.Event",
+      "Order-Draft",
+      undefined,
+      "spine.core.Event",
+      "domain-one",
+    );
+    expect(() =>
+      resolver.resolve(
+        "spine.core.Event",
+        "Order Draft",
+        undefined,
+        "spine.core.Event",
+        "domain-two",
+      ),
+    ).toThrow(/collides: order_draft_event/u);
+    expect(() =>
+      resolver.resolve("spine.core.Event", "X".repeat(58), undefined, "spine.core.Event", "long"),
+    ).toThrow(/invalid/u);
+  });
+
   it("defines the supported PostgreSQL DDL type names once", () => {
     expectTypeOf<PostgresDdlType>().not.toEqualTypeOf<string>();
     expectTypeOf<PostgresColumnSpec["postgresType"]>().toEqualTypeOf<PostgresDdlType>();

@@ -14,7 +14,7 @@
 
 import { ScalarType, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import type {
   ColumnMapping,
   ColumnTypeMapping,
@@ -40,8 +40,11 @@ export class PostgresColumnMapping implements ColumnMapping<PostgresParameter> {
    *
    * @param stringifiers Provides schema-bound message stringifiers.
    */
-  constructor(stringifiers: StringifierRegistry = new StringifierRegistry()) {
-    this.#stringifiers = new StringifierRegistry(stringifiers);
+  constructor(stringifiers: StringifierRegistry = defaultStringifierRegistry) {
+    this.#stringifiers =
+      stringifiers === defaultStringifierRegistry
+        ? stringifiers
+        : new StringifierRegistry(stringifiers);
   }
 
   /**

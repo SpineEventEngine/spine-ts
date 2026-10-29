@@ -22,7 +22,18 @@ import {
   UserIdSchema,
 } from "@spine-event-engine/proto";
 import { IdFilterSchema } from "@spine-event-engine/proto/client";
-import { AnyPacker, StringifierRegistry, Stringifiers, TypeRegistry } from "../src/index.js";
+import { registerProtoModule, registeredProtoModules } from "@spine-event-engine/proto/codegen";
+import {
+  TaskCreatedSchema,
+  TaskRenamedSchema,
+} from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import {
+  AnyPacker,
+  defaultStringifierRegistry,
+  StringifierRegistry,
+  Stringifiers,
+  TypeRegistry,
+} from "../src/index.js";
 
 const userId = create(UserIdSchema, { value: "user-42" });
 const typed = (prefix: string) =>
@@ -32,6 +43,92 @@ const typed = (prefix: string) =>
   });
 
 describe("Any JSON URL preservation", () => {
+  it("keeps existing Any conversion available after a duplicate descriptor is rejected", () => {
+    const converter = defaultStringifierRegistry.forMessage(AnySchema);
+    const packed = typed("custom");
+    const text = converter.toString(packed);
+    const before = registeredProtoModules();
+    expect(() =>
+      registerProtoModule({
+        name: "invalid-duplicate-descriptors",
+        schemas: [TaskRenamedSchema, TaskRenamedSchema],
+        dependencies: [],
+      }),
+    ).toThrow(/Conflicting Protobuf type/u);
+    expect(registeredProtoModules()).toBe(before);
+    const alias = Object.assign(Object.create(TaskRenamedSchema) as typeof TaskRenamedSchema, {
+      typeName: "spine.examples.todo.TaskRenamedAlias",
+    });
+    expect(() =>
+      registerProtoModule({
+        name: "invalid-shared-descriptor",
+        schemas: [TaskRenamedSchema, alias],
+        dependencies: [],
+      }),
+    ).toThrow(/Conflicting Protobuf descriptor/u);
+    expect(registeredProtoModules()).toBe(before);
+    expect(converter.fromString(text)).toEqual(packed);
+  });
+
+  it("expands an already obtained converter after a generated module registers", () => {
+    const stringifier = defaultStringifierRegistry.forMessage(AnySchema);
+    const packed = create(AnySchema, {
+      typeUrl: `custom/${TaskCreatedSchema.typeName}`,
+      value: toBinary(TaskCreatedSchema, create(TaskCreatedSchema)),
+    });
+    expect(() => stringifier.toString(packed)).toThrow();
+
+    const module = Object.freeze({
+      name: "core-test-late-task-event",
+      schemas: [TaskCreatedSchema],
+      dependencies: [],
+    });
+    expect(registerProtoModule(module)).toBe(module);
+    expect(registerProtoModule(module)).toBe(module);
+    const text = stringifier.toString(packed);
+    expect(stringifier.fromString(text)).toEqual(packed);
+    expect(() => registerProtoModule({ ...module, schemas: [UserIdSchema] })).toThrow(
+      /Conflicting/u,
+    );
+    expect(stringifier.toString(packed)).toBe(text);
+  });
+
+  it("pins a shared converter choice once a message mapping is requested", () => {
+    defaultStringifierRegistry.forMessage(UserIdSchema);
+    expect(() => {
+      defaultStringifierRegistry.register(UserIdSchema, {
+        toString: (value) => value.value,
+        fromString: (value) => create(UserIdSchema, { value }),
+      });
+    }).toThrow(/already in use/u);
+    expect(() => {
+      defaultStringifierRegistry.setTypeRegistry(new TypeRegistry());
+    }).toThrow(/generated module descriptors/u);
+  });
+
+  it("keeps copied custom converters isolated while following later generated descriptors", () => {
+    const custom = new StringifierRegistry();
+    const copied = new StringifierRegistry(custom);
+    const stringifier = copied.forMessage(AnySchema);
+    const packed = create(AnySchema, {
+      typeUrl: `custom/${TaskRenamedSchema.typeName}`,
+      value: toBinary(TaskRenamedSchema, create(TaskRenamedSchema)),
+    });
+    expect(() => stringifier.toString(packed)).toThrow();
+
+    registerProtoModule({
+      name: "core-test-late-task-renamed",
+      schemas: [TaskRenamedSchema],
+      dependencies: [],
+    });
+    expect(stringifier.fromString(stringifier.toString(packed))).toEqual(packed);
+    custom.register(UserIdSchema, {
+      toString: (value) => `changed:${value.value}`,
+      fromString: (value) => create(UserIdSchema, { value: value.slice(8) }),
+    });
+    expect(copied.forMessage(UserIdSchema).toString(userId)).toBe('{"value":"user-42"}');
+  });
+
   it("restores different prefixes for repeated identifiers with a native registry", () => {
     const value = create(IdFilterSchema, { id: [typed("first"), typed("second")] });
     const stringifier = Stringifiers.forMessage(IdFilterSchema, createRegistry(UserIdSchema));

@@ -82,9 +82,10 @@ try {
 
 The builder always uses a client supplied by the caller. Its fixed finite reconciliation
 bound is 1,000 records. Pass the factory to the server or create record storage
-through the normal storage API. When application values contain `Any`, configure
-a `StringifierRegistry` with that application's `TypeRegistry` before building;
-the layout section below explains why that mapping must remain reversible.
+through the normal storage API. Generated model modules register descriptors
+on import, allowing the shared default stringifier to convert `Any` values.
+An explicitly supplied `StringifierRegistry` can use the application's
+`TypeRegistry`; the layout section below explains why that mapping must remain reversible.
 
 `build()` is synchronous and does not contact Datastore. `await factory.checkConnection()`
 performs a read-only, keys-only query for the exact shared `__namespace__` metadata

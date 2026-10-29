@@ -107,16 +107,6 @@ export const inboxRecordSpec: RecordSpec<WireInboxMessageId, WireInboxMessage> =
   extractId: (record) => Values.id(record),
   columns: [
     new RecordColumn(
-      "inbox_id",
-      ColumnTypes.fromField(InboxMessageSchema.field.inboxId),
-      (record) => record.inboxId,
-    ),
-    new RecordColumn(
-      "signal_id",
-      ColumnTypes.fromField(InboxMessageSchema.field.signalId),
-      (record) => record.signalId,
-    ),
-    new RecordColumn(
       "shard_index",
       ColumnTypes.scalar(ScalarType.INT32),
       (record) => Values.shard(record).index,

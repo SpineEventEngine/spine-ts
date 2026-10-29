@@ -60,6 +60,7 @@ import * as agentHistoryPublicSchemas from "../generated/spine/ts/agent/history_
 import * as agentInteractionSchemas from "../generated/spine/ts/agent/interaction_events_pb.js";
 import * as agentModelSchemas from "../generated/spine/ts/agent/model_pb.js";
 import { spineProtoModule } from "../generated/proto-module.js";
+import { registerProtoModule, registeredProtoModules } from "../src/codegen/index.js";
 
 interface SpineManifest {
   readonly formatVersion: number;
@@ -85,6 +86,31 @@ function schemaNames(exports: object): string[] {
 }
 
 describe("spineProtoModule", () => {
+  it("registers the generated root once and keeps failed additions atomic", () => {
+    const snapshot = registeredProtoModules();
+    expect(snapshot).toContain(spineProtoModule);
+    expect(registerProtoModule(spineProtoModule)).toBe(spineProtoModule);
+    expect(registeredProtoModules()).toBe(snapshot);
+    const dependencies: ProtoModule[] = [];
+    const cyclic: ProtoModule = { name: "cyclic-module", schemas: [], dependencies };
+    dependencies.push(cyclic);
+    expect(() => registerProtoModule(cyclic)).toThrow(/dependency cycle/u);
+    expect(registeredProtoModules()).toBe(snapshot);
+    expect(() => registerProtoModule({ ...spineProtoModule })).toThrow(
+      /Conflicting Protobuf module/u,
+    );
+    const firstSchema = spineProtoModule.schemas[0];
+    if (firstSchema === undefined) throw new Error("Expected a generated Spine schema.");
+    expect(() =>
+      registerProtoModule({
+        name: "another-spine-module",
+        schemas: [firstSchema],
+        dependencies: [],
+      }),
+    ).toThrow(/Conflicting Protobuf type/u);
+    expect(registeredProtoModules()).toBe(snapshot);
+  });
+
   it("retains the public descriptor documentation in generated source", () => {
     const source = readFileSync(new URL("../generated/proto-module.ts", import.meta.url), "utf8");
 

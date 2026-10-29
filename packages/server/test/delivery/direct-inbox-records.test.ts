@@ -87,8 +87,6 @@ describe("direct InboxMessage storage", () => {
     expect(inboxRecordSpec.recordType).toBe(InboxMessageSchema);
     expect(inboxRecordSpec.idType).toBe(InboxMessageIdSchema);
     expect(inboxRecordSpec.columns.map((column) => [column.name, column.type.kind])).toEqual([
-      ["inbox_id", "message"],
-      ["signal_id", "message"],
       ["shard_index", "scalar"],
       ["shard_total", "scalar"],
       ["status", "enum"],

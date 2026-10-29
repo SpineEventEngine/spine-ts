@@ -23,10 +23,36 @@ export class MysqlTableResolver {
    */
   readonly #names = new Map<string, string>();
 
+  readonly #eventNames = new Map<string, string>();
+
   /**
    * Table names already resolved for a family.
    */
   readonly #resolved = new Map<string, string>();
+
+  /**
+   * Copies configured names for one factory snapshot.
+   *
+   * @returns An independent resolver with the same registrations.
+   */
+  copy(): MysqlTableResolver {
+    const copy = new MysqlTableResolver();
+    for (const [key, value] of this.#names) copy.#names.set(key, value);
+    for (const [key, value] of this.#eventNames) copy.#eventNames.set(key, value);
+    return copy;
+  }
+
+  /**
+   * Sets the physical table for one exact Event Store identity.
+   *
+   * @param identity Context name and store role identity.
+   * @param name Requested physical table name.
+   */
+  setEventStoreName(identity: string, name: string): void {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || Buffer.byteLength(name) > 64)
+      throw new Error(`MySQL table name is invalid: ${name}`);
+    this.#eventNames.set(identity, name);
+  }
 
   /**
    * Sets the ungrouped table name for a record type.
@@ -56,6 +82,7 @@ export class MysqlTableResolver {
    * @param group Names the optional storage group.
    * @param name Supplies an explicit table name.
    * @param recordType Names the grouped record type.
+   * @param eventStoreIdentity Distinguishes a domain or system Event Store.
    * @returns Returns the resolved table layout.
    */
   resolve(
@@ -63,35 +90,61 @@ export class MysqlTableResolver {
     group: string | undefined,
     name?: string,
     recordType?: string,
+    eventStoreIdentity?: string,
   ): MysqlResolvedTable {
-    const registered =
-      group === undefined
-        ? this.#names.get(`record:${sourceType}`)
-        : this.#names.get(`group:${sourceType}:${recordType ?? ""}`);
-    const readable =
-      name ??
-      registered ??
-      (group === undefined
-        ? sourceType.replaceAll(".", "_")
-        : `${group.replaceAll(".", "_")}_${(recordType ?? sourceType).slice(
-            (recordType ?? sourceType).lastIndexOf(".") + 1,
-          )}`);
+    const readable = this.requestedName(sourceType, group, name, recordType, eventStoreIdentity);
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(readable) || Buffer.byteLength(readable) > 64) {
       throw new Error(`MySQL table name is invalid: ${readable}`);
     }
     const identity =
-      group !== undefined
+      eventStoreIdentity ??
+      (group !== undefined
         ? `group:${sourceType}:${recordType ?? ""}:${group}`
         : this.#names.get(`record:${sourceType}`) !== undefined
           ? `record:${sourceType}`
-          : sourceType;
-    const previous = this.#resolved.get(readable);
+          : sourceType);
+    const key = readable.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+    const previous = this.#resolved.get(key);
     if (previous !== undefined && previous !== identity)
-      throw new Error(`MySQL table name collides: ${readable}`);
-    this.#resolved.set(readable, identity);
+      throw new Error(`MySQL table name collides: ${readable} (${previous} and ${identity})`);
+    this.#resolved.set(key, identity);
     return Object.freeze({
       tableName: readable,
     });
+  }
+
+  /**
+   * Returns a readable configured or default table name.
+   *
+   * @param sourceType Record source type.
+   * @param group Optional physical group.
+   * @param name Explicit name from a record layout.
+   * @param recordType Stored record type.
+   * @param eventStoreIdentity Exact Event Store context and role.
+   * @returns The requested table name before validation.
+   */
+  private requestedName(
+    sourceType: string,
+    group: string | undefined,
+    name: string | undefined,
+    recordType: string | undefined,
+    eventStoreIdentity: string | undefined,
+  ): string {
+    const registered =
+      group === undefined
+        ? this.#names.get(`record:${sourceType}`)
+        : this.#names.get(`group:${sourceType}:${recordType ?? ""}`);
+    if (eventStoreIdentity !== undefined) {
+      const selected = this.#eventNames.get(eventStoreIdentity);
+      if (selected !== undefined) return selected;
+    }
+    if (name !== undefined) return name;
+    if (registered !== undefined) return registered;
+    if (eventStoreIdentity !== undefined && group !== undefined)
+      return `${group.replace(/[^A-Za-z0-9_]/gu, "_")}_Event`;
+    if (group === undefined) return sourceType.replaceAll(".", "_");
+    const type = recordType ?? sourceType;
+    return `${group.replaceAll(".", "_")}_${type.slice(type.lastIndexOf(".") + 1)}`;
   }
 
   /**
@@ -104,7 +157,7 @@ export class MysqlTableResolver {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || Buffer.byteLength(name) > 64)
       throw new Error(`MySQL table name is invalid: ${name}`);
     for (const [registered, value] of this.#names)
-      if (registered !== identity && value === name)
+      if (registered !== identity && value.toLowerCase() === name.toLowerCase())
         throw new Error(`MySQL table name collides: ${name}`);
     this.#names.set(identity, name);
   }

@@ -38,6 +38,12 @@ pool exists; otherwise it reuses the retained runtime pool. Failed requirements
 can be retried without discarding
 earlier compatible families.
 
+The default shared registry converts message-valued IDs and columns using
+generated descriptors registered on module import. A registry supplied with
+`setStringifierRegistry(registry)` is snapshotted at factory construction.
+`setEventStoreTable(contextName, table, role?)` selects one physical Event Store
+table for the exact bounded-context name and domain or system role.
+
 PostgreSQL creates tables but not databases or schemas. A missing schema is a
 configuration error on `checkConnection()` or first use. Without an explicit schema, `current_schema()`
 is resolved from the server on first use and the validated result qualifies every

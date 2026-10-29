@@ -165,8 +165,10 @@ MySQL and Datastore use the same mapping when they write an ID or `(column)`
 value and when they later build a Query operand. This symmetry is what makes
 `board == BoardId("general")` find a row whose `board` column was written from
 that generated `BoardId`. An application can register another reversible
-mapping in `StringifierRegistry`. If compact Proto JSON encounters an `Any`,
-also call `setTypeRegistry()` with the application's generated `TypeRegistry`.
+mapping in `StringifierRegistry`. Generated model modules register their
+descriptors on import, so the shared default can expand `Any` values without
+manual registry setup. An explicit registry may still call `setTypeRegistry()`
+with the application's generated `TypeRegistry`.
 
 ## Query Projection state
 

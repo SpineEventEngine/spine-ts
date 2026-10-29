@@ -32,9 +32,12 @@ uses this precedence:
 5. the default kind.
 
 `setNamespaceConverter(...)` replaces complete `TenantId`/native namespace
-conversion. `setStringifierRegistry(...)` supplies reversible mappings for
-message-valued IDs and ordinary message columns. The stringifier registry is
-snapshotted by `build()`; a custom namespace converter is retained and must
+conversion. The default shared registry maps message-valued IDs and ordinary
+message columns using generated descriptors registered on module import.
+`setStringifierRegistry(...)` accepts a custom registry, snapshotted by
+`build()`. `setEventStoreKind(contextName, kind, role?)` selects one native kind
+for the exact bounded-context name and domain or system role. A custom
+namespace converter is retained and must
 remain behaviorally immutable for the factory lifetime. `organizeRecords(...)`
 changes a kind. `useRecordStorage(...)` replaces a record-family provider.
 `Identifiers` select the key representation, and the same configured

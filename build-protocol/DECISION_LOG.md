@@ -7036,3 +7036,23 @@ this demonstrated concurrency/durability ambiguity; runtime metadata unavailable
 Local JVM ProcessManagerRepository posts produced Commands with a no-op observer
 following state storage. That supports normal bus handoff without waiting for
 application responses, not a cross-store atomic durability claim.
+
+## D-0165 — Readable Event Store names and generated stringifier defaults
+
+2026-10-29. Human-approved continuation of environment-lifecycle. Replace D-0160's
+hash-based Event Store names with Bounded Context names and provider-readable
+physical defaults. Preserve logical domain/System distinction, reject physical
+name collisions, and support specific per-Bounded-Context overrides. All storage
+preparation and ordinary/atomic read/write paths use the same resolution.
+
+Use a shared default StringifierRegistry backed by the generated application
+schema inventory. Generated model startup installs descriptors through a small
+proto/codegen leaf, avoiding a proto/core import cycle. Converters resolve live
+additive descriptors while retaining stable converter choices; explicit custom
+registries remain available. Ordinary applications need no manual registry wiring.
+
+The [accepted storage-defaults contract](tasks/environment-lifecycle/STORAGE_DEFAULTS.md)
+specifies builder APIs, collision scope, registry mutation and test acceptance.
+No migration, dual writes, tenant-routing change or Event ID change is authorized.
+Remove the unused Inbox `inbox_id` and `signal_id` materializations while retaining
+both Protobuf fields and all query-dependent columns.

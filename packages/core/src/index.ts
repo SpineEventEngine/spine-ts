@@ -43,6 +43,7 @@ import {
   type FileOptions,
 } from "@bufbuild/protobuf/wkt";
 import { validate as validateWithSpine } from "@spine-event-engine/validation";
+import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import {
   ActorContextSchema,
   type Command,
@@ -1093,17 +1094,29 @@ function isProtobufRegistry(types: TypeRegistryLookup | Registry): types is Regi
   return "kind" in types;
 }
 
+const RegistrySources = Object.freeze({
+  /**
+   * Resolves a fixed or late-bound Protobuf descriptor registry.
+   *
+   * @param source Registry value or provider.
+   * @returns The current registry, if available.
+   */
+  current(source: Registry | undefined | (() => Registry | undefined)): Registry | undefined {
+    return typeof source === "function" ? source() : source;
+  },
+});
+
 /**
  * Creates reversible compact Proto JSON conversion for a generated message.
  *
  * @typeParam Schema Generated schema used for conversion.
  * @param schema Message schema used for Proto JSON.
- * @param registry Optional registry for expanding packed Any messages.
+ * @param registrySource Registry or late-bound registry for expanding packed Any messages.
  * @returns Schema-bound stringifier.
  */
 function defaultMessageStringifier<Schema extends MessageSchema>(
   schema: Schema,
-  registry: Registry | undefined,
+  registrySource: Registry | undefined | (() => Registry | undefined),
 ): Stringifier<MessageShape<Schema>> {
   return Object.freeze({
     /**
@@ -1113,10 +1126,9 @@ function defaultMessageStringifier<Schema extends MessageSchema>(
      * @returns Parsed generated message.
      */
     fromString(value: string): MessageShape<Schema> {
-      const message =
-        registry === undefined
-          ? fromJsonString(schema, value)
-          : fromJsonString(schema, value, { registry });
+      const registry = RegistrySources.current(registrySource);
+      const options = registry === undefined ? undefined : { registry };
+      const message = fromJsonString(schema, value, options);
       AnyJsonUrls.restore(schema, message, JSON.parse(value), registry);
       return message;
     },
@@ -1128,6 +1140,7 @@ function defaultMessageStringifier<Schema extends MessageSchema>(
      * @returns Compact Proto JSON text.
      */
     toString(value: MessageShape<Schema>): string {
+      const registry = RegistrySources.current(registrySource);
       return registry === undefined
         ? toJsonString(schema, value)
         : toJsonString(schema, value, { registry });
@@ -1676,6 +1689,8 @@ Object.freeze(Stringifiers);
 export class StringifierRegistry {
   readonly #registered = new Map<string, Stringifier<Message>>();
 
+  readonly #selected = new Set<string>();
+
   #types: Registry | undefined;
 
   /**
@@ -1702,6 +1717,12 @@ export class StringifierRegistry {
     schema: Schema,
     stringifier: Stringifier<MessageShape<Schema>>,
   ): void {
+    if (
+      this === defaultStringifierRegistry &&
+      this.#selected.has(schema.typeName) &&
+      this.#registered.get(schema.typeName) !== stringifier
+    )
+      throw new Error(`Stringifier choice is already in use for ${schema.typeName}.`);
     this.#registered.set(schema.typeName, stringifier);
   }
 
@@ -1711,6 +1732,8 @@ export class StringifierRegistry {
    * @param types Resolves message types embedded in `Any` values.
    */
   setTypeRegistry(types: TypeRegistryLookup): void {
+    if (this === defaultStringifierRegistry)
+      throw new Error("The shared stringifier registry uses generated module descriptors.");
     const metadata = types.list();
     this.#types = createRegistry(...metadata.map((item) => item.descriptor));
   }
@@ -1723,9 +1746,10 @@ export class StringifierRegistry {
    */
   forMessage<Schema extends MessageSchema>(schema: Schema): Stringifier<MessageShape<Schema>> {
     const registered = this.#registered.get(schema.typeName);
+    if (this === defaultStringifierRegistry) this.#selected.add(schema.typeName);
 
     return registered === undefined
-      ? defaultMessageStringifier(schema, this.#types)
+      ? defaultMessageStringifier(schema, () => this.#types ?? GeneratedDescriptors.current())
       : (registered as Stringifier<MessageShape<Schema>>);
   }
 
@@ -1744,6 +1768,34 @@ export class StringifierRegistry {
     return FieldStringifiers.create(field, (schema) => this.forMessage(schema));
   }
 }
+
+let descriptorSnapshot: readonly ProtoModule[] | undefined;
+let descriptorRegistry: Registry | undefined;
+
+/**
+ * Reuses descriptor composition until another generated module registers.
+ */
+const GeneratedDescriptors = Object.freeze({
+  /**
+   * Resolves descriptors from the current generated-module inventory.
+   *
+   * @returns The composed registry, if available.
+   */
+  current(): Registry | undefined {
+    const current = registeredProtoModules();
+    if (current !== descriptorSnapshot) {
+      const types = TypeRegistry.from(...current);
+      descriptorRegistry = createRegistry(...types.list().map((item) => item.descriptor));
+      descriptorSnapshot = current;
+    }
+    return descriptorRegistry;
+  },
+});
+
+/**
+ * Shared converter policy for application storage factories and mappings.
+ */
+export const defaultStringifierRegistry: StringifierRegistry = new StringifierRegistry();
 
 /**
  * Primitive identifier kinds supported by Spine JVM storage.

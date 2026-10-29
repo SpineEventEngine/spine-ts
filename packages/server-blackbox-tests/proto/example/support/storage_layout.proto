@@ -1,0 +1,123 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package example.support;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "spine/options.proto";
+
+// Identifies a Ticket within a named support queue.
+message TicketId {
+  // Queue that contains the Ticket.
+  string queue = 1;
+
+  // Ticket number within that queue.
+  string number = 2;
+}
+
+// Identifies one list of Tickets shown to clients.
+message TicketListId {
+  // Name of the list.
+  string value = 1;
+}
+
+// Identifies an Agent that drafts support replies.
+message ReplyAssistantId {
+  // Stable name of the Agent instance.
+  string value = 1;
+}
+
+// Urgency assigned to a Ticket.
+enum Priority {
+  // No urgency has been selected.
+  PRIORITY_UNSPECIFIED = 0;
+
+  // The Ticket can follow the ordinary support process.
+  NORMAL = 1;
+
+  // The Ticket needs prompt attention.
+  URGENT = 2;
+}
+
+// Contact details supplied with a Ticket.
+message Requester {
+  // Contact name shown to support staff.
+  string name = 1;
+
+  // Address to which a reply can be sent.
+  string email = 2;
+
+  // Other names used by this contact.
+  repeated string aliases = 3;
+}
+
+// Browser information attached to a Ticket.
+message BrowserInfo {
+  // Browser reported by the client.
+  string browser = 1;
+}
+
+// Details retained for a support Ticket.
+message Ticket {
+  option (entity).kind = AGGREGATE;
+
+  // Queue and number assigned when the Ticket was opened.
+  TicketId id = 1;
+
+  // Short description, available to storage queries.
+  string subject = 2 [(column) = true];
+
+  // Urgency, available to storage queries.
+  Priority priority = 3 [(column) = true];
+
+  // Complete contact details, queryable as one message value.
+  Requester requester = 4 [(column) = true];
+
+  // Opening time, available for filtering and ordering.
+  google.protobuf.Timestamp opened_at = 5 [(column) = true];
+
+  // Labels retained in the state without a separate query column.
+  repeated string tags = 6;
+
+  // Additional attributes retained in the state.
+  map<string, string> attributes = 7;
+
+  // Typed extra details, queryable as one packed message value.
+  google.protobuf.Any detail = 8 [(column) = true];
+}
+
+// Tickets included in a list shown to support staff.
+message TicketList {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = QUERY;
+
+  // Name used to retrieve this list of Tickets.
+  TicketListId id = 1;
+
+  // Tickets currently included in the list.
+  repeated TicketId tickets = 2;
+}
+
+// Current state of the Agent that drafts support replies.
+message ReplyAssistant {
+  option (entity).kind = ENTITY;
+
+  // Identifies this Agent instance.
+  ReplyAssistantId id = 1;
+
+  // Most recently saved draft.
+  string last_draft = 2;
+}

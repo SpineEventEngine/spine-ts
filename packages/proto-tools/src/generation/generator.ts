@@ -30,10 +30,11 @@ import {
 } from "node:fs";
 import { constants } from "node:fs";
 import { createRequire } from "node:module";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, matchesGlob, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
+import ts from "typescript";
 
 import { ProtoConfig, ProtoManifest } from "../index.js";
 import { generationMarkerFile, reusableGenerationId } from "./generation-reuse.mjs";
@@ -414,6 +415,63 @@ const ProtoGenerationErrors: Readonly<ProtoGenerationFailure> = Object.freeze({
  * Generates and composes deterministic Protobuf package artifacts.
  */
 const protoGeneration = Object.freeze({
+  /**
+   * Checks package tree-shaking metadata against the emitted runtime path.
+   *
+   * @param packageRoot Package containing generated startup code.
+   * @param runtimePath Published JavaScript path relative to the package.
+   */
+  assertStartupSideEffects(packageRoot: string, runtimePath: string): void {
+    const metadata = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
+      sideEffects?: boolean | string[];
+    };
+    if (metadata.sideEffects === undefined || metadata.sideEffects === true) return;
+    const allowed =
+      Array.isArray(metadata.sideEffects) &&
+      metadata.sideEffects.some((pattern) => {
+        const normalized = pattern.replace(/^\.\//u, "");
+        return matchesGlob(runtimePath, normalized.includes("/") ? normalized : `**/${normalized}`);
+      });
+    if (!allowed)
+      ProtoGenerationErrors.fail(
+        packageRoot,
+        `package sideEffects must retain ${runtimePath} at runtime`,
+      );
+  },
+
+  /**
+   * Calculates a generated source's JavaScript output under package TypeScript settings.
+   *
+   * @param packageRoot Application package directory.
+   * @param sourcePath Generated TypeScript source relative to the package.
+   * @returns Emitted JavaScript path relative to the package.
+   */
+  runtimeOutput(packageRoot: string, sourcePath: string): string {
+    const configPath = join(packageRoot, "tsconfig.json");
+    if (!existsSync(configPath)) return sourcePath.replace(/\.ts$/u, ".js");
+    const config = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
+    if (config.error !== undefined)
+      ProtoGenerationErrors.fail(packageRoot, "cannot read tsconfig.json");
+    const parsed = ts.parseJsonConfigFileContent(
+      config.config,
+      ts.sys,
+      packageRoot,
+      undefined,
+      configPath,
+    );
+    // An application may compose its first generated source into an empty directory.
+    if (parsed.errors.some((error) => error.code !== 18003))
+      ProtoGenerationErrors.fail(packageRoot, "invalid tsconfig.json");
+    const sourceFile = join(packageRoot, sourcePath);
+    const commandLine = { ...parsed, fileNames: [...parsed.fileNames, sourceFile] };
+    const output = ts
+      .getOutputFileNames(commandLine, sourceFile, !ts.sys.useCaseSensitiveFileNames)
+      .find((path) => path.endsWith(".js"));
+    if (output === undefined)
+      ProtoGenerationErrors.fail(packageRoot, "registry has no JavaScript output");
+    return relative(packageRoot, output).replace(/\\/gu, "/");
+  },
+
   // prettier-ignore
 
   /**
@@ -654,6 +712,10 @@ const protoGeneration = Object.freeze({
     const config = ProtoConfig.read(packageRoot);
     if (config.mode !== "application")
       ProtoGenerationErrors.fail(packageRoot, "compose requires application mode");
+    protoGeneration.assertStartupSideEffects(
+      packageRoot,
+      protoGeneration.runtimeOutput(packageRoot, config.registryOutput),
+    );
     const imports = ModelGraph.resolve(packageRoot, config.modelPackages)
       .models.filter((model) => config.modelPackages.includes(model.name))
       .slice()
@@ -1038,43 +1100,94 @@ const protoGeneration = Object.freeze({
     const sources = generated.map(({ path }) =>
       path.replace(/^\.\//u, "").replace(/_pb\.js$/u, ".proto"),
     );
-    const source = generatedSource(
-      [
-        'import type { ProtoModule } from "@spine-event-engine/proto";',
-        'import type { Message } from "@bufbuild/protobuf";',
-        'import type { GenMessage } from "@bufbuild/protobuf/codegenv2";',
-        ...generated.map(({ alias, path }) => `import * as ${alias} from ${JSON.stringify(path)};`),
-        ...dependencyImports.map(
-          ({ name, moduleExport, alias }) =>
-            `import { ${moduleExport} as ${alias} } from ${JSON.stringify(name)};`,
-        ),
-        "",
-        "const schemas = Object.freeze([",
-        ...generated.map(({ alias }) =>
-          [
-            `  ...Object.values(${alias})`,
-            '    .filter((value) => typeof value === "object" && value !== null &&',
-            '      (value as { kind?: unknown }).kind === "message")',
-            "    .map((value) => value as unknown as GenMessage<Message>),",
-          ].join("\n"),
-        ),
-        "].sort((left, right) =>",
-        "  (left as { typeName: string }).typeName.localeCompare(",
-        "    (right as { typeName: string }).typeName,",
-        "  ),",
-        "));",
-        "",
-        `/** All Protobuf message schemas owned by \`${packageName}\`. */`,
-        `export const ${exportName}: ProtoModule = Object.freeze({`,
-        `  name: ${JSON.stringify(packageName)},`,
-        "  schemas,",
-        `  dependencies: Object.freeze([${dependencyImports.map(({ alias }) => alias).join(", ")}]),`,
-        "});",
-        "",
-      ].join("\n"),
-      sources,
+    const lines = protoGeneration.moduleLines(
+      exportName,
+      packageName,
+      generated,
+      dependencyImports,
     );
-    writeFileSync(join(output, "proto-module.ts"), source, "utf8");
+    writeFileSync(
+      join(output, "proto-module.ts"),
+      generatedSource(lines.join("\n"), sources),
+      "utf8",
+    );
+  },
+
+  /**
+   * Renders the generated module's imports, descriptors, and registration.
+   *
+   * @param exportName Public descriptor export.
+   * @param packageName Generated package name.
+   * @param generated Generated schema modules.
+   * @param dependencies Descriptor module dependencies.
+   * @returns Source lines for the descriptor module.
+   */
+  moduleLines(
+    exportName: string,
+    packageName: string,
+    generated: readonly { alias: string; path: string }[],
+    dependencies: readonly { name: string; moduleExport: string; alias: string }[],
+  ): string[] {
+    const inventoryImport =
+      packageName === "@spine-event-engine/proto"
+        ? "../src/codegen/proto-module-inventory.js"
+        : "@spine-event-engine/proto/codegen";
+    return [
+      'import type { ProtoModule } from "@spine-event-engine/proto";',
+      `import { registerProtoModule } from ${JSON.stringify(inventoryImport)};`,
+      'import type { Message } from "@bufbuild/protobuf";',
+      'import type { GenMessage } from "@bufbuild/protobuf/codegenv2";',
+      ...generated.map(({ alias, path }) => `import * as ${alias} from ${JSON.stringify(path)};`),
+      ...dependencies.map(
+        ({ name, moduleExport, alias }) =>
+          `import { ${moduleExport} as ${alias} } from ${JSON.stringify(name)};`,
+      ),
+      "",
+      ...protoGeneration.schemaDeclaration(generated),
+      `/** All Protobuf message schemas owned by \`${packageName}\`. */`,
+      `export const ${exportName}: ProtoModule = registerProtoModule(Object.freeze({`,
+      `  name: ${JSON.stringify(packageName)},`,
+      "  schemas,",
+      `  dependencies: Object.freeze([${dependencies.map(({ alias }) => alias).join(", ")}]),`,
+      "}));",
+      "",
+    ];
+  },
+
+  /**
+   * Renders the sorted schema declaration.
+   *
+   * @param generated Generated schema modules.
+   * @returns Source lines for the schema declaration.
+   */
+  schemaDeclaration(generated: readonly { alias: string }[]): string[] {
+    return [
+      "const schemas = Object.freeze([",
+      ...protoGeneration.schemaLines(generated),
+      "].sort((left, right) =>",
+      "  (left as { typeName: string }).typeName.localeCompare(",
+      "    (right as { typeName: string }).typeName,",
+      "  ),",
+      "));",
+      "",
+    ];
+  },
+
+  /**
+   * Lists message schemas exported by generated modules.
+   *
+   * @param generated Generated schema modules.
+   * @returns Source lines collecting message schemas.
+   */
+  schemaLines(generated: readonly { alias: string }[]): string[] {
+    return generated.map(({ alias }) =>
+      [
+        `  ...Object.values(${alias})`,
+        '    .filter((value) => typeof value === "object" && value !== null &&',
+        '      (value as { kind?: unknown }).kind === "message")',
+        "    .map((value) => value as unknown as GenMessage<Message>),",
+      ].join("\n"),
+    );
   },
 
   /**
@@ -1212,4 +1325,15 @@ export const ProtoGeneration: Readonly<{
    * @param operations Optional bounded manifest publication seams for tests.
    */
   compose(packageRoot: string, operations?: CompositionOperations): void;
-}> = Object.freeze(protoGeneration);
+}> = Object.freeze({
+  ...protoGeneration,
+  generate(packageRoot: string, operations?: GenerationOperations): void {
+    const config = ProtoConfig.read(packageRoot);
+    if (config.mode === "model")
+      protoGeneration.assertStartupSideEffects(
+        packageRoot,
+        `dist/${config.exportRoot}/proto-module.js`,
+      );
+    protoGeneration.generate(packageRoot, operations);
+  },
+});

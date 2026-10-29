@@ -528,6 +528,10 @@ describe("package metadata", () => {
         types: "./dist/src/client/index.d.ts",
         default: "./dist/src/client/index.js",
       },
+      "./codegen": {
+        types: "./dist/src/codegen/index.d.ts",
+        default: "./dist/src/codegen/index.js",
+      },
       "./delivery": {
         types: "./dist/src/delivery/index.d.ts",
         default: "./dist/src/delivery/index.js",

@@ -42,6 +42,10 @@
       "types": "./dist/src/agent/index.d.ts",
       "default": "./dist/src/agent/index.js"
     },
+    "./codegen": {
+      "types": "./dist/src/codegen/index.d.ts",
+      "default": "./dist/src/codegen/index.js"
+    },
     "./spine-proto-manifest.json": "./spine-proto-manifest.json",
     "./proto/*": "./proto/*",
     "./generated/*.js": {

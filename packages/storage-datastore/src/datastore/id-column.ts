@@ -14,12 +14,19 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 
+/**
+ * Declared Datastore identifier schema or primitive kind.
+ *
+ * @typeParam I Logical identifier type.
+ */
 type DatastoreIdType<I> = I extends Message ? GenMessage<I> : string;
 
 /**
  * Converts a declared record ID to and from a Spine JVM Datastore key name.
+ *
+ * @typeParam I Logical identifier type.
  */
 export class DatastoreIdColumn<I> {
   readonly #stringifiers: StringifierRegistry;
@@ -32,9 +39,12 @@ export class DatastoreIdColumn<I> {
    */
   constructor(
     private readonly type: DatastoreIdType<I>,
-    stringifiers: StringifierRegistry = new StringifierRegistry(),
+    stringifiers: StringifierRegistry = defaultStringifierRegistry,
   ) {
-    this.#stringifiers = new StringifierRegistry(stringifiers);
+    this.#stringifiers =
+      stringifiers === defaultStringifierRegistry
+        ? stringifiers
+        : new StringifierRegistry(stringifiers);
     DatastoreIds.validateType(type);
   }
 
@@ -82,12 +92,25 @@ export class DatastoreIdColumn<I> {
 }
 
 const DatastoreIds = Object.freeze({
+  /**
+   * Validates a supported primitive identifier kind.
+   *
+   * @typeParam I Logical identifier type.
+   * @param type Declared identifier schema or primitive kind.
+   */
   validateType<I>(type: DatastoreIdType<I>): void {
     if (typeof type !== "string") return;
     if (!["string", "int32", "int64"].includes(type))
       throw new Error(`Datastore storage does not support primitive ID kind "${type}".`);
   },
 
+  /**
+   * Converts a primitive identifier to its key name.
+   *
+   * @param type Declared primitive kind.
+   * @param value Logical identifier value.
+   * @returns Its canonical text representation.
+   */
   primitive(type: string, value: unknown): string {
     if (type === "string" && typeof value === "string") return value;
     if (
@@ -108,6 +131,12 @@ const DatastoreIds = Object.freeze({
     throw new Error(`Datastore ${type} identifier is invalid.`);
   },
 
+  /**
+   * Validates a Datastore key name.
+   *
+   * @param value Candidate key name.
+   * @returns The validated key name.
+   */
   keyName(value: string): string {
     if (value.length === 0) throw new Error("Datastore storage identifier must be non-empty.");
     if (Buffer.byteLength(value, "utf8") > 1_500)

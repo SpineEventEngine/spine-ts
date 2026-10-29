@@ -54,6 +54,12 @@ tsc -b
 
 Do not edit generated output by hand: change the Proto source or configuration,
 then run generation again.
+The generated `proto-module.js` registers its descriptor graph when imported.
+If the model package lists restrictive `sideEffects` paths, include its
+published runtime module (for example `./dist/generated/proto-module.js`), not
+only the TypeScript source. An application using restrictive `sideEffects`
+metadata must likewise retain the emitted JavaScript path of its composed
+`registryOutput` so startup imports execute.
 
 ## 🧩 Compose an application after the first model succeeds
 

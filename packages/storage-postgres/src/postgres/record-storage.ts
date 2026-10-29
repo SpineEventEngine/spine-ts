@@ -13,7 +13,7 @@
  */
 
 import { fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import {
   ColumnMappings,
   defaultQueryCandidateLimit,
@@ -244,7 +244,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     private readonly lifecycle: PostgresRecordLifecycle,
     private readonly onClose: () => void,
     private readonly create?: (table: PostgresTableSpec<I, R>) => string,
-    stringifiers: StringifierRegistry = new StringifierRegistry(),
+    stringifiers: StringifierRegistry = defaultStringifierRegistry,
   ) {
     super(context, spec);
     this.#idColumn = new PostgresIdColumn(spec.idType, stringifiers);

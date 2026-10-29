@@ -144,3 +144,60 @@ Also compare `StringifierRegistry` with the JVM singleton and investigate whethe
 build-generated knowledge of Protobuf schemas can configure the default TS registry
 automatically, instead of requiring application code to assemble it manually.
 Include the findings in the explanation to the user.
+
+## Approved Event Store and stringifier implementation
+
+Implement the investigated JVM-like defaults in this existing task and feature
+worktree, following the [accepted contract](STORAGE_DEFAULTS.md). This is a high-risk continuation because physical storage selection,
+identifier conversion, generated application setup, and public builder APIs change.
+No existing-data migration, fallback reads or dual writes are authorized.
+
+- Derive readable Event Store names from the Bounded Context name. Preserve
+  separate domain/System Event Stores, tenant destinations and original Event IDs.
+  All preparation, atomic writes, ordinary writes, reads and catch-up must agree.
+- Support a naming override for a specific Bounded Context's Event Store. Reject
+  invalid or colliding physical names clearly, including domain/System name clashes.
+- Provide one shared default StringifierRegistry with the application descriptor
+  inventory installed by generated application/model startup code. Ordinary users
+  must not construct and populate stringifier registries. Preserve optional custom
+  converters, exact Any type URLs and stable identifier conversion. Avoid factories
+  retaining an empty snapshot before generated registration runs.
+- After implementing both changes, revise the storage guide against all comments
+  below and update the existing PR #20 description, preserving its useful examples
+  and explaining the resulting APIs. No verification section in the PR description.
+
+Storage guide follow-up requirements:
+
+1. Remove fictional-person narratives, including Ada. Expand the contents to show
+   subsections. Explain PostgreSQL's default schema and its override with actual code.
+2. Explain every retained Inbox SQL search column and its query use, comparing
+   JVM persistent Inbox storage. The source investigation confirmed `inbox_id` and
+   `signal_id` have no TS predicates, sorting, public column export or index use;
+   remove those two materialized columns and retain both fields in the Protobuf
+   payload. Preserve the six query columns and current delivery behavior.
+3. Every bytes-cell example must say exactly: "Protobuf message serialized into
+   binary array". Remove pseudo-decoded payload strings from those table cells.
+4. Keep concrete provider-builder code for every supported override; no mystery
+   builder variable or prose instructions standing in for code.
+5. Format Proto examples with blank lines, message/field comments and proper
+   Entity options. Examples must represent valid domain concepts and generation.
+6. Rewrite conversion, Entity identifiers and provider customization from actual
+   Proto definitions. Walk through individual values point by point, with provider
+   subsections and detailed examples. Avoid compressed summaries and jargon.
+7. Stop using documentation skills. Use the same direct, conversational language
+   as the chat. Independent reviewers must explicitly test reader comprehension,
+   explanations and examples, in addition to technical accuracy and completeness.
+
+Use one architecture pass to settle the public contracts, one implementation
+context, focused behavior tests, relevant independent review, cheap preflight and
+one converged release verification. Preserve completed baseline work and do not
+repeat its full review without a newly affected concern.
+
+### Storage defaults continuation accepted
+
+Readable Event Store names, provider overrides, generated-schema-backed default
+stringifiers, the bounded Inbox-column cleanup, and the storage-guide rewrite are
+implemented and independently reviewed. The final release profile passes, including
+6,287 Vitest tests, 39 Node tests, and all coverage thresholds. See
+[the accepted contract and evidence](STORAGE_DEFAULTS.md) for the review corrections
+and exact results. Publication uses the existing feature branch and PR #20.

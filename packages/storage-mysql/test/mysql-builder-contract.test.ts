@@ -1783,7 +1783,7 @@ function agentMetadataQuery(sql: string, values: readonly unknown[], repaired: b
   if (repaired && sql.includes("information_schema.columns") && typeof table === "string") {
     const extra = table.includes("agent_history")
       ? AgentHistoryRecords.spec((value) => value).columns.map((column) => column.name)
-      : table.endsWith("_EntityRecord") || (table.endsWith("_Event") && !table.startsWith("es_"))
+      : table.endsWith("_EntityRecord") || (table.endsWith("_Event") && table !== "Support_Event")
         ? ["entity_id", "created", "version"]
         : table.endsWith("_Event")
           ? eventStoreRecordSpec.columns.map((column) => column.name)

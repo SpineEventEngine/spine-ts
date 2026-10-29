@@ -248,7 +248,10 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     spec: RecordSpec<I, R>,
     group?: StorageGroup,
   ): void {
-    const family = JSON.stringify([spec.sourceType.typeName, group?.name ?? null]);
+    const family = JSON.stringify([
+      spec.sourceType.typeName,
+      group === undefined ? null : (EventStoreGroups.identity(group) ?? group.name),
+    ]);
     InMemoryStorageBackend.define(
       this.#backend,
       "record",
@@ -412,7 +415,10 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     group?: StorageGroup,
   ): TenantRecords<I, R> {
     const tenant = TenantBoundary.of(context);
-    const family = JSON.stringify([recordSpec.sourceType.typeName, group?.name ?? null]);
+    const family = JSON.stringify([
+      recordSpec.sourceType.typeName,
+      group === undefined ? null : (EventStoreGroups.identity(group) ?? group.name),
+    ]);
     return InMemoryStorageBackend.bind(
       this.#backend,
       "record",

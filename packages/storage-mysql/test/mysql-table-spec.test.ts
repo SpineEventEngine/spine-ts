@@ -24,6 +24,55 @@ import { MysqlTableResolver } from "../src/mysql/table-resolver.js";
 import { mysqlColumnType, resolvedMysqlTableSpec } from "../src/mysql/table-spec.js";
 
 describe("MysqlTableResolver", () => {
+  it("uses readable Event Store names and rejects case-insensitive role collisions", () => {
+    const resolver = new MysqlTableResolver();
+    const domain = JSON.stringify(["EventStore", "domain", "Support_System"]);
+    const system = JSON.stringify(["EventStore", "system", "Support_System"]);
+
+    expect(
+      resolver.resolve("spine.core.Event", "Support_System", undefined, "spine.core.Event", domain)
+        .tableName,
+    ).toBe("Support_System_Event");
+    expect(() =>
+      resolver.resolve("spine.core.Event", "Support_System", undefined, "spine.core.Event", system),
+    ).toThrow(/Support_System.*domain.*system/u);
+    resolver.setEventStoreName(system, "Support_Audit");
+    const copy = resolver.copy();
+    expect(
+      copy.resolve("spine.core.Event", "Support_System", undefined, "spine.core.Event", system)
+        .tableName,
+    ).toBe("Support_Audit");
+    resolver.setEventStoreName(system, "Later_Audit");
+    expect(
+      copy.resolve("spine.core.Event", "Support_System", undefined, "spine.core.Event", system)
+        .tableName,
+    ).toBe("Support_Audit");
+    expect(() => copy.resolve("other.Source", "history", "support_audit")).toThrow(/collides/u);
+  });
+
+  it("rejects normalized Event Store collisions and names beyond the MySQL limit", () => {
+    const resolver = new MysqlTableResolver();
+    resolver.resolve(
+      "spine.core.Event",
+      "Order-Draft",
+      undefined,
+      "spine.core.Event",
+      "domain-one",
+    );
+    expect(() =>
+      resolver.resolve(
+        "spine.core.Event",
+        "Order Draft",
+        undefined,
+        "spine.core.Event",
+        "domain-two",
+      ),
+    ).toThrow(/collides: Order_Draft_Event/u);
+    expect(() =>
+      resolver.resolve("spine.core.Event", "X".repeat(59), undefined, "spine.core.Event", "long"),
+    ).toThrow(/invalid/u);
+  });
+
   it("resolves one stable table for a source and group while separating groups", () => {
     const resolver = new MysqlTableResolver();
 

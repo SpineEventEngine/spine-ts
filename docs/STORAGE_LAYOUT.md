@@ -1,22 +1,198 @@
 # Storage layout and provisioning
 
-This guide shows the physical records produced by a Support application using
-PostgreSQL, MySQL/MariaDB, Google Cloud Datastore or in-memory storage. Read the
-single-tenant or multitenant chapter for your deployment. Each provider lists
-all ten domain/Agent families and five shared framework families, with the
-actual fields beside the corresponding default table or kind. The later chapters explain conversion, Agent and gateway storage, and startup timing.
+This guide takes a small Support application and shows what it stores. Choose
+the single-tenant or multitenant chapter, then the storage provider you use.
+Each table or Datastore kind is listed with every field, its Protobuf source,
+and an example value. Beside each layout, you can see who creates it and how
+to change its name where the API supports that.
+
+Chapter 3 follows values from their Proto definitions into storage. The
+remaining chapters explain Agent records, gateway/authentication records, and
+the startup calls that prepare the application.
+
+## Contents
+
+<!-- storage-layout-toc -->
 
 - [1. Single-tenant mode](#1-single-tenant-mode)
+  - [The Support example](#the-support-example)
+  - [PostgreSQL](#postgresql)
+    - [Domain Entity state tables](#domain-entity-state-tables)
+      - [Ticket current state: `spine.example_support_ticket`](#ticket-current-state-spineexample_support_ticket)
+      - [TicketList current state: `spine.example_support_ticketlist`](#ticketlist-current-state-spineexample_support_ticketlist)
+      - [ReplyAssistant current state: `spine.example_support_replyassistant`](#replyassistant-current-state-spineexample_support_replyassistant)
+    - [Framework tables for Events, histories and services](#framework-tables-for-events-histories-and-services)
+      - [Ticket state history: `spine.example_support_ticket_entityrecord`](#ticket-state-history-spineexample_support_ticket_entityrecord)
+      - [Ticket diagnostic Event history: `spine.example_support_ticket_event`](#ticket-diagnostic-event-history-spineexample_support_ticket_event)
+      - [Support domain Events: `spine.support_event`](#support-domain-events-spinesupport_event)
+      - [Support System Events: `spine.support_system_event`](#support-system-events-spinesupport_system_event)
+      - [Agent audit: `spine.agent_history_agenthistoryrecord`](#agent-audit-spineagent_history_agenthistoryrecord)
+      - [Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`](#agent-acceptance-receipts-spinespine_agent_acceptance_agentacceptancereceipt)
+      - [Agent model preferences: `spine.spine_agent_model_preferences_agentmodelpreferencesrecord`](#agent-model-preferences-spinespine_agent_model_preferences_agentmodelpreferencesrecord)
+      - [Subscription registry: `spine.spine_client_subscriptionrecord`](#subscription-registry-spinespine_client_subscriptionrecord)
+      - [Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`](#entity-inbox-messages-spinespine_server_delivery_inboxmessage)
+      - [Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`](#delivery-shard-sessions-spinespine_server_delivery_shardsessionrecord)
+      - [Gateway authenticated bindings: `spine.spine_auth_gatewayauthenticatedsubscription`](#gateway-authenticated-bindings-spinespine_auth_gatewayauthenticatedsubscription)
+      - [Application node leases: `spine.spine_deployment_applicationnodelease`](#application-node-leases-spinespine_deployment_applicationnodelease)
+    - [Factory setup](#factory-setup)
+    - [Human configuration checklist](#human-configuration-checklist)
+  - [MySQL and MariaDB](#mysql-and-mariadb)
+    - [Domain Entity state tables](#domain-entity-state-tables-1)
+      - [Ticket current state: `example_support_Ticket`](#ticket-current-state-example_support_ticket)
+      - [TicketList current state: `example_support_TicketList`](#ticketlist-current-state-example_support_ticketlist)
+      - [ReplyAssistant current state: `example_support_ReplyAssistant`](#replyassistant-current-state-example_support_replyassistant)
+    - [Framework tables for Events, histories and services](#framework-tables-for-events-histories-and-services-1)
+      - [Ticket state history: `example_support_Ticket_EntityRecord`](#ticket-state-history-example_support_ticket_entityrecord)
+      - [Ticket diagnostic Event history: `example_support_Ticket_Event`](#ticket-diagnostic-event-history-example_support_ticket_event)
+      - [Support domain Events: `Support_Event`](#support-domain-events-support_event)
+      - [Support System Events: `Support_System_Event`](#support-system-events-support_system_event)
+      - [Agent audit: `agent_history_AgentHistoryRecord`](#agent-audit-agent_history_agenthistoryrecord)
+      - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt)
+      - [Agent model preferences: `spine_agent_model_preferences_AgentModelPreferencesRecord`](#agent-model-preferences-spine_agent_model_preferences_agentmodelpreferencesrecord)
+      - [Subscription registry: `spine_client_SubscriptionRecord`](#subscription-registry-spine_client_subscriptionrecord)
+      - [Entity Inbox messages: `spine_server_delivery_InboxMessage`](#entity-inbox-messages-spine_server_delivery_inboxmessage)
+      - [Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`](#delivery-shard-sessions-spine_server_delivery_shardsessionrecord)
+      - [Gateway authenticated bindings: `spine_auth_GatewayAuthenticatedSubscription`](#gateway-authenticated-bindings-spine_auth_gatewayauthenticatedsubscription)
+      - [Application node leases: `spine_deployment_ApplicationNodeLease`](#application-node-leases-spine_deployment_applicationnodelease)
+    - [Factory setup](#factory-setup-1)
+    - [Human configuration checklist](#human-configuration-checklist-1)
+  - [Google Cloud Datastore](#google-cloud-datastore)
+    - [Domain Entity state kinds](#domain-entity-state-kinds)
+      - [Ticket current state: `example.support.Ticket`](#ticket-current-state-examplesupportticket)
+      - [TicketList current state: `example.support.TicketList`](#ticketlist-current-state-examplesupportticketlist)
+      - [ReplyAssistant current state: `example.support.ReplyAssistant`](#replyassistant-current-state-examplesupportreplyassistant)
+    - [Framework kinds for Events, histories and services](#framework-kinds-for-events-histories-and-services)
+      - [Ticket state history: `example.support.Ticket_EntityRecord`](#ticket-state-history-examplesupportticket_entityrecord)
+      - [Ticket diagnostic Event history: `example.support.Ticket_Event`](#ticket-diagnostic-event-history-examplesupportticket_event)
+      - [Support domain Events: `Support-Event`](#support-domain-events-support-event)
+      - [Support System Events: `Support_System-Event`](#support-system-events-support_system-event)
+      - [Agent audit: `spine_agent_history`](#agent-audit-spine_agent_history)
+      - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt-1)
+      - [Agent model preferences: `spine_agent_model_preferences`](#agent-model-preferences-spine_agent_model_preferences)
+      - [Subscription registry: `spine.client.SubscriptionRecord`](#subscription-registry-spineclientsubscriptionrecord)
+      - [Entity Inbox messages: `spine.server.delivery.InboxMessage`](#entity-inbox-messages-spineserverdeliveryinboxmessage)
+      - [Delivery shard sessions: `spine.server.delivery.ShardSessionRecord`](#delivery-shard-sessions-spineserverdeliveryshardsessionrecord)
+      - [Gateway authenticated bindings: `spine.auth.GatewayAuthenticatedSubscription`](#gateway-authenticated-bindings-spineauthgatewayauthenticatedsubscription)
+      - [Application node leases: `spine.deployment.ApplicationNodeLease`](#application-node-leases-spinedeploymentapplicationnodelease)
+    - [Factory setup](#factory-setup-2)
+    - [Composite indexes for this example](#composite-indexes-for-this-example)
+    - [Human configuration checklist](#human-configuration-checklist-2)
+  - [In-memory storage](#in-memory-storage)
 - [2. Multitenant mode](#2-multitenant-mode)
+  - [The Support example](#the-support-example-1)
+  - [PostgreSQL](#postgresql-1)
+    - [Domain Entity state tables](#domain-entity-state-tables-2)
+      - [Ticket current state: `spine.example_support_ticket`](#ticket-current-state-spineexample_support_ticket-1)
+      - [TicketList current state: `spine.example_support_ticketlist`](#ticketlist-current-state-spineexample_support_ticketlist-1)
+      - [ReplyAssistant current state: `spine.example_support_replyassistant`](#replyassistant-current-state-spineexample_support_replyassistant-1)
+    - [Framework tables for Events, histories and services](#framework-tables-for-events-histories-and-services-2)
+      - [Ticket state history: `spine.example_support_ticket_entityrecord`](#ticket-state-history-spineexample_support_ticket_entityrecord-1)
+      - [Ticket diagnostic Event history: `spine.example_support_ticket_event`](#ticket-diagnostic-event-history-spineexample_support_ticket_event-1)
+      - [Support domain Events: `spine.support_event`](#support-domain-events-spinesupport_event-1)
+      - [Support System Events: `spine.support_system_event`](#support-system-events-spinesupport_system_event-1)
+      - [Agent audit: `spine.agent_history_agenthistoryrecord`](#agent-audit-spineagent_history_agenthistoryrecord-1)
+      - [Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`](#agent-acceptance-receipts-spinespine_agent_acceptance_agentacceptancereceipt-1)
+      - [Agent model preferences: `spine.spine_agent_model_preferences_agentmodelpreferencesrecord`](#agent-model-preferences-spinespine_agent_model_preferences_agentmodelpreferencesrecord-1)
+      - [Subscription registry: `spine.spine_client_subscriptionrecord`](#subscription-registry-spinespine_client_subscriptionrecord-1)
+      - [Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`](#entity-inbox-messages-spinespine_server_delivery_inboxmessage-1)
+      - [Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`](#delivery-shard-sessions-spinespine_server_delivery_shardsessionrecord-1)
+      - [Gateway authenticated bindings: `spine.spine_auth_gatewayauthenticatedsubscription`](#gateway-authenticated-bindings-spinespine_auth_gatewayauthenticatedsubscription-1)
+      - [Application node leases: `spine.spine_deployment_applicationnodelease`](#application-node-leases-spinespine_deployment_applicationnodelease-1)
+    - [Factory setup](#factory-setup-3)
+    - [Human configuration checklist](#human-configuration-checklist-3)
+  - [MySQL and MariaDB](#mysql-and-mariadb-1)
+    - [Domain Entity state tables](#domain-entity-state-tables-3)
+      - [Ticket current state: `example_support_Ticket`](#ticket-current-state-example_support_ticket-1)
+      - [TicketList current state: `example_support_TicketList`](#ticketlist-current-state-example_support_ticketlist-1)
+      - [ReplyAssistant current state: `example_support_ReplyAssistant`](#replyassistant-current-state-example_support_replyassistant-1)
+    - [Framework tables for Events, histories and services](#framework-tables-for-events-histories-and-services-3)
+      - [Ticket state history: `example_support_Ticket_EntityRecord`](#ticket-state-history-example_support_ticket_entityrecord-1)
+      - [Ticket diagnostic Event history: `example_support_Ticket_Event`](#ticket-diagnostic-event-history-example_support_ticket_event-1)
+      - [Support domain Events: `Support_Event`](#support-domain-events-support_event-1)
+      - [Support System Events: `Support_System_Event`](#support-system-events-support_system_event-1)
+      - [Agent audit: `agent_history_AgentHistoryRecord`](#agent-audit-agent_history_agenthistoryrecord-1)
+      - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt-2)
+      - [Agent model preferences: `spine_agent_model_preferences_AgentModelPreferencesRecord`](#agent-model-preferences-spine_agent_model_preferences_agentmodelpreferencesrecord-1)
+      - [Subscription registry: `spine_client_SubscriptionRecord`](#subscription-registry-spine_client_subscriptionrecord-1)
+      - [Entity Inbox messages: `spine_server_delivery_InboxMessage`](#entity-inbox-messages-spine_server_delivery_inboxmessage-1)
+      - [Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`](#delivery-shard-sessions-spine_server_delivery_shardsessionrecord-1)
+      - [Gateway authenticated bindings: `spine_auth_GatewayAuthenticatedSubscription`](#gateway-authenticated-bindings-spine_auth_gatewayauthenticatedsubscription-1)
+      - [Application node leases: `spine_deployment_ApplicationNodeLease`](#application-node-leases-spine_deployment_applicationnodelease-1)
+    - [Factory setup](#factory-setup-4)
+    - [Human configuration checklist](#human-configuration-checklist-4)
+  - [Google Cloud Datastore](#google-cloud-datastore-1)
+    - [Domain Entity state kinds](#domain-entity-state-kinds-1)
+      - [Ticket current state: `example.support.Ticket`](#ticket-current-state-examplesupportticket-1)
+      - [TicketList current state: `example.support.TicketList`](#ticketlist-current-state-examplesupportticketlist-1)
+      - [ReplyAssistant current state: `example.support.ReplyAssistant`](#replyassistant-current-state-examplesupportreplyassistant-1)
+    - [Framework kinds for Events, histories and services](#framework-kinds-for-events-histories-and-services-1)
+      - [Ticket state history: `example.support.Ticket_EntityRecord`](#ticket-state-history-examplesupportticket_entityrecord-1)
+      - [Ticket diagnostic Event history: `example.support.Ticket_Event`](#ticket-diagnostic-event-history-examplesupportticket_event-1)
+      - [Support domain Events: `Support-Event`](#support-domain-events-support-event-1)
+      - [Support System Events: `Support_System-Event`](#support-system-events-support_system-event-1)
+      - [Agent audit: `spine_agent_history`](#agent-audit-spine_agent_history-1)
+      - [Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`](#agent-acceptance-receipts-spine_agent_acceptance_agentacceptancereceipt-3)
+      - [Agent model preferences: `spine_agent_model_preferences`](#agent-model-preferences-spine_agent_model_preferences-1)
+      - [Subscription registry: `spine.client.SubscriptionRecord`](#subscription-registry-spineclientsubscriptionrecord-1)
+      - [Entity Inbox messages: `spine.server.delivery.InboxMessage`](#entity-inbox-messages-spineserverdeliveryinboxmessage-1)
+      - [Delivery shard sessions: `spine.server.delivery.ShardSessionRecord`](#delivery-shard-sessions-spineserverdeliveryshardsessionrecord-1)
+      - [Gateway authenticated bindings: `spine.auth.GatewayAuthenticatedSubscription`](#gateway-authenticated-bindings-spineauthgatewayauthenticatedsubscription-1)
+      - [Application node leases: `spine.deployment.ApplicationNodeLease`](#application-node-leases-spinedeploymentapplicationnodelease-1)
+    - [Factory setup](#factory-setup-5)
+    - [Composite indexes for this example](#composite-indexes-for-this-example-1)
+    - [Human configuration checklist](#human-configuration-checklist-5)
+  - [In-memory storage](#in-memory-storage-1)
+  - [Adding tenants and what happens](#adding-tenants-and-what-happens)
 - [3. Value conversion and customization](#3-value-conversion-and-customization)
+  - [Follow one Ticket from Protobuf to storage](#follow-one-ticket-from-protobuf-to-storage)
+    - [First, save the complete state](#first-save-the-complete-state)
+    - [Then, copy the fields needed for queries](#then-copy-the-fields-needed-for-queries)
+    - [A string: `subject`](#a-string-subject)
+    - [An enum: `priority`](#an-enum-priority)
+    - [A message: `requester`](#a-message-requester)
+    - [A timestamp: `opened_at`](#a-timestamp-opened_at)
+    - [A packed message: `detail`](#a-packed-message-detail)
+    - [Lists and maps: `tags` and `attributes`](#lists-and-maps-tags-and-attributes)
+    - [Other field types and missing values](#other-field-types-and-missing-values)
+  - [Entity identifiers, step by step](#entity-identifiers-step-by-step)
+    - [PostgreSQL identifiers](#postgresql-identifiers)
+    - [MySQL and MariaDB identifiers](#mysql-and-mariadb-identifiers)
+    - [Datastore identifiers](#datastore-identifiers)
+    - [In-memory identifiers](#in-memory-identifiers)
+    - [One-field messages and primitive identifiers](#one-field-messages-and-primitive-identifiers)
+  - [Customize message and identifier conversion](#customize-message-and-identifier-conversion)
+    - [Use a separate registry when a factory needs different conversions](#use-a-separate-registry-when-a-factory-needs-different-conversions)
+  - [Provider differences and supported overrides](#provider-differences-and-supported-overrides)
+    - [PostgreSQL: database and schema](#postgresql-database-and-schema)
+    - [PostgreSQL: current-state, history, and Event table names](#postgresql-current-state-history-and-event-table-names)
+    - [PostgreSQL: custom table-creation SQL](#postgresql-custom-table-creation-sql)
+    - [MySQL/MariaDB: database and table names](#mysqlmariadb-database-and-table-names)
+    - [MySQL/MariaDB: larger binary records](#mysqlmariadb-larger-binary-records)
+    - [Datastore: project, namespace, and kind](#datastore-project-namespace-and-kind)
+    - [Datastore: tenant namespace conversion](#datastore-tenant-namespace-conversion)
+    - [Datastore: custom storage implementations](#datastore-custom-storage-implementations)
+    - [In-memory: records without database structures](#in-memory-records-without-database-structures)
 - [4. Agent storage](#4-agent-storage)
+  - [Current Agent state](#current-agent-state)
+  - [Acceptance receipt](#acceptance-receipt)
+  - [Audit trail for a reply](#audit-trail-for-a-reply)
+  - [Model preferences](#model-preferences)
+  - [How Agent record keys are calculated](#how-agent-record-keys-are-calculated)
+  - [Restart and history reads](#restart-and-history-reads)
 - [5. Gateway and authentication storage](#5-gateway-and-authentication-storage)
+  - [A browser subscription after authentication](#a-browser-subscription-after-authentication)
+  - [Node discovery](#node-discovery)
+  - [Sessions do not add these tables](#sessions-do-not-add-these-tables)
+  - [OIDC and trusted identity](#oidc-and-trusted-identity)
 - [6. Startup sequence](#6-startup-sequence)
+  - [Build and preparation order](#build-and-preparation-order)
 
-“Creates a table” below means inside infrastructure the application has already
-provisioned. The framework does not create SQL databases, Google Cloud projects,
-accounts or permissions. Datastore kinds appear when records are written; the
-application deploys its composite indexes.
+<!-- /storage-layout-toc -->
+
+Spine creates tables inside databases you have already provided. It does not
+create SQL databases, Google Cloud projects, accounts, or permissions.
+Datastore kinds appear when records are written; you deploy their composite
+indexes. Each provider checklist explains the required work.
 
 ## 1. Single-tenant mode
 
@@ -44,47 +220,113 @@ would be added in the application project.
 
 ```proto
 syntax = "proto3";
+
 package example.support;
 
-import "spine/options.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
+import "spine/options.proto";
 
+// Identifies a Ticket within a named support queue.
 message TicketId {
+  // Queue that contains the Ticket.
   string queue = 1;
+
+  // Ticket number within that queue.
   string number = 2;
 }
-message TicketListId { string value = 1; }
-message ReplyAssistantId { string value = 1; }
 
+// Identifies one list of Tickets shown to clients.
+message TicketListId {
+  // Name of the list.
+  string value = 1;
+}
+
+// Identifies an Agent that drafts support replies.
+message ReplyAssistantId {
+  // Stable name of the Agent instance.
+  string value = 1;
+}
+
+// Urgency assigned to a Ticket.
 enum Priority {
+  // No urgency has been selected.
   PRIORITY_UNSPECIFIED = 0;
+
+  // The Ticket can follow the ordinary support process.
   NORMAL = 1;
+
+  // The Ticket needs prompt attention.
   URGENT = 2;
 }
+
+// Contact details supplied with a Ticket.
 message Requester {
+  // Contact name shown to support staff.
   string name = 1;
+
+  // Address to which a reply can be sent.
   string email = 2;
+
+  // Other names used by this contact.
   repeated string aliases = 3;
 }
-message BrowserInfo { string browser = 1; }
 
+// Browser information attached to a Ticket.
+message BrowserInfo {
+  // Browser reported by the client.
+  string browser = 1;
+}
+
+// Details retained for a support Ticket.
 message Ticket {
+  option (entity).kind = AGGREGATE;
+
+  // Queue and number assigned when the Ticket was opened.
   TicketId id = 1;
+
+  // Short description, available to storage queries.
   string subject = 2 [(column) = true];
+
+  // Urgency, available to storage queries.
   Priority priority = 3 [(column) = true];
+
+  // Complete contact details, queryable as one message value.
   Requester requester = 4 [(column) = true];
+
+  // Opening time, available for filtering and ordering.
   google.protobuf.Timestamp opened_at = 5 [(column) = true];
+
+  // Labels retained in the state without a separate query column.
   repeated string tags = 6;
+
+  // Additional attributes retained in the state.
   map<string, string> attributes = 7;
+
+  // Typed extra details, queryable as one packed message value.
   google.protobuf.Any detail = 8 [(column) = true];
 }
+
+// Tickets included in a list shown to support staff.
 message TicketList {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = QUERY;
+
+  // Name used to retrieve this list of Tickets.
   TicketListId id = 1;
+
+  // Tickets currently included in the list.
   repeated TicketId tickets = 2;
 }
+
+// Current state of the Agent that drafts support replies.
 message ReplyAssistant {
+  option (entity).kind = ENTITY;
+
+  // Identifies this Agent instance.
   ReplyAssistantId id = 1;
+
+  // Most recently saved draft.
   string last_draft = 2;
 }
 ```
@@ -123,11 +365,23 @@ family. Enabling further Entity repositories adds their corresponding families.
 
 ### PostgreSQL
 
-These are the default physical names for the Support example. The three example-defined Entity state families come first; framework-managed layouts for histories, Events, Agent records and services follow. Framework-managed describes the layout, not its tenant destination. `bytes` holds a complete binary Protobuf record; the table shows a short decoded view so the example value is readable.
+The `spine` schema in these tables is explicitly selected for this example.
+It is not the adapter default. If `schema` is omitted from `setOptions`, the
+adapter uses PostgreSQL's `current_schema()` (often `public`, depending on the
+connection's search path). The factory setup below shows `schema: "spine"`;
+chapter 3 shows how to select a different schema. Create that schema before
+startup: Spine creates its tables, but does not create the schema itself.
 
-The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
+Start with the three Entity state tables below. The following tables store Events, history, and the records used by framework services. Each field is listed with its database type, the Protobuf field it comes from, and an example value. The `bytes` column contains the complete serialized record.
 
-The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
+Each naming example imports the concrete provider factory and generated schemas.
+The relative imports use the guide model generated from
+[storage_layout.proto](../packages/server-blackbox-tests/proto/example/support/storage_layout.proto).
+In your application, use the corresponding path under your configured generation
+output directory. Complete connection setup appears after the tables; chapter 3
+explains value conversion and optional custom stringifiers.
+
+Copy the settings you need into your application's factory builder before calling `build()`.
 
 #### Domain Entity state tables
 
@@ -137,18 +391,18 @@ The table or kind settings below apply to the same builder used in the factory s
 
 **Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the Ticket repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                    | Example value                                                                                                                                                                                                      |
-| ------------------ | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                                                                                                                                                              |
-| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice, priority=URGENT, tags=[invoice], attributes={tier:pro}); version=3; archived=false; deleted=false` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                                                                                                                                                            |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                                                                                                                                                            |
-| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                   | `3`                                                                                                                                                                                                                |
-| `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                                                                                                                                                          |
-| `priority`         | INTEGER                        | `Ticket.priority`                                               | `2 (URGENT)`                                                                                                                                                                                                       |
-| `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Ada","email":"ada@example.test","aliases":["A."]}`                                                                                                                                                       |
-| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                                                                                                                                                      |
-| `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}`                                                                                                                                  |
+| Physical field     | Database type                  | Exact source                                                    | Example value                                                                     |
+| ------------------ | ------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                             |
+| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                | Protobuf message serialized into binary array                                     |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                           |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                           |
+| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                   | `3`                                                                               |
+| `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
+| `priority`         | INTEGER                        | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
+| `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
+| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                     |
+| `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
@@ -157,13 +411,11 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(TicketSchema, "support_ticket");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(TicketSchema, "support_ticket");
 ```
 
 ##### TicketList current state: `spine.example_support_ticketlist`
@@ -172,13 +424,13 @@ builder.setTableName(TicketSchema, "support_ticket");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the TicketList repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                            | Example value                                                                                                                        |
-| ------------------ | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                                                                                                           |
-| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                        | Binary Protobuf; decoded view: `entity_id=TicketListId(billing-open); state=TicketList(tickets=[TicketId(billing,T-42)]); version=1` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                                                                                                              |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                                                                                                              |
-| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                           | `1`                                                                                                                                  |
+| Physical field     | Database type                  | Exact source                                                            | Example value                                 |
+| ------------------ | ------------------------------ | ----------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                    |
+| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                        | Protobuf message serialized into binary array |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                       |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                       |
+| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                           | `1`                                           |
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
@@ -187,13 +439,11 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketListSchema } from "../generated/example/support/storage_layout_pb.js";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(TicketListSchema, "support_ticket_list");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(TicketListSchema, "support_ticket_list");
 ```
 
 ##### ReplyAssistant current state: `spine.example_support_replyassistant`
@@ -202,13 +452,13 @@ builder.setTableName(TicketListSchema, "support_ticket_list");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                                    | Example value                                                                                                                          |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                                                                                                              |
-| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                                | Binary Protobuf; decoded view: `entity_id=ReplyAssistantId(assistant-7); state=ReplyAssistant(last_draft=Please try again); version=2` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                                                                                                |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                                                                                                |
-| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                                   | `2`                                                                                                                                    |
+| Physical field     | Database type                  | Exact source                                                                    | Example value                                 |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
+| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
+| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                                   | `2`                                           |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -217,13 +467,11 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { ReplyAssistantSchema } from "../generated/example/support/storage_layout_pb.js";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
 ```
 
 #### Framework tables for Events, histories and services
@@ -234,13 +482,13 @@ builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Ticket repository with `stateHistory: true`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                               |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}`       |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `EntityRecord`                                                          | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice); version=2` |
-| `entity_id`        | TEXT                    | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                |
-| `created`          | BIGINT                  | `EntityRecord.version.timestamp`                                                          | `42000000007`                                                                                                               |
-| `version`          | INTEGER                 | `EntityRecord.version.number`                                                             | `2`                                                                                                                         |
+| Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                         |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}` |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `EntityRecord`                                                          | Protobuf message serialized into binary array                                                                         |
+| `entity_id`        | TEXT                    | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                          |
+| `created`          | BIGINT                  | `EntityRecord.version.timestamp`                                                          | `42000000007`                                                                                                         |
+| `version`          | INTEGER                 | `EntityRecord.version.number`                                                             | `2`                                                                                                                   |
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
@@ -249,14 +497,12 @@ This historical EntityRecord keeps the complete Ticket state and lifecycle flags
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
 ```
 
 ##### Ticket diagnostic Event history: `spine.example_support_ticket_event`
@@ -265,51 +511,69 @@ builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Ticket Aggregate repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                                                         |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                                                                          |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=ticket-event-8; context.producer_id=TicketId(billing,T-42); context.version=2; message=packed Ticket domain Event` |
-| `entity_id`        | TEXT                    | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                                          |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                                                         |
-| `version`          | INTEGER                 | `Event.context.version.number`                                | `2`                                                                                                                                                   |
+| Physical field     | Database type           | Exact source                                                  | Example value                                                                                |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                 |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array                                                |
+| `entity_id`        | TEXT                    | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}` |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                |
+| `version`          | INTEGER                 | `Event.context.version.number`                                | `2`                                                                                          |
 
 This is a diagnostic history for the Aggregate, distinct from the domain Event store.
 
 **Change this layout:** There is no narrow SQL naming override for this diagnostic Event family: `setTableName(TicketSchema, EventSchema, ...)` does not select its current `(EventSchema, EventSchema)` key.
 
-##### Support domain Events: `spine.es_3zg7bqc0wuwdwaja0pfjqoalpwiatoj1us9z4hxitwvoy9ke7n_event`
+##### Support domain Events: `spine.support_event`
 
 **Table location:** `support` database, `spine` schema.
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the domain Event store. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                     |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=domain-event-8; message=packed Ticket domain Event; context.timestamp=42s+7ns` |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                     |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened`                                                                |
+| Physical field     | Database type           | Exact source                                                  | Example value                                      |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                       |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array      |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                      |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened` |
 
 The packed Event payload and its context stay in bytes; no table appears for each Event message type.
 
-**Change this layout:** No narrow per-group naming override is available for these Event stores. Keep their generated names; a broad `EventSchema` override can collide with another Event family.
+**Change this table:**
 
-##### Support System Events: `spine.es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_event`
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setEventStoreTable("Support", "support_events");
+```
+
+##### Support System Events: `spine.support_system_event`
 
 **Table location:** `support` database, `spine` schema.
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                         |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                                                                                          |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=system-event-9; message=packed AgentAiOperationStarted; context.timestamp=42s+7ns` |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                         |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted`                                                                |
+| Physical field     | Database type           | Exact source                                                  | Example value                                          |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                          |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
 
-This separately grouped Event family also retains Agent interaction Events inside complete Event records.
+This System Event table also stores the Agent interaction Events. Each row contains a complete Event envelope, including its typed payload.
 
-**Change this layout:** No narrow per-group naming override is available for these Event stores. Keep their generated names; a broad `EventSchema` override can collide with another Event family.
+**Change this table:**
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setEventStoreTable("Support_System", "support_system_events", "system");
+```
 
 ##### Agent audit: `spine.agent_history_agenthistoryrecord`
 
@@ -317,17 +581,17 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field        | Database type           | Exact source                                                                                       | Example value                                                                                                                                                    |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
-| `bytes`               | BYTEA NOT NULL          | Entire serialized `AgentHistoryRecord`                                                             | Binary Protobuf; decoded view: `scope=(example.support.ReplyAssistant, assistant-7); entry=conversation-5 at 42s+7ns with typed generation request and response` |
-| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                                                                                                                 |
-| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                                                                                                                        |
-| `scope_digest`        | TEXT                    | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8`                                                                                               |
-| `category`            | TEXT                    | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                                                                                                                   |
-| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                                                                                                                 |
-| `conversation_digest` | TEXT                    | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb`                                                                                               |
-| `order_key`           | TEXT                    | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`                                                                                                            |
+| Physical field        | Database type           | Exact source                                                                                       | Example value                                                      |
+| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
+| `bytes`               | BYTEA NOT NULL          | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
+| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
+| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
+| `scope_digest`        | TEXT                    | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
+| `category`            | TEXT                    | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
+| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
+| `conversation_digest` | TEXT                    | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`           | TEXT                    | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot. PostgreSQL indexes `order_key` with binary `C` collation.
 
@@ -340,8 +604,12 @@ import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(
+  AgentHistoryEntrySchema,
+  AgentHistoryRecordSchema,
+  "support_agent_history",
+);
 ```
 
 ##### Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`
@@ -350,10 +618,10 @@ builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                              |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894`                                                                      |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAcceptanceReceipt`                                       | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7), CommandId(command-4), HANDLE_COMMAND)` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                                         |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
@@ -365,8 +633,8 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(
   AgentAcceptanceReceiptSchema,
   AgentAcceptanceReceiptSchema,
   "support_agent_receipts",
@@ -379,10 +647,10 @@ builder.setTableName(
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                        | Example value                                                                                                                                     |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1`                                                                             |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentModelPreferencesRecord`                                     | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7)); preferences=[GENERATION:support-drafter@v2]` |
+| Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -394,8 +662,8 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(
   AgentModelPreferencesRecordSchema,
   AgentModelPreferencesRecordSchema,
   "support_agent_preferences",
@@ -408,12 +676,12 @@ builder.setTableName(
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares or starts persistent subscription monitoring. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field            | Database type           | Exact source                                                                      | Example value                                                                                                                                     |
-| ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key)        | `VARCHAR(512) NOT NULL` | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                               |
-| `bytes`                   | BYTEA NOT NULL          | Entire serialized `SubscriptionRecord`                                            | Binary Protobuf; decoded view: `id=sub-4; status=PENDING; subscription=TicketList updates for acme; when_activation_expires=1,800,000,000,000 ms` |
-| `status`                  | INTEGER                 | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                                                                                                                     |
-| `when_activation_expires` | BIGINT                  | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                                                                                                                      |
+| Physical field            | Database type           | Exact source                                                                      | Example value                                 |
+| ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key)        | `VARCHAR(512) NOT NULL` | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`                   | BYTEA NOT NULL          | Entire serialized `SubscriptionRecord`                                            | Protobuf message serialized into binary array |
+| `status`                  | INTEGER                 | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                 |
+| `when_activation_expires` | BIGINT                  | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                  |
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
@@ -425,8 +693,8 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 ```
 
 ##### Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`
@@ -435,20 +703,61 @@ builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 
 **Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                | Example value                                                                                                                                                           |
-| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}`                                                                                                                 |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `InboxMessage`                                            | Binary Protobuf; decoded view: `id=(message-3, shard 2/16); inbox_id=Ticket(billing,T-42); signal_id=command-4; status=TO_DELIVER; signal=packed Command`               |
-| `inbox_id`         | TEXT                    | `InboxMessage.inbox_id`                                                     | `{"entityId":{"id":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}},"typeUrl":"type.googleapis.com/example.support.Ticket"}` |
-| `signal_id`        | TEXT                    | `InboxMessage.signal_id`                                                    | `{"value":"command-4"}`                                                                                                                                                 |
-| `shard_index`      | INTEGER                 | `InboxMessage.id.index.index`                                               | `2`                                                                                                                                                                     |
-| `shard_total`      | INTEGER                 | `InboxMessage.id.index.of_total`                                            | `16`                                                                                                                                                                    |
-| `status`           | INTEGER                 | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                                                                                                        |
-| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                                                                                                                                           |
-| `version`          | INTEGER                 | `InboxMessage.version`                                                      | `1`                                                                                                                                                                     |
-| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                                                                                                                                             |
+| Physical field     | Database type           | Exact source                                                                | Example value                                           |
+| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
+| `shard_index`      | INTEGER                 | `InboxMessage.id.index.index`                                               | `2`                                                     |
+| `shard_total`      | INTEGER                 | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
+| `status`           | INTEGER                 | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
+| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                           |
+| `version`          | INTEGER                 | `InboxMessage.version`                                                      | `1`                                                     |
+| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
 
-Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
+Each Entity has a distinct Inbox. This table stores messages for those Inboxes,
+including messages for different tenants. The packed signal supplies the Tenant
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
+label, and retention time remain in `bytes`.
+
+The six separate query fields have these uses:
+
+- `shard_index` and `shard_total` select one Delivery shard.
+- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+  option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
+- `when_received`, `version`, and `message_id` put the selected messages in a
+  stable order. The message ID resolves ties when time and version are equal,
+  so paging can continue without skipping or repeating equal-position rows.
+
+For example, these reads use the same shard and ordering, but only the second
+adds a status condition:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+
+declare const inboxStorage: InboxStorage;
+declare const shard: ShardIndex;
+
+await inboxStorage.read(shard);
+await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+```
+
+The ordinary Delivery scan reads all states unless its operation options supply
+a filter. This is why the Datastore checklist includes both query forms.
+
+`inbox_id` and `signal_id` have no separate query fields because Delivery does
+not filter or sort by them. They remain available in the complete record.
+For SQL this gives eight columns in total: `ID`, `bytes`, and those six query
+columns. The adapter creates the primary key; it does not create an additional
+Inbox SQL index for every query column.
+
+JVM storage has a different column set. Its `InboxColumn` also declares
+`inbox_id` and `signal_id`, even though its current Inbox query does not filter
+by them. JVM additionally declares event/command indicators and a label, while
+its shard is one composite value. The TS layout above follows the queries TS
+actually runs. See the pinned [JVM column declarations](https://github.com/SpineEventEngine/core-jvm/blob/6b6219dc5f10bca1d4b137938b8a0b892fe61099/server/src/main/java/io/spine/server/delivery/InboxColumn.java)
+and [TS Inbox queries](../packages/server/src/delivery/inbox-storage.ts).
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -458,8 +767,8 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(InboxMessageSchema, "support_inbox_messages");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(InboxMessageSchema, "support_inbox_messages");
 ```
 
 ##### Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`
@@ -468,10 +777,10 @@ builder.setTableName(InboxMessageSchema, "support_inbox_messages");
 
 **Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first shard-session storage use, normally when Delivery picks up a shard. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                          |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                                                                                             |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `ShardSessionRecord`                                           | Binary Protobuf; decoded view: `index=(2,16); when_last_picked=1970-01-01T00:00:42.000000007Z; worker=node-2/worker-1` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                 |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                    |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `ShardSessionRecord`                                           | Protobuf message serialized into binary array |
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
@@ -483,8 +792,8 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
 ```
 
 ##### Gateway authenticated bindings: `spine.spine_auth_gatewayauthenticatedsubscription`
@@ -493,11 +802,11 @@ builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
 
 **Created by:** The PostgreSQL adapter creates and checks this table on the first binding storage operation after the application constructs `DurableSubscriptionBindings`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
-| Physical field     | Database type           | Exact source                                                                                    | Example value                                                                                                                        |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                  |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `GatewayAuthenticatedSubscription`                                            | Binary Protobuf; decoded view: `id=sub-4; subscription=authenticated TicketList updates for acme; when_expires=1,800,000,000,000 ms` |
-| `when_expires`     | BIGINT                  | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                                                                                                         |
+| Physical field     | Database type           | Exact source                                                                                    | Example value                                 |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `GatewayAuthenticatedSubscription`                                            | Protobuf message serialized into binary array |
+| `when_expires`     | BIGINT                  | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                  |
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
@@ -509,8 +818,8 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
 ```
 
 ##### Application node leases: `spine.spine_deployment_applicationnodelease`
@@ -519,10 +828,10 @@ builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bi
 
 **Created by:** The PostgreSQL adapter creates and checks this table on the first lease storage operation after the application constructs `LeasedNodeRegistry`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                                                   |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                                                                                                                                            |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `ApplicationNodeLease`                                         | Binary Protobuf; decoded view: `node_id=node-2; endpoint.origin=https://node-2.example.test; when_expires=2030-01-01T00:00:00Z; registration_id=registration-9` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                 |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                          |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `ApplicationNodeLease`                                         | Protobuf message serialized into binary array |
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
@@ -534,8 +843,8 @@ The endpoint origin, optional TLS server name, expiry and registration ID remain
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
 ```
 
 #### Factory setup
@@ -543,16 +852,13 @@ builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { StringifierRegistry } from "@spine-event-engine/core";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 
-// Use the registry assembled in chapter 3.
-declare const stringifiers: StringifierRegistry;
-
-const builder = PostgresStorageFactory.newBuilder()
-  .setStringifierRegistry(stringifiers)
-  .setOptions({ url: "postgresql://localhost/support", schema: "spine" });
-const factory = await builder.build();
+const postgresBuilder = PostgresStorageFactory.newBuilder().setOptions({
+  url: "postgresql://localhost/support",
+  schema: "spine",
+});
+const factory = await postgresBuilder.build();
 ```
 
 #### Human configuration checklist
@@ -588,9 +894,9 @@ describes the required privileges.
       and expose no public read-only preparation method. Retain the privileges
       required for that path even when their tables already exist.
 - [ ] **4. Decide how values are compared and converted.** Use a collation that
-      preserves distinctions in Entity IDs. Supply a complete TypeRegistry for
-      application types packed into searchable `Any` values; configure any custom
-      reversible stringifiers consistently on every instance. Check identifier and
+      preserves distinctions in Entity IDs. Import the generated model module so packed `Any` values can be resolved.
+      Register any custom converters before first storage use, with the same
+      settings on every application instance. Check identifier and
       indexed integer/timestamp limits in chapter 3.
 - [ ] **5. Configure the factory and environment.** Use the factory setup above, then supply it to `ServerEnvironment`. Complete environment setup
       before building the Bounded Context. Register all three Entity types, enable
@@ -615,7 +921,7 @@ CREATE INDEX support_ticket_priority_opened
 Evaluate indexes for diagnostic/state history, subscription expiry and Inbox
 queries against the expected workload as well. SQL can run those queries
 without a composite index, but a large scan can make them slow. The Datastore
-Datastore query/index matrix also names those query shapes for capacity planning.
+query/index matrix also names those query shapes for capacity planning.
 
 - [ ] **8. Check the whole startup path.** Run the explicit preparation/checks,
       the first gateway binding access and node registration when those components
@@ -625,11 +931,16 @@ Datastore query/index matrix also names those query shapes for capacity planning
 
 ### MySQL and MariaDB
 
-These are the default physical names for the Support example. The three example-defined Entity state families come first; framework-managed layouts for histories, Events, Agent records and services follow. Framework-managed describes the layout, not its tenant destination. `bytes` holds a complete binary Protobuf record; the table shows a short decoded view so the example value is readable.
+Start with the three Entity state tables below. The following tables store Events, history, and the records used by framework services. Each field is listed with its database type, the Protobuf field it comes from, and an example value. The `bytes` column contains the complete serialized record.
 
-The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
+Each naming example imports the concrete provider factory and generated schemas.
+The relative imports use the guide model generated from
+[storage_layout.proto](../packages/server-blackbox-tests/proto/example/support/storage_layout.proto).
+In your application, use the corresponding path under your configured generation
+output directory. Complete connection setup appears after the tables; chapter 3
+explains value conversion and optional custom stringifiers.
 
-The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
+Copy the settings you need into your application's factory builder before calling `build()`.
 
 #### Domain Entity state tables
 
@@ -639,18 +950,18 @@ The table or kind settings below apply to the same builder used in the factory s
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the Ticket repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                    | Example value                                                                                                                                                                                                      |
-| ------------------ | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                                                                                                                                                              |
-| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice, priority=URGENT, tags=[invoice], attributes={tier:pro}); version=3; archived=false; deleted=false` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                                                                                                                                                            |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                                                                                                                                                            |
-| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                   | `3`                                                                                                                                                                                                                |
-| `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                                                                                                                                                          |
-| `priority`         | INT                            | `Ticket.priority`                                               | `2 (URGENT)`                                                                                                                                                                                                       |
-| `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Ada","email":"ada@example.test","aliases":["A."]}`                                                                                                                                                       |
-| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                                                                                                                                                      |
-| `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}`                                                                                                                                  |
+| Physical field     | Database type                  | Exact source                                                    | Example value                                                                     |
+| ------------------ | ------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                             |
+| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                | Protobuf message serialized into binary array                                     |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                           |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                           |
+| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                   | `3`                                                                               |
+| `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
+| `priority`         | INT                            | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
+| `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
+| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                     |
+| `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
@@ -659,13 +970,11 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(TicketSchema, "support_ticket");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(TicketSchema, "support_ticket");
 ```
 
 ##### TicketList current state: `example_support_TicketList`
@@ -674,13 +983,13 @@ builder.setTableName(TicketSchema, "support_ticket");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the TicketList repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                            | Example value                                                                                                                        |
-| ------------------ | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                                                                                                           |
-| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                        | Binary Protobuf; decoded view: `entity_id=TicketListId(billing-open); state=TicketList(tickets=[TicketId(billing,T-42)]); version=1` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                                                                                                              |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                                                                                                              |
-| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                           | `1`                                                                                                                                  |
+| Physical field     | Database type                  | Exact source                                                            | Example value                                 |
+| ------------------ | ------------------------------ | ----------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                    |
+| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                        | Protobuf message serialized into binary array |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                       |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                       |
+| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                           | `1`                                           |
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
@@ -689,13 +998,11 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketListSchema } from "../generated/example/support/storage_layout_pb.js";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(TicketListSchema, "support_ticket_list");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(TicketListSchema, "support_ticket_list");
 ```
 
 ##### ReplyAssistant current state: `example_support_ReplyAssistant`
@@ -704,13 +1011,13 @@ builder.setTableName(TicketListSchema, "support_ticket_list");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                                    | Example value                                                                                                                          |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                                                                                                              |
-| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                                | Binary Protobuf; decoded view: `entity_id=ReplyAssistantId(assistant-7); state=ReplyAssistant(last_draft=Please try again); version=2` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                                                                                                |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                                                                                                |
-| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                                   | `2`                                                                                                                                    |
+| Physical field     | Database type                  | Exact source                                                                    | Example value                                 |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
+| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
+| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                                   | `2`                                           |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -719,13 +1026,11 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { ReplyAssistantSchema } from "../generated/example/support/storage_layout_pb.js";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
 ```
 
 #### Framework tables for Events, histories and services
@@ -736,13 +1041,13 @@ builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Ticket repository with `stateHistory: true`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                               |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}`       |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `EntityRecord`                                                          | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice); version=2` |
-| `entity_id`        | TEXT                    | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                |
-| `created`          | BIGINT                  | `EntityRecord.version.timestamp`                                                          | `42000000007`                                                                                                               |
-| `version`          | INT                     | `EntityRecord.version.number`                                                             | `2`                                                                                                                         |
+| Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                         |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}` |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `EntityRecord`                                                          | Protobuf message serialized into binary array                                                                         |
+| `entity_id`        | TEXT                    | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                          |
+| `created`          | BIGINT                  | `EntityRecord.version.timestamp`                                                          | `42000000007`                                                                                                         |
+| `version`          | INT                     | `EntityRecord.version.number`                                                             | `2`                                                                                                                   |
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
@@ -751,14 +1056,12 @@ This historical EntityRecord keeps the complete Ticket state and lifecycle flags
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
 ```
 
 ##### Ticket diagnostic Event history: `example_support_Ticket_Event`
@@ -767,51 +1070,69 @@ builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Ticket Aggregate repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                                                         |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                                                                          |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=ticket-event-8; context.producer_id=TicketId(billing,T-42); context.version=2; message=packed Ticket domain Event` |
-| `entity_id`        | TEXT                    | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                                          |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                                                         |
-| `version`          | INT                     | `Event.context.version.number`                                | `2`                                                                                                                                                   |
+| Physical field     | Database type           | Exact source                                                  | Example value                                                                                |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                 |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array                                                |
+| `entity_id`        | TEXT                    | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}` |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                |
+| `version`          | INT                     | `Event.context.version.number`                                | `2`                                                                                          |
 
 This is a diagnostic history for the Aggregate, distinct from the domain Event store.
 
 **Change this layout:** There is no narrow SQL naming override for this diagnostic Event family: `setTableName(TicketSchema, EventSchema, ...)` does not select its current `(EventSchema, EventSchema)` key.
 
-##### Support domain Events: `es_3zg7bqc0wuwdwaja0pfjqoalpwiatoj1us9z4hxitwvoy9ke7n_Event`
+##### Support domain Events: `Support_Event`
 
 **Table location:** `support` database.
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the domain Event store. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                     |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=domain-event-8; message=packed Ticket domain Event; context.timestamp=42s+7ns` |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                     |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened`                                                                |
+| Physical field     | Database type           | Exact source                                                  | Example value                                      |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                       |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array      |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                      |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened` |
 
 The packed Event payload and its context stay in bytes; no table appears for each Event message type.
 
-**Change this layout:** No narrow per-group naming override is available for these Event stores. Keep their generated names; a broad `EventSchema` override can collide with another Event family.
+**Change this table:**
 
-##### Support System Events: `es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_Event`
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setEventStoreTable("Support", "support_events");
+```
+
+##### Support System Events: `Support_System_Event`
 
 **Table location:** `support` database.
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                         |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                                                                                          |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=system-event-9; message=packed AgentAiOperationStarted; context.timestamp=42s+7ns` |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                         |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted`                                                                |
+| Physical field     | Database type           | Exact source                                                  | Example value                                          |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                          |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
 
-This separately grouped Event family also retains Agent interaction Events inside complete Event records.
+This System Event table also stores the Agent interaction Events. Each row contains a complete Event envelope, including its typed payload.
 
-**Change this layout:** No narrow per-group naming override is available for these Event stores. Keep their generated names; a broad `EventSchema` override can collide with another Event family.
+**Change this table:**
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setEventStoreTable("Support_System", "support_system_events", "system");
+```
 
 ##### Agent audit: `agent_history_AgentHistoryRecord`
 
@@ -819,17 +1140,17 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field        | Database type           | Exact source                                                                                       | Example value                                                                                                                                                    |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
-| `bytes`               | BLOB NOT NULL           | Entire serialized `AgentHistoryRecord`                                                             | Binary Protobuf; decoded view: `scope=(example.support.ReplyAssistant, assistant-7); entry=conversation-5 at 42s+7ns with typed generation request and response` |
-| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                                                                                                                 |
-| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                                                                                                                        |
-| `scope_digest`        | VARBINARY(64)           | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8`                                                                                               |
-| `category`            | VARBINARY(12)           | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                                                                                                                   |
-| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                                                                                                                 |
-| `conversation_digest` | VARBINARY(64)           | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb`                                                                                               |
-| `order_key`           | VARBINARY(2944)         | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`                                                                                                            |
+| Physical field        | Database type           | Exact source                                                                                       | Example value                                                      |
+| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
+| `bytes`               | BLOB NOT NULL           | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
+| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
+| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
+| `scope_digest`        | VARBINARY(64)           | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
+| `category`            | VARBINARY(12)           | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
+| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
+| `conversation_digest` | VARBINARY(64)           | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`           | VARBINARY(2944)         | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
@@ -842,8 +1163,12 @@ import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(
+  AgentHistoryEntrySchema,
+  AgentHistoryRecordSchema,
+  "support_agent_history",
+);
 ```
 
 ##### Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`
@@ -852,10 +1177,10 @@ builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                              |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894`                                                                      |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAcceptanceReceipt`                                       | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7), CommandId(command-4), HANDLE_COMMAND)` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                                         |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
@@ -867,8 +1192,8 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(
   AgentAcceptanceReceiptSchema,
   AgentAcceptanceReceiptSchema,
   "support_agent_receipts",
@@ -881,10 +1206,10 @@ builder.setTableName(
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                        | Example value                                                                                                                                     |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1`                                                                             |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentModelPreferencesRecord`                                     | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7)); preferences=[GENERATION:support-drafter@v2]` |
+| Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -896,8 +1221,8 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(
   AgentModelPreferencesRecordSchema,
   AgentModelPreferencesRecordSchema,
   "support_agent_preferences",
@@ -910,12 +1235,12 @@ builder.setTableName(
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares or starts persistent subscription monitoring. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field            | Database type           | Exact source                                                                      | Example value                                                                                                                                     |
-| ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key)        | `VARCHAR(512) NOT NULL` | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                               |
-| `bytes`                   | BLOB NOT NULL           | Entire serialized `SubscriptionRecord`                                            | Binary Protobuf; decoded view: `id=sub-4; status=PENDING; subscription=TicketList updates for acme; when_activation_expires=1,800,000,000,000 ms` |
-| `status`                  | INT                     | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                                                                                                                     |
-| `when_activation_expires` | BIGINT                  | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                                                                                                                      |
+| Physical field            | Database type           | Exact source                                                                      | Example value                                 |
+| ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key)        | `VARCHAR(512) NOT NULL` | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`                   | BLOB NOT NULL           | Entire serialized `SubscriptionRecord`                                            | Protobuf message serialized into binary array |
+| `status`                  | INT                     | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                 |
+| `when_activation_expires` | BIGINT                  | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                  |
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
@@ -927,8 +1252,8 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 ```
 
 ##### Entity Inbox messages: `spine_server_delivery_InboxMessage`
@@ -937,20 +1262,61 @@ builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 
 **Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                | Example value                                                                                                                                                           |
-| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}`                                                                                                                 |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `InboxMessage`                                            | Binary Protobuf; decoded view: `id=(message-3, shard 2/16); inbox_id=Ticket(billing,T-42); signal_id=command-4; status=TO_DELIVER; signal=packed Command`               |
-| `inbox_id`         | TEXT                    | `InboxMessage.inbox_id`                                                     | `{"entityId":{"id":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}},"typeUrl":"type.googleapis.com/example.support.Ticket"}` |
-| `signal_id`        | TEXT                    | `InboxMessage.signal_id`                                                    | `{"value":"command-4"}`                                                                                                                                                 |
-| `shard_index`      | INT                     | `InboxMessage.id.index.index`                                               | `2`                                                                                                                                                                     |
-| `shard_total`      | INT                     | `InboxMessage.id.index.of_total`                                            | `16`                                                                                                                                                                    |
-| `status`           | INT                     | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                                                                                                        |
-| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                                                                                                                                           |
-| `version`          | INT                     | `InboxMessage.version`                                                      | `1`                                                                                                                                                                     |
-| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                                                                                                                                             |
+| Physical field     | Database type           | Exact source                                                                | Example value                                           |
+| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
+| `shard_index`      | INT                     | `InboxMessage.id.index.index`                                               | `2`                                                     |
+| `shard_total`      | INT                     | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
+| `status`           | INT                     | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
+| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                           |
+| `version`          | INT                     | `InboxMessage.version`                                                      | `1`                                                     |
+| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
 
-Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
+Each Entity has a distinct Inbox. This table stores messages for those Inboxes,
+including messages for different tenants. The packed signal supplies the Tenant
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
+label, and retention time remain in `bytes`.
+
+The six separate query fields have these uses:
+
+- `shard_index` and `shard_total` select one Delivery shard.
+- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+  option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
+- `when_received`, `version`, and `message_id` put the selected messages in a
+  stable order. The message ID resolves ties when time and version are equal,
+  so paging can continue without skipping or repeating equal-position rows.
+
+For example, these reads use the same shard and ordering, but only the second
+adds a status condition:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+
+declare const inboxStorage: InboxStorage;
+declare const shard: ShardIndex;
+
+await inboxStorage.read(shard);
+await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+```
+
+The ordinary Delivery scan reads all states unless its operation options supply
+a filter. This is why the Datastore checklist includes both query forms.
+
+`inbox_id` and `signal_id` have no separate query fields because Delivery does
+not filter or sort by them. They remain available in the complete record.
+For SQL this gives eight columns in total: `ID`, `bytes`, and those six query
+columns. The adapter creates the primary key; it does not create an additional
+Inbox SQL index for every query column.
+
+JVM storage has a different column set. Its `InboxColumn` also declares
+`inbox_id` and `signal_id`, even though its current Inbox query does not filter
+by them. JVM additionally declares event/command indicators and a label, while
+its shard is one composite value. The TS layout above follows the queries TS
+actually runs. See the pinned [JVM column declarations](https://github.com/SpineEventEngine/core-jvm/blob/6b6219dc5f10bca1d4b137938b8a0b892fe61099/server/src/main/java/io/spine/server/delivery/InboxColumn.java)
+and [TS Inbox queries](../packages/server/src/delivery/inbox-storage.ts).
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -960,8 +1326,8 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(InboxMessageSchema, "support_inbox_messages");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(InboxMessageSchema, "support_inbox_messages");
 ```
 
 ##### Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`
@@ -970,10 +1336,10 @@ builder.setTableName(InboxMessageSchema, "support_inbox_messages");
 
 **Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first shard-session storage use, normally when Delivery picks up a shard. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                          |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                                                                                             |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `ShardSessionRecord`                                           | Binary Protobuf; decoded view: `index=(2,16); when_last_picked=1970-01-01T00:00:42.000000007Z; worker=node-2/worker-1` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                 |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                    |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `ShardSessionRecord`                                           | Protobuf message serialized into binary array |
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
@@ -985,8 +1351,8 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
 ```
 
 ##### Gateway authenticated bindings: `spine_auth_GatewayAuthenticatedSubscription`
@@ -995,11 +1361,11 @@ builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table on the first binding storage operation after the application constructs `DurableSubscriptionBindings`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
-| Physical field     | Database type           | Exact source                                                                                    | Example value                                                                                                                        |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                  |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `GatewayAuthenticatedSubscription`                                            | Binary Protobuf; decoded view: `id=sub-4; subscription=authenticated TicketList updates for acme; when_expires=1,800,000,000,000 ms` |
-| `when_expires`     | BIGINT                  | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                                                                                                         |
+| Physical field     | Database type           | Exact source                                                                                    | Example value                                 |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `GatewayAuthenticatedSubscription`                                            | Protobuf message serialized into binary array |
+| `when_expires`     | BIGINT                  | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                  |
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
@@ -1011,8 +1377,8 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
 ```
 
 ##### Application node leases: `spine_deployment_ApplicationNodeLease`
@@ -1021,10 +1387,10 @@ builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bi
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table on the first lease storage operation after the application constructs `LeasedNodeRegistry`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                                                   |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                                                                                                                                            |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `ApplicationNodeLease`                                         | Binary Protobuf; decoded view: `node_id=node-2; endpoint.origin=https://node-2.example.test; when_expires=2030-01-01T00:00:00Z; registration_id=registration-9` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                 |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                          |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `ApplicationNodeLease`                                         | Protobuf message serialized into binary array |
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
@@ -1036,8 +1402,8 @@ The endpoint origin, optional TLS server name, expiry and registration ID remain
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
 ```
 
 #### Factory setup
@@ -1045,27 +1411,28 @@ builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { StringifierRegistry } from "@spine-event-engine/core";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 
-// Use the registry assembled in chapter 3.
-declare const stringifiers: StringifierRegistry;
-
-const builder = MysqlStorageFactory.newBuilder()
-  .setStringifierRegistry(stringifiers)
-  .setOptions({ url: "mysql://localhost/support" });
-const factory = await builder.build();
+const mysqlBuilder = MysqlStorageFactory.newBuilder().setOptions({
+  url: "mysql://localhost/support",
+});
+const factory = await mysqlBuilder.build();
 ```
 
 #### Human configuration checklist
 
 ### Google Cloud Datastore
 
-These are the default physical names for the Support example. The three example-defined Entity state families come first; framework-managed layouts for histories, Events, Agent records and services follow. Framework-managed describes the layout, not its tenant destination. `bytes` holds a complete binary Protobuf record; the table shows a short decoded view so the example value is readable.
+Start with the three Entity state kinds below. The following kinds store Events, history, and the records used by framework services. Each field is listed with its database type, the Protobuf field it comes from, and an example value. The `bytes` property contains the complete serialized record.
 
-The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
+Each naming example imports the concrete provider factory and generated schemas.
+The relative imports use the guide model generated from
+[storage_layout.proto](../packages/server-blackbox-tests/proto/example/support/storage_layout.proto).
+In your application, use the corresponding path under your configured generation
+output directory. Complete connection setup appears after the tables; chapter 3
+explains value conversion and optional custom stringifiers.
 
-The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
+Copy the settings you need into your application's factory builder before calling `build()`.
 
 #### Domain Entity state kinds
 
@@ -1075,18 +1442,18 @@ The table or kind settings below apply to the same builder used in the factory s
 
 **Created by:** The Datastore adapter makes this kind visible on the first Ticket state write after Support prepares its repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type       | Exact source                                                    | Example value                                                                                                                                                                                                      |
-| ---------------------------------- | ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name  | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                                                                                                                                                              |
-| `bytes`                            | Unindexed Blob      | Entire serialized `EntityRecord`                                | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice, priority=URGENT, tags=[invoice], attributes={tier:pro}); version=3; archived=false; deleted=false` |
-| `archived`                         | Boolean             | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                                                                                                                                                            |
-| `deleted`                          | Boolean             | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                                                                                                                                                            |
-| `version`                          | Integer             | `EntityRecord.version.number`                                   | `3`                                                                                                                                                                                                                |
-| `subject`                          | String              | `Ticket.subject`                                                | `Cannot download invoice`                                                                                                                                                                                          |
-| `priority`                         | Integer             | `Ticket.priority`                                               | `2 (URGENT)`                                                                                                                                                                                                       |
-| `requester`                        | String (Proto JSON) | `Ticket.requester`                                              | `{"name":"Ada","email":"ada@example.test","aliases":["A."]}`                                                                                                                                                       |
-| `opened_at`                        | Timestamp           | `Ticket.opened_at`                                              | `1970-01-01T00:00:42.000000007Z`                                                                                                                                                                                   |
-| `detail`                           | String (Proto JSON) | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}`                                                                                                                                  |
+| Physical field                     | Database type       | Exact source                                                    | Example value                                                                     |
+| ---------------------------------- | ------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name  | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                             |
+| `bytes`                            | Unindexed Blob      | Entire serialized `EntityRecord`                                | Protobuf message serialized into binary array                                     |
+| `archived`                         | Boolean             | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                           |
+| `deleted`                          | Boolean             | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                           |
+| `version`                          | Integer             | `EntityRecord.version.number`                                   | `3`                                                                               |
+| `subject`                          | String              | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
+| `priority`                         | Integer             | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
+| `requester`                        | String (Proto JSON) | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
+| `opened_at`                        | Timestamp           | `Ticket.opened_at`                                              | `1970-01-01T00:00:42.000000007Z`                                                  |
+| `detail`                           | String (Proto JSON) | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
@@ -1095,13 +1462,11 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(TicketSchema, { kind: "support_ticket" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(TicketSchema, { kind: "support_ticket" });
 ```
 
 ##### TicketList current state: `example.support.TicketList`
@@ -1110,13 +1475,13 @@ builder.organizeRecords(TicketSchema, { kind: "support_ticket" });
 
 **Created by:** The Datastore adapter makes this kind visible on the first TicketList state write after Support prepares its repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                            | Example value                                                                                                                        |
-| ---------------------------------- | ------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                                                                                                           |
-| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                        | Binary Protobuf; decoded view: `entity_id=TicketListId(billing-open); state=TicketList(tickets=[TicketId(billing,T-42)]); version=1` |
-| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                                                                                                              |
-| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                                                                                                              |
-| `version`                          | Integer            | `EntityRecord.version.number`                                           | `1`                                                                                                                                  |
+| Physical field                     | Database type      | Exact source                                                            | Example value                                 |
+| ---------------------------------- | ------------------ | ----------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                    |
+| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                        | Protobuf message serialized into binary array |
+| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                       |
+| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                       |
+| `version`                          | Integer            | `EntityRecord.version.number`                                           | `1`                                           |
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
@@ -1125,13 +1490,11 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketListSchema } from "../generated/example/support/storage_layout_pb.js";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" });
 ```
 
 ##### ReplyAssistant current state: `example.support.ReplyAssistant`
@@ -1140,13 +1503,13 @@ builder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" });
 
 **Created by:** The Datastore adapter makes this kind visible on the first ReplyAssistant state write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                    | Example value                                                                                                                          |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                                                                                                              |
-| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                                | Binary Protobuf; decoded view: `entity_id=ReplyAssistantId(assistant-7); state=ReplyAssistant(last_draft=Please try again); version=2` |
-| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                                                                                                |
-| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                                                                                                |
-| `version`                          | Integer            | `EntityRecord.version.number`                                                   | `2`                                                                                                                                    |
+| Physical field                     | Database type      | Exact source                                                                    | Example value                                 |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
+| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
+| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
+| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
+| `version`                          | Integer            | `EntityRecord.version.number`                                                   | `2`                                           |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -1155,13 +1518,11 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { ReplyAssistantSchema } from "../generated/example/support/storage_layout_pb.js";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" });
 ```
 
 #### Framework kinds for Events, histories and services
@@ -1172,30 +1533,20 @@ builder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" 
 
 **Created by:** The Datastore adapter makes this kind visible on the first Ticket history write after Support prepares the repository with `stateHistory: true`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type       | Exact source                                                                              | Example value                                                                                                               |
-| ---------------------------------- | ------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name  | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}`       |
-| `bytes`                            | Unindexed Blob      | Entire serialized `EntityRecord`                                                          | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice); version=2` |
-| `entity_id`                        | String (Proto JSON) | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                |
-| `created`                          | Timestamp           | `EntityRecord.version.timestamp`                                                          | `1970-01-01T00:00:42.000000007Z`                                                                                            |
-| `version`                          | Integer             | `EntityRecord.version.number`                                                             | `2`                                                                                                                         |
+| Physical field                     | Database type       | Exact source                                                                              | Example value                                                                                                         |
+| ---------------------------------- | ------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name  | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}` |
+| `bytes`                            | Unindexed Blob      | Entire serialized `EntityRecord`                                                          | Protobuf message serialized into binary array                                                                         |
+| `entity_id`                        | String (Proto JSON) | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                          |
+| `created`                          | Timestamp           | `EntityRecord.version.timestamp`                                                          | `1970-01-01T00:00:42.000000007Z`                                                                                      |
+| `version`                          | Integer             | `EntityRecord.version.number`                                                             | `2`                                                                                                                   |
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
-**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
-
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
-
-```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
-import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(TicketSchema, EntityRecordSchema, { kind: "support_ticket_history" });
-```
+**Naming limitation:** The Datastore builder has no separate override for only
+the Ticket's state-history kind. A source-and-record override for Ticket and
+EntityRecord also affects current state and can cause a collision. Keep the
+default history kind when both current state and state history are enabled.
 
 ##### Ticket diagnostic Event history: `example.support.Ticket_Event`
 
@@ -1203,13 +1554,13 @@ builder.organizeRecords(TicketSchema, EntityRecordSchema, { kind: "support_ticke
 
 **Created by:** The Datastore adapter makes this kind visible on the first Ticket diagnostic Event write after Support prepares the Aggregate repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type       | Exact source                                                  | Example value                                                                                                                                         |
-| ---------------------------------- | ------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name  | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                                                                          |
-| `bytes`                            | Unindexed Blob      | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=ticket-event-8; context.producer_id=TicketId(billing,T-42); context.version=2; message=packed Ticket domain Event` |
-| `entity_id`                        | String (Proto JSON) | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                                          |
-| `created`                          | Timestamp           | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                                                                                                                      |
-| `version`                          | Integer             | `Event.context.version.number`                                | `2`                                                                                                                                                   |
+| Physical field                     | Database type       | Exact source                                                  | Example value                                                                                |
+| ---------------------------------- | ------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name  | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                 |
+| `bytes`                            | Unindexed Blob      | Entire serialized `Event`                                     | Protobuf message serialized into binary array                                                |
+| `entity_id`                        | String (Proto JSON) | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}` |
+| `created`                          | Timestamp           | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                                                             |
+| `version`                          | Integer             | `Event.context.version.number`                                | `2`                                                                                          |
 
 This is a diagnostic history for the Aggregate, distinct from the domain Event store.
 
@@ -1218,47 +1569,45 @@ This is a diagnostic history for the Aggregate, distinct from the domain Event s
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 import { EventSchema } from "@spine-event-engine/proto";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(TicketSchema, EventSchema, { kind: "support_ticket_events" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(TicketSchema, EventSchema, { kind: "support_ticket_events" });
 ```
 
-##### Support domain Events: `es_3zg7bqc0wuwdwaja0pfjqoalpwiatoj1us9z4hxitwvoy9ke7n_Event`
+##### Support domain Events: `Support-Event`
 
 **Kind location:** namespace `support`.
 
 **Created by:** The Datastore adapter makes this kind visible on the first domain Event write after Support prepares its Event store. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                  | Example value                                                                                                     |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
-| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=domain-event-8; message=packed Ticket domain Event; context.timestamp=42s+7ns` |
-| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                                                                                  |
-| `type`                             | String             | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened`                                                                |
+| Physical field                     | Database type      | Exact source                                                  | Example value                                      |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------- | -------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                       |
+| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Protobuf message serialized into binary array      |
+| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                   |
+| `type`                             | String             | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened` |
 
 The packed Event payload and its context stay in bytes; no table appears for each Event message type.
 
 **Change this layout:** These generated Event groups should retain distinct kinds. A broad record-only Event layout override can collide with another Event family.
 
-##### Support System Events: `es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_Event`
+##### Support System Events: `Support_System-Event`
 
 **Kind location:** namespace `support`.
 
 **Created by:** The Datastore adapter makes this kind visible on the first System Event write after Support prepares the Event store enabled by `persistSystemEvents()`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                  | Example value                                                                                                         |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                                                                                          |
-| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=system-event-9; message=packed AgentAiOperationStarted; context.timestamp=42s+7ns` |
-| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                                                                                      |
-| `type`                             | String             | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted`                                                                |
+| Physical field                     | Database type      | Exact source                                                  | Example value                                          |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------- | ------------------------------------------------------ |
+| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
+| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
+| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                       |
+| `type`                             | String             | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
 
-This separately grouped Event family also retains Agent interaction Events inside complete Event records.
+This System Event kind also stores the Agent interaction Events. Each entity contains a complete Event envelope, including its typed payload.
 
 **Change this layout:** These generated Event groups should retain distinct kinds. A broad record-only Event layout override can collide with another Event family.
 
@@ -1268,17 +1617,17 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Created by:** The Datastore adapter makes this kind visible on the first Agent audit write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                                       | Example value                                                                                                                                                    |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentHistoryRecord`                                                             | Binary Protobuf; decoded view: `scope=(example.support.ReplyAssistant, assistant-7); entry=conversation-5 at 42s+7ns with typed generation request and response` |
-| `state_type`                       | String             | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                                                                                                                 |
-| `agent_key`                        | String             | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                                                                                                                        |
-| `scope_digest`                     | String             | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8`                                                                                               |
-| `category`                         | String             | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                                                                                                                   |
-| `conversation_key`                 | String             | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                                                                                                                 |
-| `conversation_digest`              | String             | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb`                                                                                               |
-| `order_key`                        | String             | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`                                                                                                            |
+| Physical field                     | Database type      | Exact source                                                                                       | Example value                                                      |
+| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Native key name (no `ID` property) | Datastore key name | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
+| `state_type`                       | String             | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
+| `agent_key`                        | String             | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
+| `scope_digest`                     | String             | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
+| `category`                         | String             | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
+| `conversation_key`                 | String             | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
+| `conversation_digest`              | String             | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`                        | String             | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
@@ -1290,10 +1639,10 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 **Created by:** The Datastore adapter makes this kind visible on the first Agent receipt write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                                              |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894`                                                                      |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAcceptanceReceipt`                                       | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7), CommandId(command-4), HANDLE_COMMAND)` |
+| Physical field                     | Database type      | Exact source                                                                     | Example value                                                         |
+| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
@@ -1305,8 +1654,8 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
 ```
 
 ##### Agent model preferences: `spine_agent_model_preferences`
@@ -1315,10 +1664,10 @@ builder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_rec
 
 **Created by:** The Datastore adapter makes this kind visible on the first Agent model-preference write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                        | Example value                                                                                                                                     |
-| ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1`                                                                             |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentModelPreferencesRecord`                                     | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7)); preferences=[GENERATION:support-drafter@v2]` |
+| Physical field                     | Database type      | Exact source                                                                        | Example value                                                         |
+| ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -1330,12 +1679,12 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 **Created by:** The Datastore adapter makes this kind visible on the first subscription-registry write after Support prepares or starts subscription monitoring. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type                | Exact source                                                                      | Example value                                                                                                                                     |
-| ---------------------------------- | ---------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name           | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                               |
-| `bytes`                            | Unindexed Blob               | Entire serialized `SubscriptionRecord`                                            | Binary Protobuf; decoded view: `id=sub-4; status=PENDING; subscription=TicketList updates for acme; when_activation_expires=1,800,000,000,000 ms` |
-| `status`                           | Integer                      | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                                                                                                                     |
-| `when_activation_expires`          | Integer (epoch milliseconds) | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                                                                                                                      |
+| Physical field                     | Database type                | Exact source                                                                      | Example value                                 |
+| ---------------------------------- | ---------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name           | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`                            | Unindexed Blob               | Entire serialized `SubscriptionRecord`                                            | Protobuf message serialized into binary array |
+| `status`                           | Integer                      | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                 |
+| `when_activation_expires`          | Integer (epoch milliseconds) | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                  |
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
@@ -1347,8 +1696,8 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions" });
 ```
 
 ##### Entity Inbox messages: `spine.server.delivery.InboxMessage`
@@ -1357,20 +1706,60 @@ builder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions
 
 **Created by:** The Datastore adapter makes this kind visible on the first Inbox message write, normally when an Entity Inbox receives a routed signal. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
-| Physical field                     | Database type       | Exact source                                                                | Example value                                                                                                                                                           |
-| ---------------------------------- | ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name  | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}`                                                                                                                 |
-| `bytes`                            | Unindexed Blob      | Entire serialized `InboxMessage`                                            | Binary Protobuf; decoded view: `id=(message-3, shard 2/16); inbox_id=Ticket(billing,T-42); signal_id=command-4; status=TO_DELIVER; signal=packed Command`               |
-| `inbox_id`                         | String (Proto JSON) | `InboxMessage.inbox_id`                                                     | `{"entityId":{"id":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}},"typeUrl":"type.googleapis.com/example.support.Ticket"}` |
-| `signal_id`                        | String (Proto JSON) | `InboxMessage.signal_id`                                                    | `{"value":"command-4"}`                                                                                                                                                 |
-| `shard_index`                      | Integer             | `InboxMessage.id.index.index`                                               | `2`                                                                                                                                                                     |
-| `shard_total`                      | Integer             | `InboxMessage.id.index.of_total`                                            | `16`                                                                                                                                                                    |
-| `status`                           | Integer             | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                                                                                                        |
-| `when_received`                    | Timestamp           | `InboxMessage.when_received`                                                | `1970-01-01T00:00:42.000000007Z`                                                                                                                                        |
-| `version`                          | Integer             | `InboxMessage.version`                                                      | `1`                                                                                                                                                                     |
-| `message_id`                       | String              | `InboxMessage.id.uuid`                                                      | `message-3`                                                                                                                                                             |
+| Physical field                     | Database type      | Exact source                                                                | Example value                                           |
+| ---------------------------------- | ------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
+| `shard_index`                      | Integer            | `InboxMessage.id.index.index`                                               | `2`                                                     |
+| `shard_total`                      | Integer            | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
+| `status`                           | Integer            | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
+| `when_received`                    | Timestamp          | `InboxMessage.when_received`                                                | `1970-01-01T00:00:42.000000007Z`                        |
+| `version`                          | Integer            | `InboxMessage.version`                                                      | `1`                                                     |
+| `message_id`                       | String             | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
 
-Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
+Each Entity has a distinct Inbox. This kind stores messages for those Inboxes,
+including messages for different tenants. The packed signal supplies the Tenant
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
+label, and retention time remain in `bytes`.
+
+The six separate query fields have these uses:
+
+- `shard_index` and `shard_total` select one Delivery shard.
+- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+  option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
+- `when_received`, `version`, and `message_id` put the selected messages in a
+  stable order. The message ID resolves ties when time and version are equal,
+  so paging can continue without skipping or repeating equal-position rows.
+
+For example, these reads use the same shard and ordering, but only the second
+adds a status condition:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+
+declare const inboxStorage: InboxStorage;
+declare const shard: ShardIndex;
+
+await inboxStorage.read(shard);
+await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+```
+
+The ordinary Delivery scan reads all states unless its operation options supply
+a filter. This is why the Datastore checklist includes both query forms.
+
+`inbox_id` and `signal_id` have no separate query fields because Delivery does
+not filter or sort by them. They remain available in the complete record.
+Datastore has a native key, `bytes`, and those six query properties. The
+composite-index checklist below supplies the indexes for these query shapes.
+
+JVM storage has a different column set. Its `InboxColumn` also declares
+`inbox_id` and `signal_id`, even though its current Inbox query does not filter
+by them. JVM additionally declares event/command indicators and a label, while
+its shard is one composite value. The TS layout above follows the queries TS
+actually runs. See the pinned [JVM column declarations](https://github.com/SpineEventEngine/core-jvm/blob/6b6219dc5f10bca1d4b137938b8a0b892fe61099/server/src/main/java/io/spine/server/delivery/InboxColumn.java)
+and [TS Inbox queries](../packages/server/src/delivery/inbox-storage.ts).
 
 **Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
 
@@ -1380,8 +1769,8 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" });
 ```
 
 ##### Delivery shard sessions: `spine.server.delivery.ShardSessionRecord`
@@ -1390,10 +1779,10 @@ builder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" });
 
 **Created by:** The Datastore adapter makes this kind visible on the first shard-session write, normally when Delivery picks up a shard. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
-| Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                          |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                                                                                             |
-| `bytes`                            | Unindexed Blob     | Entire serialized `ShardSessionRecord`                                           | Binary Protobuf; decoded view: `index=(2,16); when_last_picked=1970-01-01T00:00:42.000000007Z; worker=node-2/worker-1` |
+| Physical field                     | Database type      | Exact source                                                                     | Example value                                 |
+| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                    |
+| `bytes`                            | Unindexed Blob     | Entire serialized `ShardSessionRecord`                                           | Protobuf message serialized into binary array |
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
@@ -1405,8 +1794,8 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_sessions" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_sessions" });
 ```
 
 ##### Gateway authenticated bindings: `spine.auth.GatewayAuthenticatedSubscription`
@@ -1415,11 +1804,11 @@ builder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_session
 
 **Created by:** The Datastore adapter makes this kind visible on the first binding write after the application constructs `DurableSubscriptionBindings`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build does not construct this component.
 
-| Physical field                     | Database type                | Exact source                                                                                    | Example value                                                                                                                        |
-| ---------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name           | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                  |
-| `bytes`                            | Unindexed Blob               | Entire serialized `GatewayAuthenticatedSubscription`                                            | Binary Protobuf; decoded view: `id=sub-4; subscription=authenticated TicketList updates for acme; when_expires=1,800,000,000,000 ms` |
-| `when_expires`                     | Integer (epoch milliseconds) | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                                                                                                         |
+| Physical field                     | Database type                | Exact source                                                                                    | Example value                                 |
+| ---------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name           | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`                            | Unindexed Blob               | Entire serialized `GatewayAuthenticatedSubscription`                                            | Protobuf message serialized into binary array |
+| `when_expires`                     | Integer (epoch milliseconds) | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                  |
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
@@ -1431,8 +1820,8 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, {
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, {
   kind: "support_gateway_bindings",
 });
 ```
@@ -1443,10 +1832,10 @@ builder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, {
 
 **Created by:** The Datastore adapter makes this kind visible on the first lease write after the application constructs `LeasedNodeRegistry`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build does not construct this component.
 
-| Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                                                                   |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                                                                                                                                            |
-| `bytes`                            | Unindexed Blob     | Entire serialized `ApplicationNodeLease`                                         | Binary Protobuf; decoded view: `node_id=node-2; endpoint.origin=https://node-2.example.test; when_expires=2030-01-01T00:00:00Z; registration_id=registration-9` |
+| Physical field                     | Database type      | Exact source                                                                     | Example value                                 |
+| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                          |
+| `bytes`                            | Unindexed Blob     | Entire serialized `ApplicationNodeLease`                                         | Protobuf message serialized into binary array |
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
@@ -1458,8 +1847,8 @@ The endpoint origin, optional TLS server name, expiry and registration ID remain
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases" });
 ```
 
 #### Factory setup
@@ -1467,7 +1856,6 @@ builder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { StringifierRegistry } from "@spine-event-engine/core";
 import { Datastore } from "@google-cloud/datastore";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
@@ -1475,13 +1863,9 @@ const client = new Datastore({
   projectId: "my-project",
   namespace: "support",
 });
-// Use the registry assembled in chapter 3.
-declare const stringifiers: StringifierRegistry;
 
-const builder = DatastoreStorageFactory.newBuilder()
-  .setStringifierRegistry(stringifiers)
-  .setClient(client);
-const factory = builder.build();
+const datastoreBuilder = DatastoreStorageFactory.newBuilder().setClient(client);
+const factory = datastoreBuilder.build();
 ```
 
 The application supplies the client's credentials and manages its lifetime.
@@ -1683,47 +2067,113 @@ would be added in the application project.
 
 ```proto
 syntax = "proto3";
+
 package example.support;
 
-import "spine/options.proto";
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
+import "spine/options.proto";
 
+// Identifies a Ticket within a named support queue.
 message TicketId {
+  // Queue that contains the Ticket.
   string queue = 1;
+
+  // Ticket number within that queue.
   string number = 2;
 }
-message TicketListId { string value = 1; }
-message ReplyAssistantId { string value = 1; }
 
+// Identifies one list of Tickets shown to clients.
+message TicketListId {
+  // Name of the list.
+  string value = 1;
+}
+
+// Identifies an Agent that drafts support replies.
+message ReplyAssistantId {
+  // Stable name of the Agent instance.
+  string value = 1;
+}
+
+// Urgency assigned to a Ticket.
 enum Priority {
+  // No urgency has been selected.
   PRIORITY_UNSPECIFIED = 0;
+
+  // The Ticket can follow the ordinary support process.
   NORMAL = 1;
+
+  // The Ticket needs prompt attention.
   URGENT = 2;
 }
+
+// Contact details supplied with a Ticket.
 message Requester {
+  // Contact name shown to support staff.
   string name = 1;
+
+  // Address to which a reply can be sent.
   string email = 2;
+
+  // Other names used by this contact.
   repeated string aliases = 3;
 }
-message BrowserInfo { string browser = 1; }
 
+// Browser information attached to a Ticket.
+message BrowserInfo {
+  // Browser reported by the client.
+  string browser = 1;
+}
+
+// Details retained for a support Ticket.
 message Ticket {
+  option (entity).kind = AGGREGATE;
+
+  // Queue and number assigned when the Ticket was opened.
   TicketId id = 1;
+
+  // Short description, available to storage queries.
   string subject = 2 [(column) = true];
+
+  // Urgency, available to storage queries.
   Priority priority = 3 [(column) = true];
+
+  // Complete contact details, queryable as one message value.
   Requester requester = 4 [(column) = true];
+
+  // Opening time, available for filtering and ordering.
   google.protobuf.Timestamp opened_at = 5 [(column) = true];
+
+  // Labels retained in the state without a separate query column.
   repeated string tags = 6;
+
+  // Additional attributes retained in the state.
   map<string, string> attributes = 7;
+
+  // Typed extra details, queryable as one packed message value.
   google.protobuf.Any detail = 8 [(column) = true];
 }
+
+// Tickets included in a list shown to support staff.
 message TicketList {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = QUERY;
+
+  // Name used to retrieve this list of Tickets.
   TicketListId id = 1;
+
+  // Tickets currently included in the list.
   repeated TicketId tickets = 2;
 }
+
+// Current state of the Agent that drafts support replies.
 message ReplyAssistant {
+  option (entity).kind = ENTITY;
+
+  // Identifies this Agent instance.
   ReplyAssistantId id = 1;
+
+  // Most recently saved draft.
   string last_draft = 2;
 }
 ```
@@ -1773,11 +2223,23 @@ also retains its tenant even though the registry family is shared.
 
 ### PostgreSQL
 
-These are the default physical names for the Support example. The three example-defined Entity state families come first; framework-managed layouts for histories, Events, Agent records and services follow. Framework-managed describes the layout, not its tenant destination. `bytes` holds a complete binary Protobuf record; the table shows a short decoded view so the example value is readable.
+The `spine` schema in these tables is explicitly selected for this example.
+It is not the adapter default. If `schema` is omitted from `setOptions`, the
+adapter uses PostgreSQL's `current_schema()` (often `public`, depending on the
+connection's search path). The factory setup below shows `schema: "spine"`;
+chapter 3 shows how to select a different schema. Create that schema before
+startup: Spine creates its tables, but does not create the schema itself.
 
-The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
+Start with the three Entity state tables below. The following tables store Events, history, and the records used by framework services. Each field is listed with its database type, the Protobuf field it comes from, and an example value. The `bytes` column contains the complete serialized record.
 
-The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
+Each naming example imports the concrete provider factory and generated schemas.
+The relative imports use the guide model generated from
+[storage_layout.proto](../packages/server-blackbox-tests/proto/example/support/storage_layout.proto).
+In your application, use the corresponding path under your configured generation
+output directory. Complete connection setup appears after the tables; chapter 3
+explains value conversion and optional custom stringifiers.
+
+Copy the settings you need into your application's factory builder before calling `build()`.
 
 #### Domain Entity state tables
 
@@ -1787,18 +2249,18 @@ The table or kind settings below apply to the same builder used in the factory s
 
 **Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the Ticket repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                    | Example value                                                                                                                                                                                                      |
-| ------------------ | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                                                                                                                                                              |
-| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice, priority=URGENT, tags=[invoice], attributes={tier:pro}); version=3; archived=false; deleted=false` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                                                                                                                                                            |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                                                                                                                                                            |
-| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                   | `3`                                                                                                                                                                                                                |
-| `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                                                                                                                                                          |
-| `priority`         | INTEGER                        | `Ticket.priority`                                               | `2 (URGENT)`                                                                                                                                                                                                       |
-| `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Ada","email":"ada@example.test","aliases":["A."]}`                                                                                                                                                       |
-| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                                                                                                                                                      |
-| `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}`                                                                                                                                  |
+| Physical field     | Database type                  | Exact source                                                    | Example value                                                                     |
+| ------------------ | ------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                             |
+| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                | Protobuf message serialized into binary array                                     |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                           |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                           |
+| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                   | `3`                                                                               |
+| `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
+| `priority`         | INTEGER                        | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
+| `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
+| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                     |
+| `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
@@ -1807,13 +2269,11 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(TicketSchema, "support_ticket");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(TicketSchema, "support_ticket");
 ```
 
 ##### TicketList current state: `spine.example_support_ticketlist`
@@ -1822,13 +2282,13 @@ builder.setTableName(TicketSchema, "support_ticket");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the TicketList repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                            | Example value                                                                                                                        |
-| ------------------ | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                                                                                                           |
-| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                        | Binary Protobuf; decoded view: `entity_id=TicketListId(billing-open); state=TicketList(tickets=[TicketId(billing,T-42)]); version=1` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                                                                                                              |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                                                                                                              |
-| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                           | `1`                                                                                                                                  |
+| Physical field     | Database type                  | Exact source                                                            | Example value                                 |
+| ------------------ | ------------------------------ | ----------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                    |
+| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                        | Protobuf message serialized into binary array |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                       |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                       |
+| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                           | `1`                                           |
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
@@ -1837,13 +2297,11 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketListSchema } from "../generated/example/support/storage_layout_pb.js";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(TicketListSchema, "support_ticket_list");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(TicketListSchema, "support_ticket_list");
 ```
 
 ##### ReplyAssistant current state: `spine.example_support_replyassistant`
@@ -1852,13 +2310,13 @@ builder.setTableName(TicketListSchema, "support_ticket_list");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                                    | Example value                                                                                                                          |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                                                                                                              |
-| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                                | Binary Protobuf; decoded view: `entity_id=ReplyAssistantId(assistant-7); state=ReplyAssistant(last_draft=Please try again); version=2` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                                                                                                |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                                                                                                |
-| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                                   | `2`                                                                                                                                    |
+| Physical field     | Database type                  | Exact source                                                                    | Example value                                 |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
+| `bytes`            | BYTEA NOT NULL                 | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
+| `version`          | INTEGER NOT NULL DEFAULT 0     | `EntityRecord.version.number`                                                   | `2`                                           |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -1867,13 +2325,11 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { ReplyAssistantSchema } from "../generated/example/support/storage_layout_pb.js";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
 ```
 
 #### Framework tables for Events, histories and services
@@ -1884,13 +2340,13 @@ builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Ticket repository with `stateHistory: true`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                               |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}`       |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `EntityRecord`                                                          | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice); version=2` |
-| `entity_id`        | TEXT                    | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                |
-| `created`          | BIGINT                  | `EntityRecord.version.timestamp`                                                          | `42000000007`                                                                                                               |
-| `version`          | INTEGER                 | `EntityRecord.version.number`                                                             | `2`                                                                                                                         |
+| Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                         |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}` |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `EntityRecord`                                                          | Protobuf message serialized into binary array                                                                         |
+| `entity_id`        | TEXT                    | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                          |
+| `created`          | BIGINT                  | `EntityRecord.version.timestamp`                                                          | `42000000007`                                                                                                         |
+| `version`          | INTEGER                 | `EntityRecord.version.number`                                                             | `2`                                                                                                                   |
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
@@ -1899,14 +2355,12 @@ This historical EntityRecord keeps the complete Ticket state and lifecycle flags
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
 ```
 
 ##### Ticket diagnostic Event history: `spine.example_support_ticket_event`
@@ -1915,51 +2369,69 @@ builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Ticket Aggregate repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                                                         |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                                                                          |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=ticket-event-8; context.producer_id=TicketId(billing,T-42); context.version=2; message=packed Ticket domain Event` |
-| `entity_id`        | TEXT                    | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                                          |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                                                         |
-| `version`          | INTEGER                 | `Event.context.version.number`                                | `2`                                                                                                                                                   |
+| Physical field     | Database type           | Exact source                                                  | Example value                                                                                |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                 |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array                                                |
+| `entity_id`        | TEXT                    | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}` |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                |
+| `version`          | INTEGER                 | `Event.context.version.number`                                | `2`                                                                                          |
 
 This is a diagnostic history for the Aggregate, distinct from the domain Event store.
 
 **Change this layout:** There is no narrow SQL naming override for this diagnostic Event family: `setTableName(TicketSchema, EventSchema, ...)` does not select its current `(EventSchema, EventSchema)` key.
 
-##### Support domain Events: `spine.es_3zg7bqc0wuwdwaja0pfjqoalpwiatoj1us9z4hxitwvoy9ke7n_event`
+##### Support domain Events: `spine.support_event`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the domain Event store. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                     |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=domain-event-8; message=packed Ticket domain Event; context.timestamp=42s+7ns` |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                     |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened`                                                                |
+| Physical field     | Database type           | Exact source                                                  | Example value                                      |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                       |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array      |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                      |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened` |
 
 The packed Event payload and its context stay in bytes; no table appears for each Event message type.
 
-**Change this layout:** No narrow per-group naming override is available for these Event stores. Keep their generated names; a broad `EventSchema` override can collide with another Event family.
+**Change this table:**
 
-##### Support System Events: `spine.es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_event`
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setEventStoreTable("Support", "support_events");
+```
+
+##### Support System Events: `spine.support_system_event`
 
 **Table locations:** one in `support_acme` and one in `support_globex`, both in the `spine` schema.
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                         |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                                                                                          |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=system-event-9; message=packed AgentAiOperationStarted; context.timestamp=42s+7ns` |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                         |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted`                                                                |
+| Physical field     | Database type           | Exact source                                                  | Example value                                          |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                          |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
 
-This separately grouped Event family also retains Agent interaction Events inside complete Event records.
+This System Event table also stores the Agent interaction Events. Each row contains a complete Event envelope, including its typed payload.
 
-**Change this layout:** No narrow per-group naming override is available for these Event stores. Keep their generated names; a broad `EventSchema` override can collide with another Event family.
+**Change this table:**
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setEventStoreTable("Support_System", "support_system_events", "system");
+```
 
 ##### Agent audit: `spine.agent_history_agenthistoryrecord`
 
@@ -1967,17 +2439,17 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field        | Database type           | Exact source                                                                                       | Example value                                                                                                                                                    |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
-| `bytes`               | BYTEA NOT NULL          | Entire serialized `AgentHistoryRecord`                                                             | Binary Protobuf; decoded view: `scope=(example.support.ReplyAssistant, assistant-7); entry=conversation-5 at 42s+7ns with typed generation request and response` |
-| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                                                                                                                 |
-| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                                                                                                                        |
-| `scope_digest`        | TEXT                    | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8`                                                                                               |
-| `category`            | TEXT                    | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                                                                                                                   |
-| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                                                                                                                 |
-| `conversation_digest` | TEXT                    | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb`                                                                                               |
-| `order_key`           | TEXT                    | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`                                                                                                            |
+| Physical field        | Database type           | Exact source                                                                                       | Example value                                                      |
+| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
+| `bytes`               | BYTEA NOT NULL          | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
+| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
+| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
+| `scope_digest`        | TEXT                    | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
+| `category`            | TEXT                    | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
+| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
+| `conversation_digest` | TEXT                    | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`           | TEXT                    | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot. PostgreSQL indexes `order_key` with binary `C` collation.
 
@@ -1990,8 +2462,12 @@ import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(
+  AgentHistoryEntrySchema,
+  AgentHistoryRecordSchema,
+  "support_agent_history",
+);
 ```
 
 ##### Agent acceptance receipts: `spine.spine_agent_acceptance_agentacceptancereceipt`
@@ -2000,10 +2476,10 @@ builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                              |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894`                                                                      |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAcceptanceReceipt`                                       | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7), CommandId(command-4), HANDLE_COMMAND)` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                                         |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
@@ -2015,8 +2491,8 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(
   AgentAcceptanceReceiptSchema,
   AgentAcceptanceReceiptSchema,
   "support_agent_receipts",
@@ -2029,10 +2505,10 @@ builder.setTableName(
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                        | Example value                                                                                                                                     |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1`                                                                             |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentModelPreferencesRecord`                                     | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7)); preferences=[GENERATION:support-drafter@v2]` |
+| Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -2044,8 +2520,8 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(
   AgentModelPreferencesRecordSchema,
   AgentModelPreferencesRecordSchema,
   "support_agent_preferences",
@@ -2058,12 +2534,12 @@ builder.setTableName(
 
 **Created by:** The PostgreSQL adapter creates and checks this table when Support prepares or starts persistent subscription monitoring. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field            | Database type           | Exact source                                                                      | Example value                                                                                                                                     |
-| ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key)        | `VARCHAR(512) NOT NULL` | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                               |
-| `bytes`                   | BYTEA NOT NULL          | Entire serialized `SubscriptionRecord`                                            | Binary Protobuf; decoded view: `id=sub-4; status=PENDING; subscription=TicketList updates for acme; when_activation_expires=1,800,000,000,000 ms` |
-| `status`                  | INTEGER                 | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                                                                                                                     |
-| `when_activation_expires` | BIGINT                  | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                                                                                                                      |
+| Physical field            | Database type           | Exact source                                                                      | Example value                                 |
+| ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key)        | `VARCHAR(512) NOT NULL` | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`                   | BYTEA NOT NULL          | Entire serialized `SubscriptionRecord`                                            | Protobuf message serialized into binary array |
+| `status`                  | INTEGER                 | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                 |
+| `when_activation_expires` | BIGINT                  | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                  |
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
@@ -2075,8 +2551,8 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 ```
 
 ##### Entity Inbox messages: `spine.spine_server_delivery_inboxmessage`
@@ -2085,20 +2561,61 @@ builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 
 **Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                | Example value                                                                                                                                                           |
-| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}`                                                                                                                 |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `InboxMessage`                                            | Binary Protobuf; decoded view: `id=(message-3, shard 2/16); inbox_id=Ticket(billing,T-42); signal_id=command-4; status=TO_DELIVER; signal=packed Command`               |
-| `inbox_id`         | TEXT                    | `InboxMessage.inbox_id`                                                     | `{"entityId":{"id":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}},"typeUrl":"type.googleapis.com/example.support.Ticket"}` |
-| `signal_id`        | TEXT                    | `InboxMessage.signal_id`                                                    | `{"value":"command-4"}`                                                                                                                                                 |
-| `shard_index`      | INTEGER                 | `InboxMessage.id.index.index`                                               | `2`                                                                                                                                                                     |
-| `shard_total`      | INTEGER                 | `InboxMessage.id.index.of_total`                                            | `16`                                                                                                                                                                    |
-| `status`           | INTEGER                 | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                                                                                                        |
-| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                                                                                                                                           |
-| `version`          | INTEGER                 | `InboxMessage.version`                                                      | `1`                                                                                                                                                                     |
-| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                                                                                                                                             |
+| Physical field     | Database type           | Exact source                                                                | Example value                                           |
+| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
+| `shard_index`      | INTEGER                 | `InboxMessage.id.index.index`                                               | `2`                                                     |
+| `shard_total`      | INTEGER                 | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
+| `status`           | INTEGER                 | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
+| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                           |
+| `version`          | INTEGER                 | `InboxMessage.version`                                                      | `1`                                                     |
+| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
 
-Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
+Each Entity has a distinct Inbox. This table stores messages for those Inboxes,
+including messages for different tenants. The packed signal supplies the Tenant
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
+label, and retention time remain in `bytes`.
+
+The six separate query fields have these uses:
+
+- `shard_index` and `shard_total` select one Delivery shard.
+- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+  option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
+- `when_received`, `version`, and `message_id` put the selected messages in a
+  stable order. The message ID resolves ties when time and version are equal,
+  so paging can continue without skipping or repeating equal-position rows.
+
+For example, these reads use the same shard and ordering, but only the second
+adds a status condition:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+
+declare const inboxStorage: InboxStorage;
+declare const shard: ShardIndex;
+
+await inboxStorage.read(shard);
+await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+```
+
+The ordinary Delivery scan reads all states unless its operation options supply
+a filter. This is why the Datastore checklist includes both query forms.
+
+`inbox_id` and `signal_id` have no separate query fields because Delivery does
+not filter or sort by them. They remain available in the complete record.
+For SQL this gives eight columns in total: `ID`, `bytes`, and those six query
+columns. The adapter creates the primary key; it does not create an additional
+Inbox SQL index for every query column.
+
+JVM storage has a different column set. Its `InboxColumn` also declares
+`inbox_id` and `signal_id`, even though its current Inbox query does not filter
+by them. JVM additionally declares event/command indicators and a label, while
+its shard is one composite value. The TS layout above follows the queries TS
+actually runs. See the pinned [JVM column declarations](https://github.com/SpineEventEngine/core-jvm/blob/6b6219dc5f10bca1d4b137938b8a0b892fe61099/server/src/main/java/io/spine/server/delivery/InboxColumn.java)
+and [TS Inbox queries](../packages/server/src/delivery/inbox-storage.ts).
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -2108,8 +2625,8 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(InboxMessageSchema, "support_inbox_messages");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(InboxMessageSchema, "support_inbox_messages");
 ```
 
 ##### Delivery shard sessions: `spine.spine_server_delivery_shardsessionrecord`
@@ -2118,10 +2635,10 @@ builder.setTableName(InboxMessageSchema, "support_inbox_messages");
 
 **Created by:** The PostgreSQL adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first shard-session storage use, normally when Delivery picks up a shard. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                          |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                                                                                             |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `ShardSessionRecord`                                           | Binary Protobuf; decoded view: `index=(2,16); when_last_picked=1970-01-01T00:00:42.000000007Z; worker=node-2/worker-1` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                 |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                    |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `ShardSessionRecord`                                           | Protobuf message serialized into binary array |
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
@@ -2133,8 +2650,8 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
 ```
 
 ##### Gateway authenticated bindings: `spine.spine_auth_gatewayauthenticatedsubscription`
@@ -2143,11 +2660,11 @@ builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
 
 **Created by:** The PostgreSQL adapter creates and checks this table on the first binding storage operation after the application constructs `DurableSubscriptionBindings`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
-| Physical field     | Database type           | Exact source                                                                                    | Example value                                                                                                                        |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                  |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `GatewayAuthenticatedSubscription`                                            | Binary Protobuf; decoded view: `id=sub-4; subscription=authenticated TicketList updates for acme; when_expires=1,800,000,000,000 ms` |
-| `when_expires`     | BIGINT                  | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                                                                                                         |
+| Physical field     | Database type           | Exact source                                                                                    | Example value                                 |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `GatewayAuthenticatedSubscription`                                            | Protobuf message serialized into binary array |
+| `when_expires`     | BIGINT                  | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                  |
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
@@ -2159,8 +2676,8 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
 ```
 
 ##### Application node leases: `spine.spine_deployment_applicationnodelease`
@@ -2169,10 +2686,10 @@ builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bi
 
 **Created by:** The PostgreSQL adapter creates and checks this table on the first lease storage operation after the application constructs `LeasedNodeRegistry`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                                                   |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                                                                                                                                            |
-| `bytes`            | BYTEA NOT NULL          | Entire serialized `ApplicationNodeLease`                                         | Binary Protobuf; decoded view: `node_id=node-2; endpoint.origin=https://node-2.example.test; when_expires=2030-01-01T00:00:00Z; registration_id=registration-9` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                 |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                          |
+| `bytes`            | BYTEA NOT NULL          | Entire serialized `ApplicationNodeLease`                                         | Protobuf message serialized into binary array |
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
@@ -2184,8 +2701,8 @@ The endpoint origin, optional TLS server name, expiry and registration ID remain
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
 
-const builder = PostgresStorageFactory.newBuilder();
-builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
+const postgresBuilder = PostgresStorageFactory.newBuilder();
+postgresBuilder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
 ```
 
 #### Factory setup
@@ -2193,7 +2710,6 @@ builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { StringifierRegistry } from "@spine-event-engine/core";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { create } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
@@ -2201,11 +2717,7 @@ import { TenantIdSchema } from "@spine-event-engine/proto";
 const acme = create(TenantIdSchema, { kind: { case: "value", value: "acme" } });
 const globex = create(TenantIdSchema, { kind: { case: "value", value: "globex" } });
 
-// Use the registry assembled in chapter 3.
-declare const stringifiers: StringifierRegistry;
-
-const builder = PostgresStorageFactory.newBuilder()
-  .setStringifierRegistry(stringifiers)
+const postgresBuilder = PostgresStorageFactory.newBuilder()
   .setOptions({ url: "postgresql://localhost/support_shared", schema: "spine" })
   .setTenantOptions([
     { tenantId: acme, options: { url: "postgresql://localhost/support_acme", schema: "spine" } },
@@ -2214,7 +2726,7 @@ const builder = PostgresStorageFactory.newBuilder()
       options: { url: "postgresql://localhost/support_globex", schema: "spine" },
     },
   ]);
-const factory = await builder.build();
+const factory = await postgresBuilder.build();
 ```
 
 #### Human configuration checklist
@@ -2258,9 +2770,9 @@ describes the required privileges.
       and expose no public read-only preparation method. Retain the privileges
       required for that path even when their tables already exist.
 - [ ] **4. Decide how values are compared and converted.** Use a collation that
-      preserves distinctions in Entity IDs. Supply a complete TypeRegistry for
-      application types packed into searchable `Any` values; configure any custom
-      reversible stringifiers consistently on every instance. Check identifier and
+      preserves distinctions in Entity IDs. Import the generated model module so packed `Any` values can be resolved.
+      Register any custom converters before first storage use, with the same
+      settings on every application instance. Check identifier and
       indexed integer/timestamp limits in chapter 3.
 - [ ] **5. Configure the factory and environment.** Use the factory setup above, then supply it to `ServerEnvironment`. Complete environment setup
       before building the Bounded Context. Register all three Entity types, enable
@@ -2285,7 +2797,7 @@ CREATE INDEX support_ticket_priority_opened
 Evaluate indexes for diagnostic/state history, subscription expiry and Inbox
 queries against the expected workload as well. SQL can run those queries
 without a composite index, but a large scan can make them slow. The Datastore
-Datastore query/index matrix also names those query shapes for capacity planning.
+query/index matrix also names those query shapes for capacity planning.
 
 - [ ] **8. Check the whole startup path.** Run the explicit preparation/checks,
       the first gateway binding access and node registration when those components
@@ -2295,11 +2807,16 @@ Datastore query/index matrix also names those query shapes for capacity planning
 
 ### MySQL and MariaDB
 
-These are the default physical names for the Support example. The three example-defined Entity state families come first; framework-managed layouts for histories, Events, Agent records and services follow. Framework-managed describes the layout, not its tenant destination. `bytes` holds a complete binary Protobuf record; the table shows a short decoded view so the example value is readable.
+Start with the three Entity state tables below. The following tables store Events, history, and the records used by framework services. Each field is listed with its database type, the Protobuf field it comes from, and an example value. The `bytes` column contains the complete serialized record.
 
-The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
+Each naming example imports the concrete provider factory and generated schemas.
+The relative imports use the guide model generated from
+[storage_layout.proto](../packages/server-blackbox-tests/proto/example/support/storage_layout.proto).
+In your application, use the corresponding path under your configured generation
+output directory. Complete connection setup appears after the tables; chapter 3
+explains value conversion and optional custom stringifiers.
 
-The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
+Copy the settings you need into your application's factory builder before calling `build()`.
 
 #### Domain Entity state tables
 
@@ -2309,18 +2826,18 @@ The table or kind settings below apply to the same builder used in the factory s
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the Ticket repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                    | Example value                                                                                                                                                                                                      |
-| ------------------ | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                                                                                                                                                              |
-| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice, priority=URGENT, tags=[invoice], attributes={tier:pro}); version=3; archived=false; deleted=false` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                                                                                                                                                            |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                                                                                                                                                            |
-| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                   | `3`                                                                                                                                                                                                                |
-| `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                                                                                                                                                          |
-| `priority`         | INT                            | `Ticket.priority`                                               | `2 (URGENT)`                                                                                                                                                                                                       |
-| `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Ada","email":"ada@example.test","aliases":["A."]}`                                                                                                                                                       |
-| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                                                                                                                                                      |
-| `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}`                                                                                                                                  |
+| Physical field     | Database type                  | Exact source                                                    | Example value                                                                     |
+| ------------------ | ------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                             |
+| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                | Protobuf message serialized into binary array                                     |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                           |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                           |
+| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                   | `3`                                                                               |
+| `subject`          | TEXT                           | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
+| `priority`         | INT                            | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
+| `requester`        | TEXT                           | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
+| `opened_at`        | BIGINT                         | `Ticket.opened_at`                                              | `42000000007`                                                                     |
+| `detail`           | TEXT                           | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
@@ -2329,13 +2846,11 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(TicketSchema, "support_ticket");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(TicketSchema, "support_ticket");
 ```
 
 ##### TicketList current state: `example_support_TicketList`
@@ -2344,13 +2859,13 @@ builder.setTableName(TicketSchema, "support_ticket");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the TicketList repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                            | Example value                                                                                                                        |
-| ------------------ | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                                                                                                           |
-| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                        | Binary Protobuf; decoded view: `entity_id=TicketListId(billing-open); state=TicketList(tickets=[TicketId(billing,T-42)]); version=1` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                                                                                                              |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                                                                                                              |
-| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                           | `1`                                                                                                                                  |
+| Physical field     | Database type                  | Exact source                                                            | Example value                                 |
+| ------------------ | ------------------------------ | ----------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                    |
+| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                        | Protobuf message serialized into binary array |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                       |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                       |
+| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                           | `1`                                           |
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
@@ -2359,13 +2874,11 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketListSchema } from "../generated/example/support/storage_layout_pb.js";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(TicketListSchema, "support_ticket_list");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(TicketListSchema, "support_ticket_list");
 ```
 
 ##### ReplyAssistant current state: `example_support_ReplyAssistant`
@@ -2374,13 +2887,13 @@ builder.setTableName(TicketListSchema, "support_ticket_list");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when the Support Bounded Context prepares the ReplyAssistant Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type                  | Exact source                                                                    | Example value                                                                                                                          |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                                                                                                              |
-| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                                | Binary Protobuf; decoded view: `entity_id=ReplyAssistantId(assistant-7); state=ReplyAssistant(last_draft=Please try again); version=2` |
-| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                                                                                                |
-| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                                                                                                |
-| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                                   | `2`                                                                                                                                    |
+| Physical field     | Database type                  | Exact source                                                                    | Example value                                 |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL`        | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
+| `bytes`            | BLOB NOT NULL                  | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
+| `archived`         | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
+| `deleted`          | BOOLEAN NOT NULL DEFAULT false | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
+| `version`          | INT NOT NULL DEFAULT 0         | `EntityRecord.version.number`                                                   | `2`                                           |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -2389,13 +2902,11 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { ReplyAssistantSchema } from "../generated/example/support/storage_layout_pb.js";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
 ```
 
 #### Framework tables for Events, histories and services
@@ -2406,13 +2917,13 @@ builder.setTableName(ReplyAssistantSchema, "support_reply_assistant");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Ticket repository with `stateHistory: true`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                               |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}`       |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `EntityRecord`                                                          | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice); version=2` |
-| `entity_id`        | TEXT                    | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                |
-| `created`          | BIGINT                  | `EntityRecord.version.timestamp`                                                          | `42000000007`                                                                                                               |
-| `version`          | INT                     | `EntityRecord.version.number`                                                             | `2`                                                                                                                         |
+| Physical field     | Database type           | Exact source                                                                              | Example value                                                                                                         |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}` |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `EntityRecord`                                                          | Protobuf message serialized into binary array                                                                         |
+| `entity_id`        | TEXT                    | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                          |
+| `created`          | BIGINT                  | `EntityRecord.version.timestamp`                                                          | `42000000007`                                                                                                         |
+| `version`          | INT                     | `EntityRecord.version.number`                                                             | `2`                                                                                                                   |
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
@@ -2421,14 +2932,12 @@ This historical EntityRecord keeps the complete Ticket state and lifecycle flags
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
 ```
 
 ##### Ticket diagnostic Event history: `example_support_Ticket_Event`
@@ -2437,51 +2946,69 @@ builder.setTableName(TicketSchema, EntityRecordSchema, "ticket_state_history");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Ticket Aggregate repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                                                         |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                                                                          |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=ticket-event-8; context.producer_id=TicketId(billing,T-42); context.version=2; message=packed Ticket domain Event` |
-| `entity_id`        | TEXT                    | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                                          |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                                                         |
-| `version`          | INT                     | `Event.context.version.number`                                | `2`                                                                                                                                                   |
+| Physical field     | Database type           | Exact source                                                  | Example value                                                                                |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                 |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array                                                |
+| `entity_id`        | TEXT                    | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}` |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                |
+| `version`          | INT                     | `Event.context.version.number`                                | `2`                                                                                          |
 
 This is a diagnostic history for the Aggregate, distinct from the domain Event store.
 
 **Change this layout:** There is no narrow SQL naming override for this diagnostic Event family: `setTableName(TicketSchema, EventSchema, ...)` does not select its current `(EventSchema, EventSchema)` key.
 
-##### Support domain Events: `es_3zg7bqc0wuwdwaja0pfjqoalpwiatoj1us9z4hxitwvoy9ke7n_Event`
+##### Support domain Events: `Support_Event`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the domain Event store. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                     |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=domain-event-8; message=packed Ticket domain Event; context.timestamp=42s+7ns` |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                     |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened`                                                                |
+| Physical field     | Database type           | Exact source                                                  | Example value                                      |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                       |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array      |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                      |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened` |
 
 The packed Event payload and its context stay in bytes; no table appears for each Event message type.
 
-**Change this layout:** No narrow per-group naming override is available for these Event stores. Keep their generated names; a broad `EventSchema` override can collide with another Event family.
+**Change this table:**
 
-##### Support System Events: `es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_Event`
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setEventStoreTable("Support", "support_events");
+```
+
+##### Support System Events: `Support_System_Event`
 
 **Table locations:** one in `support_acme` and one in `support_globex`.
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the System Event store enabled by `persistSystemEvents()`. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                  | Example value                                                                                                         |
-| ------------------ | ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                                                                                          |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=system-event-9; message=packed AgentAiOperationStarted; context.timestamp=42s+7ns` |
-| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                                                                                         |
-| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted`                                                                |
+| Physical field     | Database type           | Exact source                                                  | Example value                                          |
+| ------------------ | ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------ |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
+| `created`          | BIGINT                  | `Event.context.timestamp`                                     | `42000000007`                                          |
+| `type`             | TEXT                    | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
 
-This separately grouped Event family also retains Agent interaction Events inside complete Event records.
+This System Event table also stores the Agent interaction Events. Each row contains a complete Event envelope, including its typed payload.
 
-**Change this layout:** No narrow per-group naming override is available for these Event stores. Keep their generated names; a broad `EventSchema` override can collide with another Event family.
+**Change this table:**
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setEventStoreTable("Support_System", "support_system_events", "system");
+```
 
 ##### Agent audit: `agent_history_AgentHistoryRecord`
 
@@ -2489,17 +3016,17 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field        | Database type           | Exact source                                                                                       | Example value                                                                                                                                                    |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
-| `bytes`               | BLOB NOT NULL           | Entire serialized `AgentHistoryRecord`                                                             | Binary Protobuf; decoded view: `scope=(example.support.ReplyAssistant, assistant-7); entry=conversation-5 at 42s+7ns with typed generation request and response` |
-| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                                                                                                                 |
-| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                                                                                                                        |
-| `scope_digest`        | VARBINARY(64)           | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8`                                                                                               |
-| `category`            | VARBINARY(12)           | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                                                                                                                   |
-| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                                                                                                                 |
-| `conversation_digest` | VARBINARY(64)           | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb`                                                                                               |
-| `order_key`           | VARBINARY(2944)         | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`                                                                                                            |
+| Physical field        | Database type           | Exact source                                                                                       | Example value                                                      |
+| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ID` (primary key)    | `VARCHAR(512) NOT NULL` | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
+| `bytes`               | BLOB NOT NULL           | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
+| `state_type`          | TEXT                    | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
+| `agent_key`           | TEXT                    | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
+| `scope_digest`        | VARBINARY(64)           | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
+| `category`            | VARBINARY(12)           | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
+| `conversation_key`    | TEXT                    | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
+| `conversation_digest` | VARBINARY(64)           | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`           | VARBINARY(2944)         | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
@@ -2512,8 +3039,12 @@ import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support_agent_history");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(
+  AgentHistoryEntrySchema,
+  AgentHistoryRecordSchema,
+  "support_agent_history",
+);
 ```
 
 ##### Agent acceptance receipts: `spine_agent_acceptance_AgentAcceptanceReceipt`
@@ -2522,10 +3053,10 @@ builder.setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, "support
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                              |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894`                                                                      |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAcceptanceReceipt`                                       | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7), CommandId(command-4), HANDLE_COMMAND)` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                                         |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
@@ -2537,8 +3068,8 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(
   AgentAcceptanceReceiptSchema,
   AgentAcceptanceReceiptSchema,
   "support_agent_receipts",
@@ -2551,10 +3082,10 @@ builder.setTableName(
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares the Agent repository. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field     | Database type           | Exact source                                                                        | Example value                                                                                                                                     |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1`                                                                             |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentModelPreferencesRecord`                                     | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7)); preferences=[GENERATION:support-drafter@v2]` |
+| Physical field     | Database type           | Exact source                                                                        | Example value                                                         |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -2566,8 +3097,8 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { AgentModelPreferencesRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/model_preferences_record_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(
   AgentModelPreferencesRecordSchema,
   AgentModelPreferencesRecordSchema,
   "support_agent_preferences",
@@ -2580,12 +3111,12 @@ builder.setTableName(
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table when Support prepares or starts persistent subscription monitoring. The application must provision the database first; administrators may instead precreate the table and run compatibility checks.
 
-| Physical field            | Database type           | Exact source                                                                      | Example value                                                                                                                                     |
-| ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key)        | `VARCHAR(512) NOT NULL` | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                               |
-| `bytes`                   | BLOB NOT NULL           | Entire serialized `SubscriptionRecord`                                            | Binary Protobuf; decoded view: `id=sub-4; status=PENDING; subscription=TicketList updates for acme; when_activation_expires=1,800,000,000,000 ms` |
-| `status`                  | INT                     | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                                                                                                                     |
-| `when_activation_expires` | BIGINT                  | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                                                                                                                      |
+| Physical field            | Database type           | Exact source                                                                      | Example value                                 |
+| ------------------------- | ----------------------- | --------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key)        | `VARCHAR(512) NOT NULL` | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`                   | BLOB NOT NULL           | Entire serialized `SubscriptionRecord`                                            | Protobuf message serialized into binary array |
+| `status`                  | INT                     | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                 |
+| `when_activation_expires` | BIGINT                  | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                  |
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
@@ -2597,8 +3128,8 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 ```
 
 ##### Entity Inbox messages: `spine_server_delivery_InboxMessage`
@@ -2607,20 +3138,61 @@ builder.setTableName(SubscriptionRecordSchema, "support_subscriptions");
 
 **Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first Inbox storage use, normally when an Entity Inbox receives its first routed signal. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                | Example value                                                                                                                                                           |
-| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}`                                                                                                                 |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `InboxMessage`                                            | Binary Protobuf; decoded view: `id=(message-3, shard 2/16); inbox_id=Ticket(billing,T-42); signal_id=command-4; status=TO_DELIVER; signal=packed Command`               |
-| `inbox_id`         | TEXT                    | `InboxMessage.inbox_id`                                                     | `{"entityId":{"id":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}},"typeUrl":"type.googleapis.com/example.support.Ticket"}` |
-| `signal_id`        | TEXT                    | `InboxMessage.signal_id`                                                    | `{"value":"command-4"}`                                                                                                                                                 |
-| `shard_index`      | INT                     | `InboxMessage.id.index.index`                                               | `2`                                                                                                                                                                     |
-| `shard_total`      | INT                     | `InboxMessage.id.index.of_total`                                            | `16`                                                                                                                                                                    |
-| `status`           | INT                     | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                                                                                                        |
-| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                                                                                                                                           |
-| `version`          | INT                     | `InboxMessage.version`                                                      | `1`                                                                                                                                                                     |
-| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                                                                                                                                             |
+| Physical field     | Database type           | Exact source                                                                | Example value                                           |
+| ------------------ | ----------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
+| `shard_index`      | INT                     | `InboxMessage.id.index.index`                                               | `2`                                                     |
+| `shard_total`      | INT                     | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
+| `status`           | INT                     | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
+| `when_received`    | BIGINT                  | `InboxMessage.when_received`                                                | `42000000007`                                           |
+| `version`          | INT                     | `InboxMessage.version`                                                      | `1`                                                     |
+| `message_id`       | TEXT                    | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
 
-Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
+Each Entity has a distinct Inbox. This table stores messages for those Inboxes,
+including messages for different tenants. The packed signal supplies the Tenant
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
+label, and retention time remain in `bytes`.
+
+The six separate query fields have these uses:
+
+- `shard_index` and `shard_total` select one Delivery shard.
+- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+  option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
+- `when_received`, `version`, and `message_id` put the selected messages in a
+  stable order. The message ID resolves ties when time and version are equal,
+  so paging can continue without skipping or repeating equal-position rows.
+
+For example, these reads use the same shard and ordering, but only the second
+adds a status condition:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+
+declare const inboxStorage: InboxStorage;
+declare const shard: ShardIndex;
+
+await inboxStorage.read(shard);
+await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+```
+
+The ordinary Delivery scan reads all states unless its operation options supply
+a filter. This is why the Datastore checklist includes both query forms.
+
+`inbox_id` and `signal_id` have no separate query fields because Delivery does
+not filter or sort by them. They remain available in the complete record.
+For SQL this gives eight columns in total: `ID`, `bytes`, and those six query
+columns. The adapter creates the primary key; it does not create an additional
+Inbox SQL index for every query column.
+
+JVM storage has a different column set. Its `InboxColumn` also declares
+`inbox_id` and `signal_id`, even though its current Inbox query does not filter
+by them. JVM additionally declares event/command indicators and a label, while
+its shard is one composite value. The TS layout above follows the queries TS
+actually runs. See the pinned [JVM column declarations](https://github.com/SpineEventEngine/core-jvm/blob/6b6219dc5f10bca1d4b137938b8a0b892fe61099/server/src/main/java/io/spine/server/delivery/InboxColumn.java)
+and [TS Inbox queries](../packages/server/src/delivery/inbox-storage.ts).
 
 **Change this table:** Configure the provider builder before `.build()`. Use a distinct table name in each destination.
 
@@ -2630,8 +3202,8 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(InboxMessageSchema, "support_inbox_messages");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(InboxMessageSchema, "support_inbox_messages");
 ```
 
 ##### Delivery shard sessions: `spine_server_delivery_ShardSessionRecord`
@@ -2640,10 +3212,10 @@ builder.setTableName(InboxMessageSchema, "support_inbox_messages");
 
 **Created by:** The MySQL/MariaDB adapter issues `CREATE TABLE IF NOT EXISTS` and validates this table on its first shard-session storage use, normally when Delivery picks up a shard. The application must provision the database first. Administrators may precreate the table, but first use still issues creation SQL and validates its layout; SQL privileges must allow that path. Bounded Context build alone does not prepare this Delivery table, and no public standalone checker is available.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                          |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                                                                                             |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `ShardSessionRecord`                                           | Binary Protobuf; decoded view: `index=(2,16); when_last_picked=1970-01-01T00:00:42.000000007Z; worker=node-2/worker-1` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                 |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                    |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `ShardSessionRecord`                                           | Protobuf message serialized into binary array |
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
@@ -2655,8 +3227,8 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
 ```
 
 ##### Gateway authenticated bindings: `spine_auth_GatewayAuthenticatedSubscription`
@@ -2665,11 +3237,11 @@ builder.setTableName(ShardSessionRecordSchema, "support_shard_sessions");
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table on the first binding storage operation after the application constructs `DurableSubscriptionBindings`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
-| Physical field     | Database type           | Exact source                                                                                    | Example value                                                                                                                        |
-| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                  |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `GatewayAuthenticatedSubscription`                                            | Binary Protobuf; decoded view: `id=sub-4; subscription=authenticated TicketList updates for acme; when_expires=1,800,000,000,000 ms` |
-| `when_expires`     | BIGINT                  | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                                                                                                         |
+| Physical field     | Database type           | Exact source                                                                                    | Example value                                 |
+| ------------------ | ----------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `GatewayAuthenticatedSubscription`                                            | Protobuf message serialized into binary array |
+| `when_expires`     | BIGINT                  | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                  |
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
@@ -2681,8 +3253,8 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bindings");
 ```
 
 ##### Application node leases: `spine_deployment_ApplicationNodeLease`
@@ -2691,10 +3263,10 @@ builder.setTableName(GatewayAuthenticatedSubscriptionSchema, "support_gateway_bi
 
 **Created by:** The MySQL/MariaDB adapter creates and checks this table on the first lease storage operation after the application constructs `LeasedNodeRegistry`. The application must provision the database first. Bounded Context build does not prepare this separately constructed component, and it has no public standalone table checker.
 
-| Physical field     | Database type           | Exact source                                                                     | Example value                                                                                                                                                   |
-| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                                                                                                                                            |
-| `bytes`            | BLOB NOT NULL           | Entire serialized `ApplicationNodeLease`                                         | Binary Protobuf; decoded view: `node_id=node-2; endpoint.origin=https://node-2.example.test; when_expires=2030-01-01T00:00:00Z; registration_id=registration-9` |
+| Physical field     | Database type           | Exact source                                                                     | Example value                                 |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| `ID` (primary key) | `VARCHAR(512) NOT NULL` | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                          |
+| `bytes`            | BLOB NOT NULL           | Entire serialized `ApplicationNodeLease`                                         | Protobuf message serialized into binary array |
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
@@ -2706,8 +3278,8 @@ The endpoint origin, optional TLS server name, expiry and registration ID remain
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
 
-const builder = MysqlStorageFactory.newBuilder();
-builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
+const mysqlBuilder = MysqlStorageFactory.newBuilder();
+mysqlBuilder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
 ```
 
 #### Factory setup
@@ -2715,7 +3287,6 @@ builder.setTableName(ApplicationNodeLeaseSchema, "support_node_leases");
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { StringifierRegistry } from "@spine-event-engine/core";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { create } from "@bufbuild/protobuf";
 import { TenantIdSchema } from "@spine-event-engine/proto";
@@ -2723,17 +3294,13 @@ import { TenantIdSchema } from "@spine-event-engine/proto";
 const acme = create(TenantIdSchema, { kind: { case: "value", value: "acme" } });
 const globex = create(TenantIdSchema, { kind: { case: "value", value: "globex" } });
 
-// Use the registry assembled in chapter 3.
-declare const stringifiers: StringifierRegistry;
-
-const builder = MysqlStorageFactory.newBuilder()
-  .setStringifierRegistry(stringifiers)
+const mysqlBuilder = MysqlStorageFactory.newBuilder()
   .setOptions({ url: "mysql://localhost/support_shared" })
   .setTenantOptions([
     { tenantId: acme, options: { url: "mysql://localhost/support_acme" } },
     { tenantId: globex, options: { url: "mysql://localhost/support_globex" } },
   ]);
-const factory = await builder.build();
+const factory = await mysqlBuilder.build();
 ```
 
 #### Human configuration checklist
@@ -2808,11 +3375,16 @@ composite index merely to execute each filtered/sorted query.
 
 ### Google Cloud Datastore
 
-These are the default physical names for the Support example. The three example-defined Entity state families come first; framework-managed layouts for histories, Events, Agent records and services follow. Framework-managed describes the layout, not its tenant destination. `bytes` holds a complete binary Protobuf record; the table shows a short decoded view so the example value is readable.
+Start with the three Entity state kinds below. The following kinds store Events, history, and the records used by framework services. Each field is listed with its database type, the Protobuf field it comes from, and an example value. The `bytes` property contains the complete serialized record.
 
-The named `*Schema` constants below come from generated application/framework modules. The complete provider factory setup appears after the family sections; the shared stringifier setup is in [chapter 3](#3-value-conversion-and-customization).
+Each naming example imports the concrete provider factory and generated schemas.
+The relative imports use the guide model generated from
+[storage_layout.proto](../packages/server-blackbox-tests/proto/example/support/storage_layout.proto).
+In your application, use the corresponding path under your configured generation
+output directory. Complete connection setup appears after the tables; chapter 3
+explains value conversion and optional custom stringifiers.
 
-The table or kind settings below apply to the same builder used in the factory setup at the end of this provider section.
+Copy the settings you need into your application's factory builder before calling `build()`.
 
 #### Domain Entity state kinds
 
@@ -2822,18 +3394,18 @@ The table or kind settings below apply to the same builder used in the factory s
 
 **Created by:** The Datastore adapter makes this kind visible on the first Ticket state write after Support prepares its repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type       | Exact source                                                    | Example value                                                                                                                                                                                                      |
-| ---------------------------------- | ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name  | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                                                                                                                                                              |
-| `bytes`                            | Unindexed Blob      | Entire serialized `EntityRecord`                                | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice, priority=URGENT, tags=[invoice], attributes={tier:pro}); version=3; archived=false; deleted=false` |
-| `archived`                         | Boolean             | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                                                                                                                                                            |
-| `deleted`                          | Boolean             | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                                                                                                                                                            |
-| `version`                          | Integer             | `EntityRecord.version.number`                                   | `3`                                                                                                                                                                                                                |
-| `subject`                          | String              | `Ticket.subject`                                                | `Cannot download invoice`                                                                                                                                                                                          |
-| `priority`                         | Integer             | `Ticket.priority`                                               | `2 (URGENT)`                                                                                                                                                                                                       |
-| `requester`                        | String (Proto JSON) | `Ticket.requester`                                              | `{"name":"Ada","email":"ada@example.test","aliases":["A."]}`                                                                                                                                                       |
-| `opened_at`                        | Timestamp           | `Ticket.opened_at`                                              | `1970-01-01T00:00:42.000000007Z`                                                                                                                                                                                   |
-| `detail`                           | String (Proto JSON) | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}`                                                                                                                                  |
+| Physical field                     | Database type       | Exact source                                                    | Example value                                                                     |
+| ---------------------------------- | ------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name  | Ticket.id: TicketId, encoded with the configured key conversion | `{"queue":"billing","number":"T-42"}`                                             |
+| `bytes`                            | Unindexed Blob      | Entire serialized `EntityRecord`                                | Protobuf message serialized into binary array                                     |
+| `archived`                         | Boolean             | `EntityRecord.lifecycle_flags.archived`                         | `false`                                                                           |
+| `deleted`                          | Boolean             | `EntityRecord.lifecycle_flags.deleted`                          | `false`                                                                           |
+| `version`                          | Integer             | `EntityRecord.version.number`                                   | `3`                                                                               |
+| `subject`                          | String              | `Ticket.subject`                                                | `Cannot download invoice`                                                         |
+| `priority`                         | Integer             | `Ticket.priority`                                               | `2 (URGENT)`                                                                      |
+| `requester`                        | String (Proto JSON) | `Ticket.requester`                                              | `{"name":"Billing desk","email":"billing@example.test","aliases":["Invoices"]}`   |
+| `opened_at`                        | Timestamp           | `Ticket.opened_at`                                              | `1970-01-01T00:00:42.000000007Z`                                                  |
+| `detail`                           | String (Proto JSON) | `Ticket.detail`                                                 | `{"@type":"type.googleapis.com/example.support.BrowserInfo","browser":"Firefox"}` |
 
 Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes.
 
@@ -2842,13 +3414,11 @@ Ticket.tags and Ticket.attributes remain only in EntityRecord.state inside bytes
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(TicketSchema, { kind: "support_ticket" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(TicketSchema, { kind: "support_ticket" });
 ```
 
 ##### TicketList current state: `example.support.TicketList`
@@ -2857,13 +3427,13 @@ builder.organizeRecords(TicketSchema, { kind: "support_ticket" });
 
 **Created by:** The Datastore adapter makes this kind visible on the first TicketList state write after Support prepares its repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                            | Example value                                                                                                                        |
-| ---------------------------------- | ------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                                                                                                           |
-| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                        | Binary Protobuf; decoded view: `entity_id=TicketListId(billing-open); state=TicketList(tickets=[TicketId(billing,T-42)]); version=1` |
-| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                                                                                                              |
-| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                                                                                                              |
-| `version`                          | Integer            | `EntityRecord.version.number`                                           | `1`                                                                                                                                  |
+| Physical field                     | Database type      | Exact source                                                            | Example value                                 |
+| ---------------------------------- | ------------------ | ----------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | TicketList.id: TicketListId, encoded with the configured key conversion | `{"value":"billing-open"}`                    |
+| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                        | Protobuf message serialized into binary array |
+| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                 | `false`                                       |
+| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                  | `false`                                       |
+| `version`                          | Integer            | `EntityRecord.version.number`                                           | `1`                                           |
 
 TicketList.tickets stays inside EntityRecord.state in bytes.
 
@@ -2872,13 +3442,11 @@ TicketList.tickets stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketListSchema } from "../generated/example/support/storage_layout_pb.js";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const TicketListSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" });
 ```
 
 ##### ReplyAssistant current state: `example.support.ReplyAssistant`
@@ -2887,13 +3455,13 @@ builder.organizeRecords(TicketListSchema, { kind: "support_ticket_list" });
 
 **Created by:** The Datastore adapter makes this kind visible on the first ReplyAssistant state write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                    | Example value                                                                                                                          |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                                                                                                              |
-| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                                | Binary Protobuf; decoded view: `entity_id=ReplyAssistantId(assistant-7); state=ReplyAssistant(last_draft=Please try again); version=2` |
-| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                                                                                                                |
-| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                                                                                                                |
-| `version`                          | Integer            | `EntityRecord.version.number`                                                   | `2`                                                                                                                                    |
+| Physical field                     | Database type      | Exact source                                                                    | Example value                                 |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | ReplyAssistant.id: ReplyAssistantId, encoded with the configured key conversion | `{"value":"assistant-7"}`                     |
+| `bytes`                            | Unindexed Blob     | Entire serialized `EntityRecord`                                                | Protobuf message serialized into binary array |
+| `archived`                         | Boolean            | `EntityRecord.lifecycle_flags.archived`                                         | `false`                                       |
+| `deleted`                          | Boolean            | `EntityRecord.lifecycle_flags.deleted`                                          | `false`                                       |
+| `version`                          | Integer            | `EntityRecord.version.number`                                                   | `2`                                           |
 
 ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 
@@ -2902,13 +3470,11 @@ ReplyAssistant.last_draft stays inside EntityRecord.state in bytes.
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { ReplyAssistantSchema } from "../generated/example/support/storage_layout_pb.js";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const ReplyAssistantSchema: GenMessage<Message>; // Application-generated Support schema.
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" });
 ```
 
 #### Framework kinds for Events, histories and services
@@ -2919,30 +3485,20 @@ builder.organizeRecords(ReplyAssistantSchema, { kind: "support_reply_assistant" 
 
 **Created by:** The Datastore adapter makes this kind visible on the first Ticket history write after Support prepares the repository with `stateHistory: true`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type       | Exact source                                                                              | Example value                                                                                                               |
-| ---------------------------------- | ------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name  | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}`       |
-| `bytes`                            | Unindexed Blob      | Entire serialized `EntityRecord`                                                          | Binary Protobuf; decoded view: `entity_id=TicketId(billing,T-42); state=Ticket(subject=Cannot download invoice); version=2` |
-| `entity_id`                        | String (Proto JSON) | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                |
-| `created`                          | Timestamp           | `EntityRecord.version.timestamp`                                                          | `1970-01-01T00:00:42.000000007Z`                                                                                            |
-| `version`                          | Integer             | `EntityRecord.version.number`                                                             | `2`                                                                                                                         |
+| Physical field                     | Database type       | Exact source                                                                              | Example value                                                                                                         |
+| ---------------------------------- | ------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name  | EntityStateKey(entity_id=TicketId, version=2), encoded with the configured key conversion | `{"entityId":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"},"version":2}` |
+| `bytes`                            | Unindexed Blob      | Entire serialized `EntityRecord`                                                          | Protobuf message serialized into binary array                                                                         |
+| `entity_id`                        | String (Proto JSON) | `EntityRecord.entity_id`                                                                  | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                          |
+| `created`                          | Timestamp           | `EntityRecord.version.timestamp`                                                          | `1970-01-01T00:00:42.000000007Z`                                                                                      |
+| `version`                          | Integer             | `EntityRecord.version.number`                                                             | `2`                                                                                                                   |
 
 This historical EntityRecord keeps the complete Ticket state and lifecycle flags inside bytes; history has no separate archived or deleted column.
 
-**Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
-
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
-
-```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
-import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(TicketSchema, EntityRecordSchema, { kind: "support_ticket_history" });
-```
+**Naming limitation:** The Datastore builder has no separate override for only
+the Ticket's state-history kind. A source-and-record override for Ticket and
+EntityRecord also affects current state and can cause a collision. Keep the
+default history kind when both current state and state history are enabled.
 
 ##### Ticket diagnostic Event history: `example.support.Ticket_Event`
 
@@ -2950,13 +3506,13 @@ builder.organizeRecords(TicketSchema, EntityRecordSchema, { kind: "support_ticke
 
 **Created by:** The Datastore adapter makes this kind visible on the first Ticket diagnostic Event write after Support prepares the Aggregate repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type       | Exact source                                                  | Example value                                                                                                                                         |
-| ---------------------------------- | ------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name  | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                                                                          |
-| `bytes`                            | Unindexed Blob      | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=ticket-event-8; context.producer_id=TicketId(billing,T-42); context.version=2; message=packed Ticket domain Event` |
-| `entity_id`                        | String (Proto JSON) | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}`                                                          |
-| `created`                          | Timestamp           | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                                                                                                                      |
-| `version`                          | Integer             | `Event.context.version.number`                                | `2`                                                                                                                                                   |
+| Physical field                     | Database type       | Exact source                                                  | Example value                                                                                |
+| ---------------------------------- | ------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name  | Event.id: EventId, encoded with the configured key conversion | `{"value":"ticket-event-8"}`                                                                 |
+| `bytes`                            | Unindexed Blob      | Entire serialized `Event`                                     | Protobuf message serialized into binary array                                                |
+| `entity_id`                        | String (Proto JSON) | `Event.context.producer_id`                                   | `{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}` |
+| `created`                          | Timestamp           | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                                                             |
+| `version`                          | Integer             | `Event.context.version.number`                                | `2`                                                                                          |
 
 This is a diagnostic history for the Aggregate, distinct from the domain Event store.
 
@@ -2965,47 +3521,45 @@ This is a diagnostic history for the Aggregate, distinct from the domain Event s
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-declare const TicketSchema: GenMessage<Message>; // Application-generated Support schema.
 import { EventSchema } from "@spine-event-engine/proto";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(TicketSchema, EventSchema, { kind: "support_ticket_events" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(TicketSchema, EventSchema, { kind: "support_ticket_events" });
 ```
 
-##### Support domain Events: `es_3zg7bqc0wuwdwaja0pfjqoalpwiatoj1us9z4hxitwvoy9ke7n_Event`
+##### Support domain Events: `Support-Event`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
 
 **Created by:** The Datastore adapter makes this kind visible on the first domain Event write after Support prepares its Event store. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                  | Example value                                                                                                     |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                                                                                      |
-| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=domain-event-8; message=packed Ticket domain Event; context.timestamp=42s+7ns` |
-| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                                                                                  |
-| `type`                             | String             | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened`                                                                |
+| Physical field                     | Database type      | Exact source                                                  | Example value                                      |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------- | -------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"domain-event-8"}`                       |
+| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Protobuf message serialized into binary array      |
+| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                   |
+| `type`                             | String             | `Event.message.type_url`                                      | `type.googleapis.com/example.support.TicketOpened` |
 
 The packed Event payload and its context stay in bytes; no table appears for each Event message type.
 
 **Change this layout:** These generated Event groups should retain distinct kinds. A broad record-only Event layout override can collide with another Event family.
 
-##### Support System Events: `es_0k5kwy2zdeouv8i7yfp7aov3zknttgy54vkdl14iwhzrajnaoo_Event`
+##### Support System Events: `Support_System-Event`
 
 **Kind locations:** one in namespace `Vacme` and one in namespace `Vglobex`.
 
 **Created by:** The Datastore adapter makes this kind visible on the first System Event write after Support prepares the Event store enabled by `persistSystemEvents()`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                  | Example value                                                                                                         |
-| ---------------------------------- | ------------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                                                                                          |
-| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Binary Protobuf; decoded view: `id=system-event-9; message=packed AgentAiOperationStarted; context.timestamp=42s+7ns` |
-| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                                                                                      |
-| `type`                             | String             | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted`                                                                |
+| Physical field                     | Database type      | Exact source                                                  | Example value                                          |
+| ---------------------------------- | ------------------ | ------------------------------------------------------------- | ------------------------------------------------------ |
+| Native key name (no `ID` property) | Datastore key name | Event.id: EventId, encoded with the configured key conversion | `{"value":"system-event-9"}`                           |
+| `bytes`                            | Unindexed Blob     | Entire serialized `Event`                                     | Protobuf message serialized into binary array          |
+| `created`                          | Timestamp          | `Event.context.timestamp`                                     | `1970-01-01T00:00:42.000000007Z`                       |
+| `type`                             | String             | `Event.message.type_url`                                      | `type.spine.io/spine.ts.agent.AgentAiOperationStarted` |
 
-This separately grouped Event family also retains Agent interaction Events inside complete Event records.
+This System Event kind also stores the Agent interaction Events. Each entity contains a complete Event envelope, including its typed payload.
 
 **Change this layout:** These generated Event groups should retain distinct kinds. A broad record-only Event layout override can collide with another Event family.
 
@@ -3015,17 +3569,17 @@ This separately grouped Event family also retains Agent interaction Events insid
 
 **Created by:** The Datastore adapter makes this kind visible on the first Agent audit write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                                       | Example value                                                                                                                                                    |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb`                                                                                               |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentHistoryRecord`                                                             | Binary Protobuf; decoded view: `scope=(example.support.ReplyAssistant, assistant-7); entry=conversation-5 at 42s+7ns with typed generation request and response` |
-| `state_type`                       | String             | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                                                                                                                 |
-| `agent_key`                        | String             | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                                                                                                                        |
-| `scope_digest`                     | String             | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8`                                                                                               |
-| `category`                         | String             | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                                                                                                                   |
-| `conversation_key`                 | String             | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                                                                                                                 |
-| `conversation_digest`              | String             | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb`                                                                                               |
-| `order_key`                        | String             | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`                                                                                                            |
+| Physical field                     | Database type      | Exact source                                                                                       | Example value                                                      |
+| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Native key name (no `ID` property) | Datastore key name | digest of [state type, agent key, category, record ID], encoded with the configured key conversion | `ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentHistoryRecord`                                                             | Protobuf message serialized into binary array                      |
+| `state_type`                       | String             | `AgentHistoryRecord.scope.state_type`                                                              | `example.support.ReplyAssistant`                                   |
+| `agent_key`                        | String             | `AgentHistoryRecord.scope.agent_key`                                                               | `{"value":"assistant-7"}`                                          |
+| `scope_digest`                     | String             | `SHA-256 of [scope.state_type, scope.agent_key]`                                                   | `f74b42a1ecc3fc5b54ebb0cfed131529534c0d48fcba7b71cf52e28fa1b0b4e8` |
+| `category`                         | String             | `derived from AgentHistoryRecord.entry`                                                            | `conversation`                                                     |
+| `conversation_key`                 | String             | `AgentHistoryRecord.entry.conversation_record.conversation.value`; empty for Events                | `conversation-5`                                                   |
+| `conversation_digest`              | String             | `digest of conversation_key`                                                                       | `dfb001c45affbadd14a71a2e6ee6b6fed7c7687ff136ceb23b23d5544fb602fb` |
+| `order_key`                        | String             | `derived AgentHistoryKeys ordering key`                                                            | `2534023007579999999920636f6e766572736174696f6e2d35!`              |
 
 The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool content, model requests/responses, decision records, usage, System Events, and domain Events. The hash is only a storage slot.
 
@@ -3037,10 +3591,10 @@ The original scope and entire AgentHistoryEntry remain in bytes: prompt and tool
 
 **Created by:** The Datastore adapter makes this kind visible on the first Agent receipt write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                                              |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894`                                                                      |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAcceptanceReceipt`                                       | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7), CommandId(command-4), HANDLE_COMMAND)` |
+| Physical field                     | Database type      | Exact source                                                                     | Example value                                                         |
+| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | digest of AgentAcceptanceReceipt.key, encoded with the configured key conversion | `v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentAcceptanceReceipt`                                       | Protobuf message serialized into binary array                         |
 
 The complete key in bytes retains state_type, recipient_id Any, original command or event ID, and action. It records acceptance, not a runnable queue.
 
@@ -3052,8 +3606,8 @@ The complete key in bytes retains state_type, recipient_id Any, original command
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { AgentAcceptanceReceiptSchema } from "@spine-event-engine/proto/generated/spine/server/agent/acceptance_receipt_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_receipts" });
 ```
 
 ##### Agent model preferences: `spine_agent_model_preferences`
@@ -3062,10 +3616,10 @@ builder.organizeRecords(AgentAcceptanceReceiptSchema, { kind: "support_agent_rec
 
 **Created by:** The Datastore adapter makes this kind visible on the first Agent model-preference write after Support prepares its Agent repository. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type      | Exact source                                                                        | Example value                                                                                                                                     |
-| ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1`                                                                             |
-| `bytes`                            | Unindexed Blob     | Entire serialized `AgentModelPreferencesRecord`                                     | Binary Protobuf; decoded view: `key=(example.support.ReplyAssistant, ReplyAssistantId(assistant-7)); preferences=[GENERATION:support-drafter@v2]` |
+| Physical field                     | Database type      | Exact source                                                                        | Example value                                                         |
+| ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | digest of key(state_type, recipient_id), encoded with the configured key conversion | `v1:d3012cb12aaa88c0ad96a478344f74c9c6f736d80bd564da57c137fd3b92d7b1` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `AgentModelPreferencesRecord`                                     | Protobuf message serialized into binary array                         |
 
 The key and repeated preferences stay in bytes; for example GENERATION selects support-drafter revision v2. No model weights, credentials, or paused handler are stored.
 
@@ -3077,12 +3631,12 @@ The key and repeated preferences stay in bytes; for example GENERATION selects s
 
 **Created by:** The Datastore adapter makes this kind visible on the first subscription-registry write after Support prepares or starts subscription monitoring. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes.
 
-| Physical field                     | Database type                | Exact source                                                                      | Example value                                                                                                                                     |
-| ---------------------------------- | ---------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name           | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                               |
-| `bytes`                            | Unindexed Blob               | Entire serialized `SubscriptionRecord`                                            | Binary Protobuf; decoded view: `id=sub-4; status=PENDING; subscription=TicketList updates for acme; when_activation_expires=1,800,000,000,000 ms` |
-| `status`                           | Integer                      | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                                                                                                                     |
-| `when_activation_expires`          | Integer (epoch milliseconds) | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                                                                                                                      |
+| Physical field                     | Database type                | Exact source                                                                      | Example value                                 |
+| ---------------------------------- | ---------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name           | SubscriptionRecord.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`                            | Unindexed Blob               | Entire serialized `SubscriptionRecord`                                            | Protobuf message serialized into binary array |
+| `status`                           | Integer                      | `SubscriptionRecord.status`                                                       | `1 (PENDING)`                                 |
+| `when_activation_expires`          | Integer (epoch milliseconds) | `SubscriptionRecord.when_activation_expires; absent uses Number.MAX_SAFE_INTEGER` | `1,800,000,000,000 epoch ms`                  |
 
 The subscription definition, target, Actor/Tenant context, creation timestamp and full optional expiry remain in bytes.
 
@@ -3094,8 +3648,8 @@ The subscription definition, target, Actor/Tenant context, creation timestamp an
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { SubscriptionRecordSchema } from "@spine-event-engine/proto/generated/spine/client/subscription_record_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions" });
 ```
 
 ##### Entity Inbox messages: `spine.server.delivery.InboxMessage`
@@ -3104,20 +3658,60 @@ builder.organizeRecords(SubscriptionRecordSchema, { kind: "support_subscriptions
 
 **Created by:** The Datastore adapter makes this kind visible on the first Inbox message write, normally when an Entity Inbox receives a routed signal. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
-| Physical field                     | Database type       | Exact source                                                                | Example value                                                                                                                                                           |
-| ---------------------------------- | ------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name  | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}`                                                                                                                 |
-| `bytes`                            | Unindexed Blob      | Entire serialized `InboxMessage`                                            | Binary Protobuf; decoded view: `id=(message-3, shard 2/16); inbox_id=Ticket(billing,T-42); signal_id=command-4; status=TO_DELIVER; signal=packed Command`               |
-| `inbox_id`                         | String (Proto JSON) | `InboxMessage.inbox_id`                                                     | `{"entityId":{"id":{"@type":"type.googleapis.com/example.support.TicketId","queue":"billing","number":"T-42"}},"typeUrl":"type.googleapis.com/example.support.Ticket"}` |
-| `signal_id`                        | String (Proto JSON) | `InboxMessage.signal_id`                                                    | `{"value":"command-4"}`                                                                                                                                                 |
-| `shard_index`                      | Integer             | `InboxMessage.id.index.index`                                               | `2`                                                                                                                                                                     |
-| `shard_total`                      | Integer             | `InboxMessage.id.index.of_total`                                            | `16`                                                                                                                                                                    |
-| `status`                           | Integer             | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                                                                                                                                        |
-| `when_received`                    | Timestamp           | `InboxMessage.when_received`                                                | `1970-01-01T00:00:42.000000007Z`                                                                                                                                        |
-| `version`                          | Integer             | `InboxMessage.version`                                                      | `1`                                                                                                                                                                     |
-| `message_id`                       | String              | `InboxMessage.id.uuid`                                                      | `message-3`                                                                                                                                                             |
+| Physical field                     | Database type      | Exact source                                                                | Example value                                           |
+| ---------------------------------- | ------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | InboxMessage.id: InboxMessageId, encoded with the configured key conversion | `{"uuid":"message-3","index":{"index":2,"ofTotal":16}}` |
+| `bytes`                            | Unindexed Blob     | Entire serialized `InboxMessage`                                            | Protobuf message serialized into binary array           |
+| `shard_index`                      | Integer            | `InboxMessage.id.index.index`                                               | `2`                                                     |
+| `shard_total`                      | Integer            | `InboxMessage.id.index.of_total`                                            | `16`                                                    |
+| `status`                           | Integer            | `InboxMessage.status`                                                       | `1 (TO_DELIVER)`                                        |
+| `when_received`                    | Timestamp          | `InboxMessage.when_received`                                                | `1970-01-01T00:00:42.000000007Z`                        |
+| `version`                          | Integer            | `InboxMessage.version`                                                      | `1`                                                     |
+| `message_id`                       | String             | `InboxMessage.id.uuid`                                                      | `message-3`                                             |
 
-Each Entity has a distinct Inbox. Its messages share this physical family; the complete signal, tenant context, label, and keep_until remain in bytes.
+Each Entity has a distinct Inbox. This kind stores messages for those Inboxes,
+including messages for different tenants. The packed signal supplies the Tenant
+ID when Delivery dispatches it. The full signal, destination Inbox, signal ID,
+label, and retention time remain in `bytes`.
+
+The six separate query fields have these uses:
+
+- `shard_index` and `shard_total` select one Delivery shard.
+- `status` filters messages when `InboxStorage.read()` is given a `statuses`
+  option. For example, `["TO_DELIVER"]` selects messages waiting for delivery.
+- `when_received`, `version`, and `message_id` put the selected messages in a
+  stable order. The message ID resolves ties when time and version are equal,
+  so paging can continue without skipping or repeating equal-position rows.
+
+For example, these reads use the same shard and ordering, but only the second
+adds a status condition:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import type { InboxStorage, ShardIndex } from "@spine-event-engine/server";
+
+declare const inboxStorage: InboxStorage;
+declare const shard: ShardIndex;
+
+await inboxStorage.read(shard);
+await inboxStorage.read(shard, { statuses: ["TO_DELIVER"] });
+```
+
+The ordinary Delivery scan reads all states unless its operation options supply
+a filter. This is why the Datastore checklist includes both query forms.
+
+`inbox_id` and `signal_id` have no separate query fields because Delivery does
+not filter or sort by them. They remain available in the complete record.
+Datastore has a native key, `bytes`, and those six query properties. The
+composite-index checklist below supplies the indexes for these query shapes.
+
+JVM storage has a different column set. Its `InboxColumn` also declares
+`inbox_id` and `signal_id`, even though its current Inbox query does not filter
+by them. JVM additionally declares event/command indicators and a label, while
+its shard is one composite value. The TS layout above follows the queries TS
+actually runs. See the pinned [JVM column declarations](https://github.com/SpineEventEngine/core-jvm/blob/6b6219dc5f10bca1d4b137938b8a0b892fe61099/server/src/main/java/io/spine/server/delivery/InboxColumn.java)
+and [TS Inbox queries](../packages/server/src/delivery/inbox-storage.ts).
 
 **Change this kind:** Configure the provider builder before `.build()`. For a renamed Datastore kind, update and deploy its composite indexes.
 
@@ -3127,8 +3721,8 @@ Each Entity has a distinct Inbox. Its messages share this physical family; the c
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { InboxMessageSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/inbox_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" });
 ```
 
 ##### Delivery shard sessions: `spine.server.delivery.ShardSessionRecord`
@@ -3137,10 +3731,10 @@ builder.organizeRecords(InboxMessageSchema, { kind: "support_inbox_messages" });
 
 **Created by:** The Datastore adapter makes this kind visible on the first shard-session write, normally when Delivery picks up a shard. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build alone does not write a Delivery record.
 
-| Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                          |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                                                                                             |
-| `bytes`                            | Unindexed Blob     | Entire serialized `ShardSessionRecord`                                           | Binary Protobuf; decoded view: `index=(2,16); when_last_picked=1970-01-01T00:00:42.000000007Z; worker=node-2/worker-1` |
+| Physical field                     | Database type      | Exact source                                                                     | Example value                                 |
+| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | ShardSessionRecord.index: ShardIndex, encoded with the configured key conversion | `{"index":2,"ofTotal":16}`                    |
+| `bytes`                            | Unindexed Blob     | Entire serialized `ShardSessionRecord`                                           | Protobuf message serialized into binary array |
 
 The index, when_last_picked and worker are in bytes. There is no materialized expiry column.
 
@@ -3152,8 +3746,8 @@ The index, when_last_picked and worker are in bytes. There is no materialized ex
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { ShardSessionRecordSchema } from "@spine-event-engine/proto/generated/spine/server/delivery/delivery_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_sessions" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_sessions" });
 ```
 
 ##### Gateway authenticated bindings: `spine.auth.GatewayAuthenticatedSubscription`
@@ -3162,11 +3756,11 @@ builder.organizeRecords(ShardSessionRecordSchema, { kind: "support_shard_session
 
 **Created by:** The Datastore adapter makes this kind visible on the first binding write after the application constructs `DurableSubscriptionBindings`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build does not construct this component.
 
-| Physical field                     | Database type                | Exact source                                                                                    | Example value                                                                                                                        |
-| ---------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Native key name (no `ID` property) | Datastore key name           | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                                                                                                                  |
-| `bytes`                            | Unindexed Blob               | Entire serialized `GatewayAuthenticatedSubscription`                                            | Binary Protobuf; decoded view: `id=sub-4; subscription=authenticated TicketList updates for acme; when_expires=1,800,000,000,000 ms` |
-| `when_expires`                     | Integer (epoch milliseconds) | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                                                                                                         |
+| Physical field                     | Database type                | Exact source                                                                                    | Example value                                 |
+| ---------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name           | GatewayAuthenticatedSubscription.id: SubscriptionId, encoded with the configured key conversion | `{"value":"sub-4"}`                           |
+| `bytes`                            | Unindexed Blob               | Entire serialized `GatewayAuthenticatedSubscription`                                            | Protobuf message serialized into binary array |
+| `when_expires`                     | Integer (epoch milliseconds) | `GatewayAuthenticatedSubscription.when_expires`                                                 | `1,800,000,000,000 epoch ms`                  |
 
 The approved subscription with Actor/Tenant context remains in bytes. Live network streams do not.
 
@@ -3178,8 +3772,8 @@ The approved subscription with Actor/Tenant context remains in bytes. Live netwo
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/generated/spine/auth/authenticated_subscription_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, {
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, {
   kind: "support_gateway_bindings",
 });
 ```
@@ -3190,10 +3784,10 @@ builder.organizeRecords(GatewayAuthenticatedSubscriptionSchema, {
 
 **Created by:** The Datastore adapter makes this kind visible on the first lease write after the application constructs `LeasedNodeRegistry`. Preparation can check provider access, but creates no empty kind. The application deploys the required composite indexes. Bounded Context build does not construct this component.
 
-| Physical field                     | Database type      | Exact source                                                                     | Example value                                                                                                                                                   |
-| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native key name (no `ID` property) | Datastore key name | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                                                                                                                                            |
-| `bytes`                            | Unindexed Blob     | Entire serialized `ApplicationNodeLease`                                         | Binary Protobuf; decoded view: `node_id=node-2; endpoint.origin=https://node-2.example.test; when_expires=2030-01-01T00:00:00Z; registration_id=registration-9` |
+| Physical field                     | Database type      | Exact source                                                                     | Example value                                 |
+| ---------------------------------- | ------------------ | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| Native key name (no `ID` property) | Datastore key name | ApplicationNodeLease.node_id: NodeId, encoded with the configured key conversion | `{"value":"node-2"}`                          |
+| `bytes`                            | Unindexed Blob     | Entire serialized `ApplicationNodeLease`                                         | Protobuf message serialized into binary array |
 
 The endpoint origin, optional TLS server name, expiry and registration ID remain in bytes; expiry is checked by application logic.
 
@@ -3205,8 +3799,8 @@ The endpoint origin, optional TLS server name, expiry and registration ID remain
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { ApplicationNodeLeaseSchema } from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
 
-const builder = DatastoreStorageFactory.newBuilder();
-builder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases" });
+const datastoreBuilder = DatastoreStorageFactory.newBuilder();
+datastoreBuilder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases" });
 ```
 
 #### Factory setup
@@ -3214,7 +3808,6 @@ builder.organizeRecords(ApplicationNodeLeaseSchema, { kind: "support_node_leases
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { StringifierRegistry } from "@spine-event-engine/core";
 import { Datastore } from "@google-cloud/datastore";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
@@ -3222,13 +3815,9 @@ const client = new Datastore({
   projectId: "my-project",
   namespace: "support_shared",
 });
-// Use the registry assembled in chapter 3.
-declare const stringifiers: StringifierRegistry;
 
-const builder = DatastoreStorageFactory.newBuilder()
-  .setStringifierRegistry(stringifiers)
-  .setClient(client);
-const factory = builder.build();
+const datastoreBuilder = DatastoreStorageFactory.newBuilder().setClient(client);
+const factory = datastoreBuilder.build();
 ```
 
 The application supplies the client's credentials and manages its lifetime.
@@ -3503,7 +4092,6 @@ classes:
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { StringifierRegistry } from "@spine-event-engine/core";
 import type { TenantId } from "@spine-event-engine/proto";
 import { EnvironmentType, ServerEnvironment, type TenantIndex } from "@spine-event-engine/server";
 import {
@@ -3516,14 +4104,10 @@ declare const directory: {
   databaseOptions(tenant: TenantId): Promise<PostgresStorageFactoryOptions>;
 };
 
-// Use the registry assembled in chapter 3.
-declare const stringifiers: StringifierRegistry;
-
-const builder = PostgresStorageFactory.newBuilder()
-  .setStringifierRegistry(stringifiers)
+const postgresBuilder = PostgresStorageFactory.newBuilder()
   .setOptions({ url: "postgresql://localhost/support_shared", schema: "spine" })
   .setTenantResolver((tenant) => directory.databaseOptions(tenant));
-const factory = await builder.build();
+const factory = await postgresBuilder.build();
 
 ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory, tenantIndex });
 await ServerEnvironment.instance().completeSetup();
@@ -3535,21 +4119,26 @@ not a live database-relocation operation. Fixed tenant options and a resolver
 cannot be combined. Unknown input tenants receive `TENANT_UNKNOWN` before
 Spine resolves their database or prepares their Entity structures.
 
-To add `initech`, the application team must:
+To add `initech`, run these steps in order:
 
-1. Create `support_initech` and its `spine` schema for PostgreSQL, or create the
-   MySQL database; supply runtime permissions, collation and connection settings.
-   For Datastore, choose a distinct namespace through the configured converter;
-   the same kind indexes apply and need no per-namespace deployment.
-2. Make the directory resolve `initech` to that existing destination. Update the
-   persistent TenantIndex. If that index permits mutation, use `keep()` as below.
-3. Explicitly prepare all already-built Bounded Contexts that admit this tenant.
-   Keep new-tenant external traffic closed until this step succeeds if eager
-   preparation is required. Registration alone can otherwise allow first input
-   to trigger lazy preparation.
-4. Include application-specific query indexes in the new SQL database. Existing
-   Datastore indexes cover the same kinds in the new namespace. No additional
-   shared subscription/Inbox/gateway/node tables are needed for each tenant.
+1. Create its destination and grant access. For PostgreSQL this means the
+   `support_initech` database and its chosen schema; for MySQL, the database.
+   For Datastore, assign a distinct namespace through the converter.
+2. Make the database resolver return that destination's connection settings.
+3. Add the Tenant ID to the persistent TenantIndex. If the implementation
+   supports `keep()`, the call below performs that registration. Otherwise,
+   update the application directory that the index reads.
+4. Prepare the already-built Bounded Contexts that admit the tenant.
+   `createStorageStructures()` creates missing structures and verifies their
+   layouts. A separate `checkStructureCompatibility()` is optional; use it when
+   you want a read-only check of existing structures.
+5. Add the application's SQL query indexes to the newly prepared tables.
+   Datastore's deployed kind indexes already apply in the new namespace.
+6. Allow external traffic for the tenant after these steps succeed.
+
+The shared subscription, Inbox, gateway, and node tables do not need another
+copy for each tenant. If you allow traffic before explicit preparation, the
+first valid input can trigger lazy preparation instead.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
@@ -3578,183 +4167,420 @@ its later failures cause WARN logs and restart attempts, not application shutdow
 
 ## 3. Value conversion and customization
 
-### How a full record and its searchable copies relate
+### Follow one Ticket from Protobuf to storage
 
-Imagine Ada opens Ticket `billing/T-42` with subject “Cannot download
-invoice,” priority `URGENT`, the tag `invoice`, and an attribute
-`{ "tier": "pro" }`. The application passes a typed `Ticket` state to the
-Aggregate. The framework wraps it in an `EntityRecord`: its `entity_id` holds
-the typed `TicketId`, its `state` holds the complete Ticket, and its version
-and lifecycle flags describe the current state. The ID and state are packed
-as Protobuf `Any`, each with a type URL and binary value.
+Start with the fields we want to save. This is the `Ticket` definition from
+chapter 1, with the supporting message definitions immediately below it.
 
-A SQL write saves the entire `EntityRecord` as binary Protobuf in `bytes`.
-Datastore saves the same binary record in an unindexed `bytes` Blob. That is
-where the Ticket's tag and attribute live. They do not produce a tag table,
-attribute table, or extra search property. A read by ID decodes `bytes` and
-rebuilds the complete state, including those fields. The provider tables in
-chapters 1 and 2 show a short decoded view of each binary record; the binary
-value itself is not a JSON or SQL text literal.
+```proto
+// Details retained for a support Ticket.
+message Ticket {
+  option (entity).kind = AGGREGATE;
 
-Now suppose a support screen asks for urgent Tickets ordered by opening time.
-The storage query needs to compare `priority` and `opened_at` without decoding
-every Ticket. The provider therefore writes searchable copies of those two
-fields beside `bytes`, because the example marked them `(column)`. It also
-copies `subject`, `requester`, and `detail`, though this particular query does
-not use them. After the query selects a row, the full Ticket still comes from
-`bytes`; the copied values do not replace its state.
+  // Queue and number assigned when the Ticket was opened.
+  TicketId id = 1;
 
-`Ticket.id` supplies the database key, not another ordinary search field.
-For SQL it is the `ID` primary key. For Datastore it is the native key name,
-with no `ID` property. The complete typed identifier is also present in the
-serialized `EntityRecord`. Datastore's codec does not retain unknown
-Protobuf fields, so do not rely on this provider to round-trip fields from a
-newer schema that the running code does not know.
+  // Short description, available to storage queries.
+  string subject = 2 [(column) = true];
 
-#### Scalar and object conversion reference
+  // Urgency, available to storage queries.
+  Priority priority = 3 [(column) = true];
 
-This table concerns declared searchable fields. Every valid Protobuf field can
-still occur inside the serialized record even when its type cannot be a
-separate searchable column in a particular provider.
+  // Complete contact details, queryable as one message value.
+  Requester requester = 4 [(column) = true];
 
-| Protobuf field                          | PostgreSQL search column                                 | MySQL/MariaDB search column        | Datastore search property                  |
-| --------------------------------------- | -------------------------------------------------------- | ---------------------------------- | ------------------------------------------ |
-| `string`                                | `TEXT`                                                   | `TEXT`                             | String                                     |
-| 32-bit integral types                   | `INTEGER`                                                | `INT`                              | Integer                                    |
-| Enum                                    | `INTEGER`, numeric enum value                            | `INT`, numeric enum value          | Integer, numeric enum value                |
-| 64-bit integral types                   | `BIGINT`                                                 | `BIGINT`                           | Integer using the SDK's integer conversion |
-| `bool`                                  | `BOOLEAN`                                                | `BOOLEAN`                          | Boolean                                    |
-| `bytes`                                 | Raw `BYTEA`                                              | Raw `BLOB`                         | Blob                                       |
-| `float`                                 | `REAL`                                                   | Unsupported as a searchable column | Double                                     |
-| `double`                                | `DOUBLE PRECISION`                                       | Unsupported as a searchable column | Double                                     |
-| `google.protobuf.Timestamp`             | Epoch nanoseconds in `BIGINT`                            | Epoch nanoseconds in `BIGINT`      | Native timestamp                           |
-| `spine.core.Version`                    | Its number in `INTEGER`                                  | Its number in `INT`                | Integer version number                     |
-| Other singular message, including `Any` | Reversible string, normally compact Proto JSON in `TEXT` | Same, in `TEXT`                    | Same, as a string                          |
-| Repeated field or map                   | Not a supported singular search column                   | Same                               | Same                                       |
+  // Opening time, available for filtering and ordering.
+  google.protobuf.Timestamp opened_at = 5 [(column) = true];
 
-For SQL timestamps the conversion is `seconds * 1_000_000_000 + nanos`.
-The signed 64-bit range limits such searchable timestamps to approximately
-1677–2262. The full binary record retains the Protobuf Timestamp. Unsigned
-Protobuf integer types do not make the SQL columns unsigned: values must fit
-the selected native signed column. Driver-returned 64-bit decimal strings are
-converted by the provider instead of being treated as application strings.
+  // Labels retained in the state without a separate query column.
+  repeated string tags = 6;
 
-A message such as `Requester` is converted as one value. Spine does not create
-a `Requester` table, foreign key, or separate columns for `requester.name`.
-The nested `aliases` list remains inside that message's JSON string and inside
-the complete binary state. Likewise, `Ticket.tags` and `Ticket.attributes`
-remain inside the binary state without child tables. If an application needs a
-separate searchable customer name, it must model and declare that column.
+  // Additional attributes retained in the state.
+  map<string, string> attributes = 7;
 
-Default message stringification uses Proto JSON rules: lowerCamelCase field
-names, enum names inside JSON, 64-bit integer values as decimal strings,
-base64 for byte fields, and RFC 3339 strings for Timestamp fields. This explains
-why a top-level enum search column holds `2`, while the same enum nested inside
-a JSON message can appear as `"URGENT"`. Raw database byte columns are not
-base64. Absent/default fields follow Proto JSON presence rules; ordinary
-proto3 scalar defaults do not necessarily produce SQL `NULL`. An absent
-materialized value is stored as SQL `NULL` or Datastore null.
+  // Typed extra details, queryable as one packed message value.
+  google.protobuf.Any detail = 8 [(column) = true];
+}
 
-The SQL declared search columns are normally nullable; the Entity lifecycle/version
-columns shown in each provider table are exceptions. Protobuf `(required)` validation does not turn
-every field into a SQL `NOT NULL` column.
+// Contact details supplied with a Ticket.
+message Requester {
+  // Contact name shown to support staff.
+  string name = 1;
 
-#### Entity identifiers, step by step
+  // Address to which a reply can be sent.
+  string email = 2;
 
-For a Ticket with this identifier:
+  // Other names used by this contact.
+  repeated string aliases = 3;
+}
+
+// Browser information attached to a Ticket.
+message BrowserInfo {
+  // Browser reported by the client.
+  string browser = 1;
+}
+```
+
+The full file in chapter 1 also supplies the imports, `Priority`, and
+`TicketId`. For the following example, assume these field values:
+
+| Field        | Value in the Protobuf message                                                              |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| `id`         | `TicketId { queue: "billing", number: "T-42" }`                                            |
+| `subject`    | `"Cannot download invoice"`                                                                |
+| `priority`   | `URGENT`, whose enum number is `2`                                                         |
+| `requester`  | `Requester { name: "Billing desk", email: "billing@example.test", aliases: ["Invoices"] }` |
+| `opened_at`  | `Timestamp { seconds: 42, nanos: 7 }`                                                      |
+| `tags`       | `["invoice"]`                                                                              |
+| `attributes` | `{ "tier": "pro" }`                                                                        |
+| `detail`     | A packed `BrowserInfo { browser: "Firefox" }`                                              |
+
+The timestamp is deliberately close to the Unix epoch so its stored number
+is easy to check. It means `1970-01-01T00:00:42.000000007Z`.
+
+#### First, save the complete state
+
+For persistence, Spine wraps the current Entity state in a record called
+`EntityRecord`. The wrapper stores the complete Ticket, its typed ID, version,
+and archived/deleted flags together. `EntityRecord.state` and `EntityRecord.entity_id` are Protobuf `Any`
+fields: each has a type URL identifying the message and the encoded message
+bytes.
+
+The persistent adapters serialize the whole `EntityRecord` and save the result
+in `bytes`:
+
+| Provider      | Where the complete record goes                |
+| ------------- | --------------------------------------------- |
+| PostgreSQL    | The row's `bytes BYTEA` column.               |
+| MySQL/MariaDB | The row's `bytes BLOB` column.                |
+| Datastore     | The entity's unindexed `bytes` Blob property. |
+
+Every field in the Ticket above is in that value. This includes `tags`,
+`attributes`, and every field inside `requester` and `detail`.
+
+When Spine reads a row, it decodes `bytes` to recover the `EntityRecord`, then
+unpacks its `state` to recover the Ticket. It does not rebuild a Ticket by
+joining tables or collecting the separate query columns. This is why a field
+can survive a write/read even when it has no separate column.
+
+In-memory storage keeps typed records in memory. There is no database byte
+column in that provider.
+
+#### Then, copy the fields needed for queries
+
+A database cannot use a normal `WHERE priority = 2` condition to look inside
+arbitrary Protobuf bytes. The `(column) = true` option tells Spine to save an
+additional, queryable copy of a field beside `bytes`.
+
+In this model, `subject`, `priority`, `requester`, `opened_at`, and `detail`
+have that option. The next sections show exactly what is copied. A column
+makes a query possible; it does not automatically create an SQL index.
+
+#### A string: `subject`
+
+The input is:
+
+```text
+Ticket.subject = "Cannot download invoice"
+```
+
+PostgreSQL and MySQL/MariaDB store the same characters in a `TEXT` column named
+`subject`. Datastore stores a string property named `subject`. There is no
+JSON quoting added to this scalar value.
+
+#### An enum: `priority`
+
+The input is `URGENT`, defined as enum number `2`. The separate SQL column is
+an integer (`INTEGER` in PostgreSQL; `INT` in MySQL/MariaDB), and its value is
+`2`. The Datastore property is also the integer `2`.
+
+This differs from an enum _inside a message converted to JSON_: Proto JSON
+normally writes its enum name, such as `"URGENT"`. The conversion depends on
+whether the column itself is an enum or a message containing an enum.
+
+#### A message: `requester`
+
+The input has three fields:
+
+```text
+Requester {
+  name: "Billing desk"
+  email: "billing@example.test"
+  aliases: ["Invoices"]
+}
+```
+
+All three persistent providers convert this message to one string:
 
 ```json
-{ "queue": "billing", "number": "T-42" }
+{ "name": "Billing desk", "email": "billing@example.test", "aliases": ["Invoices"] }
 ```
 
-1. The Entity API uses a typed `example.support.TicketId` message.
-2. `AnyPacker` packs the complete message into `EntityRecord.entity_id`. The
-   `Any` contains the type URL and binary ID fields. An existing type URL is
-   preserved through unpacking/repacking; the database key must not change
-   because an `Any` was decoded. Newly packed types use their configured URL
-   prefix, normally `type.googleapis.com`.
-3. For PostgreSQL/MySQL's primary key, the ID stringifier produces
-   `{"queue":"billing","number":"T-42"}`. The default JSON key does not
-   contain a type name: the storage specification already knows the ID type.
-4. Datastore uses that same string as the native key name, within the selected
-   namespace and kind. Numeric identifiers also become decimal **name strings**,
-   not automatically allocated numeric Datastore IDs.
-5. A lookup applies the same stringifier. A key read back from SQL/Datastore
-   can be converted to the typed identifier with the same schema/stringifier.
-   The payload also retains the full typed ID, independently of the physical key.
-6. In-memory storage compares the typed structural identifier. SQL text key
-   formatting does not redefine the generic in-memory backend's key format.
+PostgreSQL and MySQL/MariaDB put that string in `requester TEXT`. Datastore
+puts it in the string property `requester`.
 
-A primitive string ID uses a string primary key; primitive `int32`/`int64` IDs
-use SQL `INTEGER`/`BIGINT` (`INT`/`BIGINT` in MySQL). In the packed Entity ID,
-primitive identifiers use the appropriate Protobuf wrapper message. Message
-IDs, including one-field wrappers such as `SubscriptionId`, normally use the
-message stringifier. Do not assume that a message with `{ value: "abc" }` has
-the physical key `abc`: its default key is `{"value":"abc"}`.
+There is one query column for the whole Requester. There is no `requester_name`
+column, no table for aliases, and no separate Requester table. If you need to
+filter by email alone, add a suitable field to a queryable Entity state and
+mark that field as a column. Declaring the entire Requester as a column does
+not turn its nested fields into independently searchable fields.
 
-SQL string/message IDs must fit the adapter's 512-character check and the
-native column. Datastore key names must be nonempty and at most 1500 UTF-8
-bytes. SQL string key equality also depends on the database collation: choose
-one that preserves the application's intended case and character distinctions.
-Do not let `T-42` and `t-42` collapse if the domain treats them as different IDs.
+#### A timestamp: `opened_at`
 
-For custom identifiers, a `StringifierRegistry` may register a reversible
-`toString`/`fromString` implementation for the ID schema and be supplied through
-`setStringifierRegistry()`. For example, an application may deliberately encode
-TicketId as `billing/T-42`, but it must define escaping for `/` and prove the
-round trip. No such custom encoding is required for composite IDs. Keep the
-same conversion on every application instance and for writes, reads and queries.
+For PostgreSQL and MySQL/MariaDB, Spine calculates:
 
-For `Any`-valued columns and IDs, set a complete application `TypeRegistry` on
-the stringifier registry via `setTypeRegistry()`. Include the packed application
-schemas, such as `BrowserInfo`. Otherwise Proto JSON conversion cannot resolve
-those types. This is separate from preserving the original `Any.type_url`.
+```text
+seconds × 1,000,000,000 + nanos
+42      × 1,000,000,000 + 7     = 42000000007
+```
 
-For this model, use the application's generated `ProtoModule` as the source
-of schema knowledge. It includes the model's declared schemas and their
-module dependencies. Generate that module from the Support Proto files, then
-import it in the application. The declaration in this excerpt stands for that
-import; it does not install itself into the storage factory.
+The SQL value is `42000000007` in `BIGINT`. Datastore instead stores a native
+timestamp. In both cases, the complete Protobuf timestamp is still in `bytes`.
+
+An SQL `BIGINT` has a finite range. With nanoseconds as the unit, these query
+columns cover approximately the years 1677–2262. The wider range supported by
+a Protobuf Timestamp does not increase the SQL column's range.
+
+#### A packed message: `detail`
+
+The field type is `google.protobuf.Any`. In this example, its `type_url` is
+`type.googleapis.com/example.support.BrowserInfo`, and its binary `value`
+contains `BrowserInfo { browser: "Firefox" }`.
+
+For the separate query column, the default stringifier produces:
+
+```json
+{ "@type": "type.googleapis.com/example.support.BrowserInfo", "browser": "Firefox" }
+```
+
+PostgreSQL and MySQL/MariaDB store this as `TEXT`; Datastore stores it as a
+string. The `@type` entry tells the reader which message the remaining fields
+belong to.
+
+To produce or read that JSON, Spine needs the generated `BrowserInfo` schema.
+Generated model modules register their schemas when imported. The shared
+`defaultStringifierRegistry` uses that information automatically. An ordinary
+application no longer needs to construct a registry and pass it to each
+factory. Keep the generated model-registry import in the application's startup
+code. A model-only package's generated `proto-module` import also registers its
+schemas.
+
+If the schema for a packed type has never been imported, conversion fails
+with an unknown-type error. A type URL alone cannot describe all the fields
+and their types. Import the generated module containing that type before using
+it in storage.
+
+`AnyPacker` preserves an existing type URL when unpacking and repacking a
+message. This matters for identifiers and query values: reading a message must
+not quietly change the string used to find it again.
+
+#### Lists and maps: `tags` and `attributes`
+
+These fields have no `(column)` option in the example. Their values are saved
+inside the complete Ticket in `bytes`:
+
+```text
+tags       = ["invoice"]
+attributes = { "tier": "pro" }
+```
+
+No tag table, attribute table, or extra property is created. Reading the Ticket
+restores both fields from the binary record. Repeated and map fields are not
+supported as standalone singular query columns by these adapters.
+
+#### Other field types and missing values
+
+The same rules apply to the framework records listed in chapters 1 and 2.
+Here is the complete reference for a declared query column:
+
+| Protobuf field                            | PostgreSQL                             | MySQL/MariaDB                 | Datastore                                   |
+| ----------------------------------------- | -------------------------------------- | ----------------------------- | ------------------------------------------- |
+| `string`                                  | `TEXT`                                 | `TEXT`                        | String                                      |
+| 32-bit integer                            | `INTEGER`                              | `INT`                         | Integer                                     |
+| Enum                                      | Integer enum number                    | Integer enum number           | Integer enum number                         |
+| 64-bit integer                            | `BIGINT`                               | `BIGINT`                      | Integer, using the SDK's integer conversion |
+| `bool`                                    | `BOOLEAN`                              | `BOOLEAN`                     | Boolean                                     |
+| `bytes`                                   | `BYTEA`                                | `BLOB`                        | Blob                                        |
+| `float`                                   | `REAL`                                 | Unsupported as a query column | Double                                      |
+| `double`                                  | `DOUBLE PRECISION`                     | Unsupported as a query column | Double                                      |
+| `google.protobuf.Timestamp`               | Nanoseconds in `BIGINT`                | Nanoseconds in `BIGINT`       | Native timestamp                            |
+| `spine.core.Version`                      | Version number in `INTEGER`            | Version number in `INT`       | Integer version number                      |
+| Another singular message, including `Any` | String in `TEXT`                       | String in `TEXT`              | String                                      |
+| Repeated field or map                     | Unsupported as a singular query column | Same                          | Same                                        |
+
+"Unsupported as a query column" does not prohibit a field inside the state.
+For example, MySQL can retain a `double` inside `bytes` even though this adapter
+does not support a separate query column for it.
+
+The default message-to-string conversion follows Proto JSON conventions.
+Field names use lowerCamelCase; 64-bit integers become decimal strings; byte
+fields inside JSON become base64 strings; nested timestamps become RFC 3339
+strings. A raw SQL `BYTEA` or `BLOB` value is binary and does not use base64.
+
+An absent materialized value is saved as SQL `NULL` or Datastore null.
+An ordinary proto3 scalar has a default value, so an unset scalar does not
+necessarily produce `NULL`. The Protobuf `(required)` option controls message
+validation; it does not change the table definition to add `NOT NULL`.
+
+Values must also fit native integer ranges. An unsigned Protobuf integer does not
+make an SQL column unsigned. The value must fit the selected database type.
+
+Datastore's binary codec currently drops unknown Protobuf fields. This matters
+when an older application reads a record written by a newer application: fields
+unknown to the older schema may be lost if that record is written again. Known
+fields in this example are decoded normally.
+
+### Entity identifiers, step by step
+
+Start with the identifier definition and its use as the first state field:
+
+```proto
+// Identifies a Ticket within a named support queue.
+message TicketId {
+  // Queue that contains the Ticket.
+  string queue = 1;
+
+  // Ticket number within that queue.
+  string number = 2;
+}
+
+// Details retained for a support Ticket.
+message Ticket {
+  option (entity).kind = AGGREGATE;
+
+  // Queue and number assigned when the Ticket was opened.
+  TicketId id = 1;
+
+  // Other fields appear in the complete definition above.
+}
+```
+
+For the value `{ queue: "billing", number: "T-42" }`, the default stringifier
+produces this exact compact string:
+
+```text
+{"queue":"billing","number":"T-42"}
+```
+
+The schema is already known from the Entity definition, so this string does
+not need to include `example.support.TicketId`. The complete typed ID is also
+saved in `EntityRecord.entity_id` inside the binary record.
+
+#### PostgreSQL identifiers
+
+The Ticket row has a primary-key column named `ID`, with type
+`VARCHAR(512) NOT NULL`. Its value is the complete string above, including the
+braces and both field names.
+
+A read by `TicketId { queue: "billing", number: "T-42" }` applies the same
+conversion and selects that primary key. The adapter then reads the complete
+EntityRecord from `bytes`.
+
+The adapter limits string and message keys to 512 characters. Choose a database
+collation that preserves the distinctions your identifiers need. If `T-42` and
+`t-42` identify different Tickets, the database must compare those keys as
+different values.
+
+#### MySQL and MariaDB identifiers
+
+The Ticket key is also stored in `ID VARCHAR(512) NOT NULL`, with exactly the
+same compact JSON string. Writes and reads use the same stringifier.
+
+Pay particular attention to collation here: a case-insensitive collation can
+make two different domain IDs compare equal. Configure the database/table so
+its key comparison agrees with the identifiers used by the application.
+
+#### Datastore identifiers
+
+Datastore has a native entity key instead of an `ID` property. In the
+single-tenant example, this Ticket's key consists of:
+
+```text
+namespace: support
+kind:      example.support.Ticket
+name:      {"queue":"billing","number":"T-42"}
+```
+
+In the multitenant example, tenant `acme` changes the namespace to `Vacme`.
+The kind and key name stay the same. Thus two tenants can have a Ticket with
+this ID without sharing the same Datastore entity.
+
+The name must be nonempty and no longer than 1,500 UTF-8 bytes. The adapter
+uses name strings even for numeric IDs; it does not request an automatically
+allocated numeric Datastore ID.
+
+#### In-memory identifiers
+
+The in-memory provider receives the generated TicketId object. For this example,
+its fields are:
+
+```json
+{ "$typeName": "example.support.TicketId", "queue": "billing", "number": "T-42" }
+```
+
+The backend keeps a copy of that typed ID. To find the record in its internal
+Map, it also builds a canonical string: fields are sorted and each value is
+marked with its JavaScript type. For this ID the internal Map key is:
+
+```json
+[
+  "object",
+  ["$typeName", ["string", "example.support.TicketId"]],
+  ["number", ["string", "T-42"]],
+  ["queue", ["string", "billing"]]
+]
+```
+
+This makes separately constructed TicketId objects with the same field values
+find the same record. This string is an internal Map key, with no SQL column
+or Datastore key to configure. The shared stringifier registry does not change
+this in-memory comparison format.
+
+#### One-field messages and primitive identifiers
+
+A message with one `value` field is still a message. For example:
+
+```proto
+// Identifies a list of Tickets.
+message TicketListId {
+  // Name of the list.
+  string value = 1;
+}
+```
+
+`TicketListId { value: "billing-open" }` becomes `{"value":"billing-open"}`
+with the default message stringifier. It does not automatically become
+`billing-open`.
+
+Primitive record IDs have different mappings. A primitive string remains a
+string; primitive `int32` and `int64` IDs use SQL `INTEGER`/`BIGINT`
+(`INT`/`BIGINT` in MySQL). Datastore converts those numeric IDs to decimal key
+names. When a primitive Entity ID is packed into Protobuf `Any`, Spine uses the
+appropriate Protobuf wrapper message.
+
+### Customize message and identifier conversion
+
+For normal application startup, use the shared default registry. The factory
+already uses it. You only need to register a converter when you want a format
+different from compact Proto JSON.
+
+For example, suppose you want the Ticket's physical key to be `billing/T-42`.
+Both parts must be escaped: otherwise a slash inside a queue name could be
+mistaken for the separator. Register the following converter before the first
+use of `TicketId` in storage.
+
+The import below uses the guide's generated TicketId schema. The complete Proto
+source is [storage_layout.proto](../packages/server-blackbox-tests/proto/example/support/storage_layout.proto).
+Use the path emitted by your own model build when adapting this example.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
-import type { ProtoModule } from "@spine-event-engine/proto";
+import { TicketIdSchema, type TicketId } from "../generated/example/support/storage_layout_pb.js";
+import { create } from "@bufbuild/protobuf";
+import { defaultStringifierRegistry } from "@spine-event-engine/core";
 
-declare const supportProtoModule: ProtoModule; // Import the application's generated module.
-
-const stringifiers = new StringifierRegistry();
-stringifiers.setTypeRegistry(TypeRegistry.from(supportProtoModule));
-```
-
-The module must include types packed into searchable `Any` values, including
-`TicketId` for history's `entity_id` and `BrowserInfo` for Ticket's `detail`.
-The application still creates `StringifierRegistry`, installs this type registry,
-and passes it to each SQL or Datastore factory with
-`setStringifierRegistry(stringifiers)`. There is no automatic bridge from the
-generated module to a global default stringifier registry in the current API.
-Connection settings alone cannot resolve those `Any` values.
-
-A custom reversible `TicketId` key can use `billing/T-42` if the application
-chooses it before writing data. This mapping escapes separators in both parts
-and rejects malformed stored keys:
-
-<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
-
-```ts
-import { create, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
-import type { ProtoModule } from "@spine-event-engine/proto";
-
-declare const supportProtoModule: ProtoModule;
-type TicketId = Message & { queue: string; number: string };
-declare const TicketIdSchema: GenMessage<TicketId>;
-const stringifiers = new StringifierRegistry();
-stringifiers.setTypeRegistry(TypeRegistry.from(supportProtoModule));
-
-stringifiers.register(TicketIdSchema, {
+defaultStringifierRegistry.register(TicketIdSchema, {
   toString(id) {
     return `${encodeURIComponent(id.queue)}/${encodeURIComponent(id.number)}`;
   },
@@ -3771,169 +4597,508 @@ stringifiers.register(TicketIdSchema, {
 });
 ```
 
-Install the same registry on every SQL or Datastore factory instance before
-writing the first record. Changing key conversion after data exists changes
-where subsequent lookups search; the adapter does not rewrite old keys.
+PostgreSQL, MySQL/MariaDB, and Datastore factories now use that converter without
+another setter call. A write produces `billing/T-42`; a read by the same typed
+ID produces that same key. `fromString` restores the two fields when the adapter
+needs to read a stored key.
 
-For the Agent audit example, the physical ID is SHA-256 hex of this exact input:
+This registration also affects message-valued columns whose declared type is
+`TicketId`. A converter for `TicketId` does not replace the entire conversion
+of an `Any` column containing a TicketId: that column is declared as `Any` and
+uses the Any conversion.
 
-```text
-["example.support.ReplyAssistant","{\"value\":\"assistant-7\"}","conversation","conversation-5"]
-  -> ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb
+Once the shared registry has selected a converter for a type, it rejects a
+replacement for that type. Otherwise, a later read could calculate a different
+key from the one used by an earlier write. Use the same registrations on every
+application instance.
+
+#### Use a separate registry when a factory needs different conversions
+
+An explicit `StringifierRegistry` is still available. This is an optional
+configuration, not a required part of constructing a storage factory.
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { StringifierRegistry } from "@spine-event-engine/core";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+
+const separateStringifiers = new StringifierRegistry();
+// Register application-specific converters here, before building the factory.
+const factory = await PostgresStorageFactory.newBuilder()
+  .setOptions({ url: "postgresql://localhost/support" })
+  .setStringifierRegistry(separateStringifiers)
+  .build();
 ```
 
-The scope digest hashes the first two tuple values; the conversation digest
-hashes the raw string `conversation-5`. Acceptance receipts and model
-preferences also hash the typed ID's exact `Any` bytes. For this illustrative
-`ReplyAssistantId`, those bytes encode to base64 `Cgthc3Npc3RhbnQtNw==`, with
-type URL `type.googleapis.com/example.support.ReplyAssistantId`. The receipt
-example adds original Command ID `command-4` and action `HANDLE_COMMAND`; its
-physical slot is
-`v1:678e976d5088dfdf24b02234440d7f5ceb83e454898200f24327d3a472a36894`.
-The complete identity is also inside the serialized record.
+MySQL and Datastore builders expose the same `setStringifierRegistry` method.
+The factory takes a snapshot of this explicit registry's converter settings.
+Editing it afterwards does not reconfigure the factory. Generated modules imported later can still supply schemas to either registry
+unless the explicit registry has been given its own `TypeRegistry`. Converter
+settings and schema availability are separate concerns.
 
-Sources: [PostgreSQL table types](../packages/storage-postgres/src/postgres/table-spec.ts),
-[MySQL table types](../packages/storage-mysql/src/mysql/table-spec.ts),
-[Datastore record codec](../packages/storage-datastore/src/datastore/record-storage.ts),
-[record specifications](../packages/storage/src/record/record-spec.ts).
+A separate registry can also use an explicit `TypeRegistry` through
+`setTypeRegistry`. That is useful when you deliberately need to restrict which
+schemas it resolves. The shared default gets its schemas from generated modules
+and does not allow that source to be replaced.
+
+Changing a key format does not rename existing records. Select the intended
+format before storing data with that factory.
 
 ### Provider differences and supported overrides
 
-#### PostgreSQL
+The examples below create factory builders explicitly. Apply the settings you
+need to the builder used by your application before calling `build()`.
 
-`ID` is a native SQL primary key. Message IDs and message-valued search fields
-use the configured reversible stringifiers. Ordinary Timestamp search fields
-become epoch nanoseconds in `BIGINT`; the complete timestamp remains in the
-binary record. The builder's `setTableName` methods change selected table names,
-and `useOperationFactory()` can issue compatible table-creation SQL from the
-resolved table specification. Neither method changes the adapter's required
-columns or its read/query conversion. Current-state lifecycle columns have the
-non-null defaults listed above; other declared columns are nullable. PostgreSQL
-limits identifiers to 63 bytes.
+#### PostgreSQL: database and schema
 
-#### MySQL and MariaDB
+The URL selects the database. The `schema` option selects an existing schema
+inside that database:
 
-The same stringifier and naming methods apply. Ordinary Timestamp search fields
-also use epoch nanoseconds in `BIGINT`. The adapter rejects `float` and `double`
-as declared search columns; these values may still be inside `bytes`. Default
-`bytes BLOB` has the engine's 65,535-byte limit. When larger complete records
-are expected, compatible `MEDIUMBLOB` or `LONGBLOB` DDL can be supplied through
-`useOperationFactory()` or precreated tables. Keep InnoDB for the Agent's
-transactional commits and use a collation that preserves distinct IDs. Table
-names are limited to 64 bytes.
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
-#### Google Cloud Datastore
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 
-The native key has a name derived from the same message stringifier; there is
-no `ID` property. A searchable Timestamp is a native Datastore timestamp.
-`organizeRecords` changes a kind, and `setNamespaceConverter` changes the
-mapping of tenant IDs to namespaces. Neither changes the record's declared
-properties. The built-in provider stores complete records in an unindexed Blob;
-Datastore's codec does not preserve unknown Protobuf fields. A custom
-`useRecordStorage()` or `useEntityStorage()` provider must provide matching
-ID, column, tenant and preparation behavior; those hooks are not naming-only
-settings. The custom callback does not automatically receive the builder's
-stringifier registry or namespace converter.
+const postgresBuilder = PostgresStorageFactory.newBuilder().setOptions({
+  url: "postgresql://localhost/support",
+  schema: "app_data",
+});
+const factory = await postgresBuilder.build();
+```
 
-#### In-memory
+The administrator creates `support` and `app_data` beforehand. For example,
+when connected to the `support` database as an appropriate administrative role:
 
-The backend retains typed records and structural keys in logical collections.
-It has no SQL key text, Datastore kind or physical column conversion to
-configure. Closing the backend loses those records unless the application
-provides a different durable provider.
+```sql
+CREATE SCHEMA app_data AUTHORIZATION support_app;
+```
+
+If you omit `schema`, the adapter asks PostgreSQL for `current_schema()`.
+With a conventional PostgreSQL search path this is often `public`; it depends
+on that connection's configuration. `spine` in chapters 1 and 2 is an explicit
+choice made by the guide, not an adapter default.
+
+Changing `schema` moves all this factory's tables to the selected schema. It
+does not rename the tables, create the schema, or copy records from another
+schema. For multitenant storage, each tenant's resolved connection options can
+select its own existing database and schema.
+
+#### PostgreSQL: current-state, history, and Event table names
+
+These are three distinct naming choices:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+
+const postgresBuilder = PostgresStorageFactory.newBuilder()
+  .setOptions({ url: "postgresql://localhost/support", schema: "app_data" })
+  .setTableName(TicketSchema, "tickets")
+  .setTableName(TicketSchema, EntityRecordSchema, "ticket_history")
+  .setEventStoreTable("Support", "support_events")
+  .setEventStoreTable("Support_System", "support_system_events", "system");
+```
+
+`setTableName(TicketSchema, "tickets")` changes the current-state table.
+The overload with both `TicketSchema` and `EntityRecordSchema` changes the
+Ticket's state-history table. Each keeps the columns shown earlier in this
+guide.
+
+`setEventStoreTable` selects the Event table for a named Bounded Context.
+The first call selects the domain Event Store. The second selects the paired
+System Context, using its actual name and the `"system"` argument. You can
+change either name without affecting another Bounded Context's Event Store.
+
+Without overrides, these two Event tables are `support_event` and
+`support_system_event`. All domain Event types published by Support go into
+its domain Event table; the packed message's type URL identifies each Event
+type. Spine does not create a table for each domain Event type.
+
+PostgreSQL names are limited to 63 bytes. Choose distinct physical names.
+If two names would resolve to the same table, the factory rejects the collision
+instead of mixing the records. For example, Bounded Context names `Support-A`
+and `Support_A` both normalize to the same default SQL name; give one an
+explicit, distinct table name.
+
+#### PostgreSQL: custom table-creation SQL
+
+Usually the adapter's generated SQL is sufficient. If you need to control the
+creation statement, `useOperationFactory` receives the resolved table name,
+schema, columns, and primary key. Here is a complete example that reproduces
+the required layout while showing where an application can customize the SQL:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+
+const postgresBuilder = PostgresStorageFactory.newBuilder()
+  .setOptions({ url: "postgresql://localhost/support", schema: "app_data" })
+  .useOperationFactory((table) => {
+    const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
+    const columns = table.columns.map((column) => {
+      const required = column.nullable ? "" : " NOT NULL";
+      const fallback = column.defaultSql === undefined ? "" : ` DEFAULT ${column.defaultSql}`;
+      return `${quote(column.name)} ${column.postgresType}${required}${fallback}`;
+    });
+    const primaryKey = table.primaryKey.map(quote).join(", ");
+    return {
+      sql: `CREATE TABLE IF NOT EXISTS ${quote(table.schema)}.${quote(table.tableName)}
+        (${columns.join(", ")}, PRIMARY KEY (${primaryKey}))`,
+    };
+  });
+```
+
+The adapter still checks that the resulting table supports its required
+layout. This callback does not change how values are encoded or which columns
+queries use. Renaming a required column only in the SQL would break that
+agreement. Use the table-name setters for naming changes and the stringifier
+registry for supported message-to-string changes.
+
+You can also create compatible tables with administrative SQL before startup.
+The startup chapter shows how to check those structures explicitly.
+
+#### MySQL/MariaDB: database and table names
+
+The connection URL selects the database. There is no separate PostgreSQL-style
+`schema` option. MariaDB uses the same factory and mapping as MySQL:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+
+const mysqlBuilder = MysqlStorageFactory.newBuilder()
+  .setOptions({ url: "mysql://localhost/support" })
+  .setTableName(TicketSchema, "tickets")
+  .setTableName(TicketSchema, EntityRecordSchema, "ticket_history")
+  .setEventStoreTable("Support", "support_events")
+  .setEventStoreTable("Support_System", "support_system_events", "system");
+```
+
+These setters have the same scope as their PostgreSQL counterparts. The default
+Event table names preserve case: `Support_Event` and `Support_System_Event`.
+Use distinct names even on installations where table names are case-sensitive;
+the factory checks naming collisions conservatively without relying on that
+server setting. MySQL table names are limited to 64 bytes.
+
+#### MySQL/MariaDB: larger binary records
+
+The default `bytes BLOB` column can hold at most 65,535 bytes. A long Agent
+conversation or a large Entity state may need a larger column. The application
+can precreate a compatible table or supply creation SQL that uses `LONGBLOB`
+for the complete-record column:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
+
+const mysqlBuilder = MysqlStorageFactory.newBuilder()
+  .setOptions({ url: "mysql://localhost/support" })
+  .useOperationFactory((table) => {
+    const quote = (name: string) => "`" + name.replaceAll("`", "``") + "`";
+    const columns = table.columns.map((column) => {
+      const type = column.name === "bytes" ? "LONGBLOB" : column.mysqlType;
+      const required = column.nullable ? "" : " NOT NULL";
+      const fallback = column.defaultSql === undefined ? "" : ` DEFAULT ${column.defaultSql}`;
+      return `${quote(column.name)} ${type}${required}${fallback}`;
+    });
+    const primaryKey = table.primaryKey.map(quote).join(", ");
+    return {
+      sql: `CREATE TABLE IF NOT EXISTS ${quote(table.tableName)}
+        (${columns.join(", ")}, PRIMARY KEY (${primaryKey})) ENGINE=InnoDB`,
+    };
+  });
+```
+
+This changes the capacity of `bytes`; it keeps binary Protobuf encoding and the
+other required columns. `CREATE TABLE IF NOT EXISTS` does not alter an existing
+table. Keep InnoDB for the transactional operations used by Agent storage.
+
+MySQL/MariaDB do not support separate `float` or `double` query columns through
+this adapter. Changing the creation SQL alone cannot add the missing conversion
+and query behavior.
+
+#### Datastore: project, namespace, and kind
+
+The `Datastore` client selects the Google Cloud project and the namespace used
+for single-tenant/shared records. Spine does not create that project or its
+credentials:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { TicketSchema } from "../generated/example/support/storage_layout_pb.js";
+import { Datastore } from "@google-cloud/datastore";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+
+const datastoreBuilder = DatastoreStorageFactory.newBuilder()
+  .setClient(new Datastore({ projectId: "my-project", namespace: "support_shared" }))
+  .organizeRecords(TicketSchema, { kind: "tickets" })
+  .setEventStoreKind("Support", "support_events")
+  .setEventStoreKind("Support_System", "support_system_events", "system");
+```
+
+`organizeRecords(TicketSchema, { kind: "tickets" })` selects the kind for the
+Ticket's current state. The factory's source-and-record overload has a
+limitation for Entity history: current state and state history both use the
+Ticket source and EntityRecord record type. An override for that pair can
+therefore affect both. There is currently no separate built-in setter for only
+that Entity's state-history kind; leave its default name when both are enabled.
+
+Without Event overrides, the kinds are `Support-Event` and
+`Support_System-Event`. Kind names are case-sensitive. A rename also requires
+updating any composite-index declarations that refer to the old kind. Spine
+cannot deploy those indexes on your behalf.
+
+#### Datastore: tenant namespace conversion
+
+The default mapping uses `V` before a value Tenant ID and `D` before a domain
+Tenant ID. Thus `acme` maps to `Vacme`, and the domain `acme.example` maps to
+`Dacme.example`.
+
+Here is a custom mapping that adds an application prefix while retaining those
+existing rules:
+
+<!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
+
+```ts
+import { Datastore } from "@google-cloud/datastore";
+import {
+  DatastoreStorageFactory,
+  DefaultNamespaceConverter,
+} from "@spine-event-engine/storage-datastore";
+
+const standardNamespaces = new DefaultNamespaceConverter();
+const datastoreBuilder = DatastoreStorageFactory.newBuilder()
+  .setClient(new Datastore({ projectId: "my-project", namespace: "support_shared" }))
+  .setNamespaceConverter({
+    toNamespace(tenantId) {
+      return `customer_${standardNamespaces.toNamespace(tenantId)}`;
+    },
+    fromNamespace(namespace) {
+      if (!namespace.startsWith("customer_")) return undefined;
+      return standardNamespaces.fromNamespace(namespace.slice("customer_".length));
+    },
+  });
+```
+
+Value tenant `acme` now uses `customer_Vacme`. Shared records still use the
+client's `support_shared` namespace. Every tenant must map to a different
+namespace, and conversion back must recover the complete original Tenant ID.
+The factory checks these round trips.
+
+The standard converter rejects email Tenant IDs because the legacy JVM email
+mapping can assign different IDs to the same namespace. Applications using
+email Tenant IDs must supply a reversible mapping for them explicitly. The
+prefixing example above intentionally retains that rejection.
+
+#### Datastore: custom storage implementations
+
+`organizeRecords` and `setNamespaceConverter` change names and destinations.
+They leave the declared record properties and their conversions intact.
+
+The advanced `useRecordStorage` and `useEntityStorage` callbacks replace a
+storage implementation. Such an implementation must handle ID conversion,
+query columns, tenant selection, and preparation consistently. The callbacks
+do not automatically receive this builder's stringifier registry or namespace
+converter. These are substantial provider implementations; use the naming
+setters above when your requirement is simply to rename a kind.
+
+The complete callback contracts are in the
+[Datastore package reference](../packages/storage-datastore/README.md).
+
+#### In-memory: records without database structures
+
+In-memory storage has no database/schema/table/kind options. It keeps typed
+records and compares their identifiers in memory. It does not perform the
+SQL or Datastore conversions described above.
+
+Use this provider when process-local storage is sufficient. Its records do not
+survive loss of the backend or application process. Selecting it does not
+create a file or another persistent store.
 
 ## 4. Agent storage
 
+The `ReplyAssistant` Agent in this example uses four kinds of records: its
+current Entity state, acceptance receipts, audit history, and model preferences.
+They answer different questions, so it helps to follow one Command through them.
+
 ### Current Agent state
 
-Suppose `ReplyAssistant` with ID `assistant-7` receives a Command asking for a
-reply to Ticket `billing/T-42`. Its latest state is an `EntityRecord` in the
-ReplyAssistant table: PostgreSQL `spine.example_support_replyassistant`, MySQL
-`example_support_ReplyAssistant`, or Datastore kind
-`example.support.ReplyAssistant`. The table has `ID`, `bytes`, and lifecycle
-search fields. A successful handler can save `last_draft` inside the binary
-state in `bytes`. There is no separate `last_draft` column in this example.
+Suppose a Command asks Agent `assistant-7` to draft a reply for Ticket
+`billing/T-42`. The handler eventually saves the text in
+`ReplyAssistant.last_draft`.
+
+That state goes into an EntityRecord, just like the Ticket state in chapter 3.
+The complete record is stored in `bytes`. There is no separate `last_draft`
+query column because the example did not mark that field `(column)`.
+
+The current-state locations are:
+
+| Provider      | Table or kind                          |
+| ------------- | -------------------------------------- |
+| PostgreSQL    | `spine.example_support_replyassistant` |
+| MySQL/MariaDB | `example_support_ReplyAssistant`       |
+| Datastore     | `example.support.ReplyAssistant`       |
+
+The tables in chapters 1 and 2 list the primary key, `bytes`, and the lifecycle
+and version fields for this record.
 
 ### Acceptance receipt
 
-Before that work starts, the Agent stores an acceptance receipt for the
-original Command and delivery action. Its `bytes` value retains the typed
-Agent ID and original Command ID. The physical key is a digest of that identity.
-The receipt has no prompt or executable backlog. It prevents the same accepted
-work from restarting after interruption. In the single-tenant example, the
-receipt table is PostgreSQL
-`spine.spine_agent_acceptance_agentacceptancereceipt`, MySQL
-`spine_agent_acceptance_AgentAcceptanceReceipt`, or Datastore kind
-`spine_agent_acceptance_AgentAcceptanceReceipt`.
+Before the accepted Command runs, Spine saves an acceptance receipt. It records
+which Agent accepted which original signal and for which delivery action.
+
+The receipt has only a key and the complete binary record. The record includes
+the Agent's typed ID, its state type, the Command/Event ID, and the action. The
+physical key is a digest calculated from that identity.
+
+This receipt prevents the same accepted work from starting again after an
+interruption. It does not contain steps that a background worker can resume.
+A genuinely new Command has a new signal identity and can start new work.
+
+| Provider      | Table or kind                                         |
+| ------------- | ----------------------------------------------------- |
+| PostgreSQL    | `spine.spine_agent_acceptance_agentacceptancereceipt` |
+| MySQL/MariaDB | `spine_agent_acceptance_AgentAcceptanceReceipt`       |
+| Datastore     | `spine_agent_acceptance_AgentAcceptanceReceipt`       |
 
 ### Audit trail for a reply
 
-As the Agent calls a model, it appends audit entries. They go to the Agent
-audit table, not to `ReplyAssistant` state. For PostgreSQL the table is
-`spine.agent_history_agenthistoryrecord`; for MySQL it is
-`agent_history_AgentHistoryRecord`; for Datastore it is `spine_agent_history`.
-The full `AgentHistoryRecord` is in `bytes`. Suppose the Agent drafts “I can
-help with your invoice” for conversation `conversation-5`. The audit record can
-save the typed input facts, the rendered developer instructions, the JSON
-prompt sent to the provider, and the requested output schema. The response
-can save that draft as raw text alongside the validated typed result, model
-name and token usage. The table does not create a prompt column or a token
-column: these values remain inside the binary record.
+Now the handler calls a model. Spine records the interaction as it happens.
+For example, conversation `conversation-5` can contain the request to draft the
+reply and the model's response, “I can help with your invoice.”
 
-Searchable copies answer a different question: _which entries belong to this
-Agent and conversation, and in what order?_ The `agent_key`, scope digest,
-conversation digest, category and ordering fields shown in the physical tables
-support that lookup. Reading conversation `conversation-5` selects those rows
-first, then decodes each complete record from `bytes`.
+These entries go into the Agent audit records:
 
-Other audit entries can preserve the details needed to understand a decision:
+| Provider      | Table or kind                            |
+| ------------- | ---------------------------------------- |
+| PostgreSQL    | `spine.agent_history_agenthistoryrecord` |
+| MySQL/MariaDB | `agent_history_AgentHistoryRecord`       |
+| Datastore     | `spine_agent_history`                    |
 
-| Entry                    | Facts retained inside the binary record                                                                                                                                                                                                                                                   |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Model request            | Advertised tool definitions, prompt JSON, developer instructions and output schema JSON.                                                                                                                                                                                                  |
-| Model response           | Proposed tool calls and exact argument text, raw output, typed result, usage and model name. Anthropic content may include thinking text/signatures or redacted thinking bytes; OpenAI content may include refusals, reasoning summaries or encrypted continuation fields, when supplied. |
-| Decision and tool work   | Questions, answers, confidence or distributions, tool request arguments, tool results, outcomes and safe diagnostic IDs.                                                                                                                                                                  |
-| System and domain Events | Operational facts such as selected ModelRef, capability revision, digests, limits and usage; the original domain Event and packed domain payload.                                                                                                                                         |
+Each row's `bytes` contains a complete AgentHistoryRecord. A model request can
+include the typed input, rendered developer instructions, prompt JSON, available
+tools, and the expected output schema. A response can include the returned
+text, the validated typed result, the model name, and token usage.
+
+Those details stay inside the binary record. There is no separate SQL prompt
+column or table of token counts in this layout.
+
+The separate query fields help find the right entries. For example, reading
+conversation `conversation-5` for Agent `assistant-7` uses the Agent scope and
+conversation fields to select records, then uses the ordering field to page
+through them. Once selected, each record is decoded from `bytes`.
+
+The audit can contain more than a plain text conversation:
+
+- A tool request records the proposed tool and its arguments; the corresponding
+  result records what the tool returned.
+- A decision records the question, answer, and the decision details supplied by
+  that interaction.
+- System and domain Event entries retain the complete Event and its typed
+  payload.
+- Provider-specific response fields are retained when supplied. For example,
+  Anthropic responses can contain thinking text/signatures or redacted thinking
+  bytes. OpenAI responses can contain refusals, reasoning summaries, or encrypted
+  continuation fields.
+
+These values describe what occurred during the live execution. Reading them
+later does not make the framework repeat the model call or continue the handler.
 
 ### Model preferences
 
-An authorized model change updates the separate preferences record.
-It is PostgreSQL
-`spine.spine_agent_model_preferences_agentmodelpreferencesrecord`, MySQL
-`spine_agent_model_preferences_AgentModelPreferencesRecord`, or Datastore kind
-`spine_agent_model_preferences`. Its `bytes` contains the typed Agent key and
-explicit selections, such as generation model `support-drafter` revision `v2`.
-There are no extra search columns. A selection staged in a handler becomes
-durable only after successful normal processing. A missing `GENERATION` or
-`DECISION` selection means the Agent inherits the repository setting, then the
-effective AI registry default. `.withAi(ai)` selects the Bounded Context's
-registry; without it, the Bounded Context inherits the `ServerEnvironment` AI
-registry. `inherit_repository_default` removes that kind's explicit choice. The record contains no model weights, API key, paused request or
-program counter.
+An Agent can have a model choice that differs from its repository's default.
+For example, Agent `assistant-7` may select the generation model named
+`support-drafter`, revision `v2`.
 
-In multitenant mode, each tenant's ReplyAssistant state, receipts, audit and
-preferences go to that tenant's SQL database or Datastore namespace. The
-physical table or kind names repeat within those separate destinations.
+That choice is stored separately from the generated reply and its audit:
+
+| Provider      | Table or kind                                                     |
+| ------------- | ----------------------------------------------------------------- |
+| PostgreSQL    | `spine.spine_agent_model_preferences_agentmodelpreferencesrecord` |
+| MySQL/MariaDB | `spine_agent_model_preferences_AgentModelPreferencesRecord`       |
+| Datastore     | `spine_agent_model_preferences`                                   |
+
+The record contains the Agent's typed identity and its explicit model
+selections. It has a key and `bytes`, with no extra query columns. The selection
+names a configured model; it does not save model weights or provider credentials.
+
+For each model use, such as `GENERATION` or `DECISION`, selection works in this
+order:
+
+1. Use the Agent instance's explicit preference when one is present.
+2. Otherwise use the repository's setting.
+3. Otherwise use the effective AI registry's default.
+
+The Bounded Context gets that AI registry from `.withAi(ai)` or inherits it from
+`ServerEnvironment`. Setting `inherit_repository_default` removes the Agent's
+explicit preference for that use. A preference staged by a handler is saved
+only when normal processing succeeds.
+
+In multitenant mode, all four Agent record types described here go into the
+Agent's tenant database or namespace. Their table/kind names repeat in each
+tenant destination.
+
+### How Agent record keys are calculated
+
+For this example's conversation audit entry, the key calculation starts with:
+
+```text
+["example.support.ReplyAssistant","{\"value\":\"assistant-7\"}","conversation","conversation-5"]
+```
+
+SHA-256 of that exact text produces:
+
+```text
+ea81db35be48d55aaf1cf19c1c6bcb339a21909d76aab87afabfda5df13d89fb
+```
+
+The `scope_digest` query field hashes the first two values of the tuple, which
+together identify the Agent. The `conversation_digest` field hashes the raw
+conversation ID, `conversation-5`. The complete original values remain in the
+record so they are available when it is read.
+
+Acceptance receipts and preferences also include the exact typed ID in their
+key calculation. For this example, ReplyAssistantId's encoded bytes are
+`Cgthc3Npc3RhbnQtNw==` in base64, and its type URL is
+`type.googleapis.com/example.support.ReplyAssistantId`. The receipt also
+includes the original signal identity and delivery action. The table examples
+show the resulting digest keys.
 
 ### Restart and history reads
 
-If a model response was audited but the process stopped before `last_draft`
-was saved, the audit response remains readable and current Entity state stays
-at its last committed version. The framework does not replay that handler,
-reuse the response to finish it, or send a private backlog after restart.
-A later new Command can begin new work.
+Consider a stop between these two actions:
 
-`repository.agentHistory(...)` provides `fullHistory`, `conversationHistory`,
-`systemEventHistory` and `domainEventHistory`. Each pages newest first with an
-opaque continuation for that view. Reading history does not resume work.
-Marking the Agent Entity deleted does not purge audit, acceptance or preference
+1. Spine records the model's response in audit history.
+2. The handler saves `ReplyAssistant.last_draft`.
+
+After restart, the response from step 1 is still readable when persistent
+storage is used. Current state remains at its last committed version. The
+framework does not rerun the handler to finish step 2. A new Command can ask
+for new work explicitly.
+
+`repository.agentHistory(...)` exposes four views: `fullHistory`,
+`conversationHistory`, `systemEventHistory`, and `domainEventHistory`. Each
+returns entries newest first and provides a continuation for the next page.
+Reading these views does not start an Agent execution.
+
+Marking the Agent Entity deleted does not purge its audit, receipt, or preference
 records. The current API has no per-Agent history purge or automatic cascade.
 
-Prompts, model output and tool results can contain sensitive information.
-Provider credentials are configured separately and are not intentionally
-recorded, and safe diagnostic IDs replace raw provider exception bodies.
-Application text and tool results are not automatically redacted. Apply access
-controls appropriate to the facts in these records.
+Prompts and tool results can include sensitive application information. Provider
+credentials are configured separately, but the recorded application content is
+not automatically redacted. Apply the access controls that this information
+requires.
 
 Sources: [typed interaction content](../packages/proto/proto/spine/ts/agent/content.proto),
 [conversation/history schema](../packages/proto/proto/spine/ts/agent/history.proto),
@@ -3979,8 +5144,7 @@ Its `namespace` argument is also a diagnostic label, not physical isolation.
 ### Sessions do not add these tables
 
 Authentication itself creates no user, password, signing-key, refresh-token or
-permissions table in this inventory. The storage choice is visible if Ada logs
-in and then the process restarts:
+permissions table in this inventory. The following table shows what happens to login data after a process restart:
 
 | Component               | Where the login data is kept                                 | Consequence for this inventory                                                                                           |
 | ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
@@ -3990,7 +5154,7 @@ in and then the process restarts:
 
 ### OIDC and trusted identity
 
-While Ada completes an OIDC login, `OidcFlow` keeps the pending nonce, PKCE
+During an OIDC login, `OidcFlow` keeps the pending nonce, PKCE
 verifier, redirect and one-time grant in process memory. Its provider JWKS
 cache is local too; keys are fetched again after expiry or restart. These
 pieces do not create a framework SQL table or Datastore kind. Arrange login
@@ -4022,21 +5186,30 @@ Sources: [authentication package](../packages/auth/README.md),
 
 ### Build and preparation order
 
-This code wires the same `example.support.Ticket`, `TicketList`, and
-`ReplyAssistant` model used in the tables. The declarations stand for imports
-from the application's generated Protobuf and Entity modules, with handlers
-and generated registry supplied by that application. The `factory` is one of
+This code uses the generated `example.support.Ticket`, `TicketList`, and
+`ReplyAssistant` schemas shown in the tables. The Entity class declarations
+stand for your application's implementations and handlers; the generated model
+registry is supplied by that application's build. The `factory` is one of
 the configured providers above; `ai` and `agentAi` come from its model
 configuration. The explicit Ticket repository enables state history.
 
 <!-- docs-snippet-path: packages/server-blackbox-tests/test/native-public-preparation.integration.test.ts -->
 
 ```ts
-import type { Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import {
+  TicketSchema,
+  TicketListSchema,
+  ReplyAssistantSchema,
+  type TicketId,
+  type TicketListId,
+  type ReplyAssistantId,
+  type Ticket,
+  type TicketList,
+  type ReplyAssistant,
+} from "../generated/example/support/storage_layout_pb.js";
 import type { AiRegistry } from "@spine-event-engine/ai";
 import { TypeRegistry } from "@spine-event-engine/core";
-import type { ProtoModule } from "@spine-event-engine/proto";
+import { serverBlackBoxTestsProtoModule as supportProtoModule } from "../generated/proto-module.js";
 import type { StorageFactory } from "@spine-event-engine/storage";
 import {
   Agent,
@@ -4050,23 +5223,9 @@ import {
   type GeneratedRepositoryOptions,
 } from "@spine-event-engine/server";
 
-type TicketId = Message & { queue: string; number: string };
-type TicketListId = Message & { value: string };
-type ReplyAssistantId = Message & { value: string };
-type Ticket = Message & { id?: TicketId };
-type TicketList = Message & { id?: TicketListId };
-type ReplyAssistant = Message & { id?: ReplyAssistantId };
-declare const TicketSchema: GenMessage<Ticket> & { readonly typeName: "example.support.Ticket" };
-declare const TicketListSchema: GenMessage<TicketList> & {
-  readonly typeName: "example.support.TicketList";
-};
-declare const ReplyAssistantSchema: GenMessage<ReplyAssistant> & {
-  readonly typeName: "example.support.ReplyAssistant";
-};
 declare class TicketAggregate extends Aggregate<TicketId, typeof TicketSchema> {}
 declare class TicketListProjection extends Projection<TicketListId, typeof TicketListSchema> {}
 declare class ReplyAssistantAgent extends Agent<ReplyAssistantId, typeof ReplyAssistantSchema> {}
-declare const supportProtoModule: ProtoModule;
 declare const generatedRegistryRoot: URL;
 declare const factory: StorageFactory;
 declare const ai: AiRegistry;
@@ -4213,7 +5372,8 @@ changes only when a corresponding storage-using feature is enabled.
 
 Ordinary Entity family names do not include the Bounded Context name. Registering
 the same Entity state type in two open domain Bounded Contexts is prohibited,
-including in tests. Event stores use Bounded Context-specific groups: the hash
-inputs for this example are `["spine.EventStoreGroup/v1","domain","Support"]`
-and `["spine.EventStoreGroup/v1","system","Support_System"]`. Changing these
-names changes the Event store family names in the inventories.
+including in tests. Event Store names come from the Bounded Context names:
+`Support` and `Support_System` in this example. Changing a Bounded Context name
+therefore changes its default Event table or kind name. Use the provider's
+`setEventStoreTable` or `setEventStoreKind` setting when you want an explicit
+physical name.
