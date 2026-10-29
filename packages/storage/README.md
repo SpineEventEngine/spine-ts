@@ -1,5 +1,8 @@
 # Storage API and in-memory storage for Spine TS
 
+See [storage layout and database preparation](../../docs/STORAGE_LAYOUT.md) for
+physical structures, tenant placement, prerequisites, and customization.
+
 `@spine-event-engine/storage` defines the storage API used by Spine TS and
 includes an in-memory implementation for local development and tests. Use it
 when an application needs a small record store, or when an adapter needs to

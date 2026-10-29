@@ -1,5 +1,8 @@
 # Google Cloud Datastore storage for Spine TS
 
+See [storage layout and database preparation](../../docs/STORAGE_LAYOUT.md) for
+physical structures, tenant placement, prerequisites, and customization.
+
 `@spine-event-engine/storage-datastore` stores Spine TS records in Google Cloud
 Datastore, including Firestore in Datastore mode. It implements the storage
 contract from `@spine-event-engine/storage`; it does not use Firestore Native

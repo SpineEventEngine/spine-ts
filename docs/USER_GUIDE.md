@@ -386,6 +386,10 @@ for the complete command, query, and subscription contract.
 
 ## 6. Persist application data
 
+See the [storage layout and database preparation reference](STORAGE_LAYOUT.md)
+for each provider’s single-tenant and multitenant structures, prerequisites,
+customization, and gateway/authentication storage responsibilities.
+
 Begin locally with in-memory storage. It is fast and useful for tests, but its
 state disappears when the process stops. Move to [MySQL](../packages/storage-mysql/README.md),
 [PostgreSQL](../packages/storage-postgres/README.md), or Google Cloud Datastore

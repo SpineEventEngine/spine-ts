@@ -1,5 +1,8 @@
 # MySQL storage for Spine TS
 
+See [storage layout and database preparation](../../docs/STORAGE_LAYOUT.md) for
+physical structures, tenant placement, prerequisites, and customization.
+
 `@spine-event-engine/storage-mysql` stores Spine TS records in MySQL. It is a
 durable implementation of `@spine-event-engine/storage` and manages the mysql2
 connection pool and its private tables. PostgreSQL is not supported by this
@@ -243,21 +246,11 @@ TLS, and plan backups, monitoring, and migrations. Indexed `bigint` values must
 fit the exact signed 64-bit MySQL range. PostgreSQL is provided separately by
 [`@spine-event-engine/storage-postgres`](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-postgres/README.md).
 
-Before starting this corrected layout against an existing database, run the
-legacy-layout inventory for every configured tenant database:
-
-```sh
-pnpm --dir packages/storage-mysql inventory:legacy -- \
-  --url 'mysql://user:password@127.0.0.1:3306/tenant_a' \
-  --url 'mysql://user:password@127.0.0.1:3306/tenant_b'
-```
-
-The command exits nonzero if a database is unreachable or contains the old
-`_scope`, `_revision`, or compound scope key. Do not start the corrected
-runtime until it passes. The factory repeats this check for every configured
-database before it becomes usable. The runtime does not read both layouts or choose
-between rows that old Bounded Context partitions would collapse onto the same
-new `ID`; migrate those rows offline and stop on every conflict.
+Factory construction validates configuration without connecting. Explicit preparation
+or first use checks the selected record families; it does not scan unrelated
+tables. Existing tables must satisfy the expected layout. See the
+[storage layout reference](../../docs/STORAGE_LAYOUT.md#mysql-and-mariadb) for
+creation and compatibility-check timing.
 
 ## 🔗 Learn more
 

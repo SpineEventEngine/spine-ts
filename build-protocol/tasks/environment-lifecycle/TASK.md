@@ -14,7 +14,7 @@ requirement. The detailed [factory preparation](FACTORY_PREPARATION.md),
 The common workspace version is `2.0.0-snapshot.25` in a separate version-only commit.
 
 Fresh independent review corrections are complete. The changes include environment
-AI inheritance, the Production storage default, shared Inbox enforcement,
+AI inheritance, the Production storage default, single-tenant InboxStorage enforcement,
 Delivery failure reporting and concurrent handoffs, one native Datastore Agent
 transaction attempt, and corrected public configuration examples. Required
 review concerns are clear; focused checks include native Datastore transactions
@@ -31,7 +31,8 @@ and shared-Delivery tenant and shard behavior.
   explicit startup preparation fails the application.
 - After successful initial subscription monitoring, later failures log WARN and
   attempt restart without stopping the application.
-- Single-tenant shared Inbox; derive dispatch tenant from the packed signal.
+- Single-tenant InboxStorage holds messages for individual Entity Inboxes;
+  derive dispatch tenant from the packed signal.
 - Primary delivery follows committed Inbox writes; scanning is a safety net.
 - Dynamic application-controlled TenantIndex, resolver and TENANT_UNKNOWN.
 - Apply JVM PR 1698 registration and cleanup semantics, with unconditional
@@ -57,6 +58,21 @@ and shared-Delivery tenant and shard behavior.
   after rollback; configured live AI correction settings are unchanged.
 
 ## Verification and handoff
+
+Follow-up requested for PR #20: demonstrate first-subscription creation in a
+multitenant Bounded Context using the default persistent subscription registry
+and PostgreSQL, including deferred preparation. Add an extensive storage layout
+reference for every provider, covering single-tenant and multitenant modes,
+physical structure names, framework record fields and types, prerequisites,
+and supported customization. Keep application infrastructure provisioning and
+existing-data migrations outside scope.
+The [storage layout reference](../../../docs/STORAGE_LAYOUT.md) includes gateway
+and authentication storage requirements, including runtime-only state and
+persistence delegated to application-provided implementations. Native PostgreSQL
+tests cover eager and lazy first subscriptions, shared registry placement, and
+tenant-specific state updates for the same Entity ID. This follow-up changes
+tests and documentation only; it uses the bounded `verify:task` profile plus
+native integration tests. The PR Build workflow runs full release verification.
 
 Local release verification at `b6235d13f` passed: 6,269 Vitest tests and 39 Node tests, with
 14 optional tests skipped and branch coverage at the unchanged 90% threshold.

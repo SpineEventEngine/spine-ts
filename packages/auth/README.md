@@ -1,5 +1,8 @@
 # Authentication gateway contracts
 
+See [storage layout and database preparation](../../docs/STORAGE_LAYOUT.md) for
+physical structures, tenant placement, prerequisites, and customization.
+
 `@spine-event-engine/auth` supplies provider-neutral building blocks for an
 application gateway. It authenticates a request, authorizes it, resolves a
 trusted actor context, and forwards approved Spine traffic. Bounded contexts do

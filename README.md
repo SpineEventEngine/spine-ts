@@ -114,6 +114,7 @@ Start with these packages:
 ## 🎓 Documentation
 
 - [End-user guide](docs/USER_GUIDE.md)
+- [Storage layouts, database preparation, and tenancy](docs/STORAGE_LAYOUT.md)
 - [Message Board example](examples/message-board/README.md)
 - [Support reply Agent example](examples/support/README.md)
 - [Release Notes Studio example](examples/release-notes/README.md)
