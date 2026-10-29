@@ -52,7 +52,6 @@ const DeliveryProcess: Readonly<{
       });
     };
 
-    process.once("exit", removeSignalHandlers);
     process.on("SIGINT", stop);
     process.on("SIGTERM", stop);
     server.start().then(

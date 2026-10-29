@@ -14,6 +14,7 @@
 
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -58,6 +59,21 @@ describe("spine-delivery-server executable", () => {
     const replacement = new DeliveryServer({ port: readinessPort(readiness) });
     await expect(replacement.start()).resolves.toBe(replacement);
     await replacement.close();
+  });
+
+  it("keeps terminal signals handled through process exit", async () => {
+    const script = `await import(${JSON.stringify(pathToFileURL(executable).href)}); process.once("exit", () => process.kill(process.pid, "SIGINT"));`;
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", script], {
+      env: { ...process.env, PORT: "0" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stderr = collect(child.stderr);
+    const exit = exited(child);
+    await waitFor(child, "Delivery server listening at http://127.0.0.1:");
+    child.kill("SIGINT");
+
+    await expect(exit).resolves.toBe(0);
+    await expect(stderr).resolves.toBe("");
   });
 });
 

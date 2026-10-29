@@ -58,11 +58,16 @@ and shared-Delivery tenant and shard behavior.
 
 ## Verification and handoff
 
-Local release verification passes: 6,269 Vitest tests and 39 Node tests, with
+Local release verification at `b6235d13f` passed: 6,269 Vitest tests and 39 Node tests, with
 14 optional tests skipped and branch coverage at the unchanged 90% threshold.
 The native Datastore Agent tests also pass. The release stages were resumed
 after staging intended document deletions and correcting obsolete test fixtures.
 All accepted independent-review findings are resolved.
+
+Linux CI exposed a late repeated-signal shutdown race in the delivery-server
+executable. Signal handlers now remain installed until process death. The
+deterministic regression and all five process tests pass, and independent
+runtime review is clear. Final release and remote checks cover this correction.
 
 [Draft PR #20](https://github.com/SpineEventEngine/spine-ts/pull/20) contains the
 feature branch. Exact-revision Build and Security workflow results are the final
