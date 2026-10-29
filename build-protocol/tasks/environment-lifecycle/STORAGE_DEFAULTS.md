@@ -407,3 +407,43 @@ Status: implementation complete, reviewed, and release-verified. Publish this
 accepted tree on `environment-lifecycle` and update existing PR #20. The resulting
 feature-branch SHA and current-head CI results are recorded by Git/GitHub and the
 task conversation, avoiding a follow-up commit merely to record its predecessor.
+
+### Current-head CI correction
+
+The pushed continuation commit passed local release verification, but GitHub Build
+40928580049 rejected six private sibling-package imports in the new default-registry
+test. The same run also timed out starting the multi-machine Delivery fixture.
+The prior run failed a different assertion in that same fixture. Neither failure
+is dismissed as flaky without inspection. Security passed on the pushed SHA.
+
+The existing implementer (explicit configured gpt-6-sol / medium) receives the
+bounded test-placement correction and Delivery fixture diagnosis, with no child
+agents. Preserve assertions and package boundaries; do not weaken policy, timeouts,
+or delivery behavior merely to pass CI. Root updates this record. Mechanical
+checks precede any affected specialist review and the next release verification.
+The expected remaining work is 0.5–1 hour, including CI waiting.
+
+The boundary-policy scanner listed tracked files only, which hid the new test
+until commit. The accepted correction splits provider-private assertions into
+their corresponding packages and includes non-ignored untracked files in local
+policy scanning. The Delivery fixture used a one-second real-process startup
+deadline and enabled a server processing timeout equal to the supervisor stale
+threshold. Its correction separates startup waiting from request-timeout tests
+and removes the competing server timeout; delivery assertions remain unchanged.
+A focused performance/reliability reviewer uses explicit gpt-6-sol / medium after
+the deterministic checks, limited to this fixture/policy correction. Other
+review concerns remain accepted: no public API, storage, or security contract
+changes are planned in this correction.
+
+The correction passes all 58 focused tests, changed-file lint/format, tooling
+typechecks, cleanup/TSDoc checks, and diff checks. The fresh focused
+performance/reliability reviewer (explicit Sol/medium dispatch, no children)
+found no actionable issue. Configured profile is accepted; actual runtime
+introspection is unavailable. The final release procedure runs after this
+convergence, followed by push and exact-SHA CI.
+
+The corrected tree passed `pnpm verify:release` in 462.02 seconds: 395 test
+files passed and two were skipped; 6,290 tests passed and 14 were skipped.
+All 39 generated Node tests passed. Coverage remains 93.54% statements, 90.00%
+branches (20,810/23,122), 95.61% functions, and 95.35% lines. The correction
+is ready to push; final acceptance awaits Build and Security on the new SHA.

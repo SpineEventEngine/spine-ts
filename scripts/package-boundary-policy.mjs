@@ -283,7 +283,7 @@ export function nativeServerRootDependencyProblems(root) {
   return problems.sort((left, right) => left.localeCompare(right));
 }
 
-function trackedTestOrFixtureFiles(root) {
+function localTestOrFixtureFiles(root) {
   const extensions = /\.(?:[cm]?[jt]sx?)$/u;
   const isTestOrFixture = (path) =>
     extensions.test(path) &&
@@ -299,13 +299,18 @@ function trackedTestOrFixtureFiles(root) {
         .trim(),
     );
     if (gitRoot !== realpathSync(root)) return discoveredTestOrFixtureFiles(root, isTestOrFixture);
-    return execFileSync("git", ["ls-files", "-z", "--", "packages"], {
-      cwd: root,
-      stdio: ["ignore", "pipe", "ignore"],
-    })
+    return execFileSync(
+      "git",
+      ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "packages"],
+      {
+        cwd: root,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    )
       .toString("utf8")
       .split("\0")
       .filter(isTestOrFixture)
+      .filter((path) => existsSync(join(root, path)))
       .map((path) => join(root, path))
       .sort((left, right) => left.localeCompare(right));
   } catch {
@@ -408,7 +413,7 @@ function relativeSpecifiers(path, text) {
 }
 
 /**
- * Finds tracked test and fixture imports that reach implementation trees in sibling packages.
+ * Finds local test and fixture imports that reach implementation trees in sibling packages.
  * Real paths are compared so a symlink cannot disguise the crossing.
  *
  * @param root Repository root used to find tracked packages and resolve real paths.
@@ -423,7 +428,7 @@ export function siblingPackageTreeReachProblems(root) {
   const forbiddenTrees = new Set(["src", "dist", "generated", "node_modules"]);
   const problems = [];
 
-  for (const importer of trackedTestOrFixtureFiles(actualRoot)) {
+  for (const importer of localTestOrFixtureFiles(actualRoot)) {
     const ownRoot = packageRootFor(actualRoot, importer);
     if (ownRoot === undefined) continue;
     for (const specifier of relativeSpecifiers(importer, readFileSync(importer, "utf8"))) {

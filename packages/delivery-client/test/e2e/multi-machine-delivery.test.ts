@@ -37,6 +37,7 @@ import { createMultiMachineApplication } from "../../test-fixtures/multi-machine
 const serverExecutable = resolve("packages/delivery-server/dist/bin/spine-delivery-server.js");
 const appFixture = resolve("packages/delivery-client/test-fixtures/multi-machine-app.mjs");
 const IPC_TIMEOUT_MS = 1_000;
+const STARTUP_TIMEOUT_MS = 5_000;
 const STALE_MS = 1_000;
 const STALE_TOLERANCE_MS = 100;
 const TAKEOVER_DEADLINE_MS = 5_000;
@@ -65,7 +66,7 @@ describe("TS-to-TS multi-machine delivery", () => {
     try {
       expect(createMultiMachineApplication).toBeTypeOf("function");
       server = spawn(process.execPath, [serverExecutable], {
-        env: { ...process.env, PORT: "0", SHARD_PROCESSING_TIMEOUT: "1" },
+        env: { ...process.env, PORT: "0", SHARD_PROCESSING_TIMEOUT: "0" },
         stdio: ["ignore", "pipe", "pipe"],
       });
       resources.add(server);
@@ -230,7 +231,7 @@ describe("TS-to-TS multi-machine delivery", () => {
     const scenario = async () => {
       try {
         server = spawn(process.execPath, [serverExecutable], {
-          env: { ...process.env, PORT: "0", SHARD_PROCESSING_TIMEOUT: "1" },
+          env: { ...process.env, PORT: "0", SHARD_PROCESSING_TIMEOUT: "0" },
           stdio: ["ignore", "pipe", "pipe"],
         });
         resources.add(server);
@@ -293,7 +294,7 @@ describe("TS-to-TS multi-machine delivery", () => {
     );
     resources.add(silent);
 
-    await expect(ready(silent)).rejects.toThrow("Fixture readiness timed out.");
+    await expect(ready(silent, IPC_TIMEOUT_MS)).rejects.toThrow("Fixture readiness timed out.");
     expect(coordinationState(silent)).toEqual([0, 0, 0, 0, 0]);
     await expect(settledExit(silent, 10)).resolves.toBe(false);
     expect(coordinationState(silent)).toEqual([0, 0, 0, 0, 0]);
@@ -360,9 +361,9 @@ function app(baseUrl: string, node: string): ChildProcess {
   });
 }
 
-function ready(child: ChildProcess): Promise<void> {
+function ready(child: ChildProcess, timeoutMs = STARTUP_TIMEOUT_MS): Promise<void> {
   return new Promise((resolve, reject) => {
-    const finish = onceResult(child, resolve, reject, "Fixture readiness timed out.");
+    const finish = onceResult(child, resolve, reject, "Fixture readiness timed out.", timeoutMs);
     const onMessage = (frame: unknown) => {
       if (isRecord(frame) && frame.type === "ready") finish.resolve(undefined);
       else finish.reject(new Error("Fixture readiness failed."));
@@ -643,6 +644,7 @@ function onceResult<T>(
   resolvePromise: (value: T) => void,
   rejectPromise: (error: Error) => void,
   timeoutMessage: string,
+  timeoutMs = IPC_TIMEOUT_MS,
 ): {
   resolve(value: T): void;
   reject(error: Error): void;
@@ -685,7 +687,7 @@ function onceResult<T>(
   activeCoordinationTimers += 1;
   const timer = setTimeout(() => {
     reject(new Error(timeoutMessage));
-  }, IPC_TIMEOUT_MS);
+  }, timeoutMs);
   child.once("exit", onExit);
   child.once("disconnect", onDisconnect);
   child.once("error", onError);

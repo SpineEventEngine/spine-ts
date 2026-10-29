@@ -12,14 +12,39 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { UserIdSchema } from "@spine-event-engine/proto";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
+import { EntityStateKeySchema } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
+import { ColumnTypes } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
+import { TaskIdSchema } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
+import { MysqlColumnMapping } from "../src/mysql/column-mapping.js";
 import { MysqlIdColumn } from "../src/mysql/id-column.js";
 
 describe("MysqlIdColumn", () => {
+  it("uses a late generated application Any for default ID and query-column text", async () => {
+    const id = create(EntityStateKeySchema, {
+      entityId: create(AnySchema, {
+        typeUrl: `custom/${TaskIdSchema.typeName}`,
+        value: toBinary(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
+      }),
+      version: 1,
+    });
+    const column = new MysqlIdColumn(EntityStateKeySchema);
+    const mapping = new MysqlColumnMapping().of(ColumnTypes.message(EntityStateKeySchema));
+
+    expect(() => column.value(id)).toThrow();
+    await import("../../../examples/todo/generated/proto-module.js");
+
+    const text = column.value(id);
+    expect(text).toBe(defaultStringifierRegistry.forMessage(EntityStateKeySchema).toString(id));
+    expect(column.read(text)).toEqual(id);
+    expect(mapping(id)).toBe(text);
+  });
+
   it("stores and reads message IDs as compact Proto JSON", () => {
     const column = new MysqlIdColumn(UserIdSchema);
     const id = create(UserIdSchema, { value: "user-42" });

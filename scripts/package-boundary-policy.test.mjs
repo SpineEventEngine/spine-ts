@@ -12,6 +12,7 @@
  * the License.
  */
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { expect, it } from "vitest";
@@ -101,6 +102,41 @@ it("rejects a test fixture that resolves through a sibling package source tree",
   }
 });
 
+it("checks untracked local tests before they are committed", () => {
+  const root = mkdtempSync(join(tmpdir(), "spine-package-boundary-untracked-"));
+  try {
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    for (const name of ["consumer", "sibling"]) {
+      mkdirSync(join(root, "packages", name, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "packages", name, "package.json"),
+        JSON.stringify({ name: `@example/${name}` }),
+      );
+    }
+    writeFileSync(join(root, "packages", "sibling", "src", "api.ts"), "export const api = 1;\n");
+    execFileSync(
+      "git",
+      ["add", "packages/sibling/package.json", "packages/consumer/package.json"],
+      { cwd: root },
+    );
+    mkdirSync(join(root, "packages", "consumer", "test"));
+    const removed = join(root, "packages", "consumer", "test", "removed.test.ts");
+    writeFileSync(removed, 'import "../../sibling/src/api.js";\n');
+    execFileSync("git", ["add", "packages/consumer/test/removed.test.ts"], { cwd: root });
+    rmSync(removed);
+    writeFileSync(
+      join(root, "packages", "consumer", "test", "api.test.ts"),
+      'import { api } from "../../sibling/src/api.js";\nexport { api };\n',
+    );
+
+    expect(siblingPackageTreeReachProblems(root)).toEqual([
+      "packages/consumer/test/api.test.ts reaches packages/sibling/src/api.ts",
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it("uses platform path semantics when distinguishing a nested package path from a sibling", () => {
   expect(
     isNestedPath("C:\\repo\\packages\\consumer", "C:\\repo\\packages\\consumer\\test", win32),
@@ -114,7 +150,7 @@ it("uses platform path semantics when distinguishing a nested package path from 
   ).toBe(false);
 });
 
-it("keeps tracked package tests and fixtures out of sibling implementation trees", () => {
+it("keeps local package tests and fixtures out of sibling implementation trees", () => {
   expect(siblingPackageTreeReachProblems(repoRoot)).toEqual([]);
 });
 
