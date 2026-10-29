@@ -101,3 +101,9 @@ column conversions, message-valued fields, and Entity identifier conversions wit
 concrete examples. Explain the complete Agent persistence lifecycle and the contents
 of its records, beyond merely naming model preferences. Retain gateway/auth coverage.
 This is a documentation revision; existing runtime behavior and tests remain unchanged.
+
+The final CI run must also pass the delivery-server process shutdown checks.
+Repeated-signal tests must coordinate with a running child process and distinguish
+normal shutdown handling from signals sent after its JavaScript runtime has stopped.
+Preserve normal graceful shutdown and listener release; do not hide failures with
+additional sleeps, larger timeouts, or retries.
