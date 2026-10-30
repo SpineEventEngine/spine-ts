@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Int32ValueSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Identifiers } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
@@ -43,7 +43,7 @@ describe("InboxRecords", () => {
   });
 
   it("preserves a typed JVM EntityId Any without forcing StringValue", () => {
-    const targetId = AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 7 }));
+    const targetId = AnyPacker.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 7 }));
     const source = {
       ...createMessage("typed-message", "typed-signal", 1n),
       inboxId: { targetId, targetTypeUrl: "type.example.dev/TypedEntity" },

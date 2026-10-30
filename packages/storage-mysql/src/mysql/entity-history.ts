@@ -12,7 +12,8 @@
  * the License.
  */
 
-import { create, fromBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId } from "@spine-event-engine/proto";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
@@ -30,12 +31,10 @@ import {
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import type { NormalizedQueryEntry, NormalizedQueryPlan } from "@spine-event-engine/storage";
-import { MysqlRecordStorage } from "./record-storage.js";
+import { MysqlRecordStorage, type OnPublicOperation } from "./record-storage.js";
 
 /**
-
  * Opens one MySQL record family for Entity storage.
-
  */
 interface OpenRecords {
   /**
@@ -106,40 +105,32 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   readonly current: EntityRecordStorage<I>;
 
   /**
-
    * Current record-family handle.
-
    */
   readonly #current: CurrentStorage<I, S>;
 
   /**
-
    * Optional state-history handle.
-
    */
-  readonly #states: States<I, S> | undefined;
+  #states: States<I, S> | undefined;
 
   /**
-
    * Optional diagnostic-history handle.
-
    */
-  readonly #events: Events<I, S> | undefined;
+  #events: Events<I, S> | undefined;
 
   /**
    * Exposes Entity state history records.
    */
-  readonly states: EntityStateHistoryPort<I, S>;
+  states: EntityStateHistoryPort<I, S>;
 
   /**
    * Exposes Entity event history records.
    */
-  readonly events: EntityEventHistoryPort<I>;
+  events: EntityEventHistoryPort<I>;
 
   /**
-
    * Whether this Entity storage accepts operations.
-
    */
   #open = true;
 
@@ -149,22 +140,59 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
    * @param input Configures the Entity storage families.
    * @param open Opens one record-family storage handle.
    * @param onClose Removes this Entity handle from its factory.
+   * @param lazy Whether optional families are acquired on first use.
+   * @param onAdmit Admits complete public Entity operations.
    */
   constructor(
-    input: EntityStorageInput<I, S>,
-    open: OpenRecords,
+    private readonly input: EntityStorageInput<I, S>,
+    private readonly open: OpenRecords,
     private readonly onClose: () => void = () => undefined,
+    lazy = false,
+    private readonly onAdmit: OnPublicOperation = (work) => work(),
   ) {
-    this.#current = new CurrentStorage(input, open(input.recordSpec));
+    this.#current = new CurrentStorage(input, open(input.recordSpec), onAdmit);
     this.current = this.#current;
-    const states = input.stateHistory ? stateHistorySpec(input.stateSchema) : undefined;
-    const events = input.eventHistory ? eventHistorySpec(input.stateSchema) : undefined;
-    this.#states =
-      states === undefined ? undefined : new States(input, open(states.spec, states.group));
-    this.#events =
-      events === undefined ? undefined : new Events(input, open(events.spec, events.group));
-    this.states = this.#states ?? disabledStates();
-    this.events = this.#events ?? disabledEvents();
+    this.states = disabledStates(onAdmit);
+    this.events = disabledEvents(onAdmit);
+    if (!lazy) this.ensure(Boolean(input.stateHistory), Boolean(input.eventHistory));
+  }
+
+  /**
+   * Acquires only missing requested history families, rolling back a failed upgrade.
+   *
+   * @param wantEvents Whether diagnostic Event history is required.
+   * @param wantStates Whether state history is required.
+   */
+  ensure(wantStates: boolean, wantEvents: boolean): void {
+    if (!this.#open) throw new Error("MySQL Entity storage is closed.");
+    let states: States<I, S> | undefined;
+    let events: Events<I, S> | undefined;
+    try {
+      if (wantStates && this.#states === undefined) {
+        const layout = stateHistorySpec(this.input.stateSchema);
+        states = new States(this.input, this.open(layout.spec, layout.group), this.onAdmit);
+      }
+      if (wantEvents && this.#events === undefined) {
+        const layout = eventHistorySpec(this.input.stateSchema);
+        events = new Events(this.input, this.open(layout.spec, layout.group), this.onAdmit);
+      }
+      this.#states ??= states;
+      this.#events ??= events;
+      this.states = this.#states ?? disabledStates(this.onAdmit);
+      this.events = this.#events ?? disabledEvents(this.onAdmit);
+    } catch (error) {
+      const failures: unknown[] = [];
+      for (const port of [states, events]) {
+        try {
+          port?.close();
+        } catch (cleanup) {
+          failures.push(cleanup);
+        }
+      }
+      if (failures.length)
+        throw new AggregateError([error, ...failures], "MySQL family acquisition failed.");
+      throw error;
+    }
   }
 
   /**
@@ -182,10 +210,21 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   close(): void {
     if (!this.#open) return;
     this.#open = false;
-    this.#current.close();
-    this.states.close();
-    this.events.close();
-    this.onClose();
+    const failures: unknown[] = [];
+    for (const port of [this.#current, this.#states, this.#events]) {
+      try {
+        port?.close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    try {
+      this.onClose();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length === 1) throw failures[0] as Error;
+    if (failures.length) throw new AggregateError(failures, "MySQL Entity storage close failed.");
   }
 
   /**
@@ -246,6 +285,16 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   }
 
   /**
+   * Writes current state inside an already admitted Agent transaction.
+   *
+   * @param record Committed current Entity state.
+   * @returns Completion after the record write.
+   */
+  writeCurrentAdmitted(record: EntityRecord): Promise<void> {
+    return this.#current.writeAdmitted(record);
+  }
+
+  /**
    * Returns configured Entity history writers for the Agent transaction.
    *
    * @returns Transaction-bound immutable history appenders.
@@ -256,9 +305,9 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   } {
     return {
       appendStateImmutable: (record: EntityRecord) =>
-        this.#states?.append(record) ?? Promise.resolve(),
+        this.#states?.appendAdmitted(record) ?? Promise.resolve(),
       appendDiagnosticImmutable: (record: Event) =>
-        this.#events?.append(record) ?? Promise.resolve(),
+        this.#events?.appendAdmitted(record) ?? Promise.resolve(),
     };
   }
 }
@@ -275,10 +324,12 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
    *
    * @param input Defines the Entity layout.
    * @param records Stores current Entity records.
+   * @param onAdmit Admits complete public current operations.
    */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: MysqlRecordStorage<I, EntityRecord>,
+    private readonly onAdmit: OnPublicOperation,
   ) {}
 
   /**
@@ -322,7 +373,7 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
    * @returns The current record when present.
    */
   read(id: I): Promise<EntityRecord | undefined> {
-    return this.records.read(id);
+    return this.onAdmit(() => this.records.read(id));
   }
 
   /**
@@ -332,6 +383,16 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
    * @returns Completion after the write.
    */
   write(record: EntityRecord): Promise<void> {
+    return this.onAdmit(() => this.writeAdmitted(record));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param record Current Entity record.
+   * @returns Stored result.
+   */
+  writeAdmitted(record: EntityRecord): Promise<void> {
     return this.records.write(record);
   }
 
@@ -342,6 +403,18 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
    * @returns Matching records and mapped column values.
    */
   async query(
+    plan: NormalizedQueryPlan<I>,
+  ): Promise<readonly NormalizedQueryEntry<I, EntityRecord>[]> {
+    return this.onAdmit(() => this.queryAdmitted(plan));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param plan Normalized query.
+   * @returns Current records and columns.
+   */
+  private async queryAdmitted(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly NormalizedQueryEntry<I, EntityRecord>[]> {
     const entries = await this.records.queryPlanEntries(plan);
@@ -369,9 +442,7 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
   }
 
   /**
-
    * Closes the current record handle.
-
    */
   close(): void {
     this.records.close();
@@ -390,10 +461,12 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
    *
    * @param input Defines the Entity ID and state schemas.
    * @param records Stores immutable state-history records.
+   * @param onAdmit Admits complete public state-history operations.
    */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: MysqlRecordStorage<EntityStateKey, EntityRecord>,
+    private readonly onAdmit: OnPublicOperation,
   ) {}
 
   /**
@@ -427,6 +500,16 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
    * @returns Completion after insertion or identical retry.
    */
   append(record: EntityRecord): Promise<void> {
+    return this.onAdmit(() => this.appendAdmitted(record));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param record Immutable state record.
+   * @returns Stored result.
+   */
+  appendAdmitted(record: EntityRecord): Promise<void> {
     return this.records.writeImmutable(record);
   }
 
@@ -439,6 +522,22 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
    * @returns Matching states in descending version order.
    */
   async backward(
+    id: I,
+    depth: number,
+    startingFromVersion?: bigint,
+  ): Promise<readonly EntityRecord[]> {
+    return this.onAdmit(() => this.backwardAdmitted(id, depth, startingFromVersion));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param id Entity ID.
+   * @param depth Read limit.
+   * @param startingFromVersion Maximum version.
+   * @returns Retained states in reverse order.
+   */
+  private async backwardAdmitted(
     id: I,
     depth: number,
     startingFromVersion?: bigint,
@@ -463,7 +562,18 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
    * @returns Decoded state when present.
    */
   async stateAt(id: I, time: Timestamp): Promise<S | undefined> {
-    const records = await this.backward(id, Number.MAX_SAFE_INTEGER);
+    return this.onAdmit(() => this.stateAtAdmitted(id, time));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param id Entity ID.
+   * @param time Inclusive timestamp.
+   * @returns State at the requested time.
+   */
+  private async stateAtAdmitted(id: I, time: Timestamp): Promise<S | undefined> {
+    const records = await this.backwardAdmitted(id, Number.MAX_SAFE_INTEGER);
     const found = records.find((record) => {
       const timestamp = record.version?.timestamp;
       return (
@@ -474,7 +584,7 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
     });
     return found?.state === undefined
       ? undefined
-      : fromBinary(this.input.stateSchema, found.state.value);
+      : AnyPacker.unpack(found.state, this.input.stateSchema);
   }
 
   /**
@@ -485,7 +595,18 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
    * @returns Completion after independent deletions.
    */
   async trim(id: I, keep: number): Promise<void> {
-    const records = await this.backward(id, Number.MAX_SAFE_INTEGER);
+    return this.onAdmit(() => this.trimAdmitted(id, keep));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param id Entity ID.
+   * @param keep Retained count.
+   * @returns Completion after older states are removed.
+   */
+  private async trimAdmitted(id: I, keep: number): Promise<void> {
+    const records = await this.backwardAdmitted(id, Number.MAX_SAFE_INTEGER);
     for (const record of records.slice(keep)) {
       if (record.entityId !== undefined)
         await this.records.delete(
@@ -504,6 +625,16 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
    * @returns Completion after independent deletions.
    */
   async truncate(olderThan: Timestamp): Promise<void> {
+    return this.onAdmit(() => this.truncateAdmitted(olderThan));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param olderThan Exclusive cutoff.
+   * @returns Completion after truncation.
+   */
+  private async truncateAdmitted(olderThan: Timestamp): Promise<void> {
     const all = await this.records.query();
     for (const record of all) {
       const timestamp = record.version?.timestamp;
@@ -523,9 +654,7 @@ class States<I, S extends Message> implements EntityStateHistoryPort<I, S> {
   }
 
   /**
-
    * Closes the state-history handle.
-
    */
   close(): void {
     this.records.close();
@@ -553,10 +682,12 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
    *
    * @param input Defines the Entity ID and state schemas.
    * @param records Stores immutable diagnostic Events.
+   * @param onAdmit Admits complete public Event-history operations.
    */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly records: MysqlRecordStorage<EventId, Event>,
+    private readonly onAdmit: OnPublicOperation,
   ) {}
 
   /**
@@ -590,6 +721,16 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
    * @returns Completion after insertion or identical retry.
    */
   append(record: Event): Promise<void> {
+    return this.onAdmit(() => this.appendAdmitted(record));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param record Immutable diagnostic Event.
+   * @returns Stored result.
+   */
+  appendAdmitted(record: Event): Promise<void> {
     return this.records.writeImmutable(record);
   }
 
@@ -602,6 +743,22 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
    * @returns Matching Events in descending version order.
    */
   async backward(id: I, depth: number, startingFromVersion?: bigint): Promise<readonly Event[]> {
+    return this.onAdmit(() => this.backwardAdmitted(id, depth, startingFromVersion));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param id Producer ID.
+   * @param depth Read limit.
+   * @param startingFromVersion Maximum version.
+   * @returns Diagnostic Events in reverse order.
+   */
+  private async backwardAdmitted(
+    id: I,
+    depth: number,
+    startingFromVersion?: bigint,
+  ): Promise<readonly Event[]> {
     const all = await this.records.query({ sort: [{ field: "version", direction: "desc" }] });
     return all
       .filter(
@@ -621,6 +778,16 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
    * @returns Completion after independent deletions.
    */
   async truncate(olderThan: Timestamp): Promise<void> {
+    return this.onAdmit(() => this.truncateAdmitted(olderThan));
+  }
+
+  /**
+   * Executes an admitted provider operation.
+   *
+   * @param olderThan Exclusive cutoff.
+   * @returns Completion after truncation.
+   */
+  private async truncateAdmitted(olderThan: Timestamp): Promise<void> {
     const all = await this.records.query();
     for (const event of all) {
       const timestamp = event.context?.timestamp;
@@ -635,9 +802,7 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
   }
 
   /**
-
    * Closes the diagnostic-history handle.
-
    */
   close(): void {
     this.records.close();
@@ -658,15 +823,18 @@ class Events<I, S extends Message> implements EntityEventHistoryPort<I> {
  *
  * @typeParam I Entity identifier type.
  * @typeParam S Entity state message type.
+ * @param onAdmit Admits public calls even when history is disabled.
  * @returns A disabled state-history port.
  */
-function disabledStates<I, S extends Message>(): EntityStateHistoryPort<I, S> {
+function disabledStates<I, S extends Message>(
+  onAdmit: OnPublicOperation,
+): EntityStateHistoryPort<I, S> {
   return {
-    append: () => Promise.reject(new Error("Entity state history is disabled.")),
-    backward: () => Promise.resolve([]),
-    stateAt: () => Promise.resolve(undefined),
-    trim: () => Promise.resolve(),
-    truncate: () => Promise.resolve(),
+    append: () => onAdmit(() => Promise.reject(new Error("Entity state history is disabled."))),
+    backward: () => onAdmit(() => Promise.resolve([])),
+    stateAt: () => onAdmit(() => Promise.resolve(undefined)),
+    trim: () => onAdmit(() => Promise.resolve()),
+    truncate: () => onAdmit(() => Promise.resolve()),
     close: () => undefined,
   };
 }
@@ -675,13 +843,14 @@ function disabledStates<I, S extends Message>(): EntityStateHistoryPort<I, S> {
  * Creates a rejecting diagnostic-history port when retention is disabled.
  *
  * @typeParam I Entity identifier type.
+ * @param onAdmit Admits public calls even when history is disabled.
  * @returns A disabled diagnostic-history port.
  */
-function disabledEvents<I>(): EntityEventHistoryPort<I> {
+function disabledEvents<I>(onAdmit: OnPublicOperation): EntityEventHistoryPort<I> {
   return {
-    append: () => Promise.reject(new Error("Entity event history is disabled.")),
-    backward: () => Promise.resolve([]),
-    truncate: () => Promise.resolve(),
+    append: () => onAdmit(() => Promise.reject(new Error("Entity event history is disabled."))),
+    backward: () => onAdmit(() => Promise.resolve([])),
+    truncate: () => onAdmit(() => Promise.resolve()),
     close: () => undefined,
   };
 }

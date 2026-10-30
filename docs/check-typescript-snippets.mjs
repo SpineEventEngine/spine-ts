@@ -85,6 +85,7 @@ export const documentedTypeScriptPaths = [
   "docs/api/README.md",
   "docs/architecture/README.md",
   "docs/USER_GUIDE.md",
+  "docs/STORAGE_LAYOUT.md",
 ];
 
 const fence = /^```(?:ts|typescript)\s*\n([\s\S]*?)^```\s*$/gim;

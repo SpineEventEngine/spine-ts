@@ -20,7 +20,7 @@ import {
   MessageIdSchema,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { UserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   EntityStateUpdateSchema,
   EntityUpdatesSchema,
@@ -91,7 +91,7 @@ describe("BoardPayloads", () => {
       "undecodable identity",
       updates(
         remove("bad", {
-          id: AnyMessages.pack(BoardIdSchema, create(BoardIdSchema, { value: "general" })),
+          id: AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: "general" })),
         }),
       ),
       "invalid-id",
@@ -112,20 +112,20 @@ describe("BoardPayloads", () => {
         state(
           "wrong",
           1n,
-          AnyMessages.pack(BoardIdSchema, create(BoardIdSchema, { value: "general" })),
+          AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: "general" })),
         ),
       ),
       "invalid-state",
     ],
     [
       "identity mismatch",
-      updates(state("outer", 1n, AnyMessages.pack(BoardMessageViewSchema, row("inner", 1n)))),
+      updates(state("outer", 1n, AnyPacker.pack(BoardMessageViewSchema, row("inner", 1n)))),
       "identity-mismatch",
     ],
     [
       "foreign board",
       updates(
-        state("foreign", 1n, AnyMessages.pack(BoardMessageViewSchema, row("foreign", 1n, "other"))),
+        state("foreign", 1n, AnyPacker.pack(BoardMessageViewSchema, row("foreign", 1n, "other"))),
       ),
       "foreign-board",
     ],
@@ -160,7 +160,7 @@ function update(value: MessageInitShape<typeof SubscriptionUpdateSchema>): Subsc
 function state(
   id: string,
   seconds = 1n,
-  value = AnyMessages.pack(BoardMessageViewSchema, row(id, seconds)),
+  value = AnyPacker.pack(BoardMessageViewSchema, row(id, seconds)),
 ) {
   return create(EntityStateUpdateSchema, {
     id: messageId(id),
@@ -177,7 +177,7 @@ function remove(id: string, extra: Record<string, unknown> = {}) {
 }
 
 function messageId(value: string) {
-  return AnyMessages.pack(MessageIdSchema, create(MessageIdSchema, { value }));
+  return AnyPacker.pack(MessageIdSchema, create(MessageIdSchema, { value }));
 }
 
 function row(id: string, seconds = 1n, board = "general") {

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { clone, create, ScalarType } from "@bufbuild/protobuf";
 import {
   AnySchema,
   Int32ValueSchema,
@@ -23,6 +23,7 @@ import {
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   InboxIdSchema,
   InboxLabel,
@@ -105,16 +106,6 @@ export const inboxRecordSpec: RecordSpec<WireInboxMessageId, WireInboxMessage> =
   idSchema: InboxMessageIdSchema,
   extractId: (record) => Values.id(record),
   columns: [
-    new RecordColumn(
-      "inbox_id",
-      ColumnTypes.fromField(InboxMessageSchema.field.inboxId),
-      (record) => record.inboxId,
-    ),
-    new RecordColumn(
-      "signal_id",
-      ColumnTypes.fromField(InboxMessageSchema.field.signalId),
-      (record) => record.signalId,
-    ),
     new RecordColumn(
       "shard_index",
       ColumnTypes.scalar(ScalarType.INT32),
@@ -326,9 +317,9 @@ const Values = Object.freeze({
    */
   payload(signal: Any) {
     if (signal.typeUrl === "type.spine.io/spine.core.Command")
-      return { case: "command" as const, value: fromBinary(CommandSchema, signal.value) };
+      return { case: "command" as const, value: AnyPacker.unpack(signal, CommandSchema) };
     if (signal.typeUrl === "type.spine.io/spine.core.Event")
-      return { case: "event" as const, value: fromBinary(EventSchema, signal.value) };
+      return { case: "event" as const, value: AnyPacker.unpack(signal, EventSchema) };
     throw new InboxMessageError("Inbox signal must contain a command or event payload.");
   },
 
@@ -345,14 +336,14 @@ const Values = Object.freeze({
     try {
       switch (value.typeUrl) {
         case "type.googleapis.com/google.protobuf.StringValue":
-          if (fromBinary(StringValueSchema, value.value).value.trim().length === 0)
+          if (AnyPacker.unpack(value, StringValueSchema).value.trim().length === 0)
             throw new TypeError("String target ID is blank.");
           break;
         case "type.googleapis.com/google.protobuf.Int32Value":
-          fromBinary(Int32ValueSchema, value.value);
+          AnyPacker.unpack(value, Int32ValueSchema);
           break;
         case "type.googleapis.com/google.protobuf.Int64Value":
-          fromBinary(Int64ValueSchema, value.value);
+          AnyPacker.unpack(value, Int64ValueSchema);
           break;
       }
     } catch (error) {
@@ -389,14 +380,8 @@ const Values = Object.freeze({
    */
   signal(kind: "command" | "event", payload: unknown): Any {
     return kind === "command"
-      ? create(AnySchema, {
-          typeUrl: "type.spine.io/spine.core.Command",
-          value: toBinary(CommandSchema, payload as never),
-        })
-      : create(AnySchema, {
-          typeUrl: "type.spine.io/spine.core.Event",
-          value: toBinary(EventSchema, payload as never),
-        });
+      ? AnyPacker.pack(CommandSchema, payload as never)
+      : AnyPacker.pack(EventSchema, payload as never);
   },
 
   /**

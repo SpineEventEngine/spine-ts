@@ -14,9 +14,14 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { spineCoreRegistry } from "@spine-event-engine/core";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
-import { Environment, EnvironmentType, Server, ServerEnvironment } from "../../src/index.js";
+import {
+  BoundedContext,
+  Environment,
+  EnvironmentType,
+  Server,
+  ServerEnvironment,
+} from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 
 afterEach(async () => {
@@ -33,24 +38,22 @@ describe("ServerEnvironment singleton", () => {
     try {
       expect(production.Environment.instance().type).toBe(production.EnvironmentType.Production);
       expect(() => production.ServerEnvironment.instance()).toThrow(
-        "Production ServerEnvironment requires storageFactory.",
+        "Production ServerEnvironment requires typeRegistry.",
       );
 
-      const storageFactory = new InMemoryStorageFactory();
+      const { InMemoryStorageFactory: ProductionMemoryFactory } =
+        await import("@spine-event-engine/storage");
       production.ServerEnvironment.when(production.EnvironmentType.Production).use({
-        storageFactory,
-      });
-      production.ServerEnvironment.when(production.EnvironmentType.Production).use({
-        storageFactory,
         typeRegistry: spineCoreRegistry,
       });
       const environment = production.ServerEnvironment.instance();
 
       expect(environment.environment.type).toBe(production.EnvironmentType.Production);
-      expect(environment.storageFactory).toBe(storageFactory);
+      expect(environment.storageFactory).toBeInstanceOf(ProductionMemoryFactory);
+      await environment.completeSetup();
 
       const running = await production.Server.atPort(0)
-        .add(production.BoundedContext.singleTenant("NoLegacyTransport").build())
+        .add(await production.BoundedContext.singleTenant("NoLegacyTransport").build())
         .start();
       await running.close();
     } finally {
@@ -141,21 +144,26 @@ describe("ServerEnvironment singleton", () => {
 
     await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
 
-    const freshDelivery = { close: () => undefined };
+    const freshDelivery = { close: vi.fn(() => undefined) };
     ServerEnvironment.when(EnvironmentType.Local).use({ delivery: freshDelivery });
     const fresh = ServerEnvironment.instance();
 
     expect(fresh).not.toBe(old);
-    expect(fresh.delivery).toBe(freshDelivery);
+    await fresh.completeSetup();
+    expect(fresh.delivery.inbox).toBeDefined();
+    await resetServerEnvironmentForTest();
+    expect(freshDelivery.close).toHaveBeenCalledTimes(1);
     expect(closeAttempts).toBe(2);
   });
 
-  it("retains an active server graph until that server detaches and reset retries", async () => {
+  it("retains an active context until it closes and reset retries", async () => {
     const old = ServerEnvironment.instance();
-    const running = await Server.atPort(0).start();
+    await old.completeSetup();
+    const context = await BoundedContext.singleTenant("ActiveEnvironmentContext").build();
+    const running = await Server.atPort(0).add(context).start();
 
     await expect(resetServerEnvironmentForTest()).rejects.toThrow(
-      "ServerEnvironment cannot close while it is in use.",
+      "Cannot reset ServerEnvironment with active Bounded Contexts.",
     );
 
     expect(ServerEnvironment.instance()).toBe(old);
@@ -164,6 +172,7 @@ describe("ServerEnvironment singleton", () => {
     }).toThrow("ServerEnvironment is already resolved and cannot be reconfigured.");
 
     await running.close();
+    await context.close();
     await expect(resetServerEnvironmentForTest()).resolves.toBeUndefined();
 
     const fresh = ServerEnvironment.instance();

@@ -12,12 +12,12 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { randomUUID } from "node:crypto";
 import {
-  AnySchema,
   StringValueSchema,
   TimestampSchema,
+  type Any,
   type StringValue,
 } from "@bufbuild/protobuf/wkt";
 import {
@@ -25,9 +25,10 @@ import {
   EventSchema,
   type Event,
   TenantIdSchema,
+  UserIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { AnyMessages, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
 import {
   TaskIdSchema,
@@ -35,13 +36,19 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskListSchema } from "../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
-import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
+import {
+  TaskSchema,
+  type Task,
+} from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/provider";
-import { eventStoreRecordSpec } from "@spine-event-engine/storage/provider";
+import {
+  EntityCommitStorageFactories,
+  StoragePreparations,
+} from "@spine-event-engine/storage/provider";
+import { eventStoreRecordSpec, EventStoreGroups } from "@spine-event-engine/storage/provider";
 import {
   ColumnTypes,
   EventStore,
@@ -54,6 +61,8 @@ import { createPool } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { MysqlStorageFactory } from "../src/index.js";
+import { providerEntityInput } from "../../storage/test/entity/agent-execution-provider-fixtures.js";
+import { scope as agentScope } from "../../storage/test/entity/agent-history-fixtures.js";
 import {
   mysqlCurrentRecord,
   mysqlHistoryCounts,
@@ -88,8 +97,34 @@ live("MySQL-family record layout", () => {
       .setStringifierRegistry(stringifiers)
       .build();
   });
-  afterAll(() => {
-    factory.close();
+  afterAll(async () => {
+    await factory.close();
+  });
+
+  it("checks then creates physical records, Entity history, and Agent audit indexes", async () => {
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: `mysql_prepare_${randomUUID()}`, multitenant: false } as const;
+    const group = new StorageGroup(`prep_${randomUUID().replaceAll("-", "")}`);
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (value: StringValue) => value.value,
+    });
+    await expect(preparation.prepareRecord(context, spec, group, "check")).rejects.toThrow();
+    await preparation.prepareRecord(context, spec, group, "create");
+    await preparation.prepareRecord(context, spec, group, "check");
+    const records = factory.createRecordStorage(context, spec, group);
+    try {
+      const value = create(StringValueSchema, { value: `prepared-${randomUUID()}` });
+      await records.write(value);
+      await expect(records.read(value.value)).resolves.toEqual(value);
+    } finally {
+      records.close();
+    }
+    await preparation.prepareEntity(providerEntityInput(), "create");
+    await preparation.prepareEntity(providerEntityInput(), "check");
+    await preparation.prepareAgentHistory(agentScope, "create");
+    await preparation.prepareAgentHistory(agentScope, "check");
   });
 
   it("keeps an immutable EventStore prefix and admits identical Events on retry", async () => {
@@ -101,8 +136,8 @@ live("MySQL-family record layout", () => {
       const taskId = create(TaskIdSchema, { value: task });
       return create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
-        context: { producerId: AnyMessages.pack(TaskIdSchema, taskId) },
-        message: AnyMessages.pack(
+        context: { producerId: AnyPacker.pack(TaskIdSchema, taskId) },
+        message: AnyPacker.pack(
           TaskCreatedSchema,
           create(TaskCreatedSchema, {
             id: taskId,
@@ -153,8 +188,53 @@ live("MySQL-family record layout", () => {
         }
       }
     } finally {
-      first.close();
-      second.close();
+      await first.close();
+      await second.close();
+    }
+  });
+
+  it("separates context Event groups while explicit preparation checks their exact tables", async () => {
+    const firstContext = { name: `mysql_event_first_${randomUUID()}`, multitenant: false } as const;
+    const secondContext = {
+      name: `mysql_event_second_${randomUUID()}`,
+      multitenant: false,
+    } as const;
+    const preparation = StoragePreparations.for(factory);
+    for (const scope of [firstContext, secondContext]) {
+      const group = EventStoreGroups.forContext(scope.name);
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "create");
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "check");
+    }
+    const first = new EventStore(firstContext, factory);
+    const second = new EventStore(secondContext, factory);
+    const id = `shared-${randomUUID()}`;
+    const make = (task: string) =>
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: id }),
+        context: {
+          producerId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: task })),
+        },
+        message: AnyPacker.pack(
+          TaskCreatedSchema,
+          create(TaskCreatedSchema, {
+            id: create(TaskIdSchema, { value: task }),
+            taskListId: create(TaskListIdSchema, { value: "list" }),
+            title: task,
+          }),
+        ),
+      });
+    try {
+      await first.append(make("first"));
+      await second.append(make("second"));
+      expect((await first.read()).map((entry) => toBinary(EventSchema, entry))).toEqual([
+        toBinary(EventSchema, make("first")),
+      ]);
+      expect((await second.read()).map((entry) => toBinary(EventSchema, entry))).toEqual([
+        toBinary(EventSchema, make("second")),
+      ]);
+      await expect(first.append(make("conflict"))).rejects.toThrow(/unique event IDs/);
+    } finally {
+      await Promise.all([first.close(), second.close()]);
     }
   });
 
@@ -166,7 +246,7 @@ live("MySQL-family record layout", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
         context: { timestamp },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectCreatedSchema,
           create(ProjectCreatedSchema, {
             memberId: [`member-${id}`],
@@ -218,6 +298,56 @@ live("MySQL-family record layout", () => {
       });
       expect(continued.map((event) => event.id?.value)).toEqual(["m-middle", "a-last"]);
       expect(continued.map((event) => event.context?.timestamp)).toEqual([middle, last]);
+    } finally {
+      storage.close();
+    }
+  });
+
+  it("pages optional Task assignees after NULL and into the descending NULL tail", async () => {
+    const task = (id: string, assignee?: string) =>
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: `Task ${id}`,
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+        ...(assignee === undefined ? {} : { assignee: create(UserIdSchema, { value: assignee }) }),
+      });
+    const records = [task("a"), task("b", "user-1"), task("c", "user-2")];
+    const spec = new RecordSpec<string, Task>({
+      recordType: TaskSchema,
+      idKind: "string",
+      extractId: (value) => value.id?.value ?? "",
+      columns: [
+        new RecordColumn(
+          "assignee",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (value) => value.assignee?.value,
+        ),
+      ],
+    });
+    const context = {
+      name: `nullable_assignee_${randomUUID().replaceAll("-", "")}`,
+      multitenant: false,
+    } as const;
+    const storage = factory.createRecordStorage(context, spec, new StorageGroup(context.name));
+    try {
+      await storage.writeAll([...records].reverse());
+      expect(
+        (await storage.query({ sort: [{ field: "assignee", direction: "asc" }] })).map(
+          (value) => value.id?.value,
+        ),
+      ).toEqual(["a", "b", "c"]);
+      const afterNull = await storage.query({
+        sort: [{ field: "assignee", direction: "asc" }],
+        after: { values: [{ field: "assignee", value: null }], id: "a" },
+        limit: 2,
+      });
+      expect(afterNull.map((value) => value.id?.value)).toEqual(["b", "c"]);
+      const afterHighest = await storage.query({
+        sort: [{ field: "assignee", direction: "desc" }],
+        after: { values: [{ field: "assignee", value: "user-2" }], id: "c" },
+        limit: 2,
+      });
+      expect(afterHighest.map((value) => value.id?.value)).toEqual(["b", "a"]);
     } finally {
       storage.close();
     }
@@ -477,9 +607,9 @@ live("MySQL-family record layout", () => {
         );
       }
     } finally {
-      eventStore.close();
+      await eventStore.close();
       eventRecords.close();
-      commits.close();
+      await commits.close();
       await pool.end();
       if (admin !== undefined) await admin.end();
     }
@@ -492,7 +622,7 @@ live("MySQL-family record layout", () => {
     } as const;
     const input = entityInput(context);
     const closed = EntityCommitStorageFactories.create(factory, input);
-    closed.close();
+    await closed.close();
     await expect(closed.commit(mutation(context, input, "closed"))).rejects.toThrow(/closed/i);
 
     const commits = EntityCommitStorageFactories.create(factory, input);
@@ -515,7 +645,7 @@ live("MySQL-family record layout", () => {
         }),
       ).rejects.toThrow(/requires non-blank unique delivery event IDs/i);
     } finally {
-      commits.close();
+      await commits.close();
     }
   });
 
@@ -534,7 +664,7 @@ live("MySQL-family record layout", () => {
         commits.commit({ ...mutation(context, input, "diagnostic"), states: [] }),
       ).rejects.toThrow(/event history is disabled/i);
     } finally {
-      commits.close();
+      await commits.close();
     }
   });
 
@@ -614,9 +744,9 @@ live("MySQL-family record layout", () => {
     } finally {
       for (const table of tables) await pool.query(`ALTER TABLE \`${table}\` ENGINE=InnoDB`);
       eventRecords.close();
-      eventStore.close();
-      currentOnlyCommits.close();
-      commits.close();
+      await eventStore.close();
+      await currentOnlyCommits.close();
+      await commits.close();
       await pool.end();
     }
   });
@@ -717,7 +847,7 @@ live("MySQL-family record layout", () => {
     const event = (id: string, member = id) =>
       create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectCreatedSchema,
           create(ProjectCreatedSchema, { memberId: [member] }),
         ),
@@ -783,17 +913,14 @@ live("MySQL-family record layout", () => {
         ...mutation(context, input, "same"),
         next: {
           ...current("same"),
-          state: create(AnySchema, {
-            typeUrl: `type.spine.io/${TaskSchema.typeName}`,
-            value: toBinary(
-              TaskSchema,
-              create(TaskSchema, {
-                id: create(TaskIdSchema, { value: "same" }),
-                title: "Different",
-                taskListId: create(TaskListIdSchema, { value: "list-1" }),
-              }),
-            ),
-          }),
+          state: AnyPacker.pack(
+            TaskSchema,
+            create(TaskSchema, {
+              id: create(TaskIdSchema, { value: "same" }),
+              title: "Different",
+              taskListId: create(TaskListIdSchema, { value: "list-1" }),
+            }),
+          ),
         },
       };
       const outcomes = await Promise.all([first.commit(left), second.commit(right)]);
@@ -830,9 +957,9 @@ live("MySQL-family record layout", () => {
         left.events.map((event) => Buffer.from(toBinary(EventSchema, event))),
       );
     } finally {
-      eventStore.close();
-      first.close();
-      second.close();
+      await eventStore.close();
+      await first.close();
+      await second.close();
       await pool.end();
     }
   });
@@ -853,7 +980,7 @@ live("MySQL-family record layout", () => {
       await expect(commits.commit(same)).resolves.toBeUndefined();
       await expect(mysqlCurrentRecord(pool, input, id)).resolves.toEqual(before);
     } finally {
-      commits.close();
+      await commits.close();
       await pool.end();
     }
   });
@@ -861,6 +988,7 @@ live("MySQL-family record layout", () => {
 
 tenantLive("MySQL normalized-plan tenant containment", () => {
   it("keeps matching IDs inside the selected tenant and storage group", async () => {
+    if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     if (tenantAUrl === undefined || tenantBUrl === undefined) {
       throw new Error("Dedicated MySQL tenant URLs are required.");
     }
@@ -868,6 +996,7 @@ tenantLive("MySQL normalized-plan tenant containment", () => {
     const tenantB = tenant("b");
     const group = new StorageGroup(`t0190_group_${String(Date.now())}`);
     const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url })
       .setTenantOptions([
         { tenantId: tenantA, options: { url: tenantAUrl } },
         { tenantId: tenantB, options: { url: tenantBUrl } },
@@ -903,7 +1032,7 @@ tenantLive("MySQL normalized-plan tenant containment", () => {
     } finally {
       first.close();
       second.close();
-      factory.close();
+      await factory.close();
     }
   });
 });
@@ -919,7 +1048,7 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
     idKind: "string",
     extractId: (record) => {
       if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-      return fromBinary(TaskIdSchema, record.entityId.value).value;
+      return AnyPacker.unpack(record.entityId, TaskIdSchema).value;
     },
   });
   return {
@@ -928,10 +1057,7 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
       clone: (id: string) => id,
       key: (id: string) => id,
       pack: (id: string) => packed(id),
-      unpack: (id: { typeUrl: string; value: Uint8Array }) =>
-        id.typeUrl === `type.spine.io/${TaskIdSchema.typeName}`
-          ? fromBinary(TaskIdSchema, id.value).value
-          : undefined,
+      unpack: (id: Any) => AnyPacker.tryUnpack(id, TaskIdSchema)?.value,
     },
     columns: [],
     recordSpec,
@@ -943,25 +1069,19 @@ function entityInput(context: StorageContext, stateHistory = true, eventHistory 
 }
 
 function packed(value: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${TaskIdSchema.typeName}`,
-    value: toBinary(TaskIdSchema, create(TaskIdSchema, { value })),
-  });
+  return AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value }));
 }
 function current(id: string) {
   return create(EntityRecordSchema, {
     entityId: packed(id),
-    state: create(AnySchema, {
-      typeUrl: `type.spine.io/${TaskSchema.typeName}`,
-      value: toBinary(
-        TaskSchema,
-        create(TaskSchema, {
-          id: create(TaskIdSchema, { value: id }),
-          title: "Next",
-          taskListId: create(TaskListIdSchema, { value: "list-1" }),
-        }),
-      ),
-    }),
+    state: AnyPacker.pack(
+      TaskSchema,
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: "Next",
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+      }),
+    ),
     lifecycleFlags: { archived: false, deleted: false },
     version: create(VersionSchema, { number: 1 }),
   });
@@ -1001,15 +1121,12 @@ function mutation(context: StorageContext, input: ReturnType<typeof entityInput>
 }
 
 function taskCreated(id: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${TaskCreatedSchema.typeName}`,
-    value: toBinary(
-      TaskCreatedSchema,
-      create(TaskCreatedSchema, {
-        id: create(TaskIdSchema, { value: id }),
-        title: "Created",
-        taskListId: create(TaskListIdSchema, { value: "list-1" }),
-      }),
-    ),
-  });
+  return AnyPacker.pack(
+    TaskCreatedSchema,
+    create(TaskCreatedSchema, {
+      id: create(TaskIdSchema, { value: id }),
+      title: "Created",
+      taskListId: create(TaskListIdSchema, { value: "list-1" }),
+    }),
+  );
 }

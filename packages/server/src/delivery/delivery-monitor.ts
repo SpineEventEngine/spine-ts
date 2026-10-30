@@ -209,7 +209,7 @@ export class DeliveryMonitor {
   }
 
   /**
-   * Returns an action after endpoint dispatch fails.
+   * Returns an action after a handler or its output/transition validation fails.
    *
    * @param reception The failure facts and actions; a failed repeat calls this hook again.
    * @returns The selected asynchronous reception action.

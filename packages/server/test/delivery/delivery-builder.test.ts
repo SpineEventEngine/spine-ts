@@ -22,7 +22,7 @@ import { TenantIdSchema } from "@spine-event-engine/proto";
 import { Identifiers } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   AlreadyPickedUp,
@@ -120,7 +120,24 @@ describe("DeliveryMonitor delivery", () => {
     }).toThrow();
   });
 
-  it("accepts a custom shard registry with an equivalent cloned tenant", () => {
+  it("rejects a tenant-specific Delivery context before opening storage", () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const opened = vi.spyOn(storageFactory, "createRecordStorage");
+    const context = {
+      name: "Tasks",
+      multitenant: true as const,
+      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+    };
+    expect(() =>
+      new DeliveryBuilder().withContext(context).withStorageFactory(storageFactory).build(),
+    ).toThrow("Delivery requires a single-tenant storage context.");
+    expect(() => new CoreDelivery({ context, storageFactory })).toThrow(
+      "Delivery requires a single-tenant storage context.",
+    );
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it("rejects a tenant-specific custom shard registry", () => {
     const storageFactory = new InMemoryStorageFactory();
     const registryContext = {
       name: "Tasks",
@@ -131,36 +148,24 @@ describe("DeliveryMonitor delivery", () => {
       ...registryContext,
       tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
     };
-    const workRegistry = new ShardedWorkRegistry({
-      context: registryContext,
-      storageFactory,
-    });
-
-    expect(() =>
-      new DeliveryBuilder()
-        .withContext(builderContext)
-        .withStorageFactory(storageFactory)
-        .withWorkRegistry(workRegistry)
-        .build(),
-    ).not.toThrow();
+    expect(() => new ShardedWorkRegistry({ context: registryContext, storageFactory })).toThrow(
+      "Shard registry requires a single-tenant Delivery context.",
+    );
+    expect(() => new DeliveryBuilder().withContext(builderContext)).toThrow(
+      "Delivery requires a single-tenant storage context.",
+    );
   });
 
-  it("keeps Inbox and shard storage on the original tenant after public context mutation", async () => {
+  it("keeps Inbox and shard storage on their shared context after public mutation", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const original = {
       name: "TenantIsolation",
-      multitenant: true as const,
-      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+      multitenant: false as const,
     };
     const delivery = new CoreDelivery({
-      context: {
-        ...original,
-        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
-      },
+      context: { ...original },
       storageFactory,
     });
-    if (delivery.context.multitenant && delivery.context.tenantId.kind.case === "value")
-      delivery.context.tenantId.kind.value = "tenant-b";
     const written = await delivery.inbox.receive(
       createMessage("tenant-message", "tenant-signal", 1n),
     );
@@ -600,15 +605,12 @@ function build(): DeliveryBuilder {
   return new DeliveryBuilder().withStorageFactory(new InMemoryStorageFactory());
 }
 function message(signalId: string, targetId: string, shard: ShardIndex) {
+  const domainMessage = createMessage(signalId, signalId, 1n, undefined, targetId);
   return {
+    ...domainMessage,
     id: { value: signalId, shard },
-    inboxId: { targetId: Identifiers.pack("string", targetId), targetTypeUrl: "type" },
-    signalId,
-    label: "UPDATE_SUBSCRIBER" as const,
-    status: "TO_DELIVER" as const,
     shard,
     whenReceived: Time.currentTime(),
-    version: 1n,
   };
 }
 function registry(shard: ShardIndex) {

@@ -20,10 +20,10 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { create, fromBinary } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
-import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   AdminService,
   InboxService,
@@ -162,7 +162,7 @@ function projectStateId(update: SubscriptionUpdate): string | undefined {
   const state = update.update.value.update[0]?.kind;
   if (state?.case !== "state") return undefined;
   if (state.value.typeUrl !== TypeUrls.derive(ProjectOverviewStateSchema)) return undefined;
-  return fromBinary(ProjectOverviewStateSchema, state.value.value).id;
+  return AnyPacker.unpack(state.value, ProjectOverviewStateSchema).id;
 }
 
 it("RED-28 holds a replacement outside managed admission until its remote snapshot opens", async () => {

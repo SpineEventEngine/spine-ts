@@ -12,8 +12,10 @@
  * the License.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
+import { ServerEnvironment } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { BlackBox } from "@spine-event-engine/testing";
 import { CreateProjectSchema } from "../generated/spine/server/testing/project_commands_pb.js";
 import { ProjectCreatedSchema } from "../generated/spine/server/testing/project_events_pb.js";
@@ -23,12 +25,20 @@ import {
 } from "../generated/spine/server/testing/project_workflow_pb.js";
 import { projectWorkflow, projectWorkflowIds } from "../test-fixtures/project-workflow.js";
 
+beforeEach(async () => {
+  await ServerEnvironment.instance().completeSetup();
+});
+
+afterEach(async () => {
+  await ServerTests.resetEnvironment();
+});
+
 describe("Project process fixture", () => {
   it("routes one committed ProjectCreated to real planning, staffing and projection states", async () => {
     const entries: string[] = [];
     const ids = projectWorkflowIds("fixture-test", 1);
     const blackBox = await BlackBox.from(
-      projectWorkflow("fixture-test", (entry) => {
+      await projectWorkflow("fixture-test", (entry) => {
         entries.push(entry.method);
       }),
     );
@@ -59,7 +69,7 @@ describe("Project process fixture", () => {
 
   it("derives distinct recipient IDs for two ProjectCreated Events", async () => {
     const entries: string[] = [];
-    const context = projectWorkflow("two-projects", (entry) => {
+    const context = await projectWorkflow("two-projects", (entry) => {
       entries.push(entry.correlation);
     });
     const first = projectWorkflowIds("fixture-pair", 1);

@@ -47,8 +47,243 @@ import {
   type StorageContext,
 } from "../../src/index.js";
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
+import { eventStoreAccess, EventStoreGroups } from "../../src/provider.js";
 
 describe("EventStore", () => {
+  it("uses the selected Bounded Context name while retaining the Event Store role", () => {
+    expect(EventStoreGroups.forContext("Orders").name).toBe("Orders");
+    expect(EventStoreGroups.forContext("Orders_System", "system").name).toBe("Orders_System");
+    expect(
+      EventStoreGroups.identity(EventStoreGroups.forContext("Orders_System", "system")),
+    ).not.toBe(EventStoreGroups.identity(EventStoreGroups.forContext("Orders_System")));
+  });
+
+  it("separates contexts sharing a factory while retaining each original Event ID", async () => {
+    const factory = new InMemoryStorageFactory(new InMemoryStorageBackend());
+    const event = createEvent("same-id", "created", 1n);
+    const imported = createEvent("same-id", "renamed", 1n);
+    const orders = new EventStore({ name: "Orders", multitenant: false }, factory);
+    const billing = new EventStore({ name: "Billing", multitenant: false }, factory);
+
+    await orders.append(event);
+    await billing.append(imported);
+    expect(await orders.read()).toEqual([event]);
+    expect(await billing.read()).toEqual([imported]);
+    expect(EventStoreGroups.forContext("Orders").name).not.toBe(
+      EventStoreGroups.forContext("Billing").name,
+    );
+    await Promise.all([orders.close(), billing.close()]);
+  });
+  it("keeps synchronous assembly cleanup off the public EventStore instance", () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    expect("closeIdle" in store).toBe(false);
+  });
+
+  it("reuses one record storage for admission, append, and repeated reads", async () => {
+    const factory = new TrackedEventStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const event = createEvent("retained-event", "created", 1n);
+
+    await store.accept(event);
+    await store.append(event);
+    expect(await store.read()).toEqual([event]);
+    expect(await store.read()).toEqual([event]);
+    expect(factory.creations).toHaveLength(1);
+    expect(factory.closes).toEqual([]);
+
+    await store.close();
+    expect(factory.closes).toEqual([0]);
+  });
+
+  it("retains separate record storage for an event tenant and the selected read tenant", async () => {
+    const factory = new TrackedEventStorageFactory();
+    const store = new EventStore(
+      { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+      factory,
+    );
+    const local = createEvent("local-event", "created", 1n, "tenant-a");
+    const other = createEvent("other-event", "created", 2n, "tenant-b");
+
+    await store.append(local);
+    await store.append(other);
+    expect(await store.read()).toEqual([local]);
+    expect(
+      factory.creations.map((context) => context.multitenant && context.tenantId.kind),
+    ).toEqual([tenant("tenant-a").kind, tenant("tenant-b").kind]);
+    expect(factory.creations).toHaveLength(2);
+    await store.close();
+    expect(factory.closes).toEqual([0, 1]);
+  });
+
+  it("retries record storage creation after a provider failure", async () => {
+    const factory = new TrackedEventStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    factory.failNextCreate = true;
+
+    await expect(store.append(createEvent("first-attempt", "created", 1n))).rejects.toThrow(
+      "record creation failed",
+    );
+    expect(factory.creations).toHaveLength(0);
+    await store.append(createEvent("second-attempt", "created", 2n));
+    expect(await store.read()).toHaveLength(1);
+    expect(factory.creations).toHaveLength(1);
+    await store.close();
+  });
+
+  it("attempts every retained close and rejects further operations after a close failure", async () => {
+    const factory = new TrackedEventStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
+    await store.append(createEvent("event-a", "created", 1n, "tenant-a"));
+    await store.append(createEvent("event-b", "created", 1n, "tenant-b"));
+    factory.failCloseAt = 0;
+
+    await expect(store.close()).rejects.toThrow("record close failed");
+    expect(factory.closes).toEqual([0, 1]);
+    expect(store.isOpen()).toBe(false);
+    expect(factory.isOpen()).toBe(true);
+    await expect(store.close()).rejects.toThrow("record close failed");
+    expect(factory.closes).toEqual([0, 1]);
+    await expect(
+      store.append(createEvent("after-close", "created", 2n, "tenant-a")),
+    ).rejects.toThrow("EventStore is closed");
+    await expect(
+      store.accept(createEvent("after-close", "created", 2n, "tenant-a")),
+    ).rejects.toThrow("EventStore is closed");
+    await expect(store.appendAll([])).rejects.toThrow("EventStore is closed");
+    expect(factory.creations).toHaveLength(2);
+  });
+
+  it("reports every retained storage close failure", async () => {
+    const factory = new TrackedEventStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
+    await store.append(createEvent("event-a", "created", 1n, "tenant-a"));
+    await store.append(createEvent("event-b", "created", 1n, "tenant-b"));
+    factory.failAllCloses = true;
+
+    await expect(store.close()).rejects.toThrow(AggregateError);
+    expect(factory.closes).toEqual([0, 1]);
+  });
+
+  it("drains an admitted Event batch before closing its retained storage", async () => {
+    const factory = new GatedEventStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const records = [createEvent("first", "created", 1n), createEvent("second", "renamed", 2n)];
+    const writing = store.appendAll(records);
+    await factory.entered;
+
+    const closing = store.close();
+    const closesBeforeRelease = [...factory.closes];
+    const denied = store.append(createEvent("later", "created", 3n));
+    factory.release();
+    const [writeResult, closeResult, deniedResult] = await Promise.allSettled([
+      writing,
+      closing,
+      denied,
+    ]);
+
+    expect(closesBeforeRelease).toEqual([]);
+    expect(writeResult.status).toBe("fulfilled");
+    expect(closeResult.status).toBe("fulfilled");
+    expect(deniedResult).toMatchObject({
+      status: "rejected",
+      reason: new Error("EventStore is closed."),
+    });
+    expect(factory.creations).toHaveLength(1);
+    expect(factory.closes).toEqual([0]);
+    const reader = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    expect(await reader.read()).toEqual(records);
+    await reader.close();
+  });
+
+  it("waits for an admitted query before closing its retained storage", async () => {
+    const factory = new GatedReadStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const event = createEvent("queried-event", "created", 1n);
+    await store.append(event);
+    const reading = store.read();
+    await factory.entered;
+
+    const closing = store.close();
+    expect(factory.closes).toEqual([]);
+    factory.release();
+    await expect(reading).resolves.toEqual([event]);
+    await expect(closing).resolves.toBeUndefined();
+    expect(() => {
+      eventStoreAccess.closeIdle(store);
+    }).not.toThrow();
+    expect(factory.closes).toEqual([0]);
+  });
+
+  it("reports cleanup failure after draining work and attempts every retained close", async () => {
+    const factory = new GatedEventStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
+    const admitted = store.append(createEvent("tenant-a-event", "created", 1n, "tenant-a"));
+    await factory.entered;
+    await store.append(createEvent("tenant-b-event", "created", 1n, "tenant-b"));
+    factory.failCloseAt = 0;
+
+    const closing = store.close();
+    expect(store.close()).toBe(closing);
+    expect(factory.closes).toEqual([]);
+    factory.release();
+    await expect(admitted).resolves.toBeUndefined();
+    await expect(closing).rejects.toThrow("record close failed");
+    expect(factory.closes).toEqual([0, 1]);
+  });
+
+  it("allows close inside the acceptance callback after its admission check", async () => {
+    const factory = new TrackedEventStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const event = createEvent("callback-close", "created", 1n);
+
+    await expect(
+      store.acceptThenAppend(event, async () => {
+        await store.close();
+      }),
+    ).rejects.toThrow("EventStore is closed");
+    expect(factory.closes).toEqual([0]);
+    expect(factory.isOpen()).toBe(true);
+  });
+
+  it("rejects idle cleanup while storage work is active without closing handles", async () => {
+    const factory = new GatedEventStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const writing = store.append(createEvent("active-idle-close", "created", 1n));
+    await factory.entered;
+
+    expect(() => {
+      eventStoreAccess.closeIdle(store);
+    }).toThrow("requires no active storage work");
+    expect(factory.closes).toEqual([]);
+    expect(store.isOpen()).toBe(true);
+    factory.release();
+    await writing;
+    eventStoreAccess.closeIdle(store);
+    expect(factory.closes).toEqual([0]);
+    await expect(store.close()).resolves.toBeUndefined();
+    expect(factory.closes).toEqual([0]);
+  });
+
+  it("keeps the same failed cleanup outcome after synchronous idle close", async () => {
+    const factory = new TrackedEventStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    await store.append(createEvent("idle-failure", "created", 1n));
+    factory.failCloseAt = 0;
+
+    expect(() => {
+      eventStoreAccess.closeIdle(store);
+    }).toThrow("record close failed");
+    await expect(store.close()).rejects.toThrow("record close failed");
+    expect(() => {
+      eventStoreAccess.closeIdle(store);
+    }).toThrow("record close failed");
+    expect(factory.closes).toEqual([0]);
+    expect(store.isOpen()).toBe(false);
+  });
+
   it("keeps a grouped Event family separate across reads and strict admission", async () => {
     const factory = new InMemoryStorageFactory();
     const context = { name: "Tasks", multitenant: false } as const;
@@ -69,6 +304,28 @@ describe("EventStore", () => {
     if (groupedId === undefined) throw new Error("Expected a generated Event ID.");
     expect(await domain.read({ ids: [groupedId] })).toEqual([]);
     expect(await system.read({ ids: [groupedId] })).toEqual([groupedOnly]);
+  });
+
+  it("separates equal domain and System names across factories sharing memory", async () => {
+    const backend = new InMemoryStorageBackend();
+    const context = { name: "Support_System", multitenant: false } as const;
+    const domain = new EventStore(
+      context,
+      new InMemoryStorageFactory(backend),
+      EventStoreGroups.forContext(context.name),
+    );
+    const system = new EventStore(
+      context,
+      new InMemoryStorageFactory(backend),
+      EventStoreGroups.forContext(context.name, "system"),
+    );
+    const first = createEvent("same-id", "created", 1n);
+    const second = createEvent("same-id", "renamed", 1n);
+
+    await domain.append(first);
+    await system.append(second);
+    expect(await domain.read()).toEqual([first]);
+    expect(await system.read()).toEqual([second]);
   });
 
   it("persists generated Spine events through record storage", async () => {
@@ -202,7 +459,7 @@ describe("EventStore", () => {
     await expect(store.appendAll([])).resolves.toBeUndefined();
     expect(store.isOpen()).toBe(true);
 
-    store.close();
+    await store.close();
 
     expect(store.isOpen()).toBe(false);
     await expect(store.read()).rejects.toThrow(/closed/);
@@ -432,14 +689,14 @@ describe("EventStore", () => {
     }
   });
 
-  it("atomically rejects concurrent duplicate IDs across factories sharing a backend", async () => {
+  it("atomically rejects concurrent duplicate IDs across factories for one logical context", async () => {
     const backend = new InMemoryStorageBackend();
     const first = new EventStore(
       { name: "First", multitenant: false },
       new InMemoryStorageFactory(backend),
     );
     const second = new EventStore(
-      { name: "Second", multitenant: false },
+      { name: "First", multitenant: false },
       new InMemoryStorageFactory(backend),
     );
 
@@ -586,7 +843,7 @@ async function readTenantEvents(factory: InMemoryStorageFactory, tenantId: Tenan
   try {
     return await reader.read();
   } finally {
-    reader.close();
+    await reader.close();
   }
 }
 
@@ -598,6 +855,112 @@ class NonAtomicEventStorageFactory extends InMemoryStorageFactory {
   ): RecordStorage<I, R> {
     const storage = super.onCreateRecordStorage(context, recordSpec, group);
     Object.defineProperty(storage, "atomicCompareAndSet", { value: false });
+    return storage;
+  }
+}
+
+class TrackedEventStorageFactory extends InMemoryStorageFactory {
+  readonly creations: StorageContext[] = [];
+  readonly closes: number[] = [];
+  failNextCreate = false;
+  failCloseAt = -1;
+  failAllCloses = false;
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    if (this.failNextCreate) {
+      this.failNextCreate = false;
+      throw new Error("record creation failed");
+    }
+    const storage = super.onCreateRecordStorage(context, recordSpec, group);
+    const index = this.creations.push(context) - 1;
+    const originalClose = storage.close.bind(storage);
+    vi.spyOn(storage, "close").mockImplementation(() => {
+      this.closes.push(index);
+      originalClose();
+      if (index === this.failCloseAt || this.failAllCloses) throw new Error("record close failed");
+    });
+    return storage;
+  }
+}
+
+class GatedEventStorageFactory extends TrackedEventStorageFactory {
+  readonly entered: Promise<void>;
+  readonly #continue: Promise<void>;
+  #onEntered: (() => void) | undefined;
+  #onRelease: (() => void) | undefined;
+
+  constructor() {
+    super();
+    this.entered = new Promise((resolve) => {
+      this.#onEntered = resolve;
+    });
+    this.#continue = new Promise((resolve) => {
+      this.#onRelease = resolve;
+    });
+  }
+
+  release(): void {
+    this.#onRelease?.();
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec, group);
+    if (this.creations.length > 1) return storage;
+    const compare = storage.compareAndSet.bind(storage);
+    let writes = 0;
+    vi.spyOn(storage, "compareAndSet").mockImplementation(async (id, expected, next) => {
+      const inserted = await compare(id, expected, next);
+      if (++writes === 1) {
+        this.#onEntered?.();
+        await this.#continue;
+      }
+      return inserted;
+    });
+    return storage;
+  }
+}
+
+class GatedReadStorageFactory extends TrackedEventStorageFactory {
+  readonly entered: Promise<void>;
+  readonly #continue: Promise<void>;
+  #onEntered: (() => void) | undefined;
+  #onRelease: (() => void) | undefined;
+
+  constructor() {
+    super();
+    this.entered = new Promise((resolve) => {
+      this.#onEntered = resolve;
+    });
+    this.#continue = new Promise((resolve) => {
+      this.#onRelease = resolve;
+    });
+  }
+
+  release(): void {
+    this.#onRelease?.();
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec, group);
+    const query = storage.query.bind(storage);
+    vi.spyOn(storage, "query").mockImplementation(async (request) => {
+      const result = await query(request);
+      this.#onEntered?.();
+      await this.#continue;
+      return result;
+    });
     return storage;
   }
 }

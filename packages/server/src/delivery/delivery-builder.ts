@@ -34,6 +34,7 @@ const controlledDeliveryRunners = new WeakMap<
   Delivery,
   (options: DeliveryControlledRun) => Promise<DeliveryResult>
 >();
+const controlledDeliveryWakers = new WeakMap<Delivery, (shard: ShardIndex) => void>();
 
 /**
  * Provides package-local controls for builder-created deliveries.
@@ -50,6 +51,21 @@ export interface DeliveryControls {
   runner(
     delivery: Delivery,
   ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined;
+
+  /**
+   * Finds the active-run wake callback for a builder-created delivery.
+   *
+   * @param delivery Retained Delivery instance.
+   * @returns The active Delivery wake callback, if one is registered.
+   */
+  waker(delivery: Delivery): ((shard: ShardIndex) => void) | undefined;
+
+  /**
+   * Registers the environment's single retained core for supervised runs.
+   * @param core Actual retained Delivery runtime.
+   * @returns The controlled facade for that same runtime.
+   */
+  supervised(core: CoreDelivery): Delivery;
 }
 
 /**
@@ -65,6 +81,12 @@ export const deliveryControls: DeliveryControls = Object.freeze({
     delivery: Delivery,
   ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined {
     return controlledDeliveryRunners.get(delivery);
+  },
+  waker(delivery: Delivery): ((shard: ShardIndex) => void) | undefined {
+    return controlledDeliveryWakers.get(delivery);
+  },
+  supervised(core: CoreDelivery): Delivery {
+    return new BuiltDelivery(core);
   },
 });
 
@@ -122,6 +144,11 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
    */
   readonly shardCount: number;
 
+  /**
+   * Creates a fixed uniform shard strategy.
+   *
+   * @param shards Positive shard count.
+   */
   private constructor(shards: number) {
     if (!Number.isSafeInteger(shards) || shards <= 0) {
       throw new Error("Delivery shard count must be a positive safe integer.");
@@ -238,13 +265,21 @@ export interface Delivery {
  */
 export class DeliveryBuilder {
   #context: StorageContext | undefined;
+
   #storageFactory: StorageFactory | undefined;
+
   #workRegistry: DeliveryWorkRegistry | undefined;
+
   #inbox: DeliveryInbox | undefined;
+
   #strategy: DeliveryStrategy | undefined;
+
   #monitor: DeliveryMonitor | undefined;
+
   #pageSize: number | undefined;
+
   #node: string | undefined;
+
   #worker: WorkerId | undefined;
 
   /**
@@ -254,6 +289,8 @@ export class DeliveryBuilder {
    * @returns This builder.
    */
   withContext(context: StorageContext): this {
+    if (context.multitenant)
+      throw new TypeError("Delivery requires a single-tenant storage context.");
     this.#context = DeliveryValues.snapshotContext(context);
     return this;
   }
@@ -404,16 +441,31 @@ export class DeliveryBuilder {
   }
 }
 
+/**
+ * Exposes one configured Delivery through the public facade.
+ */
 class BuiltDelivery implements Delivery {
   readonly context: StorageContext;
+
   readonly storageFactory: StorageFactory;
+
   readonly strategy: DeliveryStrategy;
+
   readonly node: string;
+
   readonly worker: WorkerId;
+
   readonly pageSize: number;
+
   readonly inbox: DeliveryInbox;
+
   readonly #core: CoreDelivery;
 
+  /**
+   * Captures the configured core without changing its run lifetime.
+   *
+   * @param core Complete configured Delivery core.
+   */
   constructor(core: CoreDelivery) {
     this.#core = core;
     this.context = core.context;
@@ -424,9 +476,18 @@ class BuiltDelivery implements Delivery {
     this.pageSize = core.pageSize;
     this.inbox = core.inbox;
     controlledDeliveryRunners.set(this, (options) => core.runControlled(options));
+    controlledDeliveryWakers.set(this, (shard) => {
+      core.wake(shard);
+    });
     Object.freeze(this);
   }
 
+  /**
+   * Executes one finite shard delivery through the configured core.
+   *
+   * @param options Shard and endpoint callback for this run.
+   * @returns Terminal finite-run result.
+   */
   run(options: DeliveryRunOptions): Promise<DeliveryResult> {
     return this.#core.run(options);
   }
@@ -436,16 +497,37 @@ class BuiltDelivery implements Delivery {
  * Groups immutable delivery configuration operations.
  */
 const DeliveryValues = Object.freeze({
+  /**
+   * Validates the physical shard count of a configured strategy.
+   *
+   * @param strategy Strategy to validate.
+   * @returns The validated strategy.
+   */
   requireStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
     if (!Number.isSafeInteger(strategy.shardCount) || strategy.shardCount <= 0) {
       throw new Error("Delivery strategy shard count must be a positive safe integer.");
     }
     return strategy;
   },
+
+  /**
+   * Captures a strategy while preserving its shard decision.
+   *
+   * @param strategy Strategy to snapshot.
+   * @returns Detached uniform strategy snapshot.
+   */
   snapshotStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
     const shardCount = this.requireStrategy(strategy).shardCount;
     return Object.freeze({
       shardCount,
+
+      /**
+       * Maps a typed target to its configured shard.
+       *
+       * @param targetId Typed delivery target identifier.
+       * @param targetType Declared target type URL.
+       * @returns Stable shard selected by the original strategy.
+       */
       shardFor(targetId: Any, targetType: string): ShardIndex {
         const shard = strategy.shardFor(InboxTargets.clone(targetId), targetType);
         if (shard.ofTotal !== shardCount) {
@@ -455,6 +537,13 @@ const DeliveryValues = Object.freeze({
       },
     });
   },
+
+  /**
+   * Calculates a stable unsigned hash for a target key.
+   *
+   * @param value Canonical target key.
+   * @returns Stable unsigned hash.
+   */
   hash(value: string): number {
     let result = 0;
     for (const character of value) {
@@ -462,6 +551,15 @@ const DeliveryValues = Object.freeze({
     }
     return result;
   },
+
+  /**
+   * Checks one positive bounded configuration value.
+   *
+   * @param name Name reported for invalid configuration.
+   * @param value Supplied configuration value.
+   * @param max Maximum accepted value.
+   * @returns The validated positive value.
+   */
   requireBound(name: string, value: number, max: number): number {
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new Error(`${name} must be a positive safe integer.`);
@@ -471,12 +569,26 @@ const DeliveryValues = Object.freeze({
     }
     return value;
   },
+
+  /**
+   * Captures a valid storage context without caller mutation.
+   *
+   * @param context Storage context to validate.
+   * @returns Detached storage context.
+   */
   snapshotContext(context: StorageContext): StorageContext {
     if (typeof context.name !== "string" || context.name.length === 0) {
       throw new Error("Delivery storage context name must be a non-empty string.");
     }
     return Object.freeze({ ...context });
   },
+
+  /**
+   * Captures a worker with its required node identifier.
+   *
+   * @param worker Delivery worker to validate.
+   * @returns Detached worker identifier.
+   */
   snapshotWorker(worker: WorkerId): WorkerId {
     const nodeId = worker.nodeId;
     if (nodeId === undefined) throw new Error("Delivery worker must include a node identifier.");
@@ -484,5 +596,21 @@ const DeliveryValues = Object.freeze({
       nodeId: Object.freeze({ value: nodeId.value }),
       value: worker.value,
     }) as WorkerId;
+  },
+});
+
+/**
+ * Package-local validated strategy snapshot for the environment Delivery.
+ */
+export const deliveryStrategyAccess: Readonly<{
+  snapshot(strategy: DeliveryStrategy): DeliveryStrategy;
+}> = Object.freeze({
+  /**
+   * Captures one environment strategy before any context routes targets.
+   * @param strategy Configured strategy.
+   * @returns Detached target-safe strategy.
+   */
+  snapshot(strategy: DeliveryStrategy): DeliveryStrategy {
+    return DeliveryValues.snapshotStrategy(strategy);
   },
 });

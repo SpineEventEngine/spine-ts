@@ -13,10 +13,11 @@
  */
 
 import { clone } from "@bufbuild/protobuf";
-import { AnyMessages, Validate, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, Validate, type MessageSchema } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import * as AgentInteraction from "@spine-event-engine/proto/agent";
 import type { EventStore } from "@spine-event-engine/storage";
+import { eventStoreAccess } from "@spine-event-engine/storage/provider";
 import type { ILogLayer } from "loglayer";
 
 import {
@@ -24,11 +25,13 @@ import {
   ServerRuntimeStateError,
   SingleProcessServerRuntime,
 } from "../runtime/runtime.js";
+import type { ServerEnvironment } from "../server/server-environment.js";
 import { EventDispatcherRegistry } from "./event-dispatcher-registry.js";
 import type { EventDispatcher } from "./event-dispatcher.js";
 import { emitServerError } from "../server/server-log.js";
 
 const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
+const eventBusRuntimes = new WeakMap<EventBus, SingleProcessServerRuntime>();
 const storedFollowUpDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const followUpPosters = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 
@@ -59,6 +62,7 @@ const forgettingBus: unique symbol = Symbol("forgetting-bus");
 const forgettingBuses = new WeakSet<EventBus>();
 const eventBusRoles = new WeakMap<EventBus, EventBusRole>();
 const eventBusLoggers = new WeakMap<EventBus, ILogLayer>();
+const eventAdmissions = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 
 type EventBusRole = "domain" | "system";
 
@@ -90,6 +94,21 @@ interface AcceptedEventDispatcher {
 
 interface EventBusAccess {
   // prettier-ignore
+
+  /**
+   * Binds this context bus's private runtime to its captured environment.
+   * @param eventBus Framework context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindEnvironment(eventBus: EventBus, environment: ServerEnvironment): void;
+
+  /**
+   * Sets receiving-context admission before Event storage or dispatch.
+   *
+   * @param eventBus Context Event bus.
+   * @param onAdmit Checks current tenant membership.
+   */
+  setAdmission(eventBus: EventBus, onAdmit: (event: Event) => Promise<void>): void;
 
   /**
    * Creates a package-internal bus without an event store.
@@ -269,6 +288,7 @@ export class EventBus {
 
     this.#eventStore = ownedStore === forgettingBus ? undefined : ownedStore;
     this.#started = this.#runtime.start();
+    eventBusRuntimes.set(this, this.#runtime);
     storedDispatchers.set(this, (event) => this.#postStored(event));
     storedFollowUpDispatchers.set(this, (event) => this.#postStoredFollowUp(event));
     followUpPosters.set(this, (event) => this.#postFollowUp(event));
@@ -334,14 +354,13 @@ export class EventBus {
   }
 
   /**
-   * Stops accepting new event work, drains accepted work, and closes an owned event store.
+   * Stops accepting new event work, drains accepted work, and closes its event store.
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
-   * Runtime and event-store close hooks are both attempted; failures reject as
-   * an `AggregateError`.
+   * Runtime and event-store close hooks are both awaited; failures reject as
+   * an `AggregateError` after both cleanup attempts.
    *
    * @returns A promise that settles after the event bus closes.
-   *
    */
   close(): Promise<void> {
     this.#closed ??= this.#closeOnce();
@@ -357,9 +376,7 @@ export class EventBus {
     this.#clearSubscribers();
     const eventStore = this.#eventStore;
     if (eventStore !== undefined) {
-      await EventBus.#closePart(() => {
-        eventStore.close();
-      }, errors);
+      await EventBus.#closePart(() => eventStore.close(), errors);
     }
 
     if (errors.length > 0) {
@@ -370,7 +387,7 @@ export class EventBus {
   #abortClose(): void {
     this.#beginClose();
     try {
-      this.#eventStore?.close();
+      if (this.#eventStore !== undefined) eventStoreAccess.closeIdle(this.#eventStore);
     } finally {
       // spine-log-boundary: server.event_bus_close_runtime
       void this.#started.then(() => this.#runtime.close()).catch(() => undefined);
@@ -386,10 +403,14 @@ export class EventBus {
       throw new Error("EventBus requires event.message.typeUrl.");
     }
 
+    const onAdmit = eventAdmissions.get(this);
+    if (onAdmit !== undefined) this.#validate(event, typeUrl);
+    await onAdmit?.(event);
+
     const dispatchers = this.#registry.find(typeUrl, event.context?.external === true);
 
     if (forgettingBuses.has(this)) {
-      this.#validate(event, typeUrl);
+      if (onAdmit === undefined) this.#validate(event, typeUrl);
       const accepted = await this.#accept(event, dispatchers);
       await this.#deliverAccepted(event, accepted);
       return;
@@ -402,7 +423,7 @@ export class EventBus {
 
     let acceptedDispatchers: readonly AcceptedEventDispatcher[] = [];
     const stored = await eventStore.acceptThenAppend(event, async (accepted) => {
-      this.#validate(accepted, typeUrl);
+      if (onAdmit === undefined) this.#validate(accepted, typeUrl);
       acceptedDispatchers = await this.#accept(accepted, dispatchers);
     });
 
@@ -499,7 +520,7 @@ export class EventBus {
     EventBusRoles.validateSchema(eventBusRoles.get(this) ?? "domain", schema);
 
     const message =
-      event.message === undefined ? undefined : AnyMessages.unpack(event.message, schema);
+      event.message === undefined ? undefined : AnyPacker.tryUnpack(event.message, schema);
 
     if (message === undefined) {
       throw new Error("Event payload does not match its registered schema.");
@@ -749,6 +770,29 @@ interface EventSubscriberRecord {
  * @internal
  */
 export const eventBusAccess: EventBusAccess = Object.freeze({
+  /**
+   * Binds the private queue to its framework context's captured environment.
+   * @param eventBus Framework context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindEnvironment(eventBus: EventBus, environment: ServerEnvironment): void {
+    const runtime = eventBusRuntimes.get(eventBus);
+    if (runtime === undefined)
+      throw new TypeError("Framework binding requires an EventBus instance.");
+    runtimeAccess.bindFrameworkEnvironment(runtime, environment);
+  },
+
+  /**
+   * Sets the context's live Event tenant check.
+   *
+   * @param eventBus Context Event bus.
+   * @param onAdmit Checks current membership.
+   */
+  setAdmission(eventBus: EventBus, onAdmit: (event: Event) => Promise<void>): void {
+    if (!storedDispatchers.has(eventBus))
+      throw new TypeError("Event admission requires an EventBus instance.");
+    eventAdmissions.set(eventBus, onAdmit);
+  },
   clearLogger(eventBus: EventBus): void {
     if (!storedDispatchers.has(eventBus)) {
       throw new TypeError("EventBus logger requires an EventBus instance.");

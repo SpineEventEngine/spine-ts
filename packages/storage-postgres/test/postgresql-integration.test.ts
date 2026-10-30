@@ -12,13 +12,14 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message, ScalarType } from "@bufbuild/protobuf";
+import { create, toBinary, type Message, ScalarType } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import {
   EventIdSchema,
   EventSchema,
   type Event,
   TenantIdSchema,
+  UserIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
 import {
@@ -34,11 +35,15 @@ import {
 } from "@spine-event-engine/storage";
 import {
   EntityCommitStorageFactories,
+  AgentHistoryStorageFactories,
+  StoragePreparations,
+  EventStoreGroups,
+  eventStoreRecordSpec,
   eventHistorySpec,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
 import {
-  AnyMessages,
+  AnyPacker,
   Identifiers,
   StringifierRegistry,
   TypeRegistry,
@@ -49,11 +54,19 @@ import {
   TaskListIdSchema,
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
-import { TaskSchema } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
+import {
+  TaskSchema,
+  type Task,
+} from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { entityStorage } from "./postgres-entity-seam.js";
+import {
+  scope as agentScope,
+  event as agentEvent,
+  occurredAt,
+} from "../../storage/test/entity/agent-history-fixtures.js";
 
 import { PostgresStorageFactory, type PostgresTableSpec } from "../src/index.js";
 
@@ -80,8 +93,53 @@ describe("PostgreSQL live storage acceptance", () => {
     factory = await postgresBuilder().setOptions({ url }).build();
   });
 
-  afterAll(() => {
-    factory.close();
+  afterAll(async () => {
+    await factory.close();
+  });
+
+  it("checks a physical family read-only and prepares the surviving Agent audit indexes", async () => {
+    const preparation = StoragePreparations.for(factory);
+    const scope = context("preparation");
+    const group = new StorageGroup(`pg_prep_${run}`);
+    const spec = new RecordSpec({
+      recordType: EventSchema,
+      idSchema: EventIdSchema,
+      extractId: (value: Event) => {
+        if (value.id === undefined) throw new Error("Event ID is required.");
+        return value.id;
+      },
+    });
+    await expect(preparation.prepareRecord(scope, spec, group, "check")).rejects.toThrow();
+    await preparation.prepareRecord(scope, spec, group, "create");
+    await preparation.prepareRecord(scope, spec, group, "check");
+    const records = factory.createRecordStorage(scope, spec, group);
+    try {
+      const stored = event(`prepared-${run}`, "task");
+      if (stored.id === undefined) throw new Error("Event ID is required.");
+      await records.write(stored);
+      await expect(records.read(stored.id)).resolves.toEqual(stored);
+    } finally {
+      records.close();
+    }
+    await preparation.prepareAgentHistory(agentScope, "create");
+    await preparation.prepareAgentHistory(agentScope, "check");
+    const entity = entityInput(context("prepared_entity"));
+    await preparation.prepareEntity(entity, "create");
+    await preparation.prepareEntity(entity, "check");
+    const history = AgentHistoryStorageFactories.create(factory, agentScope);
+    try {
+      const entry = agentEvent(`prepared-${run}`, occurredAt(1_789_000_011n), false);
+      await history.append(`ticket-${run}`, entry);
+      const page = await history.read({
+        entityId: `ticket-${run}`,
+        view: { kind: "full" },
+        count: 2,
+        maxBytes: 100_000,
+      });
+      expect(page.entries).toEqual([entry]);
+    } finally {
+      history.close();
+    }
   });
 
   it("keeps an immutable EventStore prefix and admits the same complete Events on retry", async () => {
@@ -124,8 +182,31 @@ describe("PostgreSQL live storage acceptance", () => {
         }
       }
     } finally {
-      first.close();
-      second.close();
+      await first.close();
+      await second.close();
+    }
+  });
+
+  it("keeps context Event groups separate and prepares their exact physical families", async () => {
+    const firstContext = context("event_group_first");
+    const secondContext = context("event_group_second");
+    const preparation = StoragePreparations.for(factory);
+    for (const scope of [firstContext, secondContext]) {
+      const group = EventStoreGroups.forContext(scope.name);
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "create");
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "check");
+    }
+    const first = new EventStore(firstContext, factory);
+    const second = new EventStore(secondContext, factory);
+    const eventId = `shared-${run}`;
+    try {
+      await first.append(event(eventId, "task-first"));
+      await second.append(event(eventId, "task-second"));
+      expect((await first.read())[0]?.message).toEqual(event(eventId, "task-first").message);
+      expect((await second.read())[0]?.message).toEqual(event(eventId, "task-second").message);
+      await expect(first.append(event(eventId, "conflict"))).rejects.toThrow(/unique event IDs/);
+    } finally {
+      await Promise.all([first.close(), second.close()]);
     }
   });
 
@@ -165,7 +246,7 @@ describe("PostgreSQL live storage acceptance", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
         context: { timestamp },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectCreatedSchema,
           create(ProjectCreatedSchema, {
             memberId: [`member-${id}`],
@@ -204,6 +285,56 @@ describe("PostgreSQL live storage acceptance", () => {
           after: { id: "z-first", values: [{ field: "received", value: first }] },
         }),
       ).resolves.toEqual(events.slice(1));
+    } finally {
+      storage.close();
+    }
+  });
+
+  it("pages optional Task assignees after NULL and into the descending NULL tail", async () => {
+    const task = (id: string, assignee?: string) =>
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: id }),
+        title: `Task ${id}`,
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+        ...(assignee === undefined ? {} : { assignee: create(UserIdSchema, { value: assignee }) }),
+      });
+    const records = [task("a"), task("b", "user-1"), task("c", "user-2")];
+    const spec = new RecordSpec<string, Task>({
+      recordType: TaskSchema,
+      idKind: "string",
+      extractId: (value) => value.id?.value ?? "",
+      columns: [
+        new RecordColumn(
+          "assignee",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (value) => value.assignee?.value,
+        ),
+      ],
+    });
+    const storage = factory.createRecordStorage(
+      context("nullable_assignee"),
+      spec,
+      group("nullable_assignee"),
+    );
+    try {
+      await storage.writeAll([...records].reverse());
+      expect(
+        (await storage.query({ sort: [{ field: "assignee", direction: "asc" }] })).map(
+          (value) => value.id?.value,
+        ),
+      ).toEqual(["a", "b", "c"]);
+      const afterNull = await storage.query({
+        sort: [{ field: "assignee", direction: "asc" }],
+        after: { values: [{ field: "assignee", value: null }], id: "a" },
+        limit: 2,
+      });
+      expect(afterNull.map((value) => value.id?.value)).toEqual(["b", "c"]);
+      const afterHighest = await storage.query({
+        sort: [{ field: "assignee", direction: "desc" }],
+        after: { values: [{ field: "assignee", value: "user-2" }], id: "c" },
+        limit: 2,
+      });
+      expect(afterHighest.map((value) => value.id?.value)).toEqual(["b", "a"]);
     } finally {
       storage.close();
     }
@@ -270,7 +401,7 @@ describe("PostgreSQL live storage acceptance", () => {
       await expect(storage.read("custom")).resolves.toEqual(value("custom"));
     } finally {
       storage.close();
-      custom.close();
+      await custom.close();
     }
   });
 
@@ -300,7 +431,7 @@ describe("PostgreSQL live storage acceptance", () => {
     } finally {
       records.close();
       other.close();
-      second.close();
+      await second.close();
       await pool.end();
     }
   });
@@ -320,7 +451,7 @@ describe("PostgreSQL live storage acceptance", () => {
     const event = (id: string, member = id) =>
       create(EventSchema, {
         id: create(EventIdSchema, { value: id }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectCreatedSchema,
           create(ProjectCreatedSchema, { memberId: [member] }),
         ),
@@ -362,6 +493,7 @@ describe("PostgreSQL live storage acceptance", () => {
     const tenantA = tenant("a");
     const tenantB = tenant("b");
     const tenants = await postgresBuilder()
+      .setOptions({ url })
       .setTenantOptions([
         { tenantId: tenantA, options: { url: tenantAUrl } },
         { tenantId: tenantB, options: { url: tenantBUrl } },
@@ -390,7 +522,7 @@ describe("PostgreSQL live storage acceptance", () => {
     } finally {
       first.close();
       second.close();
-      tenants.close();
+      await tenants.close();
     }
   });
 
@@ -420,7 +552,7 @@ describe("PostgreSQL live storage acceptance", () => {
       await expect(entity.states.backward(id, 10)).resolves.toEqual([]);
       await expect(entity.states.backward(truncationId, 200)).resolves.toEqual([]);
     } finally {
-      commits.close();
+      await commits.close();
       entity.close();
     }
   });
@@ -465,8 +597,8 @@ describe("PostgreSQL live storage acceptance", () => {
       if (target !== undefined)
         await pool.query(`ALTER TABLE ${target} DROP CONSTRAINT IF EXISTS ${quoted(constraint)}`);
       diagnosticRecords.close();
-      events.close();
-      commits.close();
+      await events.close();
+      await commits.close();
       entity.close();
       await pool.end();
     }
@@ -510,9 +642,9 @@ describe("PostgreSQL live storage acceptance", () => {
         reader.close();
       }
     } finally {
-      firstCommit.close();
-      secondCommit.close();
-      second.close();
+      await firstCommit.close();
+      await secondCommit.close();
+      await second.close();
     }
   });
 
@@ -520,7 +652,7 @@ describe("PostgreSQL live storage acceptance", () => {
     const closing = await postgresBuilder().setOptions({ url }).build();
     const scope = context("lifecycle");
     const records = closing.createRecordStorage(scope, stringSpec(), group("lifecycle"));
-    closing.close();
+    await closing.close();
     await Promise.resolve();
 
     expect(records.isOpen()).toBe(false);
@@ -608,7 +740,7 @@ function entityInput(
       pack: (id) => Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
       unpack: (packed) =>
         packed.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
-          ? fromBinary(TaskIdSchema, packed.value).value
+          ? AnyPacker.tryUnpack(packed, TaskIdSchema)?.value
           : undefined,
     },
     columns: [],
@@ -618,7 +750,7 @@ function entityInput(
       idKind: "string",
       extractId: (record) => {
         if (record.entityId === undefined) throw new Error("Entity record ID is required.");
-        return fromBinary(TaskIdSchema, record.entityId.value).value;
+        return AnyPacker.unpack(record.entityId, TaskIdSchema).value;
       },
     }),
     sourceType: TaskSchema,
@@ -666,7 +798,7 @@ function event(id: string, entityId: string) {
         timestamp: create(TimestampSchema, { seconds: 1n }),
       }),
     },
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(TaskIdSchema, { value: entityId }),

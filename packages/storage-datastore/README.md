@@ -1,5 +1,8 @@
 # Google Cloud Datastore storage for Spine TS
 
+See [storage layout and database preparation](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/STORAGE_LAYOUT.md) for
+physical structures, tenant placement, prerequisites, and customization.
+
 `@spine-event-engine/storage-datastore` stores Spine TS records in Google Cloud
 Datastore, including Firestore in Datastore mode. It implements the storage
 contract from `@spine-event-engine/storage`; it does not use Firestore Native
@@ -11,10 +14,10 @@ record schemas, and a configured Google Datastore client.
 For exact query limits, entity-storage behavior, and failure handling, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
-For an application using Agents, this provider keeps the Agent's accepted
-work and recorded interactions across restarts. Deploy the supplied `index.yaml`
-for Agent history and execution queries; see the [coding-agent reference](REFERENCE.md)
-for provider requirements.
+For an application using Agents, this provider keeps typed admission receipts,
+Entity state, and recorded interactions across restarts. An interrupted handler
+does not resume. Deploy the supplied `index.yaml` for Agent history queries;
+see the [coding-agent reference](REFERENCE.md) for provider requirements.
 
 ## 💡 Why use it?
 
@@ -73,15 +76,23 @@ try {
   if (stored?.value !== "task-42") throw new Error("The record was not stored.");
 } finally {
   await records.close();
-  factory.close();
+  await factory.close();
 }
 ```
 
 The builder always uses a client supplied by the caller. Its fixed finite reconciliation
 bound is 1,000 records. Pass the factory to the server or create record storage
-through the normal storage API. When application values contain `Any`, configure
-a `StringifierRegistry` with that application's `TypeRegistry` before building;
-the layout section below explains why that mapping must remain reversible.
+through the normal storage API. Generated model modules register descriptors
+on import, allowing the shared default stringifier to convert `Any` values.
+An explicitly supplied `StringifierRegistry` can use the application's
+`TypeRegistry`; the layout section below explains why that mapping must remain reversible.
+
+`build()` is synchronous and does not contact Datastore. `await factory.checkConnection()`
+performs a read-only, keys-only query for the exact shared `__namespace__` metadata
+key. It remembers success and permits retry after failure; the supplied client stays
+open after factory closure. The diagnostic requires `datastore.namespaces.get` and
+`datastore.namespaces.list` permissions. It checks metadata read access, not Entity
+read/write permissions or deployed composite indexes. An unused namespace is valid.
 
 ## Build it in this workspace
 
@@ -226,6 +237,9 @@ Ordinary `write()` and `writeAll()` calls are independent provider writes. Use
 compare-and-set for an atomic conditional record update. An Entity commit
 writes history, diagnostic Events, delivery Events, and current state in order;
 a later failure can leave the completed prefix.
+The provider-only live Agent commit uses one native Datastore transaction to
+check the initial Entity version and complete model preferences, then commit
+any changed state, final audit, and preferences together.
 
 ## 🧪 Verify with a local emulator
 

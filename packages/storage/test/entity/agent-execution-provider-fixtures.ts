@@ -12,8 +12,8 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { RecordSpec } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
 import {
@@ -28,7 +28,7 @@ import {
   type SupportReplyAgentState,
 } from "../../../server/test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 
-const idTypeUrl = `type.spine.server.testing/${SupportReplyAgentIdSchema.typeName}`;
+const idTypeUrl = TypeUrls.derive(SupportReplyAgentIdSchema);
 
 /**
  * Builds the typed support Agent layout using published provider classes.
@@ -42,12 +42,8 @@ export function providerEntityInput(): EntityStorageInput<
     id: {
       clone: (id) => create(SupportReplyAgentIdSchema, { ticketNumber: id.ticketNumber }),
       key: (id) => id.ticketNumber,
-      pack: (id) =>
-        create(AnySchema, { typeUrl: idTypeUrl, value: toBinary(SupportReplyAgentIdSchema, id) }),
-      unpack: (value) =>
-        value.typeUrl === idTypeUrl
-          ? fromBinary(SupportReplyAgentIdSchema, value.value)
-          : undefined,
+      pack: (id) => AnyPacker.pack(SupportReplyAgentIdSchema, id),
+      unpack: (value) => AnyPacker.tryUnpack(value, SupportReplyAgentIdSchema),
     },
     columns: [],
     recordSpec: new RecordSpec<SupportReplyAgentId, EntityRecord>({
@@ -57,7 +53,7 @@ export function providerEntityInput(): EntityStorageInput<
       extractId: (record) => {
         if (record.entityId?.typeUrl !== idTypeUrl)
           throw new TypeError("Support Agent current record requires its typed ID.");
-        return fromBinary(SupportReplyAgentIdSchema, record.entityId.value);
+        return AnyPacker.unpack(record.entityId, SupportReplyAgentIdSchema);
       },
     }),
     sourceType: SupportReplyAgentStateSchema,

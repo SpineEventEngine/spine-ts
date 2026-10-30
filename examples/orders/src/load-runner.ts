@@ -18,7 +18,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
@@ -402,7 +402,7 @@ class DatastoreOrdersUserRun {
     return create(CommandSchema, {
       id: metadata.commandId(),
       context: metadata.commandContext({ actorContext: this.actorContext }),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         CreateOrderSchema,
         create(CreateOrderSchema, { id: this.id, skuId: `sku-${String(this.index)}` }),
       ),
@@ -464,7 +464,7 @@ class DatastoreOrdersUserRun {
       response.message.some(
         (row) =>
           row.state !== undefined &&
-          AnyMessages.unpack(row.state, OrderSummarySchema)?.id === this.id,
+          AnyPacker.tryUnpack(row.state, OrderSummarySchema)?.id === this.id,
       )
     );
   }
@@ -503,7 +503,7 @@ class DatastoreOrdersUserRun {
       update.update.value.update.some(
         (row) =>
           row.kind.case === "state" &&
-          AnyMessages.unpack(row.kind.value, OrderSummarySchema)?.id === this.id,
+          AnyPacker.tryUnpack(row.kind.value, OrderSummarySchema)?.id === this.id,
       )
     );
   }
@@ -533,9 +533,7 @@ class DatastoreOrdersUserRun {
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [
-              AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: this.id })),
-            ],
+            id: [AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: this.id }))],
           },
         }),
       },

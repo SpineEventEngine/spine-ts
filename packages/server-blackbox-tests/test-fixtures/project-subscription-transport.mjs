@@ -27,7 +27,7 @@ import { fileURLToPath, URL } from "node:url";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnyMessages, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import {
   QueryIdSchema,
   QuerySchema,
@@ -214,15 +214,17 @@ try {
   if (deliveryMode === "shared-memory") {
     deliveryServer = await new DeliveryServer({ port: 0 }).start();
     remoteDelivery = RemoteDelivery.connectTo({ endpoint: deliveryServer.baseUrl });
-    ServerEnvironment.when(EnvironmentType.Local).use({ delivery: remoteDelivery });
-    await remoteDelivery.open();
   }
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    storageFactory: factory,
+    ...(remoteDelivery === undefined ? {} : { delivery: remoteDelivery }),
+  });
+  await ServerEnvironment.instance().completeSetup();
   const organization = `subscription-${database}`;
   const ids = projectWorkflowIds(organization, 1);
   context = projectWorkflow(
     `ProjectSubscription_${database}`,
     (entry) => entries.push(entry),
-    factory,
   );
   const services = new SpineServices({ contexts: [context] });
   server = http2.createServer(
@@ -251,7 +253,7 @@ try {
                       update.update.case === "eventUpdates"
                     ) {
                       for (const event of update.update.value.event) {
-                        const message = AnyMessages.unpack(event.message, ProjectCreatedSchema);
+                        const message = AnyPacker.tryUnpack(event.message, ProjectCreatedSchema);
                         serverEventTrace.push({
                           subscriptionId: subscription.id?.value,
                           eventId: event.id?.value,
@@ -763,7 +765,7 @@ try {
           sha256: createHash("sha256").update(toBinary(EventSchema, event)).digest("hex"),
         },
       ];
-      const payload = AnyMessages.unpack(event.message, ProjectCreatedSchema);
+      const payload = AnyPacker.tryUnpack(event.message, ProjectCreatedSchema);
       assert.equal(payload?.project?.number, 1);
       assert.equal(payload?.project?.organization?.code, organization);
       assert.equal(payload?.name, "faulted-child-roadmap");
@@ -850,7 +852,7 @@ try {
                 criterion: {
                   case: "filters",
                   value: create(TargetFiltersSchema, {
-                    idFilter: { id: [AnyMessages.pack(ProjectIdSchema, ids.project)] },
+                    idFilter: { id: [AnyPacker.pack(ProjectIdSchema, ids.project)] },
                   }),
                 },
               }),
@@ -876,7 +878,7 @@ try {
       assert.equal(received.value.update.update.case, "eventUpdates");
       const event = received.value.update.update.value.event[0];
       assert.ok(event?.id?.value);
-      const payload = AnyMessages.unpack(event.message, ProjectCreatedSchema);
+      const payload = AnyPacker.tryUnpack(event.message, ProjectCreatedSchema);
       assert.equal(payload?.project?.number, 1);
       assert.equal(payload?.project?.organization?.code, organization);
       assert.equal(payload?.name, "transport-roadmap");
@@ -886,7 +888,7 @@ try {
       assert.equal(stateReceived.value.update.update.case, "entityUpdates");
       const stateChange = stateReceived.value.update.update.value.update[0]?.kind;
       assert.equal(stateChange?.case, "state");
-      const state = AnyMessages.unpack(stateChange.value, ProjectStateSchema);
+      const state = AnyPacker.tryUnpack(stateChange.value, ProjectStateSchema);
       assert.equal(state?.id?.organization?.code, organization);
       assert.equal(state?.id?.number, 1);
       assert.equal(state?.name, "transport-roadmap");
@@ -908,7 +910,7 @@ try {
         const earlierEvent = earlier.value.update.update.value.event[0];
         assert.ok(earlierEvent?.id?.value);
         assert.notEqual(earlierEvent.id.value, event.id.value);
-        const earlierPayload = AnyMessages.unpack(earlierEvent.message, ProjectCreatedSchema);
+        const earlierPayload = AnyPacker.tryUnpack(earlierEvent.message, ProjectCreatedSchema);
         assert.equal(earlierPayload?.project?.number, 2);
         assert.equal(earlierPayload?.name, "earlier-roadmap");
 
@@ -974,7 +976,7 @@ try {
         const fourthEvent = fourthUpdate.value.update.update.value.event[0];
         assert.ok(fourthEvent?.id?.value);
         assert.equal(
-          AnyMessages.unpack(fourthEvent.message, ProjectCreatedSchema)?.project?.number,
+          AnyPacker.tryUnpack(fourthEvent.message, ProjectCreatedSchema)?.project?.number,
           4,
         );
         await bounded(observer.cancel(), 10_000, "observer cancellation");

@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { ErrorSchema, ResponseSchema, StatusSchema } from "@spine-event-engine/proto";
 import {
   EntityStateWithVersionSchema,
@@ -109,9 +109,9 @@ describe("TaskListReader", () => {
       message: [
         create(EntityStateWithVersionSchema),
         create(EntityStateWithVersionSchema, {
-          state: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: "foreign" })),
+          state: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: "foreign" })),
         }),
-        create(EntityStateWithVersionSchema, { state: AnyMessages.pack(TaskListSchema, list) }),
+        create(EntityStateWithVersionSchema, { state: AnyPacker.pack(TaskListSchema, list) }),
       ],
     });
 

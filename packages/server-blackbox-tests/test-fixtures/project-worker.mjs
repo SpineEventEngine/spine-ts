@@ -20,7 +20,7 @@ import { setTimeout } from "node:timers";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { create, equals, toBinary } from "@bufbuild/protobuf";
-import { AnyMessages, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
   ActorContextSchema,
@@ -38,6 +38,7 @@ import {
   Server,
   ServerEnvironment,
   ShardIndex,
+  UniformAcrossAllShards,
 } from "@spine-event-engine/server";
 import { EventStore } from "@spine-event-engine/storage";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
@@ -118,15 +119,19 @@ async function start(request) {
   if (settings.inboxTable !== undefined)
     storageBuilder.setTableName(InboxMessageSchema, settings.inboxTable);
   factory = await storageBuilder.build();
-  const environmentSettings = { logger: fileLogger(settings.logPath) };
+  const environmentSettings = {
+    logger: fileLogger(settings.logPath),
+    storageFactory: factory,
+    deliveryStrategy: UniformAcrossAllShards.forNumber(settings.shards),
+  };
   if (settings.deliveryEndpoint !== undefined) {
     delivery = RemoteDelivery.connectTo({ endpoint: settings.deliveryEndpoint });
     environmentSettings.delivery = delivery;
     ServerEnvironment.when(EnvironmentType.Local).use(environmentSettings);
-    await delivery.open();
   } else {
     ServerEnvironment.when(EnvironmentType.Local).use(environmentSettings);
   }
+  await ServerEnvironment.instance().completeSetup();
   let firstCandidateGated = false;
   context = projectWorkflow(
     settings.contextName,
@@ -164,8 +169,6 @@ async function start(request) {
         });
       }
     },
-    factory,
-    settings.shards,
   );
   running = await Server.atPort(0).add(context).start();
   commandClient = createClient(CommandService, createGrpcTransport({ baseUrl: running.baseUrl }));
@@ -190,7 +193,7 @@ async function post(request) {
         actor: create(UserIdSchema, { value: "matrix-actor" }),
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateProjectSchema,
       create(CreateProjectSchema, { project: ids.project, name: `roadmap-${ids.project.number}` }),
     ),
@@ -253,7 +256,7 @@ async function inspect(request) {
   return {
     projects,
     events: created.map((event) => {
-      const payload = AnyMessages.unpack(event.message, ProjectCreatedSchema);
+      const payload = AnyPacker.tryUnpack(event.message, ProjectCreatedSchema);
       const binary = toBinary(EventSchema, event);
       return {
         id: event.id?.value,
@@ -336,5 +339,5 @@ async function inspectDelivery() {
 async function close() {
   if (running !== undefined) await running.close();
   if (delivery !== undefined) await delivery.close();
-  if (factory !== undefined) factory.close();
+  if (factory !== undefined) await factory.close();
 }

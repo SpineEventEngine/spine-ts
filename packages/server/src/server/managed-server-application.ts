@@ -20,7 +20,7 @@ import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { runningServerAccess, type RunningServer } from "./server.js";
 import { emitServerWarning } from "./server-log.js";
 import { NodeCoordinator, type ReadyCoordinatorMember } from "./node-coordinator.js";
-import { environmentDeliveryWorkerAccess } from "./environment-delivery-worker.js";
+import { managedDeliveryGate } from "./managed-delivery-gate.js";
 import { managedChildSubscriptionAccess } from "./managed-child-subscription.js";
 import { InMemorySubscriptionRegistry } from "../stand/subscription-registry.js";
 import type { Subscription } from "@spine-event-engine/proto/client";
@@ -462,7 +462,7 @@ class ManagedChildLifecycle {
    * @returns Completion when admitted work drains.
    */
   async #drainDelivery(): Promise<void> {
-    environmentDeliveryWorkerAccess.cancelManagedChild();
+    managedDeliveryGate.cancel();
     managedChildSubscriptionAccess.clear();
     this.#activation.resolve(undefined);
     // spine-log-boundary: server.managed_replica_drain_ipc
@@ -512,8 +512,14 @@ class ManagedChildLifecycle {
   readonly #onMessage = (message: { readonly type?: string }): void => {
     if (message.type === "activate" && !this.#activated) {
       this.#activated = true;
-      environmentDeliveryWorkerAccess.activateManagedChild();
-      this.#activation.resolve(undefined);
+      void managedDeliveryGate.activate().then(
+        () => {
+          this.#activation.resolve(undefined);
+        },
+        (error: unknown) => {
+          this.#activation.reject(error);
+        },
+      );
     } else if (message.type === "close") {
       this.#waitForParentClose = true;
       ManagedServerValues.closeFromEvent(() => this.close());

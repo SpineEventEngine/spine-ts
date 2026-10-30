@@ -21,6 +21,7 @@ export {
   type PostgresStorageFactoryOptions,
   type PostgresTableSpec,
   type PostgresTenantStorageOptions,
+  type PostgresTenantResolver,
 } from "./postgres/storage-factory.js";
 
 export type { PostgresDdlType } from "./postgres/data-type.js";

@@ -28,6 +28,8 @@ import type { DeliveryRun } from "./delivery.js";
 export class DeliveryRunControl {
   readonly #runControlled: (options: DeliveryControlledRun) => Promise<DeliveryResult>;
 
+  readonly #wake: (shard: ShardIndex) => void;
+
   /**
    * Creates controlled admission for a builder-created delivery.
    *
@@ -39,6 +41,16 @@ export class DeliveryRunControl {
       throw new TypeError("DeliverySupervisor requires a Delivery built by DeliveryBuilder.");
     }
     this.#runControlled = runControlled;
+    this.#wake = deliveryControls.waker(delivery) ?? (() => undefined);
+  }
+
+  /**
+   * Notifies another durable scan in the active shard run.
+   *
+   * @param shard Delivery shard identifier.
+   */
+  wake(shard: ShardIndex): void {
+    this.#wake(shard);
   }
 
   /**

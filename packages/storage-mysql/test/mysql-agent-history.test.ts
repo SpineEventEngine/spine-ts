@@ -23,6 +23,7 @@ import {
   AgentHistoryConformance,
   AgentHistoryKeys,
   AgentHistoryStorageFactories,
+  StoragePreparations,
 } from "@spine-event-engine/storage/provider";
 import { AgentHistoryRecords } from "@spine-event-engine/storage/provider";
 
@@ -51,7 +52,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
       .build();
-    factory.close();
+    await factory.close();
     expect(() => AgentHistoryStorageFactories.create(factory, scope)).toThrow(
       "StorageFactory is closed.",
     );
@@ -64,6 +65,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
         .setOptions({ url: required(url) })
         .build();
       const tenants = await MysqlStorageFactory.newBuilder()
+        .setOptions({ url: required(url) })
         .setTenantOptions([
           {
             tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
@@ -91,8 +93,8 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
           occurredAt,
         });
       } finally {
-        factory.close();
-        tenants.close();
+        await factory.close();
+        await tenants.close();
       }
     },
     120_000,
@@ -110,7 +112,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
     const first = AgentHistoryStorageFactories.create(factory, input);
     await first.append("ticket-mysql", entry);
     first.close();
-    factory.close();
+    await factory.close();
     const reopened = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
       .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table)
@@ -154,9 +156,87 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       });
       history.close();
     } finally {
-      reopened.close();
+      await reopened.close();
       await pool.query(`DROP TABLE IF EXISTS \`${table}\``);
       await pool.end();
+    }
+  }, 120_000);
+
+  it("rolls back an immutable audit group when its later row conflicts", async () => {
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: required(url) })
+      .build();
+    const run = randomUUID();
+    const input = { ...scope, id: { key: (id: string) => `${run}:${id}` } };
+    const history = AgentHistoryStorageFactories.create(factory, input);
+    const first = event("batch-first", occurredAt(1_789_100_001n), false);
+    const original = conversation("batch-conflict", "dialog", occurredAt(1_789_100_002n));
+    const conflicting = response("batch-conflict", "dialog", occurredAt(1_789_100_002n));
+    try {
+      await history.append("ticket", original);
+      await expect(history.appendAll("ticket", [first, conflicting])).rejects.toThrow();
+      const page = await history.read({
+        entityId: "ticket",
+        view: { kind: "full" },
+        count: 4,
+        maxBytes: 10000,
+      });
+      expect(page.entries.map((entry) => AgentHistoryKeys.fromEntry(entry).recordId)).toEqual([
+        "batch-conflict",
+      ]);
+      await history.appendAll("ticket", [original]);
+    } finally {
+      history.close();
+      await factory.close();
+    }
+  }, 120_000);
+
+  it("retries preparation on the same Agent history handle after a failed create callback", async () => {
+    const table = `agent_retry_${randomUUID().replaceAll("-", "")}`;
+    const builder = () =>
+      MysqlStorageFactory.newBuilder()
+        .setOptions({ url: required(url) })
+        .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table);
+    const seed = await builder().build();
+    try {
+      const records = seed.createRecordStorage(
+        scope.context,
+        AgentHistoryRecords.spec((value) => AgentHistoryHash.value(value)),
+        AgentHistoryRecords.group,
+      );
+      await records.read("absent");
+      records.close();
+      await expect(
+        StoragePreparations.for(seed).prepareAgentHistory(scope, "check"),
+      ).rejects.toThrow(/index is missing/i);
+    } finally {
+      await seed.close();
+    }
+    let fail = true;
+    const factory = await builder()
+      .useOperationFactory(() => {
+        if (fail) {
+          fail = false;
+          throw new Error("preparation callback failed");
+        }
+        return { sql: "SELECT 1" };
+      })
+      .build();
+    const history = AgentHistoryStorageFactories.create(factory, scope);
+    try {
+      const page = {
+        entityId: "ticket",
+        view: { kind: "full" } as const,
+        count: 1,
+        maxBytes: 1000,
+      };
+      await expect(history.read(page)).rejects.toMatchObject({
+        cause: { message: "preparation callback failed" },
+      });
+      await expect(history.read(page)).resolves.toMatchObject({ entries: [] });
+    } finally {
+      history.close();
+      await factory.close();
     }
   }, 120_000);
 
@@ -184,7 +264,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       ).rejects.toThrow("index is incompatible");
       history.close();
     } finally {
-      factory.close();
+      await factory.close();
       await pool.query(`DROP TABLE IF EXISTS \`${table}\``);
       await pool.end();
     }
@@ -219,7 +299,7 @@ describe.runIf(url !== undefined)("MySQL Agent history", () => {
       ]);
     } finally {
       history.close();
-      factory.close();
+      await factory.close();
     }
   }, 120_000);
 });

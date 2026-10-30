@@ -136,6 +136,16 @@ function openCombined(native: Server, options: BrowserServerOptions) {
   return native.start().then((running) => BrowserHost.open(running, options));
 }
 
+async function configureEnvironment(
+  type: EnvironmentType,
+  settings: Parameters<ReturnType<typeof ServerEnvironment.when>["use"]>[0],
+): Promise<void> {
+  await resetServerEnvironmentForTest();
+  EnvironmentTests.use(type);
+  ServerEnvironment.when(type).use(settings);
+  await ServerEnvironment.instance().completeSetup();
+}
+
 describe("Server", () => {
   it("recognizes only exact IPv4 and IPv6 loopback hosts for browser composition", () => {
     for (const host of ["127.0.0.1", "127.12.34.255", "::1", "::ffff:127.0.0.1"]) {
@@ -244,7 +254,7 @@ describe("Server", () => {
   });
 
   it("exposes subscription registry facts only for framework-owned running servers", async () => {
-    const context = BoundedContext.singleTenant("RegistryFacts").build();
+    const context = await BoundedContext.singleTenant("RegistryFacts").build();
     const running = await Server.atPort(0).add(context).start();
 
     try {
@@ -271,8 +281,8 @@ describe("Server", () => {
       }),
     };
     const logger = { child: vi.fn(() => child) };
-    ServerEnvironment.when(EnvironmentType.Local).use({ logger: logger as unknown as ILogLayer });
-    const context = BoundedContext.singleTenant("Tasks").build();
+    await configureEnvironment(EnvironmentType.Local, { logger: logger as unknown as ILogLayer });
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const server = await Server.atPort(0).add(context).start();
     expect(logger.child).toHaveBeenCalledTimes(1);
     expect(
@@ -348,6 +358,7 @@ describe("Server", () => {
   });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
+    await ServerEnvironment.instance().completeSetup();
     observeHttp2Server.mockReset();
   });
 
@@ -678,8 +689,7 @@ describe("Server", () => {
   });
 
   it("rejects production browser bindings before context assembly or listener startup", async () => {
-    EnvironmentTests.use(EnvironmentType.Production);
-    ServerEnvironment.when(EnvironmentType.Production).use({
+    await configureEnvironment(EnvironmentType.Production, {
       storageFactory: new InMemoryStorageFactory(),
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
@@ -1823,7 +1833,7 @@ describe("Server", () => {
 
   it("runs a server under process-owned signal shutdown", async () => {
     const withMetadata = vi.fn(() => ({ warn: vi.fn(), error: vi.fn() }));
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       logger: { child: () => ({ withMetadata }) } as never,
     });
     const server = await Server.atPort(0).run();
@@ -1836,13 +1846,15 @@ describe("Server", () => {
 
     await expect(closed).resolves.toBeUndefined();
     await server.close();
-    expect(withMetadata).not.toHaveBeenCalled();
+    expect(withMetadata).toHaveBeenCalledWith({ operation: "server.setup_storage" });
+    expect(withMetadata).toHaveBeenCalledWith({ operation: "server.setup_transport" });
+    expect(withMetadata).toHaveBeenCalledWith({ operation: "server.setup_delivery" });
   });
 
   it("keeps a standalone discovery gateway signal-managed without retiring its environment", async () => {
     const closed: string[] = [];
     let stops = 0;
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
     const gateway = await BrowserHost.run({
@@ -1866,7 +1878,7 @@ describe("Server", () => {
   it("retires the last local environment owner while a standalone gateway remains running", async () => {
     const closed: string[] = [];
     let stops = 0;
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
     const application = await Server.atPort(0).run();
@@ -1908,13 +1920,18 @@ describe("Server", () => {
     expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
   });
 
-  it("does not return a closed managed handle from a later run call", async () => {
+  it("starts a fresh managed server after the earlier handle closes", async () => {
     const server = Server.atPort(0);
     const running = await server.run();
 
     await running.close();
-
     await expect(server.run()).rejects.toThrow("ServerEnvironment is closed.");
+    await resetServerEnvironmentForTest();
+    await ServerEnvironment.instance().completeSetup();
+
+    const restarted = await Server.atPort(0).run();
+    expect(restarted).not.toBe(running);
+    await restarted.close();
   });
 
   it("closes process-owned servers in reverse successful-start order", async () => {
@@ -1955,7 +1972,7 @@ describe("Server", () => {
         error: (message: string) => errors.push({ message, facts }),
       }),
     };
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       logger: { child: () => child } as unknown as ILogLayer,
     });
     let attempts = 0;
@@ -1995,7 +2012,7 @@ describe("Server", () => {
     const storageError = new Error("storage close failed once");
     const sigintListeners = process.listenerCount("SIGINT");
     const sigtermListeners = process.listenerCount("SIGTERM");
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       storageFactory: new FlakyCloseStorageFactory(closed, storageError),
     });
     const server = await Server.atPort(0).run();
@@ -2047,48 +2064,26 @@ describe("Server", () => {
     await callerManaged.close();
   });
 
-  it("rejects run admission before opening a listener while caller ownership is active", async () => {
+  it("allows a run-managed sibling while a caller-managed server is active", async () => {
     const callerManaged = await Server.atPort(0).start();
-    const rejectedPort = await unusedPort();
+    const siblingPort = await unusedPort();
 
     try {
-      const rejected = Server.atPort(rejectedPort).run();
-      try {
-        await expect(rejected).rejects.toThrow(
-          "Server-owned environment registration requires exclusive ownership.",
-        );
-      } finally {
-        await rejected.then(
-          (server) => server.close(),
-          () => undefined,
-        );
-      }
-      const sibling = await Server.atPort(rejectedPort).start();
-      expect(sibling.port).toBe(rejectedPort);
+      const sibling = await Server.atPort(siblingPort).run();
+      expect(sibling.port).toBe(siblingPort);
       await sibling.close();
     } finally {
       await callerManaged.close();
     }
   });
 
-  it("rejects caller-managed admission before opening a listener while run ownership is active", async () => {
+  it("allows a caller-managed sibling while a run-managed server is active", async () => {
     const runManaged = await Server.atPort(0).run();
-    const rejectedPort = await unusedPort();
+    const siblingPort = await unusedPort();
 
     try {
-      const rejected = Server.atPort(rejectedPort).start();
-      try {
-        await expect(rejected).rejects.toThrow(
-          "Server-owned environment registration requires exclusive ownership.",
-        );
-      } finally {
-        await rejected.then(
-          (server) => server.close(),
-          () => undefined,
-        );
-      }
-      const sibling = await Server.atPort(rejectedPort).run();
-      expect(sibling.port).toBe(rejectedPort);
+      const sibling = await Server.atPort(siblingPort).start();
+      expect(sibling.port).toBe(siblingPort);
       await sibling.close();
     } finally {
       await runManaged.close();
@@ -2097,7 +2092,7 @@ describe("Server", () => {
 
   it("keeps a run-managed sibling usable and closes singleton facilities after the last retires", async () => {
     const closed: string[] = [];
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
     const first = await Server.atPort(0).run();
@@ -2119,7 +2114,7 @@ describe("Server", () => {
     const closed: string[] = [];
     const storageError = new Error("storage close failed once");
     let resourceCloses = 0;
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       storageFactory: new FlakyCloseStorageFactory(closed, storageError),
     });
     const server = await Server.atPort(0)
@@ -2901,7 +2896,7 @@ describe("Server", () => {
   });
 
   it("destroys non-draining HTTP/2 streams and still closes owned resources", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const closed: string[] = [];
     const server = await Server.atPort(0)
       .add(context)
@@ -3014,7 +3009,7 @@ describe("Server", () => {
   });
 
   it("closes built bounded contexts and rejects later context work", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const server = await Server.atPort(0).add(context).start();
 
     await server.close();
@@ -3029,7 +3024,7 @@ describe("Server", () => {
 
   it("builds added context builders with the server environment storage factory", async () => {
     const storageFactory = new TrackingStorageFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+    await configureEnvironment(EnvironmentType.Local, { storageFactory });
     const server = await new Server({
       contexts: [BoundedContext.singleTenant("Tasks")],
     }).start();
@@ -3043,17 +3038,18 @@ describe("Server", () => {
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
-  it("keeps explicit builder storage factories over the server environment default", async () => {
-    const environmentStorage = new TrackingStorageFactory();
-    const builderStorage = new TrackingStorageFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: environmentStorage });
+  it("uses one configured storage factory for every added context builder", async () => {
+    const storageFactory = new TrackingStorageFactory();
+    await configureEnvironment(EnvironmentType.Local, { storageFactory });
+    await ServerEnvironment.instance().completeSetup();
     const server = await Server.atPort(0)
-      .add(BoundedContext.singleTenant("Tasks").withStorageFactory(builderStorage))
+      .add(BoundedContext.singleTenant("Tasks"))
+      .add(BoundedContext.singleTenant("Projects"))
       .start();
 
     try {
-      expect(builderStorage.contextNames()).toContain("Tasks:subscriptions");
-      expect(environmentStorage.contextNames()).toEqual([]);
+      expect(storageFactory.contextNames()).toContain("Tasks:subscriptions");
+      expect(storageFactory.contextNames()).toContain("Projects:subscriptions");
     } finally {
       await server.close();
     }
@@ -3061,7 +3057,7 @@ describe("Server", () => {
 
   it("closes contexts built earlier in the same start attempt when a later builder fails", async () => {
     const storageFactory = new TrackingStorageFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+    await configureEnvironment(EnvironmentType.Local, { storageFactory });
     const brokenBuilder = BoundedContext.singleTenant("Broken").addEventDispatcher({
       messageSchemas() {
         throw new Error("Cannot read event schemas.");
@@ -3079,7 +3075,7 @@ describe("Server", () => {
 
   it("leaves singleton facilities open when a server closes", async () => {
     const closed: string[] = [];
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
     const environment = ServerEnvironment.instance();
@@ -3097,7 +3093,7 @@ describe("Server", () => {
   it("retries failed environment facility closes without rerunning successful closes", async () => {
     const closed: string[] = [];
     const storageError = new Error("storage close failed once");
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       storageFactory: new FlakyCloseStorageFactory(closed, storageError),
     });
     const environment = ServerEnvironment.instance();
@@ -3113,7 +3109,7 @@ describe("Server", () => {
 
   it("closes configured optional singleton facilities", async () => {
     const closed: string[] = [];
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       delivery: new CloseTrackingCloseable(closed, "delivery") satisfies ServerEnvironmentCloseable,
       tracerFactory: new CloseTrackingCloseable(closed, "tracer"),
     });
@@ -3124,7 +3120,7 @@ describe("Server", () => {
 
   it("closes resources before singleton facilities and disconnects clients", async () => {
     const closed: string[] = [];
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
     const environment = ServerEnvironment.instance();
@@ -3152,7 +3148,7 @@ describe("Server", () => {
 
   it("cleans up owned resources but leaves the singleton open when listener open fails", async () => {
     const closed: string[] = [];
-    ServerEnvironment.when(EnvironmentType.Local).use({
+    await configureEnvironment(EnvironmentType.Local, {
       storageFactory: new CloseTrackingStorageFactory(closed),
     });
     const environment = ServerEnvironment.instance();
@@ -3283,9 +3279,9 @@ class CloseTrackingStorageFactory extends InMemoryStorageFactory {
     this.#closed = closed;
   }
 
-  override close(): void {
+  override close(): Promise<void> {
     this.#closed.push("storage");
-    super.close();
+    return super.close();
   }
 }
 
@@ -3320,13 +3316,13 @@ class FlakyCloseStorageFactory extends InMemoryStorageFactory {
     this.#error = error;
   }
 
-  override close(): void {
+  override close(): Promise<void> {
     this.#attempts += 1;
     this.#closed.push("storage");
     if (this.#attempts === 1) {
-      throw this.#error;
+      return Promise.reject(this.#error);
     }
-    super.close();
+    return super.close();
   }
 }
 

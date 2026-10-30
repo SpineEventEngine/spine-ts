@@ -16,7 +16,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
@@ -24,11 +24,12 @@ import { QueryIdSchema, QuerySchema } from "@spine-event-engine/proto/client";
 import { QueryService } from "@spine-event-engine/proto/client";
 import { TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
-import { SignalMetadata } from "@spine-event-engine/server";
+import { ServerEnvironment, SignalMetadata } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CreateProjectSchema } from "../generated/spine/examples/projects/commands_pb.js";
 import { ProjectSummarySchema } from "../generated/spine/examples/projects/read_models_pb.js";
@@ -42,6 +43,8 @@ import { TaskSchema } from "../generated/spine/examples/projects/entities_pb.js"
 const metadata = new SignalMetadata();
 
 describe("project-management load example", () => {
+  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+  afterEach(async () => ServerTests.resetEnvironment());
   it("passes one shared weight service to restored TaskAssignment instances", async () => {
     const { createProjectManagementContext } = await import("../dist/src/index.js");
     let weightCalls = 0;
@@ -223,7 +226,9 @@ describe("project-management load example", () => {
       const response = await readEventually(queries, id, actorContext);
       const summary = response.message
         .map((row) =>
-          row.state === undefined ? undefined : AnyMessages.unpack(row.state, ProjectSummarySchema),
+          row.state === undefined
+            ? undefined
+            : AnyPacker.tryUnpack(row.state, ProjectSummarySchema),
         )
         .find((candidate) => candidate?.id === id);
       expect(summary?.name).toBe("gRPC project");
@@ -237,7 +242,7 @@ describe("project-management load example", () => {
           update.value.update.value.update.some(
             (row) =>
               row.kind.case === "state" &&
-              AnyMessages.unpack(row.kind.value, ProjectSummarySchema)?.id === id,
+              AnyPacker.tryUnpack(row.kind.value, ProjectSummarySchema)?.id === id,
           ),
         ).toBe(true);
     } finally {
@@ -273,7 +278,7 @@ function createQuery(id: string, actorContext: ReturnType<typeof metadata.actorC
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
+            id: [AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
           },
         }),
       },
@@ -291,7 +296,7 @@ function createTopic(id: string, actorContext: ReturnType<typeof metadata.actorC
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
+            id: [AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
           },
         }),
       },

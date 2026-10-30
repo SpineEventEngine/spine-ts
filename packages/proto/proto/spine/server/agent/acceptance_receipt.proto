@@ -1,0 +1,57 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+syntax = "proto3";
+
+package spine.server.agent;
+
+import "google/protobuf/any.proto";
+import "spine/core/command.proto";
+import "spine/core/event.proto";
+import "spine/options.proto";
+
+option (SPI_all) = true;
+option (type_url_prefix) = "type.spine.io";
+
+// Complete identity evidence for one Agent delivery within its provider tenant boundary.
+// Its physical record slot is derived separately from these fields.
+message AgentAcceptanceKey {
+  // Generated Agent state type.
+  string state_type = 1 [(required) = true];
+
+  // Original typed recipient, including its exact Any type URL.
+  google.protobuf.Any recipient_id = 2 [(required) = true];
+
+  oneof source {
+    option (choice).required = true;
+
+    // Original Command identity.
+    spine.core.CommandId command = 3 [(validate) = true];
+
+    // Original Event identity.
+    spine.core.EventId event = 4 [(validate) = true];
+  }
+
+  // Original delivery route, such as HANDLE_COMMAND or REACT_UPON_EVENT.
+  string action = 5 [(required) = true];
+}
+
+// Immutable evidence that the Agent delivery was accepted once.
+message AgentAcceptanceReceipt {
+  // Complete identity evidence within the physical tenant boundary.
+  AgentAcceptanceKey key = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+}

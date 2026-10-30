@@ -27,9 +27,10 @@ this shape appropriate for tests and hosts that manage shutdown themselves.
 <!-- docs-snippet-path: packages/server/test/server/server-environment.test.ts -->
 
 ```ts
-import { BoundedContext, Server } from "@spine-event-engine/server";
+import { BoundedContext, Server, ServerEnvironment } from "@spine-event-engine/server";
 
-const context = BoundedContext.singleTenant("Tasks").build();
+await ServerEnvironment.instance().completeSetup();
+const context = await BoundedContext.singleTenant("Tasks").build();
 const running = await new Server({ contexts: [context], port: 0 }).start();
 try {
   // Native Command, Query, and Subscription services are now listening.
@@ -39,9 +40,28 @@ try {
 ```
 
 Add generated entities with `BoundedContext.add(...)` and use
-`buildAsync()` when framework-generated repository discovery is needed. A
+`build()` to assemble the context and load generated repositories when configured. A
 context is single-tenant or multitenant by construction; select that mode
 before registering application handlers and storage.
+
+`build()` prepares the current model storage and awaits the first subscription
+registry pass. Set `createStorageStructures: false` or
+`startSubscriptionMonitoring: false` in `build({...})` to defer either phase
+independently until the first valid input. Complete environment setup explicitly
+before building, even when both phases are deferred.
+Starting monitoring still prepares its shared subscription registry when model
+structure creation is deferred; it does not prepare every tenant's Entity storage structures.
+An eager required-phase failure stops accepting new input and triggers environment
+cleanup. A lazy first-input failure rejects that input and can be retried.
+After build, `context.runtime.createStorageStructures(...tenantIds)` explicitly
+creates declared structures; `checkStructureCompatibility(...tenantIds)` checks
+them without creating structures. With no IDs, a multitenant context traverses
+its current tenant index in pages; a single-tenant context prepares its neutral
+destination. `startSubscriptionMonitoring()` starts the initial registry pass
+without preparing every tenant's Entity structures. The environment offers the
+same operations across completed, open contexts, selecting matching multitenant
+contexts for explicit IDs. Database-backed providers require an existing
+database; these operations do not provision one or register tenants.
 
 ## Give an Entity an application service
 
@@ -66,7 +86,7 @@ const builder = BoundedContext.singleTenant("Assignments")
   });
 ```
 
-Call `builder.buildAsync()` to assemble the context. The callback runs for each
+Await `builder.build()` to assemble the context. The callback runs for each
 fresh or restored Entity object, not just once per ID. It also works for
 Aggregates and Projections, including Projection rebuilds. Return a fresh
 instance synchronously and pass the supplied options unchanged. Application
@@ -187,6 +207,13 @@ override. Single-tenant execution uses `SINGLE_TENANT`, even when the request
 omits a tenant field. A named tenant cannot query a single-tenant context: that
 fails before reading. See the [query contract](REFERENCE.md#handler-routing-and-operations)
 for the complete tenant rules and empty-result behavior.
+For a multitenant receiving context, explicitly register each accepted tenant
+through `context.tenantIndex.keep(tenantId)` or the configured directory.
+Provider-backed indexes may only confirm existing membership: fixed SQL catalogs
+cannot add tenants, and the Datastore index requires native namespace metadata.
+Use an application-managed `TenantIndex` to register tenants before provider
+data exists or to add tenants dynamically.
+Unknown tenants fail before reads or handlers run; input never registers them.
 
 Use `EntityQuery.all(...)` when every predicate must match and
 `EntityQuery.either(...)` when any branch may match.
@@ -201,7 +228,7 @@ state are declared in Proto and its handlers use generated registration.
 
 An Agent can read its recorded interactions and emitted domain Events through
 its repository. See the [Agent execution reference](REFERENCE.md#agent-execution)
-for history methods, paging, and recovery behavior.
+for history methods, paging, and live execution behavior.
 
 Declare the Agent ID and state in Proto, with `option (entity).kind = ENTITY;`
 on the state. The [Support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md) includes
@@ -271,16 +298,16 @@ class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateS
 <!-- prettier-ignore-end -->
 
 Configure the registry outside the Entity. The Bounded Context requires persisted System
-Events, and the Agent registration supplies its code revision and permitted
-capabilities. The [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
-assembles these settings with the generated handler registry. A server-wide
-`withAi()` default can be supplied when building Bounded Contexts through `Server`;
-Bounded Context configuration can provide its registry directly.
+Events, and the Agent registration supplies its permitted capabilities. The
+[example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
+assembles these settings with the generated handler registry. Supply the registry
+through `ServerEnvironment.when(type).use({ ai: registry })` as a default, or
+`BoundedContextBuilder.withAi(registry)` for one Bounded Context.
 
 Posting a Command awaits acceptance. Model work and the resulting domain Event
 arrive asynchronously afterward. The handling operation can await a model without
 keeping a database transaction open. See the [Agent execution reference](REFERENCE.md#agent-execution)
-for defaults, recovery and retained history.
+for defaults and retained history.
 
 ## Native lifecycle and routing
 

@@ -13,287 +13,294 @@
  */
 
 import type { TenantId } from "@spine-event-engine/proto";
-import { type StorageFactory } from "@spine-event-engine/storage";
-import type {
-  TenantCatalog,
-  TenantCatalogCursor,
-  TenantCatalogProvider,
-  TenantCatalogRead,
+import type { StorageFactory } from "@spine-event-engine/storage";
+import {
+  TenantBoundary,
+  TenantCatalogReads,
+  type TenantCatalog,
+  type TenantCatalogCursor,
+  type TenantCatalogProvider,
+  type TenantCatalogRead,
+  type TenantCatalogSignal,
 } from "@spine-event-engine/storage/provider";
-import { TenantBoundary } from "@spine-event-engine/storage/provider";
-import { TenantCatalogReads } from "@spine-event-engine/storage/provider";
-import { EffectiveTenants } from "./effective-tenant.js";
-
-type TenantMode = "single-tenant" | "multitenant";
 
 /**
- * Tracks tenants admitted through one factory-owned provider catalog.
+ * Finite read request for a live tenant index.
+ */
+export type TenantIndexRead = TenantCatalogRead;
+
+/**
+ * Cancellation port for tenant-index traversal.
+ */
+export type TenantIndexSignal = TenantCatalogSignal;
+
+/**
+ * Opaque continuation returned by the same index instance.
+ */
+export type TenantIndexCursor = TenantCatalogCursor;
+
+/**
+ * Live application membership independent of storage destination resolution.
  */
 export interface TenantIndex {
   // prettier-ignore
 
   /**
-   * Identifies whether the owning context accepts tenant IDs.
+   * Checks current membership without registration or storage preparation.
+   *
+   * @param tenantId Complete tenant identity to inspect.
+   * @returns Whether this index currently includes the tenant.
    */
-  readonly tenantMode: TenantMode;
+  contains(tenantId: TenantId): Promise<boolean>;
 
   /**
-   * Lists complete tenants discovered by the provider.
+   * Lists complete currently registered tenant identities.
    *
-   * @returns The provider-owned tenant IDs.
+   * @returns Complete currently registered tenant identities.
    */
   all(): Promise<readonly TenantId[]>;
 
   /**
-   * Reads a finite page for Agent recovery without enumerating the catalog.
+   * Reads a finite page from this index.
    *
-   * @param request Bounded provider page and cancellation.
-   * @returns Complete tenant IDs and an opaque continuation.
+   * @param request Bounded page and cancellation.
+   * @returns Tenant identities and an opaque continuation.
    */
-  page(request: TenantCatalogRead): Promise<TenantIndexPage>;
+  page(request: TenantIndexRead): Promise<TenantIndexPage>;
 
   /**
-   * Records one complete tenant through provider-native catalog state.
+   * Registers a tenant and returns after membership becomes visible.
    *
-   * @param tenantId The complete generated tenant ID.
-   * @returns Completion of provider catalog admission.
+   * @param tenantId Complete tenant identity to register.
+   * @returns Completion or rejection from this index.
    */
   keep(tenantId: TenantId): Promise<void>;
-
-  /**
-   * Closes this context view without closing the factory-owned catalog.
-   */
-  close(): void;
 }
 
 /**
- * One finite provider tenant page for Agent discovery.
+ * One finite page of complete tenant identities.
  */
 export interface TenantIndexPage {
   /**
-   * Complete generated tenant identities from this provider page.
+   * Complete generated tenant identities.
    */
   readonly ids: readonly TenantId[];
 
   /**
-   * Opaque continuation when another provider page remains.
+   * Opaque continuation when another page remains.
    */
-  readonly after?: TenantCatalogCursor;
+  readonly after?: TenantIndexCursor;
 
   /**
-   * Whether the finite catalog traversal has another page.
+   * Whether another page belongs to this traversal.
    */
   readonly hasMore: boolean;
 }
 
 /**
- * Creates context views over factory-owned tenant catalogs.
+ * Creates an environment default from a provider catalog or transient memory.
  */
-export const TenantIndexes: Readonly<{
-  create(input: {
-    readonly contextName: string;
-    readonly tenantMode: TenantMode;
-    readonly storageFactory: StorageFactory;
-  }): TenantIndex;
-}> = Object.freeze({
-  // prettier-ignore
-
-  /**
-   * Creates an index view for one context.
-   *
-   * @param input Identifies the diagnostic context, tenancy mode, and factory.
-   * @returns The matching tenant index.
-   */
-  create(input): TenantIndex {
-    return input.tenantMode === "single-tenant"
-      ? new SingleTenantIndex(input.contextName)
-      : new StorageTenantIndex(input.contextName, tenantCatalog(input.storageFactory));
-  },
-});
+export const TenantIndexes: Readonly<{ fromFactory(factory: StorageFactory): TenantIndex }> =
+  Object.freeze({
+    /**
+     * Selects a provider catalog when available without creating records.
+     *
+     * @param factory Environment storage factory.
+     * @returns One live index for the environment lifetime.
+     */
+    fromFactory(factory): TenantIndex {
+      const provider = factory as Partial<TenantCatalogProvider>;
+      return typeof provider.tenantCatalog === "function"
+        ? new StorageTenantIndex(provider.tenantCatalog())
+        : new MemoryTenantIndex();
+    },
+  });
 
 /**
- * Reports the effective identity of one single-tenant context.
- */
-class SingleTenantIndex implements TenantIndex {
-  // prettier-ignore
-
-  /**
-   * Identifies the index mode.
-   */
-  readonly tenantMode = "single-tenant";
-
-  /**
-   * Whether callers may still use this index.
-   */
-  #open = true;
-
-  /**
-   * Captures the context name for closed-index diagnostics.
-   *
-   * @param contextName Name reported in diagnostics.
-   */
-  constructor(private readonly contextName: string) {}
-
-  /**
-   * Lists the effective single-tenant identity while open.
-   *
-   * @returns The single effective tenant, or rejection after close.
-   */
-  all(): Promise<readonly TenantId[]> {
-    const closed = this.closedError();
-    return closed === undefined
-      ? Promise.resolve(Object.freeze([EffectiveTenants.current(false, undefined)]))
-      : Promise.reject(closed);
-  }
-
-  /**
-   * Returns the single effective tenant without a provider catalog.
-   *
-   * @param request Finite page request.
-   * @returns One terminal tenant page.
-   */
-  page(request: TenantCatalogRead): Promise<TenantIndexPage> {
-    return Promise.resolve().then(() => {
-      const closed = this.closedError();
-      if (closed !== undefined) throw closed;
-      TenantCatalogReads.require(request);
-      if (request.after !== undefined)
-        throw new TypeError("Single-tenant catalog does not accept a continuation.");
-      return { ids: [EffectiveTenants.current(false, undefined)], hasMore: false };
-    });
-  }
-
-  /**
-   * Rejects tenant recording because a single-tenant context has a fixed identity.
-   *
-   * @returns A rejected promise explaining why recording is unavailable.
-   */
-  keep(): Promise<void> {
-    const closed = this.closedError();
-    return Promise.reject(
-      closed ??
-        new Error(`Single-tenant context "${this.contextName}" does not accept tenant recording.`),
-    );
-  }
-
-  /**
-   * Stops accepting index operations.
-   */
-  close(): void {
-    this.#open = false;
-  }
-
-  /**
-   * Returns a closed-index error while preserving an open index.
-   *
-   * @returns An error only when the index is closed.
-   */
-  private closedError(): Error | undefined {
-    return this.#open ? undefined : new Error("TenantIndex is closed.");
-  }
-}
-
-/**
- * Reads named tenants from the storage provider's catalog.
+ * Adapts a provider catalog to the public live membership contract.
  */
 class StorageTenantIndex implements TenantIndex {
-  // prettier-ignore
-
   /**
-   * Identifies the index mode.
-   */
-  readonly tenantMode = "multitenant";
-
-  /**
-   * Whether callers may still use this index.
-   */
-  #open = true;
-
-  /**
-   * Captures the provider catalog used for this context.
+   * Binds the index to a provider catalog.
    *
-   * @param contextName Name reported in diagnostics.
-   * @param catalog Provider catalog for named tenants.
+   * @param catalog Provider catalog retained by its storage factory.
    */
-  constructor(
-    private readonly contextName: string,
-    private readonly catalog: TenantCatalog,
-  ) {}
+  constructor(private readonly catalog: TenantCatalog) {}
 
   /**
-   * Lists named tenants from the provider catalog.
+   * Checks membership through the catalog.
    *
-   * @returns Named tenant IDs, or rejection for an invalid/closed catalog.
+   * @param tenantId Tenant to inspect.
+   * @returns Live catalog membership.
    */
-  async all(): Promise<readonly TenantId[]> {
-    this.requireOpen();
-    return Object.freeze(
-      (await this.catalog.all()).map((boundary) => {
-        if (boundary.single || boundary.tenantId === undefined)
-          throw new Error("Multitenant provider catalog returned a single-tenant boundary.");
-        return boundary.tenantId;
-      }),
-    );
+  async contains(tenantId: TenantId): Promise<boolean> {
+    return this.catalog.contains(TenantBoundary.from(tenantId));
   }
 
   /**
-   * Reads exactly one bounded provider page.
+   * Lists complete named tenant identities.
    *
-   * @param request Finite page request.
-   * @returns Validated complete tenant IDs.
+   * @returns Complete named tenant identities.
    */
-  async page(request: TenantCatalogRead): Promise<TenantIndexPage> {
-    this.requireOpen();
+  async all(): Promise<readonly TenantId[]> {
+    return Object.freeze((await this.catalog.all()).map((boundary) => this.named(boundary)));
+  }
+
+  /**
+   * Reads a finite provider page.
+   *
+   * @param request Finite provider page.
+   * @returns Complete tenant page.
+   */
+  async page(request: TenantIndexRead): Promise<TenantIndexPage> {
     TenantCatalogReads.require(request);
     const page = await this.catalog.page(request);
     request.signal.throwIfAborted();
-    this.requireOpen();
-    const ids = page.boundaries.map((boundary) => {
-      if (boundary.single || boundary.tenantId === undefined)
-        throw new Error("Multitenant provider catalog returned a single-tenant boundary.");
-      return boundary.tenantId;
-    });
     return {
-      ids,
+      ids: page.boundaries.map((boundary) => this.named(boundary)),
       ...(page.after === undefined ? {} : { after: page.after }),
       hasMore: page.hasMore,
     };
   }
 
   /**
-   * Records a named tenant in the provider catalog.
+   * Registers a tenant through the provider catalog.
    *
-   * @param tenantId Named tenant to record.
-   * @returns Completion after the catalog records the tenant.
+   * @param tenantId Tenant to register.
+   * @returns Provider confirmation.
    */
-  keep(tenantId: TenantId): Promise<void> {
-    return Promise.resolve().then(() => {
-      this.requireOpen();
-      return this.catalog.keep(TenantBoundary.from(tenantId));
-    });
+  async keep(tenantId: TenantId): Promise<void> {
+    return this.catalog.keep(TenantBoundary.from(tenantId));
   }
 
   /**
-   * Stops accepting index operations.
+   * Validates a named provider boundary.
+   *
+   * @param boundary Provider boundary.
+   * @returns Its complete named identity.
    */
-  close(): void {
-    this.#open = false;
-  }
-
-  /**
-   * Rejects use of a closed index.
-   */
-  private requireOpen(): void {
-    if (!this.#open) throw new Error(`TenantIndex for "${this.contextName}" is closed.`);
+  private named(boundary: TenantBoundary): TenantId {
+    if (boundary.single || boundary.tenantId === undefined)
+      throw new Error("Multitenant provider catalog returned a single-tenant boundary.");
+    return boundary.tenantId;
   }
 }
 
-function tenantCatalog(factory: StorageFactory): TenantCatalog {
-  const provider = factory as Partial<TenantCatalogProvider>;
-  if (typeof provider.tenantCatalog !== "function")
-    throw new Error("Multitenant storage requires a provider-owned tenant catalog.");
-  const catalog = provider.tenantCatalog();
-  if (typeof catalog.page !== "function")
-    throw new Error("Multitenant Agent storage requires a paged provider tenant catalog.");
-  return catalog;
+/**
+ * Retains explicit membership when a custom factory has no catalog.
+ */
+class MemoryTenantIndex implements TenantIndex {
+  readonly #tenants = new Map<string, ReturnType<typeof TenantBoundary.from>>();
+
+  readonly #order: ReturnType<typeof TenantBoundary.from>[] = [];
+
+  readonly #identity = {};
+
+  /**
+   * Checks explicit memory membership.
+   *
+   * @param tenantId Tenant to inspect.
+   * @returns Explicit membership.
+   */
+  contains(tenantId: TenantId): Promise<boolean> {
+    return Promise.resolve().then(() =>
+      this.#tenants.has(String(TenantBoundary.from(tenantId).key)),
+    );
+  }
+
+  /**
+   * Lists detached complete tenant identities.
+   *
+   * @returns Detached complete tenant identities.
+   */
+  all(): Promise<readonly TenantId[]> {
+    return Promise.resolve(Object.freeze(this.#order.map((boundary) => boundary.tenantId)));
+  }
+
+  /**
+   * Reads a bounded page without copying the full directory.
+   *
+   * @param request Finite page request.
+   * @returns Bounded membership page.
+   */
+  page(request: TenantIndexRead): Promise<TenantIndexPage> {
+    return Promise.resolve().then(() => this.readPage(request));
+  }
+
+  /**
+   * Reads one page after promise admission.
+   *
+   * @param request Finite page request.
+   * @returns Bounded membership page.
+   */
+  private readPage(request: TenantIndexRead): TenantIndexPage {
+    TenantCatalogReads.require(request);
+    const cursor = request.after;
+    if (cursor !== undefined && !(cursor instanceof MemoryTenantIndexCursor))
+      throw new TypeError("TenantIndex continuation is invalid.");
+    const state = cursor?.position(this.#identity);
+    const start = state?.index ?? 0;
+    const length = state?.length ?? this.#order.length;
+    const end = Math.min(length, start + request.count);
+    request.signal.throwIfAborted();
+    return {
+      ids: this.#order.slice(start, end).map((boundary) => boundary.tenantId),
+      ...(end < length ? { after: new MemoryTenantIndexCursor(this.#identity, end, length) } : {}),
+      hasMore: end < length,
+    };
+  }
+
+  /**
+   * Registers one detached complete tenant identity.
+   *
+   * @param tenantId Tenant to register.
+   * @returns Visible membership completion.
+   */
+  keep(tenantId: TenantId): Promise<void> {
+    return Promise.resolve().then(() => {
+      const boundary = TenantBoundary.from(tenantId);
+      const key = String(boundary.key);
+      if (this.#tenants.has(key)) return;
+      this.#tenants.set(key, boundary);
+      this.#order.push(boundary);
+    });
+  }
+}
+
+/**
+ * Instance-bound continuation for a transient in-memory index.
+ */
+class MemoryTenantIndexCursor implements TenantIndexCursor {
+  readonly [Symbol.toStringTag] = "TenantCatalogCursor" as const;
+
+  readonly #identity: object;
+
+  readonly #index: number;
+
+  readonly #length: number;
+
+  /**
+   * Captures one finite sweep position.
+   *
+   * @param identity Index identity.
+   * @param index Next position.
+   * @param length Sweep length.
+   */
+  constructor(identity: object, index: number, length: number) {
+    this.#identity = identity;
+    this.#index = index;
+    this.#length = length;
+    Object.freeze(this);
+  }
+
+  /**
+   * Verifies the issuing index before returning the sweep position.
+   *
+   * @param identity Expected index identity.
+   * @returns Finite sweep position.
+   */
+  position(identity: object): { index: number; length: number } {
+    if (this.#identity !== identity) throw new TypeError("TenantIndex continuation is invalid.");
+    return { index: this.#index, length: this.#length };
+  }
 }

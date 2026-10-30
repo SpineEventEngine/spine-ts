@@ -14,9 +14,10 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnySchema, StringValueSchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnyPacker } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -33,6 +34,7 @@ import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
 import { repositorySpecScanner } from "../../src/entity/spec-scanner.js";
 import {
   ProjectOverviewIdSchema,
+  ProjectEnvelopeStateSchema,
   ProjectOverviewStateSchema,
   ProjectPortfolioStateSchema,
   ProjectStateSchema,
@@ -45,6 +47,7 @@ const MessageIdStateSchema = ProjectPortfolioStateSchema;
 class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchema> {}
 class AlternateAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
 class MessageIdProjection extends Projection<ProjectOverviewId, typeof MessageIdStateSchema> {}
+class EnvelopeIdProjection extends Projection<Any, typeof ProjectEnvelopeStateSchema> {}
 class DerivedTaskProjection extends TaskProjection {}
 
 function register(entityType: unknown, schema: GenMessage<Message>): void {
@@ -96,6 +99,7 @@ describe("SpecScanner", () => {
       "version",
       "name",
       "priority",
+      "attachment",
     ]);
     expect(spec.columns.find((column) => column.name === "version")?.type.kind).toBe("message");
     expect(
@@ -121,8 +125,8 @@ describe("SpecScanner", () => {
     register(TaskProjection, ProjectOverviewStateSchema);
     const spec = scan(TaskProjection);
     const record = create(EntityRecordSchema, {
-      entityId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "task-1" })),
-      state: AnyMessages.pack(
+      entityId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "task-1" })),
+      state: AnyPacker.pack(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "different-state-id", name: "First" }),
       ),
@@ -136,11 +140,51 @@ describe("SpecScanner", () => {
     const spec = scan(MessageIdProjection);
     const id = create(ProjectOverviewIdSchema, { value: "task-2" });
     const record = create(EntityRecordSchema, {
-      entityId: AnyMessages.pack(ProjectOverviewIdSchema, id),
+      entityId: AnyPacker.pack(ProjectOverviewIdSchema, id),
     });
 
     expect(spec.idType).toBe(ProjectOverviewIdSchema);
     expect(spec.idValueIn(record)).toEqual(id);
+  });
+
+  it("round-trips a declared Any Entity ID through current storage", async () => {
+    register(EnvelopeIdProjection, ProjectEnvelopeStateSchema);
+    const spec = scan(EnvelopeIdProjection);
+    const descriptor = entityStorageDescriptor(
+      { name: "EnvelopeProjects", multitenant: false },
+      spec,
+    );
+    const id = AnyPacker.pack(
+      ProjectOverviewIdSchema,
+      create(ProjectOverviewIdSchema, { value: "selected" }),
+    );
+    const state = create(ProjectEnvelopeStateSchema, { id, name: "Selected" });
+    const record = EntityRecords.pack(ProjectEnvelopeStateSchema, id, state, 1n, {
+      archived: false,
+      deleted: false,
+    });
+    const factory = new InMemoryStorageFactory();
+    const storage = factory.createEntityStorage(descriptor) as {
+      current: {
+        write(record: EntityRecord): Promise<void>;
+        read(id: Any): Promise<EntityRecord | undefined>;
+      };
+      close(): void;
+    };
+    try {
+      await storage.current.write(record);
+      const found = await storage.current.read(id);
+      expect(found?.entityId).toEqual(id);
+      expect(found && spec.idValueIn(found)).toEqual(id);
+      expect(found?.entityId && descriptor.id.unpack(found.entityId)).toEqual(id);
+      expect(found?.state && AnyPacker.unpack(found.state, ProjectEnvelopeStateSchema)).toEqual(
+        state,
+      );
+      expect(await storage.current.read(create(AnySchema))).toBeUndefined();
+    } finally {
+      storage.close();
+      await factory.close();
+    }
   });
 
   it("keeps EntityRecord shared while isolating Entity source types", () => {
@@ -160,7 +204,7 @@ describe("SpecScanner", () => {
   it("unpacks a record state once when two state columns are materialized", () => {
     register(TaskProjection, ProjectOverviewStateSchema);
     const spec = scan(TaskProjection);
-    const packedState = AnyMessages.pack(
+    const packedState = AnyPacker.pack(
       ProjectOverviewStateSchema,
       create(ProjectOverviewStateSchema, { id: "task-1", name: "First", priority: 1 }),
     );
@@ -185,7 +229,7 @@ describe("SpecScanner", () => {
 
   it("keeps unpack caches separate for the same envelope under different state schemas", () => {
     const record = create(EntityRecordSchema, {
-      state: AnyMessages.pack(
+      state: AnyPacker.pack(
         ProjectOverviewStateSchema,
         create(ProjectOverviewStateSchema, { id: "task-1", name: "First", priority: 1 }),
       ),
@@ -205,7 +249,7 @@ describe("SpecScanner", () => {
     expect(() =>
       spec.idValueIn(
         create(EntityRecordSchema, {
-          entityId: AnyMessages.pack(
+          entityId: AnyPacker.pack(
             ProjectOverviewStateSchema,
             create(ProjectOverviewStateSchema, { id: "wrong-id-envelope" }),
           ),
@@ -216,7 +260,7 @@ describe("SpecScanner", () => {
       EntityRecords.unpack(
         ProjectOverviewStateSchema,
         create(EntityRecordSchema, {
-          state: AnyMessages.pack(StringValueSchema, create(StringValueSchema)),
+          state: AnyPacker.pack(StringValueSchema, create(StringValueSchema)),
         }),
       ),
     ).toThrow(/state schema/);
@@ -224,7 +268,7 @@ describe("SpecScanner", () => {
       EntityRecords.unpack(
         ProjectOverviewStateSchema,
         create(EntityRecordSchema, {
-          state: AnyMessages.pack(ProjectOverviewStateSchema, create(ProjectOverviewStateSchema)),
+          state: AnyPacker.pack(ProjectOverviewStateSchema, create(ProjectOverviewStateSchema)),
           version: create(VersionSchema, { number: -1 }),
         }),
       ),
@@ -297,7 +341,7 @@ describe("SpecScanner", () => {
 
     expect(
       descriptor.id.unpack(
-        AnyMessages.pack(
+        AnyPacker.pack(
           ProjectOverviewStateSchema,
           create(ProjectOverviewStateSchema, { id: "wrong" }),
         ),
@@ -354,7 +398,7 @@ describe("SpecScanner", () => {
     expect(() =>
       spec.idValueIn(
         create(EntityRecordSchema, {
-          entityId: AnyMessages.pack(
+          entityId: AnyPacker.pack(
             ProjectOverviewStateSchema,
             create(ProjectOverviewStateSchema, { id: "wrong-message-id" }),
           ),

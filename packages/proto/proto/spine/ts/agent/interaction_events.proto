@@ -168,7 +168,7 @@ message AgentModelAttemptFinished {
   AiFailureCode failure = 8;
 }
 
-// Typed result passed local validation and was saved for recovery.
+// Typed result passed local validation during a live Agent invocation.
 message AgentAiResultAdmitted {
   // Logical operation producing the result.
   AgentOperationRef operation = 1 [

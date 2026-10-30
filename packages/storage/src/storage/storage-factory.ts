@@ -17,23 +17,49 @@ import type { Message } from "@bufbuild/protobuf";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageGroup } from "../record/storage-group.js";
-import type { Storage, StorageContext } from "./storage.js";
+import type { StorageContext } from "./storage.js";
 
 /**
  * Mandatory storage-adapter seam for Spine TS runtime storage.
  */
-export abstract class StorageFactory implements Storage {
+export abstract class StorageFactory {
   #open = true;
 
+  #closing: Promise<void> | undefined;
+
   /**
-   * Closes the storage factory. Future storage creation fails.
+   * Closes retained resources after admitted work settles.
+   *
+   * @returns The repeatable factory close outcome.
    */
-  close(): void {
+  close(): Promise<void> {
+    this.fenceClose();
+    return (this.#closing ??= Promise.resolve());
+  }
+
+  /**
+   * Checks the configured shared destination without preparing record families.
+   *
+   * Memory validates locally; remote providers perform their documented read-only check.
+   * Providers without a connection diagnostic reject explicitly.
+   *
+   * @returns Completion after the read-only connection check.
+   */
+  checkConnection(): Promise<void> {
+    if (!this.#open) return Promise.reject(new Error("StorageFactory is closed."));
+    return Promise.reject(new Error("StorageFactory does not support connection checks."));
+  }
+
+  /**
+   * Stops admitting new factory operations synchronously.
+   */
+  protected fenceClose(): void {
     this.#open = false;
   }
 
   /**
    * Returns whether the storage factory accepts storage creation.
+   *
    * @returns Whether the factory is open.
    */
   isOpen(): boolean {
@@ -51,6 +77,8 @@ export abstract class StorageFactory implements Storage {
    * @param recordSpec Supplies the declarative physical record layout.
    * @param group Separates records that share one source type.
    * @returns The independently closeable record storage handle.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam R Entity identifier or record type.
    */
   createRecordStorage<I, R extends Message>(
     context: StorageContext,
@@ -68,6 +96,8 @@ export abstract class StorageFactory implements Storage {
    * @param recordSpec The record specification.
    * @param group Separates records that share one source type.
    * @returns The created record storage.
+   * @typeParam I Entity identifier or record type.
+   * @typeParam R Entity identifier or record type.
    */
   protected abstract onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
@@ -75,6 +105,9 @@ export abstract class StorageFactory implements Storage {
     group?: StorageGroup,
   ): RecordStorage<I, R>;
 
+  /**
+   * Checks that the factory remains open before creating storage.
+   */
   private requireOpen(): void {
     if (!this.#open) {
       throw new Error("StorageFactory is closed.");

@@ -28,7 +28,7 @@ import {
   PostMessageSchema,
   type PostMessage,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   ConstraintViolationSchema,
   ErrorSchema,
@@ -995,19 +995,19 @@ function requestFixture(
 
 function responseRows(...texts: string[]) {
   return {
-    message: texts.map((text) => ({ state: AnyMessages.pack(BoardMessageViewSchema, view(text)) })),
+    message: texts.map((text) => ({ state: AnyPacker.pack(BoardMessageViewSchema, view(text)) })),
   } as never;
 }
 
 function responseViews(rows: readonly ReturnType<typeof view>[]) {
   return {
-    message: rows.map((row) => ({ state: AnyMessages.pack(BoardMessageViewSchema, row) })),
+    message: rows.map((row) => ({ state: AnyPacker.pack(BoardMessageViewSchema, row) })),
   } as never;
 }
 
 function responseBoardRows(text: string, board: string) {
   return {
-    message: [{ state: AnyMessages.pack(BoardMessageViewSchema, view(text, board)) }],
+    message: [{ state: AnyPacker.pack(BoardMessageViewSchema, view(text, board)) }],
   } as never;
 }
 
@@ -1033,8 +1033,8 @@ function stateUpdate(value: ReturnType<typeof view>) {
       value: create(EntityUpdatesSchema, {
         update: [
           create(EntityStateUpdateSchema, {
-            id: AnyMessages.pack(MessageIdSchema, value.id!),
-            kind: { case: "state", value: AnyMessages.pack(BoardMessageViewSchema, value) },
+            id: AnyPacker.pack(MessageIdSchema, value.id!),
+            kind: { case: "state", value: AnyPacker.pack(BoardMessageViewSchema, value) },
           }),
         ],
       }),
@@ -1049,7 +1049,7 @@ function removeUpdate(id: string) {
       value: create(EntityUpdatesSchema, {
         update: [
           create(EntityStateUpdateSchema, {
-            id: AnyMessages.pack(MessageIdSchema, create(MessageIdSchema, { value: id })),
+            id: AnyPacker.pack(MessageIdSchema, create(MessageIdSchema, { value: id })),
             kind: { case: "noLongerMatching", value: true },
           }),
         ],
@@ -1171,7 +1171,7 @@ function eventUpdate(
       value: create(EventUpdatesSchema, {
         event: [
           create(EventSchema, {
-            message: AnyMessages.pack(schema as typeof MessagePostedSchema, message as never),
+            message: AnyPacker.pack(schema as typeof MessagePostedSchema, message as never),
           }),
         ],
       }),
@@ -1196,7 +1196,7 @@ function validationOutcome(): CommandAcknowledgement {
     kind: "error",
     error: create(ErrorSchema, {
       type: "COMMAND_VALIDATION_ERROR",
-      details: AnyMessages.pack(ValidationErrorSchema, details),
+      details: AnyPacker.pack(ValidationErrorSchema, details),
     }),
   };
 }

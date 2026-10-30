@@ -18,7 +18,7 @@ import { type Any } from "@bufbuild/protobuf/wkt";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ErrorSchema,
   CommandIdSchema,
@@ -49,11 +49,14 @@ import { SubscriptionService } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
   DeliveryBuilder,
+  EnvironmentType,
   EventRouting,
   InMemorySubscriptionRegistry,
   SignalMetadata,
+  ServerEnvironment,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { BlackBox, type BlackBoxScope } from "@spine-event-engine/testing";
 import {
   cpSync,
@@ -116,6 +119,7 @@ const ownedBlackBoxes = new Set<BlackBox>();
 afterEach(async () => {
   await Promise.all([...ownedBlackBoxes].map((blackBox) => blackBox.close()));
   ownedBlackBoxes.clear();
+  await ServerTests.resetEnvironment();
 });
 
 describe("@spine-event-engine/example-todo", () => {
@@ -127,6 +131,13 @@ describe("@spine-event-engine/example-todo", () => {
         fileURLToPath(new URL("../node_modules", import.meta.url)),
         join(fixture, "node_modules"),
         "dir",
+      );
+      const fixtureProtoModule = join(fixture, "generated/proto-module.js");
+      rmSync(fixtureProtoModule);
+      symlinkSync(
+        fileURLToPath(new URL("../dist/generated/proto-module.js", import.meta.url)),
+        fixtureProtoModule,
+        "file",
       );
       const fixtureModule: unknown = await import(
         pathToFileURL(join(fixture, "src/index.js")).href
@@ -166,7 +177,7 @@ describe("@spine-event-engine/example-todo", () => {
 
     expect(createRecordStorage).toHaveBeenCalled();
     await context.close();
-    storageFactory.close();
+    await storageFactory.close();
   });
 
   it("accepts application-owned Delivery and subscription facilities", async () => {
@@ -181,7 +192,7 @@ describe("@spine-event-engine/example-todo", () => {
     });
 
     await context.close();
-    storageFactory.close();
+    await storageFactory.close();
   });
 
   it("keeps generated registry discovery out of application context assembly", () => {
@@ -197,7 +208,7 @@ describe("@spine-event-engine/example-todo", () => {
     const response = create(QueryResponseSchema, {
       message: [
         create(EntityStateWithVersionSchema, {
-          state: AnyMessages.pack(
+          state: AnyPacker.pack(
             TaskListSchema,
             create(TaskListSchema, {
               id: create(TaskListIdSchema, { value: "unsafe\nrow" }),
@@ -674,7 +685,7 @@ describe("@spine-event-engine/example-todo", () => {
       expect(fixture.assertEvents()).toHaveLength(1);
       const unassignedMessage = fixture.assertEvents()[0]?.message;
       if (unassignedMessage === undefined) throw new Error("Expected the TaskCreated Event.");
-      expect(AnyMessages.unpack(unassignedMessage, TaskCreatedSchema)?.id?.value).toBe(
+      expect(AnyPacker.tryUnpack(unassignedMessage, TaskCreatedSchema)?.id?.value).toBe(
         "task-unassigned-create",
       );
 
@@ -697,10 +708,10 @@ describe("@spine-event-engine/example-todo", () => {
         throw new Error("Expected a created Event followed by an assignment Event.");
       }
 
-      expect(AnyMessages.unpack(createdMessage, TaskCreatedSchema)?.id?.value).toBe(
+      expect(AnyPacker.tryUnpack(createdMessage, TaskCreatedSchema)?.id?.value).toBe(
         "task-assigned-create",
       );
-      expect(AnyMessages.unpack(assignedMessage, TaskAssignedSchema)?.assignee).toEqual(ada);
+      expect(AnyPacker.tryUnpack(assignedMessage, TaskAssignedSchema)?.assignee).toEqual(ada);
       await expectTaskAssigneeEventually(fixture, context, ada, ["task-assigned-create"]);
     } finally {
       await fixture.close();
@@ -805,8 +816,8 @@ describe("@spine-event-engine/example-todo", () => {
         throw new Error("Expected an initial assignment followed by a reassignment Event.");
       }
 
-      expect(AnyMessages.unpack(assignedMessage, TaskAssignedSchema)?.assignee).toEqual(ada);
-      expect(AnyMessages.unpack(reassignedMessage, TaskReassignedSchema)).toMatchObject({
+      expect(AnyPacker.tryUnpack(assignedMessage, TaskAssignedSchema)?.assignee).toEqual(ada);
+      expect(AnyPacker.tryUnpack(reassignedMessage, TaskReassignedSchema)).toMatchObject({
         previousAssignee: ada,
         assignee: lin,
       });
@@ -882,22 +893,23 @@ describe("@spine-event-engine/example-todo", () => {
         event.taskListId === undefined ? [] : [event.taskListId],
     );
     const firstStorage = new InMemoryStorageFactory(storageBackend);
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: firstStorage });
+    await ServerEnvironment.instance().completeSetup();
     const firstRouting = EventRouting.create<TaskListId>();
     firstRouting.route(TaskEvent, firstRoute);
     const first = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(firstStorage)
       .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
         // Generated interface tokens cross the dynamic compiled-example boundary.
         eventRouting: firstRouting,
       })
-      .buildAsync();
+      .build();
     const listId = create(TaskListIdSchema, { value: "task-inbox-replay" });
     const event = SignalEnvelopes.event({
       context: create(EventContextSchema, {
         timestamp: signalMetadata.timestamp(),
-        producerId: AnyMessages.pack(
+        producerId: AnyPacker.pack(
           TaskIdSchema,
           create(TaskIdSchema, { value: "task-inbox-replay" }),
         ),
@@ -915,8 +927,9 @@ describe("@spine-event-engine/example-todo", () => {
     } finally {
       await first.close();
     }
+    await ServerTests.resetEnvironment();
 
-    const targetId = AnyMessages.pack(TaskListIdSchema, listId);
+    const targetId = AnyPacker.pack(TaskListIdSchema, listId);
     const targetTypeUrl = TypeUrls.derive(TaskListSchema);
     const delivery = new DeliveryBuilder()
       .withContext({ name: "Tasks", multitenant: false })
@@ -927,12 +940,12 @@ describe("@spine-event-engine/example-todo", () => {
       id: create(EventIdSchema, { value: "event-inbox-restart" }),
       context: create(EventContextSchema, {
         timestamp: signalMetadata.timestamp(),
-        producerId: AnyMessages.pack(
+        producerId: AnyPacker.pack(
           TaskIdSchema,
           create(TaskIdSchema, { value: "task-inbox-restart" }),
         ),
       }),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         TaskCreatedSchema,
         create(TaskCreatedSchema, {
           id: create(TaskIdSchema, { value: "task-inbox-restart" }),
@@ -944,7 +957,7 @@ describe("@spine-event-engine/example-todo", () => {
     await delivery.inbox.receive({
       inboxId: { targetId, targetTypeUrl },
       signalId: "event-inbox-restart",
-      signal: AnyMessages.pack(EventSchema, replayEvent),
+      signal: AnyPacker.pack(EventSchema, replayEvent),
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard: delivery.strategy.shardFor(targetId, targetTypeUrl),
@@ -957,15 +970,18 @@ describe("@spine-event-engine/example-todo", () => {
     });
     const replayRouting = EventRouting.create<TaskListId>();
     replayRouting.route(TaskEvent, replayRoute);
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new InMemoryStorageFactory(storageBackend),
+    });
+    await ServerEnvironment.instance().completeSetup();
     const replay = await BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(new InMemoryStorageFactory(storageBackend))
       .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
         // Generated interface tokens cross the dynamic compiled-example boundary.
         eventRouting: replayRouting,
       })
-      .buildAsync();
+      .build();
     const replayFixture = await createTodoBlackBox(replay);
     try {
       await replayFixture.eventually(
@@ -1066,9 +1082,9 @@ describe("@spine-event-engine/example-todo", () => {
       message: [
         create(EntityStateWithVersionSchema),
         create(EntityStateWithVersionSchema, {
-          state: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: "foreign" })),
+          state: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: "foreign" })),
         }),
-        create(EntityStateWithVersionSchema, { state: AnyMessages.pack(TaskListSchema, list) }),
+        create(EntityStateWithVersionSchema, { state: AnyPacker.pack(TaskListSchema, list) }),
       ],
     });
 
@@ -1217,7 +1233,7 @@ describe("@spine-event-engine/example-todo", () => {
     if (validationError.details === undefined)
       throw new Error("Expected validation error details.");
     expect(
-      AnyMessages.unpack(validationError.details, ValidationErrorSchema)?.constraintViolation.some(
+      AnyPacker.tryUnpack(validationError.details, ValidationErrorSchema)?.constraintViolation.some(
         (violation) => violation.fieldPath?.fieldName[0] === "title",
       ),
     ).toBe(true);
@@ -1639,11 +1655,12 @@ describe("@spine-event-engine/example-todo", () => {
     const routing = EventRouting.create<MessageShape<typeof UserIdSchema>>()
       .route(TaskAssignmentEvent, assignmentRoute)
       .route(routedTaskReassignedSchema, reassignmentRoute);
+    await ServerEnvironment.instance().completeSetup();
     const context = await BoundedContext.singleTenant("Rejected assignment routing")
       .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskAssigneeProjection, { eventRouting: routing })
-      .buildAsync();
+      .build();
     const fixture = await createTodoBlackBox(context);
     const scope = fixture.asGuest();
     const taskId = "task-rejected-routing";
@@ -2154,7 +2171,7 @@ function createTaskListTopic(id?: string) {
               case: "filters",
               value: create(TargetFiltersSchema, {
                 idFilter: {
-                  id: [AnyMessages.pack(TaskListIdSchema, create(TaskListIdSchema, { value: id }))],
+                  id: [AnyPacker.pack(TaskListIdSchema, create(TaskListIdSchema, { value: id }))],
                 },
               }),
             },
@@ -2196,7 +2213,7 @@ function createActorContext() {
 }
 
 function unpackTaskList(state: Any | undefined): TaskList | undefined {
-  return state === undefined ? undefined : AnyMessages.unpack(state, TaskListSchema);
+  return state === undefined ? undefined : AnyPacker.tryUnpack(state, TaskListSchema);
 }
 
 function unpackSubscribedTaskList(update: SubscriptionUpdate | undefined) {
@@ -2224,7 +2241,7 @@ function unpackSubscribedTaskAlreadyDone(update: SubscriptionUpdate) {
   const message =
     event?.message === undefined
       ? undefined
-      : AnyMessages.unpack(event.message, TaskAlreadyDoneSchema);
+      : AnyPacker.tryUnpack(event.message, TaskAlreadyDoneSchema);
   if (message === undefined || event?.context === undefined) {
     throw new Error("Expected a TaskAlreadyDone event subscription update.");
   }
@@ -2236,7 +2253,7 @@ function unpackSubscribedTaskAlreadyAssigned(update: SubscriptionUpdate) {
   const message =
     event?.message === undefined
       ? undefined
-      : AnyMessages.unpack(event.message, TaskAlreadyAssignedSchema);
+      : AnyPacker.tryUnpack(event.message, TaskAlreadyAssignedSchema);
   if (message === undefined)
     throw new Error("Expected a TaskAlreadyAssigned event subscription update.");
   return message;
@@ -2247,7 +2264,7 @@ function unpackSubscribedTaskNotAssigned(update: SubscriptionUpdate) {
   const message =
     event?.message === undefined
       ? undefined
-      : AnyMessages.unpack(event.message, TaskNotAssignedSchema);
+      : AnyPacker.tryUnpack(event.message, TaskNotAssignedSchema);
   if (message === undefined)
     throw new Error("Expected a TaskNotAssigned event subscription update.");
   return message;
@@ -2506,7 +2523,7 @@ function rejectionPublisher(
         SignalEnvelopes.event({
           context: create(EventContextSchema, {
             timestamp: signalMetadata.timestamp(),
-            producerId: AnyMessages.pack(TaskIdSchema, producerId),
+            producerId: AnyPacker.pack(TaskIdSchema, producerId),
           }),
           schema,
           message,
@@ -2529,7 +2546,7 @@ function assignmentRejectionPublisher(
         SignalEnvelopes.event({
           context: create(EventContextSchema, {
             timestamp: signalMetadata.timestamp(),
-            producerId: AnyMessages.pack(TaskIdSchema, producerId),
+            producerId: AnyPacker.pack(TaskIdSchema, producerId),
           }),
           schema,
           message,
@@ -2847,8 +2864,8 @@ function validationDetails(status: unknown) {
     return undefined;
   }
 
-  return AnyMessages.unpack(
-    value.details as Parameters<typeof AnyMessages.unpack>[0],
+  return AnyPacker.tryUnpack(
+    value.details as Parameters<typeof AnyPacker.unpack>[0],
     ValidationErrorSchema,
   );
 }

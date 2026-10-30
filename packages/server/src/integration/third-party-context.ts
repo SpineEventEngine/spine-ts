@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { create, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Time, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   BoundedContextNameSchema,
@@ -59,7 +59,7 @@ export class ThirdPartyContext {
    * @returns Resolves to an open single-tenant context.
    */
   static async singleTenant(name: string): Promise<ThirdPartyContext> {
-    return new ThirdPartyContext(await BoundedContext.singleTenant(name).buildAsync(), false);
+    return new ThirdPartyContext(await BoundedContext.singleTenant(name).build(), false);
   }
 
   /**
@@ -69,7 +69,7 @@ export class ThirdPartyContext {
    * @returns Resolves to an open multitenant context.
    */
   static async multitenant(name: string): Promise<ThirdPartyContext> {
-    return new ThirdPartyContext(await BoundedContext.multitenant(name).buildAsync(), true);
+    return new ThirdPartyContext(await BoundedContext.multitenant(name).build(), true);
   }
 
   /* eslint-disable @typescript-eslint/unified-signatures --
@@ -111,14 +111,11 @@ export class ThirdPartyContext {
     }
     const envelope = create(EventSchema, {
       id: create(EventIdSchema, { value: crypto.randomUUID() }),
-      message: {
-        typeUrl: this.#schema(typeName).typeUrl,
-        value: toBinary(this.#schema(typeName).schema, event as never),
-      },
+      message: AnyPacker.pack(this.#schema(typeName), event as never),
       context: create(EventContextSchema, {
         timestamp: actorContext.timestamp ?? create(TimestampSchema),
         origin: { case: "importContext", value: actorContext },
-        producerId: AnyMessages.pack(
+        producerId: AnyPacker.pack(
           BoundedContextNameSchema,
           create(BoundedContextNameSchema, { value: this.#context.name.value }),
         ),
@@ -172,6 +169,6 @@ export class ThirdPartyContext {
   #schema(typeName: string) {
     const metadata = ServerEnvironment.instance().typeRegistry.findByFullName(typeName);
     if (metadata === undefined) throw new TypeError(`ThirdPartyContext does not know ${typeName}.`);
-    return { schema: metadata.schema, typeUrl: TypeUrls.derive(metadata.schema) };
+    return metadata.schema;
   }
 }

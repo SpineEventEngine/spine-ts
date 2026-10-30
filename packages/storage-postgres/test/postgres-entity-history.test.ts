@@ -12,9 +12,14 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import {
+  AnyPacker,
+  Identifiers,
+  StringifierRegistry,
+  TypeRegistry,
+} from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -194,6 +199,7 @@ const driver = vi.hoisted(() => {
   });
   return {
     Pool,
+    end,
     calls,
     keyPages,
     reset: () => {
@@ -750,6 +756,37 @@ describe("PostgreSQL Entity history", () => {
     driver.setDeleteHook(undefined);
   });
 
+  it("fences new Entity-history work while an admitted trim drains", async () => {
+    let settle: (() => void) | undefined;
+    let entered: (() => void) | undefined;
+    const deleting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    driver.keyPages.push(["retained-key"], []);
+    driver.setDeleteHook(
+      () =>
+        new Promise((resolve) => {
+          settle = () => {
+            resolve({ rowCount: 1, rows: [] });
+          };
+          entered?.();
+        }),
+    );
+    const factory = await postgresFactory();
+    const entity = entityStorage(factory, entityInput(true));
+    const trimming = entity.states.trim(taskId("task"), 0);
+    await deleting;
+    const closing = factory.close();
+    await expect(entity.states.backward(taskId("task"), 1)).rejects.toThrow(/closed/i);
+    expect(driver.end).not.toHaveBeenCalled();
+    if (settle === undefined) throw new Error("Expected gated history delete.");
+    settle();
+    await expect(trimming).resolves.toBeUndefined();
+    await closing;
+    expect(driver.end).toHaveBeenCalledOnce();
+    driver.setDeleteHook(undefined);
+  });
+
   it("retains earlier page effects and retries a failed trim page without skipping", async () => {
     const failure = new Error("delete failed");
     driver.keyPages.splice(0);
@@ -787,9 +824,7 @@ function task(id: string, title: string): Task {
 
 function entityInput(stateHistory = false, eventHistory = false): EntityStorageInput<TaskId, Task> {
   const unpack = (id: NonNullable<EntityRecord["entityId"]>): TaskId | undefined =>
-    id.typeUrl.endsWith(`/${TaskIdSchema.typeName}`)
-      ? fromBinary(TaskIdSchema, id.value)
-      : undefined;
+    AnyPacker.tryUnpack(id, TaskIdSchema);
   return {
     context: { name: "Tasks", multitenant: false },
     id: {

@@ -17,7 +17,7 @@ import {
   MessageIdSchema,
   type BoardMessageView,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import type { EntityStateUpdate, SubscriptionUpdate } from "@spine-event-engine/proto/client";
 
@@ -150,7 +150,7 @@ const BoardPayloadReaders = Object.freeze({
     if (update.kind.case !== "state") return "wrong-kind";
     const state = update.kind.value as Any | undefined;
     if (state === undefined) return "missing-state";
-    const row = AnyMessages.unpack(state, BoardMessageViewSchema);
+    const row = AnyPacker.tryUnpack(state, BoardMessageViewSchema);
     if (row === undefined) return "invalid-state";
     const rowId = row.id?.value;
     if (rowId === undefined || rowId.length === 0) return "invalid-state";
@@ -167,7 +167,7 @@ const BoardPayloadReaders = Object.freeze({
    */
   readId(update: EntityStateUpdate): BoardId | BoardRecovery {
     if (update.id === undefined) return "missing-id";
-    const id = AnyMessages.unpack(update.id, MessageIdSchema)?.value;
+    const id = AnyPacker.tryUnpack(update.id, MessageIdSchema)?.value;
     return id === undefined || id.length === 0 ? "invalid-id" : { value: id };
   },
 });

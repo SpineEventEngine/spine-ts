@@ -21,8 +21,10 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
+  EnvironmentType,
   EventRouting,
   Projection,
+  ServerEnvironment,
   Subscribe,
   Throws,
   type DeliveryStrategy,
@@ -662,6 +664,14 @@ interface TodoContextOptions {
  * @returns The assembled Tasks bounded context.
  */
 export async function createTodoContext(options: TodoContextOptions = {}): Promise<BoundedContext> {
+  if (options.storageFactory !== undefined || options.deliveryStrategy !== undefined)
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      ...(options.storageFactory === undefined ? {} : { storageFactory: options.storageFactory }),
+      ...(options.deliveryStrategy === undefined
+        ? {}
+        : { deliveryStrategy: options.deliveryStrategy }),
+    });
+  await ServerEnvironment.instance().completeSetup();
   const taskListRouting = EventRouting.create<TaskListId>()
     .route(TaskEvent, (event) => [taskListIds.require(event.taskListId)])
     .route(TaskAlreadyDoneSchema, (event) => taskListIds.fromTaskId(event.id))
@@ -678,12 +688,9 @@ export async function createTodoContext(options: TodoContextOptions = {}): Promi
     .add(TaskAggregate)
     .add(TaskListProjection, { eventRouting: taskListRouting })
     .add(TaskAssigneeProjection, { eventRouting: assigneeRouting });
-  if (options.deliveryStrategy !== undefined)
-    builder.withDeliveryStrategy(options.deliveryStrategy);
   if (options.subscriptionRegistry !== undefined)
     builder.withSubscriptionRegistry(options.subscriptionRegistry);
-  if (options.storageFactory !== undefined) builder.withStorageFactory(options.storageFactory);
-  return builder.buildAsync();
+  return builder.build();
 }
 
 const taskIds = {

@@ -69,7 +69,7 @@ export async function startTodoServer(options: TodoServerOptions = {}): Promise<
   try {
     context = await createTodoContext(storageFactory === undefined ? {} : { storageFactory });
   } catch (error) {
-    selectedStorage?.close();
+    await selectedStorage?.close();
     throw error;
   }
   const server = Server.atPort(port, { host }).add(context);

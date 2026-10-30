@@ -97,186 +97,149 @@ export interface EnvironmentDeliveryPorts {
  * Coordinates readiness notifications while delivery ownership changes hands.
  */
 export class DeliveryReadiness {
-  /**
-   * Callback for a newly available delivery scope.
-   */
-  #onReady: OnDeliveryReady;
+  readonly #shared: Delivery | undefined;
 
-  /**
-   * Direct drains admitted before readiness transfer.
-   */
+  readonly #onWake: ((shard: ShardIndex) => void) | undefined;
+
+  readonly #remoteSupervised: boolean;
+
+  readonly #onReady: OnDeliveryReady;
+
   readonly #active = new Set<Promise<void>>();
 
-  /**
-   * Current readiness transition phase.
-   */
-  #mode: "direct" | "transition" | "routed" | "failed" = "direct";
+  readonly #local = new Set<Delivery>();
+
+  readonly #deferred = new Map<string, DeliveryReady>();
+
+  #directReplay: ((message: InboxMessage, tenantId?: TenantId) => Promise<void>) | undefined;
+
+  #closeAttempt: Promise<void> | undefined;
+
+  #closed = false;
 
   /**
-   * Scopes configured for the transfer.
+   * Creates a readiness coordinator for one context and its shared environment Delivery.
+   * @param onReady Observes standalone direct routes after persistence.
+   * @param shared Shared environment Delivery when this context is assembled.
+   * @param onWake Wakes the environment's local or supervised shard run.
+   * @param remoteSupervised Whether setup installed a remote source and supervisor.
    */
-  #configured = new Map<string, DeliveryReady>();
-
-  /**
-   * Notifications buffered while direct drains settle.
-   */
-  #buffered = new Map<string, DeliveryReady>();
-
-  /**
-   * Whether a transition received an unconfigured scope.
-   */
-  #invalidTransition = false;
-
-  /**
-   * Remote ports installed after a successful transfer.
-   */
-  #ports: EnvironmentDeliveryPorts | undefined;
-
-  /**
-   * Creates a readiness coordinator.
-   *
-   * @param onReady Observes routes made ready before ownership is transferred.
-   */
-  constructor(onReady: OnDeliveryReady = () => undefined) {
+  constructor(
+    onReady: OnDeliveryReady = () => undefined,
+    shared?: Delivery,
+    onWake?: (shard: ShardIndex) => void,
+    remoteSupervised = false,
+  ) {
     this.#onReady = onReady;
+    this.#shared = shared;
+    this.#onWake = onWake;
+    this.#remoteSupervised = remoteSupervised;
   }
 
   /**
-   * Sets the observer used before routing takes ownership.
-   *
-   * @param onReady Observes routes that become ready.
-   * @returns Returns a function that removes this observer when still active.
+   * Closes notifications after admitted direct work drains.
+   * @returns Completion after direct work and any standalone Delivery close.
    */
-  onReady(onReady: OnDeliveryReady): () => void {
-    if (this.#mode === "routed") {
-      return () => undefined;
+  close(): Promise<void> {
+    if (this.#closeAttempt !== undefined) return this.#closeAttempt;
+    this.#closed = true;
+    this.#deferred.clear();
+    const waiting = [...this.#active];
+    const closing = [...this.#local].map((delivery) => delivery.close());
+    this.#closeAttempt = Promise.allSettled([...waiting, ...closing]).then((results) => {
+      const errors = results.flatMap((result): unknown[] =>
+        result.status === "rejected" ? [result.reason as unknown] : [],
+      );
+      if (errors.length > 0) throw new AggregateError(errors, "Delivery readiness close failed.");
+    });
+    return this.#closeAttempt;
+  }
+
+  /**
+   * Stores a ready route until Agent capacity is available.
+   * @param ready Route whose local dispatch was deferred.
+   */
+  defer(ready: DeliveryReady): void {
+    if (!this.#closed)
+      this.#deferred.set(InboxHandoff.readyKey(ready), InboxHandoff.cloneReady(ready));
+  }
+
+  /**
+   * Retries each deferred route after Agent capacity becomes available.
+   */
+  retryDeferred(): void {
+    const ready = [...this.#deferred.values()];
+    this.#deferred.clear();
+    for (const route of ready) this.notify(route);
+  }
+
+  /**
+   * Sets the complete Entity/projection replay callback before admission.
+   * @param onReplay Replays an admitted Inbox message.
+   */
+  configureDirect(onReplay: (message: InboxMessage, tenantId?: TenantId) => Promise<void>): void {
+    this.#directReplay = onReplay;
+  }
+
+  /**
+   * Notifies the retained Delivery about an existing durable route.
+   * @param ready Route to check after its eligibility changes.
+   */
+  notify(ready: DeliveryReady): void {
+    if (this.#closed) return;
+    if (this.#shared !== undefined) {
+      (this.#onWake ?? ((shard) => this.#shared?.wake(shard)))(ready.shard);
+      return;
     }
-    this.#onReady = onReady;
-    return () => {
-      if (this.#onReady === onReady) {
-        this.#onReady = () => undefined;
-      }
-    };
+    const key =
+      ready.tenantId === undefined
+        ? TenantBoundary.single.key
+        : TenantBoundary.from(ready.tenantId).key;
+    for (const delivery of this.#local)
+      if (TenantBoundary.of(delivery.context).key === key) delivery.wake(ready.shard);
   }
 
   /**
-   * Acquires readiness ownership for a persisted route.
-   *
-   * @param ready Describes the route when persistence made it ready.
-   * @returns Returns a claim that must be completed or abandoned.
+   * Returns local exact completion or remote supervised notification after reception.
+   * @param ready Route made eligible by the write, if a recipient is registered.
+   * @returns A completion claim for that write.
    */
   claim(ready?: DeliveryReady): DeliveryHandoff {
-    if (this.#mode === "direct") {
-      const handoff = this.#directHandoff();
-      if (ready !== undefined) {
-        this.#notify(ready);
-      }
-      return handoff;
+    if (this.#remoteSupervised && this.#shared !== undefined) {
+      if (ready !== undefined) this.notify(ready);
+      return settledHandoff;
     }
-    if (ready !== undefined) {
-      if (this.#mode === "transition") {
-        const key = InboxHandoff.readyKey(ready);
-        if (this.#configured.has(key)) {
-          this.#buffered.set(key, InboxHandoff.cloneReady(ready));
-        } else {
-          this.#invalidTransition = true;
-        }
-      } else if (this.#mode === "routed") {
-        this.#notify(ready);
-      }
-    }
-    return settledHandoff;
+    const handoff = this.#directHandoff();
+    if (ready !== undefined) this.#notifyStandalone(ready);
+    return handoff;
   }
 
   /**
-   * Routes a context-created delivery through the attached environment ports.
-   *
-   * Direct local delivery remains unchanged. Once ownership is transferred,
-   * inbox writes and workers must use the same environment-owned facility.
-   *
-   * @param delivery Supplies the context-created delivery configuration.
-   * @returns The delivery selected for the current ownership mode.
-   * @internal
+   * Routes through the shared Delivery or the supplied standalone test Delivery.
+   * @param delivery Direct Delivery supplied by the Inbox.
+   * @returns The Delivery used for receiving the row.
    */
   route(delivery: Delivery): Delivery {
-    const ports = this.#ports;
-    if (ports === undefined) return delivery;
-    return new Delivery({
-      context: delivery.context,
-      storageFactory: delivery.storageFactory,
-      strategy: delivery.strategy,
-      node: delivery.node,
-      pageSize: delivery.pageSize,
-      inbox: ports.inbox,
-      workRegistry: ports.workRegistry,
-    });
-  }
-
-  /**
-   * Updates readiness ownership to use configured delivery routes.
-   *
-   * @param scopes Lists the routes that may receive buffered readiness.
-   * @param onReady Observes readiness after routed ownership begins.
-   * @param options Allows an empty configured route set when `allowEmpty` is true.
-   * @returns A promise that resolves after the readiness transition completes.
-   */
-  transition(
-    scopes: readonly DeliveryReady[],
-    onReady: OnDeliveryReady,
-    options: {
-      readonly allowEmpty?: boolean;
-      readonly ports?: EnvironmentDeliveryPorts;
-    } = {},
-  ): Promise<void> {
-    if (this.#mode !== "direct" && this.#mode !== "failed") {
-      return Promise.reject(new Error("Delivery readiness ownership is already transferred."));
-    }
-    let configured: Map<string, DeliveryReady>;
-    try {
-      configured = InboxHandoff.configuredScopes(scopes, options.allowEmpty === true);
-    } catch (error) {
-      return Promise.resolve().then(() => {
-        throw error;
-      });
-    }
-    this.#configured = configured;
-    this.#buffered.clear();
-    this.#invalidTransition = false;
-    this.#mode = "transition";
-    const admitted = [...this.#active];
-    return Promise.allSettled(admitted).then(() => {
-      if (this.#invalidTransition) {
-        this.#buffered.clear();
-        this.#mode = "failed";
-        throw new Error("Delivery readiness transition received an unconfigured scope.");
-      }
-      this.#onReady = onReady;
-      this.#ports = options.ports;
-      this.#mode = "routed";
-      for (const ready of this.#buffered.values()) {
-        this.#notify(ready);
-      }
-      this.#buffered.clear();
-    });
+    if (this.#shared !== undefined) return this.#shared;
+    if (!this.#local.has(delivery) && this.#directReplay !== undefined)
+      delivery.setReplay((message) => this.#directReplay?.(message, delivery.context.tenantId));
+    this.#local.add(delivery);
+    return delivery;
   }
 
   #directHandoff(): DeliveryHandoff {
     const gate = Promise.withResolvers<undefined>();
     this.#active.add(gate.promise);
-    let abandoned = false;
     let completion: Promise<void> | undefined;
+    let abandoned = false;
     const finish = (): void => {
       gate.resolve(undefined);
       this.#active.delete(gate.promise);
     };
     return Object.freeze({
       complete: (onDrain: () => Promise<void>) => {
-        if (completion !== undefined) {
-          return completion;
-        }
-        if (abandoned) {
-          return settled;
-        }
+        if (completion !== undefined) return completion;
+        if (abandoned) return settled;
         const shared = Promise.withResolvers<undefined>();
         completion = shared.promise;
         void completion.then(finish, finish);
@@ -290,23 +253,19 @@ export class DeliveryReadiness {
         return completion;
       },
       abandon: () => {
-        if (completion !== undefined || abandoned) {
-          return;
-        }
+        if (completion !== undefined || abandoned) return;
         abandoned = true;
         finish();
       },
     });
   }
 
-  #notify(ready: DeliveryReady): void {
+  #notifyStandalone(ready: DeliveryReady): void {
     try {
       const result = Reflect.apply(this.#onReady, undefined, [ready]);
-      if (InboxHandoff.isPromiseLike(result)) {
-        void Promise.resolve(result).catch(() => undefined);
-      }
+      if (InboxHandoff.isPromiseLike(result)) void Promise.resolve(result).catch(() => undefined);
     } catch {
-      // Readiness observation cannot alter durable receive or exact-drain outcomes.
+      // A standalone observer cannot reverse a durable Inbox write.
     }
   }
 }
@@ -437,10 +396,6 @@ export interface LocalInboxKeyInput {
  */
 export const InboxHandoff: Readonly<{
   ready(endpoint: DeliveryEndpoint, tenantId?: TenantId): DeliveryReady;
-  configuredScopes(
-    scopes: readonly DeliveryReady[],
-    allowEmpty: boolean,
-  ): Map<string, DeliveryReady>;
   readyKey(ready: DeliveryReady): string;
   cloneReady(ready: DeliveryReady): DeliveryReady;
   isPromiseLike(value: unknown): value is PromiseLike<unknown>;
@@ -484,20 +439,6 @@ export const InboxHandoff: Readonly<{
       targetTypeUrl: endpoint.targetTypeUrl,
       shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
     });
-  },
-
-  configuredScopes(
-    scopes: readonly DeliveryReady[],
-    allowEmpty: boolean,
-  ): Map<string, DeliveryReady> {
-    const configured = new Map<string, DeliveryReady>();
-    for (const scope of scopes) {
-      configured.set(InboxHandoff.readyKey(scope), InboxHandoff.cloneReady(scope));
-    }
-    if (configured.size === 0 && !allowEmpty) {
-      throw new Error("Delivery readiness transition requires configured scopes.");
-    }
-    return configured;
   },
 
   readyKey(ready: DeliveryReady): string {
@@ -561,20 +502,23 @@ export const InboxHandoff: Readonly<{
       options.received,
       InboxHandoff.drainInput(options),
     );
-    if (
-      direct.acknowledged ||
-      (await options.delivery.inbox.readMessage(options.received.id))?.status === "DELIVERED"
-    )
+    if (direct.outcome?.kind === "acknowledged") return "ACKNOWLEDGED";
+    if (direct.outcome?.kind === "deferred") return "RETRY";
+    if (direct.outcome?.kind === "failed")
+      throw InboxHandoff.replayFailure(direct.outcome.error, options.replayFailureMessage);
+    if (direct.acknowledged) return "ACKNOWLEDGED";
+    const run =
+      direct.run ?? (direct.outcome?.kind === "unresolved" ? direct.outcome.run : undefined);
+    if (run === undefined) return "RETRY";
+    if ((await options.delivery.inbox.readMessage(options.received.id))?.status === "DELIVERED")
       return "ACKNOWLEDGED";
-    const failure = direct.run.failures.find(({ message }) =>
+    const failure = run.failures.find(({ message }) =>
       InboxHandoff.sameDelivery(message, options.received),
     );
     if (failure !== undefined)
       throw InboxHandoff.replayFailure(failure.error, options.replayFailureMessage);
-    if (direct.run.status === "SKIPPED") throw new Error(options.skippedMessage);
-    return direct.run.accepted === 0 && direct.run.delivered === 0 && direct.run.failed === 0
-      ? "IDLE"
-      : "RETRY";
+    if (run.status === "SKIPPED") throw new Error(options.skippedMessage);
+    return run.accepted === 0 && run.delivered === 0 && run.failed === 0 ? "IDLE" : "RETRY";
   },
 
   drainInput(options: LocalInboxDrainOptions): Parameters<Delivery["drainMessage"]>[1] {

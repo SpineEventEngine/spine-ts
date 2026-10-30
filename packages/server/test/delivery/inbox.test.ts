@@ -19,7 +19,7 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Identifiers } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
@@ -237,7 +237,7 @@ describe("Inbox", () => {
     const value = {
       ...input(createMessage("ignored", "stable", 1n)),
       inboxId: {
-        targetId: AnyMessages.pack(
+        targetId: AnyPacker.pack(
           StringValueSchema,
           create(StringValueSchema, { value: "projection-1" }),
         ),
@@ -255,8 +255,8 @@ describe("Inbox", () => {
   });
 
   it("distinguishes same printable IDs across typed Any kinds", () => {
-    const text = AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "7" }));
-    const integer = AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 7 }));
+    const text = AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "7" }));
+    const integer = AnyPacker.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 7 }));
 
     expect(InboxTargets.equal(text, integer)).toBe(false);
     expect(InboxTargets.key(text)).not.toBe(InboxTargets.key(integer));

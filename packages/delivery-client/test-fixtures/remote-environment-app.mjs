@@ -1,11 +1,14 @@
 import { Time } from "@spine-event-engine/core/time";
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
-import { CommandSchema } from "@spine-event-engine/proto";
+import { CommandContextSchema, CommandSchema } from "@spine-event-engine/proto";
+import { AnyPacker, Identifiers, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
+import { ProjectStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
+import { createManagedProjectContext } from "./managed-project-context.mjs";
 import { EnvironmentType, ServerEnvironment, ShardIndex } from "@spine-event-engine/server";
-import { commitFenced, serverEnvironmentAccess } from "../../server/test-fixtures/internal.mjs";
+import { commitFenced } from "../../server/test-fixtures/internal.mjs";
 import process from "node:process";
 
 const endpoint = process.env.DELIVERY_SERVER_URL;
@@ -17,7 +20,6 @@ const delivery = RemoteDelivery.connectTo({
   endpoint,
   clientOptions: { observationBufferSize, observationReconnects: 0 },
 });
-await delivery.open();
 const sourceEvidence = { snapshots: 0, watches: 0, failures: 0 };
 let holdSource = false;
 let releaseSource = Promise.withResolvers();
@@ -44,51 +46,36 @@ ServerEnvironment.when(EnvironmentType.Local).use({
   delivery: {
     open: () => delivery.open(),
     close: () => delivery.close(),
-    inbox: delivery.inbox,
-    workRegistry: delivery.workRegistry,
+    get inbox() { return delivery.inbox; },
+    get workRegistry() { return delivery.workRegistry; },
     source,
   },
 });
 const environment = ServerEnvironment.instance();
-const ready = {
-  label: "HANDLE_COMMAND",
-  targetTypeUrl: "type.spine.io/test.Target",
-  shard: ShardIndex.single(),
-};
-const attachOptions = {
-  ownership: "caller",
-  descriptors: [
-    {
-      storageFactory: environment.storageFactory,
-      startupScopes: () => Promise.resolve([{}]),
-      storageContext: () => ({ name: `remote-environment-${node}`, multitenant: false }),
-      endpoints: () => [ready],
-      replay: async (message) => {
-        if (message.signalId === "first" && holdFirst) {
-          process.send({ type: "dispatched", node, signalId: "first-started" });
-          await releaseFirst.promise;
-          process.send({ type: "dispatched", node, signalId: "resumed-first" });
-        }
-        try {
-          await commitFenced({}, () => {
-            process.send({ type: "dispatched", node, signalId: `committed-${message.signalId}` });
-            return { status: "committed" };
-          });
-          process.send({ type: "dispatched", node, signalId: message.signalId });
-        } catch {
-          process.send({ type: "dispatched", node, signalId: "fenced" });
-          throw new Error("Delivery commit fence rejected.");
-        }
-      },
-      onReady: () => () => undefined,
-      transition: (_scopes, onReady) => Promise.resolve(onReady(ready)).then(() => undefined),
-    },
-  ],
-};
-const attachment = await serverEnvironmentAccess.attach(environment, attachOptions);
-
 let holdFirst = false;
 let releaseFirst = Promise.withResolvers();
+await environment.completeSetup();
+const context = await createManagedProjectContext({
+  onCreateProject: async (command) => {
+    const signalId = command.id;
+    if (signalId === "first" && holdFirst) {
+      process.send({ type: "dispatched", node, signalId: "first-started" });
+      await releaseFirst.promise;
+      process.send({ type: "dispatched", node, signalId: "resumed-first" });
+    }
+    try {
+      await commitFenced({}, () => {
+        process.send({ type: "dispatched", node, signalId: `committed-${signalId}` });
+        return { status: "committed" };
+      });
+      process.send({ type: "dispatched", node, signalId });
+    } catch {
+      process.send({ type: "dispatched", node, signalId: "fenced" });
+      throw new Error("Delivery commit fence rejected.");
+    }
+  },
+});
+
 process.on("message", async (frame) => {
   if (isControl(frame)) {
     if (frame.command === "block-first") holdFirst = true;
@@ -109,19 +96,18 @@ process.on("message", async (frame) => {
   }
   if (!isWrite(frame)) return;
   try {
-    await delivery.inbox.receive({
+    const signal = SignalEnvelopes.command({
+      schema: CreateProjectSchema,
+      message: create(CreateProjectSchema, { id: frame.signalId, name: frame.signalId }),
+      context: create(CommandContextSchema),
+    });
+    await environment.delivery.inbox.receive({
       inboxId: {
-        targetId: create(AnySchema, {
-          typeUrl: "type.googleapis.com/google.protobuf.StringValue",
-          value: toBinary(StringValueSchema, create(StringValueSchema, { value: frame.signalId })),
-        }),
-        targetTypeUrl: "type.spine.io/test.Target",
+        targetId: Identifiers.pack("string", frame.signalId),
+        targetTypeUrl: TypeUrls.derive(ProjectStateSchema),
       },
-      signalId: frame.signalId,
-      signal: create(AnySchema, {
-        typeUrl: "type.spine.io/spine.core.Command",
-        value: toBinary(CommandSchema, create(CommandSchema)),
-      }),
+      signalId: signal.id.uuid,
+      signal: AnyPacker.pack(CommandSchema, signal),
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
@@ -137,7 +123,7 @@ process.on("message", async (frame) => {
 async function close() {
   const failures = [];
   try {
-    await serverEnvironmentAccess.detach(environment, attachment);
+    await context.close();
   } catch (error) {
     failures.push(error);
   }

@@ -20,7 +20,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
 import {
@@ -28,9 +28,10 @@ import {
   type CreateSubscriptionOptions,
   type Subscription,
 } from "@spine-event-engine/client-node";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { Topic } from "@spine-event-engine/proto/client";
 import { BoundedContext } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 
 import {
   EditReleaseNotesSchema,
@@ -49,11 +50,14 @@ import { GitReleaseComparison } from "../dist/src/trusted/git-release.js";
 import { PlanModelSelection } from "../src/trusted/plan-model-selection.js";
 import { StudioAccountGate } from "../src/trusted/studio-account-gate.js";
 import { StudioWindowClose } from "../src/trusted/studio-window-close.js";
+import { ReleaseNotesAgent } from "../dist/src/domain/index.js";
 
 type SubscriptionForwarder = (
   topicOrSchemas: Topic | readonly GenMessage<Message>[],
   options: CreateSubscriptionOptions,
 ) => Promise<Subscription>;
+
+afterEach(async () => ServerTests.resetEnvironment());
 
 const delayRejectionDelivery = () => {
   const client = Client.usingTransport(
@@ -84,7 +88,7 @@ const delayRejectionDelivery = () => {
               for (const event of events) {
                 const rejected =
                   event.message &&
-                  AnyMessages.unpack(event.message, ReleaseGenerationInputsConflictSchema);
+                  AnyPacker.tryUnpack(event.message, ReleaseGenerationInputsConflictSchema);
                 if (rejected?.id?.value && rejected.generation?.value)
                   seen.push({ draft: rejected.id.value, generation: rejected.generation.value });
               }
@@ -722,7 +726,11 @@ it("binds an accepted generation to its model and committed Git evidence through
       expect((await studio.cancelGeneration(draft.id, fresh)).generationStatus).toBe("canceled");
       expect(await studio.repeatGeneration(fresh)).toBe(fresh);
       expect((await studio.readDraft(draft.id)).generationStatus).toBe("canceled");
+      expect(await studio.selectionLocked()).toBe(true);
       releaseFresh.resolve(undefined);
+      await expect.poll(() => studio.generationPhase(fresh), { timeout: 10_000 }).toBe("completed");
+      expect((await studio.readDraft(draft.id)).generationStatus).toBe("canceled");
+      expect(await studio.selectionLocked()).toBe(false);
     } finally {
       prototype.post = originalPost;
     }
@@ -861,10 +869,12 @@ it("retains uncertain accepted admission and locks account switching without a d
   const responseGate = new Promise<void>((resolve) => {
     releaseResponse = resolve;
   });
+  const providerArrived = Promise.withResolvers<undefined>();
   let providerRequests = 0;
   const server = createServer((request, response) => {
     void (async () => {
       providerRequests++;
+      providerArrived.resolve(undefined);
       for await (const chunk of request) {
         void chunk;
         /* consume body */
@@ -1000,7 +1010,8 @@ it("retains uncertain accepted admission and locks account switching without a d
     expect(studio.session().generations[first.id]).toBe(generation);
     await expect(studio.requestGeneration(second.id, "Another release")).rejects.toThrow("Wait");
     expect((await studio.readDraft(second.id)).generationStatus).toBe("");
-    await expect.poll(() => providerRequests).toBe(1);
+    await providerArrived.promise;
+    expect(providerRequests).toBe(1);
 
     const closeEvents: string[] = [];
     let closeHandler: (() => Promise<"close" | "cancel">) | undefined;
@@ -1137,6 +1148,28 @@ it("releases account selection after a credential denial is saved for the accept
       next = await studio.generationPhase(later);
     }
     expect(next).toBe("completed");
+    const context = Reflect.get(studio, "context") as BoundedContext;
+    const repository = context.getRepository(ReleaseNotesAgent);
+    const originalReader = repository.agentHistory.bind(repository);
+    let pages = 0;
+    const paging = vi.spyOn(repository, "agentHistory").mockImplementation((id, scope) => {
+      const reader = originalReader(id, scope);
+      return {
+        fullHistory: (request) => {
+          pages++;
+          return reader.fullHistory({ ...request, pageSize: 1 });
+        },
+        conversationHistory: (request) => reader.conversationHistory(request),
+        systemEventHistory: (request) => reader.systemEventHistory(request),
+        domainEventHistory: (request) => reader.domainEventHistory(request),
+      };
+    });
+    try {
+      expect(await studio.generationPhase(generation)).toBe("terminated");
+      expect(pages).toBeGreaterThan(1);
+    } finally {
+      paging.mockRestore();
+    }
     expect((await studio.readDraft(draft.id)).generationStatus).toBe("staged");
     expect(useChecks).toBe(3);
     expect(requests).toBe(2);

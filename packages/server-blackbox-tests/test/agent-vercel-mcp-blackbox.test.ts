@@ -18,7 +18,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { create } from "@bufbuild/protobuf";
 import { AiRegistry, Mcp, ModelRef } from "@spine-event-engine/ai";
 import { VercelAx } from "@spine-event-engine/ai-vercel-ax";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   AiOutcome,
   AiFailureCode,
@@ -30,13 +30,16 @@ import {
 } from "@spine-event-engine/proto/agent";
 import {
   BoundedContext,
+  EnvironmentType,
   HandlerRegistryIngestor,
   Repository,
+  ServerEnvironment,
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { BlackBox } from "@spine-event-engine/testing";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DraftRecoverySupportReplySchema } from "../generated/spine/server/testing/support_recovery_commands_pb.js";
 import { SupportReplyDraftedSchema } from "../generated/spine/server/testing/support_agent_events_pb.js";
 import { SupportRecoveryStateSchema } from "../generated/spine/server/testing/support_recovery_states_pb.js";
@@ -432,7 +435,6 @@ const supportRepository = (chatgptPlan = false) =>
   new Repository({
     entityType: chatgptPlan ? ChatgptPlanSupportAgent : McpSupportAgent,
     schema: SupportRecoveryStateSchema,
-    agentCodeRevision: "support-mcp-v1",
     ai: { models: [chatgptPlan ? chatgptPlanSupportModel : mcpSupportModel] },
     handlers: new HandlerRegistryIngestor().ingest({
       receivers: [
@@ -528,7 +530,6 @@ const supportBox = async (
       deadlineMs: 10_000,
       totalInputBytes: 32_768,
       totalOutputBytes: 262_144,
-      maxRecoveryBytes: 262_144,
     },
     concurrentOperations: 1,
     queuedOperations: 0,
@@ -540,13 +541,22 @@ const supportBox = async (
   const context = BoundedContext.singleTenant("RealVercelMcpSupport")
     .withAi(registry)
     .persistSystemEvents()
-    .withStorageFactory(new InMemoryStorageFactory())
     .add(repository)
     .build();
-  return { box: await BlackBox.from(context, { timeoutMs: 10_000 }), repository };
+  return { box: await BlackBox.from(await context, { timeoutMs: 10_000 }), repository };
 };
 
 describe("Agent with real Vercel Responses and MCP transports", () => {
+  beforeEach(async () => {
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    await ServerEnvironment.instance().completeSetup();
+  });
+
+  afterEach(async () => {
+    await ServerTests.resetEnvironment();
+  });
   it.each(["input", "output"] as const)(
     "records unsupported %s tool schema before provider inference",
     async (schema) => {
@@ -569,7 +579,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
             const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
             return page.items.flatMap((entry) => {
               if (entry.item.case !== "systemEvent" || !entry.item.value.message) return [];
-              const event = AnyMessages.unpack(
+              const event = AnyPacker.tryUnpack(
                 entry.item.value.message,
                 AgentAiOperationFailedSchema,
               );
@@ -628,7 +638,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
       const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
       const responses = page.items.flatMap((entry) => {
         if (entry.item.case !== "conversationRecord" || !entry.item.value.content) return [];
-        const value = AnyMessages.unpack(entry.item.value.content, GenerationResponseSchema);
+        const value = AnyPacker.tryUnpack(entry.item.value.content, GenerationResponseSchema);
         return value ? [value] : [];
       });
       expect(responses.map((response) => response.outcome)).toEqual([
@@ -711,7 +721,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
       );
       const published = events[0]?.message;
       if (!published) throw new Error("Expected drafted reply event");
-      expect(AnyMessages.unpack(published, SupportReplyDraftedSchema)?.reply).toBe(
+      expect(AnyPacker.tryUnpack(published, SupportReplyDraftedSchema)?.reply).toBe(
         "Ticket found; we can help.",
       );
       expect(endpoint.providerBodies).toHaveLength(3);
@@ -726,7 +736,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
           : [],
       );
       const responses = content.flatMap((item) => {
-        const response = AnyMessages.unpack(item, GenerationResponseSchema);
+        const response = AnyPacker.tryUnpack(item, GenerationResponseSchema);
         return response ? [response] : [];
       });
       expect(responses.map((response) => response.outcome)).toEqual([
@@ -735,7 +745,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
         AiOutcome.TOOL_REQUESTED,
       ]);
       expect(
-        content.flatMap((item) => AnyMessages.unpack(item, ToolResponseSchema) ?? []),
+        content.flatMap((item) => AnyPacker.tryUnpack(item, ToolResponseSchema) ?? []),
       ).toMatchObject([{ outcome: AiOutcome.ADMITTED, text: ["Ticket found"] }]);
     } finally {
       await box.close();
@@ -766,14 +776,14 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
             if (entry.item.case !== "conversationRecord") return false;
             return (
               entry.item.value.content !== undefined &&
-              AnyMessages.unpack(entry.item.value.content, ToolResponseSchema) !== undefined
+              AnyPacker.tryUnpack(entry.item.value.content, ToolResponseSchema) !== undefined
             );
           }),
       );
       const page = await box.readAgentHistory(repository, id, { pageSize: 30 });
       const toolResponses = page.items.flatMap((entry) => {
         if (entry.item.case !== "conversationRecord" || !entry.item.value.content) return [];
-        const response = AnyMessages.unpack(entry.item.value.content, ToolResponseSchema);
+        const response = AnyPacker.tryUnpack(entry.item.value.content, ToolResponseSchema);
         return response ? [response] : [];
       });
       expect(toolResponses).toHaveLength(1);
@@ -838,7 +848,6 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
         deadlineMs: 10_000,
         totalInputBytes: 32_768,
         totalOutputBytes: 262_144,
-        maxRecoveryBytes: 262_144,
       },
       concurrentOperations: 1,
       queuedOperations: 0,
@@ -850,10 +859,9 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
     const context = BoundedContext.singleTenant("RealVercelMcpSupport")
       .withAi(registry)
       .persistSystemEvents()
-      .withStorageFactory(new InMemoryStorageFactory())
       .add(repository)
       .build();
-    const box = await BlackBox.from(context, { timeoutMs: 10_000 });
+    const box = await BlackBox.from(await context, { timeoutMs: 10_000 });
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-47" });
     try {
       const posted = await box
@@ -869,7 +877,7 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
       );
       const published = events[0]?.message;
       if (!published) throw new Error("Expected drafted reply event");
-      expect(AnyMessages.unpack(published, SupportReplyDraftedSchema)?.reply).toBe(
+      expect(AnyPacker.tryUnpack(published, SupportReplyDraftedSchema)?.reply).toBe(
         "Ticket found; we can help.",
       );
       expect(endpoint.providerBodies).toHaveLength(3);
@@ -884,14 +892,14 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
           : [],
       );
       const requests = content.flatMap((item) => {
-        const value = AnyMessages.unpack(item, GenerationRequestSchema);
+        const value = AnyPacker.tryUnpack(item, GenerationRequestSchema);
         return value ? [value] : [];
       });
       expect(requests).toHaveLength(3);
       expect(requests[0]?.corrects?.value).toBeTruthy();
       expect(requests[2]?.corrects).toBeUndefined();
       const responses = content.flatMap((item) => {
-        const value = AnyMessages.unpack(item, GenerationResponseSchema);
+        const value = AnyPacker.tryUnpack(item, GenerationResponseSchema);
         return value ? [value] : [];
       });
       expect(endpoint.methods.filter((method) => method === "tools/call")).toHaveLength(1);
@@ -901,10 +909,10 @@ describe("Agent with real Vercel Responses and MCP transports", () => {
         AiOutcome.TOOL_REQUESTED,
       ]);
       expect(
-        content.flatMap((item) => AnyMessages.unpack(item, ToolRequestSchema) ?? []),
+        content.flatMap((item) => AnyPacker.tryUnpack(item, ToolRequestSchema) ?? []),
       ).toHaveLength(1);
       expect(
-        content.flatMap((item) => AnyMessages.unpack(item, ToolResponseSchema) ?? []),
+        content.flatMap((item) => AnyPacker.tryUnpack(item, ToolResponseSchema) ?? []),
       ).toMatchObject([{ outcome: AiOutcome.ADMITTED, text: ["Ticket found"] }]);
     } finally {
       await box.close();

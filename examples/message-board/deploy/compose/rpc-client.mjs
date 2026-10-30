@@ -3,7 +3,7 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -69,7 +69,7 @@ const query = create(QuerySchema, {
               create(FilterSchema, {
                 fieldPath: { fieldName: ["board"] },
                 operator: Filter_Operator.EQUAL,
-                value: AnyMessages.pack(BoardIdSchema, board),
+                value: AnyPacker.pack(BoardIdSchema, board),
               }),
             ],
           }),
@@ -150,7 +150,7 @@ function noticeFor(result, ids) {
     result.value.update.value.update.some(
       (update) =>
         update.kind.case === "state" &&
-        ids.has(AnyMessages.unpack(update.kind.value, BoardMessageViewSchema)?.id?.value),
+        ids.has(AnyPacker.tryUnpack(update.kind.value, BoardMessageViewSchema)?.id?.value),
     )
   );
 }
@@ -209,7 +209,7 @@ async function authoritativeQueryFor(id) {
     const response = await queries.read(query);
     if (id === undefined) return response.message.length > 0 ? true : undefined;
     const matches = response.message.filter(
-      (entry) => AnyMessages.unpack(entry.state, BoardMessageViewSchema)?.id?.value === id,
+      (entry) => AnyPacker.tryUnpack(entry.state, BoardMessageViewSchema)?.id?.value === id,
     );
     return matches.length === 1 ? true : undefined;
   });
@@ -221,7 +221,7 @@ async function post(suffix, text) {
     create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: `${runId}-${suffix}` }),
       context: create(CommandContextSchema, { actorContext: context }),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         PostMessageSchema,
         create(PostMessageSchema, {
           id: create(MessageIdSchema, { value: `${runId}-${suffix}` }),

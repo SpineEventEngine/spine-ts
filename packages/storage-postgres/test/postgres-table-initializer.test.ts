@@ -59,7 +59,7 @@ describe("PostgresTableInitializer", () => {
     expect(fixture.release).toHaveBeenCalledOnce();
   });
 
-  it("commits an exact compatible catalog layout using parameterized schema and table", async () => {
+  it("checks each requested compatible layout using parameterized schema and table", async () => {
     const fixture = client(catalog());
     const initializer = initialize(fixture, "spine", "records");
 
@@ -67,7 +67,7 @@ describe("PostgresTableInitializer", () => {
     await initializer.prepare();
 
     expect(fixture.calls).toContain("COMMIT");
-    expect(fixture.release).toHaveBeenCalledOnce();
+    expect(fixture.release).toHaveBeenCalledTimes(2);
     expect(fixture.query).toHaveBeenCalledWith(expect.stringContaining("table_schema=$1"), [
       "spine",
       "records",

@@ -6499,3 +6499,560 @@ This correction supersedes the Agent design's durable Event-output delivery
 promise. It does not authorize restoring cross-record transactions for ordinary
 storage operations or changing Command delivery contracts. No production
 application requires legacy schemas or data migration.
+
+## D-0146: Shared Environment and Explicit or Lazy Preparation
+
+Date: 2026-10-27. Status: accepted; implementation in progress.
+
+The [accepted proposal](tasks/environment-lifecycle/PROPOSAL.md) governs the
+shared environment lifecycle task. ServerEnvironment supplies one StorageFactory,
+TransportFactory and Delivery, plus overridable TenantIndex and AI defaults.
+Server remains gRPC-centric. Storage objects are retained across operations.
+Bounded Context build flags select eager or first-input preparation independently.
+Failed lazy preparation rejects that request and can retry on later input;
+explicit startup preparation fails the application. Periodic subscription failures
+after successful startup log WARN and attempt restart without stopping processing.
+
+InboxStorage is always single-tenant and shared. Dispatch reads the tenant from
+the saved signal. Committed writes notify Delivery; periodic scans are a safety
+net. The current TenantIndex controls admission, with TENANT_UNKNOWN represented
+by a typed Spine error and canonical gRPC NOT_FOUND. Application code registers
+tenants and supplies existing database settings; Spine does not create databases.
+JVM PR 1698 supplies duplicate Entity state registration and cleanup semantics.
+The human's later correction makes duplicate state rejection unconditional across
+open domain Bounded Contexts, including tests and BlackBox. No disabling switch,
+test-profile exception or duplicate-registration execution mode is allowed. This
+supersedes the PR's historical configurable test behavior; System Contexts remain
+excluded from the domain registration record.
+
+Automatic Agent recovery is removed in full, including saved outgoing Command
+obligations. Ordinary delivery already handed to framework delivery continues
+under its existing rules. New signals execute normally; persistent state and all
+four history APIs remain. This supersedes recovery promises in D-0129 and earlier
+Agent documentation, and extends D-0145. There is no existing-data migration work.
+
+Current supported APIs remain documented until each implementation slice lands;
+this decision records the target and supersedes conflicting implementation plans.
+
+## D-0147: Shared JVM-like AnyPacker
+
+Date: 2026-10-27. Status: implemented and independently reviewed; full-task release pending.
+
+Inspect Spine JVM AnyPacker and introduce the corresponding shared TS abstraction.
+Use it throughout the framework in place of inconsistent Any packing/unpacking
+paths. Preserve the appropriate type URL and packed Any values, including the
+serialization round trips used by storage identifiers. The implementation must
+follow actual JVM behavior and the TS descriptor/type-registry contracts.
+
+This supersedes the proposed Datastore native-key deletion workaround recorded
+during D-0146 implementation: correct the shared Protobuf handling instead. The
+independent Datastore history-trimming pagination defect remains in scope. No
+existing-data migration is authorized.
+
+## D-0148: Awaitable factory and Entity commit shutdown
+
+Date: 2026-10-27. Status: implemented and independently reviewed; full-task release pending.
+
+Retained commit storage must finish admitted commits before closing its internal
+record storage. Current provider factory shutdown can close those records while
+a commit still uses them, and void factory close methods hide later pool/catalog
+failures from callers.
+
+StorageFactory.close and provider-only EntityCommitStorage.close will return
+Promise<void>. Calling close immediately rejects new work; the promise settles
+after admitted operations and all cleanup attempts. Ordinary RecordStorage.close
+remains synchronous. Commit-internal records are released by the commit wrapper,
+not independently by factory teardown. Factories await those wrappers before
+closing remaining handles, catalog and pools. Cleanup failures are reported by
+close, without retroactively changing completed commit results.
+
+Current synchronous assembly/acquisition rollback uses a guarded provider-internal
+idle operation. It is not a second public shutdown API. The later asynchronous
+Bounded Context build can use ordinary awaited cleanup. Existing public cleanup
+callers must await factory completion. No generic lifecycle framework, compatibility
+wrapper, data migration or additional recovery machinery is introduced.
+
+The Datastore custom Entity bundle follows the same explicit contract:
+close(): Promise<void> plus mandatory internal closeIdle(): void. A private commit
+adapter delegates disposal to the complete custom bundle; the factory tracks
+that acquisition through exactly one disposal path. Public bundle acquisition
+remains tracked as a bundle. Optional idle cleanup or deferred factory cleanup
+cannot fulfill synchronous rollback. Custom creators return idle bundles and
+clean up any partial acquisition before throwing. Idle cleanup validates no
+admitted work or unfinished async close before releasing anything, starts no
+deferred work, and preserves its outcome for repeated cleanup. The later async
+assembly milestone can remove this temporary synchronous requirement.
+
+## D-0149: Domain state supplied to Entity history conformance
+
+Date: 2026-10-27. Status: implemented and independently reviewed with D-0147.
+
+The published EntityHistoryConformance helper must not invent an Entity state
+from google.protobuf.StringValue. Its adapter becomes generic in the generated
+state type and supplies that schema plus state construction/value access. The
+existing check(adapter) entry remains. Tests supply the existing generated
+ProjectState with its string identifier and title. Scalar StringValue encoding
+remains valid for supported primitive identifiers.
+
+This keeps generated domain fixtures in test code. Production storage neither
+imports another package's test artifacts nor embeds descriptor payloads. No
+new schema package, generation target, compatibility wrapper or migration is
+needed. All Any conversion in this helper uses the shared AnyPacker.
+
+## D-0150: Offline factory assembly and provider preparation
+
+Date: 2026-10-27. Status: implemented and independently reviewed across memory,
+PostgreSQL, MySQL/MariaDB and Datastore preparation slices.
+
+Keep synchronous Storage construction, with logical SQL handles resolving their
+physical destination inside awaited operations. SQL build performs local
+validation only. The accepted async setTenantResolver resolves tenant options;
+setOptions supplies the shared database. checkConnection() checks only that
+shared destination, without tenant enumeration, resolver calls, DDL or writes.
+Explicit checks/preparation dispose temporary connections and pools. Successful
+destination binding is stable for the factory lifetime; failed attempts retry.
+
+The provider-only StoragePreparation port accepts existing RecordSpec, declarative
+Entity input and surviving Agent audit input, with create/check modes. Register
+it using the existing provider registry pattern. No preparation constructs
+throwaway Storage. Unknown custom implementations fail clearly until they provide
+this capability; memory deliberately supplies local checks. No recovery-only
+Agent preparation API is added. The server later enumerates pure definitions
+from actual registered models and framework storage; late additions cannot reuse
+an obsolete whole-context readiness boolean.
+
+Factory-local physical-family preparation coordinates creation and compatibility
+with ordinary storage use. Creation includes required inspection. A successful
+read-only compatibility check permits later use without DDL. Separate successful
+evidence from pending attempts, clear failures, and preserve completed families
+when another fails. A pending read-only check is never escalated to creation.
+Concurrent close drains admitted resolution/preparation before pool cleanup.
+
+Datastore create/check establish the same documented native structural facts: kind,
+namespace, mapping/configuration and read connection access. Kinds require no
+remote creation. Neither mode certifies deployed composite indexes, arbitrary
+future query combinations or write permissions. Index deployment remains an
+explicit application prerequisite. Custom preparation that cannot prove a claimed
+requirement fails both modes without caching success. No sentinel data or fake DDL.
+
+Accepted detailed contracts, JVM source evidence and five bounded implementation
+slices are in [Factory preparation](tasks/environment-lifecycle/FACTORY_PREPARATION.md).
+The explicit Astra/high requirements splitter resolved the async/synchronous
+contract gap; the parent corrected an initially inconsistent Datastore proof
+claim in that same pass. No additional architecture pass is needed absent a
+material new contract or demonstrated blocker. No migration or provisioning.
+
+## D-0151: Await Bounded Context assembly and failed-build cleanup
+
+Date: 2026-10-27. Status: accepted; implementation in M6.
+
+The accepted environment lifecycle design already requires one asynchronous
+BoundedContextBuilder.build(). Move that API consolidation from M9 to M6 because
+the strict served-state registry exposed a concrete cleanup defect: synchronous
+construction throws while asynchronous Stand/registry cleanup runs detached, and
+later failures are swallowed. Releasing registrations then permits a replacement
+context while prior resources are still closing; retaining them without an
+awaitable failure leaves callers unable to observe completion.
+
+Use build(): Promise<BoundedContext> for explicit repositories and generated
+models alike. Await partial-context and resource cleanup before rejecting, retain
+the initiating error and additional cleanup errors, and keep build/cleanup records
+until actual settlement. Remove duplicate buildAsync; adapt caller await/rejection
+semantics across tests, examples and docs. No new public cleanup-status API or
+synchronous compatibility wrapper. Independent eager/lazy flags, storage
+preparation and subscription startup remain M9–M10. This advances an approved
+contract; it does not add an activation phase or change the human requirements.
+
+## D-0152: Inert Agent acceptance evidence and live execution
+
+Date: 2026-10-27. Status: accepted for M7 implementation.
+
+Remove Agent recovery while preserving irreversible acceptance across process
+interruption. Use an immutable insert-if-absent receipt through existing atomic
+RecordStorage; it contains identity evidence only and grants permission solely to
+the successful live caller. No saved execution, read/model replay, outgoing plan,
+status transition or pending-work scan remains.
+
+Internal live results remain under the ordinary Delivery shard session, with
+same-Agent serialization, independent Agent progress, normal session renewal and
+cancellation, and preserved conditional Entity-version writes. Do not reuse the
+current shard-wide after-drain follow-up map unchanged. This resolves source-proven
+acknowledgement, concurrency and persistence gaps without adding another Agent
+scheduler or public delivery policy. The complete bounded decision and test
+requirements are in [Agent live execution](tasks/environment-lifecycle/AGENT_LIVE_EXECUTION.md).
+
+## D-0153: Compact Agent receipt slots retain complete typed identity
+
+Date: 2026-10-27. Status: accepted for M7a implementation.
+
+A live PostgreSQL regression proves that an otherwise valid generated Agent ID
+fits existing SQL512 at371 characters, while its compound receipt identity reaches 578. Correct TypeRegistry configuration resolves the separate initial fixture
+failure; it cannot resolve this physical key-size expansion. MySQL has the same
+bound. Do not widen every provider key or reduce valid Entity identifiers.
+
+Follow the existing AgentHistoryRecords bounded-slot/full-record convention:
+use a fixed internal string slot, v1: plus the complete SHA-256 digest of the
+specified identity tuple, and retain the complete typed AgentAcceptanceKey in the
+immutable receipt body. Exact Any URL and bytes remain unchanged. This changes only
+receipt lookup representation; it is not a workaround for decoding, a native-key
+fallback, or a custom application stringifier requirement. No migration exists.
+
+Only explicit CAS true grants live execution. After false, read and compare every
+identity component; equal suppresses, mismatch/missing/malformed/unreadable evidence
+errors without acknowledgement or alternative-key execution. CAS errors propagate
+unchanged without read-back permission. Capture identity before awaiting and drain
+the verification read on close. The stable encoding and tests are recorded in
+[Agent live execution](tasks/environment-lifecycle/AGENT_LIVE_EXECUTION.md).
+
+This bounded Astra/high clarification follows a demonstrated serialized-contract
+blocker, not a second whole-task architecture pass. Source evidence includes TS
+AgentHistoryRecords and SQL ID columns; JVM sharding hashes provide no Agent
+receipt precedent. No provider DDL, arbitrary new limit, collision bucket or
+execution recovery is introduced.
+
+## D-0154: Preserve live Agent conditional persistence without execution records
+
+Date: 2026-10-27. Status: accepted for M7b implementation.
+
+All current provider Agent completion paths atomically combine expected Entity
+version, optional Entity/state history, final Agent audit and model preferences.
+Generic EntityCommitStorage.commit explicitly permits prefix writes and cannot
+replace that operation. Preferences currently live only in the recovery head.
+
+Extend the existing retained provider-only EntityCommitStorage with
+readAgentPreferences and commitAgent. Store only current model selections and
+complete typed identity in a new inert preference record; do not read old heads
+or dual-write. Compare both initial Entity version and absent/present preference
+image in the native transaction, including no-op/preference-only completion.
+Capture inputs before awaiting. Preserve final audit/state/preferences atomicity,
+independent earlier interaction audit, native contention retries of captured
+storage input only, retained resources and coordinated close. Ordinary commit
+semantics remain unchanged. No new transaction framework, execution revision,
+status API, claim, backlog, output obligation or migration.
+
+Use D-0153's fixed-slot/full-identity principle with the preference-specific tuple
+and family. Make native transactional support part of Agent preparation, with no
+DDL in check mode. The inactive primitive can be reviewed before the coherent
+admission/scheduler switch. The detailed contract is recorded in
+[Agent live execution](tasks/environment-lifecycle/AGENT_LIVE_EXECUTION.md).
+
+## D-0155: Explicit shared transport factory initialization
+
+Date: 2026-10-27. Status: accepted for M8 implementation.
+
+TransportFactory in TS and the inspected JVM has channel creation and close but
+no awaitable shared-resource setup. Accepted environment setup cannot establish
+transport readiness by object construction or a fake channel. Add one required
+public SPI initialize(): Promise<void>, awaited by completeSetup. Memory validates
+its open local state without channels/timers/publications. External adapters await
+configured shared resources that do not depend on model channel identities.
+Actual context channel/consumer/control setup stays awaited in Bounded Context
+build; later dynamic channels remain ordinary runtime operations.
+
+Initialization coalesces concurrently and is idempotent after success. Closing
+fences new setup/channel work and drains/cleans partial or late acquisitions;
+late completion cannot reopen readiness. Preserve original and cleanup errors.
+Direct standalone channel creation coordinates with the same initializer. A
+missing method from a JavaScript-supplied factory is a configuration error before
+setup I/O. Environment failure latches unavailable and attempts cleanup, without
+process.exit or background retries.
+
+INFO reports only completed factory initialization and later actual context
+channel setup, never all future channels or permissions. This concrete TS API
+fulfills the human's explicit setup requirement; it is not claimed as a JVM API.
+No optional duck-typed success, generic lifecycle manager or synthetic probe.
+
+## D-0156: Live Agent inputs and atomic interaction audit
+
+Date: 2026-10-28. Status: accepted for M7b implementation.
+
+Delete every message and enum in execution_record.proto; none requires relocation.
+Existing interaction/history/model/content wire messages are independent. Replace
+TS helper parameters with minimal internal live inputs, selected model and operation
+identity, plus local budgets and active correction/tool/read data. Do not recreate
+a journal-shaped TS record or record/update-transform facade. Preserve validation,
+exact Any identity, configured live limits, cancellation and unsafe-write retry
+protection. Remove recovery bytes, revision compatibility, replay and saved reads.
+
+Preserve the existing atomic conversation-plus-System audit group before System
+publication using provider-only AgentHistoryStorage.appendAll(entityId, entries).
+Add AgentHistoryCapacity with surviving historyRecordBytes/transactionPayloadBytes
+only, and extract full encoded history-row sizing. Capture and validate the group,
+keep immutable repeats harmless, and reject conflicts without a written prefix.
+Use existing native transactions or memory history queue; preserve index updates,
+ordering/pagination and admitted close semantics. Keep final conditional commitAgent
+separate; intermediate audit must not create preferences or mutate Entity state.
+No replacement Proto, migration, persisted execution queue, recovery compatibility
+wrapper, or generic transaction framework. Detailed live constraints are in
+[Agent live execution](tasks/environment-lifecycle/AGENT_LIVE_EXECUTION.md).
+
+## D-0157: Agent acknowledgement and tracked Delivery completion
+
+Date: 2026-10-28. Status: accepted for M7b implementation.
+
+A reproduced gated BlackBox test showed local posting awaits the terminal shard
+drain even after Agent acknowledgement. Separate exact-message acknowledgement
+from complete shard-run settlement. Keep public Delivery.run/drain, supervisor
+idle/close and readiness transfer terminal. An internal retained run exposes
+completed/wake/stop; exact-message observers settle only their real outcome.
+Agent closure starts after successful ack and remains tracked under its shard
+session; ack failure discards it. Preserve ordinary endpoint/monitor/follow-up
+error policy, preacceptance failure identity and pending rows. No fabricated
+DRAINED result or fire-and-forget error suppression.
+
+Advance only actual core Delivery retention from M8 through existing shared
+readiness selection and complete context Entity/projection dispatcher. Retain
+active runs there, not in a second scheduler. Active and newly eligible work
+wakes through existing Delivery notifications, including capacity release with
+no active local run. Coalesce hints/generations, avoid lost wake and same-target
+reordering; no payload backlog, polling or new arbitrary timer.
+
+Keep ordinary configured session renewal serialized with validation/release and
+apply the current-session guard to all live effects. Loss remains final; never
+reacquire to continue accepted work. Normal idle does not abort a live handler.
+Close fences new work, cancels/wakes and awaits full runs before releasing stores;
+report cleanup failures. Ordinary outgoing Commands enter existing bus tracking
+without awaiting their originating shard's full drain. No saved Agent output list.
+Detailed mechanics and evidence are in the task's
+[Delivery lifetime decision](tasks/environment-lifecycle/AGENT_DELIVERY_LIFETIME.md).
+
+## D-0158: Definite live denial and example completion evidence
+
+Date: 2026-10-28. Status: accepted for M7b implementation.
+
+Release-notes used removed execution status for account safety. Preserve actual
+pre-handler MODEL_USE_DENIED as the existing AgentInvocationTerminated System
+Event, guarded and appended through retained history before original publication.
+Catch only the typed denial around initial model selection; do not invent domain
+failure, dispatch, success, or interruption evidence. Preserve original failure
+and audit/publication errors. No startup writer or execution record/status API.
+
+Example-local completion derives from typed, fully source-correlated paged Agent
+domain output history or that definite denial. Canceled Aggregate state, missing
+history and uncertain work remain nonterminal for account safety. Completed Agent
+history does not imply the Aggregate applied output: render this distinction,
+retain authoritative domain state, allow ordinary refresh, and release indefinite
+UI busy waits without releasing trusted account locks on unknown work. Existing
+Wait/Stop-and-close remains available; no app recovery mechanism or new limits.
+Detailed scope, error windows and focused evidence are in
+[completion audit](tasks/environment-lifecycle/AGENT_COMPLETION_AUDIT.md).
+
+## D-0159: Context construction requires explicit environment setup
+
+Date: 2026-10-28. Status: clarification of the accepted human startup sequence.
+
+The TASK ledger and PROPOSAL §1 require explicit environmental setup. A Bounded
+Context build must not call completeSetup to begin hidden database checks. It may
+await setup already explicitly started by application code. If no attempt exists,
+reject before setup I/O with an instruction to call environment.completeSetup.
+A failed or closing environment cannot become ready through a context build.
+This applies to every eager/lazy build combination. BlackBox and test assembly
+helpers may explicitly complete setup as part of their documented construction;
+Server stays gRPC-centric and does not initiate environmental preparation.
+
+This preserves the accepted API and makes its ordering error explicit; no new
+public activation/readiness API or automatic environment replacement is introduced.
+The initial M8 auto-start regression was invalid and is replaced with explicit
+setup-in-progress and missing-setup behavior tests before caller migration.
+
+## D-0160: Context-specific EventStore groups in the shared factory
+
+Date: 2026-10-28. Status: accepted after a reproduced M8 storage collision.
+
+One shared factory exposed a producer/importer collision: both Bounded Contexts
+stored the same Event ID in the ungrouped Event family. Preserve Event identity,
+uniqueness within each EventStore and the shared factory. Select an explicit stable
+StorageGroup for each logical context name and EventStore role (domain or system).
+This is an EventStore-only exception to diagnostic context names; Entity storage,
+Inbox identity and strict actual-context state reservations do not change.
+
+Use one provider-accessible EventStoreGroups.forContext helper. Hash the UTF-8
+JSON array ["spine.EventStoreGroup/v1", role, contextName] with full SHA-256,
+encode unsigned digest in base36 padded to50 characters and prefix es_. The
+53-byte group fits existing SQL mappings (59-byte default table). Preserve exact
+validated names; no sanitization, model hash, random suffix or build-order identity.
+Equal names and roles intentionally denote the same logical EventStore, consistent
+with integration origin identity. System stores use their actual System spec name
+and the explicit system role. No new context-name uniqueness rule is introduced.
+
+Default EventStore construction, all provider atomic delivery-Event writes,
+preparation, catch-up and testing reads must use this same derivation. Explicit
+standalone EventStore group overrides retain their existing meaning. Datastore's
+native preparation declaration must include group identity, so incompatible custom
+physical aliases reject as SQL mappings already do. Never certify an ungrouped
+family while runtime writes a grouped one. No migration, fallback reads or dual
+writes are introduced.
+
+JVM EventStore describes context-local Events but its memory provider allocates
+isolated handles and ignores groups. It supplies no portable grouping algorithm;
+this is a TS shared-factory correction, not a claimed JVM naming convention.
+The bounded architecture assignment used explicit Astra/high, no source edits or
+tests; actual runtime metadata was unavailable. Accepted proof requirements cover
+producer/importer isolation, retained same-name history, role/tenant separation,
+all native commit paths and matching check-only preparation.
+
+## D-0161: Remote-supervised Inbox reception completes before processing
+
+Date: 2026-10-28. Status: accepted after the managed two-process RED-19 failure.
+
+Preserve established remote routed posting semantics from environment setup onward:
+a successful remote Inbox reception followed by readiness notification submission
+completes posting while processing may remain pending. Baseline c64e82cdb's routed
+DeliveryReadiness.claim returned settledHandoff; complete did not drain. The shared
+M8 core incorrectly retained direct draining, so a peer holding the shard caused a
+pending-row SKIPPED failure. Do not change SKIPPED into acknowledgement.
+
+Select remote-supervised completion once through the package-internal fact that
+the environment installed a supervisor from its configured source and ports. No
+public selector, per-context attachment or transition, local-drain fallback,
+completion protocol, queue or polling mechanism. Source-less custom ports retain
+their established direct behavior. Every context writes through the same core;
+Entity, Projection, batch and imported Event reception use the same notification
+and completion rule. Preserve context admission/close tracking, without another
+Delivery instance.
+
+Local direct posting retains D0157 exact-message outcomes, including capacity
+COMMAND_POST_ERROR with a pending row and no receipt or acknowledgement. Explicit
+Delivery.run and supervisor runs retain actual terminal results, including SKIPPED.
+Remote posting success never creates an Agent receipt, acknowledges the row,
+executes a handler, fabricates output or implies every replica has finished work.
+
+A rejected receive RPC still rejects posting, including an uncertain write outcome
+or remote transition-publication failure. A local readiness observer failure after
+successful reception is diagnosed without reversing that reception; existing
+notifications and safety scans handle later work. Do not suppress detached errors.
+Close fences input, settles admitted receives and drains local active runs before
+closing the facility; pending remote rows cannot force indefinite local shutdown.
+
+Bounded architecture analysis used the existing explicit Astra/high profile;
+actual runtime metadata unavailable. Baseline source and JVM notifying-writer/shard
+contention behavior support this correction; no new product decision is needed.
+Required proof covers contested two-process import/subscription delivery, no remote
+onDrain or synthetic acknowledgement, receive versus observer failure, local
+capacity/error behavior, explicit SKIPPED, both local acquisition orderings,
+late-write notifications and managed shutdown.
+
+## D-0162: Shared Delivery and individual-context shutdown
+
+Date:2026-10-28. Status:accepted after the complete M8 review wave.
+
+Track every admitted core drain by operation identity from before pickup through
+release, including explicit public custom-callback runs. Retain the existing
+per-shard map solely for joinable default replay. Public callbacks cannot silently
+join a different callback or overwrite its wake/release state. Valid environment
+close fences core admission synchronously, stops acquired drains and awaits all
+admitted operations before closing retained stores and factories. Preserve actual
+terminal outcomes, original release errors and attempt-all cleanup; whenIdle uses
+the same terminal operation set. No new dispatcher or generic resource registry.
+
+Each context has an internal Agent-only abort signal combined with the shared
+session signal for both capacity reservation and live execution. Check that signal
+before and after awaited session validation in the existing effect/commit guard.
+Track reservations through receipt/ack/run settlement using existing capacity
+completion promises. Context close cannot abort sibling sessions, synthesize audit
+facts, delete acceptance receipts or resume accepted work. Cancellation remains
+cooperative; late framework effects are fenced, external effects cannot be undone.
+
+At beginClose remove only fresh recipient entries, retaining strict state
+reservations until safe cleanup. Track already-entered shared replay through its
+full callback and drain it. Existing exact local pending entries remain selectable
+through #directPending even after normal recipient removal; they preserve locally
+admitted bus work and ordinary internal follow-ups. Include existing follow-up
+promises in context drain and stabilize buses again. Never await a sibling's whole
+shard run to close this context. A merely received remote row stays pending under
+D0161 and cannot impose a remote completion wait.
+
+Recheck effective admission immediately before endpoint invocation and on retries,
+with no intervening await. A private not-admitted result bypasses acknowledgement,
+Agent receipt and FailedReception policy, leaving the row pending. It is not a
+new public delivery policy or capacity deferral. Cleanup waits admitted replay,
+Agent reservations and follow-ups before stores/Stand close; preserve original
+operation and cleanup failures. No new queue, timer, public lifecycle API, per-context
+Delivery, migration or recovery mechanism.
+
+Detailed source seams, ordering and focused race tests are recorded in
+[shared Delivery close](tasks/environment-lifecycle/SHARED_DELIVERY_CLOSE.md).
+Existing requirements-splitter ran explicit immutable Astra/high, read-only; runtime
+metadata unavailable. Local JVM Repository unregisters its Inbox before storage
+close, but supplies no claimed analogue for TypeScript Agent async cancellation.
+
+## D-0163 — Fatal required initialization coordinates automatic cleanup
+
+2026-10-28. Accepted bounded architecture ruling for the demonstrated M9 eager
+preparation failure. Detailed source-backed ordering and tests:
+[tasks/environment-lifecycle/FATAL_INITIALIZATION.md](tasks/environment-lifecycle/FATAL_INITIALIZATION.md).
+
+A required eager/explicit preparation failure synchronously records its original
+cause and fences fresh environmental input/builds, then starts one automatic
+cleanup attempt. The failing build or tracked preparation releases its admission
+after local rollback, before awaiting global cleanup; it cannot wait on itself.
+Completed contexts drain while partial builds unwind. Shared facilities close only
+after safe context/build drainage. Preserve original causes and cleanup failures.
+
+Delivery first fences fresh public runs and generic scans, while retained exact
+handoffs from already-admitted ordinary work remain drainable. One shutdown-attempt
+collection includes active operations and subsequent permitted exact runs through
+final close, preserving release failures without healthy completed-run history.
+The final full core close and established facility order follow context drainage.
+
+Public read/service input checks must not fence internal repository work already
+admitted. Lazy failures, membership failures, invalid input, local misuse and absent
+explicit setup remain nonfatal under the accepted contract. No public lifecycle API,
+process exit, new timer, recovery or change to D0161 delivery completion is introduced.
+
+## D-0164 — Process Manager Event outputs use tracked publication
+
+2026-10-28. Accepted bounded correction for a demonstrated shared-shard cycle.
+A Process Manager Event callback awaited handling of a produced Command that
+needed the same shard still executing that callback. The source row and later
+recipients could not finish, and context close waited indefinitely.
+
+After the successful Process Manager commit, register each validated produced
+Command synchronously with the existing SignalPublisher, in handler order. Do
+not await descendant handling inside the source Event Inbox callback. The
+publisher retains the handling promises, reports contained failures, and drains
+them together with the ordinary CommandBus. Preserve the existing Event replay
+return types, command-substitution follow-ups, exact local acknowledgement and
+remote reception behavior. This applies to Process Manager Event output only.
+
+Do not defer first publication to a new post-acknowledgement callback: that is
+unnecessary and the supervised replay path may still await such a callback.
+Do not add a persistence-only posting mode, queue, outbox or recovery mechanism.
+The state/dispatch-guard commit already precedes outgoing publication; this code
+does not promise atomic durable storage of both. Once an outgoing Command enters
+ordinary durable infrastructure, its existing delivery behavior applies. This
+correction removes the deadlocking normal-execution wait and preserves tracked
+publication before source completion; it does not claim identical crash-window
+duration or a new durability guarantee.
+
+Tests must exercise same-shard direct and supervised progress, tracked outgoing
+work during graceful close, handler-order publication, contained downstream
+failure, no publication on commit failure, and existing duplicate dispatch guards.
+Reuse focused coverage where already present. Keep ordinary local rejection/
+acknowledgement and remote reception tests unchanged.
+
+The existing requirements-splitter used explicit gpt-6-astra/high, read-only, for
+this demonstrated concurrency/durability ambiguity; runtime metadata unavailable.
+Local JVM ProcessManagerRepository posts produced Commands with a no-op observer
+following state storage. That supports normal bus handoff without waiting for
+application responses, not a cross-store atomic durability claim.
+
+## D-0165 — Readable Event Store names and generated stringifier defaults
+
+2026-10-29. Human-approved continuation of environment-lifecycle. Replace D-0160's
+hash-based Event Store names with Bounded Context names and provider-readable
+physical defaults. Preserve logical domain/System distinction, reject physical
+name collisions, and support specific per-Bounded-Context overrides. All storage
+preparation and ordinary/atomic read/write paths use the same resolution.
+
+Use a shared default StringifierRegistry backed by the generated application
+schema inventory. Generated model startup installs descriptors through a small
+proto/codegen leaf, avoiding a proto/core import cycle. Converters resolve live
+additive descriptors while retaining stable converter choices; explicit custom
+registries remain available. Ordinary applications need no manual registry wiring.
+
+The [accepted storage-defaults contract](tasks/environment-lifecycle/STORAGE_DEFAULTS.md)
+specifies builder APIs, collision scope, registry mutation and test acceptance.
+No migration, dual writes, tenant-routing change or Event ID change is authorized.
+Remove the unused Inbox `inbox_id` and `signal_id` materializations while retaining
+both Protobuf fields and all query-dependent columns.

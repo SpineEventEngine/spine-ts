@@ -36,7 +36,7 @@ import {
   type AgentHistoryEntry,
 } from "@spine-event-engine/proto/agent";
 import { describe, expect, it } from "vitest";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   SupportTicketFactsSchema,
   SupportTicketNumberSchema,
@@ -67,7 +67,7 @@ const scope: AgentHistoryStorageInput<string> = {
 };
 
 function packed<T extends Message>(schema: GenMessage<T>, message: T) {
-  return AnyMessages.pack(schema, message);
+  return AnyPacker.pack(schema, message);
 }
 
 function occurredAt(seconds: bigint, nanos = 0): Timestamp {
@@ -154,6 +154,32 @@ function event(id: string, time: Timestamp, system: boolean): AgentHistoryEntry 
 }
 
 describe("in-memory Agent history", () => {
+  it("appends a conversation and System audit group atomically", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = AgentHistoryStorageFactories.create(factory, scope);
+    const existing = conversation("conflict", "reply", occurredAt(2n));
+    const request = conversation("new-request", "reply", occurredAt(1n));
+    const changed = conversation("conflict", "reply", occurredAt(3n));
+    try {
+      await storage.append("T-history", existing);
+      await expect(storage.appendAll("T-history", [request, changed])).rejects.toThrow(/conflict/);
+      const afterFailure = await storage.read({
+        entityId: "T-history",
+        view: { kind: "full" },
+        count: 5,
+      });
+      expect(afterFailure.entries).toEqual([existing]);
+      const system = event("system-batch", occurredAt(4n), true);
+      await storage.appendAll("T-history", [request, system]);
+      await storage.appendAll("T-history", [request, system]);
+      await storage.appendAll("T-history", []);
+      const page = await storage.read({ entityId: "T-history", view: { kind: "full" }, count: 5 });
+      expect(page.entries).toHaveLength(3);
+    } finally {
+      storage.close();
+      await factory.close();
+    }
+  });
   it("passes reusable provider history conformance", async () => {
     const factory = new InMemoryStorageFactory();
     await AgentHistoryConformance.check({
@@ -165,7 +191,7 @@ describe("in-memory Agent history", () => {
       domain: (id, time) => event(id, time, false),
       occurredAt,
     });
-    factory.close();
+    await factory.close();
   });
 
   it("retrieves generation history with domain-correct unpackable payloads", async () => {
@@ -196,19 +222,19 @@ describe("in-memory Agent history", () => {
         throw new Error("Expected retrieved request and response.");
       if (request.item.value.content === undefined || result.item.value.content === undefined)
         throw new Error("Expected packed request and response.");
-      const generation = AnyMessages.unpack(request.item.value.content, GenerationRequestSchema);
-      const response = AnyMessages.unpack(result.item.value.content, GenerationResponseSchema);
+      const generation = AnyPacker.tryUnpack(request.item.value.content, GenerationRequestSchema);
+      const response = AnyPacker.tryUnpack(result.item.value.content, GenerationResponseSchema);
       if (generation?.input === undefined || response?.admittedOutput === undefined)
         throw new Error("Expected admitted AI request and response payloads.");
-      expect(AnyMessages.unpack(generation.input, SupportTicketFactsSchema)?.customerQuestion).toBe(
-        "Delivery?",
-      );
       expect(
-        AnyMessages.unpack(response.admittedOutput, ProposedSupportReplySchema)?.replyText,
+        AnyPacker.tryUnpack(generation.input, SupportTicketFactsSchema)?.customerQuestion,
+      ).toBe("Delivery?");
+      expect(
+        AnyPacker.tryUnpack(response.admittedOutput, ProposedSupportReplySchema)?.replyText,
       ).toBe("Review this reply.");
     } finally {
       storage.close();
-      factory.close();
+      await factory.close();
     }
   });
 

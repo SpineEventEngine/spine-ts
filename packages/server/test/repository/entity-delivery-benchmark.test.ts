@@ -14,14 +14,13 @@
 
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { expect, it } from "vitest";
 
 import {
@@ -31,6 +30,7 @@ import {
   ProcessManager,
   Repository,
 } from "../../src/index.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
 import {
   ProjectCreatedSchema,
   type ProjectCreated,
@@ -115,6 +115,7 @@ async function startCpuProfile(
 }
 
 async function measure(count: number, label: string): Promise<number> {
+  await ServerEnvironment.instance().completeSetup();
   const ids = Array.from({ length: count }, (_, index) => `queue-${String(index)}`);
   const handlers = EntityHandlers.define(RoutedQueue, ProjectQueueStateSchema, (builder) => [
     builder.react(ProjectCreatedSchema, "react"),
@@ -125,21 +126,17 @@ async function measure(count: number, label: string): Promise<number> {
     handlers,
     eventRouting: EventRouting.create(RoutedQueue).route(ProjectCreatedSchema, () => ids),
   });
-  const context = BoundedContext.singleTenant(`DeliveryBenchmark${String(count)}`)
+  const context = await BoundedContext.singleTenant(`DeliveryBenchmark${String(count)}`)
     .add(repository)
-    .withStorageFactory(new InMemoryStorageFactory())
     .build();
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: "queue-created" }),
     context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(
-        StringValueSchema,
-        create(StringValueSchema, { value: "source" }),
-      ),
+      producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "source" })),
       timestamp: create(TimestampSchema, { seconds: 1n }),
       version: create(VersionSchema, { number: 1 }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ProjectCreatedSchema,
       create(ProjectCreatedSchema, {
         id: "source",

@@ -27,16 +27,14 @@ import type {
   LanguageModelV3Message,
   LanguageModelV3Prompt,
 } from "@ai-sdk/provider";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, type MessageSchema } from "@spine-event-engine/core";
 import type { AiFailure } from "@spine-event-engine/ai";
 import {
-  assertAiOutcomeContext,
   deriveOutputSchema,
   type AiBackendExecution,
   type AiBackendOutcome,
   type AiCandidateAdmission,
   type AiAttemptTicket,
-  type AiAttemptReplay,
 } from "@spine-event-engine/ai/spi/adapter";
 import {
   AiAttemptIdSchema,
@@ -58,7 +56,6 @@ import {
 import { AxVercelBridge, type PreparedRequest } from "./bridge.js";
 import { providerConnection } from "./factory.js";
 import { canonicalJsonValue } from "./mcp-protocol.js";
-import { replayFailure } from "./replay-failure.js";
 import {
   collectModelStream,
   StreamCollectionError,
@@ -486,7 +483,7 @@ const requestContent = (
   const outputSchemaJson = JSON.stringify(schema);
   const promptJson = preparedPromptJson(request, prepared, instructions, settings);
   return create(GenerationRequestSchema, {
-    input: AnyMessages.pack(definition.input, request.input),
+    input: AnyPacker.pack(definition.input, request.input),
     instructions,
     outputSchemaJson,
     promptJson,
@@ -639,7 +636,7 @@ const responseContent = (
     ...(partial.openaiContent !== undefined
       ? { openaiContent: typedOpenAiContent(partial.openaiContent) }
       : {}),
-    ...(output ? { admittedOutput: AnyMessages.pack(schema, output) } : {}),
+    ...(output ? { admittedOutput: AnyPacker.pack(schema, output) } : {}),
     ...(failure
       ? { diagnosticId: create(AiDiagnosticIdSchema, { value: failure.diagnosticId }) }
       : {}),
@@ -1132,7 +1129,7 @@ const coherentProposals = (
 };
 
 /**
- * Replays only proposals whose exact response crossed the journal barrier.
+ * Continues the active turn with proposals recorded during this model call.
  *
  * @param partial Recorded provider content.
  * @returns Ax function-call continuation with received text.
@@ -1151,265 +1148,6 @@ const toolContinuation = (partial: StreamedPartialResult): AxChatResponse => ({
     },
   ],
 });
-
-/**
- * Replays one saved response without admitting a new transport request.
- *
- * @param request Selected typed capability.
- * @param state Ax continuation and validation state.
- * @param replay Complete durable attempt record.
- * @returns Equivalent Ax response for correction or continuation.
- */
-const replayGeneration = (
-  request: AiBackendExecution,
-  state: GenerationState,
-  replay: AiAttemptReplay,
-): AxChatResponse => {
-  const response = replay.response;
-  if (response.$typeName !== "spine.ts.agent.GenerationResponse")
-    throw new TypeError("Saved attempt response kind mismatch");
-  assertAiOutcomeContext(response);
-  assertSavedAnthropicContent(request, response);
-  assertOpenAiReceipt(request, response);
-  if (response.outcome === AiOutcome.ADMITTED)
-    return replayAdmittedGeneration(request, state, response);
-  const partial: StreamedPartialResult = {
-    text: response.rawOutput,
-    toolCalls: response.toolCalls.map((call) => ({
-      id: call.providerCallId,
-      name: call.toolName,
-      input: call.argumentsJson,
-    })),
-    ...(response.openaiContent
-      ? { openaiContent: projectedOpenAiContent(response.openaiContent) }
-      : {}),
-  };
-  if (response.outcome === AiOutcome.TOOL_REQUESTED)
-    return replayToolProposals(request, state, replay.id, partial, response);
-  state.failure = replayFailure(replay);
-  if (response.outcome !== AiOutcome.INVALID_OUTPUT || !replay.issues?.length)
-    throw new Error("Saved generation failure terminates this attempt");
-  state.admission = { ok: false, issues: replay.issues };
-  state.assistantTurns.push({ response, axContent: axCandidate(response.rawOutput) });
-  return {
-    results: [{ index: 0, content: axCandidate(response.rawOutput), finishReason: "stop" }],
-  };
-};
-
-/**
- * Checks whether saved Anthropic blocks are complete enough to resume.
- *
- * @param request Selected typed capability.
- * @param response Saved generation response.
- */
-const assertSavedAnthropicContent = (
-  request: AiBackendExecution,
-  response: GenerationResponse,
-): void => {
-  if (providerConnection(request.model).capabilities.id !== "anthropic-messages-v1") return;
-  if (!response.anthropicContent) throw new TypeError("Saved Anthropic content missing");
-  if (
-    (response.outcome === AiOutcome.TOOL_REQUESTED ||
-      response.outcome === AiOutcome.INVALID_OUTPUT) &&
-    response.anthropicContent.blocks.some(
-      (block) =>
-        (block.content.case === "thinking" && !block.content.value.signature) ||
-        (block.content.case === "redactedThinking" && !block.content.value.data),
-    )
-  )
-    throw new TypeError("Saved Anthropic content incomplete");
-};
-
-/**
- * Rebuilds bounded typed items for saved digest and projection checks.
- *
- * @param content Saved Responses receipt.
- * @returns Ordered provider item projection.
- */
-const projectedOpenAiContent = (content: OpenAiAssistantContent): OpenAiContent => ({
-  complete: content.complete,
-  items: content.items.map(projectedOpenAiItem),
-});
-
-/**
- * @param item Durable typed item.
- * @returns Bounded response projection.
- */
-const projectedOpenAiItem = (item: OpenAiAssistantContent["items"][number]): OpenAiBlock => {
-  if (item.content.case === "reasoning")
-    return {
-      type: "reasoning",
-      id: item.itemId,
-      summary: item.content.value.summary,
-      encryptedContent: item.content.value.encryptedContent,
-    };
-  if (item.content.case === "functionCall") {
-    const call = item.content.value.call;
-    if (!call) throw new TypeError("Saved Responses call missing");
-    return {
-      type: "function_call",
-      id: item.itemId,
-      call: { id: call.providerCallId, name: call.toolName, input: call.argumentsJson },
-      namespace: item.content.value.namespace,
-    };
-  }
-  if (item.content.case === "message")
-    return {
-      type: "message",
-      id: item.itemId,
-      phase:
-        item.content.value.phase === OpenAiPhase.COMMENTARY
-          ? "commentary"
-          : item.content.value.phase === OpenAiPhase.FINAL_ANSWER
-            ? "final_answer"
-            : "",
-      parts: item.content.value.parts.map((part) => ({
-        type: part.content.case === "outputText" ? "output_text" : "refusal",
-        text: part.content.value ?? "",
-      })),
-    };
-  throw new TypeError("Saved Responses item missing");
-};
-
-/**
- * Checks the complete typed provider receipt before replay or continuation.
- *
- * @param request Selected authenticated profile.
- * @param response Durable generation receipt.
- */
-const assertOpenAiReceipt = (request: AiBackendExecution, response: GenerationResponse): void => {
-  if (providerConnection(request.model).capabilities.id !== "chatgpt-plan-responses-v1") return;
-  if (!response.openaiContent) throw new TypeError("Saved Responses content missing");
-  const content = projectedOpenAiContent(response.openaiContent);
-  assertOpenAiItems(content, response);
-  if (
-    !content.complete &&
-    (response.outcome === AiOutcome.ADMITTED ||
-      response.outcome === AiOutcome.TOOL_REQUESTED ||
-      response.outcome === AiOutcome.INVALID_OUTPUT)
-  )
-    throw new TypeError("Saved Responses content incomplete");
-  assertOpenAiProjection(content, response);
-};
-
-/**
- * @param content Typed provider receipt.
- */
-const assertOpenAiItems = (content: OpenAiContent, response: GenerationResponse): void => {
-  const ids = new Set<string>();
-  for (const item of content.items) {
-    if (!item.id || ids.has(item.id)) throw new TypeError("Saved Responses item ID invalid");
-    ids.add(item.id);
-    if (item.type === "reasoning" && !item.encryptedContent)
-      throw new TypeError("Saved Responses reasoning incomplete");
-    if (item.type === "function_call" && item.namespace !== "spine_mcp")
-      throw new TypeError("Saved Responses namespace invalid");
-    if (
-      item.type === "message" &&
-      item.parts.some((part) => part.type === "refusal") &&
-      (content.complete ||
-        (response.outcome !== AiOutcome.FAILED && response.outcome !== AiOutcome.REFUSED))
-    )
-      throw new TypeError("Saved Responses refusal");
-  }
-};
-
-/**
- * @param content Typed provider receipt.
- * @param response Saved response projection.
- */
-const assertOpenAiProjection = (content: OpenAiContent, response: GenerationResponse): void => {
-  const text = content.items
-    .flatMap((item) =>
-      item.type === "message"
-        ? item.parts.filter((part) => part.type === "output_text").map((part) => part.text)
-        : [],
-    )
-    .join("");
-  const calls = content.items.flatMap((item) => (item.type === "function_call" ? [item.call] : []));
-  const partialFailure =
-    !content.complete &&
-    (response.outcome === AiOutcome.FAILED || response.outcome === AiOutcome.REFUSED);
-  if (
-    !(partialFailure ? response.rawOutput.startsWith(text) : text === response.rawOutput) ||
-    !(partialFailure
-      ? calls.length <= response.toolCalls.length
-      : calls.length === response.toolCalls.length) ||
-    calls.some(
-      (call, index) =>
-        call.id !== response.toolCalls[index]?.providerCallId ||
-        call.name !== response.toolCalls[index].toolName ||
-        call.input !== response.toolCalls[index].argumentsJson,
-    ) ||
-    response.digest?.value !== savedOpenAiDigest(content, response)
-  )
-    throw new TypeError("Saved Responses projection changed");
-};
-
-/**
- * @param content Durable typed receipt projection.
- * @param response Durable standard response fields.
- * @returns Digest of both projections.
- */
-const savedOpenAiDigest = (content: OpenAiContent, response: GenerationResponse): string =>
-  responseDigest({
-    text: response.rawOutput,
-    toolCalls: response.toolCalls.map((call) => ({
-      id: call.providerCallId,
-      name: call.toolName,
-      input: call.argumentsJson,
-    })),
-    openaiContent: content,
-  }).value;
-
-/**
- * Rebuilds a saved admitted generation without provider dispatch.
- *
- * @param request Selected typed capability.
- * @param state Ax continuation and validation state.
- * @param response Saved admitted generation response.
- * @returns Equivalent Ax response with admitted application output.
- */
-const replayAdmittedGeneration = (
-  request: AiBackendExecution,
-  state: GenerationState,
-  response: GenerationResponse,
-): AxChatResponse => {
-  const output =
-    response.admittedOutput &&
-    AnyMessages.unpack(response.admittedOutput, request.definition.output);
-  if (!output) throw new TypeError("Saved generation output missing");
-  state.admission = { ok: true, value: output };
-  return {
-    results: [
-      {
-        index: 0,
-        content: axCandidate(toJsonString(request.definition.output, output)),
-        finishReason: "stop",
-      },
-    ],
-  };
-};
-
-/**
- * Rebuilds only a previously journaled coherent tool proposal queue.
- */
-const replayToolProposals = (
-  request: AiBackendExecution,
-  state: GenerationState,
-  ticketId: string,
-  partial: StreamedPartialResult,
-  response: GenerationResponse,
-): AxChatResponse => {
-  if (!coherentProposals(partial, request)) throw new TypeError("Saved tool proposals invalid");
-  for (const call of partial.toolCalls) {
-    const queue = state.pendingCalls.get(call.name) ?? [];
-    queue.push({ ticketId, providerCallId: call.id, input: call.input });
-    state.pendingCalls.set(call.name, queue);
-  }
-  state.assistantTurns.push({ response, axContent: partial.text });
-  return toolContinuation(partial);
-};
 
 /**
  * @param request Selected execution.
@@ -1469,6 +1207,7 @@ const runtimeFunctions = (request: AiBackendExecution, state: GenerationState) =
           providerCallId: next.providerCallId,
           server: tool.server,
           tool: tool.tool,
+          providerToolName: tool.modelName,
           argumentsJson: next.input,
         }),
       );
@@ -1567,15 +1306,6 @@ const chat = async (
   const attempt = await runtimeBarrier(state, () =>
     request.control.beginAttempt({ kind: "generation", content }),
   );
-  if ("kind" in attempt) {
-    state.previous = { id: attempt.id };
-    try {
-      return replayGeneration(request, state, attempt);
-    } catch (error) {
-      if (!state.failure) state.barrierFailed = true;
-      throw error;
-    }
-  }
   const ticket = attempt;
   state.previous = ticket;
   await admitGenerationTicket(request, state, ticket);

@@ -50,6 +50,11 @@ export class RecordingTransportFactory implements TransportFactory {
     { remainingSuccesses: number; predicate: (channel: unknown) => boolean } | undefined;
   #openPublishers = new Set<string>();
 
+  initialize(): Promise<void> {
+    this.operations.push("factory:initialize");
+    return Promise.resolve();
+  }
+
   constructor(options: { readonly failCloseAttempts?: number } = {}) {
     this.#remainingCloseFailures = options.failCloseAttempts ?? 0;
   }

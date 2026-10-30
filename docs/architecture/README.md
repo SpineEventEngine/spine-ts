@@ -234,21 +234,20 @@ so remaining rules still run deterministically.
 
 ## Core Envelope Construction
 
-`@spine-event-engine/core` provides Spine-aware `Any` packing. `AnyMessages.pack()` derives
+`@spine-event-engine/core` provides Spine-aware `Any` packing. `AnyPacker.pack()` derives
 the canonical type URL with `TypeUrls.derive(schema)` and serializes the payload
 with Protobuf-ES `toBinary()`. The implementation intentionally does not call
 Buf `anyPack()` directly for Spine domain payloads because that helper emits the
 standard `type.googleapis.com/...` prefix rather than the Spine
 `type.spine.io/...` prefix required for routing.
 
-Framework-packed payloads pass `writeUnknownFields: false` to the Protobuf-ES
-binary writer. This gives the helper stable behavior for messages that carry
-retained unknown fields. Protobuf-ES 2.12.1 does not expose deterministic
+Framework-packed payloads preserve retained unknown binary fields. Protobuf-ES 2.12.1 does not expose deterministic
 map-key ordering. It does not claim fully canonical map ordering.
 
-`AnyMessages.unpack()` performs exact type URL matching against the requested schema
-before binary decoding and returns `undefined` on decode failure, keeping type
-URL comparison and malformed payload handling inside the core module interface.
+`AnyPacker.unpack()` requires the exact full type URL and throws for a mismatch or malformed
+payload. `AnyPacker.tryUnpack()` returns `undefined` for an absent, mismatched, or malformed
+payload. The registry variants apply the same strict and optional behavior to exact registered
+URLs. Packing does not validate domain constraints; signal entry points validate explicitly.
 Callers should not parse or concatenate type URL strings directly.
 
 `SignalEnvelopes.command()` and `SignalEnvelopes.event()` construct generated
@@ -489,14 +488,14 @@ surface:
   starting context assembly;
 - `ContextSpec` is an immutable framework value exposed through
   `builder.spec` and `context.spec`; it carries the validated bounded-context
-  name, tenant mode, and event-storage metadata used when
-  `withStorageFactory()` creates the context `EventStore`;
+  name, tenant mode, and event-storage metadata used when the environment
+  factory creates the context `EventStore`;
 - `BoundedContextBuilder.addCommandDispatcher()` /
   `removeCommandDispatcher()` and `addEventDispatcher()` /
   `removeEventDispatcher()` collect dispatchers for the context being built;
-- `BoundedContextBuilder.withStorageFactory(factory)` selects the
-  `StorageFactory` used to create the context `EventStore` and repository state
-  storage, plus direct `Stand`/read-side state storage;
+- `ServerEnvironment.when(type).use({ storageFactory })` selects the shared
+  `StorageFactory` used for context `EventStore`, repository state storage, and
+  direct `Stand` reads after explicit environment setup;
 - `BoundedContextBuilder.add(repository)` and `remove(repository)` maintain the
   context repository registration list;
 - `BoundedContextBuilder.build()` is the only supported path for constructing a
@@ -617,9 +616,12 @@ observe it. When posting fails, the internal signal publisher logs and contains
 the failure, the command client is not notified, and no retry is currently
 promised. Managed aggregate command handlers use
 `EntityTransaction.commit()` for transition validation. When
-that transaction is rejected, repository execution raises
+that transaction is rejected, repository execution raises a transition error
+before traceability events or latest state are stored. If it escapes command
+service processing, the service maps it to
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details before traceability events or latest state are stored. Legacy/internal
+details. Ordinary Entity Inbox reception instead passes the post-handler error to
+`DeliveryMonitor`, whose default action acknowledges the failed row. Legacy/internal
 validation failures remain internal and are sanitized as `COMMAND_POST_ERROR`;
 ordinary generated-registry aggregate loading uses the latest persisted state.
 Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
@@ -792,13 +794,15 @@ acknowledgement-only retries. The supervisor
 rescans pending shards every 10 seconds by default, separately from the
 60-second stale-session threshold and the configurable Delivery server processing
 timeout, which is disabled by default. These [recovery timers](../../packages/delivery-server/REFERENCE.md#recovery-timers)
-do not guarantee a delivery or takeover deadline. It adds no persisted attempts,
-quarantine, receipts, markers, or dead-letter storage. Callback snapshots copy `Date` values
+do not guarantee a delivery or takeover deadline. The ordinary Delivery
+supervisor adds no persisted attempts, quarantine, receipts, markers, or dead-letter storage.
+Callback snapshots copy `Date` values
 and `Any.value` bytes. The package exposes no raw worker callback API; replay
 stays behind validated endpoints. Local posting handoffs cover command rows,
-projection subscriber rows, and process-manager event rows. Command
+projection subscriber rows, and process-manager event rows. Ordinary Command
 handlers and projection subscribers wait for the exact received row to replay;
-framework replay validates the row label and pending `TO_DELIVER` status
+an accepted Agent interaction is never re-executed after interruption.
+Framework replay validates the row label and pending `TO_DELIVER` status
 before projection or user handler code runs, and the posting path resolves only
 after that row reaches `DELIVERED`. Live
 process-manager event routing writes `REACT_UPON_EVENT` rows carrying the

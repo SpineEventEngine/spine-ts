@@ -14,7 +14,7 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   EventContextSchema,
@@ -1243,10 +1243,10 @@ function createReviewTaskAssigned(id: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
+      producerId: AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id: "task-1", name: "Task" }),
     ),
@@ -1257,13 +1257,12 @@ function createValidatedEvent(id: string, name: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
+      producerId: AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewFollowUpScheduledSchema,
       create(ReviewFollowUpScheduledSchema, { id: "task-1", name }),
-      { validate: false },
     ),
   });
 }

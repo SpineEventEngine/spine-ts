@@ -22,10 +22,44 @@ import { ColumnTypes } from "../record/column-type.js";
 import type { RecordQuery } from "../record/record-query.js";
 import { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
-import type { StorageGroup } from "../record/storage-group.js";
+import { StorageGroup } from "../record/storage-group.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
 import { TenantBoundary } from "../internal/tenancy.js";
+
+const idleClosers = new WeakMap<EventStore, () => void>();
+const eventStoreSelections = new WeakMap<
+  StorageGroup,
+  { name: string; role: "domain" | "system" }
+>();
+
+/**
+ * Stable physical Event record family for one logical context and store role.
+ */
+export const EventStoreGroups: Readonly<{
+  forContext(contextName: string, role?: "domain" | "system"): StorageGroup;
+  identity(group: StorageGroup): string | undefined;
+}> = Object.freeze({
+  /**
+   * Selects the readable Bounded Context name and retains the Event Store role.
+   *
+   * @param contextName Framework-validated logical context name.
+   * @param role Domain or paired System Event store.
+   * @returns Stable physical Event family selector.
+   */
+  forContext(contextName: string, role: "domain" | "system" = "domain"): StorageGroup {
+    const group = new StorageGroup(contextName);
+    eventStoreSelections.set(group, { name: contextName, role });
+    return group;
+  },
+
+  identity(group: StorageGroup): string | undefined {
+    const selection = eventStoreSelections.get(group);
+    return selection === undefined
+      ? undefined
+      : JSON.stringify(["EventStore", selection.role, selection.name]);
+  },
+});
 
 /**
  * Framework event store backed by record storage.
@@ -47,9 +81,29 @@ export class EventStore {
   readonly #factory: StorageFactory;
 
   /**
-   * Optional record family selector independent of the diagnostic context name.
+   * Record family selected by the logical context and store role.
    */
   readonly #group: StorageGroup | undefined;
+
+  /**
+   * Retains one record storage per complete tenant boundary.
+   */
+  readonly #storages = new Map<string | symbol, RecordStorage<EventId, Event>>();
+
+  /**
+   * Tracks admitted physical storage groups until their complete operation settles.
+   */
+  readonly #active = new Set<Promise<unknown>>();
+
+  /**
+   * Reuses one asynchronous close result across repeated calls.
+   */
+  #closing: Promise<void> | undefined;
+
+  /**
+   * Retains the terminal result of synchronous assembly cleanup.
+   */
+  #idleOutcome: { error?: Error } | undefined;
 
   /**
    * Whether this Event Store accepts operations.
@@ -66,7 +120,10 @@ export class EventStore {
   constructor(context: EventStoreContext, factory: StorageFactory, group?: StorageGroup) {
     this.#context = EventContexts.base(context);
     this.#factory = factory;
-    this.#group = group;
+    this.#group = group ?? EventStoreGroups.forContext(this.#context.name);
+    idleClosers.set(this, () => {
+      this.#closeIdle();
+    });
   }
 
   /**
@@ -79,10 +136,76 @@ export class EventStore {
   }
 
   /**
-   * Closes this Event Store. Operation-selected storage handles close after use.
+   * Rejects new work, drains admitted storage groups, and closes retained handles.
+   * Repeated calls return the same close result.
+   *
+   * @returns Completion after all admitted work and storage cleanup settle.
    */
-  close(): void {
+  close(): Promise<void> {
+    if (this.#closing !== undefined) return this.#closing;
+    if (this.#idleOutcome !== undefined) {
+      const error = this.#idleOutcome.error;
+      return error === undefined ? Promise.resolve() : Promise.reject(error);
+    }
     this.#open = false;
+    this.#closing = this.drainAndClose();
+    return this.#closing;
+  }
+
+  /**
+   * Closes an idle store during synchronous assembly cleanup.
+   * Active storage work is a misuse and leaves all handles open.
+   *
+   */
+  #closeIdle(): void {
+    if (this.#active.size > 0 || (this.#closing !== undefined && this.#idleOutcome === undefined))
+      throw new Error("EventStore closeIdle requires no active storage work.");
+    if (this.#idleOutcome !== undefined) {
+      if (this.#idleOutcome.error !== undefined) throw this.#idleOutcome.error;
+      return;
+    }
+    this.#open = false;
+    try {
+      this.closeStorages();
+      this.#idleOutcome = {};
+    } catch (error) {
+      this.#idleOutcome = { error: error as Error };
+      throw error;
+    }
+  }
+
+  /**
+   * Waits for admitted physical work and then closes every retained handle.
+   *
+   * @returns Completion after admitted work and cleanup settle.
+   */
+  private async drainAndClose(): Promise<void> {
+    await Promise.allSettled([...this.#active]);
+    try {
+      this.closeStorages();
+      this.#idleOutcome = {};
+    } catch (error) {
+      this.#idleOutcome = { error: error as Error };
+      throw error;
+    }
+  }
+
+  /**
+   * Closes every retained handle and reports all cleanup failures.
+   */
+  private closeStorages(): void {
+    const storages = [...this.#storages.values()];
+    this.#storages.clear();
+    const errors: unknown[] = [];
+    for (const storage of storages) {
+      try {
+        storage.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, "EventStore close failed.");
   }
 
   /**
@@ -139,6 +262,7 @@ export class EventStore {
    * @returns Completes when the events are appended.
    */
   async appendAll(events: Iterable<Event>): Promise<void> {
+    this.requireOpen();
     const records = [...events].map((event) => clone(EventSchema, event));
 
     if (records.length > 0) {
@@ -154,16 +278,9 @@ export class EventStore {
    */
   async read(query: RecordQuery<EventId> = {}): Promise<readonly Event[]> {
     this.requireOpen();
-    const storage = this.#factory.createRecordStorage(
-      EventContexts.snapshot(this.#context),
-      eventStoreRecordSpec,
-      this.#group,
+    return this.runStorage(EventContexts.snapshot(this.#context), (storage) =>
+      storage.query(query),
     );
-    try {
-      return await storage.query(query);
-    } finally {
-      storage.close();
-    }
   }
 
   /**
@@ -178,12 +295,7 @@ export class EventStore {
     const ids = records.map((record) => EventIds.require(record));
     EventIds.rejectDuplicates(ids);
 
-    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec, this.#group);
-    try {
-      await EventIds.insertUnique(storage, records);
-    } finally {
-      storage.close();
-    }
+    await this.runStorage(context, (storage) => EventIds.insertUnique(storage, records));
   }
 
   /**
@@ -196,12 +308,7 @@ export class EventStore {
   private async appendImmutable(records: readonly Event[], context: StorageContext): Promise<void> {
     this.requireOpen();
     EventIds.rejectDuplicates(records.map((record) => EventIds.require(record)));
-    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec, this.#group);
-    try {
-      await EventIds.insertImmutable(storage, records);
-    } finally {
-      storage.close();
-    }
+    await this.runStorage(context, (storage) => EventIds.insertImmutable(storage, records));
   }
 
   /**
@@ -215,12 +322,45 @@ export class EventStore {
     this.requireOpen();
     EventIds.rejectDuplicates(ids);
 
-    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec, this.#group);
+    await this.runStorage(context, (storage) => EventIds.rejectStored(storage, ids));
+  }
+
+  /**
+   * Executes one complete physical storage operation through settlement.
+   *
+   * @typeParam T Operation result type.
+   * @param context Captured tenant scope.
+   * @param onStorage Work admitted against the retained handle.
+   * @returns The operation result or its original failure.
+   */
+  private async runStorage<T>(
+    context: StorageContext,
+    onStorage: (storage: RecordStorage<EventId, Event>) => Promise<T>,
+  ): Promise<T> {
+    const storage = this.storageFor(context);
+    const work = Promise.resolve().then(() => onStorage(storage));
+    this.#active.add(work);
     try {
-      await EventIds.rejectStored(storage, ids);
+      return await work;
     } finally {
-      storage.close();
+      this.#active.delete(work);
     }
+  }
+
+  /**
+   * Returns retained record storage for the captured tenant boundary.
+   *
+   * @param context Complete tenant-scoped storage context.
+   * @returns The retained record storage.
+   */
+  private storageFor(context: StorageContext): RecordStorage<EventId, Event> {
+    this.requireOpen();
+    const key = TenantBoundary.of(context).key;
+    const existing = this.#storages.get(key);
+    if (existing !== undefined) return existing;
+    const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec, this.#group);
+    this.#storages.set(key, storage);
+    return storage;
   }
 
   /**
@@ -230,6 +370,23 @@ export class EventStore {
     if (!this.#open) throw new Error("EventStore is closed.");
   }
 }
+
+/**
+ * Gives server assembly access to synchronous idle cleanup through the provider entrypoint.
+ * @internal
+ */
+export const eventStoreAccess = {
+  /**
+   * Closes an idle Event Store during synchronous assembly rollback.
+   *
+   * @param store Framework Event Store to close.
+   */
+  closeIdle(store: EventStore): void {
+    const close = idleClosers.get(store);
+    if (close === undefined) throw new TypeError("EventStore idle cleanup requires an EventStore.");
+    close();
+  },
+};
 
 /**
  * Selects Event Store tenancy before an event envelope supplies a tenant.

@@ -71,12 +71,24 @@ export class ShardedWorkRegistry {
 
   readonly #now: () => Date;
 
+  #retained: RecordStorage<WireShardIndex, ShardSessionRecord> | undefined;
+
+  #active = 0;
+
+  #closing = false;
+
+  #drained: (() => void) | undefined;
+
+  #closeAttempt: Promise<void> | undefined;
+
   /**
    * Opens a registry over direct shard-session storage.
    *
    * @param options Configures durable storage, lease duration, and clock.
    */
   constructor(options: ShardedWorkRegistryOptions) {
+    if (options.context.multitenant)
+      throw new TypeError("Shard registry requires a single-tenant Delivery context.");
     this.#context = copy(options.context);
     this.#factory = options.storageFactory;
     this.#lease = DeliveryLeases.requireMs("ShardedWorkRegistry", options.leaseMs ?? leaseDefault);
@@ -116,7 +128,7 @@ export class ShardedWorkRegistry {
       }
       throw concurrent("Shard pickup");
     } finally {
-      storage.close();
+      this.#finish();
     }
   }
 
@@ -162,7 +174,7 @@ export class ShardedWorkRegistry {
       }
       throw concurrent("Shard release");
     } finally {
-      storage.close();
+      this.#finish();
     }
   }
 
@@ -225,12 +237,44 @@ export class ShardedWorkRegistry {
       }
       throw concurrent("Shard renewal");
     } finally {
-      storage.close();
+      this.#finish();
     }
   }
 
   #storage(): RecordStorage<WireShardIndex, ShardSessionRecord> {
-    return this.#factory.createRecordStorage(context(this.#context), shardSessionRecordSpec);
+    if (this.#closing) throw new Error("Shard registry is closed.");
+    this.#active++;
+    try {
+      return (this.#retained ??= this.#factory.createRecordStorage(
+        context(this.#context),
+        shardSessionRecordSpec,
+      ));
+    } catch (error) {
+      this.#finish();
+      throw error;
+    }
+  }
+
+  #finish(): void {
+    this.#active--;
+    if (this.#active === 0) this.#drained?.();
+  }
+
+  /**
+   * Closes the retained shard record handle after admitted work drains.
+   *
+   * @returns The shared close completion.
+   */
+  close(): Promise<void> {
+    if (this.#closeAttempt !== undefined) return this.#closeAttempt;
+    this.#closing = true;
+    const drained =
+      this.#active === 0
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            this.#drained = resolve;
+          });
+    return (this.#closeAttempt = drained.then(() => this.#retained?.close()));
   }
 }
 

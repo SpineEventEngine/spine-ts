@@ -191,7 +191,7 @@ The application posts `DraftSupportReply` with the ticket ID, reported facts, an
 
 ```ts
 import { create, equals } from "@bufbuild/protobuf";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { ConversationIdSchema } from "@spine-event-engine/proto/agent";
 import { BlackBox } from "@spine-event-engine/testing";
 import {
@@ -232,7 +232,7 @@ async function observeDraft(box: BlackBox, command: DraftSupportReply) {
         () => box.assertEvents().slice(previousEvents)
             .flatMap((event) => event.message === undefined
                 ? []
-                : [AnyMessages.unpack(event.message, SupportReplySuggestedSchema)])
+                : [AnyPacker.tryUnpack(event.message, SupportReplySuggestedSchema)])
             .filter((event) => event !== undefined),
         (events) => events.some((event) =>
             event.id !== undefined && event.request !== undefined &&

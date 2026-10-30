@@ -1,5 +1,8 @@
 # MySQL storage for Spine TS
 
+See [storage layout and database preparation](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/STORAGE_LAYOUT.md) for
+physical structures, tenant placement, prerequisites, and customization.
+
 `@spine-event-engine/storage-mysql` stores Spine TS records in MySQL. It is a
 durable implementation of `@spine-event-engine/storage` and manages the mysql2
 connection pool and its private tables. PostgreSQL is not supported by this
@@ -11,8 +14,9 @@ record schemas, and a reachable MySQL database.
 For database requirements, query limits, lifecycle, and error details, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
-For an application using Agents, this provider keeps the Agent's accepted
-work and recorded interactions across restarts. Use InnoDB for Agent repositories;
+For an application using Agents, this provider retains typed admission receipts,
+Entity state, and recorded interactions across restarts, without resuming an
+interrupted handler. Use InnoDB for Agent repositories;
 see the [coding-agent reference](REFERENCE.md) for database requirements.
 
 ## 💡 Why use it?
@@ -38,9 +42,12 @@ The snapshot tag can change before a stable release.
 
 ## 🔌 Create and close a MySQL factory
 
-Provide a MySQL URL that includes a database name. Building the factory opens
-its pool only; each record family creates and verifies its private table lazily
-on first use.
+Provide a MySQL URL that includes a database name. Building the factory
+validates settings locally and opens no pool. `checkConnection()` optionally
+probes the shared database with a read-only query. It reuses an existing
+runtime pool or opens and releases a temporary pool. The first storage
+operation binds its database and creates or verifies
+its private table lazily.
 
 <!-- docs-snippet-path: packages/storage-mysql/src/index.ts -->
 
@@ -74,7 +81,7 @@ try {
   if (stored?.value !== "task-42") throw new Error("The record was not stored.");
 } finally {
   await records.close();
-  factory.close();
+  await factory.close();
 }
 ```
 
@@ -83,8 +90,9 @@ require TLS and provide the issuing CA explicitly; do not enable certificate
 verification without the CA material needed by your managed MySQL endpoint.
 
 For a multitenant application, assign each complete generated `TenantId` to a
-different database. The factory creates one pool per configured tenant and
-selects that pool before it opens a table or starts a transaction:
+different database. The factory resolves each tenant's database and opens
+its pool on first use; concurrent first uses share the binding. It selects
+that pool before opening a table or starting a transaction:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -95,12 +103,19 @@ const acme = create(TenantIdSchema, { kind: { case: "value", value: "acme" } });
 const globex = create(TenantIdSchema, { kind: { case: "value", value: "globex" } });
 
 const factory = await MysqlStorageFactory.newBuilder()
+  .setOptions({ url: "mysql://user:password@db/shared" })
   .setTenantOptions([
     { tenantId: acme, options: { url: "mysql://user:password@db/acme" } },
     { tenantId: globex, options: { url: "mysql://user:password@db/globex" } },
   ])
   .build();
 ```
+
+Alternatively, `setTenantResolver(async (tenantId) => options)` resolves each
+tenant's destination on first use. Fixed tenant entries and a resolver cannot
+be combined. Either mode requires shared `setOptions`; tenants must use
+distinct databases. Shared and tenant settings may point to the same database
+only when their physical table families do not collide.
 
 Use a dedicated database account. The account must be able to create and
 inspect the adapter tables and perform normal reads and writes. Do not commit
@@ -123,8 +138,11 @@ Entity commits use independent ordered records on InnoDB, MyISAM, and Aria.
 A failed operation can leave its completed prefix; an identical Entity retry
 reuses prepared versions and Event IDs. It supports primitive and structured
 storage IDs. Declared columns support strings, booleans, integral Protobuf
-numbers, enums, bytes, messages, `Timestamp`, and `Version`. Spine JVM JDBC
-does not support `float` or `double` record columns, so this adapter rejects
+numbers, enums, bytes, messages, `Timestamp`, and `Version`. The provider-only
+live Agent commit is a separate InnoDB transaction: it conditionally checks
+the initial Entity version and complete model preferences before committing
+any changed state, final audit, and preferences together. Spine JVM JDBC does
+not support `float` or `double` record columns, so this adapter rejects
 them too.
 
 Indexed `Timestamp` columns store epoch nanoseconds in signed 64-bit `BIGINT`.
@@ -228,21 +246,11 @@ TLS, and plan backups, monitoring, and migrations. Indexed `bigint` values must
 fit the exact signed 64-bit MySQL range. PostgreSQL is provided separately by
 [`@spine-event-engine/storage-postgres`](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-postgres/README.md).
 
-Before starting this corrected layout against an existing database, run the
-legacy-layout inventory for every configured tenant database:
-
-```sh
-pnpm --dir packages/storage-mysql inventory:legacy -- \
-  --url 'mysql://user:password@127.0.0.1:3306/tenant_a' \
-  --url 'mysql://user:password@127.0.0.1:3306/tenant_b'
-```
-
-The command exits nonzero if a database is unreachable or contains the old
-`_scope`, `_revision`, or compound scope key. Do not start the corrected
-runtime until it passes. The factory repeats this check for every configured
-database before it becomes usable. The runtime does not read both layouts or choose
-between rows that old Bounded Context partitions would collapse onto the same
-new `ID`; migrate those rows offline and stop on every conflict.
+Factory construction validates configuration without connecting. Explicit preparation
+or first use checks the selected record families; it does not scan unrelated
+tables. Existing tables must satisfy the expected layout. See the
+[storage layout reference](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/STORAGE_LAYOUT.md#6-startup-sequence) for
+creation and compatibility-check timing.
 
 ## 🔗 Learn more
 

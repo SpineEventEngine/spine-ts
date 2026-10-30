@@ -17,10 +17,12 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
+  EnvironmentType,
   ProcessManager,
   Projection,
   React,
   Server,
+  ServerEnvironment,
   Subscribe,
   type RunningServer,
 } from "@spine-event-engine/server";
@@ -350,8 +352,9 @@ export const datastoreOrdersTopology = {
 export async function createDatastoreOrdersContext(
   storageFactory: StorageFactory,
 ): Promise<BoundedContext> {
+  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+  await ServerEnvironment.instance().completeSetup();
   return BoundedContext.singleTenant("DatastoreOrders")
-    .withStorageFactory(storageFactory)
     .withGeneratedRegistryRoot(new URL("..", import.meta.url))
     .add(OrderAggregate)
     .add(SkuAggregate)
@@ -367,7 +370,7 @@ export async function createDatastoreOrdersContext(
     .add(SalesSkuIndexProjection)
     .add(OrderSalesManager)
     .add(SkuSalesManager)
-    .buildAsync();
+    .build();
 }
 
 /**
@@ -398,11 +401,12 @@ export async function startDatastoreOrdersServer(
   storageFactory: StorageFactory,
   options: DatastoreOrdersServerOptions = {},
 ): Promise<RunningServer> {
+  const context = await createDatastoreOrdersContext(storageFactory);
   return Server.atPort(options.port ?? 0, {
     host: options.host ?? "127.0.0.1",
     services: { subscriptionLimit: 1_000 },
   })
-    .add(await createDatastoreOrdersContext(storageFactory))
+    .add(context)
     .start();
 }
 

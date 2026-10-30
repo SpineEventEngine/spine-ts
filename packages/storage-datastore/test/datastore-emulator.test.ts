@@ -12,11 +12,11 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { EventIdSchema, EventSchema, TenantIdSchema, type Event } from "@spine-event-engine/proto";
-import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -29,7 +29,13 @@ import {
   StorageGroup,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import type { EntityStorageInput } from "@spine-event-engine/storage/provider";
+import {
+  StoragePreparations,
+  TenantBoundary,
+  EventStoreGroups,
+  eventStoreRecordSpec,
+  type EntityStorageInput,
+} from "@spine-event-engine/storage/provider";
 import { describe, expect, it } from "vitest";
 
 import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project_events_pb.js";
@@ -41,6 +47,20 @@ const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
 const projectId = process.env.DATASTORE_PROJECT_ID ?? "spine-t0135-emulator";
 
 describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
+  it("checks shared metadata and prepares a missing native kind without writing records", async () => {
+    const client = datastore();
+    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const spec = stringSpec();
+    await factory.checkConnection();
+    await StoragePreparations.for(factory).prepareRecord(
+      { name: unique("preparation"), multitenant: false },
+      spec,
+      new StorageGroup(unique("missing-kind")),
+      "check",
+    );
+    await factory.close();
+  });
+
   it("preserves microsecond timestamp ordering and a page boundary in live Datastore", async () => {
     const first = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_000_000 });
     const middle = create(TimestampSchema, { seconds: 1_789_000_000n, nanos: 1_001_000 });
@@ -244,6 +264,12 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     );
 
     try {
+      await expect(
+        factory.tenantCatalog().contains(TenantBoundary.from(tenant("missing"))),
+      ).resolves.toBe(false);
+      await expect(
+        factory.tenantCatalog().keep(TenantBoundary.from(tenant("missing"))),
+      ).rejects.toThrow(/not present/);
       await single.write(message("same"));
       await otherContext.write(message("same"));
       await Promise.all([group, tenantA, tenantB].map((storage) => storage.write(message("same"))));
@@ -251,6 +277,10 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       await group.write(message("group"));
       await tenantA.write(message("tenant-a"));
       await tenantB.write(message("tenant-b"));
+      await expect(
+        factory.tenantCatalog().contains(TenantBoundary.from(tenant("a"))),
+      ).resolves.toBe(true);
+      await factory.tenantCatalog().keep(TenantBoundary.from(tenant("a")));
       await expect(single.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(otherContext.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(group.read("same")).resolves.toMatchObject({ value: "same" });
@@ -288,80 +318,86 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
   it("keeps Entity current, histories, and Event Store in separate physical families", async () => {
     const client = new Datastore({ projectId: unique("entity-project").toLowerCase() });
     const context = { name: unique("entity"), multitenant: false } as const;
-    const entity = entityInput(context, true);
+    const entity = projectEntityInput(context);
     const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+    stringifiers.setTypeRegistry(
+      new TypeRegistry([ProjectIdSchema, ProjectStateSchema, ProjectCreatedSchema]),
+    );
     const factory = DatastoreStorageFactory.newBuilder()
       .setClient(client)
       .setStringifierRegistry(stringifiers)
       .build();
     const handle = factory.createEntityStorage(entity);
-    const first = entityRecord("current", 1);
+    const first = projectRecord("current", 1);
 
     try {
       await expect(
         handle.commits.commit({
           context,
           entity,
-          entityId: "task",
+          entityId: "project-1",
           next: first,
-          states: [entityRecord("retained", 1)],
-          diagnostics: [entityEvent("diagnostic", 1)],
-          events: [entityEvent("delivery", 1)],
+          states: [projectRecord("retained", 1)],
+          diagnostics: [projectEvent("diagnostic", 1)],
+          events: [projectEvent("delivery", 1)],
         }),
       ).resolves.toBeUndefined();
       await expect(
         handle.commits.commit({
           context,
           entity,
-          entityId: "task",
-          next: entityRecord("next", 2),
+          entityId: "project-1",
+          next: projectRecord("next", 2),
         }),
       ).resolves.toBeUndefined();
       await expect(
-        handle.commits.commit({ context, entity, entityId: "task", next: first }),
+        handle.commits.commit({ context, entity, entityId: "project-1", next: first }),
       ).resolves.toBeUndefined();
       const concurrent = await Promise.all(
         ["two", "three"].map((value) =>
           handle.commits.commit({
             context,
             entity,
-            entityId: "task",
-            next: entityRecord(value, 2),
+            entityId: "project-1",
+            next: projectRecord(value, 2),
           }),
         ),
       );
       expect(concurrent).toEqual([undefined, undefined]);
-      await expect(handle.current.read("task")).resolves.toMatchObject({ version: { number: 2 } });
+      await expect(handle.current.read("project-1")).resolves.toMatchObject({
+        version: { number: 2 },
+      });
 
       const kinds = await Promise.all([
-        rows(client, StringValueSchema.typeName),
-        rows(client, `${StringValueSchema.typeName}_EntityRecord`),
-        rows(client, `${StringValueSchema.typeName}_Event`),
-        rows(client, EventSchema.typeName),
+        rows(client, ProjectStateSchema.typeName),
+        rows(client, `${ProjectStateSchema.typeName}_EntityRecord`),
+        rows(client, `${ProjectStateSchema.typeName}_Event`),
+        rows(client, `${EventStoreGroups.forContext(context.name).name}-Event`),
       ]);
       expect(kinds.map((value) => value.length)).toEqual([1, 1, 1, 1]);
       expect(kinds.flat().every((row) => row.bytes instanceof Uint8Array)).toBe(true);
 
       for (let version = 2; version <= 129; version += 1)
-        await handle.states.append(entityRecord(`state-${String(version)}`, version));
-      await handle.states.trim("task", 1);
-      await expect(handle.states.backward("task", 2)).resolves.toHaveLength(1);
+        await handle.states.append(projectRecord(`state-${String(version)}`, version));
+      await handle.states.trim("project-1", 1);
+      await expect(handle.states.backward("project-1", 2)).resolves.toHaveLength(1);
 
-      const disabled = factory.createEntityStorage(
-        entityInput({ name: unique("disabled"), multitenant: false }, false),
-      );
-      await expect(disabled.states.append(entityRecord("state", 1))).rejects.toThrow("disabled");
-      disabled.close();
-      handle.close();
-      await expect(handle.current.read("task")).rejects.toThrow("closed");
+      const disabled = factory.createEntityStorage({
+        ...projectEntityInput({ name: unique("disabled"), multitenant: false }),
+        stateHistory: false,
+        eventHistory: false,
+      });
+      await expect(disabled.states.append(projectRecord("state", 1))).rejects.toThrow("disabled");
+      await disabled.close();
+      await handle.close();
+      await expect(handle.current.read("project-1")).rejects.toThrow("closed");
     } finally {
-      handle.close();
+      await handle.close();
       await Promise.all([
-        deleteKind(client, StringValueSchema.typeName),
-        deleteKind(client, `${StringValueSchema.typeName}_EntityRecord`),
-        deleteKind(client, `${StringValueSchema.typeName}_Event`),
-        deleteKind(client, EventSchema.typeName),
+        deleteKind(client, ProjectStateSchema.typeName),
+        deleteKind(client, `${ProjectStateSchema.typeName}_EntityRecord`),
+        deleteKind(client, `${ProjectStateSchema.typeName}_Event`),
+        deleteKind(client, `${EventStoreGroups.forContext(context.name).name}-Event`),
       ]);
     }
   }, 30_000);
@@ -401,7 +437,7 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       ProjectStateSchema.typeName,
       `${ProjectStateSchema.typeName}_EntityRecord`,
       `${ProjectStateSchema.typeName}_Event`,
-      EventSchema.typeName,
+      `${EventStoreGroups.forContext(contextA.name).name}-Event`,
     ];
 
     try {
@@ -442,12 +478,39 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       expect(storedA.flat().every((row) => row.bytes instanceof Uint8Array)).toBe(true);
       expect(storedB.map((records) => records.length)).toEqual([0, 0, 0, 0]);
     } finally {
-      deliveryA.close();
-      deliveryB.close();
-      handleA.close();
-      handleB.close();
+      await Promise.all([deliveryA.close(), deliveryB.close(), handleA.close(), handleB.close()]);
       await Promise.all(
         kinds.flatMap((kind) => [deleteKind(client, kind, "Va"), deleteKind(client, kind, "Vb")]),
+      );
+    }
+  }, 30_000);
+
+  it("keeps distinct context Event kinds and checks each declared kind", async () => {
+    const client = new Datastore({ projectId: unique("event-group-project").toLowerCase() });
+    const firstContext = { name: unique("event-first"), multitenant: false } as const;
+    const secondContext = { name: unique("event-second"), multitenant: false } as const;
+    const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const preparation = StoragePreparations.for(factory);
+    for (const scope of [firstContext, secondContext]) {
+      const group = EventStoreGroups.forContext(scope.name);
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "create");
+      await preparation.prepareRecord(scope, eventStoreRecordSpec, group, "check");
+    }
+    const first = new EventStore(firstContext, factory);
+    const second = new EventStore(secondContext, factory);
+    const id = unique("shared-event");
+    try {
+      await first.append(projectEvent(id, 1));
+      await second.append(projectEvent(id, 2));
+      expect((await first.read())[0]?.message).toEqual(projectEvent(id, 1).message);
+      expect((await second.read())[0]?.message).toEqual(projectEvent(id, 2).message);
+      await expect(first.append(projectEvent(id, 3))).rejects.toThrow(/unique event IDs/);
+    } finally {
+      await Promise.all([first.close(), second.close(), factory.close()]);
+      await Promise.all(
+        [firstContext, secondContext].map((scope) =>
+          deleteKind(client, `${EventStoreGroups.forContext(scope.name).name}-Event`),
+        ),
       );
     }
   }, 30_000);
@@ -500,63 +563,6 @@ function message(value: string) {
   return create(StringValueSchema, { value });
 }
 
-function entityInput(
-  context: StorageContext,
-  histories: boolean,
-): EntityStorageInput<string, ReturnType<typeof message>> {
-  return {
-    context,
-    id: {
-      clone: (id) => id,
-      key: (id) => id,
-      pack: pack,
-      unpack: (id) =>
-        id.typeUrl.endsWith(StringValueSchema.typeName)
-          ? fromBinary(StringValueSchema, id.value).value
-          : undefined,
-    },
-    columns: [],
-    recordSpec: new RecordSpec<string, EntityRecord>({
-      sourceType: StringValueSchema,
-      recordType: EntityRecordSchema,
-      idKind: "string",
-      extractId: (record) => {
-        if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-        return fromBinary(StringValueSchema, record.entityId.value).value;
-      },
-    }),
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
-    ...(histories ? { stateHistory: true, eventHistory: true } : {}),
-  };
-}
-
-function pack(value: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${StringValueSchema.typeName}`,
-    value: toBinary(StringValueSchema, message(value)),
-  });
-}
-
-function entityRecord(value: string, version: number) {
-  return create(EntityRecordSchema, {
-    entityId: pack("task"),
-    state: pack(value),
-    version: { number: version, timestamp: create(TimestampSchema, { seconds: BigInt(version) }) },
-  });
-}
-
-function entityEvent(id: string, version: number) {
-  return create(EventSchema, {
-    id: create(EventIdSchema, { value: id }),
-    context: {
-      producerId: pack("task"),
-      timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
-      version: { number: version },
-    },
-  });
-}
-
 function projectEntityInput(
   context: StorageContext,
 ): EntityStorageInput<string, ReturnType<typeof projectState>> {
@@ -566,10 +572,7 @@ function projectEntityInput(
       clone: (id) => id,
       key: (id) => id,
       pack: packProjectId,
-      unpack: (id) =>
-        id.typeUrl.endsWith(ProjectIdSchema.typeName)
-          ? fromBinary(ProjectIdSchema, id.value).value
-          : undefined,
+      unpack: (id) => AnyPacker.tryUnpack(id, ProjectIdSchema)?.value,
     },
     columns: [],
     recordSpec: new RecordSpec<string, EntityRecord>({
@@ -578,7 +581,7 @@ function projectEntityInput(
       idKind: "string",
       extractId: (record) => {
         if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-        return fromBinary(ProjectIdSchema, record.entityId.value).value;
+        return AnyPacker.unpack(record.entityId, ProjectIdSchema).value;
       },
     }),
     sourceType: ProjectStateSchema,
@@ -593,19 +596,13 @@ function projectState(title: string) {
 }
 
 function packProjectId(value: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${ProjectIdSchema.typeName}`,
-    value: toBinary(ProjectIdSchema, create(ProjectIdSchema, { value })),
-  });
+  return AnyPacker.pack(ProjectIdSchema, create(ProjectIdSchema, { value }));
 }
 
 function projectRecord(title: string, version: number) {
   return create(EntityRecordSchema, {
     entityId: packProjectId("project-1"),
-    state: create(AnySchema, {
-      typeUrl: `type.spine.io/${ProjectStateSchema.typeName}`,
-      value: toBinary(ProjectStateSchema, projectState(title)),
-    }),
+    state: AnyPacker.pack(ProjectStateSchema, projectState(title)),
     version: { number: version, timestamp: create(TimestampSchema, { seconds: BigInt(version) }) },
   });
 }
@@ -618,13 +615,10 @@ function projectEvent(id: string, version: number) {
       timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
       version: { number: version },
     },
-    message: create(AnySchema, {
-      typeUrl: `type.spine.io/${ProjectCreatedSchema.typeName}`,
-      value: toBinary(
-        ProjectCreatedSchema,
-        create(ProjectCreatedSchema, { memberId: [`member-${id}`] }),
-      ),
-    }),
+    message: AnyPacker.pack(
+      ProjectCreatedSchema,
+      create(ProjectCreatedSchema, { memberId: [`member-${id}`] }),
+    ),
   });
 }
 

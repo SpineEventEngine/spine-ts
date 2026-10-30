@@ -18,56 +18,17 @@ import { fileURLToPath, URL } from "node:url";
 import { createConnection } from "mysql2/promise";
 import { Pool } from "pg";
 import { describe, expect, it } from "vitest";
-import { startToolEndpoint } from "./tool-endpoint.js";
 
 interface RecoveryMessage {
   kind: string;
   result?: string;
-  reply?: string;
   error?: string;
-  operation?: string;
-  physicalRequests?: number;
+  stack?: string;
   state?: string;
-  projection?: string;
-  version?: number;
-  events?: string[];
-  operations?: string[];
   historyCount?: number;
-  readSnapshots?: number;
-  inboxHash?: string;
-  inboxIdBytes?: string;
-  inboxStatus?: number;
-  recordStatus?: number;
-  handlerCalls?: number;
-  publicExecutionStatus?: string;
-  acceptedActor?: string;
-  acceptedTenant?: string;
-  keyBytes?: string;
-  uncertainAttempts?: number;
-  reservedOutputBytes?: string;
-  toolIntents?: {
-    effect?: number;
-    dispatched: boolean;
-    outcomeUnknown: boolean;
-    hasResponse: boolean;
-  }[];
-  protocolCalls?: {
-    method: string;
-    settled: boolean;
-    reservedBytes: string;
-  }[];
-  pendingCommands?: {
-    id?: string;
-    delivered: boolean;
-    targets?: { kind: number; fingerprint: string }[];
-  }[];
-  systemOriginalId?: string;
-  systemStoredId?: string;
-  systemEqual?: boolean;
-  terminationReason?: string;
-  unresolvedAttempts?: number;
-  unresolvedToolCalls?: number;
-  message?: string;
+  requests?: number;
+  events?: number;
+  calls?: number;
 }
 
 interface RecoveryScope {
@@ -96,21 +57,6 @@ async function postgresScope(unique: string): Promise<RecoveryScope> {
       }
     },
   };
-}
-
-async function persistedExecutionBytes(schema: string): Promise<readonly Buffer[]> {
-  const url = process.env.SPINE_TS_POSTGRESQL_URL;
-  if (!url || !/^agent_recovery_[a-f0-9]{16}$/.test(schema))
-    throw new Error("Execution proof requires an isolated PostgreSQL schema.");
-  const pool = new Pool({ connectionString: url });
-  try {
-    const rows = await pool.query<{ bytes: Buffer }>(
-      `SELECT "bytes" FROM "${schema}"."agent_execution_agentexecutionrecord" ORDER BY "ID"`,
-    );
-    return rows.rows.map((row) => row.bytes);
-  } finally {
-    await pool.end();
-  }
 }
 
 async function mysqlScope(unique: string): Promise<RecoveryScope> {
@@ -250,51 +196,52 @@ const providers = [
   },
 ] as const;
 
-describe.each(providers)("$name Agent response-saved process recovery", (provider) => {
-  it.skipIf(!provider.ready)(
-    "reuses the persisted response after SIGKILL without a second model request",
-    async () => {
+describe.each(providers)("$name live Agent interruption", (provider) => {
+  it.each(["accepted", "response"])(
+    "does not replay a %s interrupted turn and accepts a fresh signal",
+    async (cut) => {
+      if (!provider.ready) return;
       const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_recovery_${unique}`;
-      const ticket = `REC-${unique}`;
+      const context = `agent_interruption_${unique}`;
+      const ticket = `INT-${unique}`;
       const scope = await isolatedScope(provider.key, unique);
       const first = new RecoveryChild(
         provider.key,
         "crash",
         context,
         ticket,
-        "response",
+        cut,
         "",
         "",
         scope.environment,
       );
       let second: RecoveryChild | undefined;
       try {
-        const admitted = await first.message("admitted");
-        expect(admitted.result, admitted.error).toBe("ok");
-        const saved = await first.message("response-saved");
-        expect(saved.physicalRequests).toBe(1);
-        expect(saved.operation).toBeTruthy();
+        const barrier = await first.message(
+          cut === "accepted" ? "receipt-saved" : "response-saved",
+        );
+        expect(barrier.error).toBeUndefined();
         expect((await first.kill()).signal).toBe("SIGKILL");
-
         second = new RecoveryChild(
           provider.key,
-          "recover",
+          "reopen",
           context,
           ticket,
-          "response",
+          cut,
           "",
           "",
           scope.environment,
         );
-        expect((await second.message("recovery-start")).historyCount).toBeGreaterThan(0);
-        const recovered = await second.message("recovered", 65_000);
-        expect(recovered.state).toBe("A reviewer can help.");
-        expect(recovered.version).toBe(1);
-        expect(recovered.events).toEqual(["A reviewer can help."]);
-        expect(recovered.operations).toContain(saved.operation);
-        expect(recovered.historyCount).toBeGreaterThan(0);
-        expect(recovered.physicalRequests).toBe(0);
+        const reopened = await second.message("reopened");
+        expect(reopened.state).toBeUndefined();
+        expect(reopened.events).toBe(0);
+        expect(reopened.requests).toBe(0);
+        if (cut === "response") expect(reopened.historyCount).toBeGreaterThan(0);
+        const fresh = await second.message("fresh-complete", 65_000);
+        expect(fresh.state).toBe("A reviewer can help.");
+        expect(fresh.requests).toBe(1);
+        expect(fresh.calls).toBe(1);
+        expect(fresh.historyCount).toBeGreaterThan(reopened.historyCount ?? 0);
         expect((await second.exit()).code).toBe(0);
       } finally {
         if (first.process.exitCode === null && first.process.signalCode === null)
@@ -307,603 +254,3 @@ describe.each(providers)("$name Agent response-saved process recovery", (provide
     80_000,
   );
 });
-
-describe("PostgreSQL Agent actor and tenant recovery", () => {
-  it.skipIf(!process.env.SPINE_TS_POSTGRESQL_URL)(
-    "retains the original actor and tenant when a saved response resumes",
-    async () => {
-      const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_tenant_${unique}`;
-      const ticket = `TEN-${unique}`;
-      const scope = await isolatedScope("postgres", unique);
-      const first = new RecoveryChild(
-        "postgres",
-        "crash",
-        context,
-        ticket,
-        "tenant-response",
-        "",
-        "",
-        scope.environment,
-      );
-      let second: RecoveryChild | undefined;
-      try {
-        expect((await first.message("admitted")).result).toBe("ok");
-        let saved: RecoveryMessage;
-        try {
-          saved = await first.message("response-saved");
-        } catch (error) {
-          first.process.send({ kind: "probe-tenant" });
-          const probe = await first.message("tenant-probe");
-          throw new Error(`${String(error)}; nativeProbe=${JSON.stringify(probe)}`);
-        }
-        expect(saved.acceptedActor).toBe("reviewer-a");
-        expect(saved.acceptedTenant).toBe("tenant-a");
-        expect(saved.keyBytes).toBeTruthy();
-        expect((await first.kill()).signal).toBe("SIGKILL");
-
-        second = new RecoveryChild(
-          "postgres",
-          "recover",
-          context,
-          ticket,
-          "tenant-response",
-          saved.keyBytes,
-          "",
-          scope.environment,
-        );
-        const recovered = await second.message("recovered", 65_000);
-        expect(recovered.acceptedActor).toBe("reviewer-a");
-        expect(recovered.acceptedTenant).toBe("tenant-a");
-        expect(recovered.state).toBe("A reviewer can help.");
-        expect(recovered.version).toBe(1);
-        expect(recovered.events).toEqual(["A reviewer can help."]);
-        expect(recovered.physicalRequests).toBe(0);
-        expect((await second.exit()).code).toBe(0);
-      } finally {
-        if (first.process.exitCode === null && first.process.signalCode === null)
-          await first.kill();
-        if (second?.process.exitCode === null && second.process.signalCode === null)
-          await second.kill();
-        await scope.close();
-      }
-    },
-    80_000,
-  );
-});
-
-describe.each(providers)("$name Agent admission process recovery", (provider) => {
-  it.skipIf(!provider.ready)(
-    "discovers persisted Inbox work after SIGKILL before execution",
-    async () => {
-      const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_admission_${unique}`;
-      const ticket = `ADM-${unique}`;
-      const scope = await isolatedScope(provider.key, unique);
-      const first = new RecoveryChild(
-        provider.key,
-        "crash",
-        context,
-        ticket,
-        "admission",
-        "",
-        "",
-        scope.environment,
-      );
-      let second: RecoveryChild | undefined;
-      try {
-        const stored = await first.message("admission-saved");
-        expect(stored.result).toBe("persisted");
-        expect(stored.physicalRequests).toBe(0);
-        expect(stored.inboxHash).toBeTruthy();
-        expect((await first.kill()).signal).toBe("SIGKILL");
-
-        second = new RecoveryChild(
-          provider.key,
-          "recover",
-          context,
-          ticket,
-          "admission",
-          "",
-          stored.inboxIdBytes,
-          scope.environment,
-        );
-        const recovered = await second.message("recovered", 65_000);
-        expect(recovered.state).toBe("A reviewer can help.");
-        expect(recovered.version).toBe(1);
-        expect(recovered.events).toEqual(["A reviewer can help."]);
-        expect(recovered.physicalRequests).toBe(1);
-        expect((await second.exit()).code).toBe(0);
-      } finally {
-        if (first.process.exitCode === null && first.process.signalCode === null)
-          await first.kill();
-        if (second?.process.exitCode === null && second.process.signalCode === null)
-          await second.kill();
-        await scope.close();
-      }
-    },
-    80_000,
-  );
-});
-
-describe.each(providers)("$name Agent completion process recovery", (provider) => {
-  it.skipIf(!provider.ready)(
-    "delivers committed output after SIGKILL before acknowledgement",
-    async () => {
-      const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_completion_${unique}`;
-      const ticket = `COM-${unique}`;
-      const scope = await isolatedScope(provider.key, unique);
-      const first = new RecoveryChild(
-        provider.key,
-        "crash",
-        context,
-        ticket,
-        "complete",
-        "",
-        "",
-        scope.environment,
-      );
-      let second: RecoveryChild | undefined;
-      try {
-        expect((await first.message("admitted")).result).toBe("ok");
-        const completed = await first.message("completion-saved");
-        expect(completed.result).toBe("persisted");
-        expect(completed.physicalRequests).toBe(1);
-        expect((await first.kill()).signal).toBe("SIGKILL");
-
-        second = new RecoveryChild(
-          provider.key,
-          "recover",
-          context,
-          ticket,
-          "complete",
-          "",
-          "",
-          scope.environment,
-        );
-        const recovered = await second.message("recovered", 65_000);
-        expect(recovered.state).toBe("A reviewer can help.");
-        expect(recovered.version).toBe(1);
-        expect(recovered.events).toEqual(["A reviewer can help."]);
-        expect(recovered.physicalRequests).toBe(0);
-        expect((await second.exit()).code).toBe(0);
-      } finally {
-        if (first.process.exitCode === null && first.process.signalCode === null)
-          await first.kill();
-        if (second?.process.exitCode === null && second.process.signalCode === null)
-          await second.kill();
-        await scope.close();
-      }
-    },
-    80_000,
-  );
-});
-
-describe.skipIf(process.env.SPINE_TS_POSTGRESQL_URL === undefined)(
-  "PostgreSQL Agent EventBus handoff across process restart",
-  () => {
-    it("does not track or replay a partly observed Event after SIGKILL", async () => {
-      const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_fanout_${unique}`;
-      const ticket = `FAN-${unique}`;
-      const scope = await isolatedScope("postgres", unique);
-      const first = new RecoveryChild(
-        "postgres",
-        "crash",
-        context,
-        ticket,
-        "fanout",
-        "",
-        "",
-        scope.environment,
-      );
-      let second: RecoveryChild | undefined;
-      try {
-        expect((await first.message("admitted")).result).toBe("ok");
-        const firstReceipt = await first.message("first-recipient-delivered", 65_000);
-        expect(firstReceipt.reply).toBe("A reviewer can help.");
-        const entered = await first.message("second-recipient-entered", 65_000);
-        expect(entered.reply).toBe(firstReceipt.reply);
-        first.process.send({ kind: "probe-fanout" });
-        const saved = await first.message("fanout-saved");
-        expect(saved.recordStatus).toBe(4);
-        expect(saved.handlerCalls).toBe(1);
-        expect(saved.keyBytes).toBeTruthy();
-        expect(saved.pendingCommands).toEqual([]);
-        expect((await first.kill()).signal).toBe("SIGKILL");
-
-        second = new RecoveryChild(
-          "postgres",
-          "recover",
-          context,
-          ticket,
-          "fanout",
-          saved.keyBytes,
-          "",
-          scope.environment,
-        );
-        const recovered = await second.message("recovered", 65_000);
-        expect(recovered.state).toBe("A reviewer can help.");
-        expect(recovered.version).toBe(1);
-        expect(recovered.events).toEqual([]);
-        expect(recovered.physicalRequests).toBe(0);
-        expect(recovered.handlerCalls).toBe(0);
-        expect(recovered.publicExecutionStatus).toBe("completed");
-        expect((await second.exit()).code).toBe(0);
-      } finally {
-        if (first.process.exitCode === null && first.process.signalCode === null)
-          await first.kill();
-        if (second?.process.exitCode === null && second.process.signalCode === null)
-          await second.kill();
-        await scope.close();
-      }
-    }, 90_000);
-  },
-);
-
-describe.skipIf(process.env.SPINE_TS_POSTGRESQL_URL === undefined)(
-  "PostgreSQL Agent changed-registration process recovery",
-  () => {
-    it("rejects a missing generated recipient without changing saved work", async () => {
-      const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_binding_${unique}`;
-      const ticket = `BND-${unique}`;
-      const scope = await isolatedScope("postgres", unique);
-      const schema = scope.environment.SPINE_TS_POSTGRESQL_SCHEMA;
-      if (!schema) throw new Error("PostgreSQL schema was not supplied to the recovery test.");
-      const first = new RecoveryChild(
-        "postgres",
-        "crash",
-        context,
-        ticket,
-        "complete",
-        "",
-        "",
-        scope.environment,
-      );
-      let blocked: RecoveryChild | undefined;
-      let restored: RecoveryChild | undefined;
-      try {
-        expect((await first.message("admitted")).result).toBe("ok");
-        expect((await first.message("completion-saved")).result).toBe("persisted");
-        expect((await first.kill()).signal).toBe("SIGKILL");
-        const before = await persistedExecutionBytes(schema);
-        expect(before).toHaveLength(1);
-
-        blocked = new RecoveryChild(
-          "postgres",
-          "missing-receiver",
-          context,
-          ticket,
-          "complete",
-          "",
-          "",
-          scope.environment,
-        );
-        const rejected = await blocked.message("fatal");
-        expect(rejected.message).toContain(
-          "Generated standalone receiver SupportDraftObserver has no explicitly registered instance",
-        );
-        expect(await persistedExecutionBytes(schema)).toEqual(before);
-
-        restored = new RecoveryChild(
-          "postgres",
-          "recover",
-          context,
-          ticket,
-          "complete",
-          "",
-          "",
-          scope.environment,
-        );
-        const recovered = await restored.message("recovered", 65_000);
-        expect(recovered.state).toBe("A reviewer can help.");
-        expect(recovered.version).toBe(1);
-        expect(recovered.events).toEqual(["A reviewer can help."]);
-        expect(recovered.physicalRequests).toBe(0);
-        expect((await restored.exit()).code).toBe(0);
-      } finally {
-        if (first.process.exitCode === null && first.process.signalCode === null)
-          await first.kill();
-        if (blocked?.process.exitCode === null && blocked.process.signalCode === null)
-          await blocked.kill();
-        if (restored?.process.exitCode === null && restored.process.signalCode === null)
-          await restored.kill();
-        await scope.close();
-      }
-    }, 90_000);
-  },
-);
-
-describe.each(providers)("$name Agent write-tool process recovery", (provider) => {
-  it.skipIf(!provider.ready)(
-    "retains a dispatched write intent without sending the tool a second time",
-    async () => {
-      const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_write_${unique}`;
-      const ticket = `WRT-${unique}`;
-      const scope = await isolatedScope(provider.key, unique);
-      const endpoint = await startToolEndpoint();
-      const environment = {
-        ...scope.environment,
-        SPINE_TS_RECOVERY_ENDPOINT: endpoint.base,
-      };
-      const first = new RecoveryChild(
-        provider.key,
-        "crash",
-        context,
-        ticket,
-        "tool-write",
-        "",
-        "",
-        environment,
-      );
-      let second: RecoveryChild | undefined;
-      try {
-        expect((await first.message("admitted")).result).toBe("ok");
-        const accepted = await first.message("execution-admitted");
-        expect(accepted.keyBytes).toBeTruthy();
-        await endpoint.waitForWrite();
-        expect(endpoint.providerRequests).toBe(1);
-        expect(endpoint.writeCalls).toBe(1);
-        first.process.send({ kind: "probe-tool" });
-        const saved = await first.message("tool-journal");
-        expect(saved.toolIntents).toEqual([
-          expect.objectContaining({ dispatched: true, hasResponse: false }),
-        ]);
-        expect(saved.protocolCalls).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({ method: "tools/call", settled: false }),
-          ]),
-        );
-        expect((await first.kill()).signal).toBe("SIGKILL");
-
-        second = new RecoveryChild(
-          provider.key,
-          "recover",
-          context,
-          ticket,
-          "tool-write",
-          accepted.keyBytes,
-          "",
-          environment,
-        );
-        let terminal: RecoveryMessage;
-        try {
-          terminal = await second.message("tool-unknown-terminated", 65_000);
-        } catch (error) {
-          throw new Error(
-            `${String(error)}; providerRequests=${String(endpoint.providerRequests)}; ` +
-              `writeCalls=${String(endpoint.writeCalls)}`,
-          );
-        }
-        expect(terminal.recordStatus).toBe(5);
-        expect(terminal.version).toBe(0);
-        expect(terminal.events).toEqual([]);
-        expect(terminal.terminationReason).toBe("TOOL_OUTCOME_UNKNOWN");
-        expect(terminal.unresolvedToolCalls).toBe(1);
-        expect(terminal.systemOriginalId).toBeTruthy();
-        expect(terminal.systemStoredId).toBe(terminal.systemOriginalId);
-        expect(terminal.systemEqual).toBe(true);
-        expect(endpoint.writeCalls).toBe(1);
-        expect(endpoint.providerRequests).toBe(1);
-        expect((await second.exit()).code).toBe(0);
-      } finally {
-        if (first.process.exitCode === null && first.process.signalCode === null)
-          await first.kill();
-        if (second?.process.exitCode === null && second.process.signalCode === null)
-          await second.kill();
-        await endpoint.close();
-        await scope.close();
-      }
-    },
-    85_000,
-  );
-});
-
-describe.skipIf(process.env.SPINE_TS_POSTGRESQL_URL === undefined)(
-  "PostgreSQL Agent saved read process recovery",
-  () => {
-    it("reuses the original Projection read and completed lookup tool result", async () => {
-      const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_lookup_${unique}`;
-      const ticket = `LKP-${unique}`;
-      const scope = await isolatedScope("postgres", unique);
-      const endpoint = await startToolEndpoint("read");
-      const environment = { ...scope.environment, SPINE_TS_RECOVERY_ENDPOINT: endpoint.base };
-      const first = new RecoveryChild(
-        "postgres",
-        "crash",
-        context,
-        ticket,
-        "tool-read",
-        "",
-        "",
-        environment,
-      );
-      let revised: RecoveryChild | undefined;
-      let second: RecoveryChild | undefined;
-      try {
-        expect((await first.message("admitted")).result).toBe("ok");
-        const saved = await first.message("tool-result-saved", 65_000);
-        expect(saved.keyBytes).toBeTruthy();
-        expect(saved.readSnapshots).toBe(1);
-        expect(saved.toolIntents).toEqual([
-          expect.objectContaining({ dispatched: true, hasResponse: true }),
-        ]);
-        expect(endpoint.providerRequests).toBe(1);
-        expect(endpoint.readCalls).toBe(1);
-        expect((await first.kill()).signal).toBe("SIGKILL");
-
-        revised = new RecoveryChild(
-          "postgres",
-          "revise-projection",
-          context,
-          ticket,
-          "tool-read",
-          "",
-          "",
-          environment,
-        );
-        expect((await revised.message("projection-revised")).reply).toBe("Revised draft");
-        expect((await revised.exit()).code).toBe(0);
-
-        second = new RecoveryChild(
-          "postgres",
-          "recover",
-          context,
-          ticket,
-          "tool-read",
-          saved.keyBytes,
-          "",
-          environment,
-        );
-        let recovered: RecoveryMessage;
-        try {
-          recovered = await second.message("recovered", 65_000);
-        } catch (error) {
-          throw new Error(
-            `${String(error)}; providerRequests=${String(endpoint.providerRequests)}; ` +
-              `readCalls=${String(endpoint.readCalls)}`,
-          );
-        }
-        expect(recovered.state).toBe("Ticket found; we can help. Earlier draft: Original draft");
-        expect(recovered.events).toEqual([recovered.state]);
-        expect(recovered.version).toBe(1);
-        expect(recovered.readSnapshots).toBe(1);
-        expect(recovered.toolIntents).toEqual([
-          expect.objectContaining({ dispatched: true, hasResponse: true }),
-        ]);
-        expect(endpoint.providerRequests).toBe(2);
-        expect(endpoint.readCalls).toBe(1);
-        expect(endpoint.writeCalls).toBe(0);
-        expect((await second.exit()).code).toBe(0);
-      } finally {
-        if (first.process.exitCode === null && first.process.signalCode === null)
-          await first.kill();
-        if (revised?.process.exitCode === null && revised.process.signalCode === null)
-          await revised.kill();
-        if (second?.process.exitCode === null && second.process.signalCode === null)
-          await second.kill();
-        await endpoint.close();
-        await scope.close();
-      }
-    }, 95_000);
-  },
-);
-
-describe.skipIf(process.env.SPINE_TS_POSTGRESQL_URL === undefined)(
-  "PostgreSQL Agent dispatched-request process recovery",
-  () => {
-    it("retains uncertain request credit without sending the model again", async () => {
-      const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_dispatched_${unique}`;
-      const ticket = `DSP-${unique}`;
-      const scope = await isolatedScope("postgres", unique);
-      const first = new RecoveryChild(
-        "postgres",
-        "crash",
-        context,
-        ticket,
-        "dispatched",
-        "",
-        "",
-        scope.environment,
-      );
-      let second: RecoveryChild | undefined;
-      try {
-        expect((await first.message("admitted")).result).toBe("ok");
-        const dispatched = await first.message("request-dispatched");
-        expect(dispatched.physicalRequests).toBe(1);
-        expect(dispatched.uncertainAttempts).toBe(1);
-        expect(BigInt(dispatched.reservedOutputBytes ?? "0")).toBeGreaterThan(0n);
-        expect(dispatched.keyBytes).toBeTruthy();
-        expect((await first.kill()).signal).toBe("SIGKILL");
-
-        second = new RecoveryChild(
-          "postgres",
-          "recover",
-          context,
-          ticket,
-          "dispatched",
-          dispatched.keyBytes,
-          "",
-          scope.environment,
-        );
-        const terminal = await second.message("uncertain-terminated", 65_000);
-        expect(terminal.recordStatus).toBe(5);
-        expect(terminal.uncertainAttempts).toBe(1);
-        expect(terminal.reservedOutputBytes).toBe(dispatched.reservedOutputBytes);
-        expect(terminal.version).toBe(0);
-        expect(terminal.events).toEqual([]);
-        expect(terminal.terminationReason).toBe("MODEL_OUTCOME_UNKNOWN");
-        expect(terminal.unresolvedAttempts).toBe(1);
-        expect(terminal.systemOriginalId).toBeTruthy();
-        expect(terminal.systemStoredId).toBe(terminal.systemOriginalId);
-        expect(terminal.systemEqual).toBe(true);
-        expect(terminal.physicalRequests).toBe(0);
-        expect((await second.exit()).code).toBe(0);
-      } finally {
-        if (first.process.exitCode === null && first.process.signalCode === null)
-          await first.kill();
-        if (second?.process.exitCode === null && second.process.signalCode === null)
-          await second.kill();
-        await scope.close();
-      }
-    }, 80_000);
-  },
-);
-
-describe.skipIf(process.env.SPINE_TS_POSTGRESQL_URL === undefined)(
-  "PostgreSQL Agent execution admission process recovery",
-  () => {
-    it("discovers a persisted Agent invocation after SIGKILL", async () => {
-      const unique = randomUUID().replaceAll("-", "").slice(0, 16);
-      const context = `agent_execution_admission_${unique}`;
-      const ticket = `EXA-${unique}`;
-      const scope = await isolatedScope("postgres", unique);
-      const first = new RecoveryChild(
-        "postgres",
-        "crash",
-        context,
-        ticket,
-        "execution-admit",
-        "",
-        "",
-        scope.environment,
-      );
-      let second: RecoveryChild | undefined;
-      try {
-        const stored = await first.message("execution-admission-saved");
-        expect(stored.result).toBe("persisted");
-        expect(stored.physicalRequests).toBe(0);
-        expect(stored.keyBytes).toBeTruthy();
-        expect((await first.kill()).signal).toBe("SIGKILL");
-
-        second = new RecoveryChild(
-          "postgres",
-          "recover",
-          context,
-          ticket,
-          "execution-admit",
-          stored.keyBytes,
-          stored.inboxIdBytes,
-          scope.environment,
-        );
-        const recovered = await second.message("recovered", 65_000);
-        expect(recovered.state).toBe("A reviewer can help.");
-        expect(recovered.version).toBe(1);
-        expect(recovered.events).toEqual(["A reviewer can help."]);
-        expect(recovered.physicalRequests).toBe(1);
-        expect((await second.exit()).code).toBe(0);
-      } finally {
-        if (first.process.exitCode === null && first.process.signalCode === null)
-          await first.kill();
-        if (second?.process.exitCode === null && second.process.signalCode === null)
-          await second.kill();
-        await scope.close();
-      }
-    }, 80_000);
-  },
-);

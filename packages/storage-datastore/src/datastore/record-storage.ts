@@ -14,7 +14,7 @@
 
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { and, Datastore, or, PropertyFilter } from "@google-cloud/datastore";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import { AgentHistoryRecordSchema } from "@spine-event-engine/proto/generated/spine/server/agent/history_record_pb.js";
 import {
   ColumnMappings,
@@ -33,6 +33,7 @@ import { TenantBoundary } from "@spine-event-engine/storage/provider";
 import { StorageQueryValues } from "@spine-event-engine/storage/provider";
 
 import { DatastoreColumnMapping } from "./column-mapping.js";
+import { RecordKinds } from "./record-kind.js";
 import { DatastoreIdColumn } from "./id-column.js";
 import {
   DefaultNamespaceConverter,
@@ -166,6 +167,7 @@ class FlatEntityCodec<I, R extends Message> {
    * @param kind Optional explicit physical kind.
    * @param namespaceConverter Converts tenant IDs to Datastore namespaces.
    * @param stringifiers Converts message-valued IDs and columns.
+   * @param namespace Preselected native tenant namespace.
    */
   constructor(
     context: StorageContext,
@@ -176,18 +178,20 @@ class FlatEntityCodec<I, R extends Message> {
     kind: string | undefined,
     namespaceConverter: NamespaceConverter,
     stringifiers: StringifierRegistry,
+    namespace?: string,
   ) {
     this.#kind =
-      kind ??
-      (group === undefined
-        ? recordSpec.sourceType.typeName
-        : `${group.name}_${recordSpec.recordType.typeName.split(".").at(-1) ?? ""}`);
+      kind ?? RecordKinds.of(recordSpec.sourceType.typeName, recordSpec.recordType.typeName, group);
     if (this.#kind.trim().length === 0 || Buffer.byteLength(this.#kind, "utf8") > 1_500)
       throw new Error("Datastore record kind must be non-blank and at most 1,500 bytes.");
     const boundary = TenantBoundary.of(context);
-    this.#namespace = boundary.single
-      ? client.namespace
-      : namespaceConverter.toNamespace(boundary.tenantId as NonNullable<typeof boundary.tenantId>);
+    this.#namespace =
+      namespace ??
+      (boundary.single
+        ? client.namespace
+        : namespaceConverter.toNamespace(
+            boundary.tenantId as NonNullable<typeof boundary.tenantId>,
+          ));
     this.#idColumn = new DatastoreIdColumn(recordSpec.idType, stringifiers);
     this.#columnMapping = new DatastoreColumnMapping(stringifiers);
   }
@@ -322,6 +326,14 @@ class FlatEntityCodec<I, R extends Message> {
   }
 
   /**
+   * Returns the native mapping selected for this codec.
+   * @returns The exact namespace and kind used by provider operations.
+   */
+  mapping(): { readonly namespace: string | undefined; readonly kind: string } {
+    return { namespace: this.#namespace, kind: this.#kind };
+  }
+
+  /**
    * Converts a declared record column value to its provider representation.
    *
    * @param column Declared record column name.
@@ -453,6 +465,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @param kind The optional physical Datastore kind override.
    * @param namespaceConverter Converts complete tenants to native namespaces.
    * @param stringifiers Converts message-valued IDs and declared columns.
+   * @param namespace Preselected native tenant namespace.
    */
   constructor(
     context: StorageContext,
@@ -462,7 +475,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     group?: StorageGroup,
     kind?: string,
     namespaceConverter: NamespaceConverter = new DefaultNamespaceConverter(),
-    stringifiers: StringifierRegistry = new StringifierRegistry(),
+    stringifiers: StringifierRegistry = defaultStringifierRegistry,
+    namespace?: string,
   ) {
     super(context, recordSpec);
     this.#codec = new FlatEntityCodec(
@@ -476,7 +490,17 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
         ? namespaceConverter
         : new NamespaceAssignments(namespaceConverter),
       stringifiers,
+      namespace,
     );
+  }
+
+  /**
+   * Returns the physical mapping captured when this handle opened.
+   * @returns The exact namespace and kind used for its records.
+   * @internal
+   */
+  nativeMapping(): { readonly namespace: string | undefined; readonly kind: string } {
+    return this.#codec.mapping();
   }
 
   /**
@@ -589,34 +613,6 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       cursor: info.more ? next : undefined,
       hasMore: info.more,
     };
-  }
-
-  /**
-   * Reads at most two indexed successor records inside the caller's transaction.
-   *
-   * @param filters Native indexed query predicates.
-   * @param orderProperty Native property containing the complete order key.
-   * @param transaction Current native transaction.
-   * @returns Earliest scoped rows in native order.
-   */
-  async queryTransactionSuccessors(
-    transaction: ReturnType<Datastore["transaction"]>,
-    filters: readonly DatastoreRangeFilter[],
-    orderProperty: string,
-  ): Promise<readonly R[]> {
-    const query = this.#codec.createQuery(this.client);
-    for (const filter of filters)
-      query.filter(
-        new PropertyFilter(
-          filter.property,
-          filter.operator,
-          this.#codec.columnValue(filter.property, filter.value),
-        ),
-      );
-    query.order(orderProperty);
-    query.limit(2);
-    const response = await transaction.runQuery(query, wrappedReadOptions);
-    return DatastoreResults.entities(response).map((entity) => this.#codec.decode(entity));
   }
 
   /**

@@ -19,6 +19,22 @@ history and Entity commit contracts, query values, tenant boundaries/catalogs,
 and record access. The storage root intentionally does not export
 these provider seams; application code uses its root storage contracts instead.
 
+`StorageFactory.close()` synchronously rejects new handles and returns a Promise
+for admitted provider work and cleanup. Await it to observe cleanup failures;
+repeated calls return the same completion. Provider-only Entity commit handles
+also await admitted commits before releasing retained records. Ordinary
+`RecordStorage.close()` remains synchronous.
+
+`StorageFactory.checkConnection()` is a public read-only diagnostic for the
+configured shared destination. The base factory rejects unsupported checks and
+closed factories reject them. The memory factory succeeds locally while open;
+this does not admit a tenant or create records. For model preparation, provider
+adapters register through the provider-only `StoragePreparations` registry. Its `prepareRecord`,
+`prepareEntity`, and `prepareAgentHistory` methods accept declarative definitions
+and a `"create"` or `"check"` mode without constructing Storage. Memory validates
+record-family layouts and the Agent audit tenant boundary and state type locally. An unregistered provider
+rejects preparation rather than reporting success.
+
 The provider entry point also exports `AgentHistoryStorage`,
 `AgentHistoryStorageFactories`, `AgentHistoryKeys`, and
 `AgentHistoryConformance`. Calling `AgentHistoryStorageFactories.create()` to
@@ -68,65 +84,40 @@ still have more candidates. Continue until `hasMore` is false, rather than
 stopping at the first empty page. Repeating a valid continuation may repeat the
 page. A fresh sweep starts without a continuation.
 
-Memory pages use an admission-time index and capture its length for that sweep;
+Memory pages use an explicit-registration index and capture its length for that sweep;
 PostgreSQL and MySQL page their configured tenant collections. Datastore pages
-its bounded early-admission cache and then native namespace metadata using a
-query limit and native cursor. A tenant can appear in both phases. Existing
-Agent claims prevent that duplicate discovery from running the same accepted
-invocation concurrently. An empty native `MORE_RESULTS_AFTER_LIMIT` tail that repeats its cursor ends
+native namespace metadata using a query limit and native cursor. An empty native
+`MORE_RESULTS_AFTER_LIMIT` tail that repeats its cursor ends
 that sweep; other continuing pages must advance. Datastore destroys its query
 stream when the caller cancels the read.
 
 Catalogs check cancellation before starting work and before returning a result.
 Paging is a finite traversal, not an atomic catalog snapshot: a concurrent
-admission can appear in the current or next sweep. Agent recovery uses this
-paged contract; the separate `all()` operation remains available for existing
-callers that require the complete catalog.
+registration can appear in the current or next sweep. The separate `all()`
+operation remains available to callers requiring the complete catalog.
 
-## Agent execution storage
+## Agent live persistence and history
 
-`AgentExecutionStorageFactories` opens the provider-only execution handle for an
-Agent repository and tenant. `supports()` checks factory registration without
-opening a tenant. It does not replace the provider checks made when admitting
-work. Application code configures a storage factory; it does not claim or poll
-these records directly.
+Providers retain indexed Agent history separately from Entity state. The
+provider-only `AgentHistoryStorage.appendAll()` commits one immutable audit
+batch; reads use the same scoped indexes and finite cursors as individual
+appends. A complete System audit group is saved before its original Event is
+published. Its failure remains observable and does not create a replacement
+application Event.
 
-The handle's `capacity` reports encoded execution, per-instance and history-record
-limits plus a transaction payload limit where the provider enforces one.
-`AgentExecutionSizes` measures the full internal Protobuf wrappers, including
-scope and metadata. The runtime must allow for the bounded response and complete
-record overhead before dispatch; a payload limit is not a history retention rule.
+A typed receipt records live admission without a replayable execution record.
+`EntityCommitStorage.commitAgent()` atomically compares an exact Entity image
+and model preferences, then writes the accepted state, preference and history
+changes. An unchanged-state or preference-only turn can succeed without
+increasing the Entity Version. Failed comparisons write no prefix. The ordinary
+`commit()` contract below remains separate and can retain prefix writes after
+an error. Built-in providers implement the live Agent operation with their
+native transaction semantics; custom providers must explicitly support it.
 
-`admit()` stores the original signal, typed recipient and selected handlers once.
-`claim()` permits one execution at a time for an Agent instance. `renew()`,
-`update()`, `complete()` and `markDelivered()` check the current claim token.
-Updates also compare the exact previously read record. Completion compares the
-initial Entity Version and stores the Entity changes, mandatory histories, model
-preferences and original outgoing Command obligations in one provider operation. Emitted
-domain Events are retained in immutable Agent history and handed to the normal
-EventBus after completion; they are not saved delivery obligations. This includes
-handlers that change no state or produce only a Command.
-
-Pending queries read one pending invocation per Agent instance from an index. A page
-carries its original time cutoff and the provider-observed continuation, so the
-caller can continue even when another execution claims a returned invocation.
-These internal pages are separate from application history pages. Eligibility
-and claim expiry use Spine `Time`; original Inbox order determines which signal
-runs next within an instance.
-
-Each saved outgoing Command can receive one dispatch plan before transport
-begins. The plan and original Command envelope cannot be replaced.
-`markDelivered()` requires that plan and a current claim. Command retries must
-still visit every saved recipient; these records do not make downstream
-application callbacks execute exactly once. Independently, the framework's
-internal EventStore retry operation accepts an identical existing envelope;
-ordinary public EventStore append still rejects duplicate IDs. EventStore
-history is not an Agent Event delivery queue.
-
-The memory implementation coordinates changes only within a shared in-process
-backend. PostgreSQL, transactional MySQL and Datastore use native transactions.
-Database query, index and payload requirements are documented in each provider's
-reference. No execution-storage operation trims the Agent's history.
+Memory coordinates these changes within a shared in-process backend;
+PostgreSQL, transactional MySQL/MariaDB, and Datastore use their native atomic
+storage operations. Closing a factory drains admitted work before releasing
+retained private handles.
 
 ## Record storage
 
@@ -197,14 +188,17 @@ that stated overlap. See each provider reference for mappings and index needs.
 
 ## Lifecycle
 
-The base `StorageFactory.close()` prevents later record-storage creation. The
-in-memory factory follows that behavior and leaves existing record handles open
-until each handle closes. `RecordStorage.close()` rejects that handle's later
-operations. Datastore follows the base factory behavior. Adapters can define a
-stronger shutdown lifecycle: the MySQL factory closes live handles while it
-drains its pool. Read the [Datastore reference](../storage-datastore/REFERENCE.md)
-and [MySQL reference](../storage-mysql/REFERENCE.md) or [PostgreSQL reference](../storage-postgres/REFERENCE.md) before relying on shutdown
-behavior. The in-memory backend is ephemeral and process-local. Passing one
+`StorageFactory.close()` fences new storage creation immediately and returns a
+promise that settles after its retained commit work and provider resources close.
+The in-memory factory drains retained commits and closes its tenant catalog;
+independent record handles remain open until their own synchronous
+`RecordStorage.close()`. PostgreSQL and MySQL also close their live record
+handles and connection pools. Datastore closes retained Entity bundles and its
+tenant catalog. Cleanup failures reject the factory close promise. Read the
+[Datastore reference](../storage-datastore/REFERENCE.md),
+[MySQL reference](../storage-mysql/REFERENCE.md), and
+[PostgreSQL reference](../storage-postgres/REFERENCE.md) for provider details.
+The in-memory backend is ephemeral and process-local. Passing one
 `InMemoryStorageBackend` to multiple in-memory factories deliberately shares
 its scoped rows.
 
@@ -229,6 +223,14 @@ runs its callback, then inserts with an atomic absent-slot condition. Competing
 callbacks may both run and may each have effects, but at most one Event is stored.
 The framework EventBus dispatches only after strict insertion succeeds.
 
+An `EventStore` retains its RecordStorage objects for reuse by the corresponding
+tenants. Always await `eventStore.close()` before closing its factory. Closing
+rejects new storage operations, waits for an already admitted query or insertion
+batch to settle, and then closes every retained store. It leaves the factory open;
+cleanup failures reject the close promise. Repeated calls return the same outcome.
+The callback in `acceptThenAppend()` runs between storage operations: closing from
+that callback completes, and the later insertion rejects because the store is closed.
+
 History ports are lazy. When a history is disabled, the in-memory provider does
 not open or allocate its grouped records. Current Entity loading always uses
 the current record, never retained history. Event history is diagnostic data,
@@ -243,10 +245,16 @@ record layouts are unchanged.
 
 The built-in providers capture prepared input before I/O and write state history,
 diagnostic Events, delivery Events, then current state as independent records.
-SQL and Datastore providers automatically retry one classified transient Entity
-persistence failure using that captured input. In memory, a caller retry must
-reuse the same versions and Event IDs without rerunning the handler. A later
-failure leaves completed writes in place. The presence of a delivery Event
-alone does not prove the entire Entity save completed. Concurrent saves may
-interleave, including current-state writes. Automatic Entity versions,
-single-record atomic compare-and-set, and immutable-record checks remain.
+For ordinary Entity `commit()`, SQL and Datastore providers automatically retry
+one classified transient persistence failure using the captured input. In
+memory, a caller retry must reuse the same versions and Event IDs without
+rerunning the handler. A later failure leaves completed writes in place. The
+presence of a delivery Event alone does not prove the entire Entity save
+completed. Concurrent ordinary saves may interleave, including current-state
+writes. Automatic Entity versions, single-record atomic compare-and-set, and
+immutable-record checks remain.
+
+The provider-only `commitAgent()` instead checks the initial Entity version and
+complete model-preference image, then atomically commits any changed Entity
+record, final Agent audit, and replacement preferences. It also checks the
+initial Entity version when the turn has no state change.

@@ -17,7 +17,7 @@ import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
 import { Client } from "@spine-event-engine/client-web";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import { ActorContextSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilterSchema,
@@ -79,7 +79,7 @@ const query = create(QuerySchema, {
               create(FilterSchema, {
                 fieldPath: { fieldName: ["board"] },
                 operator: Filter_Operator.EQUAL,
-                value: AnyMessages.pack(BoardIdSchema, create(BoardIdSchema, { value: board })),
+                value: AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: board })),
               }),
             ],
           }),
@@ -162,11 +162,11 @@ const postAndConfirm = async () => {
     for await (const delivery of result.subscription.updates) {
       if (delivery.kind !== "update" || delivery.update.update.case !== "eventUpdates") continue;
       for (const event of delivery.update.update.value.event) {
-        const posted = event.message && AnyMessages.unpack(event.message, MessagePostedSchema);
+        const posted = event.message && AnyPacker.tryUnpack(event.message, MessagePostedSchema);
         if (posted?.id?.value === command.id?.value)
           return { kind: "confirmed", acknowledgement: result.acknowledgement.kind };
         const duplicate =
-          event.message && AnyMessages.unpack(event.message, MessageAlreadyPostedSchema);
+          event.message && AnyPacker.tryUnpack(event.message, MessageAlreadyPostedSchema);
         if (duplicate?.id?.value === command.id?.value)
           return { kind: "alreadyPosted", acknowledgement: result.acknowledgement.kind };
       }

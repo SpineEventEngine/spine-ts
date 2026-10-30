@@ -13,15 +13,1055 @@
  */
 
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import type { ILogLayer } from "loglayer";
 import { create } from "@bufbuild/protobuf";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
+import { Inbox } from "../../src/delivery/inbox.js";
+import { InboxStorage } from "../../src/delivery/inbox-storage.js";
+import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
+import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
+import { AgentDeliveryScope } from "../../src/delivery/agent-delivery-scope.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import { ShardIndex } from "../../src/index.js";
+import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Delivery fencing", () => {
+  it("reports one safe detached failure for a burst of wakes during shard pickup", async () => {
+    const row = createMessage("burst-failure", "signal", 1n);
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const entered = Promise.withResolvers<undefined>();
+    const logs: string[] = [];
+    const metadata: Record<string, unknown>[] = [];
+    const logger = {
+      withMetadata: (facts: Record<string, unknown>) => {
+        metadata.push(facts);
+        return { error: (message: string) => logs.push(message) };
+      },
+    };
+    const delivery = agentDelivery(
+      [],
+      () => undefined,
+      undefined,
+      new Set(),
+      logger as unknown as ILogLayer,
+    );
+    let pickups = 0;
+    delivery.shards.pickUp = () => {
+      if (++pickups === 1) {
+        entered.resolve(undefined);
+        return pickup.promise;
+      }
+      return Promise.resolve(undefined);
+    };
+    const sensitive = { secret: "background read details" };
+    delivery.inbox.read = vi.fn().mockRejectedValue(sensitive);
+    delivery.setReplay(() => undefined);
+    for (let count = 0; count < 4; count++) delivery.wake(row.shard);
+    await entered.promise;
+    pickup.resolve(session());
+    await delivery.whenIdle().catch(() => undefined);
+    expect(logs).toEqual(["Background Delivery failed."]);
+    expect(metadata).toEqual([{ shardId: row.shard.key(), errorName: "UnknownError" }]);
+    await delivery.close().catch(() => undefined);
+  });
+
+  it("does not log a failed background run joined by an exact handoff", async () => {
+    const row = createMessage("mixed-failure", "signal", 1n);
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const entered = Promise.withResolvers<undefined>();
+    const failure = new Error("background read failed");
+    const logs: string[] = [];
+    const logger = { withMetadata: () => ({ error: (message: string) => logs.push(message) }) };
+    const delivery = agentDelivery(
+      [],
+      () => undefined,
+      undefined,
+      new Set(),
+      logger as unknown as ILogLayer,
+    );
+    let pickups = 0;
+    delivery.shards.pickUp = () => {
+      if (++pickups === 1) {
+        entered.resolve(undefined);
+        return pickup.promise;
+      }
+      return Promise.resolve(undefined);
+    };
+    delivery.inbox.read = () => Promise.reject(failure);
+    delivery.setReplay(() => undefined);
+    delivery.wake(row.shard);
+    await entered.promise;
+    const handoff = delivery.drainMessage(row, { onMessage: () => undefined });
+    pickup.resolve(session());
+    await expect(handoff).resolves.toMatchObject({
+      acknowledged: false,
+      outcome: { kind: "failed", error: failure },
+    });
+    await delivery.whenIdle().catch(() => undefined);
+    expect(logs).toEqual([]);
+    await delivery.close().catch(() => undefined);
+  });
+
+  it("logs a later shard failure after the exact row was acknowledged", async () => {
+    const row = createMessage("later-failure", "signal", 1n);
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const entered = Promise.withResolvers<undefined>();
+    const acknowledged = new Set<string>();
+    const logs: string[] = [];
+    const logger = { withMetadata: () => ({ error: (message: string) => logs.push(message) }) };
+    const delivery = agentDelivery(
+      [row],
+      (message) => acknowledged.add(message.id.value),
+      undefined,
+      acknowledged,
+      logger as unknown as ILogLayer,
+    );
+    let pickups = 0;
+    delivery.shards.pickUp = () => {
+      if (++pickups === 1) {
+        entered.resolve(undefined);
+        return pickup.promise;
+      }
+      return Promise.resolve(undefined);
+    };
+    delivery.inbox.read = () =>
+      acknowledged.has(row.id.value)
+        ? Promise.reject(new Error("later inbox read failed"))
+        : Promise.resolve([row]);
+    delivery.setReplay(() => undefined);
+    delivery.wake(row.shard);
+    await entered.promise;
+    const handoff = delivery.drainMessage(row, { onMessage: () => undefined });
+    pickup.resolve(session());
+    await expect(handoff).resolves.toMatchObject({ acknowledged: true });
+    await delivery.whenIdle().catch(() => undefined);
+    expect(logs).toEqual(["Background Delivery failed."]);
+    await delivery.close().catch(() => undefined);
+  });
+
+  it("settles concurrent handoffs for the same row after one dispatch", async () => {
+    const message = createMessage("same-row", "signal", 1n);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const acknowledged = new Set<string>();
+    const delivery = agentDelivery(
+      [message],
+      (next) => acknowledged.add(next.id.value),
+      undefined,
+      acknowledged,
+    );
+    delivery.shards.pickUp = () => Promise.resolve(session());
+    delivery.inbox.read = async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      return acknowledged.has(message.id.value) ? [] : [message];
+    };
+    let dispatched = 0;
+    const first = delivery.drainMessage(message, {
+      onMessage: () => {
+        dispatched++;
+      },
+    });
+    await entered.promise;
+    const second = delivery.drainMessage(message, {
+      onMessage: () => {
+        dispatched++;
+      },
+    });
+    release.resolve(undefined);
+    const outcomes = await Promise.all([first, second]);
+    expect(outcomes.map((outcome) => outcome.acknowledged)).toEqual([true, true]);
+    expect(dispatched).toBe(1);
+    await delivery.close();
+  });
+
+  it.each(["supervisor-first", "direct-first"] as const)(
+    "shares one retained shard run for %s admission",
+    async (order) => {
+      const message = createMessage(`shared-${order}`, "signal", 1n);
+      const acknowledged = new Set<string>();
+      const delivery = agentDelivery(
+        [message],
+        (next) => acknowledged.add(next.id.value),
+        () => undefined,
+        acknowledged,
+      );
+      delivery.setReplay(() => undefined);
+      const entered = Promise.withResolvers<undefined>();
+      const release = Promise.withResolvers<undefined>();
+      let pickups = 0;
+      delivery.shards.pickUp = () => Promise.resolve(++pickups === 1 ? session() : undefined);
+      delivery.inbox.read = async () => {
+        entered.resolve(undefined);
+        await release.promise;
+        return acknowledged.has(message.id.value) ? [] : [message];
+      };
+      const controlled = () =>
+        delivery.runControlled({
+          shard: message.shard,
+          onMessage: () => undefined,
+          signal: new AbortController().signal,
+        });
+      const first =
+        order === "supervisor-first"
+          ? controlled()
+          : delivery.drainMessage(message, { onMessage: () => undefined });
+      await entered.promise;
+      const second =
+        order === "supervisor-first"
+          ? delivery.drainMessage(message, { onMessage: () => undefined })
+          : controlled();
+      release.resolve(undefined);
+      const [earlier, later] = await Promise.all([first, second]);
+      expect(earlier).toBeDefined();
+      expect(later).toBeDefined();
+      expect(pickups).toBe(1);
+      expect(acknowledged.has(message.id.value)).toBe(true);
+      await delivery.close();
+    },
+  );
+  it("closes both retained physical stores after direct work without closing the factory", async () => {
+    const factory = new InMemoryStorageFactory();
+    const opened = vi.spyOn(factory, "createRecordStorage");
+    const delivery = new Delivery({
+      context: { name: "SharedPhysicalDelivery", multitenant: false },
+      storageFactory: factory,
+    });
+    expect(delivery.inbox).toBeInstanceOf(Inbox);
+    expect(delivery.shards).toBeInstanceOf(ShardedWorkRegistry);
+    await (delivery.inbox as Inbox).storage.write(createMessage("retained", "signal", 1n));
+    await delivery.shards.pickUp(ShardIndex.single(), delivery.worker);
+    expect(opened).toHaveBeenCalledTimes(2);
+    await delivery.close();
+    await delivery.close();
+    await expect((delivery.inbox as Inbox).storage.read(ShardIndex.single())).rejects.toThrow(
+      "closed",
+    );
+    await expect(factory.checkConnection()).resolves.toBeUndefined();
+  });
+
+  it("restarts a finite scan when a durable wake lands at its terminal decision", async () => {
+    const message = createMessage("terminal-wake", "signal", 1n);
+    const rows: ReturnType<typeof createMessage>[] = [];
+    const delivered = Promise.withResolvers<undefined>();
+    const delivery = agentDelivery(rows, () => {
+      delivered.resolve(undefined);
+    });
+    let reads = 0;
+    delivery.inbox.read = () => {
+      if (++reads === 1) {
+        queueMicrotask(() => {
+          queueMicrotask(() => {
+            queueMicrotask(() => {
+              rows.push(message);
+              delivery.wake(message.shard);
+            });
+          });
+        });
+        return Promise.resolve([]);
+      }
+      return Promise.resolve(rows);
+    };
+    delivery.setReplay(() => undefined);
+    delivery.wake(message.shard);
+    await delivered.promise;
+    await delivery.whenIdle();
+    expect(reads).toBeGreaterThanOrEqual(2);
+    await delivery.close();
+  });
+
+  it("rechecks a direct deferred route without an onReady observer", async () => {
+    const message = createMessage("direct-retry", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const delivery = agentDelivery([message], (next) => {
+      acknowledged.add(next.id.value);
+    });
+    const readiness = new DeliveryReadiness();
+    let replayed = 0;
+    readiness.configureDirect(() => {
+      replayed++;
+      return Promise.resolve();
+    });
+    readiness.route(delivery);
+    readiness.notify({
+      label: message.label,
+      targetTypeUrl: message.inboxId.targetTypeUrl,
+      shard: message.shard,
+    });
+    await delivery.whenIdle();
+    expect(replayed).toBe(1);
+    expect(acknowledged.has(message.id.value)).toBe(true);
+    await readiness.close();
+  });
+
+  it("keeps direct close pending after acknowledgement until entered Agent work settles", async () => {
+    const message = createMessage("close-agent", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const release = Promise.withResolvers<undefined>();
+    const entered = Promise.withResolvers<undefined>();
+    let released = 0;
+    const delivery = agentDelivery(
+      [message],
+      (next) => {
+        acknowledged.add(next.id.value);
+      },
+      () => {
+        released++;
+      },
+      acknowledged,
+    );
+    const readiness = new DeliveryReadiness();
+    readiness.route(delivery);
+    await delivery.drainMessage(message, {
+      onMessage: () => {
+        AgentDeliveryScope.record({
+          kind: "accepted",
+          discard: () => undefined,
+          run: async () => {
+            entered.resolve(undefined);
+            await release.promise;
+          },
+        });
+      },
+    });
+    await entered.promise;
+    let closed = false;
+    const closing = readiness.close().then(() => {
+      closed = true;
+    });
+    await Promise.resolve();
+    expect(closed).toBe(false);
+    expect(released).toBe(0);
+    release.resolve(undefined);
+    await closing;
+    expect(released).toBe(1);
+  });
+
+  it("reports an admitted direct shard release failure during close", async () => {
+    const message = createMessage("release-agent", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const releaseWork = Promise.withResolvers<undefined>();
+    const entered = Promise.withResolvers<undefined>();
+    const releaseFailure = new Error("shard release failed");
+    const delivery = agentDelivery(
+      [message],
+      (next) => {
+        acknowledged.add(next.id.value);
+      },
+      () => {
+        throw releaseFailure;
+      },
+      acknowledged,
+    );
+    const readiness = new DeliveryReadiness();
+    readiness.route(delivery);
+    await delivery.drainMessage(message, {
+      onMessage: () => {
+        AgentDeliveryScope.record({
+          kind: "accepted",
+          discard: () => undefined,
+          run: async () => {
+            entered.resolve(undefined);
+            await releaseWork.promise;
+          },
+        });
+      },
+    });
+    await entered.promise;
+    const closing = readiness.close();
+    releaseWork.resolve(undefined);
+    await expect(closing).rejects.toMatchObject({ errors: [releaseFailure] });
+  });
+
+  it("attempts both retained store closes and preserves an admitted release failure", async () => {
+    const factory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "FailedPhysicalDeliveryClose", multitenant: false },
+      storageFactory: factory,
+    });
+    const message = createMessage("release-and-store-close", "signal", 1n);
+    const accepted = Promise.withResolvers<undefined>();
+    const releaseWork = Promise.withResolvers<undefined>();
+    const storeCloseEntered = Promise.withResolvers<undefined>();
+    const releaseStoreClose = Promise.withResolvers<undefined>();
+    const releaseFailure = new Error("shard release failed");
+    const storeFailure = new Error("inbox store close failed");
+    const inboxClose = vi.spyOn(InboxStorage.prototype, "close").mockImplementation(async () => {
+      storeCloseEntered.resolve(undefined);
+      await releaseStoreClose.promise;
+      throw storeFailure;
+    });
+    const shardClose = vi.spyOn(ShardedWorkRegistry.prototype, "close");
+    vi.spyOn(ShardedWorkRegistry.prototype, "release").mockRejectedValue(releaseFailure);
+    await (delivery.inbox as Inbox).storage.write(message);
+    try {
+      await delivery.drainMessage(message, {
+        onMessage: () => {
+          AgentDeliveryScope.record({
+            kind: "accepted",
+            discard: () => undefined,
+            run: async () => {
+              accepted.resolve(undefined);
+              await releaseWork.promise;
+            },
+          });
+        },
+      });
+      await accepted.promise;
+      const closing = delivery.close();
+      let settled = false;
+      void closing.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      expect(inboxClose).not.toHaveBeenCalled();
+      releaseWork.resolve(undefined);
+      await storeCloseEntered.promise;
+      expect(settled).toBe(false);
+      expect(shardClose).toHaveBeenCalledOnce();
+      releaseStoreClose.resolve(undefined);
+      await expect(closing).rejects.toMatchObject({
+        errors: [releaseFailure, storeFailure],
+      });
+      expect(inboxClose).toHaveBeenCalledOnce();
+      expect(shardClose).toHaveBeenCalledOnce();
+    } finally {
+      releaseWork.resolve(undefined);
+      releaseStoreClose.resolve(undefined);
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("renews the leased shard session while an acknowledged Agent call remains held", async () => {
+    vi.useFakeTimers();
+    const message = createMessage("renew-agent", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const gate = Promise.withResolvers<undefined>();
+    const entered = Promise.withResolvers<undefined>();
+    const delivery = agentDelivery(
+      [message],
+      (next) => {
+        acknowledged.add(next.id.value);
+      },
+      undefined,
+      acknowledged,
+    );
+    let renewals = 0;
+    delivery.shards.renew = (current) => {
+      renewals++;
+      return Promise.resolve({
+        kind: "LEASED" as const,
+        shard: current.shard,
+        worker: current.worker,
+        pickedUpAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+    };
+    try {
+      await delivery.drainMessage(message, {
+        onMessage: () => {
+          AgentDeliveryScope.record({
+            kind: "accepted",
+            discard: () => undefined,
+            run: async () => {
+              entered.resolve(undefined);
+              await gate.promise;
+            },
+          });
+        },
+      });
+      await entered.promise;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(renewals).toBeGreaterThanOrEqual(1);
+    } finally {
+      gate.resolve(undefined);
+      await delivery.whenIdle();
+      vi.useRealTimers();
+    }
+  });
+
+  it("fences a held live Agent effect after shard authority is lost", async () => {
+    const message = createMessage("lost-agent", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const gate = Promise.withResolvers<undefined>();
+    const entered = Promise.withResolvers<undefined>();
+    const delivery = agentDelivery(
+      [message],
+      (next) => {
+        acknowledged.add(next.id.value);
+      },
+      undefined,
+      acknowledged,
+    );
+    let valid = true;
+    let effects = 0;
+    delivery.shards.validateOwnership = (current) => Promise.resolve(valid ? current : undefined);
+    await delivery.drainMessage(message, {
+      onMessage: () => {
+        AgentDeliveryScope.record({
+          kind: "accepted",
+          discard: () => undefined,
+          run: async (_signal, checkSession) => {
+            entered.resolve(undefined);
+            await gate.promise;
+            await checkSession();
+            effects++;
+          },
+        });
+      },
+    });
+    await entered.promise;
+    valid = false;
+    gate.resolve(undefined);
+    await delivery.whenIdle();
+    expect(effects).toBe(0);
+  });
+  it("leaves deferred Agent input pending without invoking reception failure policy", async () => {
+    const message = createMessage("agent-pending", "signal", 1n);
+    let marks = 0;
+    let receptions = 0;
+    const delivery = new Delivery({
+      context: { name: "AgentDefer", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(): never {
+          receptions++;
+          throw new Error("Agent deferral entered reception policy.");
+        }
+      })(),
+      inbox: {
+        sessionKind: "LEASED",
+        receive: () => Promise.reject(new Error("unused")),
+        read: () => Promise.resolve([message]),
+        readMessage: () => Promise.resolve(message),
+        markDelivered: () => {
+          marks++;
+          return Promise.resolve(message);
+        },
+        removeDuplicate: () => Promise.resolve(true),
+      },
+      workRegistry: {
+        sessionKind: "LEASED",
+        pickUp: () => Promise.resolve(session()),
+        release: () => Promise.resolve(true),
+        validateOwnership: (current) => Promise.resolve(current),
+      },
+    });
+    const result = await delivery.drainMessage(message, {
+      onMessage: () => {
+        AgentDeliveryScope.record({ kind: "deferred" });
+      },
+    });
+    expect(result.acknowledged).toBe(false);
+    expect(result.outcome).toMatchObject({ kind: "deferred" });
+    expect(marks).toBe(0);
+    expect(receptions).toBe(0);
+  });
+
+  it("surfaces receipt failure without acknowledging or applying reception policy", async () => {
+    const message = createMessage("agent-error", "signal", 1n);
+    const failure = new Error("receipt CAS failed");
+    let marks = 0;
+    const delivery = agentDelivery([message], () => {
+      marks++;
+    });
+    const direct = await delivery.drainMessage(message, {
+      onMessage: () => {
+        AgentDeliveryScope.record({ kind: "error", error: failure });
+      },
+    });
+    expect(direct.acknowledged).toBe(false);
+    expect(direct.outcome).toEqual({ kind: "failed", error: failure });
+    expect(marks).toBe(0);
+  });
+
+  it("acknowledges Agent input before live work and retains the shard for two targets", async () => {
+    const first = createMessage("agent-a", "signal-a", 1n);
+    const second = createMessage("agent-b", "signal-b", 2n);
+    const acknowledged = new Set<string>();
+    let released = 0;
+    const delivery = agentDelivery(
+      [first, second],
+      (message) => {
+        acknowledged.add(message.id.value);
+      },
+      () => {
+        released++;
+      },
+      acknowledged,
+    );
+    const entered = Promise.withResolvers<undefined>();
+    const secondStarted = Promise.withResolvers<undefined>();
+    const continueFirst = Promise.withResolvers<undefined>();
+    const started: string[] = [];
+    const run = delivery.drain(ShardIndex.single(), {
+      onMessage: (message) => {
+        AgentDeliveryScope.record({
+          kind: "accepted",
+          discard: () => undefined,
+          run: async () => {
+            expect(acknowledged.has(message.id.value)).toBe(true);
+            started.push(message.id.value);
+            if (message.id.value === first.id.value) {
+              entered.resolve(undefined);
+              await continueFirst.promise;
+            } else secondStarted.resolve(undefined);
+          },
+        });
+      },
+    });
+    await entered.promise;
+    await secondStarted.promise;
+    expect(started).toEqual([first.id.value, second.id.value]);
+    expect(released).toBe(0);
+    continueFirst.resolve(undefined);
+    await expect(run).resolves.toMatchObject({ delivered: 2, failed: 0 });
+    expect(released).toBe(1);
+  });
+
+  it("settles the selected Agent message while its complete shard drain remains live", async () => {
+    const message = createMessage("agent-direct", "signal", 1n);
+    const releaseWork = Promise.withResolvers<undefined>();
+    const entered = Promise.withResolvers<undefined>();
+    const acknowledged = new Set<string>();
+    let released = 0;
+    const delivery = agentDelivery(
+      [message],
+      (next) => {
+        acknowledged.add(next.id.value);
+      },
+      () => {
+        released++;
+      },
+      acknowledged,
+    );
+    const settled = delivery.drainMessage(message, {
+      onMessage: () => {
+        AgentDeliveryScope.record({
+          kind: "accepted",
+          discard: () => undefined,
+          run: async () => {
+            entered.resolve(undefined);
+            await releaseWork.promise;
+          },
+        });
+      },
+    });
+    await entered.promise;
+    await expect(settled).resolves.toMatchObject({ acknowledged: true });
+    expect(released).toBe(0);
+    releaseWork.resolve(undefined);
+  });
+
+  it("wakes one active shard drain for a second Agent without a second acquisition", async () => {
+    const first = createMessage("agent-a", "signal-a", 1n);
+    const second = createMessage("agent-b", "signal-b", 2n);
+    const rows = [first];
+    const acknowledged = new Set<string>();
+    const releaseFirst = Promise.withResolvers<undefined>();
+    let pickups = 0;
+    const delivery = agentDelivery(
+      rows,
+      (next) => {
+        acknowledged.add(next.id.value);
+      },
+      undefined,
+      acknowledged,
+    );
+    const pickup = delivery.shards.pickUp.bind(delivery.shards);
+    delivery.shards.pickUp = (...args) => {
+      pickups++;
+      return pickup(...args);
+    };
+    const onMessage = (message: typeof first) => {
+      AgentDeliveryScope.record({
+        kind: "accepted",
+        discard: () => undefined,
+        run: async () => {
+          if (message.id.value === first.id.value) await releaseFirst.promise;
+        },
+      });
+    };
+    await expect(delivery.drainMessage(first, { onMessage })).resolves.toMatchObject({
+      acknowledged: true,
+    });
+    rows.push(second);
+    await expect(delivery.drainMessage(second, { onMessage })).resolves.toMatchObject({
+      acknowledged: true,
+    });
+    expect(pickups).toBe(1);
+    releaseFirst.resolve(undefined);
+  });
+
+  it("revisits a deferred partial page after the active Agent turn finishes", async () => {
+    const first = createMessage("agent-a", "signal-a", 1n);
+    const waiting = createMessage("agent-b", "signal-b", 2n);
+    const acknowledged = new Set<string>();
+    const releaseFirst = Promise.withResolvers<undefined>();
+    const firstStarted = Promise.withResolvers<undefined>();
+    const secondStarted = Promise.withResolvers<undefined>();
+    const deferredOnce = Promise.withResolvers<undefined>();
+    let released = 0;
+    let firstActive = false;
+    let deferred = 0;
+    const delivery = agentDelivery(
+      [first, waiting],
+      (message) => {
+        acknowledged.add(message.id.value);
+      },
+      () => {
+        released++;
+      },
+      acknowledged,
+    );
+    const run = delivery.drain(ShardIndex.single(), {
+      onMessage: (message) => {
+        if (message.id.value === waiting.id.value && firstActive) {
+          deferred++;
+          deferredOnce.resolve(undefined);
+          AgentDeliveryScope.record({ kind: "deferred" });
+        } else
+          AgentDeliveryScope.record({
+            kind: "accepted",
+            discard: () => undefined,
+            run: async () => {
+              if (message.id.value === first.id.value) {
+                firstActive = true;
+                firstStarted.resolve(undefined);
+                await releaseFirst.promise;
+                firstActive = false;
+              } else secondStarted.resolve(undefined);
+            },
+          });
+      },
+    });
+    await firstStarted.promise;
+    await deferredOnce.promise;
+    releaseFirst.resolve(undefined);
+    await secondStarted.promise;
+    await expect(run).resolves.toMatchObject({ delivered: 2, failed: 0 });
+    expect(deferred).toBeGreaterThan(0);
+    expect(released).toBe(1);
+  });
+
+  it("starts a successor when input arrives during shard release", async () => {
+    const first = createMessage("release-first", "signal-a", 1n);
+    const second = createMessage("release-second", "signal-b", 2n);
+    const rows = [first];
+    const acknowledged = new Set<string>();
+    const secondDelivered = Promise.withResolvers<undefined>();
+    let releases = 0;
+    let selected: ReturnType<Delivery["drainMessage"]> | undefined;
+    const delivery = agentDelivery(
+      rows,
+      (message) => {
+        acknowledged.add(message.id.value);
+        if (message.id.value === second.id.value) secondDelivered.resolve(undefined);
+      },
+      () => {
+        if (++releases === 1) {
+          rows.push(second);
+          selected = delivery.drainMessage(second, { onMessage: () => undefined });
+        }
+      },
+      acknowledged,
+    );
+    delivery.setReplay(() => undefined);
+    await expect(
+      delivery.drainMessage(first, { onMessage: () => undefined }),
+    ).resolves.toMatchObject({
+      acknowledged: true,
+    });
+    await secondDelivered.promise;
+    await expect(selected).resolves.toMatchObject({ acknowledged: true });
+    await delivery.whenIdle();
+    expect(releases).toBeGreaterThanOrEqual(2);
+  });
+
+  it("fences a direct post when close starts during shard acquisition", async () => {
+    const message = createMessage("pickup-close", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    let entered = 0;
+    let releases = 0;
+    const delivery = agentDelivery(
+      [message],
+      (next) => {
+        acknowledged.add(next.id.value);
+      },
+      () => {
+        releases++;
+      },
+      acknowledged,
+    );
+    delivery.shards.pickUp = () => pickup.promise;
+    const posted = delivery.drainMessage(message, {
+      onMessage: () => {
+        entered++;
+      },
+    });
+    const closing = delivery.close();
+    pickup.resolve(session());
+    await closing;
+    await expect(posted).resolves.toMatchObject({ acknowledged: false });
+    expect(entered).toBe(0);
+    expect(releases).toBe(1);
+  });
+
+  it("reports a failed acquired-session release when close started during pickup", async () => {
+    const message = createMessage("pickup-release-failure", "signal", 1n);
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const failure = new Error("pickup release failed");
+    let dispatched = 0;
+    let releases = 0;
+    const delivery = agentDelivery(
+      [],
+      () => undefined,
+      () => {
+        releases++;
+        throw failure;
+      },
+    );
+    delivery.shards.pickUp = () => pickup.promise;
+    const posted = delivery.drainMessage(message, {
+      onMessage: () => {
+        dispatched++;
+      },
+    });
+    const closing = delivery.close();
+    pickup.resolve(session());
+    await expect(closing).rejects.toBe(failure);
+    await expect(posted).resolves.toMatchObject({ acknowledged: false });
+    expect(dispatched).toBe(0);
+    expect(releases).toBe(1);
+  });
+
+  it("retains a release failure between the synchronous close fence and facility cleanup", async () => {
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const failure = new Error("late release failed");
+    const delivery = agentDelivery(
+      [],
+      () => undefined,
+      () => {
+        throw failure;
+      },
+    );
+    delivery.shards.pickUp = () => pickup.promise;
+    const running = delivery.run({ onMessage: () => undefined });
+    delivery.beginClose();
+    pickup.resolve(session());
+    await expect(running).resolves.toMatchObject({ status: "FAILED" });
+    await expect(delivery.close()).rejects.toBe(failure);
+  });
+
+  it("retains a public run release error across the fatal startup drain interval", async () => {
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const failure = new Error("public release failed during startup drain");
+    const delivery = agentDelivery(
+      [],
+      () => undefined,
+      () => {
+        throw failure;
+      },
+    );
+    delivery.shards.pickUp = () => pickup.promise;
+    const running = delivery.run({ onMessage: () => undefined });
+    delivery.beginStartupDrain();
+    await expect(delivery.run({ onMessage: () => undefined })).resolves.toMatchObject({
+      status: "STOPPED",
+    });
+    pickup.resolve(session());
+    await expect(running).resolves.toMatchObject({ status: "FAILED" });
+    await expect(delivery.close()).rejects.toBe(failure);
+  });
+
+  it("permits only an exact pending handoff to start a shared fatal-drain run", async () => {
+    const message = createMessage("fatal-exact", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const delivery = agentDelivery([message], (next) => acknowledged.add(next.id.value));
+    let pickups = 0;
+    delivery.shards.pickUp = () => Promise.resolve(++pickups === 1 ? session() : undefined);
+    delivery.setReplay(() => undefined);
+    delivery.beginStartupDrain();
+    await expect(
+      delivery.runControlled({
+        shard: message.shard,
+        onMessage: () => undefined,
+        signal: new AbortController().signal,
+      }),
+    ).resolves.toMatchObject({ status: "STOPPED" });
+    expect(pickups).toBe(0);
+    const selected = await delivery.drainMessage(message, { onMessage: () => undefined });
+    expect(selected.acknowledged).toBe(true);
+    expect(acknowledged.has(message.id.value)).toBe(true);
+    expect(pickups).toBe(1);
+    await delivery.close();
+  });
+
+  it("does not replay an unrelated row beside an admitted fatal handoff", async () => {
+    const exact = createMessage("fatal-selected", "signal-a", 1n);
+    const other = createMessage("fatal-unrelated", "signal-b", 2n);
+    const acknowledged = new Set<string>();
+    const delivery = agentDelivery([exact, other], (message) => acknowledged.add(message.id.value));
+    let replayed = 0;
+    delivery.shards.pickUp = () => Promise.resolve(session());
+    delivery.setReplay(() => {
+      replayed++;
+    });
+    delivery.beginStartupDrain();
+    await expect(
+      delivery.drainMessage(exact, { onMessage: () => undefined }),
+    ).resolves.toMatchObject({
+      acknowledged: true,
+    });
+    await delivery.whenIdle();
+    expect(acknowledged.has(exact.id.value)).toBe(true);
+    expect(acknowledged.has(other.id.value)).toBe(false);
+    expect(replayed).toBe(0);
+    await delivery.close();
+  });
+
+  it("retains a late exact-handoff release failure until full fatal close", async () => {
+    const message = createMessage("fatal-late-release", "signal", 1n);
+    const failure = new Error("late exact release failed");
+    const delivery = agentDelivery(
+      [message],
+      () => undefined,
+      () => {
+        throw failure;
+      },
+    );
+    delivery.shards.pickUp = () => Promise.resolve(session());
+    delivery.beginStartupDrain();
+    await expect(
+      delivery.drainMessage(message, { onMessage: () => undefined }),
+    ).resolves.toMatchObject({
+      acknowledged: true,
+    });
+    await expect(delivery.whenIdle()).rejects.toBe(failure);
+    await expect(delivery.close()).rejects.toBe(failure);
+  });
+
+  it("leaves a fresh shared row pending when its recipient closes after the first predicate", async () => {
+    const message = createMessage("closed-recipient", "signal", 1n);
+    const validation = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let eligible = true;
+    let dispatched = 0;
+    let acknowledged = 0;
+    const delivery = agentDelivery([message], () => {
+      acknowledged++;
+    });
+    delivery.shards.validateOwnership = async (current) => {
+      validation.resolve(undefined);
+      await release.promise;
+      return current;
+    };
+    delivery.setReplay(
+      () => {
+        dispatched++;
+      },
+      () => eligible,
+    );
+    delivery.wake(message.shard);
+    await validation.promise;
+    eligible = false;
+    release.resolve(undefined);
+    await delivery.whenIdle();
+    expect(dispatched).toBe(0);
+    expect(acknowledged).toBe(0);
+    await delivery.close();
+  });
+
+  it("does not acknowledge a monitor repeat rejected at its final recipient check", async () => {
+    const message = createMessage("repeat-close", "signal", 1n);
+    let eligible = true;
+    let dispatched = 0;
+    let acknowledged = 0;
+    const monitor = vi
+      .spyOn(DeliveryMonitor.prototype, "onReceptionFailure")
+      .mockImplementation((failure) => {
+        eligible = false;
+        return failure.repeatDispatching();
+      });
+    const delivery = agentDelivery([message], () => {
+      acknowledged++;
+    });
+    delivery.setReplay(
+      () => {
+        if (++dispatched === 1) throw new Error("first receptor failed");
+      },
+      () => eligible,
+    );
+    try {
+      delivery.wake(message.shard);
+      await delivery.whenIdle();
+      expect(dispatched).toBe(1);
+      expect(acknowledged).toBe(0);
+    } finally {
+      monitor.mockRestore();
+      await delivery.close();
+    }
+  });
+
+  it("keeps a public custom callback separate from an active shared shard run", async () => {
+    const message = createMessage("shared-versus-custom", "signal", 1n);
+    const acknowledged = new Set<string>();
+    const delivery = agentDelivery(
+      [message],
+      (next) => acknowledged.add(next.id.value),
+      undefined,
+      acknowledged,
+    );
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let pickups = 0;
+    let replayed = 0;
+    let custom = 0;
+    delivery.shards.pickUp = () => Promise.resolve(++pickups === 1 ? session() : undefined);
+    delivery.inbox.read = async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      return acknowledged.has(message.id.value) ? [] : [message];
+    };
+    delivery.setReplay(() => {
+      replayed++;
+    });
+    delivery.wake(message.shard);
+    await entered.promise;
+    const explicit = delivery.run({
+      onMessage: () => {
+        custom++;
+      },
+    });
+    release.resolve(undefined);
+    await expect(explicit).resolves.toMatchObject({ status: "SKIPPED" });
+    await delivery.whenIdle();
+    expect(pickups).toBe(2);
+    expect(replayed).toBe(1);
+    expect(custom).toBe(0);
+    await delivery.close();
+  });
+
+  it("reports an unconfirmed acquired-session release during pending-pickup close", async () => {
+    const message = createMessage("pickup-unconfirmed", "signal", 1n);
+    const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+    const delivery = agentDelivery([], () => undefined);
+    delivery.shards.pickUp = () => pickup.promise;
+    delivery.shards.release = () => Promise.resolve(false);
+    const posted = delivery.drainMessage(message, { onMessage: () => undefined });
+    const closing = delivery.close();
+    pickup.resolve(session());
+    await expect(closing).rejects.toThrow("Shard release was not confirmed.");
+    await expect(posted).resolves.toMatchObject({ acknowledged: false });
+  });
   it("does not acquire a shard after an operation is already aborted", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -98,3 +1138,49 @@ describe("Delivery fencing", () => {
     expect(releases).toBe(1);
   });
 });
+
+function session() {
+  return {
+    kind: "LEASED" as const,
+    shard: ShardIndex.single(),
+    worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    pickedUpAt: new Date(),
+    expiresAt: new Date(Date.now() + 60_000),
+  };
+}
+
+function agentDelivery(
+  messages: ReturnType<typeof createMessage>[],
+  onMark: (message: ReturnType<typeof createMessage>) => void,
+  onRelease: () => void = () => undefined,
+  acknowledged = new Set<string>(),
+  logger?: ILogLayer,
+): Delivery {
+  return new Delivery({
+    context: { name: "AgentDelivery", multitenant: false },
+    storageFactory: new InMemoryStorageFactory(),
+    ...(logger === undefined ? {} : { logger }),
+    inbox: {
+      sessionKind: "LEASED",
+      receive: () => Promise.reject(new Error("unused")),
+      read: () =>
+        Promise.resolve(messages.filter((message) => !acknowledged.has(message.id.value))),
+      readMessage: (id) =>
+        Promise.resolve(messages.find((message) => message.id.value === id.value)),
+      markDelivered: (message) => {
+        onMark(message);
+        return Promise.resolve(message);
+      },
+      removeDuplicate: () => Promise.resolve(true),
+    },
+    workRegistry: {
+      sessionKind: "LEASED",
+      pickUp: () => Promise.resolve(session()),
+      release: () => {
+        onRelease();
+        return Promise.resolve(true);
+      },
+      validateOwnership: (current) => Promise.resolve(current),
+    },
+  });
+}

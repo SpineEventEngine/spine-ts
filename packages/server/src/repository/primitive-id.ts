@@ -21,7 +21,7 @@ import {
   StringValueSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 
 /**
@@ -108,13 +108,13 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
   pack(id: PrimitiveId): Any {
     switch (typeof id) {
       case "string":
-        return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }));
+        return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id }));
       case "number":
-        return AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
+        return AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
       case "boolean":
-        return AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
+        return AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
       case "bigint":
-        return AnyMessages.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }));
+        return AnyPacker.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }));
     }
   },
 
@@ -134,12 +134,12 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
     }
 
     return (
-      AnyMessages.unpack(id, StringValueSchema)?.value ??
-      AnyMessages.unpack(id, Int32ValueSchema)?.value ??
-      AnyMessages.unpack(id, DoubleValueSchema)?.value ??
-      AnyMessages.unpack(id, Int64ValueSchema)?.value ??
-      AnyMessages.unpack(id, BoolValueSchema)?.value ??
-      AnyMessages.unpack(id, UserIdSchema)?.value
+      AnyPacker.tryUnpack(id, StringValueSchema)?.value ??
+      AnyPacker.tryUnpack(id, Int32ValueSchema)?.value ??
+      AnyPacker.tryUnpack(id, DoubleValueSchema)?.value ??
+      AnyPacker.tryUnpack(id, Int64ValueSchema)?.value ??
+      AnyPacker.tryUnpack(id, BoolValueSchema)?.value ??
+      AnyPacker.tryUnpack(id, UserIdSchema)?.value
     );
   },
 });
@@ -157,6 +157,11 @@ export const MessageIds: MessageIdCodec = Object.freeze({
  * Validates and decodes values shared by identifier codecs.
  */
 const IdValues = Object.freeze({
+  /**
+   * Reads a primitive identifier value.
+   * @param value Candidate identifier.
+   * @returns Primitive identifier, if supported.
+   */
   primitive(value: unknown): PrimitiveId | undefined {
     if (
       typeof value === "string" ||
@@ -170,6 +175,11 @@ const IdValues = Object.freeze({
     return undefined;
   },
 
+  /**
+   * Checks whether an identifier is a generated message.
+   * @param value Candidate identifier.
+   * @returns Whether the value is a generated message.
+   */
   isMessage(value: unknown): value is MessageId {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       return false;
@@ -181,6 +191,11 @@ const IdValues = Object.freeze({
     );
   },
 
+  /**
+   * Reads a message identifier value.
+   * @param value Candidate identifier.
+   * @returns Message identifier, if supported.
+   */
   message(value: unknown): MessageId | undefined {
     return IdValues.isMessage(value) ? value : undefined;
   },

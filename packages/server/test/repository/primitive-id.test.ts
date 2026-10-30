@@ -14,7 +14,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { Int32ValueSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
 import { MessageIds, PrimitiveIds } from "../../src/repository/primitive-id.js";
@@ -30,7 +30,7 @@ describe("primitive aggregate IDs", () => {
   });
 
   it("reads a JVM-compatible int32 producer identity", () => {
-    const producerId = AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 42 }));
+    const producerId = AnyPacker.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 42 }));
 
     expect(PrimitiveIds.unpack(producerId)).toBe(42);
   });

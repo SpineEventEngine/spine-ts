@@ -25,7 +25,7 @@ import {
   occurredAt,
   scope,
 } from "../../storage/test/entity/agent-history-fixtures.js";
-import { PostgresAgentHistory } from "../src/postgres/agent-history.js";
+import { PostgresAgentHistory, PostgresAgentIndexes } from "../src/postgres/agent-history.js";
 
 const indexes = {
   agent_history_full: 'scope_digest, order_key COLLATE "C"',
@@ -39,6 +39,26 @@ function entry(record: AgentHistoryRecord) {
 }
 
 describe("PostgreSQL Agent history provider boundary", () => {
+  it("checks all mandatory audit indexes without creating them", async () => {
+    const query = vi.fn((_sql: string, values?: [string, keyof typeof indexes]) =>
+      Promise.resolve({
+        rows:
+          values === undefined
+            ? []
+            : [
+                {
+                  definition: `CREATE INDEX ${values[1]} ON audit USING btree (${indexes[values[1]]})`,
+                  indisvalid: true,
+                  indisready: true,
+                },
+              ],
+      }),
+    );
+    await PostgresAgentIndexes.prepare({ query } as never, '"spine"."audit"', "check");
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls.every(([sql]) => sql.startsWith("SELECT"))).toBe(true);
+  });
+
   it("returns scoped original entries through indexed category and conversation pages", async () => {
     const stored = new Map<string, AgentHistoryRecord>();
     const query = vi.fn((_client: unknown, sql: string, values: (string | number)[]) => {
@@ -88,6 +108,9 @@ describe("PostgreSQL Agent history provider boundary", () => {
     const executor = {
       prepare: vi.fn(() => Promise.resolve()),
       using: <T>(work: (connection: typeof client) => Promise<T>) => work(client),
+      transaction: <T>(work: (connection: typeof client) => Promise<T>) => work(client),
+      appendImmutable: (_connection: typeof client, record: AgentHistoryRecord) =>
+        writeImmutable(record),
       table: () => '"test_history"',
       query,
     };
@@ -105,7 +128,9 @@ describe("PostgreSQL Agent history provider boundary", () => {
     });
     const close = vi.fn();
     const records = { historyExecutor: () => executor, writeImmutable, close };
-    const history = new PostgresAgentHistory(scope, records as never);
+    const history = new PostgresAgentHistory(scope, records as never, <T>(work: () => Promise<T>) =>
+      work(),
+    );
     const time = occurredAt(1_789_000_001n, 123_456_789);
     const first = conversation("conversation-a", "thread-a", time);
     const system = event("system-a", time, true);
@@ -198,6 +223,7 @@ describe("PostgreSQL Agent history provider boundary", () => {
   });
 
   it("rejects an index that is present but unavailable for reads", async () => {
+    let valid = false;
     const client = {
       query: vi.fn((_sql: string, values?: [string, keyof typeof indexes]) =>
         Promise.resolve({
@@ -207,7 +233,7 @@ describe("PostgreSQL Agent history provider boundary", () => {
               : [
                   {
                     definition: `CREATE INDEX ${values[1]} ON test USING btree (${indexes[values[1]]})`,
-                    indisvalid: false,
+                    indisvalid: valid,
                     indisready: true,
                   },
                 ],
@@ -217,15 +243,26 @@ describe("PostgreSQL Agent history provider boundary", () => {
     const executor = {
       prepare: () => Promise.resolve(),
       using: <T>(work: (connection: typeof client) => Promise<T>) => work(client),
+      transaction: <T>(work: (connection: typeof client) => Promise<T>) => work(client),
+      appendImmutable: () => Promise.resolve(),
       table: () => '"test_history"',
     };
-    const history = new PostgresAgentHistory(scope, {
-      historyExecutor: () => executor,
-      close: vi.fn(),
-    } as never);
+    const history = new PostgresAgentHistory(
+      scope,
+      {
+        historyExecutor: () => executor,
+        writeImmutable: vi.fn(() => Promise.resolve()),
+        close: vi.fn(),
+      } as never,
+      <T>(work: () => Promise<T>) => work(),
+    );
     await expect(
       history.read({ entityId: "ticket-a", view: { kind: "full" }, count: 1, maxBytes: 10_000 }),
     ).rejects.toThrow(/index is incompatible/i);
+    valid = true;
+    await expect(
+      history.append("ticket-a", event("after-retry", occurredAt(4n), false)),
+    ).resolves.toBeUndefined();
     history.close();
   });
 });

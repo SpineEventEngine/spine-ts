@@ -32,6 +32,7 @@ interface LocalSubscriptionAttachment {
 }
 
 const subscriptionRuntimeLoggers = new WeakMap<SubscriptionRuntime, ILogLayer>();
+const subscriptionRuntimeContextNames = new WeakMap<SubscriptionRuntime, string>();
 const subscriptionRuntimes = new WeakSet<SubscriptionRuntime>();
 
 interface SubscriptionRuntimeAccess {
@@ -40,8 +41,9 @@ interface SubscriptionRuntimeAccess {
    *
    * @param runtime The subscription runtime.
    * @param logger The server logger.
+   * @param contextName The Bounded Context name for diagnostic records, when available.
    */
-  installLogger(runtime: SubscriptionRuntime, logger: ILogLayer): void;
+  installLogger(runtime: SubscriptionRuntime, logger: ILogLayer, contextName?: string): void;
 
   /**
    * Removes a logger association during shutdown.
@@ -93,6 +95,10 @@ export class SubscriptionRuntime {
 
   #timerReconciliation: Promise<void> | undefined;
 
+  #initialPass: Promise<void> | undefined;
+
+  #initialSucceeded = false;
+
   #closing = false;
 
   #closed: Promise<void> | undefined;
@@ -122,14 +128,31 @@ export class SubscriptionRuntime {
   }
 
   /**
-   * Starts immediate and ten-second complete-snapshot reconciliation.
+   * Awaits the first complete snapshot, then starts periodic reconciliation.
+   * @returns Shared first-pass completion; a failure permits a later retry.
    */
-  start(): void {
+  start(): Promise<void> {
+    if (this.#closing) return Promise.reject(new Error("Subscription runtime is closing."));
+    if (this.#initialSucceeded) return Promise.resolve();
+    if (this.#initialPass !== undefined) return this.#initialPass;
+    const attempt = this.reconcile()
+      .then(() => {
+        if (this.#closing) return;
+        this.#initialSucceeded = true;
+        this.#startTimer();
+      })
+      .finally(() => {
+        if (this.#initialPass === attempt) this.#initialPass = undefined;
+      });
+    this.#initialPass = attempt;
+    return attempt;
+  }
+
+  /**
+   * Starts the existing periodic reconciliation cadence after first success.
+   */
+  #startTimer(): void {
     if (this.#timer !== undefined || this.#closing) return;
-    // spine-log-boundary: server.subscription_initial_reconcile
-    void this.reconcile().catch(() => {
-      this.#warnReconciliationFailure();
-    });
     this.#timer = setInterval(() => {
       void this.#reconcileTimer();
     }, 10_000);
@@ -192,18 +215,32 @@ export class SubscriptionRuntime {
     });
     this.#timerReconciliation = reconciliation;
     // spine-log-boundary: server.subscription_timer_reconcile
-    void reconciliation.catch(() => {
-      this.#warnReconciliationFailure();
+    void reconciliation.catch((error: unknown) => {
+      this.#warnReconciliationFailure(error);
     });
     return reconciliation;
   }
 
-  #warnReconciliationFailure(): void {
+  #warnReconciliationFailure(error: unknown): void {
     const logger = subscriptionRuntimeLoggers.get(this);
     if (logger === undefined) return;
+    let errorName: string | undefined;
+    let errorCode: unknown;
+    try {
+      if (error instanceof Error) {
+        errorName = error.name;
+        errorCode = Reflect.get(error, "code");
+      }
+      // spine-log-boundary: server.subscription_warning_metadata
+    } catch {
+      // A malformed rejection cannot prevent the next reconciliation pass.
+    }
     emitServerWarning(logger, "Subscription reconciliation failed.", {
+      contextName: subscriptionRuntimeContextNames.get(this),
       operation: "subscription.reconcile",
       reasonCode: "failed",
+      errorName,
+      errorCode,
     });
   }
 
@@ -435,12 +472,14 @@ export const subscriptionRuntimeAccess: SubscriptionRuntimeAccess = Object.freez
    * Installs a logger for one validated subscription runtime.
    * @param runtime The runtime receiving logging metadata.
    * @param logger The server logger.
+   * @param contextName The Bounded Context for diagnostic records, when available.
    */
-  installLogger(runtime: SubscriptionRuntime, logger: ILogLayer): void {
+  installLogger(runtime: SubscriptionRuntime, logger: ILogLayer, contextName?: string): void {
     if (!subscriptionRuntimes.has(runtime)) {
       throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
     }
     subscriptionRuntimeLoggers.set(runtime, logger);
+    if (contextName !== undefined) subscriptionRuntimeContextNames.set(runtime, contextName);
   },
 
   /**
@@ -452,6 +491,7 @@ export const subscriptionRuntimeAccess: SubscriptionRuntimeAccess = Object.freez
       throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
     }
     subscriptionRuntimeLoggers.delete(runtime);
+    subscriptionRuntimeContextNames.delete(runtime);
   },
 
   /**

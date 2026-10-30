@@ -13,8 +13,8 @@
  */
 
 import { AiModel, ModelRef, type AiFailure, type AiModelDefinition } from "@spine-event-engine/ai";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
-import { assertAiOutcomeContext, backendDefinition } from "@spine-event-engine/ai/spi/adapter";
+import type { MessageSchema } from "@spine-event-engine/core";
+import { backendDefinition } from "@spine-event-engine/ai/spi/adapter";
 import type {
   AiBackendExecution,
   AiExecutionControl,
@@ -31,14 +31,7 @@ import {
   AiToolCallIdSchema,
   AiUsageSchema,
   AiOutcome,
-  DecisionResponseSchema,
   GenerationResponseSchema,
-  AnthropicAssistantContentSchema,
-  OpenAiOutputItemSchema,
-  OpenAiReasoningItemSchema,
-  OpenAiMessageItemSchema,
-  OpenAiMessagePartSchema,
-  OpenAiMessageItem_Phase,
   ToolResponseSchema,
 } from "@spine-event-engine/proto/agent";
 import {
@@ -315,6 +308,48 @@ const anthropicToolEvents = () =>
     },
     { type: "content_block_stop", index: 1 },
     { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 2 } },
+    { type: "message_stop" },
+  ]
+    .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+    .join("");
+
+const anthropicInvalidReasoningEvents = (kind: "signed" | "redacted") =>
+  [
+    {
+      type: "message_start",
+      message: {
+        id: "msg-invalid",
+        type: "message",
+        role: "assistant",
+        model: "claude-fable-5",
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 4, output_tokens: 0 },
+      },
+    },
+    {
+      type: "content_block_start",
+      index: 0,
+      content_block:
+        kind === "signed"
+          ? { type: "thinking", thinking: "" }
+          : { type: "redacted_thinking", data: "ciphertext" },
+    },
+    ...(kind === "signed"
+      ? [
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "signature_delta", signature: "live-signature" },
+          },
+        ]
+      : []),
+    { type: "content_block_stop", index: 0 },
+    { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "{}" } },
+    { type: "content_block_stop", index: 1 },
+    { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 2 } },
     { type: "message_stop" },
   ]
     .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
@@ -704,7 +739,7 @@ describe("Vercel connection registration", () => {
   });
 
   it.each(["text", "tool"] as const)(
-    "journals and replays an interrupted ChatGPT %s delta without continuation",
+    "journals an interrupted ChatGPT %s delta without tool continuation",
     async (kind) => {
       const parts: LanguageModelV3StreamPart[] = [
         {
@@ -743,35 +778,14 @@ describe("Vercel connection registration", () => {
         openaiContent: { complete: false, items: [] },
       });
       expect(saved.toolCalls).toHaveLength(kind === "tool" ? 1 : 0);
-      expect(() => {
-        assertAiOutcomeContext(saved);
-      }).not.toThrow();
-      const replay = generationFixture(
-        [],
-        1,
-        kind === "tool",
-        "openai",
-        "test-model",
-        "prompt-and-validate",
-        true,
-        null,
+      const restored = fromBinary(
+        GenerationResponseSchema,
+        toBinary(GenerationResponseSchema, saved),
       );
-      vi.mocked(replay.runtime.beginAttempt).mockResolvedValueOnce({
-        kind: "replay",
-        id: "attempt-1",
-        response: fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved)),
-        failure: {
-          code: "UNAVAILABLE",
-          retryableByNewSignal: true,
-          diagnosticId: "diagnostic-1",
-        },
-      });
-      await expect(replay.run()).resolves.toMatchObject({
-        ok: false,
-        failure: { code: "UNAVAILABLE" },
-      });
-      expect(replay.network).not.toHaveBeenCalled();
-      expect(replay.runtime.callTool).not.toHaveBeenCalled();
+      expect(restored.openaiContent).toEqual(saved.openaiContent);
+      expect(restored.toolCalls).toEqual(saved.toolCalls);
+      expect(first.network).toHaveBeenCalledOnce();
+      expect(first.runtime.callTool).not.toHaveBeenCalled();
     },
   );
 
@@ -974,7 +988,7 @@ describe("Vercel connection registration", () => {
     },
   );
 
-  it("journals a typed ChatGPT refusal and replays it as a terminal refusal", async () => {
+  it("journals a typed ChatGPT refusal without retrying the provider", async () => {
     const first = generationFixture(
       [
         [
@@ -1022,24 +1036,7 @@ describe("Vercel connection registration", () => {
       rawOutput: "",
       openaiContent: { complete: false, items: [{ itemId: "message-1" }] },
     });
-    const replay = generationFixture(
-      [],
-      1,
-      false,
-      "openai",
-      "test-model",
-      "prompt-and-validate",
-      true,
-      null,
-    );
-    vi.mocked(replay.runtime.beginAttempt).mockResolvedValueOnce({
-      kind: "replay",
-      id: "attempt-1",
-      response: fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved)),
-      failure: { code: "REFUSED", retryableByNewSignal: false, diagnosticId: "diagnostic-1" },
-    });
-    await expect(replay.run()).resolves.toMatchObject({ ok: false, failure: { code: "REFUSED" } });
-    expect(replay.network).not.toHaveBeenCalled();
+    expect(first.network).toHaveBeenCalledOnce();
   });
 
   it("continues a ChatGPT plan tool call with ordered encrypted reasoning", async () => {
@@ -1186,7 +1183,7 @@ describe("Vercel connection registration", () => {
       expect(response.openaiContent?.items).toHaveLength(2);
   });
 
-  it("replays serialized ChatGPT plan tool content and rejects tampered namespace", async () => {
+  it("serializes live ChatGPT plan tool content before continuation", async () => {
     const proposal: LanguageModelV3StreamPart[] = [
       {
         type: "raw",
@@ -1264,19 +1261,17 @@ describe("Vercel connection registration", () => {
       true,
       null,
     );
-    for (const fixture of [first]) {
-      vi.mocked(fixture.runtime.callTool).mockResolvedValue(
-        create(ToolResponseSchema, {
-          call: create(AiToolCallIdSchema, { value: "spine-tool-1" }),
-          outcome: AiOutcome.ADMITTED,
-          text: ["Found"],
-        }),
-      );
-      vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
-        ok: true,
-        value: create(ProposedSupportReplySchema, { replyText: "Done" }),
-      });
-    }
+    vi.mocked(first.runtime.callTool).mockResolvedValue(
+      create(ToolResponseSchema, {
+        call: create(AiToolCallIdSchema, { value: "spine-tool-1" }),
+        outcome: AiOutcome.ADMITTED,
+        text: ["Found"],
+      }),
+    );
+    vi.mocked(first.runtime.admitGeneration).mockReturnValue({
+      ok: true,
+      value: create(ProposedSupportReplySchema, { replyText: "Done" }),
+    });
     await expect(first.run()).resolves.toMatchObject({ ok: true });
     const saved = vi.mocked(first.runtime.finishAttempt).mock.calls[0]?.[0].response;
     if (saved?.$typeName !== "spine.ts.agent.GenerationResponse")
@@ -1285,153 +1280,10 @@ describe("Vercel connection registration", () => {
       GenerationResponseSchema,
       toBinary(GenerationResponseSchema, saved),
     );
-    const replay = generationFixture(
-      [answer],
-      2,
-      true,
-      "openai",
-      "test-model",
-      "prompt-and-validate",
-      true,
-      null,
-    );
-    vi.mocked(replay.runtime.beginAttempt).mockResolvedValueOnce({
-      kind: "replay",
-      id: "attempt-1",
-      response: restored,
-    });
-    vi.mocked(replay.runtime.callTool).mockResolvedValue(
-      create(ToolResponseSchema, {
-        call: create(AiToolCallIdSchema, { value: "spine-tool-1" }),
-        outcome: AiOutcome.ADMITTED,
-        text: ["Found"],
-      }),
-    );
-    vi.mocked(replay.runtime.admitGeneration).mockReturnValue({
-      ok: true,
-      value: create(ProposedSupportReplySchema, { replyText: "Done" }),
-    });
-    await expect(replay.run()).resolves.toMatchObject({ ok: true });
-    expect(replay.providerCalls).toHaveLength(1);
-    expect(replay.network).toHaveBeenCalledTimes(1);
-    const changed = fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved));
-    const call = changed.openaiContent?.items[0]?.content;
-    if (call?.case === "functionCall") call.value.namespace = "other";
-    const tampered = generationFixture(
-      [],
-      2,
-      true,
-      "openai",
-      "test-model",
-      "prompt-and-validate",
-      true,
-      null,
-    );
-    vi.mocked(tampered.runtime.beginAttempt).mockResolvedValueOnce({
-      kind: "replay",
-      id: "attempt-1",
-      response: changed,
-    });
-    await expect(tampered.run()).rejects.toThrow("namespace");
-    expect(tampered.network).not.toHaveBeenCalled();
-    for (const [name, corrupt, reason] of [
-      [
-        "duplicate provider item ID",
-        (content: NonNullable<typeof restored.openaiContent>) => {
-          const original = content.items[0];
-          if (!original) throw new Error("Expected saved function item");
-          content.items.push(
-            create(OpenAiOutputItemSchema, {
-              itemId: original.itemId,
-              content: {
-                case: "reasoning",
-                value: create(OpenAiReasoningItemSchema, { encryptedContent: "encrypted" }),
-              },
-            }),
-          );
-        },
-        "Saved Responses item ID invalid",
-      ],
-      [
-        "reasoning without encrypted continuation",
-        (content: NonNullable<typeof restored.openaiContent>) => {
-          content.items.unshift(
-            create(OpenAiOutputItemSchema, {
-              itemId: "reasoning-1",
-              content: {
-                case: "reasoning",
-                value: create(OpenAiReasoningItemSchema, { summary: ["visible summary"] }),
-              },
-            }),
-          );
-        },
-        "Saved Responses reasoning incomplete",
-      ],
-      [
-        "incomplete tool proposal",
-        (content: NonNullable<typeof restored.openaiContent>) => {
-          content.complete = false;
-        },
-        "Responses receipt incomplete",
-      ],
-      [
-        "missing saved function call",
-        (content: NonNullable<typeof restored.openaiContent>) => {
-          const item = content.items[0];
-          if (item?.content.case !== "functionCall")
-            throw new Error("Expected saved function item");
-          item.content.value.call = undefined;
-        },
-        "Responses call missing",
-      ],
-      [
-        "saved message not reflected in output",
-        (content: NonNullable<typeof restored.openaiContent>) => {
-          content.items.push(
-            create(OpenAiOutputItemSchema, {
-              itemId: "unrecorded-message",
-              content: {
-                case: "message",
-                value: create(OpenAiMessageItemSchema, {
-                  phase: OpenAiMessageItem_Phase.FINAL_ANSWER,
-                  parts: [
-                    create(OpenAiMessagePartSchema, {
-                      content: { case: "outputText", value: "unrecorded" },
-                    }),
-                  ],
-                }),
-              },
-            }),
-          );
-        },
-        "Responses projection differs from standard fields",
-      ],
-    ] as const) {
-      const corruptReceipt = fromBinary(
-        GenerationResponseSchema,
-        toBinary(GenerationResponseSchema, saved),
-      );
-      if (!corruptReceipt.openaiContent) throw new Error("Expected saved Responses content");
-      corrupt(corruptReceipt.openaiContent);
-      const rejected = generationFixture(
-        [],
-        2,
-        true,
-        "openai",
-        "test-model",
-        "prompt-and-validate",
-        true,
-        null,
-      );
-      vi.mocked(rejected.runtime.beginAttempt).mockResolvedValueOnce({
-        kind: "replay",
-        id: `tampered-${name}`,
-        response: corruptReceipt,
-      });
-      await expect(rejected.run()).rejects.toThrow(reason);
-      expect(rejected.network).not.toHaveBeenCalled();
-      expect(rejected.runtime.callTool).not.toHaveBeenCalled();
-    }
+    expect(restored.openaiContent?.items[0]?.content.case).toBe("functionCall");
+    expect(restored.toolCalls).toEqual(saved.toolCalls);
+    expect(first.providerCalls).toHaveLength(2);
+    expect(first.network).toHaveBeenCalledTimes(2);
   });
   it("registers the pinned Anthropic Messages route as a generation provider", () => {
     const capabilities = VercelAx.capabilities.anthropicMessages();
@@ -1677,6 +1529,61 @@ describe("Vercel connection registration", () => {
     expect(JSON.stringify(body)).toContain('"type":"tool_result"');
   });
 
+  it.each(["signed", "redacted"] as const)(
+    "uses live %s Anthropic reasoning during a fresh correction attempt",
+    async (kind) => {
+      const fixture = realAnthropicFixture(
+        [anthropicInvalidReasoningEvents(kind), anthropicEvents('{"replyText":"Fixed"}')],
+        "native-schema",
+        "claude-fable-5",
+        { withTool: true },
+      );
+      const output = create(ProposedSupportReplySchema, { replyText: "Fixed" });
+      vi.mocked(fixture.runtime.admitGeneration)
+        .mockReturnValueOnce({
+          ok: false,
+          issues: [{ code: "INVALID_OUTPUT", path: "replyText", message: "Required reply" }],
+        })
+        .mockReturnValue({ ok: true, value: output });
+      await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: output });
+      expect(fixture.network).toHaveBeenCalledTimes(2);
+      expect(fixture.runtime.beginAttempt).toHaveBeenCalledTimes(2);
+      expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(2);
+      const completions = vi
+        .mocked(fixture.runtime.finishAttempt)
+        .mock.calls.map(([entry]) => entry);
+      expect(completions.map((entry) => entry.ticketId)).toEqual([
+        "anthropic-attempt-1",
+        "anthropic-attempt-2",
+      ]);
+      expect(completions.map((entry) => entry.response.outcome)).toEqual([
+        AiOutcome.INVALID_OUTPUT,
+        AiOutcome.ADMITTED,
+      ]);
+      expect(vi.mocked(fixture.runtime.beginAttempt).mock.calls[1]?.[0]).toMatchObject({
+        content: { corrects: { value: "anthropic-attempt-1" } },
+      });
+      const [, init] = vi.mocked(fixture.network).mock.calls[1] ?? [];
+      const parsed: unknown = JSON.parse(
+        typeof init?.body === "string"
+          ? init.body
+          : Buffer.from(init?.body as Uint8Array).toString("utf8"),
+      );
+      expect(parsed).toHaveProperty("messages");
+      const body = parsed as { messages: { role: string; content: unknown }[] };
+      expect(body.messages.map((message) => message.role)).toEqual(["user", "assistant", "user"]);
+      expect(body.messages[1]?.content).toEqual([
+        kind === "signed"
+          ? { type: "thinking", thinking: "", signature: "live-signature" }
+          : { type: "redacted_thinking", data: "ciphertext" },
+        { type: "text", text: "{}" },
+      ]);
+      expect(body.messages[2]?.content).toEqual([
+        { type: "text", text: "Follow these instructions: replyText: Required reply." },
+      ]);
+    },
+  );
+
   it("uses a trusted Anthropic token for prompted text without recording it", async () => {
     const fixture = realAnthropicFixture(
       anthropicEvents('{"replyText":"Hello"}'),
@@ -1781,7 +1688,7 @@ describe("Vercel connection registration", () => {
       marker: 'event: content_block_stop\ndata: {"type":"content_block_stop","index":1',
       input: '{"ticket":"T-1"}',
     },
-  ])("replays a failed Anthropic stream cut after $point without tool dispatch", async (cut) => {
+  ])("journals a failed Anthropic stream cut after $point without tool dispatch", async (cut) => {
     const full = anthropicToolEvents();
     const offset = full.indexOf(cut.marker);
     expect(offset).toBeGreaterThan(0);
@@ -1808,23 +1715,14 @@ describe("Vercel connection registration", () => {
       case: "toolCall",
       value: { argumentsJson: cut.input },
     });
-    expect(() => {
-      assertAiOutcomeContext(saved);
-    }).not.toThrow();
-
-    const replay = realAnthropicFixture("", "native-schema", "claude-fable-5", {
-      withTool: true,
-    });
-    vi.mocked(replay.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "saved-interrupted-tool",
-      response: fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved)),
-      failure: firstResult.failure,
-    });
-    await expect(replay.run()).resolves.toMatchObject({ ok: false, failure: firstResult.failure });
-    expect(replay.network).not.toHaveBeenCalled();
-    expect(replay.runtime.callTool).not.toHaveBeenCalled();
-    expect(replay.runtime.finishAttempt).not.toHaveBeenCalled();
+    const restored = fromBinary(
+      GenerationResponseSchema,
+      toBinary(GenerationResponseSchema, saved),
+    );
+    expect(restored.anthropicContent).toEqual(saved.anthropicContent);
+    expect(restored.toolCalls).toEqual(saved.toolCalls);
+    expect(original.network).toHaveBeenCalledOnce();
+    expect(original.runtime.callTool).not.toHaveBeenCalled();
   });
 
   it("bounds an actual Anthropic SSE body before candidate admission", async () => {
@@ -1874,149 +1772,6 @@ describe("Vercel connection registration", () => {
     );
   });
 
-  it("replays a recorded Anthropic generation without another physical fetch", async () => {
-    const fixture = generationFixture([], 1, false, "anthropic");
-    const saved = create(ProposedSupportReplySchema, { replyText: "Saved" });
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "anthropic-saved",
-      response: create(GenerationResponseSchema, {
-        outcome: AiOutcome.ADMITTED,
-        rawOutput: '{"replyText":"Saved"}',
-        anthropicContent: create(AnthropicAssistantContentSchema, {
-          blocks: [{ content: { case: "text", value: '{"replyText":"Saved"}' } }],
-        }),
-        admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, saved),
-      }),
-    });
-    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: saved });
-    expect(fixture.network).not.toHaveBeenCalled();
-    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-    const request = vi.mocked(fixture.runtime.beginAttempt).mock.calls[0]?.[0];
-    if (request?.kind !== "generation") throw new Error("Expected generation request");
-    expect(JSON.parse(request.content.promptJson)).toMatchObject({
-      provider: { profile: "anthropic-messages-v1", lowering: "anthropic-4.0.72-v3" },
-    });
-  });
-
-  it.each([
-    ["missing typed content", undefined, "Saved Anthropic content missing"],
-    [
-      "unsigned thinking",
-      create(AnthropicAssistantContentSchema, {
-        blocks: [{ content: { case: "thinking", value: { text: "reasoning" } } }],
-      }),
-      "Complete Anthropic thinking requires a signature",
-    ],
-    [
-      "empty redacted reasoning",
-      create(AnthropicAssistantContentSchema, {
-        blocks: [{ content: { case: "redactedThinking", value: {} } }],
-      }),
-      "Complete Anthropic redacted thinking requires data",
-    ],
-  ] as const)(
-    "rejects %s in a saved Anthropic tool turn before dispatch",
-    async (_case, content, reason) => {
-      const fixture = generationFixture([], 2, true, "anthropic");
-      vi.mocked(fixture.runtime.beginAttempt).mockResolvedValueOnce({
-        kind: "replay",
-        id: "tampered-anthropic-tool",
-        response: create(GenerationResponseSchema, {
-          outcome: AiOutcome.TOOL_REQUESTED,
-          toolCalls: [
-            { providerCallId: "saved-call", toolName: "tool_0", argumentsJson: '{"ticket":"T-1"}' },
-          ],
-          ...(content === undefined ? {} : { anthropicContent: content }),
-        }),
-      });
-      await expect(fixture.run()).rejects.toThrow(reason);
-      expect(fixture.network).not.toHaveBeenCalled();
-      expect(fixture.runtime.callTool).not.toHaveBeenCalled();
-    },
-  );
-
-  it("rebuilds a serialized signed Anthropic tool turn before the next provider request", async () => {
-    const fixture = generationFixture(
-      [
-        [
-          { type: "text-start", id: "t" },
-          { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
-          { type: "text-end", id: "t" },
-          {
-            type: "finish",
-            finishReason: { unified: "stop", raw: "end_turn" },
-            usage: sdkUsage(2, 1),
-          },
-        ],
-      ],
-      2,
-      true,
-      "anthropic",
-    );
-    const saved = create(GenerationResponseSchema, {
-      outcome: AiOutcome.TOOL_REQUESTED,
-      toolCalls: [
-        { providerCallId: "provider-saved", toolName: "tool_0", argumentsJson: '{"ticket":"T-1"}' },
-      ],
-      anthropicContent: create(AnthropicAssistantContentSchema, {
-        blocks: [
-          { content: { case: "thinking", value: { text: "", signature: "saved-signature" } } },
-          {
-            content: {
-              case: "toolCall",
-              value: {
-                providerCallId: "provider-saved",
-                toolName: "tool_0",
-                argumentsJson: '{"ticket":"T-1"}',
-              },
-            },
-          },
-        ],
-      }),
-    });
-    vi.mocked(fixture.runtime.beginAttempt)
-      .mockResolvedValueOnce({
-        kind: "replay",
-        id: "saved-proposal",
-        response: fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved)),
-      })
-      .mockResolvedValueOnce({
-        id: "fresh-after-tool",
-        maxInputBytes: 2000,
-        maxOutputBytes: 2000,
-        deadlineEpochMs: 1000,
-        signal: fixture.runtime.signal,
-      });
-    vi.mocked(fixture.runtime.callTool).mockResolvedValue(
-      create(ToolResponseSchema, {
-        call: create(AiToolCallIdSchema, { value: "saved-call" }),
-        outcome: AiOutcome.ADMITTED,
-        text: ["Ticket found"],
-      }),
-    );
-    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({
-      ok: true,
-      value: create(ProposedSupportReplySchema, { replyText: "Done" }),
-    });
-    await expect(fixture.run()).resolves.toMatchObject({ ok: true });
-    expect(fixture.network).toHaveBeenCalledTimes(1);
-    expect(fixture.runtime.callTool).toHaveBeenCalledTimes(1);
-    const assistant = fixture.providerCalls[0]?.prompt.find(
-      (message) => message.role === "assistant",
-    );
-    expect(assistant?.role).toBe("assistant");
-    if (assistant?.role !== "assistant") throw new Error("Expected recorded assistant turn");
-    expect(
-      assistant.content.some(
-        (part) =>
-          part.type === "reasoning" &&
-          part.text === "" &&
-          part.providerOptions?.anthropic?.signature === "saved-signature",
-      ),
-    ).toBe(true);
-  });
-
   it("does not call an Anthropic proposed tool after journal persistence fails", async () => {
     const fixture = generationFixture(
       [
@@ -2043,438 +1798,6 @@ describe("Vercel connection registration", () => {
     expect(fixture.network).toHaveBeenCalledTimes(1);
     expect(fixture.runtime.callTool).not.toHaveBeenCalled();
   });
-
-  it("reuses a saved admitted decision without a second provider call", async () => {
-    const doDecide = vi.fn().mockRejectedValue(new Error("provider must not run"));
-    const fixture = decisionFixture({
-      specificationVersion: "v4",
-      provider: "fixture",
-      modelId: identity.model,
-      supportedQuestionTypes: ["boolean"],
-      doDecide,
-    });
-    const saved = create(SupportRoutingResultSchema, { queue: { value: "tier-one" } });
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "saved-decision",
-      response: create(DecisionResponseSchema, {
-        outcome: AiOutcome.ADMITTED,
-        admittedOutput: AnyMessages.pack(SupportRoutingResultSchema, saved),
-      }),
-    });
-    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: saved });
-    expect(doDecide).not.toHaveBeenCalled();
-    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    { outcome: AiOutcome.INVALID_OUTPUT, code: "INVALID_OUTPUT" as const, retryable: false },
-    { outcome: AiOutcome.FAILED, code: "UNAVAILABLE" as const, retryable: true },
-    { outcome: AiOutcome.REFUSED, code: "REFUSED" as const, retryable: false },
-  ])("preserves saved decision $code without another provider call", async (saved) => {
-    const doDecide = vi.fn().mockRejectedValue(new Error("provider must not run"));
-    const fixture = decisionFixture({
-      specificationVersion: "v4",
-      provider: "fixture",
-      modelId: identity.model,
-      supportedQuestionTypes: ["boolean"],
-      doDecide,
-    });
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "saved-decision-failure",
-      response: create(DecisionResponseSchema, {
-        outcome: saved.outcome,
-        diagnosticId: { value: "original-diagnostic" },
-      }),
-      failure: {
-        code: saved.code,
-        retryableByNewSignal: saved.retryable,
-        diagnosticId: "original-diagnostic",
-      },
-    });
-    await expect(fixture.run()).resolves.toMatchObject({
-      ok: false,
-      failure: {
-        code: saved.code,
-        retryableByNewSignal: saved.retryable,
-        diagnosticId: "original-diagnostic",
-      },
-    });
-    expect(doDecide).not.toHaveBeenCalled();
-    expect(fixture.runtime.recordFailure).not.toHaveBeenCalled();
-    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-  });
-
-  it("replays a saved invalid decision diagnostic without another provider call", async () => {
-    const doDecide = vi.fn().mockRejectedValue(new Error("provider must not run"));
-    const fixture = decisionFixture({
-      specificationVersion: "v4",
-      provider: "fixture",
-      modelId: identity.model,
-      supportedQuestionTypes: ["boolean"],
-      doDecide,
-    });
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "saved-invalid-decision",
-      response: create(DecisionResponseSchema, {
-        outcome: AiOutcome.INVALID_OUTPUT,
-        diagnosticId: { value: "diagnostic-saved" },
-      }),
-      failure: {
-        code: "INVALID_OUTPUT",
-        retryableByNewSignal: false,
-        diagnosticId: "diagnostic-saved",
-      },
-    });
-    await expect(fixture.run()).resolves.toMatchObject({
-      ok: false,
-      failure: { code: "INVALID_OUTPUT", diagnosticId: "diagnostic-saved" },
-    });
-    expect(doDecide).not.toHaveBeenCalled();
-    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    create(DecisionResponseSchema, { outcome: AiOutcome.ADMITTED }),
-    create(DecisionResponseSchema, { outcome: AiOutcome.INVALID_OUTPUT }),
-    create(GenerationResponseSchema, { outcome: AiOutcome.INVALID_OUTPUT }),
-  ])("rejects incompatible saved decision response without provider dispatch", async (response) => {
-    const doDecide = vi.fn().mockRejectedValue(new Error("provider must not run"));
-    const fixture = decisionFixture({
-      specificationVersion: "v4",
-      provider: "fixture",
-      modelId: identity.model,
-      supportedQuestionTypes: ["boolean"],
-      doDecide,
-    });
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "saved-incomplete-decision",
-      response,
-    });
-    await expect(fixture.run()).rejects.toThrow("Saved");
-    expect(doDecide).not.toHaveBeenCalled();
-    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-  });
-
-  it("reuses a saved admitted generation response without another provider attempt", async () => {
-    const fixture = generationFixture([], 1);
-    const saved = create(ProposedSupportReplySchema, { replyText: "Saved" });
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "saved-attempt",
-      response: create(GenerationResponseSchema, {
-        rawOutput: '{"replyText":"Saved"}',
-        outcome: AiOutcome.ADMITTED,
-        admittedOutput: AnyMessages.pack(ProposedSupportReplySchema, saved),
-      }),
-    });
-    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: saved });
-    expect(fixture.network).not.toHaveBeenCalled();
-    expect(fixture.runtime.reserveTransport).not.toHaveBeenCalled();
-    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    { outcome: AiOutcome.FAILED, code: "UNAVAILABLE" as const, retryable: true },
-    { outcome: AiOutcome.REFUSED, code: "REFUSED" as const, retryable: false },
-  ])("preserves saved generation $code without another provider attempt", async (saved) => {
-    const fixture = generationFixture([], 1);
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "saved-failure",
-      response: create(GenerationResponseSchema, {
-        outcome: saved.outcome,
-        diagnosticId: { value: "original-diagnostic" },
-      }),
-      failure: {
-        code: saved.code,
-        retryableByNewSignal: saved.retryable,
-        diagnosticId: "original-diagnostic",
-      },
-    });
-    await expect(fixture.run()).resolves.toMatchObject({
-      ok: false,
-      failure: {
-        code: saved.code,
-        retryableByNewSignal: saved.retryable,
-        diagnosticId: "original-diagnostic",
-      },
-    });
-    expect(fixture.network).not.toHaveBeenCalled();
-    expect(fixture.runtime.recordFailure).not.toHaveBeenCalled();
-    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    { outcome: AiOutcome.INVALID_OUTPUT, code: "UNAVAILABLE" as const, diagnosticId: "original" },
-    { outcome: AiOutcome.REFUSED, code: "UNAVAILABLE" as const, diagnosticId: "original" },
-    { outcome: AiOutcome.FAILED, code: "REFUSED" as const, diagnosticId: "original" },
-    { outcome: AiOutcome.FAILED, code: "UNAVAILABLE" as const, diagnosticId: "changed" },
-    { outcome: AiOutcome.UNSPECIFIED, code: "UNAVAILABLE" as const, diagnosticId: "original" },
-  ])("rejects an incoherent saved generation failure before redispatch", async (saved) => {
-    const fixture = generationFixture([], 1);
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "saved-incoherent",
-      response: create(GenerationResponseSchema, {
-        outcome: saved.outcome,
-        diagnosticId: { value: "original" },
-      }),
-      failure: { code: saved.code, retryableByNewSignal: false, diagnosticId: saved.diagnosticId },
-    });
-    await expect(fixture.run()).rejects.toThrow();
-    expect(fixture.network).not.toHaveBeenCalled();
-    expect(fixture.runtime.recordFailure).not.toHaveBeenCalled();
-  });
-
-  it.each(["text", "structured"] as const)(
-    "replays saved %s tool output before the next physical model attempt",
-    async (format) => {
-      const fixture = generationFixture(
-        [
-          [
-            { type: "text-delta", id: "t", delta: '{"replyText":"Done"}' },
-            {
-              type: "finish",
-              finishReason: { unified: "stop", raw: "stop" },
-              usage: sdkUsage(2, 1),
-            },
-          ],
-        ],
-        2,
-        true,
-      );
-      vi.mocked(fixture.runtime.beginAttempt)
-        .mockResolvedValueOnce({
-          kind: "replay",
-          id: "saved-proposal",
-          response: create(GenerationResponseSchema, {
-            outcome: AiOutcome.TOOL_REQUESTED,
-            toolCalls: [
-              {
-                providerCallId: "provider-saved",
-                toolName: "tool_0",
-                argumentsJson: '{"ticket":"T-1"}',
-              },
-            ],
-          }),
-        })
-        .mockResolvedValueOnce({
-          id: "fresh-after-tool",
-          maxInputBytes: 2000,
-          maxOutputBytes: 2000,
-          deadlineEpochMs: 1000,
-          signal: fixture.runtime.signal,
-        });
-      vi.mocked(fixture.runtime.callTool).mockResolvedValue(
-        create(ToolResponseSchema, {
-          call: create(AiToolCallIdSchema, { value: "spine-saved" }),
-          outcome: AiOutcome.ADMITTED,
-          ...(format === "text"
-            ? { text: ["Ticket found"] }
-            : { structuredJson: '{"ticketNumber":"T-1"}' }),
-        }),
-      );
-      const output = create(ProposedSupportReplySchema, { replyText: "Done" });
-      vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({ ok: true, value: output });
-      await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: output });
-      expect(fixture.network).toHaveBeenCalledTimes(1);
-      expect(fixture.runtime.callTool).toHaveBeenCalledWith(
-        expect.objectContaining({
-          ticketId: "saved-proposal",
-          providerCallId: "provider-saved",
-        }),
-      );
-      expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
-      if (format === "structured")
-        expect(JSON.stringify(fixture.providerCalls[0]?.prompt)).toContain("ticketNumber");
-    },
-  );
-
-  it.each([
-    { providerCallId: "", toolName: "tool_0", argumentsJson: "{}" },
-    { providerCallId: "saved", toolName: "other", argumentsJson: "{}" },
-    { providerCallId: "saved", toolName: "tool_0", argumentsJson: "{" },
-    { providerCallId: "saved", toolName: "tool_0", argumentsJson: "[]" },
-  ])("rejects an incoherent saved tool proposal before tool or provider dispatch", async (call) => {
-    const fixture = generationFixture([], 1, true);
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "malformed-proposal",
-      response: create(GenerationResponseSchema, {
-        outcome: AiOutcome.TOOL_REQUESTED,
-        toolCalls: [call],
-      }),
-    });
-    await expect(fixture.run()).rejects.toThrow("Saved tool proposals invalid");
-    expect(fixture.runtime.callTool).not.toHaveBeenCalled();
-    expect(fixture.network).not.toHaveBeenCalled();
-    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-  });
-
-  it("rejects a saved response with the wrong capability kind before dispatch", async () => {
-    const fixture = generationFixture([], 1);
-    vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-      kind: "replay",
-      id: "wrong-kind",
-      response: create(DecisionResponseSchema, { outcome: AiOutcome.INVALID_OUTPUT }),
-    });
-    await expect(fixture.run()).rejects.toThrow("kind mismatch");
-    expect(fixture.network).not.toHaveBeenCalled();
-    expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-  });
-
-  it("rejects incomplete saved generation outcomes without refetching", async () => {
-    for (const response of [
-      create(GenerationResponseSchema, { outcome: AiOutcome.ADMITTED }),
-      create(GenerationResponseSchema, { outcome: AiOutcome.INVALID_OUTPUT, rawOutput: "bad" }),
-    ]) {
-      const fixture = generationFixture([], 1);
-      vi.mocked(fixture.runtime.beginAttempt).mockResolvedValue({
-        kind: "replay",
-        id: "saved-incomplete",
-        response,
-      });
-      await expect(fixture.run()).rejects.toThrow();
-      expect(fixture.network).not.toHaveBeenCalled();
-      expect(fixture.runtime.finishAttempt).not.toHaveBeenCalled();
-    }
-  });
-
-  it("uses saved validation issues for correction without refetching the invalid output", async () => {
-    const fixture = generationFixture(
-      [
-        [
-          { type: "text-delta", id: "t", delta: '{"replyText":"Fixed"}' },
-          {
-            type: "finish",
-            finishReason: { unified: "stop", raw: "stop" },
-            usage: sdkUsage(2, 1),
-          },
-        ],
-      ],
-      2,
-    );
-    vi.mocked(fixture.runtime.beginAttempt)
-      .mockResolvedValueOnce({
-        kind: "replay",
-        id: "saved-invalid",
-        response: create(GenerationResponseSchema, {
-          rawOutput: "not-json",
-          outcome: AiOutcome.INVALID_OUTPUT,
-          diagnosticId: { value: "diagnostic-saved" },
-        }),
-        failure: {
-          code: "INVALID_OUTPUT",
-          retryableByNewSignal: false,
-          diagnosticId: "diagnostic-saved",
-        },
-        issues: [{ code: "INVALID_OUTPUT", path: "replyText", message: "A reply is required" }],
-      })
-      .mockResolvedValueOnce({
-        id: "correction",
-        maxInputBytes: 2000,
-        maxOutputBytes: 2000,
-        deadlineEpochMs: 1000,
-        signal: fixture.runtime.signal,
-      });
-    const output = create(ProposedSupportReplySchema, { replyText: "Fixed" });
-    vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({ ok: true, value: output });
-    await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: output });
-    expect(fixture.network).toHaveBeenCalledTimes(1);
-    expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response).toMatchObject({
-      outcome: AiOutcome.ADMITTED,
-    });
-    expect(vi.mocked(fixture.runtime.finishAttempt).mock.calls[0]?.[0].response).not.toHaveProperty(
-      "diagnosticId",
-    );
-    const corrected = vi.mocked(fixture.runtime.beginAttempt).mock.calls[1]?.[0];
-    if (corrected?.kind !== "generation") throw new Error("Expected correction request");
-    expect(corrected.content.corrects?.value).toBe("saved-invalid");
-  });
-
-  it.each(["signed", "redacted"] as const)(
-    "replays saved invalid Anthropic output with %s thinking into a correction",
-    async (kind) => {
-      const fixture = generationFixture(
-        [
-          [
-            { type: "text-start", id: "t" },
-            { type: "text-delta", id: "t", delta: '{"replyText":"Fixed"}' },
-            { type: "text-end", id: "t" },
-            {
-              type: "finish",
-              finishReason: { unified: "stop", raw: "end_turn" },
-              usage: sdkUsage(2, 1),
-            },
-          ],
-        ],
-        2,
-        false,
-        "anthropic",
-      );
-      const saved = create(GenerationResponseSchema, {
-        rawOutput: "not-json",
-        outcome: AiOutcome.INVALID_OUTPUT,
-        diagnosticId: { value: "diagnostic-saved" },
-        anthropicContent: create(AnthropicAssistantContentSchema, {
-          blocks: [
-            kind === "signed"
-              ? { content: { case: "thinking", value: { text: "", signature: "saved-signature" } } }
-              : { content: { case: "redactedThinking", value: { data: "saved-ciphertext" } } },
-            { content: { case: "text", value: "not-json" } },
-          ],
-        }),
-      });
-      vi.mocked(fixture.runtime.beginAttempt)
-        .mockResolvedValueOnce({
-          kind: "replay",
-          id: "saved-invalid-anthropic",
-          response: fromBinary(GenerationResponseSchema, toBinary(GenerationResponseSchema, saved)),
-          failure: {
-            code: "INVALID_OUTPUT",
-            retryableByNewSignal: false,
-            diagnosticId: "diagnostic-saved",
-          },
-          issues: [{ code: "INVALID_OUTPUT", path: "replyText", message: "A reply is required" }],
-        })
-        .mockResolvedValueOnce({
-          id: "correction",
-          maxInputBytes: 2000,
-          maxOutputBytes: 2000,
-          deadlineEpochMs: 1000,
-          signal: fixture.runtime.signal,
-        });
-      const output = create(ProposedSupportReplySchema, { replyText: "Fixed" });
-      vi.mocked(fixture.runtime.admitGeneration).mockReturnValue({ ok: true, value: output });
-      await expect(fixture.run()).resolves.toMatchObject({ ok: true, value: output });
-      expect(fixture.network).toHaveBeenCalledTimes(1);
-      expect(fixture.runtime.finishAttempt).toHaveBeenCalledTimes(1);
-      const correction = vi.mocked(fixture.runtime.beginAttempt).mock.calls[1]?.[0];
-      if (correction?.kind !== "generation") throw new Error("Expected correction request");
-      expect(correction.content.corrects?.value).toBe("saved-invalid-anthropic");
-      expect(correction.content.promptJson).toContain(
-        kind === "signed" ? "saved-signature" : "saved-ciphertext",
-      );
-      const assistant = fixture.providerCalls[0]?.prompt.find(
-        (message) => message.role === "assistant",
-      );
-      if (assistant?.role !== "assistant") throw new Error("Expected saved assistant turn");
-      const reasoning = assistant.content.find((part) => part.type === "reasoning");
-      if (reasoning?.type !== "reasoning") throw new Error("Expected saved reasoning block");
-      expect(reasoning.text).toBe("");
-      expect(reasoning.providerOptions?.anthropic).toEqual(
-        kind === "signed" ? { signature: "saved-signature" } : { redactedData: "saved-ciphertext" },
-      );
-      expect(
-        assistant.content.some((part) => part.type === "text" && part.text === "not-json"),
-      ).toBe(true);
-    },
-  );
 
   it("records the exact discovered tool schema and mapping in prepared generation input", async () => {
     const outputSchemaJson = JSON.stringify({
@@ -3236,7 +2559,7 @@ describe("Vercel connection registration", () => {
     expect(recordedMaxTokens(attempt.content.promptJson)).toBe(64000);
   });
 
-  it("records a changed Anthropic capacity in the durable request used for replay comparison", async () => {
+  it("records a changed Anthropic capacity in the physical request", async () => {
     const first = generationFixture(
       [],
       1,
@@ -4361,6 +3684,7 @@ describe("Vercel connection registration", () => {
       expect(runtime.callTool).toHaveBeenCalledWith({
         ticketId: "attempt-1",
         providerCallId: "provider-1",
+        providerToolName: "tool_0",
         server: "support",
         tool: "lookup",
         argumentsJson: '{"ticket":"T-1"}',

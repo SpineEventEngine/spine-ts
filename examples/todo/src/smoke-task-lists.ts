@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import type { QueryResponse } from "@spine-event-engine/proto/client";
 
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
@@ -58,20 +58,9 @@ export const SmokeTaskLists = {
     const omittedResponseRows = Math.max(0, response.message.length - inspectedRows.length);
 
     for (const row of inspectedRows) {
-      if (row.state === undefined) {
-        unavailableRows += 1;
-        continue;
-      }
-      try {
-        const taskList = AnyMessages.unpack(row.state, TaskListSchema);
-        if (taskList === undefined) {
-          unavailableRows += 1;
-          continue;
-        }
-        taskLists.push(taskList);
-      } catch {
-        unavailableRows += 1;
-      }
+      const taskList = this.decodeRow(row);
+      if (taskList === undefined) unavailableRows += 1;
+      else taskLists.push(taskList);
     }
 
     const diagnostics = taskLists
@@ -89,6 +78,20 @@ export const SmokeTaskLists = {
     }
 
     return { diagnostics, taskLists };
+  },
+
+  /**
+   * Reads one task-list state while treating malformed rows as unavailable.
+   * @param row Query row to inspect.
+   * @returns Decoded task list, if present and valid.
+   */
+  decodeRow(row: QueryResponse["message"][number]): TaskList | undefined {
+    if (row.state === undefined) return undefined;
+    try {
+      return AnyPacker.tryUnpack(row.state, TaskListSchema);
+    } catch {
+      return undefined;
+    }
   },
 
   /**

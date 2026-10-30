@@ -14,7 +14,7 @@
 
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   EventContextSchema,
@@ -59,7 +59,7 @@ export const scope: AgentHistoryStorageInput<string> = {
 };
 
 function packed<T extends Message>(schema: GenMessage<T>, message: T) {
-  return AnyMessages.pack(schema, message);
+  return AnyPacker.pack(schema, message);
 }
 
 export function occurredAt(seconds: bigint, nanos = 0): Timestamp {

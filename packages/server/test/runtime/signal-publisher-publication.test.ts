@@ -13,7 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import type { EventStore } from "@spine-event-engine/storage";
 import {
   EventContextSchema,
@@ -125,10 +125,10 @@ function committedEvent(value: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value }),
     context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(TaskIdSchema, id),
+      producerId: AnyPacker.pack(TaskIdSchema, id),
       version: create(VersionSchema, { number: 1 }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id,
@@ -143,11 +143,11 @@ function systemCreatedEvent() {
   const entityId = create(TaskIdSchema, { value: "task-1" });
   return create(EventSchema, {
     id: create(EventIdSchema, { value: "created-task-1" }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       EntityCreatedSchema,
       create(EntityCreatedSchema, {
         entity: create(MessageIdSchema, {
-          id: AnyMessages.pack(TaskIdSchema, entityId),
+          id: AnyPacker.pack(TaskIdSchema, entityId),
           typeUrl: TypeUrls.derive(TaskSchema),
         }),
         kind: EntityOption_Kind.AGGREGATE,

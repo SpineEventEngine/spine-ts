@@ -259,6 +259,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
 
   /**
    * Sends an admitted Post or Read envelope through its matching native descriptor.
+   * Removes the backend transport's media type from errors before a gateway serializes them.
    * @param request The admitted unary request envelope.
    * @returns The encoded native response.
    */
@@ -268,23 +269,27 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     readonly value: Uint8Array;
     readonly signal?: AbortSignal;
   }): Promise<Uint8Array> {
-    if (request.service === "spine.client.CommandService" && request.method === "Post")
-      return toBinary(
-        CommandService.method.post.output,
-        await createClient(CommandService, this.#transport).post(
-          fromBinary(CommandService.method.post.input, request.value),
-          ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
-        ),
-      );
-    if (request.service === "spine.client.QueryService" && request.method === "Read")
-      return toBinary(
-        QueryService.method.read.output,
-        await createClient(QueryService, this.#transport).read(
-          fromBinary(QueryService.method.read.input, request.value),
-          ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
-        ),
-      );
-    throw new ConnectError("unsupported native unary operation", Code.Unimplemented);
+    try {
+      if (request.service === "spine.client.CommandService" && request.method === "Post")
+        return toBinary(
+          CommandService.method.post.output,
+          await createClient(CommandService, this.#transport).post(
+            fromBinary(CommandService.method.post.input, request.value),
+            ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
+          ),
+        );
+      if (request.service === "spine.client.QueryService" && request.method === "Read")
+        return toBinary(
+          QueryService.method.read.output,
+          await createClient(QueryService, this.#transport).read(
+            fromBinary(QueryService.method.read.input, request.value),
+            ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
+          ),
+        );
+      throw new ConnectError("unsupported native unary operation", Code.Unimplemented);
+    } catch (error) {
+      throw NativeGatewayValues.publicError(error);
+    }
   }
 
   /**
@@ -297,11 +302,15 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     request: PublicSubscriptionWire,
     signal: SubscriptionAbortSignal,
   ): Promise<BackendSubscriptionEnvelope> {
-    const result = await createClient(SubscriptionService, this.#transport).subscribe(
-      fromBinary(SubscriptionSchema, request.bytes).topic ?? create(TopicSchema),
-      { signal },
-    );
-    return { kind: "backend-subscription-envelope", bytes: toBinary(SubscriptionSchema, result) };
+    try {
+      const result = await createClient(SubscriptionService, this.#transport).subscribe(
+        fromBinary(SubscriptionSchema, request.bytes).topic ?? create(TopicSchema),
+        { signal },
+      );
+      return { kind: "backend-subscription-envelope", bytes: toBinary(SubscriptionSchema, result) };
+    } catch (error) {
+      throw NativeGatewayValues.publicError(error);
+    }
   }
 
   /**
@@ -318,23 +327,27 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     signal: SubscriptionAbortSignal,
   ): Promise<void> {
     const subscription = fromBinary(SubscriptionSchema, request.wire.bytes);
-    for await (const update of createClient(SubscriptionService, this.#transport).activate(
-      subscription,
-      { signal },
-    )) {
-      const topic = subscription.topic;
-      const updateTopic = update.subscription?.topic;
-      if (
-        update.subscription?.id?.value !== subscription.id?.value ||
-        topic === undefined ||
-        updateTopic === undefined ||
-        !equals(TopicSchema, updateTopic, topic)
-      )
-        throw new Error("Backend child update does not match its subscription.");
-      await request.updates({
-        kind: "subscription-update",
-        bytes: toBinary(SubscriptionUpdateSchema, update),
-      });
+    try {
+      for await (const update of createClient(SubscriptionService, this.#transport).activate(
+        subscription,
+        { signal },
+      )) {
+        const topic = subscription.topic;
+        const updateTopic = update.subscription?.topic;
+        if (
+          update.subscription?.id?.value !== subscription.id?.value ||
+          topic === undefined ||
+          updateTopic === undefined ||
+          !equals(TopicSchema, updateTopic, topic)
+        )
+          throw new Error("Backend child update does not match its subscription.");
+        await request.updates({
+          kind: "subscription-update",
+          bytes: toBinary(SubscriptionUpdateSchema, update),
+        });
+      }
+    } catch (error) {
+      throw NativeGatewayValues.publicError(error);
     }
   }
 
@@ -348,10 +361,14 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     request: { readonly wire: PublicSubscriptionWire },
     signal: SubscriptionAbortSignal,
   ): Promise<void> {
-    await createClient(SubscriptionService, this.#transport).cancel(
-      fromBinary(SubscriptionSchema, request.wire.bytes),
-      { signal },
-    );
+    try {
+      await createClient(SubscriptionService, this.#transport).cancel(
+        fromBinary(SubscriptionSchema, request.wire.bytes),
+        { signal },
+      );
+    } catch (error) {
+      throw NativeGatewayValues.publicError(error);
+    }
   }
 
   /**
@@ -364,10 +381,14 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     envelope: BackendSubscriptionEnvelope,
     signal: SubscriptionAbortSignal,
   ): Promise<void> {
-    await createClient(SubscriptionService, this.#transport).cancel(
-      fromBinary(SubscriptionSchema, envelope.bytes),
-      { signal },
-    );
+    try {
+      await createClient(SubscriptionService, this.#transport).cancel(
+        fromBinary(SubscriptionSchema, envelope.bytes),
+        { signal },
+      );
+    } catch (error) {
+      throw NativeGatewayValues.publicError(error);
+    }
   }
 }
 
@@ -508,6 +529,23 @@ export function createNativeGatewayServices(
  * Converts native Connect gateway inputs, responses, and errors.
  */
 const NativeGatewayValues = Object.freeze({
+  /**
+   * Removes backend transport headers before another Connect server serializes the error.
+   * @param error The native RPC failure.
+   * @returns The original failure with application metadata and details retained.
+   */
+  publicError(error: unknown): unknown {
+    if (error instanceof ConnectError)
+      for (const header of [
+        "content-type",
+        "grpc-status",
+        "grpc-message",
+        "grpc-status-details-bin",
+      ])
+        error.metadata.delete(header);
+    return error;
+  },
+
   /**
    * Resolves authenticated context for a public request.
    *

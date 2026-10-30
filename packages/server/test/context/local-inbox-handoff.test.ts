@@ -13,9 +13,8 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { create } from "@bufbuild/protobuf";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { TaskIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
@@ -30,12 +29,49 @@ import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("DeliveryReadiness", () => {
+  it("completes a supervised remote handoff after notification without draining", async () => {
+    const sharedWake = vi.fn();
+    const shared = { wake: sharedWake } as unknown as Delivery;
+    const onWake = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, shared, onWake, true);
+    const onDrain = vi.fn().mockResolvedValue(undefined);
+
+    expect(readiness.route(shared)).toBe(shared);
+    await readiness.claim(ready()).complete(onDrain);
+
+    expect(onWake).toHaveBeenCalledExactlyOnceWith(ShardIndex.single());
+    expect(onDrain).not.toHaveBeenCalled();
+    expect(sharedWake).not.toHaveBeenCalled();
+  });
+
+  it("does not turn an explicit receipt failure into success through delivered readback", async () => {
+    const message = {
+      id: { value: "failed-agent", shard: ShardIndex.single() },
+    } as InboxMessage;
+    const failure = new Error("receipt compare-and-set failed");
+    const delivery = {
+      drainMessage: () =>
+        Promise.resolve({ acknowledged: false, outcome: { kind: "failed", error: failure } }),
+      inbox: { readMessage: () => Promise.resolve({ ...message, status: "DELIVERED" }) },
+    } as unknown as Delivery;
+    await expect(
+      InboxHandoff.runDrain({
+        delivery,
+        received: message,
+        node: "AgentReceipts",
+        onReplay: () => undefined,
+        replayFailureMessage: "replay failed",
+        skippedMessage: "skipped",
+        unfinishedMessage: "unfinished",
+      }),
+    ).rejects.toBe(failure);
+  });
   it("stops a direct handoff when an older row for the same signal fails", async () => {
     const shard = ShardIndex.single();
     const received = {
       id: { value: "new-row", shard },
       inboxId: {
-        targetId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
+        targetId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
         targetTypeUrl: TypeUrls.derive(TaskSchema),
       },
       signalId: "event-1",
@@ -79,7 +115,7 @@ describe("DeliveryReadiness", () => {
     const received = {
       id: { value: "new-row", shard },
       inboxId: {
-        targetId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
+        targetId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
         targetTypeUrl: TypeUrls.derive(TaskSchema),
       },
       signalId: "event-1",
@@ -153,355 +189,44 @@ describe("DeliveryReadiness", () => {
     expect(drainMessage.mock.calls[0]?.[1]).not.toHaveProperty("onDelivered");
   });
 
-  it("publishes the direct gate before a readiness callback can transition", async () => {
-    const scope = ready();
+  it("waits for admitted direct work and preserves its original failure", async () => {
+    const readiness = new DeliveryReadiness();
+    const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
-    const routed: DeliveryReady[] = [];
-    let transition: Promise<void> | undefined;
-    const readiness = new DeliveryReadiness(() => {
-      transition = readiness.transition([scope], (next) => routed.push(next));
+    const failure = new Error("direct replay failed");
+    const draining = readiness.claim(ready()).complete(async () => {
+      entered.resolve(undefined);
+      await release.promise;
+      throw failure;
     });
-
-    const handoff = readiness.claim(scope);
-    const transferring = transition;
-    if (transferring === undefined) {
-      throw new Error("Expected the readiness callback to begin transition.");
-    }
-    let transferred = false;
-    void transferring.then(() => {
-      transferred = true;
+    await entered.promise;
+    const closing = readiness.close();
+    let settled = false;
+    void closing.then(() => {
+      settled = true;
     });
     await Promise.resolve();
-    await Promise.resolve();
-
-    expect(transferred).toBe(false);
-    const draining = handoff.complete(() => release.promise);
+    expect(settled).toBe(false);
     release.resolve(undefined);
-    await Promise.all([draining, transferring]);
-    expect(routed).toEqual([]);
+    await expect(draining).rejects.toBe(failure);
+    await closing;
+    expect(settled).toBe(true);
   });
 
-  it("closes direct admission, awaits every admitted drain, and transfers bounded readiness once", async () => {
-    const scope = ready("tenant-a");
-    const first = Promise.withResolvers<undefined>();
-    const second = Promise.withResolvers<undefined>();
-    const routed: DeliveryReady[] = [];
-    const readiness = new DeliveryReadiness();
-    let directDrains = 0;
-
-    const firstDrain = readiness.claim(scope).complete(() => {
-      directDrains += 1;
-      return first.promise;
-    });
-    const secondDrain = readiness.claim(scope).complete(() => {
-      directDrains += 1;
-      return second.promise;
-    });
-    const transition = readiness.transition([scope], (next) => routed.push(next));
-    const buffered = readiness.claim(scope).complete(() => {
-      directDrains += 1;
-      return Promise.resolve();
-    });
-    let transitioned = false;
-    void transition.then(() => {
-      transitioned = true;
-    });
-
-    await buffered;
-    expect(directDrains).toBe(2);
-    expect(routed).toEqual([]);
-    first.resolve(undefined);
-    await firstDrain;
-    await Promise.resolve();
-    expect(transitioned).toBe(false);
-
-    second.resolve(undefined);
-    await Promise.all([secondDrain, transition]);
-    expect(routed).toEqual([scope]);
-
-    await readiness.claim(scope).complete(() => {
-      directDrains += 1;
-      return Promise.resolve();
-    });
-    expect(directDrains).toBe(2);
-    expect(routed).toEqual([scope, scope]);
-  });
-
-  it("preserves a pre-transition exact-drain rejection", async () => {
-    const failure = new Error("exact drain failed");
-    const readiness = new DeliveryReadiness();
-
-    await expect(readiness.claim(ready()).complete(() => Promise.reject(failure))).rejects.toBe(
-      failure,
-    );
-  });
-
-  it("rejects a second ownership transfer", async () => {
-    const scope = ready();
-    const readiness = new DeliveryReadiness();
-
-    await readiness.transition([scope], () => undefined);
-
-    await expect(readiness.transition([scope], () => undefined)).rejects.toThrow(
-      "Delivery readiness ownership is already transferred.",
-    );
-  });
-
-  it("runs direct completion once across concurrent and repeated calls", async () => {
-    const readiness = new DeliveryReadiness();
-    const handoff = readiness.claim(ready());
-    const release = Promise.withResolvers<undefined>();
-    let drains = 0;
-
-    const first = handoff.complete(() => {
-      drains += 1;
-      return release.promise;
-    });
-    const concurrent = handoff.complete(() => {
-      drains += 1;
-      return Promise.resolve();
-    });
-    expect(drains).toBe(1);
-
-    release.resolve(undefined);
-    await Promise.all([first, concurrent]);
-    await handoff.complete(() => {
-      drains += 1;
-      return Promise.resolve();
-    });
-    expect(drains).toBe(1);
-  });
-
-  it("publishes shared completion before synchronous complete reentry", async () => {
-    const scope = ready();
-    const readiness = new DeliveryReadiness();
-    const handoff = readiness.claim(scope);
-    const release = Promise.withResolvers<undefined>();
-    let drains = 0;
-    let reentrant: Promise<void> | undefined;
-
-    const original = handoff.complete(() => {
-      drains += 1;
-      reentrant = handoff.complete(() => {
-        drains += 1;
-        return Promise.resolve();
-      });
-      return release.promise;
-    });
-    const transferring = readiness.transition([scope], () => undefined);
-    let transferred = false;
-    void transferring.then(() => {
-      transferred = true;
-    });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(drains).toBe(1);
-    expect(reentrant).toBe(original);
-    expect(transferred).toBe(false);
-    release.resolve(undefined);
-    await Promise.all([original, transferring]);
-  });
-
-  it("does not release the shared completion gate on synchronous abandon", async () => {
-    const scope = ready();
-    const readiness = new DeliveryReadiness();
-    const handoff = readiness.claim(scope);
-    const release = Promise.withResolvers<undefined>();
-
-    const draining = handoff.complete(() => {
-      handoff.abandon();
-      return release.promise;
-    });
-    const transferring = readiness.transition([scope], () => undefined);
-    let transferred = false;
-    void transferring.then(() => {
-      transferred = true;
-    });
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(transferred).toBe(false);
-    release.resolve(undefined);
-    await Promise.all([draining, transferring]);
-  });
-
-  it("does not start direct completion after abandon", async () => {
-    const readiness = new DeliveryReadiness();
-    const handoff = readiness.claim(ready());
-    let drains = 0;
-
-    handoff.abandon();
-    await handoff.complete(() => {
-      drains += 1;
-      return Promise.resolve();
-    });
-
-    expect(drains).toBe(0);
-  });
-
-  it("keeps the installed route when onReady is called after transfer", async () => {
-    const scope = ready();
-    const routed: DeliveryReady[] = [];
-    const replaced: DeliveryReady[] = [];
-    const readiness = new DeliveryReadiness();
-    await readiness.transition([scope], (next) => routed.push(next));
-
-    readiness.onReady((next) => replaced.push(next));
-    await readiness.claim(scope).complete(() => Promise.resolve());
-
-    expect(routed).toEqual([scope]);
-    expect(replaced).toEqual([]);
-  });
-
-  it("routes inbox writes and shard work through transferred environment ports", async () => {
-    const localStorage = new InMemoryStorageFactory();
-    const remoteStorage = new InMemoryStorageFactory();
-    const local = new Delivery({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: localStorage,
-    });
-    const remote = new Delivery({
-      context: { name: "Remote", multitenant: false },
-      storageFactory: remoteStorage,
-    });
-    const readiness = new DeliveryReadiness();
-
-    expect(readiness.route(local)).toBe(local);
-    await readiness.transition([ready()], () => undefined, {
-      ports: { inbox: remote.inbox, workRegistry: remote.shards },
-    });
-
-    const routed = readiness.route(local);
-    expect(routed).not.toBe(local);
-    expect(routed.context).toEqual(local.context);
-    expect(routed.storageFactory).toBe(local.storageFactory);
-    expect(routed.inbox).toBe(remote.inbox);
-    expect(routed.shards).toBe(remote.shards);
-
-    localStorage.close();
-    remoteStorage.close();
-  });
-
-  it("fails a stalled transition finitely for arbitrary unconfigured scopes", async () => {
-    const scope = ready();
-    const readiness = new DeliveryReadiness();
-    const release = Promise.withResolvers<undefined>();
-    const draining = readiness.claim(scope).complete(() => release.promise);
-    const routed: DeliveryReady[] = [];
-    const transition = readiness.transition([scope], (next) => routed.push(next));
-    let directDrains = 1;
-
-    for (let index = 0; index < 2_048; index += 1) {
-      await readiness
-        .claim({ ...scope, targetTypeUrl: `type.example.dev/Unknown.${String(index)}` })
-        .complete(() => {
-          directDrains += 1;
-          return Promise.resolve();
-        });
-    }
-    expect(routed).toEqual([]);
-    expect(directDrains).toBe(1);
-
-    release.resolve(undefined);
-    await draining;
-    await expect(transition).rejects.toThrow(
-      "Delivery readiness transition received an unconfigured scope.",
-    );
-    expect(routed).toEqual([]);
-
-    await readiness
-      .claim({ ...scope, targetTypeUrl: "type.example.dev/Unknown.Late" })
-      .complete(() => {
-        directDrains += 1;
-        return Promise.resolve();
-      });
-    expect(directDrains).toBe(1);
-  });
-
-  it("retries a failed transition with a refreshed complete scope set", async () => {
-    const configured = ready();
-    const omitted = { ...configured, targetTypeUrl: "type.example.dev/Recovered" };
-    const readiness = new DeliveryReadiness();
-    const release = Promise.withResolvers<undefined>();
-    const draining = readiness.claim(configured).complete(() => release.promise);
-    const routed: DeliveryReady[] = [];
-    const stale = readiness.transition([configured], (next) => routed.push(next));
-    let directDrains = 1;
-
-    await readiness.claim(omitted).complete(() => {
-      directDrains += 1;
-      return Promise.resolve();
-    });
-    release.resolve(undefined);
-    await draining;
-    await expect(stale).rejects.toThrow(
-      "Delivery readiness transition received an unconfigured scope.",
-    );
-    expect(routed).toEqual([]);
-
-    await readiness.claim(omitted).complete(() => {
-      directDrains += 1;
-      return Promise.resolve();
-    });
-    expect(routed).toEqual([]);
-
-    const retry = readiness.transition([configured, omitted], (next) => routed.push(next));
-    await readiness.claim(configured).complete(() => {
-      directDrains += 1;
-      return Promise.resolve();
-    });
-    await readiness.claim(omitted).complete(() => {
-      directDrains += 1;
-      return Promise.resolve();
-    });
-    await retry;
-
-    expect(directDrains).toBe(1);
-    expect(routed).toEqual([configured, omitted]);
-  });
-
-  it("accepts one simultaneous failed-checkpoint retry without loser mutation", async () => {
-    const configured = ready();
-    const omitted = { ...configured, targetTypeUrl: "type.example.dev/Recovered" };
-    const readiness = new DeliveryReadiness();
-    const staleRoute: DeliveryReady[] = [];
-    const stale = readiness.transition([configured], (next) => staleRoute.push(next));
-    await readiness.claim(omitted).complete(() => Promise.resolve());
-    await expect(stale).rejects.toThrow(
-      "Delivery readiness transition received an unconfigured scope.",
-    );
-
-    const winnerRoute: DeliveryReady[] = [];
-    const loserRoute: DeliveryReady[] = [];
-    let directDrains = 0;
-    const winner = readiness.transition([configured, omitted], (next) => winnerRoute.push(next));
-    const configuredReadiness = readiness.claim(configured).complete(() => {
-      directDrains += 1;
-      return Promise.resolve();
-    });
-    const loser = readiness.transition([omitted], (next) => loserRoute.push(next));
-    const omittedReadiness = readiness.claim(omitted).complete(() => {
-      directDrains += 1;
-      return Promise.resolve();
-    });
-
-    expect(winnerRoute).toEqual([]);
-    expect(loserRoute).toEqual([]);
-    await expect(loser).rejects.toThrow("Delivery readiness ownership is already transferred.");
-    await Promise.all([configuredReadiness, omittedReadiness, winner]);
-    expect(staleRoute).toEqual([]);
-    expect(winnerRoute).toEqual([configured, omitted]);
-    expect(loserRoute).toEqual([]);
-    expect(directDrains).toBe(0);
-
-    await readiness.claim(omitted).complete(() => {
-      directDrains += 1;
-      return Promise.resolve();
-    });
-    expect(winnerRoute).toEqual([configured, omitted, omitted]);
-    expect(loserRoute).toEqual([]);
-    expect(directDrains).toBe(0);
+  it("keeps deferred routes until capacity is available and discards them on close", async () => {
+    const sharedWake = vi.fn();
+    const shared = { wake: sharedWake } as unknown as Delivery;
+    const onWake = vi.fn();
+    const readiness = new DeliveryReadiness(undefined, shared, onWake);
+    readiness.defer(ready());
+    expect(onWake).not.toHaveBeenCalled();
+    readiness.retryDeferred();
+    expect(onWake).toHaveBeenCalledOnce();
+    readiness.defer(ready());
+    await readiness.close();
+    readiness.retryDeferred();
+    expect(onWake).toHaveBeenCalledOnce();
+    expect(sharedWake).not.toHaveBeenCalled();
   });
 });
 

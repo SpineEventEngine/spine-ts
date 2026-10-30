@@ -18,7 +18,6 @@ const calls = vi.hoisted(() => {
   const delivery = { open: vi.fn(() => Promise.resolve()) };
   const storageFactory = {};
   const typeRegistry = {};
-  const stringifiers = { setTypeRegistry: vi.fn() };
   const subscriptionRegistry = {};
   const context = {};
   const server = {};
@@ -26,11 +25,9 @@ const calls = vi.hoisted(() => {
   const add = vi.fn(() => ({ start }));
   const builder = {
     setClient: vi.fn(),
-    setStringifierRegistry: vi.fn(),
     build: vi.fn(() => storageFactory),
   };
   builder.setClient.mockReturnValue(builder);
-  builder.setStringifierRegistry.mockReturnValue(builder);
   return {
     add,
     builder,
@@ -42,16 +39,12 @@ const calls = vi.hoisted(() => {
     shardStrategy: {},
     start,
     storageFactory,
-    stringifiers,
     subscriptionRegistry,
     typeRegistry,
   };
 });
 
 vi.mock("@spine-event-engine/core", () => ({
-  StringifierRegistry: vi.fn(function StringifierRegistry() {
-    return calls.stringifiers;
-  }),
   TypeRegistry: { from: vi.fn(() => calls.typeRegistry) },
 }));
 vi.mock("@spine-event-engine/delivery-client", () => ({
@@ -93,8 +86,12 @@ describe("To-Do multi-process replica", () => {
     );
 
     expect(calls.builder.setClient).toHaveBeenCalledOnce();
-    expect(calls.stringifiers.setTypeRegistry).toHaveBeenCalledWith(calls.typeRegistry);
-    expect(calls.builder.setStringifierRegistry).toHaveBeenCalledWith(calls.stringifiers);
+    expect(calls.builder.build).toHaveBeenCalledOnce();
+    expect(calls.environmentUse).toHaveBeenCalledWith({
+      storageFactory: calls.storageFactory,
+      typeRegistry: calls.typeRegistry,
+      delivery: calls.delivery,
+    });
     expect(calls.createContext).toHaveBeenCalledWith({
       storageFactory: calls.storageFactory,
       deliveryStrategy: calls.shardStrategy,

@@ -6,11 +6,20 @@ This reference is for coding agents configuring the Google Cloud Datastore adapt
 
 Import `DatastoreStorageFactory`, `DatastoreStorageFactoryBuilder`,
 `RecordLayout`, `CreateRecordStorage`, `CreateEntityStorage`,
+`PrepareDatastoreRecordStorage`, `PrepareDatastoreEntityStorage`,
 `NamespaceConverter`, `DefaultNamespaceConverter`, `DatastoreIdColumn`,
 `DatastoreColumnMapping`, and `DatastoreQueryLimitError` from
 `@spine-event-engine/storage-datastore`.
 Create a factory with `DatastoreStorageFactory.newBuilder().setClient(client)`.
 The adapter never closes that client.
+
+`build()` is offline. `checkConnection()` runs one read-only exact-key,
+keys-only query against shared `__namespace__` metadata and remembers a
+successful result. It retries failures and drains admitted checks on close.
+An empty result is valid for an unused namespace. The diagnostic needs
+`datastore.namespaces.get` and `datastore.namespaces.list`; it does not prove
+ordinary Entity read/write permissions, deployed composite indexes, or every
+query shape. The caller-supplied client remains open.
 
 The builder is mutable until `build()` and the built factory receives a
 snapshot. The last registration for the same identity wins. Record resolution
@@ -23,9 +32,12 @@ uses this precedence:
 5. the default kind.
 
 `setNamespaceConverter(...)` replaces complete `TenantId`/native namespace
-conversion. `setStringifierRegistry(...)` supplies reversible mappings for
-message-valued IDs and ordinary message columns. The stringifier registry is
-snapshotted by `build()`; a custom namespace converter is retained and must
+conversion. The default shared registry maps message-valued IDs and ordinary
+message columns using generated descriptors registered on module import.
+`setStringifierRegistry(...)` accepts a custom registry, snapshotted by
+`build()`. `setEventStoreKind(contextName, kind, role?)` selects one native kind
+for the exact bounded-context name and domain or system role. A custom
+namespace converter is retained and must
 remain behaviorally immutable for the factory lifetime. `organizeRecords(...)`
 changes a kind. `useRecordStorage(...)` replaces a record-family provider.
 `Identifiers` select the key representation, and the same configured
@@ -38,8 +50,27 @@ a provider string or infer shared filter/sort-name validation.
 its commit capability. Custom providers receive the storage context, record or
 Entity contract, and caller-supplied client, but not the built-in converter or
 stringifier registry; they must provide equivalent tenant, ID, and column mapping.
+For model preparation, the existing `StoragePreparations` provider port checks
+declarative current, enabled history, and surviving Agent audit families without
+opening storage handles or writing records. Native `create` and `check` establish
+the same narrow kind, namespace, ID, and column compatibility plus metadata-read
+facts; missing kinds are valid. Applications must deploy the required indexes,
+including the three Agent audit indexes. A selected custom creator requires an
+optional trailing preparation callback on `useRecordStorage(...)` or
+`useEntityStorage(...)`; preparation rejects before invoking a creator when that
+callback is absent. Custom callbacks receive the declarative input, caller client,
+and `create` or read-only `check` mode, and must establish matching guarantees.
+The callback and creator must share application-managed readiness: after a
+successful `check`, later ordinary use must not auto-create the checked
+structures. A `create` callback verifies its result. Each callback cleans up
+resources it partially acquires if preparation fails.
 The built-in Entity provider writes its record families independently; custom
 record creators do not join a combined Entity transaction.
+Custom Entity bundles return a `Promise<void>` from `close()` and provide synchronous
+`closeIdle()` for internal assembly rollback. Their close fences new commits immediately,
+waits for admitted work, and releases every resource acquired by the custom creator.
+The factory tracks each bundle as one disposal unit and awaits its close before
+closing the native tenant catalog.
 
 ## Physical layout
 
@@ -68,11 +99,10 @@ numbers, and integers outside their declared/provider range fail before an
 RPC. Stored `bytes` remain authoritative; declared properties are rematerialized
 after decoding.
 
-`keep()` bridges native `__namespace__` metadata lag without storing a tenant
-record. Its early-admission cache retains at most 1,000 tenants for at most 60
-seconds and removes an entry sooner when native metadata becomes visible. A
-full cache fails closed; applications can retry after metadata appears or an
-entry expires.
+`contains()` checks the exact native `__namespace__` metadata key without
+writing records or scanning the catalog. `keep()` confirms an existing
+namespace and rejects a missing one. Applications needing registration before
+the first Datastore entity exists supply their own tenant index.
 
 Declared string and boolean columns use native values. Integer columns use
 Datastore int values, float/double columns use Datastore double values, bytes
@@ -141,10 +171,9 @@ of at most 128 rows and sum serialized entry bytes. A fetched chunk can be
 larger than the returned byte budget.
 
 The factory has one tenant catalog. It reads native `__namespace__` metadata,
-converts only namespaces recognized by its `NamespaceConverter`, and keeps an early
-in-memory cache for newly admitted tenants. `keep()` stores no `TenantId` row or
-other discovery record; Datastore exposes native metadata after an application
-entity is written in that namespace.
+converts only namespaces recognized by its `NamespaceConverter`. `keep()`
+stores no `TenantId` row or other discovery record; Datastore exposes native
+metadata after an application entity is written in that namespace.
 
 Before deployment to an existing project, run `pnpm --dir
 packages/storage-datastore inventory:legacy -- --project <project-id>`. It
@@ -153,33 +182,16 @@ an old `_scope` property, or a scope-derived key name. Passing the inventory is
 a startup prerequisite; the application performs migration offline, with no
 dual-layout reads or automatic conflict winner.
 
-## Agent execution
+## Agent live persistence
 
-Agent execution uses `spine_agent_execution` and `spine_agent_execution_head` in
-the selected tenant namespace. Deploy the execution indexes in this package's
-`index.yaml` together with its Agent history indexes. Pending queries select one
-entry per instance by its complete eligibility-time key.
-
-The database must support the adapter's non-ancestor query inside a transaction.
-The `OPTIMISTIC_WITH_ENTITY_GROUPS` concurrency mode requires ancestor queries
-and is therefore incompatible with Agent execution in this adapter. See
-[Datastore transaction modes](https://docs.cloud.google.com/datastore/docs/concepts/transactions).
-Admission probes that query and the indexed pending query before saving work.
-A database mode that forbids it is rejected; the adapter does not fall back to
-a scan or a query outside the transaction. The local Agent execution conformance suite uses the Firestore emulator in
-Datastore mode, distributed with Google Cloud CLI 578.0.0. This tests the
-transactional query capability; it does not validate a production project's
-configuration.
-
-Conditional completion reads the current Entity Version and pending work before
-queuing writes. State, mandatory history, preferences, execution completion and
-outgoing Command obligations are saved in the same transaction. Emitted domain
-Events remain in immutable Agent history and are handed to the normal EventBus
-after completion without a saved delivery phase. Datastore entity, index and
-transaction limits still apply: execution, per-instance and Agent history
-payloads are limited to 1,000,000 encoded bytes each, and the adapter limits a staged transaction to
-9 MiB. Response reservations must account for the complete stored records before
-inference. No transaction remains open during a model call.
+`AgentHistoryStorage.appendAll()` saves one complete immutable audit group
+atomically. The live `EntityCommitStorage.commitAgent()` compares exact Entity
+state and model preferences before it writes accepted state, preferences, and
+history in one Datastore transaction. A no-op or preference-only turn can leave
+the Entity Version unchanged. Typed admission receipts persist separately and
+do not make an interrupted Agent handler replayable. Datastore entity, index,
+and transaction limits still apply, including the adapter's 9 MiB staged
+transaction payload ceiling. No transaction remains open during a model call.
 
 ## Operations and errors
 
@@ -188,6 +200,6 @@ errors are surfaced without payload data. The emulator suite is required for
 provider acceptance; cloud smoke remains credential-gated.
 
 `build()` and storage-handle creation issue no request. Closing the factory is
-idempotent and prevents creation of another handle without closing the
-caller-supplied client or already-created handles. Each record, Entity, and commit
-handle has an independent idempotent lifecycle and rejects work after it is closed.
+idempotent, prevents creation of another handle, and drains tracked Entity bundles
+and commit handles. It leaves ordinary independent record handles and the
+caller-supplied client open. Each handle rejects work after it is closed.

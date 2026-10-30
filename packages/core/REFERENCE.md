@@ -13,7 +13,7 @@ transport semantic tags.
 ## Public entry point
 
 Import from `@spine-event-engine/core`. The package exports `Validate`,
-`ValidationException`, `RejectionThrowable`, `AnyMessages`, `SignalEnvelopes`,
+`ValidationException`, `RejectionThrowable`, `AnyPacker`, `SignalEnvelopes`,
 `TypeUrls`, `TypeRegistry`, `spineCoreRegistry`, `Identifiers`, `Stringifiers`,
 `StringifierRegistry`, the `Stringifier` contract, `Time`, and their exported input,
 result, and metadata types.
@@ -126,13 +126,14 @@ application subscription API and is not exported from the core root.
 `Identifiers` packs and unpacks the generated-message and supported primitive
 identifier kinds used by storage contracts. `Stringifiers.forMessage()` maps a
 generated message reversibly to compact Proto JSON by default.
-`StringifierRegistry` lets an application register another reversible mapping
-for a particular message schema. Providers snapshot the registry they accept;
-use the same mapping for stored IDs or columns and their query operands.
-Call `setTypeRegistry(applicationTypes)` before provider construction when
-default Proto JSON may encounter `Any`. The generated type registry supplies
-the descriptor needed to expand and restore the packed application message;
-without it, an `Any` cannot be converted to interoperable Proto JSON.
+`defaultStringifierRegistry` supplies the shared provider default. Generated
+model modules register their descriptors when imported, so its Proto JSON
+conversion can resolve `Any` messages registered after a factory is built.
+Register a custom converter before that schema is first used by the shared
+registry; its choice is fixed after use. An explicit `StringifierRegistry` can
+instead register reversible mappings and a `TypeRegistry`. Providers snapshot
+an explicit registry at construction. Use the same mapping for stored IDs or
+columns and their query operands.
 
 ## Validation
 
@@ -160,10 +161,13 @@ route, persist, or publish themselves.
 
 `TypeUrls.derive(schema)` uses the file's `type_url_prefix` option, or
 `type.googleapis.com` when no prefix is present. A fallback prefix must be
-non-empty and whitespace-free. `AnyMessages.pack()` validates unless
-`validate: false` is given, serializes without unknown fields, and returns a
-Spine-aware `Any`. `unpack()` and `unpackUsing()` return `undefined` for an
-unknown/mismatched URL or malformed bytes.
+non-empty and whitespace-free. `AnyPacker.pack(schema, message)` preserves
+unknown fields and does not validate domain constraints; `pack(any)` returns
+the same envelope unchanged. `unpack()` requires the exact derived type URL,
+and `unpackUsing()` requires an exact registered URL; both throw on mismatch
+or malformed bytes. `tryUnpack()` and `tryUnpackUsing()` return `undefined`
+for mismatch, unregistered URL, or malformed bytes. Signal entry points
+continue to validate inputs unless explicitly configured otherwise.
 
 `SignalEnvelopes.command()` and `.event()` generate fresh secure UUID v4 IDs,
 clone caller-supplied contexts, and pack the supplied domain message. They use

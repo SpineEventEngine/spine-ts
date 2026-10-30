@@ -60,6 +60,20 @@ export function emitServerWarning(
 }
 
 /**
+ * Records one completed setup phase without allowing logging failures into setup.
+ * @param logger Receives the contained record.
+ * @param message Describes the completed phase.
+ * @param facts Supplies allowlisted structured facts.
+ */
+export function emitServerInfo(
+  logger: ILogLayer,
+  message: string,
+  facts: Readonly<Record<string, unknown>>,
+): void {
+  emitServerLog(logger, "info", message, facts);
+}
+
+/**
  * Records one internal error without allowing logging failures into runtime work.
  *
  * @param logger Receives the contained record.
@@ -76,14 +90,18 @@ export function emitServerError(
 
 function emitServerLog(
   logger: ILogLayer,
-  level: "warn" | "error",
+  level: "info" | "warn" | "error",
   message: string,
   facts: Readonly<Record<string, unknown>>,
 ): void {
   try {
     const builder = logger.withMetadata(cleanFacts(facts));
     const emit: (message: string) => unknown =
-      level === "warn" ? builder.warn.bind(builder) : builder.error.bind(builder);
+      level === "info"
+        ? builder.info.bind(builder)
+        : level === "warn"
+          ? builder.warn.bind(builder)
+          : builder.error.bind(builder);
     const emitted = emit(message);
     if (isPromiseLike(emitted)) {
       // spine-log-boundary: server.log_async_failure

@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/example-release-notes",
-  "version": "2.0.0-snapshot.24",
+  "version": "2.0.0-snapshot.25",
   "private": true,
   "type": "module",
   "exports": {
@@ -34,7 +34,7 @@
     "@spine-event-engine/ai-vercel-ax": "workspace:*",
     "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.24",
+    "@spine-event-engine/proto": "2.0.0-snapshot.25",
     "@spine-event-engine/server": "workspace:*",
     "@spine-event-engine/storage": "workspace:*",
     "@mobrowser/api": "2.18.0",
@@ -43,16 +43,16 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "10.1.0",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.3.1",
     "@playwright/test": "1.63.0",
-    "@spine-event-engine/proto-tools": "2.0.0-snapshot.24",
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.25",
     "@spine-event-engine/testing": "workspace:*",
     "esbuild": "0.28.2",
     "ts-proto": "2.15.0",
-    "vite": "8.1.0"
+    "vite": "8.1.6"
   },
   "optionalDependencies": {
     "@mobrowser/sdk-darwin-arm64": "2.18.0",

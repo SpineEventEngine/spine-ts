@@ -39,7 +39,7 @@ it("exposes the narrow provider-only entity history SPI", () => {
       ]
     | undefined = undefined;
   expect(types).toBeUndefined();
-  expect(EntityHistoryConformance.check).toBeTypeOf("function");
+  expect(typeof EntityHistoryConformance.check).toBe("function");
   expect(stateHistorySpec(StringValueSchema).group.name).toBe(StringValueSchema.typeName);
   expect(eventHistorySpec(StringValueSchema).group.name).toBe(StringValueSchema.typeName);
 });

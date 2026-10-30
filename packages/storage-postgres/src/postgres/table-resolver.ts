@@ -18,7 +18,32 @@
 export class PostgresTableResolver {
   readonly #names = new Map<string, string>();
 
+  readonly #eventNames = new Map<string, string>();
+
   readonly #resolved = new Map<string, string>();
+
+  /**
+   * Copies configured names for one factory snapshot.
+   *
+   * @returns An independent resolver with the same registrations.
+   */
+  copy(): PostgresTableResolver {
+    const copy = new PostgresTableResolver();
+    for (const [key, value] of this.#names) copy.#names.set(key, value);
+    for (const [key, value] of this.#eventNames) copy.#eventNames.set(key, value);
+    return copy;
+  }
+
+  /**
+   * Sets the physical table for one exact Event Store identity.
+   *
+   * @param identity Context name and store role identity.
+   * @param name Requested physical table name.
+   */
+  setEventStoreName(identity: string, name: string): void {
+    PostgresNames.physical(name);
+    this.#eventNames.set(identity, name);
+  }
 
   /**
    * Sets an ungrouped record-family table name.
@@ -48,6 +73,7 @@ export class PostgresTableResolver {
    * @param group Names the optional storage group.
    * @param name Supplies an explicit physical name.
    * @param recordType Names the grouped record type.
+   * @param eventStoreIdentity Distinguishes a domain or system Event Store.
    * @returns The validated PostgreSQL table identity.
    */
   resolve(
@@ -55,21 +81,26 @@ export class PostgresTableResolver {
     group: string | undefined,
     name?: string,
     recordType?: string,
+    eventStoreIdentity?: string,
   ): { readonly tableName: string } {
     const identity =
-      group === undefined
+      eventStoreIdentity ??
+      (group === undefined
         ? sourceType
-        : `${sourceType}\u0000${recordType ?? sourceType}\u0000${group}`;
+        : `${sourceType}\u0000${recordType ?? sourceType}\u0000${group}`);
     const readable =
+      (eventStoreIdentity === undefined ? undefined : this.#eventNames.get(eventStoreIdentity)) ??
       name ??
       (group === undefined
         ? this.#names.get(`record:${sourceType}`)
         : this.#names.get(`group:${sourceType}\u0000${recordType ?? sourceType}`)) ??
-      PostgresNames.default(sourceType, group, recordType);
+      (eventStoreIdentity !== undefined && group !== undefined
+        ? `${group.replace(/[^A-Za-z0-9_]/gu, "_")}_Event`
+        : PostgresNames.default(sourceType, group, recordType));
     const tableName = PostgresNames.physical(readable);
     const previous = this.#resolved.get(tableName);
     if (previous !== undefined && previous !== identity)
-      throw new Error(`PostgreSQL table name collides: ${tableName}`);
+      throw new Error(`PostgreSQL table name collides: ${tableName} (${previous} and ${identity})`);
     this.#resolved.set(tableName, identity);
     return Object.freeze({ tableName });
   }

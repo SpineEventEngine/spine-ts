@@ -25,7 +25,7 @@ import {
   type DynamicUnaryClient,
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
   ActorContextSchema,
@@ -1282,8 +1282,8 @@ function coordinatorEvent(target: string, index: number) {
   const id = create(TaskIdSchema, { value: `${target}-${index.toString()}` });
   return create(EventSchema, {
     id: create(EventIdSchema, { value: `event-${target}-${index.toString()}` }),
-    context: create(EventContextSchema, { producerId: AnyMessages.pack(TaskIdSchema, id) }),
-    message: AnyMessages.pack(
+    context: create(EventContextSchema, { producerId: AnyPacker.pack(TaskIdSchema, id) }),
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id,

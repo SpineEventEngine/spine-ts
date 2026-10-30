@@ -1,13 +1,17 @@
 # Storage API and in-memory storage for Spine TS
 
+See [storage layout and database preparation](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/STORAGE_LAYOUT.md) for
+physical structures, tenant placement, prerequisites, and customization.
+
 `@spine-event-engine/storage` defines the storage API used by Spine TS and
 includes an in-memory implementation for local development and tests. Use it
 when an application needs a small record store, or when an adapter needs to
 implement the same storage contract for a durable provider.
 
-Agents use the configured storage provider to retain accepted work and the
-recorded model interaction. The in-memory factory keeps these records only while
-the process runs; choose a database provider when they must survive a restart.
+Agents use the configured storage provider to retain typed admission receipts,
+Entity state, and recorded model interactions. The in-memory factory keeps
+these records only while the process runs; choose a database provider when the
+records must survive a restart. An interrupted handler does not resume from them.
 Applications read an Agent's history through its repository, as shown in the
 [support example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/README.md). Adapter implementation
 details are in the [coding-agent reference](REFERENCE.md#provider-spi).
@@ -127,6 +131,11 @@ types its IDs. Providers apply their documented runtime mapping and validation
 to filter names and values: MySQL checks declared columns, while other adapters
 can support different query shapes. A provider can push down supported ID and
 declared-column query parts while preserving the common result semantics.
+
+`await factory.checkConnection()` checks the configured shared destination. The
+in-memory factory validates this locally without admitting a tenant or creating
+records. Other adapters must implement the diagnostic explicitly; the base
+factory rejects an unsupported check.
 
 The storage API clones data at its boundaries. For the base factory and the
 in-memory implementation, closing a factory prevents new record handles while

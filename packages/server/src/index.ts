@@ -15,8 +15,11 @@
 export {
   BoundedContext,
   BoundedContextBuilder,
+  type BoundedContextBuildOptions,
+  type BoundedContextRuntime,
   type BoundedContextName,
   BoundedContextNameError,
+  DuplicateEntityStateException,
   type BoundedContextSnapshot,
   type CommandEndpoint,
   ContextSpec,
@@ -28,6 +31,14 @@ export {
   type TenantMode,
 } from "./context/bounded-context.js";
 export { ThirdPartyContext } from "./integration/third-party-context.js";
+export type {
+  TenantIndex,
+  TenantIndexCursor,
+  TenantIndexPage,
+  TenantIndexRead,
+  TenantIndexSignal,
+} from "./context/tenant-index.js";
+export { TenantUnknownError } from "./context/tenant-unknown-error.js";
 
 export {
   Stand,
@@ -243,7 +254,6 @@ export { EventRouting, type EventRoute } from "./repository/event-routing.js";
 export { StateUpdateRouting, type StateUpdateRoute } from "./repository/state-update-routing.js";
 
 export {
-  type AgentExecutionStatus,
   type AgentHistoryReader,
   type AgentReadScope,
   type ConcreteRepositoryEntityType,

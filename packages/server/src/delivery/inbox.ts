@@ -14,8 +14,9 @@
 
 import { randomUUID } from "node:crypto";
 
-import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { clone, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { AnyPacker } from "@spine-event-engine/core";
 
 import type { InboxStorage } from "./inbox-storage.js";
 import type { DeliveryOperationOptions } from "./delivery-ports.js";
@@ -192,7 +193,7 @@ export const InboxTargets: Readonly<{
   shardKey(value: Any): string {
     if (value.typeUrl === "type.googleapis.com/google.protobuf.StringValue") {
       try {
-        const text = fromBinary(StringValueSchema, value.value).value;
+        const text = AnyPacker.unpack(value, StringValueSchema).value;
         if (text.trim().length === 0) throw new TypeError("String target ID is blank.");
         return text;
       } catch {

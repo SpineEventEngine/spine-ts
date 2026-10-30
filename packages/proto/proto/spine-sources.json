@@ -419,6 +419,10 @@
   ],
   "ownedSources": [
     {
+      "localPath": "packages/proto/proto/spine/server/agent/acceptance_receipt.proto",
+      "sha256": "daa0f8e724849523cb539b9b6a7503aa8eab0de3f23d926d1aa9d117bd44f007"
+    },
+    {
       "localPath": "packages/proto/proto/spine/auth/authenticated_subscription.proto",
       "sha256": "b6436714f754e6d7c1a6bbd177c5a4f0b606d3c7c1adc4b86fa3c299210ffc76"
     },
@@ -435,16 +439,16 @@
       "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
     },
     {
-      "localPath": "packages/proto/proto/spine/server/agent/execution_record.proto",
-      "sha256": "98f6b2eef372433da63cdd343aa6bf7163171857396d816a1ffae248d10b85b0"
-    },
-    {
       "localPath": "packages/proto/proto/spine/server/agent/history_record.proto",
       "sha256": "24ed282bc0cd901a3b38748ea7b516e972a87b2a7f69db99a2b094458d48e38a"
     },
     {
+      "localPath": "packages/proto/proto/spine/server/agent/model_preferences_record.proto",
+      "sha256": "33b7f805be70c5435b6d2f7ef558e0fab5dfed34a699ce87734f3c9b2b6f00d5"
+    },
+    {
       "localPath": "packages/proto/proto/spine/ts/agent/content.proto",
-      "sha256": "d119c8a71c39dcdd4af8de1dd1c1ceeb22eab08fb02a704d8ee15bae5949f4fe"
+      "sha256": "f4242677c02f546724dbffe9dabb93bdf8d5a63f8d3357e91fab3765e41e058a"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/history.proto",
@@ -452,11 +456,11 @@
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/interaction_events.proto",
-      "sha256": "e975e3fae68ff9ee59fb967ac3ae87bc0709e483b139b6d2d31276f5a3bebb8f"
+      "sha256": "26e959ccfa9c9c662087cfab7a01c3f2a28c3f027704601e7a50eb83d28ab401"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/model.proto",
-      "sha256": "f3fc4fe4e244a9d9a397d2a62bc1246bf1bf038c93f07be633d480eb4e44ff9c"
+      "sha256": "d69d290932e43d6932d70041b996cca1efd897e0e418c58462727de9c3ba97f7"
     }
   ]
 }

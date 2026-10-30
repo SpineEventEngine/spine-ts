@@ -12,21 +12,43 @@
  * the License.
  */
 
-import { create, ScalarType } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { entity } from "@google-cloud/datastore/build/src/entity.js";
 import { google } from "@google-cloud/datastore/build/protos/protos.js";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import { UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
 import { OrderBy_DirectionSchema } from "@spine-event-engine/proto/generated/spine/client/query_pb.js";
+import { EntityStateKeySchema } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
 import { ColumnMappings, ColumnTypes } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
+import { TaskIdSchema } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 import { DatastoreColumnMapping } from "../src/datastore/column-mapping.js";
 import { DatastoreIdColumn } from "../src/datastore/id-column.js";
 
 describe("Spine JVM Datastore value mappings", () => {
+  it("uses a late generated application Any for default ID and query-column text", async () => {
+    const id = create(EntityStateKeySchema, {
+      entityId: create(AnySchema, {
+        typeUrl: `custom/${TaskIdSchema.typeName}`,
+        value: toBinary(TaskIdSchema, create(TaskIdSchema, { value: "task-1" })),
+      }),
+      version: 1,
+    });
+    const column = new DatastoreIdColumn(EntityStateKeySchema);
+    const mapping = new DatastoreColumnMapping().of(ColumnTypes.message(EntityStateKeySchema));
+
+    expect(() => column.value(id)).toThrow();
+    await import("../../../examples/todo/generated/proto-module.js");
+
+    const text = column.value(id);
+    expect(text).toBe(defaultStringifierRegistry.forMessage(EntityStateKeySchema).toString(id));
+    expect(column.read(text)).toEqual(id);
+    expect(mapping(id)).toBe(text);
+  });
+
   it("serializes boundary receipts to exact Datastore timestamp nanos", () => {
     const mapping = new DatastoreColumnMapping();
     const examples = [

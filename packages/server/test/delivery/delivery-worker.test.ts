@@ -16,9 +16,9 @@ import { Time } from "@spine-event-engine/core/time";
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/require-await */
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, Identifiers, TypeUrls } from "@spine-event-engine/core";
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, Identifiers, TypeUrls } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -443,10 +443,7 @@ describe("Delivery direct worker", () => {
     void _firstId;
     void _duplicateId;
 
-    const signal = create(AnySchema, {
-      typeUrl: "type.spine.io/spine.core.Event",
-      value: toBinary(EventSchema, create(EventSchema)),
-    });
+    const signal = AnyPacker.pack(EventSchema, create(EventSchema));
     const firstWrite = await delivery.inbox.receive({
       ...firstInput,
       signal,
@@ -488,7 +485,7 @@ describe("Delivery direct worker", () => {
       delivery.drainMessage(target, () => {
         seen += 1;
       }),
-    ).resolves.toMatchObject({ acknowledged: true, run: { delivered: 1 } });
+    ).resolves.toMatchObject({ acknowledged: true, outcome: { kind: "acknowledged" } });
     expect(seen).toBe(1);
   });
 
@@ -510,7 +507,7 @@ describe("Delivery direct worker", () => {
 
     await expect(delivery.drainMessage(duplicate, () => undefined)).resolves.toMatchObject({
       acknowledged: true,
-      run: { accepted: 0, delivered: 0, failed: 0 },
+      outcome: { kind: "acknowledged" },
     });
   });
 
@@ -1767,7 +1764,7 @@ function message(
   const id = create(TaskIdSchema, { value: targetId });
   const event = create(EventSchema, {
     id: create(EventIdSchema, { value: signalId }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id,
@@ -1783,7 +1780,7 @@ function message(
       targetTypeUrl: TypeUrls.derive(TaskSchema),
     },
     signalId,
-    signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+    signal: AnyPacker.pack(EventSchema, event),
     label,
     status: "TO_DELIVER",
     shard,

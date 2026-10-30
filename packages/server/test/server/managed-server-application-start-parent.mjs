@@ -13,10 +13,11 @@
  */
 
 import process from "node:process";
-import { ManagedServerApplication, Server } from "../../dist/index.js";
+import { ManagedServerApplication, Server, ServerEnvironment } from "../../dist/index.js";
 
 const priorSigint = new Set(process.listeners("SIGINT"));
 const priorSigterm = new Set(process.listeners("SIGTERM"));
+await ServerEnvironment.instance().completeSetup();
 const managed = await ManagedServerApplication.start({
   processCount: 1,
   port: 0,

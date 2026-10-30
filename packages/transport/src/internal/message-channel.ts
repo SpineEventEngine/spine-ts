@@ -158,6 +158,17 @@ export interface Subscriber extends MessageChannel {
 export interface TransportFactory {
   // prettier-ignore
 
+  /**
+   * Validates factory configuration and initializes channel-independent resources.
+   * Concurrent setup callers await this completion; close fences new setup work.
+   * Real channel creation may still fail after this method succeeds.
+   *
+   * @returns Completion when configured shared resources are ready for channel creation.
+   */
+  initialize(): Promise<void>;
+
+  // prettier-ignore
+
   // prettier-ignore
 
   /**

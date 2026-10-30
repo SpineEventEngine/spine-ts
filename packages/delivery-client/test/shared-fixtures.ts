@@ -18,7 +18,7 @@ import type { Transport } from "@connectrpc/connect";
 import { type InboxMessage, ShardIndex } from "@spine-event-engine/server";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import { CommandIdSchema } from "@spine-event-engine/proto";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { CreateTaskSchema } from "../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
 import {
   TaskIdSchema,
@@ -263,7 +263,7 @@ export function domainMessage(id = "message-1"): InboxMessage {
   const commandId = create(CommandIdSchema, { uuid: id });
   const command = create(CommandSchema, {
     id: commandId,
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateTaskSchema,
       create(CreateTaskSchema, {
         id: taskId,
@@ -275,11 +275,11 @@ export function domainMessage(id = "message-1"): InboxMessage {
   return Object.freeze({
     id: { value: id, shard: ShardIndex.single() },
     inboxId: {
-      targetId: AnyMessages.pack(TaskIdSchema, taskId),
+      targetId: AnyPacker.pack(TaskIdSchema, taskId),
       targetTypeUrl: TypeUrls.derive(TaskSchema),
     },
     signalId: commandId.uuid,
-    signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+    signal: AnyPacker.pack(CommandSchema, command),
     label: "HANDLE_COMMAND" as const,
     status: "TO_DELIVER" as const,
     shard: ShardIndex.single(),

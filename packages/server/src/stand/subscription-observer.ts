@@ -26,7 +26,7 @@ import {
   UInt32ValueSchema,
   UInt64ValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   EventSchema,
   ResponseSchema,
@@ -249,6 +249,29 @@ export class SubscriptionObservers {
     };
   }
 
+  /**
+   * Decodes a lifecycle Event's domain payload when present.
+   * @param event Stored lifecycle Event.
+   * @param schema Generated lifecycle payload schema.
+   * @returns Decoded lifecycle payload, if available.
+   */
+  static #lifecycle(event: Event, schema: MessageSchema): LifecycleMessage | undefined {
+    return event.message === undefined ? undefined : AnyPacker.tryUnpack(event.message, schema);
+  }
+
+  /**
+   * Checks an Event against an optional subscription tenant.
+   * @param event Observed Event.
+   * @param tenantId Subscription tenant, when scoped.
+   * @returns Whether the Event is eligible for this tenant.
+   */
+  static #matchesTenant(event: Event, tenantId: TenantId | undefined): boolean {
+    return (
+      tenantId === undefined ||
+      SubscriptionObservers.#sameTenant(SubscriptionObservers.#eventTenant(event), tenantId)
+    );
+  }
+
   static #lifecycleRemoval(
     event: Event,
     state: StandObservedState,
@@ -257,15 +280,8 @@ export class SubscriptionObservers {
     subscription: Subscription,
     onUpdate: (update: SubscriptionUpdate) => void,
   ): void {
-    if (
-      tenantId !== undefined &&
-      !SubscriptionObservers.#sameTenant(SubscriptionObservers.#eventTenant(event), tenantId)
-    )
-      return;
-    const lifecycle =
-      event.message === undefined
-        ? undefined
-        : (AnyMessages.unpack(event.message, schema) as LifecycleMessage | undefined);
+    if (!SubscriptionObservers.#matchesTenant(event, tenantId)) return;
+    const lifecycle = SubscriptionObservers.#lifecycle(event, schema);
     if (
       lifecycle?.entity?.typeUrl !== TypeUrls.derive(state.schema) ||
       lifecycle.entity.id === undefined
@@ -277,7 +293,7 @@ export class SubscriptionObservers {
     const lastState =
       lifecycle.lastState === undefined
         ? undefined
-        : AnyMessages.unpack(lifecycle.lastState, state.schema);
+        : AnyPacker.tryUnpack(lifecycle.lastState, state.schema);
     if (
       lastState === undefined ||
       SubscriptionObservers.#createMatcher(subscription, state).match({
@@ -298,15 +314,8 @@ export class SubscriptionObservers {
     render: (update: StandUpdate) => SubscriptionUpdate | undefined,
     onUpdate: (update: SubscriptionUpdate) => void,
   ): void {
-    if (
-      tenantId !== undefined &&
-      !SubscriptionObservers.#sameTenant(SubscriptionObservers.#eventTenant(event), tenantId)
-    )
-      return;
-    const lifecycle =
-      event.message === undefined
-        ? undefined
-        : (AnyMessages.unpack(event.message, schema) as LifecycleMessage | undefined);
+    if (!SubscriptionObservers.#matchesTenant(event, tenantId)) return;
+    const lifecycle = SubscriptionObservers.#lifecycle(event, schema);
     if (
       lifecycle?.entity?.typeUrl !== TypeUrls.derive(state.schema) ||
       lifecycle.entity.id === undefined ||
@@ -315,7 +324,7 @@ export class SubscriptionObservers {
       return;
     const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
     const id = SubscriptionObservers.#unpackValue(lifecycle.entity.id, idSchema);
-    const entityState = AnyMessages.unpack(lifecycle.state, state.schema);
+    const entityState = AnyPacker.tryUnpack(lifecycle.state, state.schema);
     if (id === undefined || entityState === undefined) return;
     const rendered = render(
       Object.freeze({
@@ -374,9 +383,7 @@ export class SubscriptionObservers {
                   match === "state"
                     ? {
                         case: "state",
-                        value: AnyMessages.pack(state.schema, clone(state.schema, update.state), {
-                          validate: false,
-                        }),
+                        value: AnyPacker.pack(state.schema, clone(state.schema, update.state)),
                       }
                     : { case: "noLongerMatching", value: true },
               }),
@@ -405,18 +412,12 @@ export class SubscriptionObservers {
     state: StandObservedState,
     tenantId: TenantId | undefined,
   ): StandUpdate | undefined {
-    if (
-      tenantId !== undefined &&
-      !SubscriptionObservers.#sameTenant(SubscriptionObservers.#eventTenant(event), tenantId)
-    )
-      return undefined;
+    if (!SubscriptionObservers.#matchesTenant(event, tenantId)) return undefined;
     const change =
-      event.message === undefined
-        ? undefined
-        : AnyMessages.unpack(event.message, EntityLog.EntityStateChangedSchema);
+      event.message && AnyPacker.tryUnpack(event.message, EntityLog.EntityStateChangedSchema);
     if (change?.entity?.typeUrl !== TypeUrls.derive(state.schema) || change.newState === undefined)
       return undefined;
-    const newState = AnyMessages.unpack(change.newState, state.schema);
+    const newState = AnyPacker.tryUnpack(change.newState, state.schema);
     const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
     const id =
       change.entity.id === undefined
@@ -424,7 +425,9 @@ export class SubscriptionObservers {
         : SubscriptionObservers.#unpackValue(change.entity.id, idSchema);
     if (newState === undefined || id === undefined) return undefined;
     const oldState =
-      change.oldState === undefined ? undefined : AnyMessages.unpack(change.oldState, state.schema);
+      change.oldState === undefined
+        ? undefined
+        : AnyPacker.tryUnpack(change.oldState, state.schema);
     return Object.freeze({
       typeUrl: TypeUrls.derive(state.schema),
       id,
@@ -546,12 +549,15 @@ export class SubscriptionObservers {
   static #decodeId(value: Any, schema: MessageSchema | undefined): unknown {
     return schema === undefined
       ? SubscriptionObservers.#unpackValue(value)
-      : AnyMessages.unpack(value, schema);
+      : schema.typeName === AnySchema.typeName
+        ? value
+        : AnyPacker.tryUnpack(value, schema);
   }
 
   static #unpackValue(value: Any, schema?: MessageSchema): unknown {
     if (schema !== undefined) {
-      const message = AnyMessages.unpack(value, schema);
+      if (schema.typeName === AnySchema.typeName) return value;
+      const message = AnyPacker.tryUnpack(value, schema);
       if (message !== undefined) return message;
     }
     for (const decoder of SubscriptionObservers.#valueDecoders) {
@@ -562,15 +568,15 @@ export class SubscriptionObservers {
   }
 
   static readonly #valueDecoders = Object.freeze([
-    (value: Any) => AnyMessages.unpack(value, StringValueSchema)?.value,
-    (value: Any) => AnyMessages.unpack(value, BoolValueSchema)?.value,
-    (value: Any) => AnyMessages.unpack(value, Int32ValueSchema)?.value,
-    (value: Any) => AnyMessages.unpack(value, UInt32ValueSchema)?.value,
-    (value: Any) => AnyMessages.unpack(value, Int64ValueSchema)?.value,
-    (value: Any) => AnyMessages.unpack(value, UInt64ValueSchema)?.value,
-    (value: Any) => AnyMessages.unpack(value, FloatValueSchema)?.value,
-    (value: Any) => AnyMessages.unpack(value, DoubleValueSchema)?.value,
-    (value: Any) => AnyMessages.unpack(value, BytesValueSchema)?.value,
+    (value: Any) => AnyPacker.tryUnpack(value, StringValueSchema)?.value,
+    (value: Any) => AnyPacker.tryUnpack(value, BoolValueSchema)?.value,
+    (value: Any) => AnyPacker.tryUnpack(value, Int32ValueSchema)?.value,
+    (value: Any) => AnyPacker.tryUnpack(value, UInt32ValueSchema)?.value,
+    (value: Any) => AnyPacker.tryUnpack(value, Int64ValueSchema)?.value,
+    (value: Any) => AnyPacker.tryUnpack(value, UInt64ValueSchema)?.value,
+    (value: Any) => AnyPacker.tryUnpack(value, FloatValueSchema)?.value,
+    (value: Any) => AnyPacker.tryUnpack(value, DoubleValueSchema)?.value,
+    (value: Any) => AnyPacker.tryUnpack(value, BytesValueSchema)?.value,
   ]);
 
   static #equals(left: unknown, right: unknown, schema?: MessageSchema): boolean {
@@ -597,17 +603,17 @@ export class SubscriptionObservers {
     if (SubscriptionObservers.#isAny(id)) return clone(AnySchema, id);
     const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
     if (idSchema !== undefined && SubscriptionObservers.#isMessage(id))
-      return AnyMessages.pack(idSchema, id, { validate: false });
+      return AnyPacker.pack(idSchema, id);
     if (id instanceof Uint8Array)
-      return AnyMessages.pack(BytesValueSchema, create(BytesValueSchema, { value: id }));
+      return AnyPacker.pack(BytesValueSchema, create(BytesValueSchema, { value: id }));
     if (typeof id === "string")
-      return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }));
+      return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id }));
     if (typeof id === "boolean")
-      return AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
+      return AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
     if (typeof id === "number")
-      return AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
+      return AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
     return typeof id === "bigint"
-      ? AnyMessages.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }))
+      ? AnyPacker.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }))
       : undefined;
   }
 

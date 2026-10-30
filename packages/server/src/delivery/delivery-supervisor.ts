@@ -20,7 +20,7 @@ import { DeliveryRunControl } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
 import type { ILogLayer } from "loglayer";
 
-import { emitServerWarning } from "../server/server-log.js";
+import { emitServerError, emitServerWarning } from "../server/server-log.js";
 
 const deliverySupervisorLoggers = new WeakMap<DeliverySupervisor, ILogLayer>();
 const deliverySupervisorAdmissions = new WeakMap<
@@ -388,7 +388,12 @@ export class DeliverySupervisor {
   #admit(shard: ShardIndex, observed: boolean): void {
     if (!this.#started || this.#closing || this.#closed) return;
     const key = DeliverySupervisor.#shardKey(shard);
-    if (this.#active.has(key) || this.#active.size >= this.#concurrency) {
+    if (this.#active.has(key)) {
+      this.#runs.wake(shard);
+      this.#queue(key, shard, observed);
+      return;
+    }
+    if (this.#active.size >= this.#concurrency) {
       this.#queue(key, shard, observed);
       return;
     }
@@ -454,8 +459,8 @@ export class DeliverySupervisor {
     } catch (error) {
       releaseError = error;
     }
-    if (releaseError !== undefined) throw DeliverySupervisor.#releaseError(releaseError);
     if (this.#active.size > 0) await this.whenIdle();
+    if (releaseError !== undefined) throw DeliverySupervisor.#releaseError(releaseError);
     this.#closed = true;
     deliverySupervisorLoggers.delete(this);
     if (timedOut) throw new DeliveryShutdownTimeoutError();
@@ -515,12 +520,29 @@ export class DeliverySupervisor {
         signal: this.#controller.signal,
       });
       failed ||= result.status === "FAILED";
+    } catch (error) {
+      this.#reportTerminalRunFailure();
+      throw error;
     } finally {
       if (failed && !this.#closing) this.#failedObserved.add(key);
       this.#active.delete(key);
       this.#startNext(key);
       this.#settleIdle();
     }
+  }
+
+  /**
+   * Reports an escaping background run error without exposing its message.
+   *
+   */
+  #reportTerminalRunFailure(): void {
+    if (this.#closing || this.#controller.signal.aborted) return;
+    const logger = deliverySupervisorLoggers.get(this);
+    if (logger === undefined) return;
+    emitServerError(logger, "Delivery run failed.", {
+      operation: "delivery.run",
+      reasonCode: "failed",
+    });
   }
 
   #settleIdle(): void {

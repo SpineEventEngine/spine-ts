@@ -1,15 +1,6 @@
 [
   {
     "rule": "standalone-function",
-    "file": "packages/storage-postgres/src/postgres/storage-factory.ts",
-    "kind": "function-declaration",
-    "identity": "createOperation()#1",
-    "name": "createOperation",
-    "disposition": "necessity",
-    "reason": "TypeScript PostgreSQL factory boundary: createOperation remains standalone because generic record-family types require the exact public creation callback bridge."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/storage-postgres/src/postgres/record-storage.ts",
     "kind": "function-declaration",
     "identity": "quote()#1",
@@ -52,23 +43,5 @@
     "name": "operationError",
     "disposition": "necessity",
     "reason": "TypeScript PostgreSQL provider boundary: operationError remains standalone because record operations share the exact sanitized provider-error conversion."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/storage-postgres/src/postgres/agent-execution.ts",
-    "kind": "function-declaration",
-    "identity": "historyRecord()#1",
-    "name": "historyRecord",
-    "disposition": "necessity",
-    "reason": "TypeScript PostgreSQL boundary: historyRecord builds one complete immutable history envelope from the accepted Agent scope and original entry."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/storage-postgres/src/postgres/agent-execution.ts",
-    "kind": "function-declaration",
-    "identity": "ensureIndex()#1",
-    "name": "ensureIndex",
-    "disposition": "necessity",
-    "reason": "TypeScript PostgreSQL boundary: ensureIndex checks native index definition and readiness before accepting Agent work."
   }
 ]

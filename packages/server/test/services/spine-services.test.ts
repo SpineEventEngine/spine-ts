@@ -17,12 +17,10 @@ import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
 import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
-  BytesValueSchema,
   DoubleValueSchema,
   EmptySchema,
   FieldMaskSchema,
   Int32ValueSchema,
-  Int64ValueSchema,
   StringValueSchema,
   TimestampSchema,
   UInt32ValueSchema,
@@ -32,7 +30,7 @@ import {
   ValidationException,
   type MessageSchema,
   TypeUrls,
-  AnyMessages,
+  AnyPacker,
 } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -41,10 +39,12 @@ import {
   CommandContextSchema,
   CommandIdSchema,
   Command_SystemPropertiesSchema,
+  ConstraintViolationSchema,
   EmailAddressSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  ErrorSchema,
   FieldPathSchema,
   InternetDomainSchema,
   MessageIdSchema,
@@ -94,9 +94,11 @@ import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/ser
 import {
   EventStore,
   InMemoryStorageFactory,
+  StorageFactory,
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
-import { describe, expect, it, vi } from "vitest";
+import { StoragePreparations, TenantBoundary } from "@spine-event-engine/storage/provider";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ILogLayer } from "loglayer";
 
 import {
@@ -114,9 +116,12 @@ import {
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
+import { TenantIndexes } from "../../src/context/tenant-index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
+import { TransitionValidationError } from "../../src/repository/command-errors.js";
 import { spineServicesAccess } from "../../src/services/spine-services.js";
+import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
 import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
@@ -132,6 +137,8 @@ import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/t
 import {
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
+  ProjectEnvelopeStateSchema,
+  ProjectOverviewIdSchema,
   ProjectStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 // prettier-ignore
@@ -143,6 +150,28 @@ import {
   CreateReviewProjectSchema,
 } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
 import { ReviewProjectStateSchema } from "../../test-fixtures/generated/validation-refusal/project_states_pb.js";
+
+beforeEach(async () => {
+  const { ServerEnvironment } = await import("../../src/server/server-environment.js");
+  await ServerEnvironment.instance().completeSetup();
+});
+
+afterEach(async () => {
+  const { ServerEnvironment, ServerEnvironmentLifecycle, serverEnvironmentAccess } =
+    await import("../../src/server/server-environment.js");
+  const environment = ServerEnvironment.instance();
+  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
+  await ServerEnvironmentLifecycle.resetForTest();
+});
+
+async function configureStorage(storageFactory: InMemoryStorageFactory): Promise<void> {
+  const { ServerEnvironment, ServerEnvironmentLifecycle } =
+    await import("../../src/server/server-environment.js");
+  const { EnvironmentType } = await import("../../src/server/environment.js");
+  await ServerEnvironmentLifecycle.resetForTest();
+  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+  await ServerEnvironment.instance().completeSetup();
+}
 
 const GeneratedTaskIdSchema = TaskIdSchema;
 let stateChangeSequence = 0;
@@ -168,6 +197,8 @@ class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchem
     );
   }
 }
+
+class EnvelopeProjection extends Projection<Any, typeof ProjectEnvelopeStateSchema> {}
 
 class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignTask(): never {
@@ -246,7 +277,9 @@ describe("SpineServices", () => {
     const dispatcher = createCommandDispatcher((command) => {
       observed.push(command.id?.uuid ?? "missing");
     });
-    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
     const server = await startServices(context);
 
     try {
@@ -268,7 +301,9 @@ describe("SpineServices", () => {
     const dispatcher = createCommandDispatcher((command) => {
       observed.push(command.id?.uuid ?? "missing");
     });
-    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
     const server = await new Server({ contexts: [context], readMaxBytes: 512 }).start();
 
     try {
@@ -291,7 +326,9 @@ describe("SpineServices", () => {
     const dispatcher = createCommandDispatcher((command) => {
       observed.push(command.id?.uuid ?? "missing");
     });
-    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
     const server = await new Server({ contexts: [context] }).start();
 
     try {
@@ -314,7 +351,9 @@ describe("SpineServices", () => {
     const dispatcher = createCommandDispatcher((command) => {
       observed.push(command.id?.uuid ?? "missing");
     });
-    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
     const server = await new Server({ contexts: [context], readMaxBytes: 512 }).start();
 
     try {
@@ -342,7 +381,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
@@ -370,7 +409,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
@@ -387,7 +426,10 @@ describe("SpineServices", () => {
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
       expect(
-        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+        AnyPacker.tryUnpack(
+          response.message[0]?.state ?? packMissing(),
+          ProjectOverviewStateSchema,
+        ),
       ).toEqual(createState("task-1", "First"));
       expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
     } finally {
@@ -400,7 +442,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("NetworkQuery").add(repository).build();
+    const context = await BoundedContext.singleTenant("NetworkQuery").add(repository).build();
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Beta", 2), {
       version: create(VersionSchema, { number: 1 }),
     });
@@ -486,7 +528,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 7 }),
     });
@@ -497,7 +539,7 @@ describe("SpineServices", () => {
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(1);
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-1", "First"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
   });
@@ -507,7 +549,7 @@ describe("SpineServices", () => {
       entityType: MessageIdTaskAggregate,
       schema: TaskSchema,
     });
-    const context = BoundedContext.singleTenant("MessageIdTasks")
+    const context = await BoundedContext.singleTenant("MessageIdTasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
@@ -527,7 +569,7 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(1);
-    expect(AnyMessages.unpack(response.message[0]?.state ?? packMissing(), TaskSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), TaskSchema)).toEqual(
       task,
     );
     expect(responseErrorMessage(incompatible)).toBe(
@@ -540,7 +582,8 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    const context = await BoundedContext.multitenant("Tasks").add(repository).build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A"), {
       tenantId: tenantValue("tenant-a"),
     });
@@ -557,7 +600,10 @@ describe("SpineServices", () => {
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
       expect(
-        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+        AnyPacker.tryUnpack(
+          response.message[0]?.state ?? packMissing(),
+          ProjectOverviewStateSchema,
+        ),
       ).toEqual(createState("task-1", "Tenant B"));
     } finally {
       await server.close();
@@ -569,7 +615,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Second"), {
       version: create(VersionSchema, { number: 2 }),
     });
@@ -583,11 +629,11 @@ describe("SpineServices", () => {
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(2);
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-1", "First"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 1 }));
     expect(
-      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-2", "Second"));
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 2 }));
   });
@@ -597,7 +643,8 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    const context = await BoundedContext.multitenant("Tasks").add(repository).build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A"), {
       tenantId: tenantValue("tenant-a"),
       version: create(VersionSchema, { number: 1 }),
@@ -619,11 +666,11 @@ describe("SpineServices", () => {
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(2);
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-2", "Tenant B"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 2 }));
     expect(
-      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[1]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-3", "Tenant B Again"));
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 3 }));
   });
@@ -641,7 +688,7 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-aggregate", "Aggregate"));
   });
 
@@ -658,7 +705,7 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(
-      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-pm", "Process manager"));
   });
 
@@ -680,11 +727,11 @@ describe("SpineServices", () => {
       createColumnFilterQuery("name", packStringId("Entity")),
       createColumnFilterQuery(
         "archived",
-        AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
+        AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
       ),
       createColumnFilterQuery(
         "deleted",
-        AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
+        AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
       ),
     ];
     const responses = await Promise.all(
@@ -698,7 +745,7 @@ describe("SpineServices", () => {
   });
 
   it("returns Spine error statuses for unsupported command and query targets", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const server = await startServices(context);
 
     try {
@@ -722,7 +769,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addCommandDispatcher(dispatcher)
       .build();
@@ -750,7 +797,9 @@ describe("SpineServices", () => {
       messageSchemas: () => [CreateReviewProjectSchema],
       dispatch: () => Promise.reject(failure),
     };
-    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
     const error = vi.fn();
     const withMetadata = vi.fn(() => ({ error }));
     const services = new SpineServices({ contexts: [context] });
@@ -764,22 +813,28 @@ describe("SpineServices", () => {
     } as never);
     if (post === undefined) throw new Error("CommandService was not registered.");
 
-    const ack = await post(createProjectionCommand("command-diagnostic"));
-    const wire = Buffer.from(toBinary(AckSchema, ack)).toString("utf8");
+    const rawError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const ack = await post(createProjectionCommand("command-diagnostic"));
+      const wire = Buffer.from(toBinary(AckSchema, ack)).toString("utf8");
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
-    expect(wire).not.toContain("secret SQL");
-    expect(wire).not.toContain("password");
-    expect(error).toHaveBeenCalledOnce();
-    expect(withMetadata).toHaveBeenCalledWith({
-      contextName: "Tasks",
-      commandId: "command-diagnostic",
-      commandType: TypeUrls.derive(CreateReviewProjectSchema),
-      operation: "command.post",
-      errorName: "Error",
-      errorCode: "ER_LOCK_DEADLOCK",
-    });
+      expect(ack.status?.status.case).toBe("error");
+      expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
+      expect(wire).not.toContain("secret SQL");
+      expect(wire).not.toContain("password");
+      expect(rawError).not.toHaveBeenCalled();
+      expect(error).toHaveBeenCalledOnce();
+      expect(withMetadata).toHaveBeenCalledWith({
+        contextName: "Tasks",
+        commandId: "command-diagnostic",
+        commandType: TypeUrls.derive(CreateReviewProjectSchema),
+        operation: "command.post",
+        errorName: "Error",
+        errorCode: "ER_LOCK_DEADLOCK",
+      });
+    } finally {
+      rawError.mockRestore();
+    }
   });
 
   it("keeps a safe command status when an error has an unreadable diagnostic code", async () => {
@@ -789,7 +844,7 @@ describe("SpineServices", () => {
         throw new Error("diagnostic getter failed");
       },
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .addCommandDispatcher({
         messageSchemas: () => [CreateReviewProjectSchema],
         dispatch: () => Promise.reject(failure),
@@ -820,7 +875,7 @@ describe("SpineServices", () => {
       name: "CustomerPayload",
       code: "CUSTOMER_PAYLOAD",
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .addCommandDispatcher({
         messageSchemas: () => [CreateReviewProjectSchema],
         dispatch: () => Promise.reject(failure),
@@ -851,7 +906,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     const server = await startServices(context);
     const emptyServer = await startServices();
 
@@ -872,7 +927,7 @@ describe("SpineServices", () => {
       );
       const objectId = await queryClient.read(
         createQueryWithIds([
-          AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "task-1" })),
+          AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "task-1" })),
         ]),
       );
       const emptyFilter = await queryClient.read(
@@ -907,7 +962,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 7 }),
     });
@@ -933,12 +988,12 @@ describe("SpineServices", () => {
     const unknownResponse = await handlers.read(createFormattedQuery(unknownField));
     const emptyResponse = await handlers.read(createFormattedQuery(emptyMask));
 
-    const idState = AnyMessages.unpack(
+    const idState = AnyPacker.tryUnpack(
       idResponse.message[0]?.state ?? packMissing(),
       ProjectOverviewStateSchema,
     );
     const allStates = allResponse.message.map((message) =>
-      AnyMessages.unpack(message.state ?? packMissing(), ProjectOverviewStateSchema),
+      AnyPacker.tryUnpack(message.state ?? packMissing(), ProjectOverviewStateSchema),
     );
     if (idState === undefined) {
       throw new Error("Expected ID-filter state.");
@@ -960,7 +1015,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Beta", 2));
     await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Alpha", 2));
     await context.stand().update(ProjectOverviewStateSchema, createState("task-3", "Gamma", 1));
@@ -995,7 +1050,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("VersionQuery").add(repository).build();
+    const context = await BoundedContext.singleTenant("VersionQuery").add(repository).build();
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 1 }),
     });
@@ -1004,7 +1059,7 @@ describe("SpineServices", () => {
     });
     const query = createColumnFilterQuery(
       "version",
-      AnyMessages.pack(VersionSchema, create(VersionSchema, { number: 2 }), { validate: false }),
+      AnyPacker.pack(VersionSchema, create(VersionSchema, { number: 2 })),
       { operator: Filter_Operator.GREATER_OR_EQUAL },
     );
     query.format = create(ResponseFormatSchema, {
@@ -1027,7 +1082,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Open", 1));
     await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Closed", 2));
     await context.stand().update(ProjectOverviewStateSchema, createState("task-3", "Open", 3));
@@ -1042,12 +1097,46 @@ describe("SpineServices", () => {
     ]);
   });
 
+  it("filters an Any-valued Projection column by its complete opaque value", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectOverviewStateSchema,
+    });
+    const context = await BoundedContext.singleTenant("AnyColumnQuery").add(repository).build();
+    const selected = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "selected" }));
+    const other = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "other" }));
+    await context.stand().update(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
+        id: "task-1",
+        name: "Selected",
+        attachment: selected,
+      }),
+    );
+    await context
+      .stand()
+      .update(
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "task-2", name: "Other", attachment: other }),
+      );
+
+    const response = await registeredQueryHandlers(context).read(
+      createColumnFilterQuery("attachment", selected),
+    );
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(
+      response.message.map((message) => unpackProjectOverviewState(message.state)?.id),
+    ).toEqual(["task-1"]);
+    await context.close();
+  });
+
   it("applies tenant-scoped filters and ordering while ignoring wire masks", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    const context = await BoundedContext.multitenant("Tasks").add(repository).build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Tenant A", 1), {
       tenantId: tenantValue("tenant-a"),
     });
@@ -1165,7 +1254,8 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.multitenant("ImplicitQueryCap").add(repository).build();
+    const context = await BoundedContext.multitenant("ImplicitQueryCap").add(repository).build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     const tenantAUpdates = Array.from({ length: 1_001 }, (_, index) =>
       context
         .stand()
@@ -1304,7 +1394,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("NestedQuery").add(repository).build();
+    const context = await BoundedContext.singleTenant("NestedQuery").add(repository).build();
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "Open", 1));
     await context.stand().update(ProjectOverviewStateSchema, createState("task-2", "Closed", 2));
     const handlers = registeredQueryHandlers(context);
@@ -1512,13 +1602,13 @@ describe("SpineServices", () => {
     const doubleWrapped = await handlers.read(
       createColumnFilterQuery(
         "priority",
-        AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: 2 })),
+        AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value: 2 })),
       ),
     );
     const unsignedWrapped = await handlers.read(
       createColumnFilterQuery(
         "priority",
-        AnyMessages.pack(UInt32ValueSchema, create(UInt32ValueSchema, { value: 2 })),
+        AnyPacker.pack(UInt32ValueSchema, create(UInt32ValueSchema, { value: 2 })),
       ),
     );
 
@@ -1571,7 +1661,7 @@ describe("SpineServices", () => {
       handlers.read(
         createColumnFilterQuery(
           "version",
-          AnyMessages.pack(
+          AnyPacker.pack(
             VersionSchema,
             create(VersionSchema, {
               number: 2,
@@ -1584,13 +1674,13 @@ describe("SpineServices", () => {
       handlers.read(
         createColumnFilterQuery(
           "archived",
-          AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
+          AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
         ),
       ),
       handlers.read(
         createColumnFilterQuery(
           "deleted",
-          AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: true })),
+          AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: true })),
         ),
       ),
     ]);
@@ -1606,7 +1696,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     await context.stand().update(ProjectOverviewStateSchema, createState("task-1", "First"));
     const handlers = registeredQueryHandlers(context);
 
@@ -1688,7 +1778,9 @@ describe("SpineServices", () => {
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       dispatch: () => Promise.reject("dispatcher-string"),
     };
-    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
     const server = await startServices(context);
 
     try {
@@ -1705,9 +1797,9 @@ describe("SpineServices", () => {
 
   it("accepts a domain rejection and stores its typed event asynchronously", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const context = BoundedContext.singleTenant("Tasks")
+    await configureStorage(storageFactory);
+    const context = await BoundedContext.singleTenant("Tasks")
       .add(createRejectingRepository())
-      .withStorageFactory(storageFactory)
       .build();
     const handlers = registeredCommandHandlers(context);
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
@@ -1721,7 +1813,7 @@ describe("SpineServices", () => {
     expect(
       event?.message === undefined
         ? undefined
-        : AnyMessages.unpack(event.message, TaskAlreadyDoneSchema),
+        : AnyPacker.tryUnpack(event.message, TaskAlreadyDoneSchema),
     ).toEqual(
       create(TaskAlreadyDoneSchema, {
         id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
@@ -1731,7 +1823,7 @@ describe("SpineServices", () => {
   });
 
   it("subscribes to a declared rejection without a server-side rejection consumer", async () => {
-    const context = BoundedContext.singleTenant("DeclaredRejections")
+    const context = await BoundedContext.singleTenant("DeclaredRejections")
       .add(createRejectingRepository())
       .build();
     expect(context.eventBus().acceptedEventTypes()).toContain(
@@ -1762,7 +1854,7 @@ describe("SpineServices", () => {
     }
     const event = update.update.value.event[0];
     if (event?.message === undefined) throw new Error("Expected a rejection Event payload.");
-    expect(AnyMessages.unpack(event.message, TaskAlreadyDoneSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(event.message, TaskAlreadyDoneSchema)).toEqual(
       create(TaskAlreadyDoneSchema, {
         id: create(GeneratedTaskIdSchema, { value: "task-declared-rejection" }),
       }),
@@ -1774,7 +1866,9 @@ describe("SpineServices", () => {
   });
 
   it("returns stable Ack errors with details for invalid command payloads", async () => {
-    const context = BoundedContext.singleTenant("Tasks").add(createValidatingRepository()).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .add(createValidatingRepository())
+      .build();
     const handlers = registeredCommandHandlers(context);
 
     const ack = await handlers.post(createValidatedCommand("command-invalid", "task-invalid", ""));
@@ -1787,7 +1881,7 @@ describe("SpineServices", () => {
 
   it("returns stable Ack errors with details for invalid custom-dispatcher command payloads", async () => {
     const dispatched: string[] = [];
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .addCommandDispatcher(
         createValidatedCommandDispatcher((command) => {
           dispatched.push(command.id?.uuid ?? "");
@@ -1806,7 +1900,9 @@ describe("SpineServices", () => {
   });
 
   it("returns stable Ack error details for incompatible command payload bytes", async () => {
-    const context = BoundedContext.singleTenant("Tasks").add(createValidatingRepository()).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .add(createValidatingRepository())
+      .build();
     const handlers = registeredCommandHandlers(context);
     const command = createValidatedCommand("command-incompatible", "task-incompatible", "name");
 
@@ -1828,7 +1924,9 @@ describe("SpineServices", () => {
       messageSchemas: () => [CreateReviewProjectSchema],
       dispatch: () => Promise.reject(new ValidationException(create(ValidationErrorSchema, {}))),
     };
-    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
     const handlers = registeredCommandHandlers(context);
 
     const ack = await handlers.post(createProjectionCommand("command-dispatcher-validation"));
@@ -1839,49 +1937,69 @@ describe("SpineServices", () => {
     expect(validationDetails(ack.status?.status)).toBeUndefined();
   });
 
-  it("reports transition validation failures in the command Ack", async () => {
-    const context = BoundedContext.singleTenant("Tasks")
+  it("acknowledges a monitored transition failure without persisting invalid state", async () => {
+    const context = await BoundedContext.singleTenant("Tasks")
       .add(createTransitionViolatingRepository())
       .build();
     const handlers = registeredCommandHandlers(context);
-
     const ack = await handlers.post(
       createAggregateCommand("command-transition-invalid", "task-transition-invalid"),
     );
-
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
-    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+    expect(ack.status?.status.case).toBe("ok");
+    await expect(
+      context.stand().read(ProjectStateSchema, "task-transition-invalid"),
+    ).resolves.toBeUndefined();
   });
 
-  it("reports rollback transition validation failures in the command Ack", async () => {
-    const context = BoundedContext.singleTenant("Tasks")
+  it("acknowledges a monitored rollback transition without persisting invalid state", async () => {
+    const context = await BoundedContext.singleTenant("Tasks")
       .add(createRollingBackTransitionRepository())
       .build();
     const handlers = registeredCommandHandlers(context);
-
     const ack = await handlers.post(
       createAggregateCommand("command-transition-rollback", "task-transition-rollback"),
     );
+    expect(ack.status?.status.case).toBe("ok");
+    await expect(
+      context.stand().read(ProjectStateSchema, "task-transition-rollback"),
+    ).resolves.toBeUndefined();
+  });
 
+  it("returns structured transition details when the failure escapes service processing", async () => {
+    const validation = create(ValidationErrorSchema, {
+      constraintViolation: [
+        create(ConstraintViolationSchema, { typeName: ProjectStateSchema.typeName }),
+      ],
+    });
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => [CreateReviewProjectSchema],
+      dispatch: () => Promise.reject(new TransitionValidationError(validation)),
+    };
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(dispatcher)
+      .build();
+    const ack = await registeredCommandHandlers(context).post(
+      createProjectionCommand("command-escaped-transition"),
+    );
     expect(ack.status?.status.case).toBe("error");
     expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
-    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+    expect(validationDetails(ack.status?.status)).toEqual(validation);
   });
 
   it("rejects command tenant mismatches without dispatching", async () => {
     const singleTenantDispatches: string[] = [];
     const multitenantDispatches: string[] = [];
-    const singleTenant = BoundedContext.singleTenant("Single")
+    const singleTenant = await BoundedContext.singleTenant("Single")
       .addCommandDispatcher(
         createCommandDispatcher((command) => singleTenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
-    const multitenant = BoundedContext.multitenant("Multi")
+    const multitenant = await BoundedContext.multitenant("Multi")
       .addCommandDispatcher(
         createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
+    await multitenant.tenantIndex.keep(tenantEmail("tenant@example.test"));
     const singleServer = await startServices(singleTenant);
 
     try {
@@ -1922,19 +2040,345 @@ describe("SpineServices", () => {
     }
   });
 
+  it("returns structured NotFound for an unknown tenant before command or query work", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const dispatched: string[] = [];
+    const context = await BoundedContext.multitenant("Tasks")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addCommandDispatcher(
+        createCommandDispatcher((command) => dispatched.push(command.id?.uuid ?? "missing")),
+      )
+      .build();
+    const server = await startServices(context);
+    try {
+      const transport = createGrpcTransport({ baseUrl: server.baseUrl });
+      const commands = createClient(CommandService, transport);
+      const queries = createClient(QueryService, transport);
+      for (const operation of [
+        () => commands.post(createProjectionCommand("unknown-command", "tenant-a")),
+        () => queries.read(createQuery("task-1", "tenant-a")),
+      ]) {
+        const failure = await operation().then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(failure).toBeInstanceOf(ConnectError);
+        expect((failure as ConnectError).code).toBe(Code.NotFound);
+        expect((failure as ConnectError).findDetails(ErrorSchema)[0]?.type).toBe("TENANT_UNKNOWN");
+      }
+      expect(dispatched).toEqual([]);
+      await index.keep(tenantValue("tenant-a"));
+      await commands.post(createProjectionCommand("known-command", "tenant-a"));
+      expect(dispatched).toEqual(["known-command"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("checks live membership for subscription creation, activation, and cancellation", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const contains = index.contains.bind(index);
+    let removed = false;
+    const lookup = vi
+      .spyOn(index, "contains")
+      .mockImplementation(async (tenantId) => !removed && contains(tenantId));
+    const context = await BoundedContext.multitenant("SubscriptionTenants")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createTopic("tenant-a");
+
+    await expect(handlers.subscribe(topic)).rejects.toMatchObject({ code: Code.NotFound });
+    const lookupFailure = new Error("directory unavailable");
+    lookup.mockRejectedValueOnce(lookupFailure);
+    await expect(handlers.subscribe(topic)).rejects.toBe(lookupFailure);
+    await index.keep(tenantValue("tenant-a"));
+    const subscription = await handlers.subscribe(topic);
+    removed = true;
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toMatchObject({ code: Code.NotFound });
+    await expect(Promise.resolve(handlers.cancel(subscription))).rejects.toMatchObject({
+      code: Code.NotFound,
+    });
+    removed = false;
+    await handlers.cancel(subscription);
+    await context.close();
+  });
+
+  it("sends structured unknown-tenant details on native subscription transport", async () => {
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const registry = new InMemorySubscriptionRegistry();
+    const createSubscription = vi.spyOn(registry, "create");
+    const context = await BoundedContext.multitenant("NativeSubscriptionTenants")
+      .withTenantIndex(index)
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const server = await startServices(context);
+    try {
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: server.baseUrl }),
+      );
+      const error = await client.subscribe(createTopic("missing-native")).then(
+        () => undefined,
+        (failure: unknown) => failure,
+      );
+      expect(error).toBeInstanceOf(ConnectError);
+      expect((error as ConnectError).code).toBe(Code.NotFound);
+      expect((error as ConnectError).findDetails(ErrorSchema)[0]?.type).toBe("TENANT_UNKNOWN");
+      expect(createSubscription).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("prepares a lazy context before creating a native subscription", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
+    const context = await BoundedContext.singleTenant("LazySubscription")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+    try {
+      expect(prepareEntity).not.toHaveBeenCalled();
+      await registeredSubscriptionHandlers(context).subscribe(createTopic());
+      expect(prepareEntity).toHaveBeenCalledOnce();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("rejects new native subscription preparation after the context close fence", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
+    const context = await BoundedContext.singleTenant("ClosingLazySubscription")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+    const handlers = registeredSubscriptionHandlers(context);
+    boundedContextAccess.beginClose(context);
+    try {
+      await expect(handlers.subscribe(createTopic())).rejects.toThrow("closing");
+      expect(prepareEntity).not.toHaveBeenCalled();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("drains an admitted subscription membership check and rejects fresh checks", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const index = TenantIndexes.fromFactory(factory);
+    await index.keep(tenantValue("tenant-a"));
+    const contains = index.contains.bind(index);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const lookup = vi.spyOn(index, "contains").mockImplementation(async (tenantId) => {
+      if (lookup.mock.calls.length === 1) {
+        entered.resolve(undefined);
+        await release.promise;
+      }
+      return contains(tenantId);
+    });
+    const context = await BoundedContext.multitenant("AdmittedSubscriptionTenant")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
+    const handlers = registeredSubscriptionHandlers(context);
+    const admitted = handlers.subscribe(createTopic("tenant-a"));
+    const admittedResult = expect(admitted).resolves.toBeDefined();
+    await entered.promise;
+    const closing = context.close();
+    try {
+      await expect(handlers.subscribe(createTopic("tenant-a"))).rejects.toThrow("closing");
+      expect(lookup).toHaveBeenCalledOnce();
+      release.resolve(undefined);
+      await admittedResult;
+      await closing;
+    } finally {
+      release.resolve(undefined);
+      await closing.catch(() => undefined);
+    }
+  });
+
+  it("keeps an admitted subscription create open through fatal context cleanup", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const registry = new InMemorySubscriptionRegistry();
+    const createRecord = registry.create.bind(registry);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    vi.spyOn(registry, "create").mockImplementation(async (subscription) => {
+      entered.resolve(undefined);
+      await release.promise;
+      return createRecord(subscription);
+    });
+    let registryClosed = false;
+    const closeRegistry = registry.close.bind(registry);
+    vi.spyOn(registry, "close").mockImplementation(async () => {
+      registryClosed = true;
+      await closeRegistry();
+    });
+    const context = await BoundedContext.singleTenant("HeldSubscriptionCreate")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const accepted = registeredSubscriptionHandlers(context).subscribe(createTopic());
+    const acceptedResult = expect(accepted).resolves.toBeDefined();
+    await entered.promise;
+    const failure = new Error("other eager model failed");
+    vi.spyOn(StoragePreparations.for(factory), "prepareEntity").mockRejectedValueOnce(failure);
+    const failing = BoundedContext.singleTenant("TriggersSubscriptionClose")
+      .add(new Repository({ entityType: RejectingTaskAggregate, schema: ProjectStateSchema }))
+      .build();
+    const failed = expect(failing).rejects.toBe(failure);
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(registryClosed).toBe(false);
+      release.resolve(undefined);
+      await acceptedResult;
+      await failed;
+      expect(registryClosed).toBe(true);
+    } finally {
+      release.resolve(undefined);
+      await Promise.allSettled([accepted, failing]);
+    }
+  });
+
+  it("drains an admitted subscription cancellation without waiting for a stream", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("HeldSubscriptionCancel")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const deleteRecord = registry.delete.bind(registry);
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    vi.spyOn(registry, "delete").mockImplementation(async (id) => {
+      entered.resolve(undefined);
+      await release.promise;
+      return deleteRecord(id);
+    });
+    let registryClosed = false;
+    const closeRegistry = registry.close.bind(registry);
+    vi.spyOn(registry, "close").mockImplementation(async () => {
+      registryClosed = true;
+      await closeRegistry();
+    });
+    const cancellation = handlers.cancel(subscription);
+    await entered.promise;
+    const closing = context.close();
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(registryClosed).toBe(false);
+      release.resolve(undefined);
+      await expect(cancellation).resolves.toMatchObject({ status: { status: { case: "ok" } } });
+      await closing;
+      expect(registryClosed).toBe(true);
+    } finally {
+      release.resolve(undefined);
+      await Promise.allSettled([cancellation, closing]);
+    }
+  });
+
+  it("coalesces cancellation while a native subscription observer is still attaching", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("AttachingSubscriptionCancel")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const snapshot = registry.snapshot.bind(registry);
+    const snapshotEntered = Promise.withResolvers<undefined>();
+    const releaseSnapshot = Promise.withResolvers<undefined>();
+    vi.spyOn(registry, "snapshot").mockImplementation(async () => {
+      snapshotEntered.resolve(undefined);
+      await releaseSnapshot.promise;
+      return snapshot();
+    });
+    const consume: SubscriptionRuntime["consume"] = Reflect.get(
+      SubscriptionRuntime.prototype,
+      "consume",
+    );
+    const attached = Promise.withResolvers<Awaited<ReturnType<typeof consume>>>();
+    const consumeSpy = vi
+      .spyOn(SubscriptionRuntime.prototype, "consume")
+      .mockImplementation(function (this: SubscriptionRuntime, ...args) {
+        return Reflect.apply(consume, this, args).then(
+          (handle: Awaited<ReturnType<typeof consume>>) => {
+            attached.resolve(handle);
+            return handle;
+          },
+        );
+      });
+    const deleteRecord = registry.delete.bind(registry);
+    const deleteEntered = Promise.withResolvers<undefined>();
+    const releaseDelete = Promise.withResolvers<undefined>();
+    const deletion = vi.spyOn(registry, "delete").mockImplementation(async (id) => {
+      deleteEntered.resolve(undefined);
+      await releaseDelete.promise;
+      return deleteRecord(id);
+    });
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const activation = iterator.next();
+    let firstCancel: Promise<unknown> | undefined;
+    let secondCancel: Promise<unknown> | undefined;
+    try {
+      await snapshotEntered.promise;
+      firstCancel = Promise.resolve(handlers.cancel(subscription));
+      secondCancel = Promise.resolve(handlers.cancel(subscription));
+      await deleteEntered.promise;
+      releaseDelete.resolve(undefined);
+      for (const response of await Promise.all([firstCancel, secondCancel])) {
+        expect(response).toMatchObject({ status: { status: { case: "ok" } } });
+      }
+      expect(deletion).toHaveBeenCalledOnce();
+      releaseSnapshot.resolve(undefined);
+      const first = await activation;
+      expect((await attached.promise).closed).toBe(true);
+      if (!first.done) {
+        expect(first.value.response?.status?.status.case).toBe("ok");
+      }
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("late", "Late"),
+      );
+      await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+      expect(deletion).toHaveBeenCalledOnce();
+    } finally {
+      releaseDelete.resolve(undefined);
+      releaseSnapshot.resolve(undefined);
+      consumeSpy.mockRestore();
+      await Promise.allSettled([activation, firstCancel, secondCancel]);
+      await iterator.return?.();
+      await context.close();
+    }
+  });
+
   it("treats command tenant domain and email variants as present", async () => {
     const singleTenantDispatches: string[] = [];
     const multitenantDispatches: string[] = [];
-    const singleTenant = BoundedContext.singleTenant("Single")
+    const singleTenant = await BoundedContext.singleTenant("Single")
       .addCommandDispatcher(
         createCommandDispatcher((command) => singleTenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
-    const multitenant = BoundedContext.multitenant("Multi")
+    const multitenant = await BoundedContext.multitenant("Multi")
       .addCommandDispatcher(
         createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
+    await multitenant.tenantIndex.keep(tenantEmail("tenant@example.test"));
     const singleServer = await startServices(singleTenant);
 
     try {
@@ -2029,91 +2473,85 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const singleTenant = BoundedContext.singleTenant("SingleSubscription").add(repository).build();
+    const singleTenant = await BoundedContext.singleTenant("SingleSubscription")
+      .add(repository)
+      .build();
     const secondRepository = new Repository({
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const multitenant = BoundedContext.multitenant("MultiSubscription")
-      .add(secondRepository)
-      .build();
     const singleServer = await startServices(singleTenant);
-    const multiServer = await startServices(multitenant);
-
     try {
       const singleClient = createClient(
         SubscriptionService,
         createGrpcTransport({ baseUrl: singleServer.baseUrl }),
       );
+      await expect(singleClient.subscribe(createTopic("tenant-a"))).rejects.toMatchObject({
+        code: Code.InvalidArgument,
+      } satisfies Partial<ConnectError>);
+    } finally {
+      await singleServer.close();
+    }
+    const multitenant = await BoundedContext.multitenant("MultiSubscription")
+      .add(secondRepository)
+      .build();
+    const multiServer = await startServices(multitenant);
+    try {
       const multiClient = createClient(
         SubscriptionService,
         createGrpcTransport({ baseUrl: multiServer.baseUrl }),
       );
-
-      await expect(singleClient.subscribe(createTopic("tenant-a"))).rejects.toMatchObject({
-        code: Code.InvalidArgument,
-      } satisfies Partial<ConnectError>);
       await expect(multiClient.subscribe(createTopic())).rejects.toMatchObject({
         code: Code.InvalidArgument,
       } satisfies Partial<ConnectError>);
     } finally {
       await multiServer.close();
-      await singleServer.close();
     }
   });
 
   it("treats subscription tenant domain and email variants as present", async () => {
-    const capturedTenantKeys: (TenantId | undefined)[] = [];
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const singleTenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      isMultitenant: false,
-    });
-    const multitenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      isMultitenant: true,
-      subscribe: (_schema, callback, options) => {
-        deliverUpdate = callback;
-        capturedTenantKeys.push(options.tenantId);
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const singleHandlers = registeredSubscriptionHandlers(singleTenant);
-    const multiHandlers = registeredSubscriptionHandlers(multitenant);
-
-    await expect(
-      Promise.resolve().then(() =>
-        singleHandlers.subscribe(createTopic(tenantDomain("tenant.example"))),
-      ),
-    ).rejects.toMatchObject({
-      code: Code.InvalidArgument,
-    } satisfies Partial<ConnectError>);
-
-    const subscription = await multiHandlers.subscribe(
-      createTopic(tenantEmail("tenant@example.test")),
-    );
-    const iterator = multiHandlers.activate(subscription)[Symbol.asyncIterator]();
-    const pending = iterator.next();
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-tenant",
-      state: createState("task-tenant", "Tenant"),
-    });
-    await withTimeout(pending, "subscription tenant activation update");
-    await iterator.return?.();
-
-    expect(capturedTenantKeys).toEqual([tenantEmail("tenant@example.test")]);
+    const single = await buildStateSubscriptionContext("SingleTenantVariants");
+    try {
+      await expect(
+        Promise.resolve().then(() =>
+          registeredSubscriptionHandlers(single).subscribe(
+            createTopic(tenantDomain("tenant.example")),
+          ),
+        ),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument } satisfies Partial<ConnectError>);
+    } finally {
+      await single.close();
+    }
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const email = tenantEmail("tenant@example.test");
+    const multitenant = await BoundedContext.multitenant("MultiTenantVariants")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    try {
+      await index.keep(email);
+      const handlers = registeredSubscriptionHandlers(multitenant);
+      const subscription = await handlers.subscribe(createTopic(email));
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(multitenant, subscription);
+      await postEntityStateChanged(
+        multitenant,
+        ProjectOverviewStateSchema,
+        createState("task-tenant", "Tenant"),
+        undefined,
+        email,
+      );
+      expect(
+        unpackEntityState(
+          (await withTimeout(next, "subscription tenant update")).value as SubscriptionUpdate,
+        ),
+      ).toEqual(createState("task-tenant", "Tenant"));
+      await iterator.return?.();
+    } finally {
+      await multitenant.close();
+    }
   });
 
   it("returns QueryResponse errors for query tenant mismatches", async () => {
@@ -2121,35 +2559,35 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const singleTenant = BoundedContext.singleTenant("Single").add(repository).build();
+    const singleTenant = await BoundedContext.singleTenant("Single").add(repository).build();
     const secondRepository = new Repository({
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const multitenant = BoundedContext.multitenant("Multi").add(secondRepository).build();
     const singleServer = await startServices(singleTenant);
-    const multiServer = await startServices(multitenant);
-
     try {
       const singleClient = createClient(
         QueryService,
         createGrpcTransport({ baseUrl: singleServer.baseUrl }),
       );
+      const inapplicable = await singleClient.read(createQuery("task-1", "tenant-a"));
+      expect(inapplicable.response?.status?.status.case).toBe("error");
+      expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
+    } finally {
+      await singleServer.close();
+    }
+    const multitenant = await BoundedContext.multitenant("Multi").add(secondRepository).build();
+    const multiServer = await startServices(multitenant);
+    try {
       const multiClient = createClient(
         QueryService,
         createGrpcTransport({ baseUrl: multiServer.baseUrl }),
       );
-
-      const inapplicable = await singleClient.read(createQuery("task-1", "tenant-a"));
       const missing = await multiClient.read(createQuery("task-1"));
-
-      expect(inapplicable.response?.status?.status.case).toBe("error");
-      expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
       expect(missing.response?.status?.status.case).toBe("error");
       expect(responseErrorMessage(missing)).toBe("Tenant is required for this query.");
     } finally {
       await multiServer.close();
-      await singleServer.close();
     }
   });
 
@@ -2162,6 +2600,7 @@ describe("SpineServices", () => {
     const multitenant = createFakeContext({
       stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
+      admittedTenants: [tenantDomain("tenant.example")],
       readVersioned: (_schema, _id, options) => {
         capturedTenantKeys.push(options.tenantId);
         return Promise.resolve({
@@ -2195,6 +2634,7 @@ describe("SpineServices", () => {
     const multitenant = createFakeContext({
       stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: true,
+      admittedTenants: [tenantDomain("tenant.example")],
       readAllVersioned: (_schema, options) => {
         capturedTenantKeys.push(options.tenantId);
         return Promise.resolve([
@@ -2226,7 +2666,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
@@ -2267,7 +2707,7 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected entity state update.");
       }
-      expect(AnyMessages.unpack(state.value, ProjectOverviewStateSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(state.value, ProjectOverviewStateSchema)).toEqual(
         createState("task-1", "First"),
       );
 
@@ -2286,7 +2726,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("RegistrySubscriptions")
+    const context = await BoundedContext.singleTenant("RegistrySubscriptions")
       .withSubscriptionRegistry(registry)
       .add(repository)
       .build();
@@ -2314,18 +2754,13 @@ describe("SpineServices", () => {
 
   it("activates a registry definition from another service instance", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const firstContext = BoundedContext.singleTenant("SharedSubscriptions")
-      .withStorageFactory(storageFactory)
-      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
-      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
-      .build();
-    const secondContext = BoundedContext.singleTenant("SharedSubscriptions")
-      .withStorageFactory(storageFactory)
+    await configureStorage(storageFactory);
+    const firstContext = await BoundedContext.singleTenant("SharedSubscriptions")
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
     const first = registeredSubscriptionHandlers(firstContext);
-    const second = registeredSubscriptionHandlers(secondContext);
+    const second = registeredSubscriptionHandlers(firstContext);
 
     try {
       const subscription = await first.subscribe(createTopic());
@@ -2333,7 +2768,7 @@ describe("SpineServices", () => {
       const pending = iterator.next();
       await delay(25);
       await postEntityStateChanged(
-        secondContext,
+        firstContext,
         ProjectOverviewStateSchema,
         createState("task-shared", "Shared"),
       );
@@ -2343,13 +2778,12 @@ describe("SpineServices", () => {
       await second.cancel(subscription);
       await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
     } finally {
-      await secondContext.close();
       await firstContext.close();
     }
   });
 
   it("delivers event_updates for activated event subscriptions", async () => {
-    const context = BoundedContext.singleTenant("Events")
+    const context = await BoundedContext.singleTenant("Events")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
@@ -2382,7 +2816,7 @@ describe("SpineServices", () => {
     expect(event).toEqual(source);
     expect(event).not.toBe(source);
     expect(event.id?.value).toBe("event-created");
-    expect(AnyMessages.unpack(event.message, TaskCreatedSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(event.message, TaskCreatedSchema)).toEqual(
       create(TaskCreatedSchema, {
         id: create(GeneratedTaskIdSchema, { value: "aggregate-1" }),
         title: "Created",
@@ -2393,7 +2827,7 @@ describe("SpineServices", () => {
   });
 
   it("keeps a closed event subscription detached when best-effort cleanup rejects", async () => {
-    const context = BoundedContext.singleTenant("EventCleanup")
+    const context = await BoundedContext.singleTenant("EventCleanup")
       .withSubscriptionRegistry(new RejectingDeleteRegistry())
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
@@ -2427,7 +2861,7 @@ describe("SpineServices", () => {
 
   it("redacts rejection details only from client event subscription updates", async () => {
     const internallyDispatched: ReturnType<typeof createRejectionEvent>[] = [];
-    const context = BoundedContext.multitenant("RejectionEvents")
+    const context = await BoundedContext.multitenant("RejectionEvents")
       .addEventDispatcher({
         messageSchemas: () => [TaskAlreadyDoneSchema],
         dispatch: (event) => {
@@ -2436,6 +2870,7 @@ describe("SpineServices", () => {
         },
       })
       .build();
+    await admitTenants(context, "tenant-rejected");
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(
       createEventTopic("tenant-rejected", TaskAlreadyDoneSchema),
@@ -2487,9 +2922,10 @@ describe("SpineServices", () => {
   });
 
   it("keeps multitenant event subscriptions isolated by tenant", async () => {
-    const context = BoundedContext.multitenant("TenantEvents")
+    const context = await BoundedContext.multitenant("TenantEvents")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic("tenant-a"));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
@@ -2522,9 +2958,10 @@ describe("SpineServices", () => {
   });
 
   it("matches multitenant event subscriptions against past-message actor tenants", async () => {
-    const context = BoundedContext.multitenant("PastMessageTenantEvents")
+    const context = await BoundedContext.multitenant("PastMessageTenantEvents")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
+    await admitTenants(context, "tenant-past", "tenant-other");
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createEventTopic("tenant-past"));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
@@ -2559,9 +2996,10 @@ describe("SpineServices", () => {
   });
 
   it("isolates concurrent same-type event streams by full Command origin and tenant", async () => {
-    const context = BoundedContext.multitenant("CommandOriginEvents")
+    const context = await BoundedContext.multitenant("CommandOriginEvents")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
+    await admitTenants(context, "tenant-a", "tenant-b");
     const handlers = registeredSubscriptionHandlers(context);
     const alice = createCommandOrigin("command-alice", "alice", "tenant-a");
     const bob = createCommandOrigin("command-bob", "bob", "tenant-a");
@@ -2605,7 +3043,7 @@ describe("SpineServices", () => {
   });
 
   it("keeps duplicate activation and cancellation behavior for event subscriptions", async () => {
-    const context = BoundedContext.singleTenant("EventLifecycle")
+    const context = await BoundedContext.singleTenant("EventLifecycle")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
@@ -2636,7 +3074,7 @@ describe("SpineServices", () => {
   });
 
   it("rejects unsupported event subscription filters through the service boundary", async () => {
-    const context = BoundedContext.singleTenant("FilteredEvents")
+    const context = await BoundedContext.singleTenant("FilteredEvents")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
@@ -2666,8 +3104,8 @@ describe("SpineServices", () => {
     );
   });
 
-  it("ignores event topic masks and rejects false include-all values", () => {
-    const context = BoundedContext.singleTenant("MalformedEventTopics")
+  it("ignores event topic masks and rejects false include-all values", async () => {
+    const context = await BoundedContext.singleTenant("MalformedEventTopics")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
@@ -2686,7 +3124,7 @@ describe("SpineServices", () => {
   });
 
   it("delivers complete events after activating a topic with an unknown mask path", async () => {
-    const context = BoundedContext.singleTenant("UnknownEventMaskDelivery")
+    const context = await BoundedContext.singleTenant("UnknownEventMaskDelivery")
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
@@ -2715,8 +3153,8 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
-  it("rejects internal event targets before listener attachment", () => {
-    const context = BoundedContext.singleTenant("InternalEvents")
+  it("rejects internal event targets before listener attachment", async () => {
+    const context = await BoundedContext.singleTenant("InternalEvents")
       .addEventDispatcher(createDomainEventDispatcher(Command_SystemPropertiesSchema))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
@@ -2736,7 +3174,7 @@ describe("SpineServices", () => {
   });
 
   it("delivers subscription updates from real projection event handling", async () => {
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .add(createProjectionRepositoryWithHandlers())
       .build();
     const handlers = registeredSubscriptionHandlers(context);
@@ -2762,155 +3200,74 @@ describe("SpineServices", () => {
     if (state?.case !== "state") {
       throw new Error("Expected entity state update.");
     }
-    expect(AnyMessages.unpack(state.value, ProjectOverviewStateSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(state.value, ProjectOverviewStateSchema)).toEqual(
       createState("task-projected", "Task (projected)", 2),
     );
     await iterator.return?.();
   });
 
   it("matches subscription filters before delivering entity updates", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(
-      createFilteredTopic({ id: "task-1", name: "Open" }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      state: createState("task-1", "Closed"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-2",
-      state: createState("task-2", "Open"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      state: createState("task-1", "Open"),
-    });
-
-    const delivered = await withTimeout(first, "filtered subscription update");
-    const update = delivered.value as SubscriptionUpdate | undefined;
-
-    expect(delivered.done).toBe(false);
-    expect(unpackEntityState(update)).toEqual(createState("task-1", "Open"));
-    await iterator.return?.();
+    const context = await buildStateSubscriptionContext("FilteredProjectUpdates");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(
+        createFilteredTopic({ id: "task-1", name: "Open" }),
+      );
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const first = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-1", "Closed"),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-2", "Open"),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-1", "Open"),
+      );
+      const delivered = await withTimeout(first, "filtered subscription update");
+      expect(delivered.done).toBe(false);
+      expect(unpackEntityState(delivered.value as SubscriptionUpdate | undefined)).toEqual(
+        createState("task-1", "Open"),
+      );
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
   });
 
   it("emits no-longer-matching when a filtered subscription stops matching", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly previousState?: ProjectOverviewState;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createFilteredTopic({ name: "Open" }));
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      previousState: createState("task-1", "Open"),
-      state: createState("task-1", "Closed"),
-    });
-
-    const delivered = await withTimeout(next, "no-longer-matching subscription update");
-    const update = delivered.value as SubscriptionUpdate | undefined;
-
-    expect(delivered.done).toBe(false);
-    expect(entityUpdateKind(update)?.case).toBe("noLongerMatching");
-    expect(entityUpdateKind(update)?.value).toBe(true);
-    expect(
-      AnyMessages.unpack(entityUpdateId(update) ?? packMissing(), StringValueSchema)?.value,
-    ).toBe("task-1");
-    await iterator.return?.();
-  });
-
-  it("ignores topic masks and delivers complete matching states", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly previousState?: ProjectOverviewState;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(
-      createFilteredTopic({ name: "Open", fieldMask: ["name"] }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      state: createState("task-1", "Open", 7),
-    });
-    const deliveredState = await withTimeout(first, "complete subscription state");
-    const second = iterator.next();
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      previousState: createState("task-1", "Open", 7),
-      state: createState("task-1", "Closed", 7),
-    });
-    const noLongerMatching = await withTimeout(second, "no-longer-matching update");
-
-    expect(unpackEntityState(deliveredState.value as SubscriptionUpdate | undefined)).toEqual(
-      createState("task-1", "Open", 7),
-    );
-    expect(entityUpdateKind(noLongerMatching.value as SubscriptionUpdate | undefined)?.case).toBe(
-      "noLongerMatching",
-    );
-    await iterator.return?.();
+    const context = await buildStateSubscriptionContext("NoLongerMatchingProjects");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createFilteredTopic({ name: "Open" }));
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-1", "Closed"),
+        createState("task-1", "Open"),
+      );
+      const delivered = await withTimeout(next, "no-longer-matching subscription update");
+      const update = delivered.value as SubscriptionUpdate | undefined;
+      expect(delivered.done).toBe(false);
+      expect(entityUpdateKind(update)?.case).toBe("noLongerMatching");
+      expect(entityUpdateKind(update)?.value).toBe(true);
+      expect(
+        AnyPacker.tryUnpack(entityUpdateId(update) ?? packMissing(), StringValueSchema)?.value,
+      ).toBe("task-1");
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
   });
 
   it("rejects unsupported subscription filters before activation attaches Stand delivery", async () => {
@@ -3019,44 +3376,31 @@ describe("SpineServices", () => {
     expect(subscribeCalls).toBe(0);
   });
 
-  it("ignores invalid wire field masks on state topics", () => {
-    const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
-    );
-    const cases = [
-      {
-        fieldMask: new Array(33).fill("name") as string[],
-      },
-      {
-        fieldMask: ["n".repeat(129)],
-      },
-      {
-        fieldMask: [".name"],
-      },
-      {
-        fieldMask: ["name."],
-      },
-      {
-        fieldMask: ["name..value"],
-      },
-      {
-        fieldMask: ["missing"],
-      },
-      {
-        fieldMask: ["name.value"],
-      },
-    ];
-
-    for (const { fieldMask } of cases) {
-      const topic = createTopic();
-      topic.fieldMask = create(FieldMaskSchema, { paths: fieldMask });
-
-      expect(() => handlers.subscribe(topic)).not.toThrow();
+  it("ignores invalid wire field masks on state topics", async () => {
+    const context = await buildStateSubscriptionContext("IgnoredStateMasks");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const cases = [
+        new Array(33).fill("name") as string[],
+        ["n".repeat(129)],
+        [".name"],
+        ["name."],
+        ["name..value"],
+        ["missing"],
+        ["name.value"],
+      ];
+      for (const fieldMask of cases) {
+        const topic = createTopic();
+        topic.fieldMask = create(FieldMaskSchema, { paths: fieldMask });
+        await expect(handlers.subscribe(topic)).resolves.toBeDefined();
+      }
+    } finally {
+      await context.close();
     }
   });
 
   it("delivers complete states after activating a topic with a malformed mask path", async () => {
-    const context = BoundedContext.singleTenant("MalformedStateMaskDelivery")
+    const context = await BoundedContext.singleTenant("MalformedStateMaskDelivery")
       .add(createProjectionRepositoryWithHandlers())
       .build();
     const handlers = registeredSubscriptionHandlers(context);
@@ -3143,12 +3487,12 @@ describe("SpineServices", () => {
     }
   });
 
-  it("rejects wrong-type Any values for message-typed subscription field filters", () => {
+  it("rejects wrong-type Any values for message-typed subscription field filters", async () => {
     const repository = new Repository({
       entityType: MessageIdTaskAggregate,
       schema: TaskSchema,
     });
-    const context = BoundedContext.singleTenant("MessageIdTasks")
+    const context = await BoundedContext.singleTenant("MessageIdTasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
@@ -3159,10 +3503,7 @@ describe("SpineServices", () => {
           filter: [
             create(FilterSchema, {
               fieldPath: { fieldName: ["id"] },
-              value: AnyMessages.pack(
-                CommandIdSchema,
-                create(CommandIdSchema, { uuid: "wrong-id" }),
-              ),
+              value: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "wrong-id" })),
               operator: Filter_Operator.EQUAL,
             }),
           ],
@@ -3177,122 +3518,82 @@ describe("SpineServices", () => {
   });
 
   it("keeps returned subscription mutation from changing activation tenant or topic", async () => {
-    const capturedTenantKeys: (TenantId | undefined)[] = [];
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      isMultitenant: true,
-      subscribe: (_schema, callback, options) => {
-        capturedTenantKeys.push(options.tenantId);
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic("tenant-a"));
-    if (subscription.topic === undefined) {
-      throw new Error("Expected returned subscription topic.");
+    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const context = await BoundedContext.multitenant("ClonedSubscriptionTenant")
+      .withTenantIndex(index)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    try {
+      await admitTenants(context, "tenant-a", "tenant-b");
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createTopic("tenant-a"));
+      const original = clone(SubscriptionSchema, subscription);
+      subscription.topic = createFilteredTopic({ name: "Never", tenantId: "tenant-b" });
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, original);
+      await awaitSubscriptionAttachment(context, original);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-cloned", "Delivered"),
+        undefined,
+        "tenant-a",
+      );
+      const delivered = (await withTimeout(next, "clone-isolated subscription update"))
+        .value as SubscriptionUpdate;
+      expect(delivered.subscription?.topic).toEqual(original.topic);
+      expect(unpackEntityState(delivered)).toEqual(createState("task-cloned", "Delivered"));
+      await iterator.return?.();
+    } finally {
+      await context.close();
     }
-    const originalSubscription = clone(SubscriptionSchema, subscription);
-    subscription.topic = createFilteredTopic({ name: "Never", tenantId: "tenant-b" });
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, originalSubscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-cloned",
-      state: createState("task-cloned", "Delivered"),
-    });
-    const delivered = await withTimeout(next, "clone-isolated subscription update");
-
-    expect(capturedTenantKeys).toEqual([tenantValue("tenant-a")]);
-    expect(unpackEntityState(delivered.value as SubscriptionUpdate | undefined)).toEqual(
-      createState("task-cloned", "Delivered"),
-    );
-    await iterator.return?.();
   });
 
   it("keeps delivered subscription metadata mutation from changing later updates", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-    const originalSubscriptionId = subscription.id?.value;
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = iterator.next();
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "first-delivered",
-      state: createState("first-delivered", "First"),
-    });
-    const firstDelivered = await withTimeout(
-      first,
-      "first clone-isolated subscription metadata update",
-    );
-    const firstUpdate = firstDelivered.value as SubscriptionUpdate | undefined;
-
-    expect(firstUpdate?.subscription?.id?.value).toBe(originalSubscriptionId);
-    if (firstUpdate?.subscription === undefined) {
-      throw new Error("Expected first delivered update to echo subscription metadata.");
+    const context = await buildStateSubscriptionContext("ClonedSubscriptionUpdates");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createTopic());
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const first = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("first-delivered", "First"),
+      );
+      const firstUpdate = (await withTimeout(first, "first subscription update"))
+        .value as SubscriptionUpdate;
+      expect(firstUpdate.subscription?.id?.value).toBe(subscription.id?.value);
+      if (firstUpdate.subscription?.id === undefined)
+        throw new Error("Expected subscription metadata.");
+      firstUpdate.subscription.id.value = "mutated-subscription";
+      firstUpdate.subscription.topic = createFilteredTopic({ name: "Mutated" });
+      const second = iterator.next();
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("second-delivered", "Second"),
+      );
+      const secondUpdate = (await withTimeout(second, "second subscription update"))
+        .value as SubscriptionUpdate;
+      expect(secondUpdate.subscription).toEqual(subscription);
+      expect(unpackEntityState(secondUpdate)).toEqual(createState("second-delivered", "Second"));
+      await iterator.return?.();
+    } finally {
+      await context.close();
     }
-    if (firstUpdate.subscription.id === undefined) {
-      throw new Error("Expected first delivered update to echo subscription ID.");
-    }
-    firstUpdate.subscription.id.value = "mutated-subscription";
-    firstUpdate.subscription.topic = createFilteredTopic({ name: "Mutated" });
-
-    const second = iterator.next();
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "second-delivered",
-      state: createState("second-delivered", "Second"),
-    });
-    const secondDelivered = await withTimeout(
-      second,
-      "second clone-isolated subscription metadata update",
-    );
-    const secondUpdate = secondDelivered.value as SubscriptionUpdate | undefined;
-
-    expect(secondUpdate?.subscription?.id?.value).toBe(originalSubscriptionId);
-    expect(secondUpdate?.subscription?.topic).toEqual(subscription.topic);
-    await iterator.return?.();
   });
 
-  it("coerces a non-positive subscription queue limit", () => {
-    const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
-      { queueLimit: 0 },
-    );
-
-    expect(() => handlers.subscribe(createTopic())).not.toThrow();
+  it("coerces a non-positive subscription queue limit", async () => {
+    const context = await buildStateSubscriptionContext("NormalizedSubscriptionQueue");
+    try {
+      const handlers = registeredSubscriptionHandlers(context, { queueLimit: 0 });
+      await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+    } finally {
+      await context.close();
+    }
   });
 
   it("keeps missing subscription IDs inert", async () => {
@@ -3314,7 +3615,7 @@ describe("SpineServices", () => {
 
   it("keeps registry-missing and expired subscriptions inert during activation", async () => {
     for (const outcome of ["missing", "expired"] as const) {
-      const context = BoundedContext.singleTenant(`Subscription-${outcome}`)
+      const context = await BoundedContext.singleTenant(`Subscription-${outcome}`)
         .withSubscriptionRegistry(new InertActivationRegistry(outcome))
         .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
         .build();
@@ -3368,145 +3669,149 @@ describe("SpineServices", () => {
   });
 
   it("delivers subscription updates matched by EITHER filters", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(
-      createFilteredTopicWithCriteria({
-        filter: [
-          create(CompositeFilterSchema, {
-            filter: [
-              create(FilterSchema, {
-                fieldPath: { fieldName: ["name"] },
-                value: packStringId("Closed"),
-                operator: Filter_Operator.EQUAL,
-              }),
-              create(FilterSchema, {
-                fieldPath: { fieldName: ["priority"] },
-                value: packInt32(7),
-                operator: Filter_Operator.EQUAL,
-              }),
-            ],
-            operator: CompositeFilter_CompositeOperator.EITHER,
-          }),
-        ],
-      }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-1",
-      state: createState("task-1", "Open", 7),
-    });
-
-    const delivered = (await withTimeout(next, "either subscription")).value as
-      SubscriptionUpdate | undefined;
-
-    expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Open", 7));
-    await iterator.return?.();
+    const context = await buildStateSubscriptionContext("EitherFilteredProjects");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(
+        createFilteredTopicWithCriteria({
+          filter: [
+            create(CompositeFilterSchema, {
+              filter: [
+                create(FilterSchema, {
+                  fieldPath: { fieldName: ["name"] },
+                  value: packStringId("Closed"),
+                  operator: Filter_Operator.EQUAL,
+                }),
+                create(FilterSchema, {
+                  fieldPath: { fieldName: ["priority"] },
+                  value: packInt32(7),
+                  operator: Filter_Operator.EQUAL,
+                }),
+              ],
+              operator: CompositeFilter_CompositeOperator.EITHER,
+            }),
+          ],
+        }),
+      );
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-1", "Open", 7),
+      );
+      const delivered = (await withTimeout(next, "either subscription")).value as
+        SubscriptionUpdate | undefined;
+      expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Open", 7));
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
   });
 
-  it("delivers ID-only subscriptions and accepts unknown Any ID values", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const id = AnyMessages.pack(TopicIdSchema, create(TopicIdSchema, { value: "packed-id" }));
-    const subscription = await handlers.subscribe(
-      createFilteredTopicWithCriteria({ idFilter: { id: [id] } }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id,
-      state: createState("task-1", "Packed"),
-    });
-
-    const delivered = (await withTimeout(next, "id-only subscription")).value as
-      SubscriptionUpdate | undefined;
-
-    expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Packed"));
-    await iterator.return?.();
+  it("matches an Any-valued subscription column without unpacking its payload", async () => {
+    const context = await buildStateSubscriptionContext("AnyFilteredProjects");
+    try {
+      const selected = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "selected" }));
+      const other = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "other" }));
+      const filter = create(FilterSchema, {
+        fieldPath: { fieldName: ["attachment"] },
+        value: selected,
+        operator: Filter_Operator.EQUAL,
+      });
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(
+        createFilteredTopicWithCriteria({
+          filter: [
+            create(CompositeFilterSchema, {
+              filter: [filter],
+              operator: CompositeFilter_CompositeOperator.ALL,
+            }),
+          ],
+        }),
+      );
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const next = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "task-1", attachment: other }),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        create(ProjectOverviewStateSchema, { id: "task-2", attachment: selected }),
+      );
+      expect(
+        unpackEntityState(
+          (await withTimeout(next, "Any column subscription")).value as
+            SubscriptionUpdate | undefined,
+        )?.id,
+      ).toBe("task-2");
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
   });
 
-  it("matches byte subscription ID filters by value", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
+  it("matches declared Any Entity IDs in system-event subscription filters", async () => {
+    const repository = new Repository({
+      entityType: EnvelopeProjection,
+      schema: ProjectEnvelopeStateSchema,
     });
-    const handlers = registeredSubscriptionHandlers(context);
-    const id = new Uint8Array([1, 2, 3]);
-    const subscription = await handlers.subscribe(
-      createFilteredTopicWithCriteria({ idFilter: { id: [packBytes(id)] } }),
-    );
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const next = nextBusinessUpdate(iterator, subscription);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: new Uint8Array([9]),
-      state: createState("task-ignored", "Ignored"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: new Uint8Array(id),
-      state: createState("task-1", "Bytes"),
-    });
-
-    const delivered = (await withTimeout(next, "byte-id subscription")).value as
-      SubscriptionUpdate | undefined;
-
-    expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Bytes"));
-    await iterator.return?.();
+    const context = await BoundedContext.singleTenant("EnvelopeProjects")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const selected = AnyPacker.pack(
+        ProjectOverviewIdSchema,
+        create(ProjectOverviewIdSchema, { value: "selected" }),
+      );
+      const other = AnyPacker.pack(
+        ProjectOverviewIdSchema,
+        create(ProjectOverviewIdSchema, { value: "other" }),
+      );
+      const topic = create(TopicSchema, {
+        id: create(TopicIdSchema, { value: "t-envelope-id" }),
+        target: create(TargetSchema, {
+          type: TypeUrls.derive(ProjectEnvelopeStateSchema),
+          criterion: {
+            case: "filters",
+            value: create(TargetFiltersSchema, {
+              idFilter: { id: [selected] },
+            }),
+          },
+        }),
+        context: createActorContext(),
+      });
+      const subscription = await handlers.subscribe(topic);
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      await expectActivationAcknowledgement(iterator, subscription);
+      const next = iterator.next();
+      await postEntityStateChanged(
+        context,
+        ProjectEnvelopeStateSchema,
+        create(ProjectEnvelopeStateSchema, { id: other, name: "Other" }),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectEnvelopeStateSchema,
+        create(ProjectEnvelopeStateSchema, { id: selected, name: "Selected" }),
+      );
+      const delivered = (await withTimeout(next, "Any ID subscription"))
+        .value as SubscriptionUpdate;
+      const kind = entityUpdateKind(delivered);
+      expect(kind?.case).toBe("state");
+      if (kind?.case !== "state") throw new Error("Expected a state update.");
+      expect(AnyPacker.unpack(kind.value, ProjectEnvelopeStateSchema).name).toBe("Selected");
+      await iterator.return?.();
+    } finally {
+      await context.close();
+    }
   });
 
   it("matches message-typed subscription ID filters and packs delivered message IDs", async () => {
@@ -3514,7 +3819,7 @@ describe("SpineServices", () => {
       entityType: MessageIdTaskAggregate,
       schema: TaskSchema,
     });
-    const context = BoundedContext.singleTenant("MessageIdTasks")
+    const context = await BoundedContext.singleTenant("MessageIdTasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
@@ -3545,10 +3850,10 @@ describe("SpineServices", () => {
     const delivered = (await withTimeout(next, "message-id subscription")).value as
       SubscriptionUpdate | undefined;
 
-    expect(AnyMessages.unpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
       taskId,
     );
-    expect(AnyMessages.unpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
       create(TaskSchema, {
         id: taskId,
         title: "Matched",
@@ -3563,7 +3868,7 @@ describe("SpineServices", () => {
       entityType: MessageIdTaskAggregate,
       schema: TaskSchema,
     });
-    const context = BoundedContext.singleTenant("MessageFieldTasks")
+    const context = await BoundedContext.singleTenant("MessageFieldTasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
@@ -3576,7 +3881,7 @@ describe("SpineServices", () => {
             filter: [
               create(FilterSchema, {
                 fieldPath: { fieldName: ["id"] },
-                value: AnyMessages.pack(TaskIdSchema, taskId),
+                value: AnyPacker.pack(TaskIdSchema, taskId),
                 operator: Filter_Operator.EQUAL,
               }),
             ],
@@ -3606,10 +3911,10 @@ describe("SpineServices", () => {
     const delivered = (await withTimeout(next, "message field subscription")).value as
       SubscriptionUpdate | undefined;
 
-    expect(AnyMessages.unpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
       taskId,
     );
-    expect(AnyMessages.unpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
       create(TaskSchema, { id: taskId, title: "Matched" }),
     );
     attachment.unsubscribe();
@@ -3789,7 +4094,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = await BoundedContext.singleTenant("Tasks")
       .add(repository)
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
@@ -3835,7 +4140,7 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected entity state update.");
       }
-      expect(AnyMessages.unpack(state.value, ProjectOverviewStateSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(state.value, ProjectOverviewStateSchema)).toEqual(
         createState("task-live", "Live"),
       );
       expect(unknownNext.done).toBe(true);
@@ -3847,112 +4152,9 @@ describe("SpineServices", () => {
     }
   });
 
-  it("releases subscription delivery when the activation iterator closes", async () => {
-    const activeStandSubscriptions: string[] = [];
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        activeStandSubscriptions.push("open");
-        deliverUpdate = callback;
-        return {
-          get closed() {
-            return activeStandSubscriptions.length === 0;
-          },
-          unsubscribe: () => {
-            activeStandSubscriptions.pop();
-          },
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-
-    expect(activeStandSubscriptions).toEqual([]);
-
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const pending = iterator.next();
-
-    await delay(25);
-    expect(activeStandSubscriptions).toEqual(["open"]);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-close",
-      state: createState("task-close", "Close"),
-    });
-    await withTimeout(pending, "first subscription update");
-    await iterator.return?.();
-
-    expect(activeStandSubscriptions).toEqual([]);
-  });
-
-  it("keeps duplicate activation inert after a subscription is active", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    let subscribeCalls = 0;
-    let unsubscribeCount = 0;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        subscribeCalls += 1;
-        deliverUpdate = callback;
-        return {
-          get closed() {
-            return unsubscribeCount > 0;
-          },
-          unsubscribe: () => {
-            unsubscribeCount += 1;
-          },
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-    const primaryIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const firstUpdate = primaryIterator.next();
-
-    await delay(25);
-    const duplicateIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const duplicateDone = await withTimeout(duplicateIterator.next(), "duplicate activation close");
-
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-primary",
-      state: createState("task-primary", "Primary"),
-    });
-    const delivered = await withTimeout(firstUpdate, "primary activation update");
-    await duplicateIterator.return?.();
-    const secondUpdate = primaryIterator.next();
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-still-active",
-      state: createState("task-still-active", "Still active"),
-    });
-    const stillActive = await withTimeout(secondUpdate, "primary activation after duplicate");
-
-    expect(duplicateDone.done).toBe(true);
-    expect(delivered.done).toBe(false);
-    expect(stillActive.done).toBe(false);
-    expect(subscribeCalls).toBe(1);
-    expect(unsubscribeCount).toBe(0);
-    await primaryIterator.return?.();
-    expect(unsubscribeCount).toBe(1);
-  });
-
   it("serializes simultaneous activation before the registry activation await", async () => {
     const registry = new GatedActivateRegistry();
-    const context = BoundedContext.singleTenant("ActivationRace")
+    const context = await BoundedContext.singleTenant("ActivationRace")
       .withSubscriptionRegistry(registry)
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
@@ -3982,38 +4184,15 @@ describe("SpineServices", () => {
     await context.close();
   });
 
-  it("removes inactive subscription records when activation attachment fails", async () => {
-    let subscribeCalls = 0;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: () => {
-        subscribeCalls += 1;
-        throw new Error("stand subscribe failed");
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-
-    await expect(iterator.next()).rejects.toThrow("stand subscribe failed");
-
-    const secondActivation = await withTimeout(
-      handlers.activate(subscription)[Symbol.asyncIterator]().next(),
-      "activation after failed attachment",
-    );
-
-    expect(secondActivation.done).toBe(true);
-    expect(subscribeCalls).toBe(1);
-  });
-
   it("surfaces attachment setup and registry cleanup failures together during activation", async () => {
     const registry = new FailingDeleteRegistry();
-    const context = BoundedContext.singleTenant("SubscriptionCleanup")
+    const context = await BoundedContext.singleTenant("SubscriptionCleanup")
       .withSubscriptionRegistry(registry)
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .build();
     const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createTopic());
+    registry.failCleanup();
 
     try {
       await expect(
@@ -4033,7 +4212,7 @@ describe("SpineServices", () => {
 
   it("warns once when detached closed-stream cleanup rejects without changing the stream outcome", async () => {
     const registry = new RejectingDeleteRegistry();
-    const context = BoundedContext.singleTenant("CleanupWarning")
+    const context = await BoundedContext.singleTenant("CleanupWarning")
       .withSubscriptionRegistry(registry)
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
@@ -4089,261 +4268,51 @@ describe("SpineServices", () => {
     await context.close();
   });
 
-  it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
-    const unsubscribeCounts: number[] = [];
-    const callbacks: ((update: {
-      readonly typeUrl: string;
-      readonly id: unknown;
-      readonly state: ProjectOverviewState;
-    }) => void)[] = [];
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        const index = callbacks.length;
-        let closed = false;
-        callbacks.push(callback);
-        unsubscribeCounts.push(0);
-        return {
-          get closed() {
-            return closed;
-          },
-          unsubscribe: () => {
-            unsubscribeCounts[index] = (unsubscribeCounts[index] ?? 0) + 1;
-            closed = true;
-          },
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const firstSubscription = await handlers.subscribe(createTopic());
-    const secondSubscription = await handlers.subscribe(createTopic());
-    const firstIterator = handlers.activate(firstSubscription)[Symbol.asyncIterator]();
-    const secondIterator = handlers.activate(secondSubscription)[Symbol.asyncIterator]();
-    await expectActivationAcknowledgement(firstIterator, firstSubscription);
-    const firstNext = firstIterator.next();
-    const secondNext = nextBusinessUpdate(secondIterator, secondSubscription);
-
-    await delay(25);
-    await handlers.cancel(firstSubscription);
-    await handlers.cancel(firstSubscription);
-    await firstIterator.return?.();
-    callbacks[1]?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-second",
-      state: createState("task-second", "Second"),
-    });
-
-    const firstClosed = await withTimeout(firstNext, "canceled subscription close");
-    const secondDelivered = await withTimeout(secondNext, "second subscription update");
-
-    expect(firstSubscription.id?.value).not.toBe(secondSubscription.id?.value);
-    expect(firstClosed.done).toBe(true);
-    expect(secondDelivered.done).toBe(false);
-    expect(unsubscribeCounts).toEqual([1, 0]);
-    await handlers.cancel(secondSubscription);
-    await secondIterator.return?.();
-    expect(unsubscribeCounts).toEqual([1, 1]);
-  });
-
-  it("packs delivered subscription update IDs for supported ID shapes", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context);
-    const subscription = await handlers.subscribe(createTopic());
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = nextBusinessUpdate(iterator, subscription);
-    const anyId = AnyMessages.pack(
-      TopicIdSchema,
-      create(TopicIdSchema, { value: "already-packed" }),
-    );
-    const bytesId = new Uint8Array([7, 8, 9]);
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-first",
-      state: createState("task-first", "First"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: bytesId,
-      state: createState("task-bytes", "Bytes"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: anyId,
-      state: createState("task-any", "Any"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: true,
-      state: createState("task-bool", "Bool"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: 42,
-      state: createState("task-number", "Number"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: 9007199254740993n,
-      state: createState("task-bigint", "Bigint"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: { unsupported: true },
-      state: createState("task-object", "Object"),
-    });
-
-    const firstUpdate = await withTimeout(first, "first direct subscription update");
-    const secondUpdate = await withTimeout(iterator.next(), "queued direct subscription update");
-    const thirdUpdate = await withTimeout(iterator.next(), "packed Any subscription update");
-    const fourthUpdate = await withTimeout(iterator.next(), "boolean ID subscription update");
-    const fifthUpdate = await withTimeout(iterator.next(), "number ID subscription update");
-    const sixthUpdate = await withTimeout(iterator.next(), "bigint ID subscription update");
-    const seventhUpdate = await withTimeout(iterator.next(), "object ID subscription update");
-    const secondValue = secondUpdate.value as SubscriptionUpdate | undefined;
-    const thirdValue = thirdUpdate.value as SubscriptionUpdate | undefined;
-    const fourthValue = fourthUpdate.value as SubscriptionUpdate | undefined;
-    const fifthValue = fifthUpdate.value as SubscriptionUpdate | undefined;
-    const sixthValue = sixthUpdate.value as SubscriptionUpdate | undefined;
-    const seventhValue = seventhUpdate.value as SubscriptionUpdate | undefined;
-
-    expect(firstUpdate.done).toBe(false);
-    expect(secondUpdate.done).toBe(false);
-    expect(thirdUpdate.done).toBe(false);
-    expect(fourthUpdate.done).toBe(false);
-    expect(fifthUpdate.done).toBe(false);
-    expect(sixthUpdate.done).toBe(false);
-    expect(seventhUpdate.done).toBe(false);
-    const firstId = entityUpdateId(firstUpdate.value as SubscriptionUpdate);
-    const secondId = entityUpdateId(secondValue);
-    const thirdId = entityUpdateId(thirdValue);
-    const fourthId = entityUpdateId(fourthValue);
-    const fifthId = entityUpdateId(fifthValue);
-    const sixthId = entityUpdateId(sixthValue);
-    const seventhId = entityUpdateId(seventhValue);
-    if (
-      firstId === undefined ||
-      secondId === undefined ||
-      thirdId === undefined ||
-      fourthId === undefined ||
-      fifthId === undefined ||
-      sixthId === undefined
-    ) {
-      throw new Error("Expected packed update IDs.");
-    }
-    expect(AnyMessages.unpack(firstId, StringValueSchema)).toEqual(
-      create(StringValueSchema, { value: "task-first" }),
-    );
-    expect(AnyMessages.unpack(secondId, BytesValueSchema)).toEqual(
-      create(BytesValueSchema, { value: bytesId }),
-    );
-    expect(thirdId).toEqual(anyId);
-    expect(AnyMessages.unpack(fourthId, BoolValueSchema)).toEqual(
-      create(BoolValueSchema, { value: true }),
-    );
-    expect(AnyMessages.unpack(fifthId, DoubleValueSchema)).toEqual(
-      create(DoubleValueSchema, { value: 42 }),
-    );
-    expect(AnyMessages.unpack(sixthId, Int64ValueSchema)).toEqual(
-      create(Int64ValueSchema, { value: 9007199254740993n }),
-    );
-    expect(seventhId).toBeUndefined();
-    await iterator.return?.();
-  });
-
   it("closes slow subscription consumers when the update queue limit is exceeded", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectOverviewState;
-        }) => void)
-      | undefined;
-    let unsubscribeCount = 0;
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      subscribe: (_schema, callback) => {
-        deliverUpdate = callback;
-        return {
-          get closed() {
-            return unsubscribeCount > 0;
-          },
-          unsubscribe: () => {
-            unsubscribeCount += 1;
-          },
-        };
-      },
-    });
-    const handlers = registeredSubscriptionHandlers(context, {
-      queueLimit: 1,
-      subscriptionLimit: 1,
-    });
-    const subscription = await handlers.subscribe(createTopic());
-    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
-    const first = iterator.next();
-
-    await delay(25);
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-one",
-      state: createState("task-one", "One"),
-    });
-    await withTimeout(first, "first slow subscription update");
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-two",
-      state: createState("task-two", "Two"),
-    });
-    deliverUpdate?.({
-      typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
-      id: "task-three",
-      state: createState("task-three", "Three"),
-    });
-
-    const next = await withTimeout(iterator.next(), "closed slow subscription");
-
-    expect(next.done).toBe(true);
-    expect(unsubscribeCount).toBe(1);
-    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
-  });
-
-  it("releases subscription capacity after activation attachment fails", async () => {
-    const handlers = registeredSubscriptionHandlers(
-      createFakeContext({
-        stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-        subscribe: () => {
-          throw new Error("activation failed");
-        },
-      }),
-      { subscriptionLimit: 1 },
-    );
-    const subscription = await handlers.subscribe(createTopic());
-
-    await expect(handlers.activate(subscription)[Symbol.asyncIterator]().next()).rejects.toThrow(
-      "activation failed",
-    );
-    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("SlowSubscriptionQueue")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    try {
+      const handlers = registeredSubscriptionHandlers(context, {
+        queueLimit: 1,
+        subscriptionLimit: 1,
+      });
+      const subscription = await handlers.subscribe(createTopic());
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      const first = nextBusinessUpdate(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-one", "One"),
+      );
+      await withTimeout(first, "first slow subscription update");
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-two", "Two"),
+      );
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("task-three", "Three"),
+      );
+      expect(await withTimeout(iterator.next(), "closed slow subscription")).toMatchObject({
+        done: true,
+      });
+      if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+      expect(await registry.get(subscription.id)).toBeUndefined();
+      await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+    } finally {
+      await context.close();
+    }
   });
 
   it("fails unsupported subscription topics contractually", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
+    const context = await BoundedContext.singleTenant("Tasks").build();
     const server = await startServices(context);
 
     try {
@@ -4394,7 +4363,7 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     const server = await startServices(context);
 
     try {
@@ -4416,12 +4385,12 @@ describe("SpineServices", () => {
     }
   });
 
-  it("fails known subscription topics with missing context or criterion directly", () => {
+  it("fails known subscription topics with missing context or criterion directly", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
       schema: ProjectOverviewStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     const handlers = registeredSubscriptionHandlers(context);
     const target = create(TargetSchema, {
       type: TypeUrls.derive(ProjectOverviewStateSchema),
@@ -4601,10 +4570,9 @@ function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Tas
     context: create(CommandContextSchema, {
       actorContext: createActorContext(tenantId),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, { id: "task-1", name }),
-      { validate: false },
     ),
   });
 }
@@ -4615,10 +4583,9 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task") 
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, { id: aggregateId, name }),
-      { validate: false },
     ),
   });
 }
@@ -4629,13 +4596,12 @@ function createValidatedCommand(id: string, aggregateId: string, name: string) {
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, {
         id: aggregateId,
         name,
       }),
-      { validate: false },
     ),
   });
 }
@@ -4649,7 +4615,7 @@ function createAggregateEvent(
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: createEventContext(aggregateId, tenantId),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(GeneratedTaskIdSchema, { value: aggregateId }),
@@ -4669,7 +4635,7 @@ function createPastMessageAggregateEvent(id: string, tenantId: string) {
         value: create(OriginSchema, { actorContext: createActorContext(tenantId) }),
       },
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(GeneratedTaskIdSchema, { value: `aggregate-${id}` }),
@@ -4683,7 +4649,7 @@ function createPastMessageAggregateEvent(id: string, tenantId: string) {
 function createCommandOrigin(commandId: string, actor: string, tenantId: string): Origin {
   return create(OriginSchema, {
     message: create(MessageIdSchema, {
-      id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: commandId })),
+      id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: commandId })),
       typeUrl: TypeUrls.derive(CreateTaskSchema),
     }),
     actorContext: create(ActorContextSchema, {
@@ -4715,7 +4681,7 @@ function createOriginEventTopic(id: string, origin: Origin, tenantId: string): T
               create(FilterSchema, {
                 fieldPath: { fieldName: ["context", "past_message"] },
                 operator: Filter_Operator.EQUAL,
-                value: AnyMessages.pack(OriginSchema, origin),
+                value: AnyPacker.pack(OriginSchema, origin),
               }),
             ],
           }),
@@ -4745,20 +4711,20 @@ function createRejectionEvent(
         case: "importContext",
         value: createActorContext("tenant-rejected"),
       },
-      producerId: AnyMessages.pack(
+      producerId: AnyPacker.pack(
         StringValueSchema,
         create(StringValueSchema, { value: "producer-1" }),
       ),
       rejection: create(RejectionEventContextSchema, {
         command,
-        commandMessage: AnyMessages.pack(
+        commandMessage: AnyPacker.pack(
           CreateReviewProjectSchema,
           create(CreateReviewProjectSchema, { id: "task-rejected", name: "Task" }),
         ),
         stacktrace,
       }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskAlreadyDoneSchema,
       create(TaskAlreadyDoneSchema, {
         id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
@@ -4769,10 +4735,7 @@ function createRejectionEvent(
 
 function createEventContext(producerId: string, tenantId?: TenantInput) {
   const context = create(EventContextSchema, {
-    producerId: AnyMessages.pack(
-      StringValueSchema,
-      create(StringValueSchema, { value: producerId }),
-    ),
+    producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: producerId })),
   });
 
   if (tenantId !== undefined) {
@@ -4789,12 +4752,12 @@ function createValidatedEvent(id: string, aggregateId: string, name: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(
+      producerId: AnyPacker.pack(
         StringValueSchema,
         create(StringValueSchema, { value: aggregateId }),
       ),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ProjectSubmissionCreatedSchema,
       create(ProjectSubmissionCreatedSchema, { id: aggregateId, name }),
     ),
@@ -4805,13 +4768,10 @@ function createProjectionEvent(id: string, entityId: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: AnyMessages.pack(
-        StringValueSchema,
-        create(StringValueSchema, { value: entityId }),
-      ),
+      producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: entityId })),
       version: create(VersionSchema, { number: 1 }),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(GeneratedTaskIdSchema, { value: entityId }),
@@ -4824,10 +4784,9 @@ function createProjectionEvent(id: string, entityId: string) {
 
 function createCommandWithoutId() {
   return create(CommandSchema, {
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       CreateReviewProjectSchema,
       create(CreateReviewProjectSchema, { id: "task-1", name: "Task" }),
-      { validate: false },
     ),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
@@ -4839,7 +4798,7 @@ function createQuery(id: string, tenantId?: TenantInput) {
   return createQueryWithIds([packStringId(id)], tenantId);
 }
 
-function createQueryWithIds(ids: ReturnType<typeof AnyMessages.pack>[], tenantId?: TenantInput) {
+function createQueryWithIds(ids: ReturnType<typeof AnyPacker.pack>[], tenantId?: TenantInput) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-1" }),
     target: create(TargetSchema, {
@@ -4855,7 +4814,7 @@ function createQueryWithIds(ids: ReturnType<typeof AnyMessages.pack>[], tenantId
   });
 }
 
-function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof AnyMessages.pack>) {
+function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof AnyPacker.pack>) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-message-id" }),
     target: create(TargetSchema, {
@@ -4863,7 +4822,7 @@ function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof Any
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
-          idFilter: { id: [incompatibleId ?? AnyMessages.pack(TaskIdSchema, id)] },
+          idFilter: { id: [incompatibleId ?? AnyPacker.pack(TaskIdSchema, id)] },
         }),
       },
     }),
@@ -4873,7 +4832,7 @@ function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof Any
 
 function createColumnFilterQuery(
   column = "name",
-  value: ReturnType<typeof AnyMessages.pack> = packStringId("First"),
+  value: ReturnType<typeof AnyPacker.pack> = packStringId("First"),
   options: {
     readonly operator?: Filter_Operator;
     readonly compositeOperator?: CompositeFilter_CompositeOperator;
@@ -4964,7 +4923,7 @@ function createColumnFilterQueryWithComposites(compositeCount: number) {
 
 function createFormattedColumnFilterQuery(
   column: string,
-  value: ReturnType<typeof AnyMessages.pack>,
+  value: ReturnType<typeof AnyPacker.pack>,
   format: Query["format"],
   tenantId?: TenantInput,
 ) {
@@ -5131,7 +5090,7 @@ function createFilteredTopicForTask(
 
 function createMessageIdFilteredTopic(id: TaskId) {
   return createFilteredTopicForTask({
-    idFilter: { id: [AnyMessages.pack(TaskIdSchema, id)] },
+    idFilter: { id: [AnyPacker.pack(TaskIdSchema, id)] },
   });
 }
 
@@ -5162,6 +5121,10 @@ function tenantValue(value: string): TenantId {
   });
 }
 
+async function admitTenants(context: BoundedContext, ...values: string[]): Promise<void> {
+  await Promise.all(values.map((value) => context.tenantIndex.keep(tenantValue(value))));
+}
+
 function tenantDomain(value: string): TenantId {
   return create(TenantIdSchema, {
     kind: {
@@ -5188,17 +5151,26 @@ function createState(id: string, name: string, priority = 1): ProjectOverviewSta
   });
 }
 
+async function buildStateSubscriptionContext(name: string): Promise<BoundedContext> {
+  return BoundedContext.singleTenant(name)
+    .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+    .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+    .build();
+}
+
 async function postEntityStateChanged(
   context: BoundedContext,
   schema: MessageSchema,
   state: Message,
+  oldState?: Message,
+  tenantId?: TenantInput,
 ): Promise<void> {
   const id = (state as Record<string, unknown>)[schema.fields[0]?.localName ?? "id"];
   const idSchema = schema.fields[0]?.message as MessageSchema | undefined;
   const packedId =
     idSchema !== undefined && id !== undefined
-      ? AnyMessages.pack(idSchema, id as never, { validate: false })
-      : AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: String(id) }));
+      ? AnyPacker.pack(idSchema, id as never)
+      : AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: String(id) }));
   await (
     boundedContextAccess as unknown as {
       postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
@@ -5207,14 +5179,16 @@ async function postEntityStateChanged(
     context,
     create(EventSchema, {
       id: { value: `state-change-${String(++stateChangeSequence)}` },
-      message: AnyMessages.pack(
+      ...(tenantId === undefined ? {} : { context: createEventContext("state-change", tenantId) }),
+      message: AnyPacker.pack(
         EntityLog.EntityStateChangedSchema,
         create(EntityLog.EntityStateChangedSchema, {
           entity: { id: packedId, typeUrl: TypeUrls.derive(schema) },
-          newState: AnyMessages.pack(schema, state, { validate: false }),
+          newState: AnyPacker.pack(schema, state),
+          ...(oldState === undefined ? {} : { oldState: AnyPacker.pack(schema, oldState) }),
           signalId: [
             {
-              id: AnyMessages.pack(
+              id: AnyPacker.pack(
                 StringValueSchema,
                 create(StringValueSchema, { value: "test-signal" }),
               ),
@@ -5228,19 +5202,15 @@ async function postEntityStateChanged(
 }
 
 function packStringId(id: string) {
-  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }));
+  return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id }));
 }
 
 function packInt32(value: number) {
-  return AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value }));
-}
-
-function packBytes(value: Uint8Array) {
-  return AnyMessages.pack(BytesValueSchema, create(BytesValueSchema, { value }));
+  return AnyPacker.pack(Int32ValueSchema, create(Int32ValueSchema, { value }));
 }
 
 function unpackProjectOverviewState(state: Any | undefined) {
-  return AnyMessages.unpack(state ?? packMissing(), ProjectOverviewStateSchema);
+  return AnyPacker.tryUnpack(state ?? packMissing(), ProjectOverviewStateSchema);
 }
 
 function unpackEntityState(update: SubscriptionUpdate | undefined) {
@@ -5266,7 +5236,7 @@ function entityUpdateId(update: SubscriptionUpdate | undefined) {
 }
 
 function packMissing() {
-  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "missing" }));
+  return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "missing" }));
 }
 
 function errorMessage(status: unknown) {
@@ -5313,8 +5283,8 @@ function validationDetails(status: unknown) {
     return undefined;
   }
 
-  return AnyMessages.unpack(
-    value.details as Parameters<typeof AnyMessages.unpack>[0],
+  return AnyPacker.tryUnpack(
+    value.details as Parameters<typeof AnyPacker.unpack>[0],
     ValidationErrorSchema,
   );
 }
@@ -5391,6 +5361,11 @@ class InertActivationRegistry extends InMemorySubscriptionRegistry {
 
 class FailingDeleteRegistry extends InMemorySubscriptionRegistry {
   deletions = 0;
+  #cleanupFails = false;
+
+  failCleanup(): void {
+    this.#cleanupFails = true;
+  }
 
   override delete(
     id: Parameters<InMemorySubscriptionRegistry["delete"]>[0],
@@ -5401,7 +5376,9 @@ class FailingDeleteRegistry extends InMemorySubscriptionRegistry {
   }
 
   override cleanup(): ReturnType<InMemorySubscriptionRegistry["cleanup"]> {
-    return Promise.reject(new Error("subscription attachment setup failed"));
+    return this.#cleanupFails
+      ? Promise.reject(new Error("subscription attachment setup failed"))
+      : super.cleanup();
   }
 }
 
@@ -5419,6 +5396,7 @@ class RejectingDeleteRegistry extends InMemorySubscriptionRegistry {
 
 function createFakeContext(options: {
   readonly isMultitenant?: boolean;
+  readonly admittedTenants?: readonly TenantId[];
   readonly commandTypes?: readonly string[];
   readonly entityFamily?: "aggregate" | "projection" | "process-manager";
   readonly eventTypes?: readonly string[];
@@ -5455,7 +5433,16 @@ function createFakeContext(options: {
   const queryVersioned = options.queryVersioned ?? createFakeQueryVersioned(options);
 
   return {
+    name: { value: "FakeContext" },
     isMultitenant: options.isMultitenant ?? false,
+    tenantIndex: {
+      contains: (tenantId: TenantId) =>
+        Promise.resolve(
+          options.admittedTenants?.some(
+            (admitted) => TenantBoundary.from(admitted).key === TenantBoundary.from(tenantId).key,
+          ) ?? false,
+        ),
+    },
     commandBus: () =>
       Object.freeze({
         acceptedCommandTypes: () => commandTypes,

@@ -21,7 +21,7 @@ import {
   EventSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { AnyMessages, Identifiers, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers, TypeUrls } from "@spine-event-engine/core";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
@@ -143,6 +143,90 @@ describe("DeliverySupervisor", () => {
     }
   });
 
+  it("shares one recovery when the periodic scan and watch retry arrive together", async () => {
+    vi.useFakeTimers();
+    const releaseRecovery = Promise.withResolvers<undefined>();
+    const recoveryEntered = Promise.withResolvers<undefined>();
+    const runEntered = Promise.withResolvers<undefined>();
+    let releases = 0;
+    let snapshots = 0;
+    let watches = 0;
+    let runs = 0;
+    const supervisor = new DeliverySupervisor({
+      recoveryMs: 5,
+      watchInitialBackoffMs: 10,
+      watchMaxBackoffMs: 10,
+      source: {
+        releaseExpired: async () => {
+          releases += 1;
+          if (releases === 3) {
+            recoveryEntered.resolve(undefined);
+            await releaseRecovery.promise;
+          }
+          return [];
+        },
+        shardSnapshot: () => {
+          snapshots += 1;
+          return Promise.resolve(
+            snapshots === 3
+              ? [{ shard: newShard(0), status: "NOT_PICKED" as const, messages: 1 }]
+              : [],
+          );
+        },
+        observeShardUpdates: (options) => {
+          watches += 1;
+          return watches < 3 ? failingUpdates() : updatesUntilAborted(options?.signal);
+        },
+      },
+      delivery: qualifiedDelivery({
+        run: () => {
+          runs += 1;
+          runEntered.resolve(undefined);
+          return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
+        },
+      }),
+      onMessage: () => Promise.resolve(),
+    });
+    try {
+      await supervisor.start();
+      expect({ releases, snapshots, watches, runs }).toEqual({
+        releases: 1,
+        snapshots: 1,
+        watches: 1,
+        runs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(5);
+      expect({ releases, snapshots, watches, runs }).toEqual({
+        releases: 2,
+        snapshots: 2,
+        watches: 2,
+        runs: 0,
+      });
+      expect(vi.getTimerCount()).toBe(2);
+      await vi.advanceTimersByTimeAsync(5);
+      await recoveryEntered.promise;
+      expect({ releases, snapshots, watches, runs }).toEqual({
+        releases: 3,
+        snapshots: 2,
+        watches: 2,
+        runs: 0,
+      });
+      releaseRecovery.resolve(undefined);
+      await runEntered.promise;
+      await supervisor.whenIdle();
+      expect({ releases, snapshots, watches, runs }).toEqual({
+        releases: 3,
+        snapshots: 3,
+        watches: 3,
+        runs: 1,
+      });
+    } finally {
+      releaseRecovery.resolve(undefined);
+      await supervisor.close({ graceMs: 100 });
+      vi.useRealTimers();
+    }
+  });
+
   it("finds work written after a shard run released without a fresh notification", async () => {
     vi.useFakeTimers();
     try {
@@ -183,9 +267,11 @@ describe("DeliverySupervisor", () => {
     }
   });
 
-  it("does not log returned failed delivery evidence as a terminal detached run", async () => {
+  it("logs one contained terminal error when a detached run rejects", async () => {
     const error = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ error })) };
+    const failure = new Error("delivery secret");
+    failure.name = "TenantSecret123";
     const supervisor = new DeliverySupervisor({
       source: {
         releaseExpired: () => Promise.resolve([]),
@@ -193,8 +279,42 @@ describe("DeliverySupervisor", () => {
         observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
       },
       delivery: qualifiedDelivery({
-        run: () => Promise.reject(new Error("delivery secret")),
+        run: () => Promise.reject(failure),
       }),
+      onMessage: () => Promise.resolve(),
+    });
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+
+    await supervisor.start();
+    supervisor.notify(newShard(0));
+    await supervisor.whenIdle();
+
+    expect(logger.withMetadata).toHaveBeenCalledOnce();
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "delivery.run",
+      reasonCode: "failed",
+    });
+    expect(error).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith("Delivery run failed.");
+    await supervisor.close();
+  });
+
+  it("does not log a returned failed run as a detached exception", async () => {
+    const error = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ error })) };
+    const registry = new OpenRegistry();
+    vi.spyOn(registry, "release").mockResolvedValue(false);
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
+      },
+      delivery: qualifiedDelivery(
+        { run: () => Promise.resolve({ status: "COMPLETED", pages: [] }) },
+        3,
+        registry,
+      ),
       onMessage: () => Promise.resolve(),
     });
     deliverySupervisorAccess.installLogger(supervisor, logger as never);
@@ -343,36 +463,64 @@ describe("DeliverySupervisor", () => {
   });
 
   it("does not open a replacement watch until failed recovery later succeeds", async () => {
+    vi.useFakeTimers();
     let snapshots = 0;
+    let releases = 0;
     let watches = 0;
+    let runs = 0;
     const supervisor = new DeliverySupervisor({
       source: {
-        releaseExpired: () => Promise.resolve([]),
+        releaseExpired: () => {
+          releases += 1;
+          return Promise.resolve([]);
+        },
         shardSnapshot: () => {
           snapshots += 1;
-          return snapshots === 1
+          return snapshots < 3
             ? Promise.reject(new Error("snapshot failed"))
-            : Promise.resolve([]);
+            : Promise.resolve([{ shard: newShard(0), status: "NOT_PICKED", messages: 1 }]);
         },
         observeShardUpdates: (options) => {
           watches += 1;
           return updatesUntilAborted(options?.signal);
         },
       },
-      delivery: new DeliveryBuilder()
-        .withStorageFactory(new InMemoryStorageFactory())
-        .withNode("node")
-        .build(),
+      delivery: qualifiedDelivery({
+        run: () => {
+          runs += 1;
+          return Promise.resolve({ status: "COMPLETED", pages: [] });
+        },
+      }),
       onMessage: () => Promise.resolve(),
-      recoveryMs: 1,
-      watchInitialBackoffMs: 1,
-      watchMaxBackoffMs: 1,
+      recoveryMs: 10,
     });
-    await supervisor.start();
-    expect(watches).toBe(0);
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(watches).toBe(1);
-    await supervisor.close();
+    try {
+      await supervisor.start();
+      expect({ snapshots, releases, watches, runs }).toEqual({
+        snapshots: 1,
+        releases: 1,
+        watches: 0,
+        runs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      expect({ snapshots, releases, watches, runs }).toEqual({
+        snapshots: 2,
+        releases: 2,
+        watches: 0,
+        runs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(10);
+      await supervisor.whenIdle();
+      expect({ snapshots, releases, watches, runs }).toEqual({
+        snapshots: 3,
+        releases: 3,
+        watches: 1,
+        runs: 1,
+      });
+    } finally {
+      await supervisor.close({ graceMs: 100 });
+      vi.useRealTimers();
+    }
   });
   it.each([
     [{ concurrency: 0 }, "Delivery supervisor concurrency"],
@@ -1071,32 +1219,44 @@ describe("DeliverySupervisor", () => {
 
   it("restarts a failed Admin watch with one bounded backoff timer", async () => {
     vi.useFakeTimers();
-    try {
-      const warn = vi.fn();
-      const logger = { withMetadata: vi.fn(() => ({ warn })) };
-      let watches = 0;
-      let snapshots = 0;
-      const supervisor = new DeliverySupervisor({
-        source: {
-          shardSnapshot: () => {
-            snapshots += 1;
-            return Promise.resolve([]);
-          },
-          observeShardUpdates: () => {
-            watches += 1;
-            return failingUpdates();
-          },
-          releaseExpired: () => Promise.resolve([]),
+    let watches = 0;
+    let snapshots = 0;
+    let releases = 0;
+    let runs = 0;
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    const supervisor = new DeliverySupervisor({
+      source: {
+        shardSnapshot: () => {
+          snapshots += 1;
+          return snapshots === 2
+            ? Promise.reject(new Error("watch restart snapshot failed"))
+            : Promise.resolve(
+                snapshots === 3 ? [{ shard: newShard(0), status: "NOT_PICKED", messages: 1 }] : [],
+              );
         },
-        delivery: qualifiedDelivery({
-          run: () => Promise.resolve({ status: "COMPLETED" as const, pages: [] }),
-        }),
-        onMessage: () => Promise.resolve(),
-        watchInitialBackoffMs: 10,
-        watchMaxBackoffMs: 10,
-      });
-      deliverySupervisorAccess.installLogger(supervisor, logger as never);
-
+        observeShardUpdates: (options) => {
+          watches += 1;
+          return watches === 1 ? failingUpdates() : updatesUntilAborted(options?.signal);
+        },
+        releaseExpired: () => {
+          releases += 1;
+          return Promise.resolve([]);
+        },
+      },
+      delivery: qualifiedDelivery({
+        run: () => {
+          runs += 1;
+          return Promise.resolve({ status: "COMPLETED" as const, pages: [] });
+        },
+      }),
+      onMessage: () => Promise.resolve(),
+      recoveryMs: 1_000,
+      watchInitialBackoffMs: 10,
+      watchMaxBackoffMs: 10,
+    });
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+    try {
       await supervisor.start();
       vi.runAllTicks();
       expect(watches).toBe(1);
@@ -1108,10 +1268,17 @@ describe("DeliverySupervisor", () => {
       });
       expect(warn).toHaveBeenCalledWith("Delivery shard watch failed.");
       await vi.advanceTimersByTimeAsync(10);
-      expect(watches).toBe(2);
+      expect(watches).toBe(1);
       expect(snapshots).toBe(2);
-      await supervisor.close({ graceMs: 10 });
+      expect(runs).toBe(0);
+      await vi.advanceTimersByTimeAsync(10);
+      await supervisor.whenIdle();
+      expect(watches).toBe(2);
+      expect(snapshots).toBe(3);
+      expect(releases).toBe(3);
+      expect(runs).toBe(1);
     } finally {
+      await supervisor.close({ graceMs: 10 });
       vi.useRealTimers();
     }
   });
@@ -1466,15 +1633,15 @@ class RealDeliveryFixture {
       shard,
       whenReceived: timestampFromDate(new Date("2026-07-23T12:00:00.000Z")),
       version,
-      signal: AnyMessages.pack(
+      signal: AnyPacker.pack(
         EventSchema,
         create(EventSchema, {
           id: create(EventIdSchema, { value: signalId }),
           context: create(EventContextSchema, {
-            producerId: AnyMessages.pack(TaskIdSchema, taskId),
+            producerId: AnyPacker.pack(TaskIdSchema, taskId),
             version: create(VersionSchema, { number: Number(version) }),
           }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             TaskCreatedSchema,
             create(TaskCreatedSchema, {
               id: taskId,
@@ -1682,13 +1849,14 @@ function qualifiedDelivery(
     run: (options: DeliveryRunOptions) => Promise<{ status: "COMPLETED"; pages: [] }>;
   },
   shardCount = 3,
+  registry: DeliveryWorkRegistry = new OpenRegistry(),
 ): Delivery {
   return new DeliveryBuilder()
     .withContext({ name: "supervisor-test", multitenant: false })
     .withStorageFactory(new InMemoryStorageFactory())
     .withStrategy(UniformAcrossAllShards.forNumber(shardCount))
     .withInbox(new RunnerInbox(delivery.run))
-    .withWorkRegistry(new OpenRegistry())
+    .withWorkRegistry(registry)
     .withNode("test-node")
     .build();
 }

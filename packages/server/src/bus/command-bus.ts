@@ -12,42 +12,47 @@
  * the License.
  */
 
-import { clone, create } from "@bufbuild/protobuf";
-import { ValidationException, Validate, AnyMessages } from "@spine-event-engine/core";
+import { clone } from "@bufbuild/protobuf";
+import { ValidationException, Validate, AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, type Command } from "@spine-event-engine/proto";
-import {
-  AgentSavedDispatchPlanSchema as SavedPlanSchema,
-  type AgentSavedDispatchPlan,
-} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 
 import {
   runtimeAccess,
   ServerRuntimeStateError,
   SingleProcessServerRuntime,
 } from "../runtime/runtime.js";
+import type { ServerEnvironment } from "../server/server-environment.js";
 import { CommandValidationError } from "./command-errors.js";
 import { ImplicitRequiredIds } from "../entity/implicit-required-id.js";
 import { CommandDispatcherRegistry } from "./command-dispatcher-registry.js";
 import type { CommandDispatcher } from "./command-dispatcher.js";
-import { SavedDispatcherBindings } from "./saved-dispatcher-binding.js";
 
 const internalCommandPosters = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
 const commandFollowUpPosters = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
-const savedPreparers = new WeakMap<
-  CommandBus,
-  (command: Command) => Promise<AgentSavedDispatchPlan>
->();
-const savedFollowUps = new WeakMap<
-  CommandBus,
-  (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>
->();
 const commandBusCloseStarters = new WeakMap<CommandBus, () => void>();
 const commandBusDrainers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusCloseFinishers = new WeakMap<CommandBus, () => Promise<void>>();
 const commandBusAborters = new WeakMap<CommandBus, () => void>();
 const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
+const commandBusRuntimes = new WeakMap<CommandBus, SingleProcessServerRuntime>();
+const commandAdmissions = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
 
 interface CommandBusAccess {
+  /**
+   * Binds this context bus's private runtime to its captured environment.
+   * @param commandBus Framework context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindEnvironment(commandBus: CommandBus, environment: ServerEnvironment): void;
+
+  /**
+   * Sets receiving-context admission before command dispatch.
+   *
+   * @param commandBus Context command bus.
+   * @param onAdmit Checks current tenant membership.
+   */
+  setAdmission(commandBus: CommandBus, onAdmit: (command: Command) => Promise<void>): void;
+
   /**
    * Posts an accepted internal command.
    *
@@ -65,29 +70,6 @@ interface CommandBusAccess {
    * @returns A promise for completion of the command follow-up.
    */
   postInternalFollowUp(commandBus: CommandBus, command: Command): Promise<void>;
-
-  /**
-   * Prepares a dispatch plan before persisting accepted output.
-   *
-   * @param commandBus Command bus receiving this internal operation.
-   * @param command Command envelope to prepare or dispatch.
-   * @returns The exact saved recipient plan.
-   */
-  prepareSaved(commandBus: CommandBus, command: Command): Promise<AgentSavedDispatchPlan>;
-
-  /**
-   * Posts a prepared dispatch after its Agent result is saved.
-   *
-   * @param commandBus Command bus receiving this internal operation.
-   * @param command Command envelope to prepare or dispatch.
-   * @param plan Persisted recipient plan for this dispatch.
-   * @returns A promise for completion of the saved dispatch.
-   */
-  postSavedFollowUp(
-    commandBus: CommandBus,
-    command: Command,
-    plan: AgentSavedDispatchPlan,
-  ): Promise<void>;
 
   /**
    * Stops accepting new external work.
@@ -156,10 +138,9 @@ export class CommandBus {
    */
   constructor(dispatchers: Iterable<CommandDispatcher> = []) {
     this.#started = this.#runtime.start();
+    commandBusRuntimes.set(this, this.#runtime);
     internalCommandPosters.set(this, (command) => this.#postInternal(command));
     commandFollowUpPosters.set(this, (command) => this.#postInternalFollowUp(command));
-    savedPreparers.set(this, (command) => this.#prepareSaved(command));
-    savedFollowUps.set(this, (command, plan) => this.#postSavedFollowUp(command, plan));
     commandBusCloseStarters.set(this, () => {
       this.#beginClose();
     });
@@ -249,37 +230,6 @@ export class CommandBus {
     );
   }
 
-  async #prepareSaved(command: Command): Promise<AgentSavedDispatchPlan> {
-    const dispatcher = this.#checkedDispatcher(command);
-    const binding = SavedDispatcherBindings.forCommand(dispatcher);
-    if (binding === undefined)
-      throw new Error("Saved Agent Command matches a dispatcher without durable metadata.");
-    return create(SavedPlanSchema, {
-      targets: [await binding.prepare(clone(CommandSchema, command))],
-    });
-  }
-
-  #postSavedFollowUp(command: Command, plan: AgentSavedDispatchPlan): Promise<void> {
-    const accepted = clone(CommandSchema, command);
-    const frozen = clone(SavedPlanSchema, plan);
-    if (this.#intakeState === "closed")
-      return Promise.reject(new ServerRuntimeStateError("enqueue", "closed"));
-    this.#acceptedWorkCount++;
-    return this.#started.then(() =>
-      runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatchSaved(accepted, frozen)),
-    );
-  }
-
-  async #dispatchSaved(command: Command, plan: AgentSavedDispatchPlan): Promise<void> {
-    const dispatcher = this.#checkedDispatcher(command);
-    const target = plan.targets[0];
-    const binding = SavedDispatcherBindings.forCommand(dispatcher);
-    if (plan.targets.length !== 1 || target === undefined || !binding?.matches(target))
-      throw new Error("Saved Agent Command dispatcher binding changed before delivery.");
-    const deliver = await binding.bind(clone(CommandSchema, command), target);
-    await deliver();
-  }
-
   #enqueueAccepted(command: Command): Promise<void> {
     this.#acceptedWorkCount++;
     return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatch(command)));
@@ -314,7 +264,9 @@ export class CommandBus {
   }
 
   async #dispatch(command: Command): Promise<void> {
-    await this.#checkedDispatcher(command).dispatch(command);
+    const dispatcher = this.#checkedDispatcher(command);
+    await commandAdmissions.get(this)?.(command);
+    await dispatcher.dispatch(command);
   }
 
   #checkedDispatcher(command: Command): CommandDispatcher {
@@ -331,7 +283,7 @@ export class CommandBus {
       throw new Error(`No command dispatcher registered for "${typeUrl}".`);
     }
 
-    const message = AnyMessages.unpack(packed, registration.schema);
+    const message = AnyPacker.tryUnpack(packed, registration.schema);
 
     if (message === undefined) {
       throw CommandValidationError.invalidPayload();
@@ -360,6 +312,29 @@ export class CommandBus {
  * @internal
  */
 export const commandBusAccess: CommandBusAccess = Object.freeze({
+  /**
+   * Binds the private queue to its framework context's captured environment.
+   * @param commandBus Framework context bus.
+   * @param environment Exact environment containing the context.
+   */
+  bindEnvironment(commandBus: CommandBus, environment: ServerEnvironment): void {
+    const runtime = commandBusRuntimes.get(commandBus);
+    if (runtime === undefined)
+      throw new TypeError("Framework binding requires a CommandBus instance.");
+    runtimeAccess.bindFrameworkEnvironment(runtime, environment);
+  },
+
+  /**
+   * Sets the context's live Command tenant check.
+   *
+   * @param commandBus Context command bus.
+   * @param onAdmit Checks current membership.
+   */
+  setAdmission(commandBus: CommandBus, onAdmit: (command: Command) => Promise<void>): void {
+    if (!commandBusWorkCounters.has(commandBus))
+      throw new TypeError("Command admission requires a CommandBus instance.");
+    commandAdmissions.set(commandBus, onAdmit);
+  },
   postInternal(commandBus: CommandBus, command: Command): Promise<void> {
     const postInternal = internalCommandPosters.get(commandBus);
 
@@ -376,23 +351,6 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
       throw new TypeError("Internal command follow-up requires a CommandBus instance.");
     }
     return post(command);
-  },
-
-  prepareSaved(commandBus: CommandBus, command: Command): Promise<AgentSavedDispatchPlan> {
-    const prepare = savedPreparers.get(commandBus);
-    if (prepare === undefined)
-      throw new TypeError("Saved Command preparation requires a CommandBus.");
-    return prepare(command);
-  },
-
-  postSavedFollowUp(
-    commandBus: CommandBus,
-    command: Command,
-    plan: AgentSavedDispatchPlan,
-  ): Promise<void> {
-    const post = savedFollowUps.get(commandBus);
-    if (post === undefined) throw new TypeError("Saved Command delivery requires a CommandBus.");
-    return post(command, plan);
   },
 
   beginClose(commandBus: CommandBus): void {

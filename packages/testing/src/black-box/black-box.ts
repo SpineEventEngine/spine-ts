@@ -321,7 +321,7 @@ export class BlackBox {
     const context =
       contextOrBuilder instanceof BoundedContext
         ? contextOrBuilder
-        : await contextOrBuilder.buildAsync();
+        : await contextOrBuilder.build();
     return BlackBoxLifecycle.open(
       context,
       normalized,

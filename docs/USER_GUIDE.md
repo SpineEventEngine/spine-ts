@@ -74,9 +74,10 @@ application uses `start()` and closes the server itself.
 <!-- docs-snippet-path: packages/server/test/context/bounded-context.test.ts -->
 
 ```ts
-import { BoundedContext } from "@spine-event-engine/server";
+import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
 
-const context = await BoundedContext.singleTenant("MessageBoard").buildAsync();
+await ServerEnvironment.instance().completeSetup();
+const context = await BoundedContext.singleTenant("MessageBoard").build();
 await context.close();
 ```
 
@@ -247,7 +248,7 @@ weight and adds the result to its stored counter. Register it like this:
 <!-- docs-snippet-path: examples/projects/test/topology.test.ts -->
 
 ```ts
-import { BoundedContext } from "@spine-event-engine/server";
+import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
 import { TaskAssignment, type AssignmentWeightService } from "../src/index.js";
 
 // Set up the service once, before the context starts receiving messages.
@@ -262,8 +263,10 @@ const builder = BoundedContext.singleTenant("Assignments")
     onCreate: (options) => new TaskAssignment(options, weights),
   });
 
-// buildAsync() loads the generated handler registry for this application.
-const context = await builder.buildAsync();
+// Complete environment setup before building this Bounded Context.
+await ServerEnvironment.instance().completeSetup();
+// build() loads the generated handler registry for this application.
+const context = await builder.build();
 await context.close();
 ```
 
@@ -291,7 +294,9 @@ Use an exact route when the first field is not the correct target. `CommandRouti
 `EventRouting`, and `StateUpdateRouting` accept both `.route(Schema, via)` and
 `.route(Token, via)`. Selection is exact schema, then the first registered
 matching token, then the replacement/default route. Route functions run once at
-accepted admission and stored typed targets are replayed on retry. The
+accepted admission and stored typed targets are replayed on retry for ordinary
+Aggregate, Process Manager, and Projection work. An accepted Agent interaction
+does not replay after interruption. The
 callback may be asynchronous. Pass the receiving Entity class to `create()` to
 receive typed `findIds`, `findStates`, and `find` reads as the callback's third
 argument. Use the same Entity constructor when registering the repository;
@@ -380,6 +385,10 @@ Continue with the [Node client reference](../packages/client-node/REFERENCE.md)
 for the complete command, query, and subscription contract.
 
 ## 6. Persist application data
+
+See the [storage layout and database preparation reference](STORAGE_LAYOUT.md)
+for each provider’s single-tenant and multitenant structures, prerequisites,
+customization, and gateway/authentication storage responsibilities.
 
 Begin locally with in-memory storage. It is fast and useful for tests, but its
 state disappears when the process stops. Move to [MySQL](../packages/storage-mysql/README.md),
@@ -606,10 +615,27 @@ records help diagnose lifecycle, warnings, and failures; they are not a durable
 record of a domain fact. Put business facts in events or storage, and keep
 secrets and credential values out of application logs.
 
+All Bounded Contexts use the Delivery configured in `ServerEnvironment`. With
+local Delivery, posting waits for the signal's delivery result. An Agent's input
+can be accepted before its live handler finishes. With remote Delivery and its
+environment supervisor, posting returns after the remote Inbox accepts the signal
+and the notification is submitted. Processing may happen afterward on another
+application process. For example, a successful Command submission can precede the
+Projection update that your UI is waiting for; use a query or subscription to
+observe that update.
+
+A failed Inbox write rejects the posting call. A notification failure after a
+successful write is logged, and ordinary delivery can find the pending signal
+through its existing notifications and safety scan.
+
 Durable delivery stores pending and delivered Inbox rows. A shard lease prevents
 concurrent delivery, but a handler effect and the delivered transition are not
-one transaction. A lost acknowledgement can redeliver after restart, so make
-downstream effects idempotent. The framework does not add attempt history,
+one transaction. A lost acknowledgement can redeliver ordinary Aggregate,
+Process Manager or Projection work after restart, so make downstream effects
+idempotent. Agents retain an additional acceptance receipt: once an Agent input
+is accepted, interruption does not cause its handler to run again. Its saved
+history remains readable; a fresh signal can start new work.
+The framework does not add attempt history,
 quarantine records, scheduled retry policy, or exactly-once side effects.
 Local and remote delivery removes a pending duplicate when its signal ID and
 typed Inbox target match a delivered row in the current page or a recent local

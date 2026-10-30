@@ -45,11 +45,40 @@ function required(value: string | undefined): string {
 }
 
 describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
+  it("rolls back an immutable audit group when its second row conflicts", async () => {
+    const factory = await PostgresStorageFactory.newBuilder()
+      .setOptions({ url: required(url) })
+      .build();
+    const history = AgentHistoryStorageFactories.create(factory, scope);
+    const agent = `batch-${randomUUID()}`;
+    const existing = conversation("conflict", "reply", occurredAt(2n));
+    const request = conversation("request", "reply", occurredAt(1n));
+    try {
+      await history.append(agent, existing);
+      await expect(
+        history.appendAll(agent, [request, conversation("conflict", "reply", occurredAt(3n))]),
+      ).rejects.toThrow(/immutable|conflict/i);
+      const page = await history.read({ entityId: agent, view: { kind: "full" }, count: 5 });
+      expect(page.entries).toEqual([existing]);
+      await history.appendAll(agent, [request, event("system", occurredAt(4n), true)]);
+      await history.appendAll(agent, [request, event("system", occurredAt(4n), true)]);
+      expect(
+        (await history.read({ entityId: agent, view: { kind: "full" }, count: 5 })).entries,
+      ).toHaveLength(3);
+    } finally {
+      history.close();
+      await factory.close();
+    }
+  });
   it("rejects creation of an Agent history handle after factory closure", async () => {
     const factory = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: required(url) })
       .build();
-    factory.close();
+    const existing = AgentHistoryStorageFactories.create(factory, scope);
+    await factory.close();
+    await expect(
+      existing.read({ entityId: "ticket-a", view: { kind: "full" }, count: 1, maxBytes: 1024 }),
+    ).rejects.toThrow(/closed/i);
     expect(() => AgentHistoryStorageFactories.create(factory, scope)).toThrow(
       "StorageFactory is closed.",
     );
@@ -62,6 +91,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
         .setOptions({ url: required(url) })
         .build();
       const tenants = await PostgresStorageFactory.newBuilder()
+        .setOptions({ url: required(url) })
         .setTenantOptions([
           {
             tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
@@ -89,8 +119,8 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
           occurredAt,
         });
       } finally {
-        factory.close();
-        tenants.close();
+        await factory.close();
+        await tenants.close();
       }
     },
     120_000,
@@ -111,7 +141,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
     const first = AgentHistoryStorageFactories.create(factory, input);
     await first.append("ticket-pg", entry);
     first.close();
-    factory.close();
+    await factory.close();
     const reopened = await PostgresStorageFactory.newBuilder()
       .setOptions({ url: required(url), schema })
       .setTableName(AgentHistoryEntrySchema, AgentHistoryRecordSchema, table)
@@ -146,7 +176,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
       );
       history.close();
     } finally {
-      reopened.close();
+      await reopened.close();
       await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
       await pool.end();
     }
@@ -182,7 +212,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
       ).rejects.toThrow("PostgreSQL record operation failed");
       history.close();
     } finally {
-      factory.close();
+      await factory.close();
       await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
       await pool.end();
     }
@@ -224,7 +254,7 @@ describe.runIf(url !== undefined)("PostgreSQL Agent history", () => {
         ).rejects.toThrow("PostgreSQL record operation failed");
         history.close();
       } finally {
-        factory.close();
+        await factory.close();
         await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
         await pool.end();
       }

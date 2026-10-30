@@ -36,7 +36,6 @@ const limits = {
   deadlineMs: 1000,
   totalInputBytes: 3000,
   totalOutputBytes: 3000,
-  maxRecoveryBytes: 3000,
 };
 const capability = AiModel.define({
   name: "draft-support-reply",
@@ -322,9 +321,6 @@ describe("application AI registry", () => {
     expect(() => AiRegistry.create({ ...options, queuedOperations: -1 })).toThrow(
       "queuedOperations",
     );
-    expect(() =>
-      AiRegistry.create({ ...options, invocationLimits: { ...limits, maxRecoveryBytes: 0 } }),
-    ).toThrow("maxRecoveryBytes");
   });
 
   it("rejects absent, mismatched, unregistered and unsupported selections", () => {

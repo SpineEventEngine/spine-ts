@@ -38,7 +38,8 @@ const connect = vi.hoisted(() => ({
   ackStarted: vi.fn(),
 }));
 
-vi.mock("@connectrpc/connect", () => ({
+vi.mock("@connectrpc/connect", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@connectrpc/connect")>()),
   createClient: () => ({
     subscribe: (topic: unknown) =>
       Promise.resolve(

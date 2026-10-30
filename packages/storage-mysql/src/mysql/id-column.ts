@@ -14,12 +14,19 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 
+/**
+ * Declared SQL identifier schema or primitive kind.
+ *
+ * @typeParam I Logical identifier type.
+ */
 type MysqlIdType<I> = I extends Message ? GenMessage<I> : string;
 
 /**
  * Converts one declared record ID to and from Spine JVM JDBC values.
+ *
+ * @typeParam I Logical identifier type.
  */
 export class MysqlIdColumn<I> {
   readonly #stringifiers: StringifierRegistry;
@@ -38,9 +45,12 @@ export class MysqlIdColumn<I> {
    */
   constructor(
     private readonly type: MysqlIdType<I>,
-    stringifiers: StringifierRegistry = new StringifierRegistry(),
+    stringifiers: StringifierRegistry = defaultStringifierRegistry,
   ) {
-    this.#stringifiers = new StringifierRegistry(stringifiers);
+    this.#stringifiers =
+      stringifiers === defaultStringifierRegistry
+        ? stringifiers
+        : new StringifierRegistry(stringifiers);
     this.mysqlType = MysqlIdTypes.mysqlType(type);
   }
 
@@ -87,11 +97,24 @@ export class MysqlIdColumn<I> {
 }
 
 const MysqlIdTypes = Object.freeze({
+  /**
+   * Checks the SQL text-ID length.
+   *
+   * @param value Candidate identifier text.
+   * @returns The validated text.
+   */
   text(value: string): string {
     if (value.length > 512) throw new Error("MySQL storage identifier is too large.");
     return value;
   },
 
+  /**
+   * Returns the physical SQL ID column type.
+   *
+   * @typeParam I Logical identifier type.
+   * @param type Declared identifier schema or primitive kind.
+   * @returns SQL column type.
+   */
   mysqlType<I>(type: MysqlIdType<I>): string {
     if (typeof type !== "string") return "VARCHAR(512)";
     switch (type) {
@@ -106,6 +129,12 @@ const MysqlIdTypes = Object.freeze({
     }
   },
 
+  /**
+   * Validates a primitive identifier value.
+   *
+   * @param type Declared primitive kind.
+   * @param value Logical identifier value.
+   */
   validate(type: string, value: unknown): void {
     if (type === "string" && typeof value === "string") return;
     if (

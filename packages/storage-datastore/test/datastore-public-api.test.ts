@@ -37,7 +37,21 @@ describe("Datastore public compile-consumer contract", () => {
       expect(maxClientSideScan).toBe(1_000);
       return { close: () => undefined, isOpen: () => true } as never;
     };
-    const entityCreator: CreateEntityStorage = () => ({}) as never;
+    const entityCreator: CreateEntityStorage = () => ({
+      current: {} as never,
+      states: {} as never,
+      events: {} as never,
+      commits: {
+        commit: () => Promise.resolve(),
+        readAgentPreferences: () => Promise.resolve(undefined),
+        commitAgent: () => Promise.resolve(),
+        close: () => Promise.resolve(),
+        closeIdle: () => undefined,
+      },
+      isOpen: () => true,
+      close: () => Promise.resolve(),
+      closeIdle: () => undefined,
+    });
     const builder = DatastoreStorageFactory.newBuilder()
       .setClient({} as Datastore)
       .organizeRecords(StringValueSchema, layout)

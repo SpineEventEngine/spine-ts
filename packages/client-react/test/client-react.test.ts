@@ -14,7 +14,7 @@
 
 // @vitest-environment jsdom
 import { create } from "@bufbuild/protobuf";
-import { anyPack } from "@bufbuild/protobuf/wkt";
+import { AnyPacker } from "@spine-event-engine/core";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import {
   createElement,
@@ -629,7 +629,7 @@ describe("client-react", () => {
               create(EventSchema, {
                 id: create(EventIdSchema, { value: id }),
                 context: create(EventContextSchema),
-                message: anyPack(
+                message: AnyPacker.pack(
                   ProjectCreatedSchema,
                   create(ProjectCreatedSchema, { id, name: `Project ${id}`, priority: 1 }),
                 ),

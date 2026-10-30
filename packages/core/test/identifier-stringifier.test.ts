@@ -27,6 +27,7 @@ import { EventIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import {
+  AnyPacker,
   Identifiers,
   StringifierRegistry,
   Stringifiers,
@@ -155,6 +156,12 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
     expect(Identifiers.unpack(EventIdSchema, packed)).toEqual(id);
   });
 
+  it("round-trips an Any-valued identifier without an extra envelope", () => {
+    const id = AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "user-42" }));
+    expect(Identifiers.pack(AnySchema, id)).toBe(id);
+    expect(Identifiers.unpack(AnySchema, id)).toBe(id);
+  });
+
   it("round-trips a message as compact Proto JSON", () => {
     const id = create(EventIdSchema, { value: "event-42" });
     const stringifier = Stringifiers.forMessage(EventIdSchema);
@@ -183,7 +190,7 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
     });
     const anyStringifier = Stringifiers.forMessage(AnySchema, createRegistry(UserIdSchema));
     const restored = anyStringifier.fromString(anyStringifier.toString(packed));
-    expect(restored.typeUrl).toBe(`type.googleapis.com/${UserIdSchema.typeName}`);
+    expect(restored.typeUrl).toBe(`type.spine.io/${UserIdSchema.typeName}`);
     expect(restored.value).toEqual(packed.value);
   });
 

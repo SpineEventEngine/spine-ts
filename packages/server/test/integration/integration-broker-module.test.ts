@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
   BoundedContextOnlineSchema,
@@ -463,7 +463,7 @@ describe("IntegrationBroker module", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: "rolled-back" }),
         context: create(EventContextSchema),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewStartedSchema,
           create(ReviewStartedSchema, { id: "rolled-back" }),
         ),
@@ -522,7 +522,7 @@ describe("IntegrationBroker module", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: "new" }),
         context: create(EventContextSchema),
-        message: AnyMessages.pack(ReviewStartedSchema, create(ReviewStartedSchema, { id: "new" })),
+        message: AnyPacker.pack(ReviewStartedSchema, create(ReviewStartedSchema, { id: "new" })),
       }),
     );
     expect(factory.published).toHaveLength(before + 1);
@@ -602,7 +602,7 @@ describe("IntegrationBroker module", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: "ignored" }),
         context: create(EventContextSchema),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewStartedSchema,
           create(ReviewStartedSchema, { id: "ignored" }),
         ),
@@ -660,7 +660,7 @@ describe("IntegrationBroker module", () => {
       create(EventSchema, {
         id: create(EventIdSchema, { value: "external" }),
         context: create(EventContextSchema, { external: true }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ReviewTaskAssignedSchema,
           create(ReviewTaskAssignedSchema, { id: "external", name: "external" }),
         ),
@@ -1032,9 +1032,9 @@ describe("IntegrationBroker module", () => {
           TypeUrls.derive(ExternalEventsWantedSchema),
       )
       .map(({ message }) =>
-        fromBinary(
+        AnyPacker.unpack(
+          (message as { originalMessage: Any }).originalMessage,
           ExternalEventsWantedSchema,
-          (message as { originalMessage: { value: Uint8Array } }).originalMessage.value,
         ),
       );
     expect(wanted.at(-1)?.type).toEqual([]);
@@ -1045,7 +1045,7 @@ function event(id: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id, name: id }),
     ),
@@ -1079,24 +1079,21 @@ async function publishWanted(
   const publisher = await factory.createPublisher(
     create(ChannelIdSchema, { targetType: TypeUrls.derive(ExternalEventsWantedSchema) }),
   );
-  const id = create(AnySchema, {
-    typeUrl: TypeUrls.derive(StringValueSchema),
-    value: toBinary(StringValueSchema, create(StringValueSchema, { value: crypto.randomUUID() })),
-  });
+  const id = AnyPacker.pack(
+    StringValueSchema,
+    create(StringValueSchema, { value: crypto.randomUUID() }),
+  );
   try {
     await publisher.publish(
       id,
       create(ExternalMessageSchema, {
         id,
-        originalMessage: create(AnySchema, {
-          typeUrl: TypeUrls.derive(ExternalEventsWantedSchema),
-          value: toBinary(
-            ExternalEventsWantedSchema,
-            create(ExternalEventsWantedSchema, {
-              type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
-            }),
-          ),
-        }),
+        originalMessage: AnyPacker.pack(
+          ExternalEventsWantedSchema,
+          create(ExternalEventsWantedSchema, {
+            type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
+          }),
+        ),
         boundedContextName: create(BoundedContextNameSchema, { value: source }),
       }),
     );

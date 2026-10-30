@@ -20,7 +20,7 @@ import {
   type Subscription,
   type SubscriptionDelivery,
 } from "@spine-event-engine/client-node";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import {
   BoardMessageSchema,
   BoardMessageViewSchema,
@@ -52,8 +52,9 @@ import {
   type Query,
 } from "@spine-event-engine/proto/client";
 import { BoundedContext, Server } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const browserHost = vi.hoisted(() => ({ open: vi.fn(), run: vi.fn() }));
 
@@ -69,6 +70,8 @@ import { MessageBoardApplication, BoardMessageAggregate, typeRegistry } from "..
 describe("MessageBoard Projection backend", () => {
   const application = new MessageBoardApplication();
 
+  afterEach(async () => ServerTests.resetEnvironment());
+
   it("decodes every MessageBoard model value from the single model package", () => {
     const user = create(UserIdSchema, { value: "ada" });
     const message = create(BoardMessageSchema, {
@@ -80,10 +83,10 @@ describe("MessageBoard Projection backend", () => {
       postedAt: create(TimestampSchema, { seconds: 1n }),
     });
     expect(
-      AnyMessages.unpackUsing(typeRegistry, AnyMessages.pack(BoardMessageSchema, message))
+      AnyPacker.tryUnpackUsing(typeRegistry, AnyPacker.pack(BoardMessageSchema, message))
         ?.$typeName,
     ).toBe(BoardMessageSchema.typeName);
-    expect(AnyMessages.unpackUsing(typeRegistry, AnyMessages.pack(UserIdSchema, user))).toEqual(
+    expect(AnyPacker.tryUnpackUsing(typeRegistry, AnyPacker.pack(UserIdSchema, user))).toEqual(
       user,
     );
     expect(typeRegistry.findByFullName(UserIdSchema.typeName)?.schema).toBe(UserIdSchema);
@@ -109,7 +112,21 @@ describe("MessageBoard Projection backend", () => {
       return this;
     });
     const atPort = vi.spyOn(Server, "atPort").mockReturnValue({ add, run, start } as never);
+    const created: BoundedContext[] = [];
+    const actualCreateContext = application.createContext.bind(application);
+    const createContext = vi
+      .spyOn(application, "createContext")
+      .mockImplementation(async (...args) => {
+        const context = await actualCreateContext(...args);
+        created.push(context);
+        return context;
+      });
+    const closeCreated = async () => {
+      await created.pop()?.close();
+      await ServerTests.resetEnvironment();
+    };
     const storage = new InMemoryStorageFactory();
+    const combinedStorage = new InMemoryStorageFactory();
     try {
       browserHost.open.mockResolvedValueOnce({ baseUrl: "http://started" });
       browserHost.run.mockImplementationOnce(
@@ -121,13 +138,20 @@ describe("MessageBoard Projection backend", () => {
       await expect(application.start({ host: "127.0.0.2", port: 1 })).resolves.toEqual({
         baseUrl: "http://started",
       });
+      await closeCreated();
       await expect(application.run()).resolves.toEqual({ baseUrl: "http://running" });
+      await closeCreated();
       await expect(application.runApplication({ port: 2 }, storage)).resolves.toEqual({
         baseUrl: "http://running",
       });
+      await closeCreated();
       await expect(
-        application.runCombined({ port: 3, webOrigin: "https://board.example.com" }, storage),
+        application.runCombined(
+          { port: 3, webOrigin: "https://board.example.com" },
+          combinedStorage,
+        ),
       ).resolves.toEqual({ baseUrl: "http://running" });
+      await closeCreated();
 
       expect(atPort).toHaveBeenCalledTimes(4);
       expect(start).toHaveBeenCalledOnce();
@@ -135,7 +159,12 @@ describe("MessageBoard Projection backend", () => {
       expect(add).toHaveBeenCalledTimes(4);
     } finally {
       atPort.mockRestore();
-      storage.close();
+      createContext.mockRestore();
+      await closeResources([
+        ...created.map((context) => () => context.close()),
+        () => storage.close(),
+        () => combinedStorage.close(),
+      ]);
     }
   });
 
@@ -157,17 +186,11 @@ describe("MessageBoard Projection backend", () => {
       const event = (await waitForStoredEvents(eventStore, 1))[0];
       const producerId = event?.context?.producerId;
       if (producerId === undefined) throw new Error("Expected stored event producer ID.");
-      expect(AnyMessages.unpack(producerId, MessageIdSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(producerId, MessageIdSchema)).toEqual(
         create(MessageIdSchema, { value: "producer-id" }),
       );
     } finally {
-      await closeResources([
-        () => {
-          eventStore.close();
-        },
-        () => client.close(),
-        () => server.close(),
-      ]);
+      await closeResources([() => eventStore.close(), () => client.close(), () => server.close()]);
     }
   });
 
@@ -287,11 +310,11 @@ describe("MessageBoard Projection backend", () => {
       expect(normalEvents).toHaveLength(1);
       const message = normalEvents[0]?.message;
       if (message === undefined) throw new Error("Expected stored message.");
-      const winner = AnyMessages.unpack(message, MessagePostedSchema);
+      const winner = AnyPacker.tryUnpack(message, MessagePostedSchema);
       expect(winner?.text).toBe("first");
       const producerId = normalEvents[0]?.context?.producerId;
       if (producerId === undefined) throw new Error("Expected stored event producer ID.");
-      expect(AnyMessages.unpack(producerId, MessageIdSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(producerId, MessageIdSchema)).toEqual(
         create(MessageIdSchema, { value: "duplicate" }),
       );
       expect(
@@ -307,9 +330,7 @@ describe("MessageBoard Projection backend", () => {
       ).resolves.toMatchObject({ state: { board: { value: "board-a" }, text: "first" } });
     } finally {
       await closeResources([
-        () => {
-          eventStore.close();
-        },
+        () => eventStore.close(),
         () => subscription?.cancel(),
         () => client.close(),
         () => server.close(),
@@ -343,7 +364,7 @@ describe("MessageBoard Projection backend", () => {
       expect(normalEvents).toHaveLength(1);
       const message = normalEvents[0]?.message;
       if (message === undefined) throw new Error("Expected stored message.");
-      const winner = AnyMessages.unpack(message, MessagePostedSchema);
+      const winner = AnyPacker.tryUnpack(message, MessagePostedSchema);
       expect(["first", "second"]).toContain(winner?.text);
       expect(
         events.filter(
@@ -362,9 +383,7 @@ describe("MessageBoard Projection backend", () => {
       });
     } finally {
       await closeResources([
-        () => {
-          eventStore.close();
-        },
+        () => eventStore.close(),
         () => subscription?.cancel(),
         () => client.close(),
         () => server.close(),
@@ -408,7 +427,7 @@ describe("MessageBoard Projection backend", () => {
       if (validationError.details === undefined)
         throw new Error("Expected validation error details.");
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           validationError.details,
           ValidationErrorSchema,
         )?.constraintViolation.some((violation) => violation.fieldPath?.fieldName[0] === "id"),
@@ -461,7 +480,7 @@ function createBoardQuery(board: string): Query {
               filter: [
                 create(FilterSchema, {
                   fieldPath: { fieldName: ["board"] },
-                  value: AnyMessages.pack(BoardIdSchema, create(BoardIdSchema, { value: board })),
+                  value: AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: board })),
                   operator: Filter_Operator.EQUAL,
                 }),
               ],
@@ -489,8 +508,8 @@ async function readRows(
       entry.state === undefined
         ? []
         : [
-            AnyMessages.unpack(
-              entry.state as Parameters<typeof AnyMessages.unpack>[0],
+            AnyPacker.tryUnpack(
+              entry.state as Parameters<typeof AnyPacker.unpack>[0],
               BoardMessageViewSchema,
             ),
           ].filter((row): row is BoardMessageView => row !== undefined),
@@ -518,7 +537,8 @@ async function nextView(
       throw new Error("Expected Projection update.");
     const kind = update.update.update.value.update[0]?.kind;
     const value = kind?.case === "state" ? kind.value : undefined;
-    const row = value === undefined ? undefined : AnyMessages.unpack(value, BoardMessageViewSchema);
+    const row =
+      value === undefined ? undefined : AnyPacker.tryUnpack(value, BoardMessageViewSchema);
     if (row === undefined) throw new Error("Expected BoardMessageView.");
     return row;
   } finally {

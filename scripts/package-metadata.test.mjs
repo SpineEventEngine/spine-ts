@@ -183,9 +183,9 @@ describe("package metadata", () => {
     const rootPackage = readJson("package.json");
     const messageBoardWeb = readJson("examples/message-board/web/package.json");
 
-    expect(rootPackage.devDependencies.vitest).toBe("4.1.11");
-    expect(rootPackage.devDependencies["@vitest/coverage-v8"]).toBe("4.1.11");
-    expect(messageBoardWeb.devDependencies.vitest).toBe("4.1.11");
+    expect(rootPackage.devDependencies.vitest).toBe("4.1.12");
+    expect(rootPackage.devDependencies["@vitest/coverage-v8"]).toBe("4.1.12");
+    expect(messageBoardWeb.devDependencies.vitest).toBe("4.1.12");
     expect(workspace.overrides?.["js-yaml"]).toBe("4.3.2");
     expect(workspace.overrides?.["smol-toml"]).toBe("1.7.1");
   });
@@ -466,6 +466,10 @@ describe("package metadata", () => {
       "packages/server/test/server/server-integration-broker-cross-process.test.ts",
     );
     expect(releaseGenerated.match(/vitest run/gu)).toHaveLength(1);
+    expect(releaseGenerated).toContain("&& pnpm test:node:generated");
+    expect(rootPackage.scripts["test:node:generated"]).toBe(
+      "node --test packages/testing/test/black-box.node.test.mjs packages/testing/test/black-box.lifecycle.node.test.mjs scripts/check-log-containment.test.mjs compatibility-tests/jvm/wire-compatibility.test.mjs",
+    );
     expect(generatedGates.match(/pnpm typecheck:build:generated/gu)).toHaveLength(1);
     expect(generatedGates.match(/pnpm docs:check:generated/gu)).toHaveLength(1);
     expect(generatedGates).toContain("pnpm lint:cleanup");
@@ -523,6 +527,10 @@ describe("package metadata", () => {
       "./client": {
         types: "./dist/src/client/index.d.ts",
         default: "./dist/src/client/index.js",
+      },
+      "./codegen": {
+        types: "./dist/src/codegen/index.d.ts",
+        default: "./dist/src/codegen/index.js",
       },
       "./delivery": {
         types: "./dist/src/delivery/index.d.ts",

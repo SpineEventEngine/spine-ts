@@ -293,6 +293,14 @@ export interface TenantCatalog {
   // prettier-ignore
 
   /**
+   * Checks current membership without registering or preparing storage.
+   *
+   * @param boundary Complete tenant boundary to inspect.
+   * @returns Whether this catalog currently includes the boundary.
+   */
+  contains(boundary: TenantBoundary): Promise<boolean>;
+
+  /**
    * Lists the boundaries available for storage-backed startup work.
    *
    * @returns The available tenant boundaries.

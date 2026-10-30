@@ -27,10 +27,6 @@ export {
 export type { EntityRecord, EntityRecordStorage } from "../entity/entity-record.js";
 export { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
 export { AgentHistoryRecords } from "../entity/agent-history-record-spec.js";
-export { AgentExecutionRecords } from "../entity/agent-execution-record-spec.js";
-export { AgentExecutionSizes } from "../entity/agent-execution-sizes.js";
-export { AgentExecutionTransitions } from "../entity/agent-execution-transitions.js";
-export { AgentExecutionValues } from "../entity/agent-execution-values.js";
 export { AgentHistoryPages } from "../entity/agent-history-provider-page.js";
 export {
   EntityHistoryConformance,
@@ -45,25 +41,10 @@ export {
   type AgentHistoryStorageInput,
   type AgentHistoryRead,
   type AgentHistoryPage,
+  type AgentHistoryCapacity,
   type AgentHistoryStorage,
 } from "../entity/agent-history.js";
 export { AgentHistoryStorageFactories, type AgentHistoryStorageFactory } from "./agent-history.js";
-export {
-  AgentExecutionStorageFactories,
-  type AgentExecutionStorageFactory,
-} from "./agent-execution.js";
-export type {
-  AgentExecutionStorage,
-  AgentExecutionCapacity,
-  AgentExecutionStorageInput,
-  AgentExecutionClaim,
-  AgentExecutionUpdate,
-  AgentExecutionComplete,
-  AgentPendingRead,
-  AgentPendingKey,
-  AgentPendingCursor,
-  AgentPendingPage,
-} from "../entity/agent-execution.js";
 export {
   AgentHistoryConformance,
   type AgentHistoryConformanceAdapter,

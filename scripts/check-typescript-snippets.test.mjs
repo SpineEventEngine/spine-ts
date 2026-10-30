@@ -120,6 +120,7 @@ describe("TypeScript documentation snippets", () => {
       "docs/api/README.md",
       "docs/architecture/README.md",
       "docs/USER_GUIDE.md",
+      "docs/STORAGE_LAYOUT.md",
     ]);
   });
 

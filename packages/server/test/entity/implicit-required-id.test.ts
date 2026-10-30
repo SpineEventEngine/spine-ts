@@ -26,7 +26,7 @@ import { file_spine_options } from "@spine-event-engine/proto";
 import { required } from "@spine-event-engine/proto/generated/spine/options_pb.js";
 import { describe, expect, it } from "vitest";
 
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { CommandContextSchema, CommandIdSchema, CommandSchema } from "@spine-event-engine/proto";
 import { CommandBus, type CommandDispatcher } from "../../src/index.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
@@ -198,7 +198,7 @@ describe("implicit declaration-first ID validation", () => {
     const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "implicit-id-command" }),
       context: create(CommandContextSchema),
-      message: AnyMessages.pack(implicitString, create(implicitString), { validate: false }),
+      message: AnyPacker.pack(implicitString, create(implicitString)),
     });
 
     await expect(bus.post(command)).rejects.toBeInstanceOf(CommandValidationError);
@@ -218,7 +218,7 @@ describe("implicit declaration-first ID validation", () => {
     const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "explicit-required-command" }),
       context: create(CommandContextSchema),
-      message: AnyMessages.pack(explicitTrue, create(explicitTrue), { validate: false }),
+      message: AnyPacker.pack(explicitTrue, create(explicitTrue)),
     });
 
     try {
@@ -244,7 +244,7 @@ describe("implicit declaration-first ID validation", () => {
     const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "explicit-false-command" }),
       context: create(CommandContextSchema),
-      message: AnyMessages.pack(explicitFalse, create(explicitFalse), { validate: false }),
+      message: AnyPacker.pack(explicitFalse, create(explicitFalse)),
     });
 
     await expect(bus.post(command)).resolves.toBeUndefined();

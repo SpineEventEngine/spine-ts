@@ -12,14 +12,10 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
-import {
-  AnySchema,
-  StringValueSchema,
-  TimestampSchema,
-  type Any,
-  type StringValue,
-} from "@bufbuild/protobuf/wkt";
+import { create, ScalarType, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { AnyPacker } from "@spine-event-engine/core";
+import { StringValueSchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -35,6 +31,8 @@ import { RecordSpec } from "../record/record-spec.js";
 
 /**
  * Provides the current-record and state-history handles used by adapter conformance checks.
+ * @typeParam I Entity identifier type.
+ * @typeParam S Generated Entity state type.
  */
 export interface EntityStorageConformance<I, S extends Message> {
   // prettier-ignore
@@ -62,34 +60,64 @@ export interface EntityStorageConformance<I, S extends Message> {
 
 /**
  * Creates a provider handle for the reusable current-record and state-history checks.
+ * @typeParam S Generated Entity state type.
  */
-export interface EntityHistoryConformanceAdapter {
+export interface EntityHistoryConformanceAdapter<S extends Message> {
   // prettier-ignore
 
   /**
+   * Generated descriptor for the test Entity state.
+   */
+  readonly stateSchema: GenMessage<S>;
+
+  /**
+   * Creates one domain-correct Entity state fixture.
+   * @param id Entity identifier.
+   * @param value State title.
+   * @returns Generated Entity state.
+   */
+  state(id: string, value: string): S;
+
+  /**
+   * Reads the title used in conformance assertions.
+   * @param state Generated Entity state.
+   * @returns State title.
+   */
+  value(state: S): string;
+
+  /**
    * Creates storage for the supplied Entity shape.
-   *
    * @param input Defines the Entity storage scope and schemas.
    * @returns The provider handle.
    */
-  readonly create: (
-    input: EntityStorageInput<string, StringValue>,
-  ) => EntityStorageConformance<string, StringValue>;
+  create(input: EntityStorageInput<string, S>): EntityStorageConformance<string, S>;
 
   /**
    * Creates a reopened handle for the same Entity shape.
-   *
    * @param input Defines the Entity storage scope and schemas.
    * @returns The reopened provider handle.
    */
-  readonly reopen: (
-    input: EntityStorageInput<string, StringValue>,
-  ) => EntityStorageConformance<string, StringValue>;
+  reopen(input: EntityStorageInput<string, S>): EntityStorageConformance<string, S>;
 }
 
 interface EntityHistoryConformanceChecks {
-  readonly checkCurrentQueries: (adapter: EntityHistoryConformanceAdapter) => Promise<void>;
-  readonly check: (adapter: EntityHistoryConformanceAdapter) => Promise<void>;
+  /**
+   * Checks current-record querying with the supplied generated state.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Provider and state fixture.
+   * @returns Completion after current-record assertions.
+   */
+  checkCurrentQueries<S extends Message>(
+    adapter: EntityHistoryConformanceAdapter<S>,
+  ): Promise<void>;
+
+  /**
+   * Checks current-record and state-history behavior.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Provider and state fixture.
+   * @returns Completion after conformance assertions.
+   */
+  check<S extends Message>(adapter: EntityHistoryConformanceAdapter<S>): Promise<void>;
 }
 
 /**
@@ -100,35 +128,35 @@ export const EntityHistoryConformance: EntityHistoryConformanceChecks = Object.f
 
   /**
    * Checks the shared current-record behavior.
-   *
+   * @typeParam S Generated Entity state type.
    * @param adapter Supplies the provider under test.
    * @returns Completes when the behavior is verified.
    */
-  async checkCurrentQueries(adapter: EntityHistoryConformanceAdapter): Promise<void> {
-    const storage = adapter.create(EntityHistoryFixture.input());
+  async checkCurrentQueries<S extends Message>(adapter: EntityHistoryConformanceAdapter<S>): Promise<void> {
+    const storage = adapter.create(EntityHistoryFixture.input(adapter));
     try {
-      await storage.current.write(EntityHistoryFixture.record("task", "task", 3));
-      await storage.current.write(EntityHistoryFixture.record("later", "later", 4));
+      await storage.current.write(EntityHistoryFixture.record(adapter, "task", "task", 3));
+      await storage.current.write(EntityHistoryFixture.record(adapter, "later", "later", 4));
       const queried = await storage.current.query({
-        predicate: { kind: "comparison", column: "value", operator: "equal", value: "later" },
-        order: [{ column: "value", direction: "asc" }],
+        predicate: { kind: "comparison", column: "title", operator: "equal", value: "task" },
+        order: [{ column: "title", direction: "asc" }],
         limit: 1,
         candidateLimit: 2,
       });
       const current = await storage.current.read("task");
       EntityHistoryFixture.assert(current !== undefined, "current state must round-trip");
       EntityHistoryFixture.assert(
-        EntityHistoryFixture.state(current).value === "task",
+        adapter.value(EntityHistoryFixture.state(adapter, current)) === "task",
         "current state must round-trip",
       );
       EntityHistoryFixture.assert(
-        queried.length === 1 && queried[0]?.id === "later",
+        queried.length === 1 && queried[0]?.id === "task",
         "current queries must filter, order, and limit generated records",
       );
     } finally {
       storage.close?.();
     }
-    const reopened = adapter.reopen(EntityHistoryFixture.input());
+    const reopened = adapter.reopen(EntityHistoryFixture.input(adapter));
     try {
       EntityHistoryFixture.assert(
         (await reopened.current.read("task")) !== undefined,
@@ -141,43 +169,36 @@ export const EntityHistoryConformance: EntityHistoryConformanceChecks = Object.f
 
   /**
    * Checks the generated state-history behavior.
-   *
+   * @typeParam S Generated Entity state type.
    * @param adapter Supplies the provider under test.
    * @returns Completes when the behavior is verified.
    */
-  async check(adapter: EntityHistoryConformanceAdapter): Promise<void> {
+  async check<S extends Message>(adapter: EntityHistoryConformanceAdapter<S>): Promise<void> {
     await EntityHistoryConformance.checkCurrentQueries(adapter);
-    const input = EntityHistoryFixture.input();
+    const input = EntityHistoryFixture.input(adapter);
     const storage = adapter.create(input);
     try {
-      await storage.states.append(EntityHistoryFixture.record("task", "first", 1));
-      await storage.states.append(EntityHistoryFixture.record("task", "second", 2));
+      await storage.states.append(EntityHistoryFixture.record(adapter, "task", "first", 1));
+      await storage.states.append(EntityHistoryFixture.record(adapter, "task", "second", 2));
       const backward = await storage.states.backward("task", 2);
       const newest = backward[0];
       const older = backward[1];
       EntityHistoryFixture.assert(
         newest !== undefined &&
           older !== undefined &&
-          EntityHistoryFixture.state(newest).value === "second" &&
-          EntityHistoryFixture.state(older).value === "first",
+          adapter.value(EntityHistoryFixture.state(adapter, newest)) === "second" &&
+          adapter.value(EntityHistoryFixture.state(adapter, older)) === "first",
         "state history must return newest records first",
       );
+      const stateAt = await storage.states.stateAt(
+        "task",
+        create(TimestampSchema, { seconds: 1n }),
+      );
       EntityHistoryFixture.assert(
-        (await storage.states.stateAt("task", create(TimestampSchema, { seconds: 1n })))?.value ===
-          "first",
+        stateAt !== undefined && adapter.value(stateAt) === "first",
         "state history must return the state at an inclusive timestamp",
       );
-      const event = EntityHistoryFixture.event("event", "task", 2);
-      await storage.events.append(event);
-      EntityHistoryFixture.assert(
-        (await storage.events.backward("task", 1))[0]?.id?.value === "event",
-        "event history must retain generated events",
-      );
-      await storage.events.truncate(create(TimestampSchema, { seconds: 3n }));
-      EntityHistoryFixture.assert(
-        (await storage.events.backward("task", 1)).length === 0,
-        "event history truncation must remove older generated events",
-      );
+      await EntityHistoryFixture.checkEvents(storage.events);
     } finally {
       storage.close?.();
     }
@@ -185,23 +206,92 @@ export const EntityHistoryConformance: EntityHistoryConformanceChecks = Object.f
 });
 
 const EntityHistoryFixture: {
-  input(): EntityStorageInput<string, StringValue>;
-  record(id: string, state: string, version: number): EntityRecord;
-  pack(value: StringValue): Any;
-  state(record: EntityRecord): StringValue;
+  /**
+   * Builds provider input from a generated Entity state fixture.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Generated state fixture.
+   * @returns Provider storage input.
+   */
+  input<S extends Message>(
+    adapter: EntityHistoryConformanceAdapter<S>,
+  ): EntityStorageInput<string, S>;
+
+  /**
+   * Creates a versioned generated Entity record.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Generated state fixture.
+   * @param id Entity identifier.
+   * @param value State title.
+   * @param version Entity version.
+   * @returns Generated Entity record.
+   */
+  record<S extends Message>(
+    adapter: EntityHistoryConformanceAdapter<S>,
+    id: string,
+    value: string,
+    version: number,
+  ): EntityRecord;
+
+  /**
+   * Decodes a generated Entity state.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Generated state fixture.
+   * @param record Generated Entity record.
+   * @returns Decoded Entity state.
+   */
+  state<S extends Message>(adapter: EntityHistoryConformanceAdapter<S>, record: EntityRecord): S;
+
+  /**
+   * Creates a diagnostic Event for history checks.
+   * @param id Event identifier.
+   * @param producer Producer identifier.
+   * @param version Event version.
+   * @returns Generated Event.
+   */
   event(id: string, producer: string, version: number): import("@spine-event-engine/proto").Event;
+
+  /**
+   * Checks one conformance condition.
+   * @param condition Expected condition.
+   * @param message Failure explanation.
+   */
   assert(condition: unknown, message: string): asserts condition;
+
+  /**
+   * Checks generated Event retention and truncation.
+   * @param events Event-history port.
+   * @returns Completion after Event assertions.
+   */
+  checkEvents(events: EntityEventHistoryPort<string>): Promise<void>;
+
+  /**
+   * Creates the generated record specification.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Generated state fixture.
+   * @param unpack Decodes scalar Entity identifiers.
+   * @param columns Declared query columns.
+   * @returns Record specification.
+   */
+  spec<S extends Message>(
+    adapter: EntityHistoryConformanceAdapter<S>,
+    unpack: (id: Any) => string | undefined,
+    columns: RecordColumn<EntityRecord>[],
+  ): RecordSpec<string, EntityRecord>;
 } = Object.freeze({
-  input(): EntityStorageInput<string, StringValue> {
+  /**
+   * Builds provider input using the caller's generated Entity state schema.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Generated state fixture and provider port factory.
+   * @returns Entity storage input for conformance checks.
+   */
+  input<S extends Message>(
+    adapter: EntityHistoryConformanceAdapter<S>,
+  ): EntityStorageInput<string, S> {
     const unpack = (id: Any): string | undefined =>
-      id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-        ? fromBinary(StringValueSchema, id.value).value
-        : undefined;
+      AnyPacker.tryUnpack(id, StringValueSchema)?.value;
     const columns = [
-      new RecordColumn(
-        "value",
-        ColumnTypes.scalar(ScalarType.STRING),
-        (record: EntityRecord) => EntityHistoryFixture.state(record).value,
+      new RecordColumn("title", ColumnTypes.scalar(ScalarType.STRING), (record: EntityRecord) =>
+        adapter.value(EntityHistoryFixture.state(adapter, record)),
       ),
     ];
     return {
@@ -209,33 +299,36 @@ const EntityHistoryFixture: {
       id: {
         clone: (id) => id,
         key: (id) => id,
-        pack: (id) => EntityHistoryFixture.pack(create(StringValueSchema, { value: id })),
+        pack: (id) => AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id })),
         unpack,
       },
       columns,
-      recordSpec: new RecordSpec({
-        sourceType: StringValueSchema,
-        recordType: EntityRecordSchema,
-        idKind: "string",
-        extractId: (record) => {
-          if (record.entityId === undefined) throw new Error("EntityRecord requires entityId.");
-          const id = unpack(record.entityId);
-          if (id === undefined) throw new Error("EntityRecord has an incompatible ID.");
-          return id;
-        },
-        columns,
-      }),
-      sourceType: StringValueSchema,
-      stateSchema: StringValueSchema,
+      recordSpec: EntityHistoryFixture.spec(adapter, unpack, columns),
+      sourceType: adapter.stateSchema,
+      stateSchema: adapter.stateSchema,
       stateHistory: true,
       eventHistory: true,
     };
   },
 
-  record(id: string, state: string, version: number): EntityRecord {
+  /**
+   * Creates a generated Entity record for one state version.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Generated state fixture and provider port factory.
+   * @param id Entity identifier.
+   * @param value State title.
+   * @param version Entity version.
+   * @returns Generated Entity record.
+   */
+  record<S extends Message>(
+    adapter: EntityHistoryConformanceAdapter<S>,
+    id: string,
+    value: string,
+    version: number,
+  ): EntityRecord {
     return create(EntityRecordSchema, {
-      entityId: EntityHistoryFixture.pack(create(StringValueSchema, { value: id })),
-      state: EntityHistoryFixture.pack(create(StringValueSchema, { value: state })),
+      entityId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+      state: AnyPacker.pack(adapter.stateSchema, adapter.state(id, value)),
       version: {
         number: version,
         timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
@@ -243,29 +336,89 @@ const EntityHistoryFixture: {
     });
   },
 
-  pack(value: StringValue) {
-    return create(AnySchema, {
-      typeUrl: `type.spine.io/${StringValueSchema.typeName}`,
-      value: toBinary(StringValueSchema, value),
+  /**
+   * Decodes the caller's Entity state from a generated record.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Generated state fixture and provider port factory.
+   * @param record Generated Entity record.
+   * @returns Decoded generated Entity state.
+   */
+  state<S extends Message>(adapter: EntityHistoryConformanceAdapter<S>, record: EntityRecord): S {
+    if (record.state === undefined) throw new Error("Entity record has no state.");
+    return AnyPacker.unpack(record.state, adapter.stateSchema);
+  },
+
+  /**
+   * Builds the current-record specification for the generated state.
+   * @typeParam S Generated Entity state type.
+   * @param adapter Generated state fixture.
+   * @param unpack Decodes scalar Entity identifiers.
+   * @param columns Declared query columns.
+   * @returns Record specification.
+   */
+  spec<S extends Message>(
+    adapter: EntityHistoryConformanceAdapter<S>,
+    unpack: (id: Any) => string | undefined,
+    columns: RecordColumn<EntityRecord>[],
+  ): RecordSpec<string, EntityRecord> {
+    return new RecordSpec({
+      sourceType: adapter.stateSchema,
+      recordType: EntityRecordSchema,
+      idKind: "string",
+      extractId: (record) => {
+        if (record.entityId === undefined) throw new Error("EntityRecord requires entityId.");
+        const id = unpack(record.entityId);
+        if (id === undefined) throw new Error("EntityRecord has an incompatible ID.");
+        return id;
+      },
+      columns,
     });
   },
 
-  state(record: EntityRecord): StringValue {
-    if (record.state === undefined) throw new Error("Entity record has no state.");
-    return fromBinary(StringValueSchema, record.state.value);
+  /**
+   * Checks generated Event retention and truncation.
+   * @param events Event-history port.
+   * @returns Completion after Event assertions.
+   */
+  async checkEvents(events: EntityEventHistoryPort<string>): Promise<void> {
+    await events.append(EntityHistoryFixture.event("event", "task", 2));
+    EntityHistoryFixture.assert(
+      (await events.backward("task", 1))[0]?.id?.value === "event",
+      "event history must retain generated events",
+    );
+    await events.truncate(create(TimestampSchema, { seconds: 3n }));
+    EntityHistoryFixture.assert(
+      (await events.backward("task", 1)).length === 0,
+      "event history truncation must remove older generated events",
+    );
   },
 
+  /**
+   * Creates a generated diagnostic Event.
+   * @param id Event identifier.
+   * @param producer Producer Entity identifier.
+   * @param version Event version.
+   * @returns Generated Event.
+   */
   event(id: string, producer: string, version: number) {
     return create(EventSchema, {
       id: create(EventIdSchema, { value: id }),
       context: {
-        producerId: EntityHistoryFixture.pack(create(StringValueSchema, { value: producer })),
+        producerId: AnyPacker.pack(
+          StringValueSchema,
+          create(StringValueSchema, { value: producer }),
+        ),
         timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
         version: create(VersionSchema, { number: version }),
       },
     });
   },
 
+  /**
+   * Checks one conformance condition.
+   * @param condition Expected condition.
+   * @param message Failure explanation.
+   */
   assert(condition: unknown, message: string): asserts condition {
     if (!condition) throw new Error(`Entity storage conformance failed: ${message}`);
   },

@@ -17,15 +17,16 @@ import { Buffer } from "node:buffer";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   BuildHandlerAnalyzer,
   GeneratedRegistryWriter,
 } from "@spine-event-engine/proto-tools/testing";
-import { BoundedContext } from "@spine-event-engine/server";
+import { BoundedContext, ServerEnvironment } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { expectWave13ContractToCompile } from "../integration/wave13-compile-contract.js";
 import {
   createWave13OriginRegistry,
@@ -35,13 +36,15 @@ import {
 import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 
 describe("Wave 13 external receptor origin", () => {
+  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+  afterEach(async () => ServerTests.resetEnvironment());
   it("RED-03 excludes imported events from a domestic receptor", async () => {
     const registry = createWave13OriginRegistry();
     Wave13OriginProjection.reset();
     const context = await BoundedContext.singleTenant("Red03MixedOrigin")
       .withGeneratedRegistryRoot(registry.root)
       .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
-      .buildAsync();
+      .build();
     try {
       await context.eventBus().post(event(true));
       expect(Wave13OriginProjection.domesticContexts).toEqual([]);
@@ -57,7 +60,7 @@ describe("Wave 13 external receptor origin", () => {
     const context = await BoundedContext.singleTenant("Red04MixedOrigin")
       .withGeneratedRegistryRoot(registry.root)
       .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
-      .buildAsync();
+      .build();
     try {
       await context.eventBus().post(event(false));
       expect(Wave13OriginProjection.domesticContexts).toHaveLength(1);
@@ -129,7 +132,7 @@ function event(externalOrigin: boolean) {
     $typeName: "spine.core.Event",
     id: create(EventIdSchema, { value }),
     context: create(EventContextSchema, { external: externalOrigin }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id: value, name: value }),
     ),

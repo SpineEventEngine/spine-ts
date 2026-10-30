@@ -12,8 +12,8 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { create, ScalarType, type Message } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   EventIdSchema,
   EventSchema,
@@ -26,6 +26,7 @@ import {
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { describe, expect, it, vi } from "vitest";
+import { AnyPacker } from "@spine-event-engine/core";
 import {
   TaskIdSchema,
   TaskListIdSchema,
@@ -35,12 +36,19 @@ import { TaskListSchema } from "../../../../examples/todo/generated/spine/exampl
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 
 import { EventStore } from "../../src/event/event-store.js";
+import { ColumnTypes } from "../../src/record/column-type.js";
+import { RecordColumn } from "../../src/record/record-column.js";
 import { stateHistorySpec } from "../../src/entity/entity-history-record-spec.js";
 import type { EntityCommitStorage } from "../../src/internal/entity-commit.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
+import { StoragePreparations } from "../../src/internal/storage-preparation.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
-import { MemoryEntityRecordStorage } from "../../src/memory/in-memory-entity-history.js";
+import { InMemoryStorageBackend } from "../../src/memory/in-memory-storage-backend.js";
+import {
+  MemoryEntityRecordStorage,
+  MemoryEntityStorageFactory,
+} from "../../src/memory/in-memory-entity-history.js";
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
 import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { RecordStorage } from "../../src/record/record-storage.js";
@@ -48,6 +56,382 @@ import { RecordSpec } from "../../src/record/record-spec.js";
 import { StorageFactory } from "../../src/storage/storage-factory.js";
 
 describe("MemoryEntityCommitStorage", () => {
+  it("does not bind Agent-only families for an ordinary Entity commit", async () => {
+    const backend = new InMemoryStorageBackend();
+    const factory = new InMemoryStorageFactory(backend);
+    const bind = vi.spyOn(InMemoryStorageBackend, "bind");
+    const input = entityInput(false);
+    const commits = commitStorage(factory, input);
+    try {
+      await commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("ordinary", 1n),
+      });
+      expect(bind.mock.calls.some((call) => call[3].startsWith("agent-"))).toBe(false);
+    } finally {
+      bind.mockRestore();
+      await commits.close();
+      await factory.close();
+    }
+  });
+
+  it("admits all three memory preparation calls before close", async () => {
+    const factory = new InMemoryStorageFactory();
+    const preparation = StoragePreparations.for(factory);
+    const input = entityInput(true);
+    const agent = {
+      context: input.context,
+      stateType: TaskSchema.typeName,
+      id: { key: (id: string) => id },
+    };
+    const admitted = [
+      preparation.prepareRecord(input.context, input.recordSpec, undefined, "check"),
+      preparation.prepareEntity(input, "check"),
+      preparation.prepareAgentHistory(agent, "check"),
+    ];
+    await factory.close();
+    await expect(Promise.all(admitted)).resolves.toEqual([undefined, undefined, undefined]);
+    await expect(
+      preparation.prepareRecord(input.context, input.recordSpec, undefined, "check"),
+    ).rejects.toThrow(/closed/);
+    await expect(preparation.prepareEntity(input, "check")).rejects.toThrow(/closed/);
+    await expect(preparation.prepareAgentHistory(agent, "check")).rejects.toThrow(/closed/);
+  });
+
+  it("rejects Entity query columns that differ from its current RecordSpec", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = {
+      ...entityInput(false),
+      columns: [
+        new RecordColumn<EntityRecord>("actual", ColumnTypes.scalar(ScalarType.STRING), () => "x"),
+      ],
+    };
+    await expect(StoragePreparations.for(factory).prepareEntity(input, "check")).rejects.toThrow(
+      /columns|incompatible/,
+    );
+    expect(() => factory.createEntityStorage(input)).toThrow(/columns|incompatible/);
+    await factory.close();
+  });
+
+  it("validates Agent audit tenancy before registering a preparation", async () => {
+    const factory = new InMemoryStorageFactory();
+    const preparation = StoragePreparations.for(factory);
+    const audit = { stateType: TaskSchema.typeName, id: { key: (id: string) => id } };
+    await expect(
+      preparation.prepareAgentHistory(
+        { ...audit, context: { name: "Tasks", multitenant: true } as never },
+        "check",
+      ),
+    ).rejects.toThrow(/tenantId/);
+    await expect(
+      preparation.prepareAgentHistory(
+        {
+          ...audit,
+          context: {
+            name: "Tasks",
+            multitenant: false,
+            tenantId: create(TenantIdSchema, { kind: { case: "value", value: "extra" } }),
+          } as never,
+        },
+        "check",
+      ),
+    ).rejects.toThrow(/does not accept/);
+    await expect(
+      preparation.prepareAgentHistory({ ...audit, context }, "check"),
+    ).resolves.toBeUndefined();
+    await factory.close();
+  });
+  it("prepares current, history, and Agent audit definitions without opening tenant storage", async () => {
+    const backend = new InMemoryStorageBackend();
+    const factory = new InMemoryStorageFactory(backend);
+    const input = {
+      ...entityInput(true),
+      context: {
+        name: "Tasks",
+        multitenant: true,
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "unseen" } }),
+      } as const,
+    };
+    const createEntity = vi.spyOn(MemoryEntityStorageFactory.prototype, "create");
+    try {
+      const preparation = StoragePreparations.for(factory);
+      await preparation.prepareEntity(input, "check");
+      await preparation.prepareEntity(input, "create");
+      await expect(
+        preparation.prepareAgentHistory(
+          {
+            context: input.context,
+            stateType: " ",
+            id: { key: (id: string) => id },
+          },
+          "check",
+        ),
+      ).rejects.toThrow(/state type/);
+      await preparation.prepareAgentHistory(
+        {
+          context: input.context,
+          stateType: TaskSchema.typeName,
+          id: { key: (id: string) => id },
+        },
+        "check",
+      );
+      expect(createEntity).not.toHaveBeenCalled();
+      expect(InMemoryStorageBackend.tenantCount(backend)).toBe(0);
+      await expect(factory.tenantCatalog().all()).resolves.toEqual([]);
+    } finally {
+      createEntity.mockRestore();
+      await factory.close();
+    }
+  });
+  it("retains one current adapter across repeated current-only commits", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput(false);
+    const created = vi.spyOn(MemoryEntityStorageFactory.prototype, "create");
+    const commits = commitStorage(factory, input);
+    try {
+      for (const name of ["first", "second"]) {
+        await commits.commit({
+          context: input.context,
+          entity: input,
+          entityId: "task",
+          next: current(name, 1n),
+        });
+      }
+      expect(created).toHaveBeenCalledTimes(1);
+    } finally {
+      created.mockRestore();
+      await commits.close();
+      await factory.close();
+    }
+  });
+  it("removes individually closed commit roots before factory shutdown", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput(false);
+    const handles = Array.from({ length: 4 }, () => commitStorage(factory, input));
+    const closes = handles.map((handle) => vi.spyOn(handle, "close"));
+    await Promise.all(handles.map((handle) => handle.close()));
+    await factory.close();
+    for (const close of closes) expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("drains an admitted write before factory and commit closure", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput(false);
+    const commits = commitStorage(factory, input);
+    const entered = deferred();
+    const release = deferred();
+    const original = Object.getOwnPropertyDescriptor(MemoryEntityRecordStorage.prototype, "write")
+      ?.value as MemoryEntityRecordStorage<unknown>["write"];
+    const write = vi
+      .spyOn(MemoryEntityRecordStorage.prototype, "write")
+      .mockImplementation(async function (this: MemoryEntityRecordStorage<unknown>, record) {
+        entered.resolve(undefined);
+        await release.promise;
+        return original.call(this, record);
+      });
+    try {
+      const admitted = commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("first", 1n),
+      });
+      await entered.promise;
+      const closing = factory.close();
+      expect(() =>
+        commits.commit({
+          context: input.context,
+          entity: input,
+          entityId: "task",
+          next: current("later", 2n),
+        }),
+      ).toThrow(/closed/);
+      release.resolve(undefined);
+      await expect(admitted).resolves.toBeUndefined();
+      await expect(closing).resolves.toBeUndefined();
+      expect(commits.close()).toBe(commits.close());
+    } finally {
+      release.resolve(undefined);
+      write.mockRestore();
+    }
+  });
+  it("registers admission before a reentrant provider acquisition callback", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput(false);
+    const commits = commitStorage(factory, input);
+    const original = Object.getOwnPropertyDescriptor(MemoryEntityStorageFactory.prototype, "create")
+      ?.value as MemoryEntityStorageFactory["create"];
+    const create = vi
+      .spyOn(MemoryEntityStorageFactory.prototype, "create")
+      .mockImplementation(function (this: MemoryEntityStorageFactory, entity) {
+        expect(() => {
+          commits.closeIdle();
+        }).toThrow(/active/);
+        return original.call(this, entity);
+      });
+    try {
+      await commits.commit({
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("admitted", 1n),
+      });
+    } finally {
+      create.mockRestore();
+      await commits.close();
+      await factory.close();
+    }
+  });
+  it("drains a commit when ID cloning reenters factory close", async () => {
+    const factory = new InMemoryStorageFactory();
+    const base = entityInput(false);
+    let closing: Promise<void> | undefined;
+    const input = {
+      ...base,
+      id: {
+        ...base.id,
+        clone: (id: string) => {
+          expect(() => {
+            commits.closeIdle();
+          }).toThrow(/active/);
+          closing = factory.close();
+          return id;
+        },
+      },
+    };
+    const commits = commitStorage(factory, input);
+    const admitted = commits.commit({
+      context: input.context,
+      entity: input,
+      entityId: "task",
+      next: current("captured", 1n),
+    });
+    await expect(admitted).resolves.toBeUndefined();
+    await expect(closing).resolves.toBeUndefined();
+    await expect(commits.close()).resolves.toBeUndefined();
+  });
+
+  it("reports idle cleanup failure synchronously without an orphaned rejection", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const commits = commitStorage(factory, input);
+    await commits.commit({
+      context: input.context,
+      entity: input,
+      entityId: "task",
+      next: current("stored", 1n),
+      states: [state("stored", 1n)],
+    });
+    const failure = new Error("state close failed");
+    const original = Object.getOwnPropertyDescriptor(RecordStorage.prototype, "close")
+      ?.value as InMemoryRecordStorage<unknown, Message>["close"];
+    const close = vi.spyOn(InMemoryRecordStorage.prototype, "close").mockImplementation(function (
+      this: InMemoryRecordStorage<unknown, Message>,
+    ) {
+      original.call(this);
+      throw failure;
+    });
+    try {
+      expect(() => {
+        commits.closeIdle();
+      }).toThrow(failure);
+      expect(() => {
+        commits.closeIdle();
+      }).toThrow(failure);
+      await expect(commits.close()).rejects.toBe(failure);
+      await expect(factory.close()).resolves.toBeUndefined();
+    } finally {
+      close.mockRestore();
+    }
+  });
+  it("retains acquisition and rollback failures, then permits another commit", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const commits = commitStorage(factory, input);
+    const acquisition = new Error("history acquisition failed");
+    const cleanup = new Error("new current cleanup failed");
+    const originalBackend = Object.getOwnPropertyDescriptor(
+      MemoryEntityStorageFactory.prototype,
+      "backend",
+    )?.value as MemoryEntityStorageFactory["backend"];
+    const backend = vi.spyOn(MemoryEntityStorageFactory.prototype, "backend");
+    const originalClose = Object.getOwnPropertyDescriptor(RecordStorage.prototype, "close")
+      ?.value as InMemoryRecordStorage<unknown, Message>["close"];
+    const close = vi.spyOn(InMemoryRecordStorage.prototype, "close");
+    backend.mockImplementationOnce(function (this: MemoryEntityStorageFactory, entity) {
+      return originalBackend.call(this, entity);
+    });
+    backend.mockImplementationOnce(() => {
+      throw acquisition;
+    });
+    close.mockImplementationOnce(function (this: InMemoryRecordStorage<unknown, Message>) {
+      originalClose.call(this);
+      throw cleanup;
+    });
+    try {
+      const mutation = {
+        context: input.context,
+        entity: input,
+        entityId: "task",
+        next: current("first", 1n),
+        states: [state("first", 1n)],
+      };
+      await expect(commits.commit(mutation)).rejects.toMatchObject({
+        errors: [acquisition, cleanup],
+      });
+      await expect(commits.commit(mutation)).resolves.toBeUndefined();
+    } finally {
+      backend.mockRestore();
+      close.mockRestore();
+      await commits.close();
+      await factory.close();
+    }
+  });
+  it("attempts every retained close and catalog cleanup after multiple failures", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const commits = commitStorage(factory, input);
+    await commits.commit({
+      context: input.context,
+      entity: input,
+      entityId: "task",
+      next: current("stored", 1n),
+      states: [state("stored", 1n)],
+      diagnostics: [diagnostic("stored-diagnostic", 1n)],
+      events: [event("stored-event")],
+    });
+    const failures = [
+      new Error("state close"),
+      new Error("diagnostic close"),
+      new Error("delivery close"),
+    ];
+    const catalogFailure = new Error("catalog close");
+    const originalClose = Object.getOwnPropertyDescriptor(RecordStorage.prototype, "close")
+      ?.value as InMemoryRecordStorage<unknown, Message>["close"];
+    let closed = 0;
+    const close = vi.spyOn(InMemoryRecordStorage.prototype, "close").mockImplementation(function (
+      this: InMemoryRecordStorage<unknown, Message>,
+    ) {
+      originalClose.call(this);
+      throw failures[closed++] ?? new Error("Unexpected retained close.");
+    });
+    const catalog = vi.spyOn(factory.tenantCatalog(), "close").mockRejectedValue(catalogFailure);
+    try {
+      const outcome = factory.close();
+      await expect(outcome).rejects.toMatchObject({
+        errors: [{ errors: failures }, catalogFailure],
+      });
+      expect(closed).toBe(3);
+      expect(catalog).toHaveBeenCalledTimes(1);
+      await expect(commits.close()).rejects.toMatchObject({ errors: failures });
+      expect(factory.close()).toBe(outcome);
+    } finally {
+      close.mockRestore();
+      catalog.mockRestore();
+    }
+  });
   it("replaces a different current record without an expected-state result", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput(false);
@@ -69,7 +453,7 @@ describe("MemoryEntityCommitStorage", () => {
       }),
     ).resolves.toBeUndefined();
     await expect(entity.current.read("task")).resolves.toEqual(current("two", 2n));
-    commits.close();
+    await commits.close();
     entity.close();
   });
 
@@ -105,7 +489,7 @@ describe("MemoryEntityCommitStorage", () => {
     await expect(entity.current.read("seed-499")).resolves.toEqual(
       current("seed-499", 1n, undefined, "seed-499"),
     );
-    commits.close();
+    await commits.close();
     entity.close();
   });
 
@@ -157,7 +541,7 @@ describe("MemoryEntityCommitStorage", () => {
     } finally {
       release.resolve(undefined);
       write.mockRestore();
-      commits.close();
+      await commits.close();
       entity.close();
     }
   });
@@ -187,8 +571,8 @@ describe("MemoryEntityCommitStorage", () => {
     await expect(entity.states.backward("task", 1)).resolves.toEqual([state("next", 1n)]);
     const events = new EventStore(input.context, factory);
     expect((await events.read()).map((entry) => entry.id?.value)).toEqual(["delivery-isolated"]);
-    events.close();
-    commits.close();
+    await events.close();
+    await commits.close();
     entity.close();
   });
 
@@ -241,11 +625,11 @@ describe("MemoryEntityCommitStorage", () => {
       expect((await entity.events.backward("task", 1))[0]?.id?.value).toBe("accepted-diagnostic");
       const events = new EventStore(input.context, factory);
       expect((await events.read()).map((entry) => entry.id?.value)).toEqual(["accepted-delivery"]);
-      events.close();
+      await events.close();
     } finally {
       release.resolve(undefined);
       write.mockRestore();
-      commits.close();
+      await commits.close();
       entity.close();
     }
   });
@@ -301,7 +685,7 @@ describe("MemoryEntityCommitStorage", () => {
     } finally {
       release.resolve(undefined);
       write.mockRestore();
-      commits.close();
+      await commits.close();
       entity.close();
     }
   });
@@ -360,7 +744,7 @@ describe("MemoryEntityCommitStorage", () => {
       ]);
       const eventsA = new EventStore(contextA, factory);
       expect((await eventsA.read()).map((entry) => entry.id?.value)).toEqual(["queued-A"]);
-      eventsA.close();
+      await eventsA.close();
       entityA.close();
 
       const contextB = {
@@ -373,7 +757,7 @@ describe("MemoryEntityCommitStorage", () => {
       await expect(entityB.states.backward("task", 2)).resolves.toEqual([]);
       const eventsB = new EventStore(contextB, factory);
       expect(await eventsB.read()).toEqual([]);
-      eventsB.close();
+      await eventsB.close();
       entityB.close();
       expect(() =>
         commits.commit({
@@ -394,7 +778,7 @@ describe("MemoryEntityCommitStorage", () => {
     } finally {
       release.resolve(undefined);
       write.mockRestore();
-      commits.close();
+      await commits.close();
     }
   });
 
@@ -421,7 +805,7 @@ describe("MemoryEntityCommitStorage", () => {
     ).rejects.toThrow(/divergent content/);
     await expect(entity.current.read("task")).resolves.toEqual(current("first", 1n));
     await expect(entity.states.backward("task", 2)).resolves.toEqual([state("first", 1n)]);
-    commits.close();
+    await commits.close();
     entity.close();
   });
 
@@ -461,8 +845,8 @@ describe("MemoryEntityCommitStorage", () => {
     ]);
     const events = new EventStore(input.context, factory);
     await expect(events.read()).resolves.toEqual([]);
-    events.close();
-    commits.close();
+    await events.close();
+    await commits.close();
     entity.close();
   });
 
@@ -504,8 +888,8 @@ describe("MemoryEntityCommitStorage", () => {
         events: [delivery],
       }),
     ).resolves.toBeUndefined();
-    events.close();
-    commits.close();
+    await events.close();
+    await commits.close();
     entity.close();
   });
 
@@ -543,8 +927,8 @@ describe("MemoryEntityCommitStorage", () => {
     await expect(entity.events.backward("task", 10)).resolves.toEqual([]);
     const events = new EventStore(input.context, factory);
     await expect(events.read()).resolves.toEqual([]);
-    events.close();
-    commits.close();
+    await events.close();
+    await commits.close();
     entity.close();
   });
 
@@ -568,7 +952,7 @@ describe("MemoryEntityCommitStorage", () => {
     await expect(entity.current.read("task")).resolves.toBeUndefined();
     await expect(entity.states.backward("task", 10)).resolves.toEqual([state("partial", 1n)]);
     await expect(entity.events.backward("task", 10)).resolves.toEqual([]);
-    commits.close();
+    await commits.close();
     entity.close();
   });
 
@@ -600,7 +984,7 @@ describe("MemoryEntityCommitStorage", () => {
         next: current("divergent", 2n),
       }),
     ).resolves.toBeUndefined();
-    first.close();
+    await first.close();
     expect(() =>
       first.commit({
         context: input.context,
@@ -609,7 +993,7 @@ describe("MemoryEntityCommitStorage", () => {
         next: current("closed", 2n),
       }),
     ).toThrow(/closed/);
-    second.close();
+    await second.close();
   });
 
   it("retains current and enabled history rows from concurrent commits for different entity IDs", async () => {
@@ -651,7 +1035,7 @@ describe("MemoryEntityCommitStorage", () => {
     expect((await entity.events.backward("other", 1)).map((value) => value.id?.value)).toEqual([
       "other-event",
     ]);
-    commits.close();
+    await commits.close();
     entity.close();
   });
 
@@ -699,7 +1083,7 @@ describe("MemoryEntityCommitStorage", () => {
     }
 
     expect(await entity.states.backward("task", 5)).toEqual([state("new", 2n)]);
-    commits.close();
+    await commits.close();
     entity.close();
   });
 
@@ -730,7 +1114,7 @@ describe("MemoryEntityCommitStorage", () => {
       current("after", 2n, create(TimestampSchema, { seconds: 42n, nanos: 8 })),
     );
 
-    commits.close();
+    await commits.close();
     entity.close();
   });
 
@@ -754,8 +1138,8 @@ describe("MemoryEntityCommitStorage", () => {
     await expect(entity.events.backward("task", 10)).resolves.toEqual([]);
     const events = new EventStore(input.context, factory);
     await expect(events.read()).resolves.toEqual([]);
-    events.close();
-    commits.close();
+    await events.close();
+    await commits.close();
     entity.close();
   });
 
@@ -777,7 +1161,7 @@ describe("MemoryEntityCommitStorage", () => {
 
     expect(createStorage).not.toHaveBeenCalled();
     await expect(entity.current.read("task")).resolves.toEqual(current("current-only", 1n));
-    commits.close();
+    await commits.close();
     entity.close();
   });
 
@@ -804,7 +1188,7 @@ describe("MemoryEntityCommitStorage", () => {
     expect(close).not.toHaveBeenCalled();
     expect(supplied.isOpen()).toBe(true);
     supplied.close();
-    commits.close();
+    await commits.close();
   });
 
   it("rejects retained history rows when that history is disabled", async () => {
@@ -830,7 +1214,7 @@ describe("MemoryEntityCommitStorage", () => {
         diagnostics: [diagnostic("diagnostic", 1n)],
       }),
     ).rejects.toThrow(/event history when it is disabled/);
-    commits.close();
+    await commits.close();
   });
 
   it("retains a direct Event Store append concurrent with an Entity commit", async () => {
@@ -854,8 +1238,8 @@ describe("MemoryEntityCommitStorage", () => {
       "committed",
       "direct",
     ]);
-    events.close();
-    commits.close();
+    await events.close();
+    await commits.close();
   });
 
   it("retains a direct event-history append concurrent with an Entity commit", async () => {
@@ -878,7 +1262,7 @@ describe("MemoryEntityCommitStorage", () => {
     expect(
       (await entity.events.backward("task", 10)).map((value) => value.id?.value).sort(),
     ).toEqual(["committed-history", "direct-history"]);
-    commits.close();
+    await commits.close();
     entity.close();
   });
 
@@ -906,7 +1290,7 @@ describe("MemoryEntityCommitStorage", () => {
     const entity = factory.createEntityStorage(input) as EntityHandle;
     await expect(entity.current.read("task")).resolves.toEqual(current("unexpected", 2n));
     entity.close();
-    commits.close();
+    await commits.close();
   });
 
   it("keeps sibling handles usable after a handle is closed repeatedly", async () => {
@@ -915,10 +1299,8 @@ describe("MemoryEntityCommitStorage", () => {
     const first = commitStorage(factory, input);
     const second = commitStorage(factory, input);
 
-    first.close();
-    expect(() => {
-      first.close();
-    }).not.toThrow();
+    await first.close();
+    await expect(first.close()).resolves.toBeUndefined();
     await expect(
       second.commit({
         context: input.context,
@@ -927,10 +1309,10 @@ describe("MemoryEntityCommitStorage", () => {
         next: current("sibling", 1n),
       }),
     ).resolves.toBeUndefined();
-    second.close();
+    await second.close();
   });
 
-  it("rejects a commit input from another entity storage scope", () => {
+  it("rejects a commit input from another entity storage scope", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
     const commits = commitStorage(factory, input);
@@ -944,7 +1326,7 @@ describe("MemoryEntityCommitStorage", () => {
         next: current("wrong-scope", 1n),
       }),
     ).toThrow(/another Entity storage scope/);
-    commits.close();
+    await commits.close();
   });
 
   it("rejects absent or mismatched current IDs before writing history or current state", async () => {
@@ -968,7 +1350,7 @@ describe("MemoryEntityCommitStorage", () => {
     }
     await expect(storage.current.read("task")).resolves.toBeUndefined();
     await expect(storage.states.backward("task", 1)).resolves.toEqual([]);
-    commits.close();
+    await commits.close();
     storage.close();
   });
 
@@ -1028,10 +1410,7 @@ function current(value: string, version: bigint, timestamp?: Timestamp, id = "ta
   return create(EntityRecordSchema, {
     entityId: packedId(id),
     lifecycleFlags: { archived: false, deleted: false },
-    state: create(AnySchema, {
-      typeUrl: `type.spine.io/${TaskSchema.typeName}`,
-      value: toBinary(TaskSchema, createTask(value, id)),
-    }),
+    state: AnyPacker.pack(TaskSchema, createTask(value, id)),
     version: create(VersionSchema, {
       number: Number(version),
       ...(timestamp === undefined ? {} : { timestamp }),
@@ -1040,16 +1419,11 @@ function current(value: string, version: bigint, timestamp?: Timestamp, id = "ta
 }
 
 function packedId(value: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${TaskIdSchema.typeName}`,
-    value: toBinary(TaskIdSchema, create(TaskIdSchema, { value })),
-  });
+  return AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value }));
 }
 
 function unpackTaskId(id: NonNullable<EntityRecord["entityId"]>) {
-  return id.typeUrl === `type.spine.io/${TaskIdSchema.typeName}`
-    ? fromBinary(TaskIdSchema, id.value).value
-    : undefined;
+  return AnyPacker.tryUnpack(id, TaskIdSchema)?.value;
 }
 
 function state(value: string, version: bigint, id = "task") {
@@ -1076,17 +1450,14 @@ function event(id: string) {
 }
 
 function taskCreated(id: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${TaskCreatedSchema.typeName}`,
-    value: toBinary(
-      TaskCreatedSchema,
-      create(TaskCreatedSchema, {
-        id: create(TaskIdSchema, { value: id }),
-        title: id,
-        taskListId: create(TaskListIdSchema, { value: "list-1" }),
-      }),
-    ),
-  });
+  return AnyPacker.pack(
+    TaskCreatedSchema,
+    create(TaskCreatedSchema, {
+      id: create(TaskIdSchema, { value: id }),
+      title: id,
+      taskListId: create(TaskListIdSchema, { value: "list-1" }),
+    }),
+  );
 }
 
 interface EntityHandle {

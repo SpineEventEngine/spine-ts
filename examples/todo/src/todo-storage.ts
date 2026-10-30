@@ -20,12 +20,11 @@
  * multi-process example intentionally remains a separate Datastore deployment.
  */
 
-import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
-import { todoProtoModule } from "../generated/proto-module.js";
+import "../generated/proto-module.js";
 
 /**
  * Builds storage selected for the local single-process To-Do app.
@@ -48,10 +47,8 @@ export const TodoStorage = {
     if (url === undefined || url === "") {
       throw new Error(`${variable} is required when TODO_STORAGE selects durable storage.`);
     }
-    const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(TypeRegistry.from(todoProtoModule));
     const builder =
       selected === "mysql" ? MysqlStorageFactory.newBuilder() : PostgresStorageFactory.newBuilder();
-    return builder.setOptions({ url }).setStringifierRegistry(stringifiers).build();
+    return builder.setOptions({ url }).build();
   },
 } as const;

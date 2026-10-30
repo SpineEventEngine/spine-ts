@@ -14,6 +14,7 @@
 
 import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
+import type { StoragePreparationMode } from "@spine-event-engine/storage/provider";
 
 import { PostgresDataTypes } from "./data-type.js";
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
@@ -29,8 +30,6 @@ import {
  * Prepares one PostgreSQL record-family table.
  */
 export class PostgresTableInitializer {
-  #ready: Promise<void> | undefined;
-
   /**
    * Creates a private initializer for one resolved PostgreSQL table.
    *
@@ -47,46 +46,53 @@ export class PostgresTableInitializer {
   ) {}
 
   /**
-   * Prepares the table once.
+   * Prepares or checks the table for one caller attempt.
    *
+   * @param mode Creation or read-only checking.
    * @returns Completion of initialization.
    */
-  prepare(): Promise<void> {
-    this.#ready ??= this.attempt().catch((error: unknown) => this.retry(error));
-    return this.#ready;
+  prepare(mode: StoragePreparationMode = "create"): Promise<void> {
+    return this.attempt(mode).catch((error: unknown) => this.retry(error, mode));
   }
 
   /**
    * Retries initialization only after an admitted transaction conflict.
    *
    * @param error Initial table-preparation failure.
+   * @param mode The creation or check mode to retry.
    * @returns Completion of the retry attempt.
    */
-  private retry(error: unknown): Promise<void> {
+  private retry(error: unknown, mode: StoragePreparationMode): Promise<void> {
     if (!PostgresTransactionErrors.retryable(error)) throw PostgresStorageErrors.operation(error);
-    return this.attempt();
+    return this.attempt(mode);
   }
 
   /**
    * Creates and verifies the table inside one transaction.
    *
-   * @returns Completion after commit.
+   * @param mode Creation or read-only compatibility checking.
+   * @returns Completion after the physical requirement is verified.
    */
-  private async attempt(): Promise<void> {
+  private async attempt(mode: StoragePreparationMode): Promise<void> {
     const client = await this.lifecycle.acquire();
     let discard: Error | undefined;
     try {
+      if (mode === "check") {
+        await this.verify(client);
+        return;
+      }
       await client.query("BEGIN");
       await this.lock(client);
       await client.query(this.customCreate?.() ?? this.create());
       await this.verify(client);
       await client.query("COMMIT");
     } catch (error) {
-      try {
-        await client.query("ROLLBACK");
-      } catch {
-        discard = PostgresRollbackErrors.discard(error);
-      }
+      if (mode === "create")
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          discard = PostgresRollbackErrors.discard(error);
+        }
       throw error;
     } finally {
       client.release(discard);

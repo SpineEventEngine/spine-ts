@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { create, ScalarType } from "@bufbuild/protobuf";
 import {
   AnySchema,
   StringValueSchema,
@@ -31,6 +31,11 @@ import {
   type Event,
 } from "@spine-event-engine/proto";
 import { describe, expect, it, vi } from "vitest";
+import { AnyPacker } from "@spine-event-engine/core";
+import {
+  ProjectStateSchema,
+  type ProjectState,
+} from "../../../core/test-fixtures/generated/project_states_pb.js";
 
 import type { EntityStorageConformance } from "../../src/entity/history-conformance.js";
 import { EntityHistoryConformance } from "../../src/entity/history-conformance.js";
@@ -56,16 +61,19 @@ describe("InMemoryEntityHistory", () => {
   it("passes the reusable generated current-record and state-history conformance checks", async () => {
     const factory = new InMemoryStorageFactory();
     const adapter = {
-      create: (entity: EntityStorageInput<string, StringValue>) =>
-        factory.createEntityStorage(entity) as EntityStorageConformance<string, StringValue>,
-      reopen: (entity: EntityStorageInput<string, StringValue>) =>
-        factory.createEntityStorage(entity) as EntityStorageConformance<string, StringValue>,
+      stateSchema: ProjectStateSchema,
+      state: stateValue,
+      value: (state: ProjectState) => state.title,
+      create: (entity: EntityStorageInput<string, ProjectState>) =>
+        factory.createEntityStorage(entity) as EntityStorageConformance<string, ProjectState>,
+      reopen: (entity: EntityStorageInput<string, ProjectState>) =>
+        factory.createEntityStorage(entity) as EntityStorageConformance<string, ProjectState>,
     };
     await EntityHistoryConformance.check(adapter);
   });
 
   it("keeps disabled history ports readable and maintenance-safe without writes", async () => {
-    const states = disabledStateHistoryPort<string, StringValue>();
+    const states = disabledStateHistoryPort<string, ProjectState>();
     const events = disabledEventHistoryPort<string>();
     await expect(states.backward("task", 1)).resolves.toEqual([]);
     await expect(states.stateAt("task", create(TimestampSchema))).resolves.toBeUndefined();
@@ -83,13 +91,13 @@ describe("InMemoryEntityHistory", () => {
       idKey: (id: string) => id,
       unpackId: (id) =>
         id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-          ? fromBinary(StringValueSchema, id.value).value
+          ? AnyPacker.tryUnpack(id, StringValueSchema)?.value
           : undefined,
       columns: [
         new RecordColumn(
           "value",
           ColumnTypes.scalar(ScalarType.STRING),
-          (entry) => state(entry).value,
+          (entry) => state(entry).title,
         ),
         new RecordColumn(
           "archived",
@@ -107,7 +115,7 @@ describe("InMemoryEntityHistory", () => {
 
     const storedActive = await current.read("active");
     if (storedActive === undefined) throw new Error("Expected stored current state.");
-    expect(state(storedActive).value).toBe("active");
+    expect(state(storedActive).title).toBe("active");
     expect(
       (
         await current.query({
@@ -135,12 +143,12 @@ describe("InMemoryEntityHistory", () => {
     const createStorage = vi.spyOn(factory, "createRecordStorage");
     const storage = factory.createEntityStorage(input(false)) as EntityStorageConformance<
       string,
-      StringValue
+      ProjectState
     >;
     await expect(storage.states.append(record("task", "first", 1))).rejects.toThrow(/disabled/);
     expect(createStorage).not.toHaveBeenCalled();
 
-    const layout = stateHistorySpec(StringValueSchema);
+    const layout = stateHistorySpec(ProjectStateSchema);
     const raw = factory.createRecordStorage(input(false).context, layout.spec, layout.group);
     await expect(raw.query()).resolves.toEqual([]);
   });
@@ -149,7 +157,7 @@ describe("InMemoryEntityHistory", () => {
     const factory = new InMemoryStorageFactory();
     const storage = factory.createEntityStorage(input(true)) as EntityStorageConformance<
       string,
-      StringValue
+      ProjectState
     >;
     const first = record("task", "first", 1);
     const second = record("task", "second", 2);
@@ -157,12 +165,12 @@ describe("InMemoryEntityHistory", () => {
     await storage.states.append(second);
 
     const backward = await storage.states.backward("task", 2);
-    expect(backward.map((entry) => state(entry).value)).toEqual(["second", "first"]);
+    expect(backward.map((entry) => state(entry).title)).toEqual(["second", "first"]);
     expect(await storage.states.stateAt("task", create(TimestampSchema, { seconds: 1n }))).toEqual(
-      create(StringValueSchema, { value: "first" }),
+      stateValue("task", "first"),
     );
 
-    const layout = stateHistorySpec(StringValueSchema);
+    const layout = stateHistorySpec(ProjectStateSchema);
     const raw = factory.createRecordStorage(input(true).context, layout.spec, layout.group);
     expect(await raw.query()).toEqual([first, second]);
   });
@@ -171,22 +179,22 @@ describe("InMemoryEntityHistory", () => {
     const factory = new InMemoryStorageFactory();
     const storage = factory.createEntityStorage(input(true)) as EntityStorageConformance<
       string,
-      StringValue
+      ProjectState
     >;
     await storage.states.append(record("task", "first", 1));
     await storage.states.append(record("task", "second", 2));
     await storage.states.append(record("other", "other", 3));
 
     expect(
-      (await storage.states.backward("task", 5, 2n)).map((entry) => state(entry).value),
+      (await storage.states.backward("task", 5, 2n)).map((entry) => state(entry).title),
     ).toEqual(["first"]);
     await storage.states.trim("task", 1);
-    expect((await storage.states.backward("task", 5)).map((entry) => state(entry).value)).toEqual([
+    expect((await storage.states.backward("task", 5)).map((entry) => state(entry).title)).toEqual([
       "second",
     ]);
     await storage.states.truncate(create(TimestampSchema, { seconds: 3n }));
     expect(await storage.states.backward("task", 5)).toEqual([]);
-    expect((await storage.states.backward("other", 5)).map((entry) => state(entry).value)).toEqual([
+    expect((await storage.states.backward("other", 5)).map((entry) => state(entry).title)).toEqual([
       "other",
     ]);
   });
@@ -202,10 +210,12 @@ describe("InMemoryEntityHistory", () => {
     const [stored] = await history.backward("task", 1);
     expect(stored).not.toBe(first);
     if (stored === undefined) throw new Error("Expected stored history value.");
-    expect(state(stored).value).toBe("first");
+    expect(state(stored).title).toBe("first");
     await expect(
       history.append(
-        create(EntityRecordSchema, { state: pack(create(StringValueSchema, { value: "bad" })) }),
+        create(EntityRecordSchema, {
+          state: AnyPacker.pack(ProjectStateSchema, stateValue("task", "bad")),
+        }),
       ),
     ).rejects.toThrow(/entityId/i);
     await expect(
@@ -241,9 +251,9 @@ describe("InMemoryEntityHistory", () => {
     await history.append(record("task", "three", 3, 4));
 
     expect(await history.stateAt("task", create(TimestampSchema, { seconds: 5n }))).toEqual(
-      create(StringValueSchema, { value: "two" }),
+      stateValue("task", "two"),
     );
-    expect((await history.backward("task", 10, 3n)).map((entry) => state(entry).value)).toEqual([
+    expect((await history.backward("task", 10, 3n)).map((entry) => state(entry).title)).toEqual([
       "two",
       "one",
     ]);
@@ -255,11 +265,11 @@ describe("InMemoryEntityHistory", () => {
     const other = input(true, multitenant("tenant-b"));
     const first = factory.createEntityStorage(tenant) as EntityStorageConformance<
       string,
-      StringValue
+      ProjectState
     >;
     const second = factory.createEntityStorage(other) as EntityStorageConformance<
       string,
-      StringValue
+      ProjectState
     >;
     await first.states.append(record("task", "first", 1));
     expect(await second.states.backward("task", 1)).toEqual([]);
@@ -276,7 +286,7 @@ describe("InMemoryEntityHistory", () => {
     await expect(history.backward("task", 0)).rejects.toThrow(/positive safe integer/);
     await expect(history.trim("task", -1)).rejects.toThrow(/non-negative safe integer/);
     await history.trim("task", 5);
-    expect((await history.backward("task", 10)).map((entry) => state(entry).value)).toEqual([
+    expect((await history.backward("task", 10)).map((entry) => state(entry).title)).toEqual([
       "17",
       "16",
       "15",
@@ -289,12 +299,12 @@ describe("InMemoryEntityHistory", () => {
   it("uses bounded record-storage windows for history reads and maintenance", async () => {
     const factory = new InMemoryStorageFactory();
     const entity = input(true);
-    const layout = stateHistorySpec(StringValueSchema);
+    const layout = stateHistorySpec(ProjectStateSchema);
     const records = factory.createRecordStorage(entity.context, layout.spec, layout.group);
     const history = new InMemoryEntityHistory({
       id: entity.id,
       records,
-      stateSchema: StringValueSchema,
+      stateSchema: ProjectStateSchema,
       maintenance: { batchSize: 2 },
     });
     for (let version = 1; version <= 5; version++) {
@@ -319,23 +329,23 @@ describe("InMemoryEntityHistory", () => {
       await history.append(record("task", String(version), version));
     }
 
-    expect((await history.backward("task", 3, 5n)).map((entry) => state(entry).value)).toEqual([
+    expect((await history.backward("task", 3, 5n)).map((entry) => state(entry).title)).toEqual([
       "4",
       "3",
       "2",
     ]);
     expect(await history.stateAt("task", create(TimestampSchema, { seconds: 3n }))).toEqual(
-      create(StringValueSchema, { value: "3" }),
+      stateValue("task", "3"),
     );
     await history.trim("task", 1);
-    expect((await history.backward("task", 5)).map((entry) => state(entry).value)).toEqual(["5"]);
+    expect((await history.backward("task", 5)).map((entry) => state(entry).title)).toEqual(["5"]);
 
     const truncation = createHistory({ batchSize: 2, pageSize: 2 });
     for (let version = 1; version <= 5; version++) {
       await truncation.append(record("task", String(version), version));
     }
     await truncation.truncate(create(TimestampSchema, { seconds: 5n }));
-    expect((await truncation.backward("task", 5)).map((entry) => state(entry).value)).toEqual([
+    expect((await truncation.backward("task", 5)).map((entry) => state(entry).title)).toEqual([
       "5",
     ]);
   });
@@ -345,7 +355,7 @@ describe("InMemoryEntityHistory", () => {
     for (let version = 1; version <= 5; version++) {
       await history.append(record("task", String(version), version, 7));
     }
-    expect((await history.backward("task", 5)).map((entry) => state(entry).value)).toEqual([
+    expect((await history.backward("task", 5)).map((entry) => state(entry).title)).toEqual([
       "5",
       "4",
       "3",
@@ -353,10 +363,10 @@ describe("InMemoryEntityHistory", () => {
       "1",
     ]);
     expect(await history.stateAt("task", create(TimestampSchema, { seconds: 7n }))).toEqual(
-      create(StringValueSchema, { value: "5" }),
+      stateValue("task", "5"),
     );
     await history.trim("task", 1);
-    expect((await history.backward("task", 5)).map((entry) => state(entry).value)).toEqual(["5"]);
+    expect((await history.backward("task", 5)).map((entry) => state(entry).title)).toEqual(["5"]);
   });
 
   it("keeps an append queued during trim and retains an append after truncate selects rows", async () => {
@@ -375,7 +385,7 @@ describe("InMemoryEntityHistory", () => {
     const append = history.append(record("task", "three", 3));
     selection.resolve(undefined);
     await Promise.all([trimming, append]);
-    expect((await history.backward("task", 5)).map((entry) => state(entry).value)).toEqual([
+    expect((await history.backward("task", 5)).map((entry) => state(entry).title)).toEqual([
       "three",
       "two",
     ]);
@@ -394,7 +404,7 @@ describe("InMemoryEntityHistory", () => {
     const appended = later.append(record("task", "new", 2));
     laterSelection.resolve(undefined);
     await Promise.all([truncating, appended]);
-    expect((await later.backward("task", 5)).map((entry) => state(entry).value)).toEqual(["new"]);
+    expect((await later.backward("task", 5)).map((entry) => state(entry).title)).toEqual(["new"]);
   });
 
   it("does not open grouped event storage when event history is disabled", async () => {
@@ -402,7 +412,7 @@ describe("InMemoryEntityHistory", () => {
     const createStorage = vi.spyOn(factory, "createRecordStorage");
     const storage = factory.createEntityStorage(input(false)) as EntityStorageConformance<
       string,
-      StringValue
+      ProjectState
     > & { readonly events: MemoryEntityEventHistory<string> };
     await expect(storage.events.append(event("event", "task", 1, 1))).rejects.toThrow(/disabled/);
     expect(createStorage).not.toHaveBeenCalled();
@@ -429,7 +439,7 @@ describe("InMemoryEntityHistory", () => {
       "old",
     ]);
 
-    const layout = eventHistorySpec(StringValueSchema);
+    const layout = eventHistorySpec(ProjectStateSchema);
     const raw = factory.createRecordStorage(entity.context, layout.spec, layout.group);
     expect((await raw.query()).map((entry) => entry.id?.value).sort()).toEqual(
       ["a", "old", "é", "\uE000", "\u{10000}"].sort(),
@@ -609,7 +619,7 @@ describe("InMemoryEntityHistory", () => {
 function input(
   stateHistory: boolean,
   context: StorageContext = { name: "Tasks", multitenant: false },
-): EntityStorageInput<string, StringValue> {
+): EntityStorageInput<string, ProjectState> {
   return {
     context,
     id: {
@@ -618,21 +628,21 @@ function input(
       pack: (id) => pack(create(StringValueSchema, { value: id })),
       unpack: (id) =>
         id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-          ? fromBinary(StringValueSchema, id.value).value
+          ? AnyPacker.tryUnpack(id, StringValueSchema)?.value
           : undefined,
     },
     columns: [],
     recordSpec: new RecordSpec<string, EntityRecord>({
-      sourceType: StringValueSchema,
+      sourceType: ProjectStateSchema,
       recordType: EntityRecordSchema,
       idKind: "string",
       extractId: (record) => {
         if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
-        return fromBinary(StringValueSchema, record.entityId.value).value;
+        return AnyPacker.unpack(record.entityId, StringValueSchema).value;
       },
     }),
-    sourceType: StringValueSchema,
-    stateSchema: StringValueSchema,
+    sourceType: ProjectStateSchema,
+    stateSchema: ProjectStateSchema,
     stateHistory,
   };
 }
@@ -648,11 +658,11 @@ function multitenant(value: string): StorageContext {
 function createHistory(maintenance?: InMemoryMaintenance) {
   const factory = new InMemoryStorageFactory();
   const entity = input(true);
-  const layout = stateHistorySpec(StringValueSchema);
+  const layout = stateHistorySpec(ProjectStateSchema);
   return new InMemoryEntityHistory({
     id: entity.id,
     records: factory.createRecordStorage(entity.context, layout.spec, layout.group),
-    stateSchema: StringValueSchema,
+    stateSchema: ProjectStateSchema,
     ...(maintenance === undefined ? {} : { maintenance }),
   });
 }
@@ -664,7 +674,7 @@ function createEventHistory(maintenance?: InMemoryMaintenance) {
 function createEventHistoryBundle(maintenance?: InMemoryMaintenance) {
   const factory = new InMemoryStorageFactory();
   const entity = input(false);
-  const layout = eventHistorySpec(StringValueSchema);
+  const layout = eventHistorySpec(ProjectStateSchema);
   const records = factory.createRecordStorage(entity.context, layout.spec, layout.group);
   return {
     history: new MemoryEntityEventHistory({
@@ -683,7 +693,7 @@ function createEventHistoryBundle(maintenance?: InMemoryMaintenance) {
 function record(id: string, value: string, version: number, created = version): EntityRecord {
   return create(EntityRecordSchema, {
     entityId: pack(create(StringValueSchema, { value: id })),
-    state: pack(create(StringValueSchema, { value })),
+    state: AnyPacker.pack(ProjectStateSchema, stateValue(id, value)),
     version: { number: version, timestamp: create(TimestampSchema, { seconds: BigInt(created) }) },
   });
 }
@@ -697,22 +707,23 @@ function currentRecord(
 ): EntityRecord {
   return create(EntityRecordSchema, {
     entityId: pack(create(StringValueSchema, { value: id })),
-    state: pack(create(StringValueSchema, { value })),
+    state: AnyPacker.pack(ProjectStateSchema, stateValue(id, value)),
     version: { number: version },
     lifecycleFlags: { archived, deleted },
   });
 }
 
+function stateValue(id: string, title: string): ProjectState {
+  return create(ProjectStateSchema, { id, title });
+}
+
 function pack(value: StringValue) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${StringValueSchema.typeName}`,
-    value: toBinary(StringValueSchema, value),
-  });
+  return AnyPacker.pack(StringValueSchema, value);
 }
 
 function state(record: EntityRecord) {
   if (record.state === undefined) throw new Error("Entity record has no state.");
-  return fromBinary(StringValueSchema, record.state.value);
+  return AnyPacker.unpack(record.state, ProjectStateSchema);
 }
 
 function event(id: string, producer: string, version: number, timestamp: number): Event {

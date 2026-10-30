@@ -15,7 +15,7 @@
 import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { AiRegistry } from "@spine-event-engine/ai";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 // prettier-ignore
 import {
   CommandDispatchedToHandlerSchema,
@@ -26,10 +26,12 @@ import {
   type EntityHandlersMetadata,
   HandlerRegistryIngestor,
   Repository,
+  ServerEnvironment,
 } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import { BlackBox } from "@spine-event-engine/testing";
 import { readAgentHistory } from "@spine-event-engine/server/testing";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { generatedHandlerRegistry } from "../dist/generated/handler/generated-handler-registry.js";
 import {
@@ -80,7 +82,6 @@ function emptyModelRegistry(): AiRegistry {
       deadlineMs: 1_000,
       totalInputBytes: 4_000,
       totalOutputBytes: 4_000,
-      maxRecoveryBytes: 4_000,
     },
     concurrentOperations: 1,
     queuedOperations: 0,
@@ -105,14 +106,15 @@ function generatedSupportContext(
 }
 
 describe("support reply Agent", () => {
+  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+  afterEach(async () => ServerTests.resetEnvironment());
   it("registers authored handlers through generated Bounded Context discovery", async () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-48" });
     const context = await generatedSupportContext("Support reply generated")
       .add(SupportReplyAgent, {
-        agentCodeRevision: "support-reply-v1",
         ai: { models: [] },
       })
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       const result = await blackBox
@@ -139,7 +141,6 @@ describe("support reply Agent", () => {
       .add(
         new Repository({
           entityType: SupportReplyAgent,
-          agentCodeRevision: "support-reply-v1",
           ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
@@ -147,7 +148,7 @@ describe("support reply Agent", () => {
           eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
         }),
       )
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -176,14 +177,13 @@ describe("support reply Agent", () => {
       .add(
         new Repository({
           entityType: SupportReplyAgent,
-          agentCodeRevision: "support-reply-v1",
           ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
           events: [SupportReplyDraftedSchema],
         }),
       )
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -215,7 +215,6 @@ describe("support reply Agent", () => {
       .add(
         new Repository({
           entityType: SupportReplyAgent,
-          agentCodeRevision: "support-reply-v1",
           ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
@@ -223,7 +222,7 @@ describe("support reply Agent", () => {
           eventRouting: EventRouting.create().route(SupportTicketUpdatedSchema, () => [agent]),
         }),
       )
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -237,7 +236,7 @@ describe("support reply Agent", () => {
         (candidate) => candidate.length === 1,
       );
       expect(
-        AnyMessages.unpack(requiredMessage(commands[0]), ReviewSupportReplySchema)?.agent,
+        AnyPacker.tryUnpack(requiredMessage(commands[0]), ReviewSupportReplySchema)?.agent,
       ).toEqual(agent);
       expect(assignee.requests).toHaveLength(1);
       expect(await context.stand().read(SupportReplyAgentStateSchema, agent)).toBeUndefined();
@@ -246,7 +245,7 @@ describe("support reply Agent", () => {
           blackBox
             .assertEvents()
             .map((event) =>
-              AnyMessages.unpack(requiredMessage(event), SupportReplyReviewStartedSchema),
+              AnyPacker.tryUnpack(requiredMessage(event), SupportReplyReviewStartedSchema),
             )
             .filter((event) => event !== undefined),
         (events) => events.length === 1,
@@ -262,7 +261,6 @@ describe("support reply Agent", () => {
     const assignee = new SupportReviewAssignee();
     const repository = new Repository({
       entityType: SupportReplyAgent,
-      agentCodeRevision: "support-reply-v1",
       ai: { models: [] },
       schema: SupportReplyAgentStateSchema,
       handlers: agentHandlers,
@@ -271,7 +269,7 @@ describe("support reply Agent", () => {
     });
     const context = await generatedSupportContext("Support reply event", assignee)
       .add(repository)
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       await blackBox
@@ -294,13 +292,14 @@ describe("support reply Agent", () => {
             .assertEvents()
             .filter(
               (event) =>
-                AnyMessages.unpack(requiredMessage(event), SupportReplyDraftedSchema) !== undefined,
+                AnyPacker.tryUnpack(requiredMessage(event), SupportReplyDraftedSchema) !==
+                undefined,
             ),
         (candidate) => candidate.length === 2,
       );
       expect(
         events.map(
-          (event) => AnyMessages.unpack(requiredMessage(event), SupportReplyDraftedSchema)?.reply,
+          (event) => AnyPacker.tryUnpack(requiredMessage(event), SupportReplyDraftedSchema)?.reply,
         ),
       ).toEqual(["Answer: Can I change my address?", "Answer: Can I change my address? [review]"]);
       const commands = await blackBox.eventually(
@@ -308,7 +307,7 @@ describe("support reply Agent", () => {
         (candidate) => candidate.length === 1,
       );
       expect(
-        AnyMessages.unpack(requiredMessage(commands[0]), ReviewSupportReplySchema)?.agent,
+        AnyPacker.tryUnpack(requiredMessage(commands[0]), ReviewSupportReplySchema)?.agent,
       ).toEqual(agent);
       expect(assignee.requests).toHaveLength(1);
       const review = await blackBox.eventually(
@@ -316,7 +315,7 @@ describe("support reply Agent", () => {
           blackBox
             .assertEvents()
             .map((event) =>
-              AnyMessages.unpack(requiredMessage(event), SupportReplyReviewStartedSchema),
+              AnyPacker.tryUnpack(requiredMessage(event), SupportReplyReviewStartedSchema),
             )
             .filter((event) => event !== undefined),
         (items) => items.length === 1,
@@ -340,14 +339,13 @@ describe("support reply Agent", () => {
       .add(
         new Repository({
           entityType: SupportReplyAgent,
-          agentCodeRevision: "support-reply-v1",
           ai: { models: [] },
           schema: SupportReplyAgentStateSchema,
           handlers: agentHandlers,
           events: [SupportReplyDraftedSchema],
         }),
       )
-      .buildAsync();
+      .build();
     const blackBox = await BlackBox.from(context);
     try {
       const result = await blackBox
@@ -366,9 +364,9 @@ describe("support reply Agent", () => {
         () => blackBox.assertEvents(),
         (candidate) => candidate.length === 1,
       );
-      expect(AnyMessages.unpack(requiredMessage(events[0]), SupportReplyDraftedSchema)?.reply).toBe(
-        "Answer: Where is my order?",
-      );
+      expect(
+        AnyPacker.tryUnpack(requiredMessage(events[0]), SupportReplyDraftedSchema)?.reply,
+      ).toBe("Answer: Where is my order?");
     } finally {
       await blackBox.close();
     }
@@ -378,13 +376,12 @@ describe("support reply Agent", () => {
     const agent = create(SupportReplyAgentIdSchema, { ticketNumber: "T-history" });
     const repository = new Repository({
       entityType: SupportReplyAgent,
-      agentCodeRevision: "support-reply-v1",
       ai: { models: [] },
       schema: SupportReplyAgentStateSchema,
       handlers: agentHandlers,
       events: [SupportReplyDraftedSchema],
     });
-    const context = supportContext("Support history").add(repository).build();
+    const context = await supportContext("Support history").add(repository).build();
     const blackBox = await BlackBox.from(context);
     try {
       const result = await blackBox
@@ -418,7 +415,7 @@ describe("support reply Agent", () => {
       if (dispatch?.case !== "systemEvent")
         throw new Error("Expected the System dispatch envelope.");
       expect(
-        AnyMessages.unpack(requiredMessage(dispatch.value), CommandDispatchedToHandlerSchema)
+        AnyPacker.tryUnpack(requiredMessage(dispatch.value), CommandDispatchedToHandlerSchema)
           ?.payload?.id,
       ).toBeDefined();
     } finally {

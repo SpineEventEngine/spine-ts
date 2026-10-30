@@ -1074,3 +1074,34 @@ test("a confirmed cancellation returns to dashboard after a retained retry", asy
   expect(cancel).toHaveBeenCalledWith("draft", "retained");
   expect(screen.queryByRole("textbox", { name: "Markdown" })).toBeNull();
 });
+
+test("unknown generation completion returns sign-out control without changing credentials", async () => {
+  const signOut = vi.fn(() => Promise.resolve());
+  const notice = vi.fn();
+  const cancel = vi.fn(() => Promise.resolve({ ...release("", 2), generationStatus: "canceled" }));
+  render(
+    <StudioFlow
+      bridge={bridge({
+        session: () => Promise.resolve({ drafts: ["draft"], generations: { draft: "retained" } }),
+        readDraft: () => Promise.resolve({ ...release("", 1), generationStatus: "requested" }),
+        cancelGeneration: cancel,
+        phase: () => Promise.resolve({ receipt: true, phase: "running" }),
+      })}
+      models={[{ slug: "demo", displayName: "Demo model" }]}
+      model="demo"
+      selectModel={() => Promise.resolve()}
+      signOut={signOut}
+      onNotice={notice}
+    />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: /Portal 2.4/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+  await waitFor(() => {
+    expect(cancel).toHaveBeenCalledWith("draft", "retained");
+  });
+  await waitFor(() => {
+    expect(notice).toHaveBeenCalled();
+  });
+  expect(signOut).not.toHaveBeenCalled();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Sign out" }).disabled).toBe(false);
+});

@@ -136,7 +136,7 @@ uses the same API and cancels after it handles its post's outcome.
 <!-- docs-snippet-path: examples/message-board/web/src/post-form.tsx -->
 
 ```ts
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { Client, type Subscription } from "@spine-event-engine/client-web";
 import {
   PostMessageSchema,
@@ -173,8 +173,8 @@ async function receiveUpdates(subscription: Subscription): Promise<void> {
     if (delivery.kind !== "update" || delivery.update.update.case !== "eventUpdates") continue;
     for (const event of delivery.update.update.value.event) {
       if (event.message === undefined) continue;
-      const posted = AnyMessages.unpack(event.message, MessagePostedSchema);
-      const rejected = AnyMessages.unpack(event.message, MessageAlreadyPostedSchema);
+      const posted = AnyPacker.tryUnpack(event.message, MessagePostedSchema);
+      const rejected = AnyPacker.tryUnpack(event.message, MessageAlreadyPostedSchema);
       if (posted !== undefined) console.info("Message posted:", posted.text);
       if (rejected !== undefined) console.info("Message was already posted:", rejected.id);
     }

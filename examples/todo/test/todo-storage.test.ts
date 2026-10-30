@@ -20,35 +20,21 @@ const calls = vi.hoisted(() => {
   const mysqlBuilder = {
     build: vi.fn(() => Promise.resolve(mysqlFactory)),
     setOptions: vi.fn(),
-    setStringifierRegistry: vi.fn(),
   };
   const postgresqlBuilder = {
     build: vi.fn(() => Promise.resolve(postgresqlFactory)),
     setOptions: vi.fn(),
-    setStringifierRegistry: vi.fn(),
   };
   mysqlBuilder.setOptions.mockReturnValue(mysqlBuilder);
-  mysqlBuilder.setStringifierRegistry.mockReturnValue(mysqlBuilder);
   postgresqlBuilder.setOptions.mockReturnValue(postgresqlBuilder);
-  postgresqlBuilder.setStringifierRegistry.mockReturnValue(postgresqlBuilder);
-  const typeRegistry = {};
-  const stringifiers = { setTypeRegistry: vi.fn() };
   return {
     mysqlBuilder,
     mysqlFactory,
     postgresqlBuilder,
     postgresqlFactory,
-    stringifiers,
-    typeRegistry,
   };
 });
 
-vi.mock("@spine-event-engine/core", () => ({
-  StringifierRegistry: vi.fn(function StringifierRegistry() {
-    return calls.stringifiers;
-  }),
-  TypeRegistry: { from: vi.fn(() => calls.typeRegistry) },
-}));
 vi.mock("@spine-event-engine/storage-mysql", () => ({
   MysqlStorageFactory: { newBuilder: vi.fn(() => calls.mysqlBuilder) },
 }));
@@ -64,7 +50,7 @@ describe("To-Do single-process storage selection", () => {
     await expect(TodoStorage.select({})).resolves.toBeUndefined();
   });
 
-  it("builds MySQL storage with Todo message stringifiers", async () => {
+  it("builds MySQL storage with the selected connection", async () => {
     await expect(
       TodoStorage.select({ TODO_MYSQL_URL: "mysql://todo.example/todo", TODO_STORAGE: "mysql" }),
     ).resolves.toBe(calls.mysqlFactory);
@@ -72,11 +58,10 @@ describe("To-Do single-process storage selection", () => {
     expect(calls.mysqlBuilder.setOptions).toHaveBeenCalledWith({
       url: "mysql://todo.example/todo",
     });
-    expect(calls.mysqlBuilder.setStringifierRegistry).toHaveBeenCalledWith(calls.stringifiers);
-    expect(calls.stringifiers.setTypeRegistry).toHaveBeenCalledWith(calls.typeRegistry);
+    expect(calls.mysqlBuilder.build).toHaveBeenCalledOnce();
   });
 
-  it("builds PostgreSQL storage with Todo message stringifiers", async () => {
+  it("builds PostgreSQL storage with the selected connection", async () => {
     await expect(
       TodoStorage.select({
         TODO_POSTGRESQL_URL: "postgresql://todo.example/todo",
@@ -87,7 +72,7 @@ describe("To-Do single-process storage selection", () => {
     expect(calls.postgresqlBuilder.setOptions).toHaveBeenCalledWith({
       url: "postgresql://todo.example/todo",
     });
-    expect(calls.postgresqlBuilder.setStringifierRegistry).toHaveBeenCalledWith(calls.stringifiers);
+    expect(calls.postgresqlBuilder.build).toHaveBeenCalledOnce();
   });
 
   it.each([

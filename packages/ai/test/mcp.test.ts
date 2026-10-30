@@ -42,7 +42,6 @@ const limits = {
   deadlineMs: 1000,
   totalInputBytes: 100,
   totalOutputBytes: 100,
-  maxRecoveryBytes: 100,
 };
 
 describe("MCP connection and authorization configuration", () => {

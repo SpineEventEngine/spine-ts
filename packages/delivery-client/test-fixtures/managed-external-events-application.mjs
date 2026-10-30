@@ -64,6 +64,7 @@ if (isManagedChild) {
   process.env.NODE_ENV = "production";
   ServerEnvironment.when(EnvironmentType.Production).use({
     delivery,
+    deliveryStrategy: strategy,
     storageFactory: new InMemoryStorageFactory(),
     typeRegistry: new TypeRegistry([ProjectCreatedSchema]),
   });
@@ -75,22 +76,21 @@ const managed = await ManagedServerApplication.run({
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
     const registry = await generatedRegistryRoot();
+    await ServerEnvironment.instance().completeSetup();
     const server = Server.atPort(port, { host });
     server.add(
       await createManagedProjectContext({
-        deliveryStrategy: strategy,
         subscriptionRegistry: new InMemorySubscriptionRegistry(),
       }),
     );
     server.add(
       await BoundedContext.singleTenant("ExternalProjects")
         .withGeneratedRegistryRoot(registry.root)
-        .withDeliveryStrategy(strategy)
         .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
         .add(ExternalProjectProjection, {
           eventRouting: EventRouting.create().route(ProjectCreatedSchema, (event) => [event.id]),
         })
-        .buildAsync(),
+        .build(),
     );
     const thirdParty = await ThirdPartyContext.singleTenant("T0210ThirdParty");
     const running = await server.start();
@@ -114,6 +114,7 @@ const managed = await ManagedServerApplication.run({
         }),
         create(UserIdSchema, { value: "t0210-third-party" }),
       );
+      await writeFile(join(thirdPartyDirectory, "third-party-complete"), "");
     };
     timer = setInterval(() => {
       void importThirdParty();

@@ -15,7 +15,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
@@ -112,7 +112,7 @@ describe.each(providers)("$name Inbox status lists", ({ name, url }) => {
           ).map((message) => message.id.value),
         ).toEqual(["status-2"]);
       } finally {
-        factory.close();
+        await factory.close();
       }
     },
   );
@@ -123,7 +123,7 @@ function statusMessage(index: number, status: DeliveryStatus, shard: ShardIndex)
   const eventId = create(EventIdSchema, { value: `event-${String(index)}` });
   const event = create(EventSchema, {
     id: eventId,
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(TaskIdSchema, { value: `task-${String(index)}` }),
@@ -135,11 +135,11 @@ function statusMessage(index: number, status: DeliveryStatus, shard: ShardIndex)
   return {
     id: { value: `status-${String(index)}`, shard },
     inboxId: {
-      targetId: AnyMessages.pack(TaskListIdSchema, taskListId),
+      targetId: AnyPacker.pack(TaskListIdSchema, taskListId),
       targetTypeUrl: TypeUrls.derive(TaskListSchema),
     },
     signalId: eventId.value,
-    signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+    signal: AnyPacker.pack(EventSchema, event),
     label: "UPDATE_SUBSCRIBER",
     status,
     shard,

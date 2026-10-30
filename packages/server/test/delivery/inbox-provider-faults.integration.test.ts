@@ -15,7 +15,7 @@
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { create } from "@bufbuild/protobuf";
-import { AnyMessages, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyPacker, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { InboxMessageSchema, ShardSessionRecordSchema } from "@spine-event-engine/proto/delivery";
 import { type StorageFactory } from "@spine-event-engine/storage";
 import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
@@ -93,7 +93,7 @@ describe("live SQL Inbox delivery faults", () => {
       const unrelated = {
         ...createMessage(`unrelated-${randomUUID()}`, `event-${randomUUID()}`, 2n),
         inboxId: {
-          targetId: AnyMessages.pack(
+          targetId: AnyPacker.pack(
             TaskListIdSchema,
             create(TaskListIdSchema, { value: "other-task-list" }),
           ),
@@ -278,7 +278,7 @@ async function releaseSqlResources(options: {
 }): Promise<readonly unknown[]> {
   const failures: unknown[] = [];
   try {
-    options.factory?.close();
+    await options.factory?.close();
   } catch (error) {
     failures.push(error);
   }

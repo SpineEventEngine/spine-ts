@@ -22,7 +22,7 @@ import {
   Int64ValueSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventSchema,
@@ -113,7 +113,7 @@ describe("SubscriptionObservers", () => {
                     create(FilterSchema, {
                       fieldPath: { fieldName: ["priority"] },
                       operator: Filter_Operator.EQUAL,
-                      value: AnyMessages.pack(
+                      value: AnyPacker.pack(
                         Int32ValueSchema,
                         create(Int32ValueSchema, { value: 1 }),
                       ),
@@ -151,7 +151,7 @@ describe("SubscriptionObservers", () => {
       received[0]?.update.case === "entityUpdates" ? received[0].update.value.update[0] : undefined;
     expect(first?.kind.case).toBe("state");
     if (first?.kind.case === "state") {
-      expect(AnyMessages.unpack(first.kind.value, ProjectOverviewStateSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(first.kind.value, ProjectOverviewStateSchema)).toEqual(
         createState("task-1", "Open", 1),
       );
     }
@@ -186,7 +186,7 @@ describe("SubscriptionObservers", () => {
                       create(FilterSchema, {
                         fieldPath: { fieldName: ["priority"] },
                         operator: Filter_Operator.EQUAL,
-                        value: AnyMessages.pack(
+                        value: AnyPacker.pack(
                           Int32ValueSchema,
                           create(Int32ValueSchema, { value: 5 }),
                         ),
@@ -213,7 +213,7 @@ describe("SubscriptionObservers", () => {
     const update =
       received[0]?.update.case === "entityUpdates" ? received[0].update.value.update[0] : undefined;
     if (update?.kind.case !== "state") throw new Error("Expected an entity state update.");
-    expect(AnyMessages.unpack(update.kind.value, ProjectOverviewStateSchema)).toEqual(
+    expect(AnyPacker.tryUnpack(update.kind.value, ProjectOverviewStateSchema)).toEqual(
       createState("task-either", "Priority match", 5),
     );
     observer?.unsubscribe();
@@ -227,7 +227,7 @@ describe("SubscriptionObservers", () => {
       create(FilterSchema, {
         fieldPath: { fieldName: ["priority"] },
         operator: Filter_Operator.GREATER_THAN,
-        value: AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
+        value: AnyPacker.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
       }),
       create(FilterSchema, {
         fieldPath: { fieldName: ["priority"] },
@@ -294,17 +294,12 @@ describe("SubscriptionObservers", () => {
 
     for (const { schema, value } of cases) {
       const state = create(schema, { value } as never);
-      await postObservedStateChange(
-        bus,
-        schema,
-        state,
-        AnyMessages.pack(schema, state, { validate: false }),
-      );
+      await postObservedStateChange(bus, schema, state, AnyPacker.pack(schema, state));
     }
 
     expect(received).toHaveLength(cases.length);
     for (const [index, { value, rendered }] of cases.entries()) {
-      expect(AnyMessages.unpack(entityUpdateId(received[index]), rendered)?.value).toEqual(value);
+      expect(AnyPacker.tryUnpack(entityUpdateId(received[index]), rendered)?.value).toEqual(value);
     }
     observers.forEach((observer) => observer?.unsubscribe());
     await bus.close();
@@ -321,11 +316,11 @@ describe("SubscriptionObservers", () => {
       typeUrl: anyId.typeUrl,
       value: new Uint8Array([1, 3]),
     });
-    const bytesId = AnyMessages.pack(
+    const bytesId = AnyPacker.pack(
       BytesValueSchema,
       create(BytesValueSchema, { value: new Uint8Array([4, 5]) }),
     );
-    const otherBytesId = AnyMessages.pack(
+    const otherBytesId = AnyPacker.pack(
       BytesValueSchema,
       create(BytesValueSchema, { value: new Uint8Array([4, 6]) }),
     );
@@ -380,7 +375,7 @@ describe("SubscriptionObservers", () => {
     await bus.post(
       create(EventSchema, {
         id: { value: "wrong-type" },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           EntityLog.EntityStateChangedSchema,
           create(EntityLog.EntityStateChangedSchema, {
             entity: { id: packString("task-1"), typeUrl: TypeUrls.derive(StringValueSchema) },
@@ -389,7 +384,6 @@ describe("SubscriptionObservers", () => {
               { id: packString("wrong-type"), typeUrl: TypeUrls.derive(StringValueSchema) },
             ],
           }),
-          { validate: false },
         ),
         context: tenantContext("tenant-a"),
       }),
@@ -398,10 +392,9 @@ describe("SubscriptionObservers", () => {
       bus.post(
         create(EventSchema, {
           id: { value: "malformed" },
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             EntityLog.EntityStateChangedSchema,
             create(EntityLog.EntityStateChangedSchema),
-            { validate: false },
           ),
           context: tenantContext("tenant-a"),
         }),
@@ -426,7 +419,7 @@ describe("SubscriptionObservers", () => {
     await bus.post(
       create(EventSchema, {
         id: { value: "archived" },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           EntityLog.EntityArchivedSchema,
           create(EntityLog.EntityArchivedSchema, {
             entity: {
@@ -437,19 +430,18 @@ describe("SubscriptionObservers", () => {
               { id: packString("archive-signal"), typeUrl: TypeUrls.derive(StringValueSchema) },
             ],
             version: { number: 1 },
-            lastState: AnyMessages.pack(
+            lastState: AnyPacker.pack(
               ProjectOverviewStateSchema,
               createState("task-archived", "Archived", 1),
             ),
           }),
-          { validate: false },
         ),
       }),
     );
     await bus.post(
       create(EventSchema, {
         id: { value: "deleted" },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           EntityLog.EntityDeletedSchema,
           create(EntityLog.EntityDeletedSchema, {
             entity: {
@@ -461,12 +453,11 @@ describe("SubscriptionObservers", () => {
             ],
             version: { number: 1 },
             deletion: { case: "markedAsDeleted", value: true },
-            lastState: AnyMessages.pack(
+            lastState: AnyPacker.pack(
               ProjectOverviewStateSchema,
               createState("task-deleted", "Deleted", 1),
             ),
           }),
-          { validate: false },
         ),
       }),
     );
@@ -501,7 +492,7 @@ describe("SubscriptionObservers", () => {
       await bus.post(
         create(EventSchema, {
           id: { value: id },
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             schema,
             create(schema, {
               entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectOverviewStateSchema) },
@@ -509,9 +500,8 @@ describe("SubscriptionObservers", () => {
                 { id: packString(`${id}-signal`), typeUrl: TypeUrls.derive(StringValueSchema) },
               ],
               version: { number: 2 },
-              state: AnyMessages.pack(ProjectOverviewStateSchema, createState(id, id, 1)),
+              state: AnyPacker.pack(ProjectOverviewStateSchema, createState(id, id, 1)),
             }),
-            { validate: false },
           ),
         }),
       );
@@ -549,7 +539,7 @@ describe("SubscriptionObservers", () => {
         create(EventSchema, {
           id: { value: tenant },
           context: tenantContext(tenant),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             EntityLog.EntityArchivedSchema,
             create(EntityLog.EntityArchivedSchema, {
               entity: {
@@ -558,18 +548,14 @@ describe("SubscriptionObservers", () => {
               },
               signalId: [{ id: packString(tenant), typeUrl: TypeUrls.derive(StringValueSchema) }],
               version: { number: 1 },
-              lastState: AnyMessages.pack(
-                ProjectOverviewStateSchema,
-                createState(tenant, tenant, 1),
-              ),
+              lastState: AnyPacker.pack(ProjectOverviewStateSchema, createState(tenant, tenant, 1)),
             }),
-            { validate: false },
           ),
         }),
       );
     }
     expect(received).toHaveLength(1);
-    expect(AnyMessages.unpack(entityUpdateId(received[0]), StringValueSchema)?.value).toBe(
+    expect(AnyPacker.tryUnpack(entityUpdateId(received[0]), StringValueSchema)?.value).toBe(
       "tenant-a",
     );
     observer?.unsubscribe();
@@ -588,7 +574,7 @@ describe("SubscriptionObservers", () => {
     await bus.post(
       create(EventSchema, {
         id: { value: "archive-filter" },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           EntityLog.EntityArchivedSchema,
           create(EntityLog.EntityArchivedSchema, {
             entity: {
@@ -597,12 +583,11 @@ describe("SubscriptionObservers", () => {
             },
             signalId: [{ id: packString("signal"), typeUrl: TypeUrls.derive(StringValueSchema) }],
             version: { number: 1 },
-            lastState: AnyMessages.pack(
+            lastState: AnyPacker.pack(
               ProjectOverviewStateSchema,
               createState("archived-id", "Archived", 1),
             ),
           }),
-          { validate: false },
         ),
       }),
     );
@@ -629,15 +614,14 @@ describe("SubscriptionObservers", () => {
       await bus.post(
         create(EventSchema, {
           id: { value: `${id}-${schema.typeName}` },
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             schema,
             create(schema, {
               entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectOverviewStateSchema) },
               signalId: [{ id: packString(id), typeUrl: TypeUrls.derive(StringValueSchema) }],
               version: { number: 1 },
-              state: AnyMessages.pack(ProjectOverviewStateSchema, createState(id, id, 1)),
+              state: AnyPacker.pack(ProjectOverviewStateSchema, createState(id, id, 1)),
             }),
-            { validate: false },
           ),
         }),
       );
@@ -645,7 +629,7 @@ describe("SubscriptionObservers", () => {
     expect(received).toHaveLength(2);
     expect(
       received.map(
-        (update) => AnyMessages.unpack(entityUpdateId(update), StringValueSchema)?.value,
+        (update) => AnyPacker.tryUnpack(entityUpdateId(update), StringValueSchema)?.value,
       ),
     ).toEqual(["match", "match"]);
     observer?.unsubscribe();
@@ -671,9 +655,7 @@ describe("SubscriptionObservers", () => {
     );
     const source = create(EventSchema, {
       id: { value: "rejected-event" },
-      message: AnyMessages.pack(ProjectOverviewStateSchema, createState("task-1", "Event", 1), {
-        validate: false,
-      }),
+      message: AnyPacker.pack(ProjectOverviewStateSchema, createState("task-1", "Event", 1)),
       context: create(EventContextSchema, {
         ...tenantContext("tenant-a"),
         rejection: create(RejectionEventContextSchema, {
@@ -687,12 +669,9 @@ describe("SubscriptionObservers", () => {
     await bus.post(
       create(EventSchema, {
         id: { value: "wrong-tenant-event" },
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           ProjectOverviewStateSchema,
           createState("task-1", "Wrong tenant", 1),
-          {
-            validate: false,
-          },
         ),
         context: tenantContext("tenant-b"),
       }),
@@ -811,7 +790,7 @@ function subscriptionFor(schema: MessageSchema) {
   });
 }
 
-function filteredSubscription(schema: MessageSchema, id: ReturnType<typeof AnyMessages.pack>) {
+function filteredSubscription(schema: MessageSchema, id: ReturnType<typeof AnyPacker.pack>) {
   return create(SubscriptionSchema, {
     topic: {
       target: {
@@ -830,7 +809,7 @@ function createState(id: string, name: string, priority: number): ProjectOvervie
 }
 
 function packString(value: string) {
-  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }));
+  return AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value }));
 }
 
 function tenantContext(tenantId: string) {
@@ -857,9 +836,7 @@ async function postProjectionEvent(
   await bus.post(
     create(EventSchema, {
       id: { value: id },
-      message: AnyMessages.pack(ProjectOverviewStateSchema, createState(id, "Event", 1), {
-        validate: false,
-      }),
+      message: AnyPacker.pack(ProjectOverviewStateSchema, createState(id, "Event", 1)),
       context,
     }),
   );
@@ -869,16 +846,16 @@ async function postObservedStateChange(
   bus: EventBus,
   schema: MessageSchema,
   state: Message,
-  id: ReturnType<typeof AnyMessages.pack>,
+  id: ReturnType<typeof AnyPacker.pack>,
 ): Promise<void> {
   await bus.post(
     create(EventSchema, {
       id: { value: `scalar-state-${String(++eventSequence)}` },
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         EntityLog.EntityStateChangedSchema,
         create(EntityLog.EntityStateChangedSchema, {
           entity: { id, typeUrl: TypeUrls.derive(schema) },
-          newState: AnyMessages.pack(schema, state, { validate: false }),
+          newState: AnyPacker.pack(schema, state),
           signalId: [
             {
               id: packString(`scalar-signal-${String(eventSequence)}`),
@@ -886,7 +863,6 @@ async function postObservedStateChange(
             },
           ],
         }),
-        { validate: false },
       ),
     }),
   );
@@ -901,14 +877,14 @@ async function postStateChange(
   await bus.post(
     create(EventSchema, {
       id: { value: `state-change-${String(++eventSequence)}` },
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         EntityLog.EntityStateChangedSchema,
         create(EntityLog.EntityStateChangedSchema, {
           entity: {
             id: packString(state.id),
             typeUrl: TypeUrls.derive(ProjectOverviewStateSchema),
           },
-          newState: AnyMessages.pack(ProjectOverviewStateSchema, state, { validate: false }),
+          newState: AnyPacker.pack(ProjectOverviewStateSchema, state),
           signalId: [
             {
               id: packString(`signal-${String(eventSequence)}`),
@@ -918,12 +894,9 @@ async function postStateChange(
           ...(previousState === undefined
             ? {}
             : {
-                oldState: AnyMessages.pack(ProjectOverviewStateSchema, previousState, {
-                  validate: false,
-                }),
+                oldState: AnyPacker.pack(ProjectOverviewStateSchema, previousState),
               }),
         }),
-        { validate: false },
       ),
       ...(tenantId === undefined ? {} : { context: tenantContext(tenantId) }),
     }),

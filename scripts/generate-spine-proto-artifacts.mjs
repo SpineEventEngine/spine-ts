@@ -53,6 +53,7 @@ export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput
       'import type { Message } from "@bufbuild/protobuf";',
       'import type { GenMessage } from "@bufbuild/protobuf/codegenv2";',
       'import type { ProtoModule } from "../src/model/proto-module.js";',
+      'import { registerProtoModule } from "../src/codegen/proto-module-inventory.js";',
       ...generatedFiles.map(
         (path, index) =>
           `import * as schemas${String(index)} from ${JSON.stringify(`./${path.replace(/\.ts$/, ".js")}`)};`,
@@ -70,11 +71,11 @@ export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput
       "].sort((left, right) => left.typeName < right.typeName ? -1 : left.typeName > right.typeName ? 1 : 0));",
       "",
       "/** All Spine schemas shipped by `@spine-event-engine/proto`. */",
-      `export const ${config.moduleExport}: ProtoModule = Object.freeze({`,
+      `export const ${config.moduleExport}: ProtoModule = registerProtoModule(Object.freeze({`,
       `  name: ${JSON.stringify(packageJson.name)},`,
       "  schemas,",
       "  dependencies: Object.freeze([]),",
-      "});",
+      "}));",
       "",
     ].join("\n"),
     protoFiles,

@@ -32,6 +32,11 @@ is supported for low-level generated schema subpaths. `./proto/*`,
 `spine-proto-manifest.json`, and the model metadata files are package assets
 used by model generation.
 
+`@spine-event-engine/proto/codegen` exports `registerProtoModule` and
+`registeredProtoModules` for generated module initialization. Importing a
+generated `proto-module.js` registers its descriptors and declared dependencies
+for the shared default stringifier registry.
+
 Generated wildcard paths also contain internal `spine/system/server` schemas
 used by the server runtime. They are intentionally absent from the root and
 named public subpaths: application code must not depend on them as a stable
@@ -49,6 +54,9 @@ name, source/generated/export roots, direct model dependencies, and a module
 export name. It must list `@spine-event-engine/proto` as both a runtime package
 dependency and a model dependency when it imports Spine definitions. The
 generator validates package identity and paths before replacing output.
+When a model package declares restrictive `sideEffects` metadata, it must
+retain the published runtime `proto-module.js` path so imports execute its
+descriptor registration.
 
 `spineProtoModule` is a `ProtoModule`: it identifies the package, lists its
 schemas, and declares dependencies. Application registries compose model

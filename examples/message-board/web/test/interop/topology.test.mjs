@@ -9,7 +9,7 @@ import {
   create,
   toBinary,
 } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/index.js";
-import { AnyMessages, TypeUrls } from "../../../../../packages/core/dist/index.js";
+import { AnyPacker, TypeUrls } from "../../../../../packages/core/dist/index.js";
 import { TimestampSchema } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/wkt/gen/google/protobuf/timestamp_pb.js";
 import {
   CommandSchema,
@@ -55,7 +55,7 @@ test("routes credential-free gRPC-Web commands, queries, and subscriptions throu
       create(CommandSchema, {
         id: create(CommandIdSchema, { uuid: "interop-command-1" }),
         context: create(CommandContextSchema, { actorContext: context }),
-        message: AnyMessages.pack(
+        message: AnyPacker.pack(
           PostMessageSchema,
           create(PostMessageSchema, {
             id: create(MessageIdSchema, { value: "interop-1" }),
@@ -82,7 +82,7 @@ test("routes credential-free gRPC-Web commands, queries, and subscriptions throu
                   create(FilterSchema, {
                     fieldPath: { fieldName: ["board"] },
                     operator: Filter_Operator.EQUAL,
-                    value: AnyMessages.pack(
+                    value: AnyPacker.pack(
                       BoardIdSchema,
                       create(BoardIdSchema, { value: "general" }),
                     ),
@@ -120,7 +120,7 @@ test("routes credential-free gRPC-Web commands, queries, and subscriptions throu
         create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: `interop-command-${probe}` }),
           context: create(CommandContextSchema, { actorContext: context }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             PostMessageSchema,
             create(PostMessageSchema, {
               id: create(MessageIdSchema, { value: `interop-${probe}` }),
@@ -224,7 +224,7 @@ test("keeps a direct native passive subscription alive for three sequential writ
                   create(FilterSchema, {
                     fieldPath: { fieldName: ["board"] },
                     operator: Filter_Operator.EQUAL,
-                    value: AnyMessages.pack(
+                    value: AnyPacker.pack(
                       BoardIdSchema,
                       create(BoardIdSchema, { value: "general" }),
                     ),
@@ -251,7 +251,7 @@ test("keeps a direct native passive subscription alive for three sequential writ
         create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: `native-passive-command-${updateNumber}` }),
           context: create(CommandContextSchema, { actorContext: context }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             PostMessageSchema,
             create(PostMessageSchema, {
               id: create(MessageIdSchema, { value: `native-passive-${updateNumber}` }),

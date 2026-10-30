@@ -947,23 +947,22 @@ const recoverGeneration = async (
 const useWritingPoll = (state: FlowState, config: FlowConfig): void => {
   const acceptedGeneration = state.draft && state.session.generations[state.draft.id];
   useEffect(() => {
-    if (
-      state.page !== "writing" ||
-      !state.draft ||
-      !acceptedGeneration ||
-      state.draft.generationStatus.startsWith("failed:") ||
-      state.draft.generationStatus === "canceled"
-    )
-      return;
+    if (!writingPollRequired(state, acceptedGeneration)) return;
     const draftId = state.draft.id;
-    let current = true;
+    const active = { current: true };
     const poll = async () => {
       try {
         const latest = await config.bridge.readDraft(draftId);
-        if (!current) return;
+        if (!active.current) return;
         applyGenerationSnapshot(state, latest);
+        if (latest.generationStatus === "requested" && state.generation.current) {
+          const observation = await config.bridge.phase(state.generation.current);
+          // The effect cleanup may run while the phase request is pending.
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          if (active.current) applyTerminalObservation(state, observation.phase);
+        }
       } catch (error) {
-        if (current) state.report(error, "Could not check writing progress.");
+        if (active.current) state.report(error, "Could not check writing progress.");
       }
     };
     void poll();
@@ -971,10 +970,29 @@ const useWritingPoll = (state: FlowState, config: FlowConfig): void => {
       void poll();
     }, 900);
     return () => {
-      current = false;
+      active.current = false;
       clearInterval(timer);
     };
   }, [state.page, state.draft?.id, state.draft?.generationStatus, acceptedGeneration]);
+};
+
+/**
+ * Returns whether an accepted generation still needs a writing update.
+ */
+const writingPollRequired = (
+  state: FlowState,
+  generation: string | undefined,
+): state is FlowState & { draft: Draft } =>
+  state.page === "writing" &&
+  state.draft !== undefined &&
+  generation !== undefined &&
+  !state.draft.generationStatus.startsWith("failed:") &&
+  state.draft.generationStatus !== "canceled";
+
+const applyTerminalObservation = (state: FlowState, phase: string | undefined): void => {
+  if (phase === "terminated") state.setWritingStatus("Writing was denied. Try again.");
+  else if (phase === "completed")
+    state.setWritingStatus("Writing finished; waiting for the draft to update.");
 };
 
 const applyGenerationSnapshot = (state: FlowState, latest: Draft): void => {
@@ -1022,11 +1040,9 @@ const exportCurrent = async (state: FlowState, config: FlowConfig): Promise<void
 
 const awaitGenerationFence = async (state: FlowState, config: FlowConfig): Promise<void> => {
   if (!state.generation.current) return;
-  for (;;) {
-    const observation = await config.bridge.phase(state.generation.current);
-    if (observation.phase === "completed" || observation.phase === "terminated") return;
-    await new Promise((done) => setTimeout(done, 1_000));
-  }
+  const observation = await config.bridge.phase(state.generation.current);
+  if (observation.phase === "completed" || observation.phase === "terminated") return;
+  throw new Error("Writing is still in progress. Close the studio to stop it before signing out.");
 };
 
 const signOutSafely = async (state: FlowState, config: FlowConfig): Promise<void> => {

@@ -112,7 +112,7 @@ message AiContentDigest {
   ];
 }
 
-// Identifies one logical tool call and its recovery record.
+// Identifies one logical tool call in a running Agent invocation.
 message AiToolCallId {
   // Spine-assigned ID, distinct from an MCP request ID.
   string value = 1 [(required) = true];

@@ -12,8 +12,9 @@
  * the License.
  */
 
-import { fromBinary } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker } from "@spine-event-engine/core";
 import { BoundedContext, EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -30,16 +31,17 @@ describe("Wave 13 broker lifecycle", () => {
     async () => {
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
+    await ServerEnvironment.instance().completeSetup();
     const first = await BoundedContext.singleTenant(`Wave13LifecycleA${crypto.randomUUID()}`)
       .addEventDispatcher({
         messageSchemas: () => [StringValueSchema],
         externalEventSchemas: () => [StringValueSchema],
         dispatch: () => Promise.resolve(),
       })
-      .buildAsync();
+      .build();
     const second = await BoundedContext.singleTenant(
       `Wave13LifecycleB${crypto.randomUUID()}`,
-    ).buildAsync();
+    ).build();
     const environment = ServerEnvironment.instance() as unknown as {
       integrationChannelFactory: unknown;
     };
@@ -97,6 +99,6 @@ async function decodedWanted(
       original.value === undefined
     )
       return [];
-    return [fromBinary(ExternalEventsWantedSchema, original.value)];
+    return [AnyPacker.unpack(create(AnySchema, original), ExternalEventsWantedSchema)];
   });
 }

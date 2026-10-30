@@ -24,11 +24,10 @@ import {
   ProcessManager,
   Projection,
   Repository,
-  UniformAcrossAllShards,
+  type BoundedContextBuildOptions,
   type EntityHandlersMetadata,
 } from "@spine-event-engine/server";
 import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
-import type { StorageFactory } from "@spine-event-engine/storage";
 
 import {
   CreateProjectSchema,
@@ -180,16 +179,14 @@ function handlersFor<Instance extends object, Schema extends GenMessage<Message>
  *
  * @param name Names this diagnostic context.
  * @param onEntry Records each actual handler entry and may hold a selected handler before its effect.
- * @param storageFactory Persists records in the selected test database.
- * @param shards Selects the delivery shard count.
+ * @param options Selects tenant mode and build preparation for native integration tests.
  * @returns The configured bounded context.
  */
 export function projectWorkflow(
   name: string,
   onEntry: (entry: ProjectHandlerEntry) => void | Promise<void>,
-  storageFactory?: StorageFactory,
-  shards = 1,
-): BoundedContext {
+  options: { readonly multitenant?: boolean; readonly build?: BoundedContextBuildOptions } = {},
+): Promise<BoundedContext> {
   const recordEntry = onEntry;
 
   /**
@@ -375,8 +372,9 @@ export function projectWorkflow(
     ],
   };
   const generated = new HandlerRegistryIngestor().ingest(receivers);
-  const builder = BoundedContext.singleTenant(name)
-    .withDeliveryStrategy(UniformAcrossAllShards.forNumber(shards))
+  const builder = (
+    options.multitenant ? BoundedContext.multitenant(name) : BoundedContext.singleTenant(name)
+  )
     .add(
       new Repository({
         entityType: Project,
@@ -442,6 +440,5 @@ export function projectWorkflow(
         ),
       }),
     );
-  if (storageFactory !== undefined) builder.withStorageFactory(storageFactory);
-  return builder.build();
+  return builder.build(options.build);
 }

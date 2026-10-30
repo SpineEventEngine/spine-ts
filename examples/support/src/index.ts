@@ -19,7 +19,9 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
+  EnvironmentType,
   Projection,
+  ServerEnvironment,
   Subscribe,
 } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
@@ -159,18 +161,19 @@ export const SupportContext: Readonly<{
    * @returns Built support Bounded Context with Agent audit retention.
    */
   async create(ai: AiRegistry, storage?: StorageFactory): Promise<BoundedContext> {
+    if (storage !== undefined)
+      ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: storage });
+    await ServerEnvironment.instance().completeSetup();
     const builder = BoundedContext.singleTenant("WarehouseSupport")
       .withGeneratedRegistryRoot(new URL("..", import.meta.url))
       .withAi(ai)
       .persistSystemEvents()
       .add(SupportTicket)
       .add(SupportDraftAgent, {
-        agentCodeRevision: "support-draft-v1",
         ai: { models: [draftSupportReply] },
       })
       .add(SupportReview);
-    if (storage !== undefined) builder.withStorageFactory(storage);
-    return builder.buildAsync();
+    return builder.build();
   },
 });
 

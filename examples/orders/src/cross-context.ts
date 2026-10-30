@@ -13,7 +13,13 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { BoundedContext, ProcessManager, React } from "@spine-event-engine/server";
+import {
+  BoundedContext,
+  EnvironmentType,
+  ProcessManager,
+  React,
+  ServerEnvironment,
+} from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 import { OrderAggregate, SkuAggregate, SkuCatalogProjection } from "./index.js";
@@ -78,18 +84,18 @@ export const OrderReviewContexts: Readonly<{
    */
   async create(storageFactory) {
     const registryRoot = new URL("..", import.meta.url);
+    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+    await ServerEnvironment.instance().completeSetup();
     const catalog = await BoundedContext.singleTenant("Catalog")
-      .withStorageFactory(storageFactory)
       .withGeneratedRegistryRoot(registryRoot)
       .add(SkuAggregate)
       .add(SkuCatalogProjection)
-      .buildAsync();
+      .build();
     const orders = await BoundedContext.singleTenant("Ordering")
-      .withStorageFactory(storageFactory)
       .withGeneratedRegistryRoot(registryRoot)
       .add(OrderAggregate)
       .add(OrderReview)
-      .buildAsync();
+      .build();
     return { catalog, orders };
   },
 });

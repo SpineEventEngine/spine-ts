@@ -21,7 +21,7 @@ import {
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { Time } from "@spine-event-engine/core/time";
 import {
   EventContextSchema,
@@ -210,10 +210,10 @@ describe("delivery codec and immutable snapshots", () => {
     const event = create(EventSchema, {
       id: eventId,
       context: create(EventContextSchema, {
-        producerId: AnyMessages.pack(TaskIdSchema, taskId),
+        producerId: AnyPacker.pack(TaskIdSchema, taskId),
         version: create(VersionSchema, { number: 1 }),
       }),
-      message: AnyMessages.pack(
+      message: AnyPacker.pack(
         TaskCreatedSchema,
         create(TaskCreatedSchema, { id: taskId, taskListId, title: "Task 1" }),
       ),
@@ -241,11 +241,11 @@ describe("delivery codec and immutable snapshots", () => {
                 label,
                 status,
                 signalId: eventId.value,
-                signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+                signal: AnyPacker.pack(EventSchema, event),
                 inboxId: {
                   targetId: subscriber
-                    ? AnyMessages.pack(TaskListIdSchema, taskListId)
-                    : AnyMessages.pack(TaskIdSchema, taskId),
+                    ? AnyPacker.pack(TaskListIdSchema, taskListId)
+                    : AnyPacker.pack(TaskIdSchema, taskId),
                   targetTypeUrl: TypeUrls.derive(subscriber ? TaskListSchema : TaskSchema),
                 },
               };

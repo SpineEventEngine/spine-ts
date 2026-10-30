@@ -16,7 +16,7 @@ import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import type { Event } from "@spine-event-engine/proto";
+import type { Event, EventId } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -31,12 +31,116 @@ import {
   RecordColumn,
   RecordSpec,
   StorageGroup,
-  type StorageFactory,
+  StorageFactory,
 } from "../../src/index.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
+import { StoragePreparations } from "../../src/internal/storage-preparation.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 
 describe("StorageFactory", () => {
+  it("checks memory connection without admitting a tenant or creating storage", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = {
+      name: "Tasks",
+      multitenant: true,
+      tenantId: tenant("value", "unseen"),
+    } as const;
+    const preparation = StoragePreparations.for(factory);
+
+    await expect(factory.checkConnection()).resolves.toBeUndefined();
+    await preparation.prepareRecord(context, createEventSpec(), undefined, "check");
+
+    await expect(factory.tenantCatalog().all()).resolves.toEqual([]);
+    await expect(factory.checkConnection()).resolves.toBeUndefined();
+  });
+
+  it("reuses compatible memory families and rejects an incompatible layout", async () => {
+    const factory = new InMemoryStorageFactory();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "Tasks", multitenant: false } as const;
+    const compatible = createEventSpec();
+    const incompatible = new RecordSpec<EventId, Event>({
+      sourceType: EventSchema,
+      recordType: EventSchema,
+      idSchema: EventIdSchema,
+      extractId: (event) => {
+        if (event.id === undefined) throw new Error("Expected event.id.");
+        return event.id;
+      },
+      columns: [
+        new RecordColumn<Event>(
+          "other",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (event) => event.id?.value,
+        ),
+      ],
+    });
+
+    await preparation.prepareRecord(context, compatible, undefined, "check");
+    await preparation.prepareRecord(context, createEventSpec(), undefined, "create");
+    expect(() => factory.createRecordStorage(context, incompatible)).toThrow(/incompatible/);
+    await expect(
+      preparation.prepareRecord(context, incompatible, undefined, "check"),
+    ).rejects.toThrow(/incompatible/);
+  });
+
+  it("accepts the same Event columns in a different declaration order", async () => {
+    const factory = new InMemoryStorageFactory();
+    const preparation = StoragePreparations.for(factory);
+    const context = { name: "Tasks", multitenant: false } as const;
+    const columns = [
+      new RecordColumn<Event>(
+        "typeUrl",
+        ColumnTypes.scalar(ScalarType.STRING),
+        (event) => event.message?.typeUrl,
+      ),
+      new RecordColumn<Event>(
+        "eventId",
+        ColumnTypes.scalar(ScalarType.STRING),
+        (event) => event.id?.value,
+      ),
+    ];
+    const spec = (ordered: typeof columns) =>
+      new RecordSpec<EventId, Event>({
+        recordType: EventSchema,
+        idSchema: EventIdSchema,
+        extractId: (event) => {
+          if (event.id === undefined) throw new Error("Expected event.id.");
+          return event.id;
+        },
+        columns: ordered,
+      });
+    await preparation.prepareRecord(context, spec(columns), undefined, "check");
+    await expect(
+      preparation.prepareRecord(context, spec([...columns].reverse()), undefined, "create"),
+    ).resolves.toBeUndefined();
+    expect(columns.map((column) => column.name)).toEqual(["typeUrl", "eventId"]);
+  });
+
+  it("rejects unsupported or closed preparation instead of reporting false success", async () => {
+    class UnsupportedFactory extends StorageFactory {
+      protected onCreateRecordStorage<
+        I,
+        R extends Message,
+      >(): import("../../src/record/record-storage.js").RecordStorage<I, R> {
+        throw new Error("No records");
+      }
+    }
+    const unsupported = new UnsupportedFactory();
+    await expect(unsupported.checkConnection()).rejects.toThrow(/does not support/);
+    expect(() => StoragePreparations.for(unsupported)).toThrow(/preparation/);
+    const memory = new InMemoryStorageFactory();
+    await memory.close();
+    await expect(memory.checkConnection()).rejects.toThrow(/closed/);
+    await expect(
+      StoragePreparations.for(memory).prepareRecord(
+        { name: "Tasks", multitenant: false },
+        createEventSpec(),
+        undefined,
+        "check",
+      ),
+    ).rejects.toThrow(/closed/);
+  });
   it("creates typed record storages through the JVM-like seam", () => {
     const factory: StorageFactory = new InMemoryStorageFactory();
     const spec = createEventSpec();
@@ -130,7 +234,7 @@ describe("StorageFactory", () => {
     const first = firstFactory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
     await first.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
 
-    firstFactory.close();
+    await firstFactory.close();
 
     const sibling = secondFactory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
     await expect(sibling.read(create(EventIdSchema, { value: "event-1" }))).resolves.toMatchObject({
@@ -273,11 +377,11 @@ describe("StorageFactory", () => {
     },
   );
 
-  it("rejects record storage creation after the factory closes", () => {
+  it("rejects record storage creation after the factory closes", async () => {
     const factory = new InMemoryStorageFactory();
     const spec = createEventSpec();
 
-    factory.close();
+    await factory.close();
 
     expect(factory.isOpen()).toBe(false);
     expect(() => factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec)).toThrow(
@@ -285,11 +389,11 @@ describe("StorageFactory", () => {
     );
   });
 
-  it("rejects internal entity and atomic commit storage creation after the factory closes", () => {
+  it("rejects internal entity and atomic commit storage creation after the factory closes", async () => {
     const factory = new InMemoryStorageFactory();
     const input = createEntityInput();
 
-    factory.close();
+    await factory.close();
 
     expect(() => factory.createEntityStorage(input)).toThrow(/closed/);
     expect(() => EntityCommitStorageFactories.create(factory, input)).toThrow(/closed/);

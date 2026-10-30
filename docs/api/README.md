@@ -216,8 +216,9 @@ rejected-command payload forms and throwable stack from
 best-effort: a publication failure is logged and does not change the client
 `Ack` or promise a retry.
 Core envelope construction exports include
-`AnyMessages.pack()`, `AnyMessages.unpack()`,
-`SignalEnvelopes.command()`, `SignalEnvelopes.event()`, `PackAnyOptions`, `PackCommandInput`, and
+`AnyPacker.pack()`, `AnyPacker.unpack()`, `AnyPacker.tryUnpack()`,
+`AnyPacker.unpackUsing()`, `AnyPacker.tryUnpackUsing()`,
+`SignalEnvelopes.command()`, `SignalEnvelopes.event()`, `SignalValidationOptions`, `PackCommandInput`, and
 `PackEventInput`.
 
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
@@ -245,9 +246,11 @@ including custom `addCommandDispatcher()` routes. For repository-backed
 aggregate dispatchers, validation still happens before route calculation,
 latest persisted state load, traceability event-journal append, latest-state
 write, or stored-event dispatch. Transition validation failures from the
-framework aggregate command transaction continue to surface as
+framework aggregate command transaction that escape service processing surface as
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details. Legacy/internal validation failures remain internal and are sanitized
+details. Managed reception of ordinary Entity work sends post-handler transition
+failures to `DeliveryMonitor`; its default action acknowledges the failed input
+without storing invalid state. Legacy/internal validation failures remain internal and are sanitized
 as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate loading uses the
 latest persisted state. Dispatcher-thrown `ValidationException` values and other unexpected
 command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
@@ -255,9 +258,9 @@ The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains an immutable framework value surfaced through
 `builder.spec` and `context.spec`; the builder collects command and event
-dispatchers; `withStorageFactory(factory)` selects the storage factory used for
-the context event store, repository state storage, and direct read-side stand;
-and `build()` returns a
+dispatchers; the explicitly configured `ServerEnvironment` supplies storage
+for the context event store, repository state storage, and direct read-side
+stand after `completeSetup()`; and `build()` returns a
 `BoundedContext` that contains mutable `CommandBus` and `EventBus` instances
 internally while exposing a post-only `CommandEndpoint` and an event
 listing/posting `EventEndpoint` through `commandBus()` and `eventBus()`, plus a
@@ -270,12 +273,13 @@ the context repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
-internal system-pairing metadata and a framework tenant index:
-single-tenant contexts list the built-in `SINGLE_TENANT` identity, and multitenant contexts use the
-configured provider's tenant catalog. MySQL enumerates configured
-tenant/database entries, Datastore enumerates native namespaces, and memory
-enumerates tenant slices; no generic `TenantId` record is persisted. These
-internals are not part of the end-user `BoundedContext` API. The full
+built-in system-pairing metadata and use the live `TenantIndex` selected by
+`ServerEnvironment`, or the builder's `withTenantIndex()` override. Both
+`environment.tenantIndex` and `context.tenantIndex` return that exact object.
+Single-tenant contexts do not register a synthetic directory member. A default
+provider catalog exposes explicit memory registrations, configured SQL tenants,
+or Datastore native namespaces; a custom factory without a catalog gets a
+transient in-memory index. No generic `TenantId` record is persisted. The full
 system-context runtime,
 command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
 broader JVM production runtime remain outside this public surface.
@@ -290,7 +294,7 @@ mutation or storage. Aggregate command completion resolves after traceability
 event-journal append and latest persisted state write. Later produced-signal
 publication is contained by the internal publisher and does not extend the
 `BoundedContext` API. Generated entity-class assembly creates default repositories
-through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
+through `add(EntityClass).withGeneratedRegistryRoot(root).build()`. This
 implementation does not invoke query handlers, run durable delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported durable inbox
 handoffs are framework process-manager command replay, live
@@ -330,10 +334,14 @@ it starts another scan only if it delivered messages during the completed scan.
 It stops after a scan with no deliveries, rather than returning to the beginning
 after every productive page. The 30-second Inbox
 deduplication window controls how long delivered rows remain available as
-duplicate evidence. It is not a replay-retention period; accepted rows follow
-their Inbox lifecycle and may be replayed after the duplicate window has elapsed.
-The framework persists no attempts, quarantine, receipts, markers, timers, backoff,
-dead-letter storage, or scheduler policy.
+duplicate evidence. It is not a replay-retention period; ordinary accepted rows
+follow their Inbox lifecycle and may be replayed after the duplicate window has
+elapsed. An accepted Agent interaction has a stored receipt and never resumes
+handler or model execution after interruption. The receipt survives process
+termination with persistent storage; memory storage retains it only within that
+process. Ordinary Delivery persists no
+attempts, quarantine, receipts, markers, timers, backoff, dead-letter storage,
+or scheduler policy.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
@@ -533,25 +541,25 @@ live streams durable: active streams and their bounded queues remain
 process-local and are not replayed after restart. `InMemorySubscriptionRegistry`
 is valid for development and tests. A context using it emits a warning only
 when attached to a production `ServerEnvironment`.
-`Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
-owner for hosting those routes over Node HTTP/2. `Environment`, `EnvironmentType`,
+`Server`, `ServerOptions`, and `RunningServer` host those routes over Node HTTP/2.
+`Environment`, `EnvironmentType`,
 `ServerEnvironment`, and `ServerEnvironmentSettings` select one process-wide
 storage, integration-channel, optional delivery, and optional tracing facility set through
-`ServerEnvironment.when(type).use(settings)`. `Server`
-accepts built contexts and `BoundedContextBuilder` values; builders added
-through `Server` use the environment storage factory unless
-`withStorageFactory()` already selected a more specific local factory.
+`ServerEnvironment.when(type).use(settings)`. Applications await
+`ServerEnvironment.instance().completeSetup()` before building contexts.
+`Server` accepts built contexts and `BoundedContextBuilder` values; all
+builders use the shared environment storage factory.
 `Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
 explicit through `ServerOptions`. All servers share the lazily resolved
-singleton; production configuration requires `storageFactory` and `typeRegistry`
-before first resolution, and production selection itself requires
-`NODE_ENV=production` before that first resolution. `RunningServer` exposes
+singleton; production configuration requires `typeRegistry` before first resolution.
+Without a configured `storageFactory`, the environment uses in-memory storage.
+Production selection requires `NODE_ENV=production` before first resolution. `RunningServer` exposes
 `host`, `port`, `baseUrl`, and
 idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
-closes service intake and drains accepted work, then detaches and
-quiesces environment delivery before closing contexts and explicit resources.
-Shared facilities remain open when a server closes. Network or context-intake
-close failure is a hard gate: delivery detach and dependency cleanup do not begin
+closes service intake, drains accepted work, then closes contexts and explicit
+resources. Shared Delivery remains available to sibling contexts until the
+environment closes. Network or context-intake close failure is a hard gate:
+context and dependency cleanup do not begin
 until a later `close()` retry completes that step. After the hard gate,
 remaining phases are attempted in order; failures are combined, and a later
 close retries only unfinished cleanup. The API deliberately hides private child
@@ -590,7 +598,7 @@ Standalone generated handlers extend one of `AbstractAssignee`,
 `AbstractCommander`, `AbstractEventReactor`, or `AbstractEventSubscriber`.
 Register an assignee with `addAssignee()`, a commander with
 `addCommandDispatcher()`, and reactors or subscribers with
-`addEventDispatcher()`, then call `buildAsync()` so the generated receiver
+`addEventDispatcher()`, then call `build()` so the generated receiver
 metadata can match the registered instance. Assignees consume Commands and
 produce Events; commanders may consume Commands, Events, or rejections and
 produce Commands; reactors consume Events or rejections and may produce Events;
@@ -663,7 +671,9 @@ rescan, while other shards continue. Other processes can each make a failed
 attempt before applying their local suppression. The interval is not a
 per-message delivery deadline.
 
-`DeliveryMonitor` handles endpoint failures. Its default reception action
+`DeliveryMonitor` handles ordinary Entity handler failures and post-handler
+output or transition validation failures. Accepted Agent work is acknowledged
+before its live handler and does not use this reception action. The default action
 marks the row delivered; a custom monitor may repeat failed processing.
 Any selected reception action that completes normally leads to delivered
 acknowledgement; a rejected action leaves the row `TO_DELIVER` and propagates.
@@ -753,15 +763,15 @@ generated registry assembly and framework materialization; it is not a
 public decorator form. `materializeDecoratedEntityHandlers()` remains a
 framework-only helper; application code must not call it.
 Ordinary generated assembly uses
-`await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).buildAsync()`.
+`await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).build()`.
 `withGeneratedRegistryRoot(root)` accepts a trusted compiled package/app root as
 a filesystem path, `URL`, or `file:` URL string. It rejects malformed URL
 strings, non-`file:` URL schemes, and `file:` aliases carrying query/hash
-suffixes, and it is required before `buildAsync()` can assemble entity classes
+suffixes, and it is required before `build()` can assemble entity classes
 from generated metadata. The builder loads the conventional generated registry
 module under that root, matches entity-class metadata, constructs default
-repositories, and keeps synchronous `build()` for explicit `add(repository)`
-assembly. The server registry exports
+repositories. The same asynchronous `build()` assembles explicit
+`add(repository)` registrations. The server registry exports
 include `HandlerMetadataRegistry`, `HandlerMetadataRegistryLookup`,
 `RegisteredHandlerMetadata`, and `HandlerMetadataRegistryError` for low-level
 lookup-only registration and duplicate-policy validation. These APIs are
@@ -832,6 +842,7 @@ import {
 import {
   BoundedContext,
   Command,
+  ServerEnvironment,
   type EntityHandlersMetadata,
   HandlerRegistryIngestor,
   ProcessManager,
@@ -895,7 +906,8 @@ const repository = new Repository({
   schema: CoordinationStateSchema,
   handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
 });
-const context = BoundedContext.singleTenant("Projects").add(repository).build();
+await ServerEnvironment.instance().completeSetup();
+const context = await BoundedContext.singleTenant("Projects").add(repository).build();
 await context.commandBus().post(
   SignalEnvelopes.command({
     context: create(CommandContextSchema),
@@ -909,7 +921,7 @@ Its generated registry record declares `ApproveProjectSchema` under `input` and
 `ScheduleProjectSchema` as a normal returned outcome. Declared rejection
 schemas, when present, appear separately under `outcomes.thrown`. Application builds emit that record
 to `generated/handler/generated-handler-registry.js`; those applications use
-`buildAsync()` with their compiled package root before Command Bus posting.
+`build()` with their compiled package root before Command Bus posting.
 The public `@spine-event-engine/server/spi/handler-registry` subpath is the
 generated-registry data-contract SPI. Generated source writes unversioned
 receiver records and rejects retired registry shapes. Generated registry source
@@ -922,7 +934,7 @@ package-internal entry point.
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
 URLs for framework/tooling paths. Application package builds run registry
 generation after Protobuf-ES generation and before `tsc`; normal context
-assembly lets `buildAsync()` load the compiled registry module from the explicit
+assembly lets `build()` load the compiled registry module from the explicit
 trusted package output tree passed to `withGeneratedRegistryRoot(root)`.
 Repository execution calls generated two-argument command assignees, command
 substitutions, event subscribers, command reactions, and event reactors with generated

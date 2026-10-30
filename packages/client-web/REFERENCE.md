@@ -30,6 +30,9 @@ during authoritative reads, including recovery after reconnect. Its target must 
 to the Topic target. The returned query response is delivered as `resynchronization` before held
 updates. For event subscriptions, reconnection reports `gapPossible`; events can be missing,
 duplicated, or differently ordered, and no replay, completeness, or cluster-complete guarantee is made.
+An RPC `NotFound` carrying a structured `spine.base.Error` detail with type
+`TENANT_UNKNOWN` ends the subscription without recovery attempts. Other transient
+transport failures retain the configured retry behavior.
 
 The defaults are 64 queued updates, 1,048,576 queued update bytes, 32 lifecycle notices, five retry attempts, and 30,000 milliseconds of elapsed recovery. Every capacity, retry value, scheduler value, and custom delay is a positive safe integer. The default retry delay starts at 250 milliseconds with bounded jitter, caps at 5,000 milliseconds, and never falls below one millisecond. A stream connected for at least the configured elapsed-recovery window starts a fresh finite retry episode when it later fails; rapid failures remain in one episode and exhaust its limits. Overflow is terminal and never silently drops an update. `connecting`, `connected`, `resynchronizing`, `gapPossible`, `notificationFailed`, `failed`, and `closed` lifecycle notices describe that local subscription state.
 

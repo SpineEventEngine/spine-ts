@@ -176,11 +176,31 @@ export interface AgentHistoryPage {
 }
 
 /**
+ * Provider bounds for complete stored Agent audit rows and one atomic group.
+ */
+export interface AgentHistoryCapacity {
+  /**
+   * Maximum encoded AgentHistoryRecord bytes, when the provider imposes one.
+   */
+  readonly historyRecordBytes?: number;
+
+  /**
+   * Maximum native transaction payload bytes, when the provider imposes one.
+   */
+  readonly transactionPayloadBytes?: number;
+}
+
+/**
  * Provider handle for one repository state type and tenant boundary.
  *
  * @typeParam Id Typed Agent identifier.
  */
 export interface AgentHistoryStorage<Id> {
+  /**
+   * Physical bounds used to preflight live Agent audit writes.
+   */
+  readonly capacity: AgentHistoryCapacity;
+
   /**
    * Adds one immutable occurrence, or accepts an identical repeated append.
    *
@@ -189,6 +209,15 @@ export interface AgentHistoryStorage<Id> {
    * @returns Resolves after the occurrence is recorded.
    */
   append(entityId: Id, entry: AgentHistoryEntry): Promise<void>;
+
+  /**
+   * Writes atomically adds one immutable group of conversation and System audit rows.
+   *
+   * @param entityId Typed Agent identifier.
+   * @param entries Complete rows, or an empty no-op group.
+   * @returns Completion after all rows and indexes are committed together.
+   */
+  appendAll(entityId: Id, entries: readonly AgentHistoryEntry[]): Promise<void>;
 
   /**
    * Reads a bounded live continuation from one indexed view.

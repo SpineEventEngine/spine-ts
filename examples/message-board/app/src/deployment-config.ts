@@ -18,7 +18,6 @@
  */
 
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
-import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   EnvironmentType,
   ServerEnvironment,
@@ -60,25 +59,91 @@ interface ManagedServerFacilities {
 }
 
 interface DeploymentContract {
+  /**
+   * Reads application host, port, and Datastore project settings.
+   * @param environment Process environment.
+   * @returns Validated application settings.
+   */
   application(environment: NodeJS.ProcessEnv): DeploymentConfig;
+
+  /**
+   * Reads combined application and web origin settings.
+   * @param environment Process environment.
+   * @returns Validated combined settings.
+   */
   combined(environment: NodeJS.ProcessEnv): CombinedConfig;
+
+  /**
+   * Reads gateway discovery or backend endpoint settings.
+   * @param environment Process environment.
+   * @returns Validated gateway settings.
+   */
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
+
+  /**
+   * Reads managed process and shard settings.
+   * @param environment Process environment.
+   * @returns Validated managed settings.
+   */
   managed(environment: NodeJS.ProcessEnv): ManagedConfig;
+
+  /**
+   * Builds the Datastore storage factory for this application.
+   * @param client Datastore client.
+   * @returns Configured storage factory.
+   */
   storage(client: Datastore): StorageFactory;
+
+  /**
+   * Returns cloud logging outside the Datastore emulator.
+   * @param projectId Google Cloud project ID.
+   * @param environment Process environment.
+   * @returns Cloud logging layer, if enabled.
+   */
   logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined;
+
+  /**
+   * Wraps a Google Cloud log to the server logging layer.
+   * @param log Cloud log destination.
+   * @returns Server logging layer.
+   */
   cloudLogger(log: Log): ILogLayer;
 
+  /**
+   * Sets production server facilities when required.
+   * @param config Deployment settings.
+   * @param client Datastore client.
+   * @param environment Process environment.
+   * @param logger Optional logging layer.
+   * @returns Storage factory in production, otherwise undefined.
+   */
   configureServer(
     config: DeploymentConfig,
     client: Datastore,
     environment: NodeJS.ProcessEnv,
     logger?: ILogLayer,
   ): StorageFactory | undefined;
+
+  /**
+   * Sets gateway storage and logging layers.
+   * @param config Gateway deployment settings.
+   * @param storageFactory Configured storage factory.
+   * @param logger Optional logging layer.
+   */
   configureGatewayServer(
     config: GatewayConfig,
     storageFactory: StorageFactory,
     logger?: ILogLayer,
   ): void;
+
+  /**
+   * Sets managed server storage and remote delivery.
+   * @param config Deployment settings.
+   * @param client Datastore client.
+   * @param environment Process environment.
+   * @param logger Optional logging layer.
+   * @returns Configured server facilities.
+   */
   configureManagedServer(
     config: DeploymentConfig,
     client: Datastore,
@@ -91,6 +156,12 @@ interface DeploymentContract {
  * Reads the finite MessageBoard runtime configuration without exposing values in errors.
  */
 export const MessageBoardDeployment: DeploymentContract = Object.freeze({
+  /**
+   * Reads application host, port, and Datastore project settings.
+   *
+   * @param environment Process environment.
+   * @returns Validated application settings.
+   */
   application(environment: NodeJS.ProcessEnv): DeploymentConfig {
     return {
       host: DeploymentValues.required(environment, "HOST"),
@@ -99,6 +170,12 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     };
   },
 
+  /**
+   * Reads combined application and web origin settings.
+   *
+   * @param environment Process environment.
+   * @returns Validated combined settings.
+   */
   combined(environment: NodeJS.ProcessEnv): CombinedConfig {
     return {
       ...MessageBoardDeployment.application(environment),
@@ -106,6 +183,12 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     };
   },
 
+  /**
+   * Reads gateway discovery or backend endpoint settings.
+   *
+   * @param environment Process environment.
+   * @returns Validated gateway settings.
+   */
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig {
     const serviceName = environment.BACKEND_DISCOVERY_SERVICE;
     if (serviceName !== undefined && serviceName.length > 0)
@@ -124,6 +207,12 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     };
   },
 
+  /**
+   * Reads managed process and shard settings.
+   *
+   * @param environment Process environment.
+   * @returns Validated managed settings.
+   */
   managed(environment: NodeJS.ProcessEnv): ManagedConfig {
     return {
       ...MessageBoardDeployment.application(environment),
@@ -138,26 +227,49 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     };
   },
 
+  /**
+   * Builds the Datastore storage factory for this application.
+   *
+   * @param client Datastore client.
+   * @returns Configured storage factory.
+   */
   storage(client: Datastore): StorageFactory {
-    const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(typeRegistry);
-    return DatastoreStorageFactory.newBuilder()
-      .setClient(client)
-      .setStringifierRegistry(stringifiers)
-      .build();
+    return DatastoreStorageFactory.newBuilder().setClient(client).build();
   },
 
+  /**
+   * Selects cloud logging outside the Datastore emulator.
+   *
+   * @param projectId Google Cloud project ID.
+   * @param environment Process environment.
+   * @returns Cloud logging layer, if enabled.
+   */
   logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined {
     if (environment.DATASTORE_EMULATOR_HOST !== undefined) return undefined;
     return MessageBoardDeployment.cloudLogger(new Logging({ projectId }).log("message-board"));
   },
 
+  /**
+   * Adapts a Google Cloud log to the server logging layer.
+   *
+   * @param log Cloud log destination.
+   * @returns Server logging layer.
+   */
   cloudLogger(log: Log): ILogLayer {
     return new LogLayer({
       transport: new GoogleCloudLoggingTransport({ logger: log }),
     });
   },
 
+  /**
+   * Configures production server facilities when required.
+   *
+   * @param config Deployment settings.
+   * @param client Datastore client.
+   * @param environment Process environment.
+   * @param logger Optional logging layer.
+   * @returns Storage factory in production, otherwise undefined.
+   */
   configureServer(
     config: DeploymentConfig,
     client: Datastore,
@@ -169,6 +281,13 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
       .storageFactory;
   },
 
+  /**
+   * Configures a gateway with the selected storage and logging layers.
+   *
+   * @param _config Gateway deployment settings.
+   * @param storageFactory Configured storage factory.
+   * @param logger Optional logging layer.
+   */
   configureGatewayServer(
     _config: GatewayConfig,
     storageFactory: StorageFactory,
@@ -181,6 +300,15 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     });
   },
 
+  /**
+   * Configures managed server storage and remote delivery.
+   *
+   * @param config Deployment settings.
+   * @param client Datastore client.
+   * @param environment Process environment.
+   * @param logger Optional logging layer.
+   * @returns Configured server facilities.
+   */
   configureManagedServer(
     config: DeploymentConfig,
     client: Datastore,
@@ -221,6 +349,12 @@ const DeploymentValues = Object.freeze({
     return value;
   },
 
+  /**
+   * Reads one or more backend endpoints.
+   *
+   * @param environment Process environment.
+   * @returns Nonempty backend endpoint list.
+   */
   backendUrls(environment: NodeJS.ProcessEnv): readonly [string, ...string[]] {
     const configured = environment.BACKEND_URLS;
     if (configured === undefined || configured.length === 0)
@@ -246,6 +380,13 @@ const DeploymentValues = Object.freeze({
     return parsed;
   },
 
+  /**
+   * Parses a positive safe integer setting.
+   *
+   * @param value Required decimal value.
+   * @param name Configuration key for errors.
+   * @returns Validated positive integer.
+   */
   positiveSafeInteger(value: string, name: string): number {
     const parsed = Number(value);
     if (!Number.isSafeInteger(parsed) || parsed < 1)

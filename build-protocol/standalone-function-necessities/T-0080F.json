@@ -543,24 +543,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "bytesEqual()#1",
-    "name": "bytesEqual",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration bytesEqual()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "cloneClientEvent()#1",
-    "name": "cloneClientEvent",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration cloneClientEvent()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "commandPostError()#1",
     "name": "commandPostError",
     "disposition": "migration-debt",
@@ -588,64 +570,10 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "createCompositePredicate()#1",
-    "name": "createCompositePredicate",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createCompositePredicate()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "createEntityUpdate()#1",
-    "name": "createEntityUpdate",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createEntityUpdate()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "createEventUpdate()#1",
-    "name": "createEventUpdate",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createEventUpdate()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "createFilteredSubscriptionMatcher()#1",
-    "name": "createFilteredSubscriptionMatcher",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createFilteredSubscriptionMatcher()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "createReadPlan()#1",
     "name": "createReadPlan",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration createReadPlan()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "createSimplePredicate()#1",
-    "name": "createSimplePredicate",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createSimplePredicate()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "createSubscriptionPredicate()#1",
-    "name": "createSubscriptionPredicate",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createSubscriptionPredicate()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",
@@ -745,24 +673,6 @@
     "name": "errorStatus",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration errorStatus()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "eventTenant()#1",
-    "name": "eventTenant",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration eventTenant()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "eventTenantMatches()#1",
-    "name": "eventTenantMatches",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration eventTenantMatches()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",
@@ -876,24 +786,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "packEntityId()#1",
-    "name": "packEntityId",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration packEntityId()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "packString()#1",
-    "name": "packString",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration packString()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "packVersionedState()#1",
     "name": "packVersionedState",
     "disposition": "migration-debt",
@@ -916,15 +808,6 @@
     "name": "queryErrorResponse",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration queryErrorResponse()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "readPathValue()#1",
-    "name": "readPathValue",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration readPathValue()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",
@@ -997,15 +880,6 @@
     "name": "tenantMismatch",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration tenantMismatch()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "tenantOptions()#1",
-    "name": "tenantOptions",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration tenantOptions()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",
@@ -1146,15 +1020,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "valuesEqual()#1",
-    "name": "valuesEqual",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration valuesEqual()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "wireComparison()#1",
     "name": "wireComparison",
     "disposition": "migration-debt",
@@ -1285,15 +1150,6 @@
     "name": "tenantKey",
     "disposition": "necessity",
     "reason": "TypeScript delivery tenancy boundary: tenantKey gives local handoff routing one structural complete-tenant comparison key."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/context/tenant-index.ts",
-    "kind": "function-declaration",
-    "identity": "tenantCatalog()#1",
-    "name": "tenantCatalog",
-    "disposition": "necessity",
-    "reason": "TypeScript provider-catalog boundary: tenantCatalog fails multitenant startup closed unless the configured factory supplies its native catalog."
   },
   {
     "rule": "standalone-function",
@@ -1522,65 +1378,38 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/repository/repository.ts",
-    "kind": "function-declaration",
-    "identity": "addMillis()#1",
-    "name": "addMillis",
-    "disposition": "necessity",
-    "reason": "TypeScript Time boundary: addMillis supplies claim renewal and invocation deadlines with nanosecond-preserving Timestamp addition without sampling a second clock."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-admission.ts",
-    "kind": "function-declaration",
-    "identity": "signalKey()#1",
-    "name": "signalKey",
-    "disposition": "necessity",
-    "reason": "TypeScript accepted-signal boundary: signalKey retains the original Command or Event ID and its domain discriminator before Inbox acknowledgement."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-admission.ts",
-    "kind": "function-declaration",
-    "identity": "binding()#1",
-    "name": "binding",
-    "disposition": "necessity",
-    "reason": "TypeScript generated-handler boundary: binding converts selected handler metadata into the exact durable ordinal, kind, origin and filter compared on replay."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-admission.ts",
-    "kind": "function-declaration",
-    "identity": "nonblank()#1",
-    "name": "nonblank",
-    "disposition": "necessity",
-    "reason": "TypeScript admission validation boundary: nonblank rejects missing state, Agent key and revision strings before a durable accepted record is formed."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-revisions.ts",
-    "kind": "function-declaration",
-    "identity": "policyShape()#1",
-    "name": "policyShape",
-    "disposition": "necessity",
-    "reason": "TypeScript revision boundary: policyShape selects serializable registry and repository policy while callback implementations remain covered by the explicit code revision."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/agent/agent-revisions.ts",
-    "kind": "function-declaration",
-    "identity": "mcpPolicies()#1",
-    "name": "mcpPolicies",
-    "disposition": "necessity",
-    "reason": "TypeScript MCP revision boundary: mcpPolicies hashes fixed server transport and tool policy without executing scoped credential callbacks."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/server/src/testing/index.ts",
     "kind": "function-declaration",
     "identity": "agentHistoryView()#1",
     "name": "agentHistoryView",
     "disposition": "necessity",
     "reason": "TypeScript testing boundary: agentHistoryView validates a context-issued repository view when framework conformance checks cannot retain the application repository's generic ID type."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/server-log.ts",
+    "kind": "function-declaration",
+    "identity": "emitServerInfo()#1",
+    "name": "emitServerInfo",
+    "disposition": "necessity",
+    "reason": "TypeScript logging boundary: emitServerInfo stays standalone alongside warning and error emission so completed setup phases use the same allowlisted fault-contained logger."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery-tenant.ts",
+    "kind": "function-declaration",
+    "identity": "deliveryTenant()#1",
+    "name": "deliveryTenant",
+    "disposition": "necessity",
+    "reason": "TypeScript Inbox boundary: deliveryTenant decodes the canonical tenant from the persisted Command or Event envelope for both dispatch and storage routing."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery-tenant.ts",
+    "kind": "function-declaration",
+    "identity": "deliveryTenantKey()#1",
+    "name": "deliveryTenantKey",
+    "disposition": "necessity",
+    "reason": "TypeScript Inbox boundary: deliveryTenantKey gives the same canonical tenant scope to retained delivery and duplicate coordination call sites."
   }
 ]

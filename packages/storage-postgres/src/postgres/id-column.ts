@@ -14,7 +14,7 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringifierRegistry } from "@spine-event-engine/core";
+import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 
 import { PostgresDataTypes, type PostgresDdlType } from "./data-type.js";
 import type { PostgresParameter } from "./parameter.js";
@@ -48,9 +48,12 @@ export class PostgresIdColumn<I> {
    */
   constructor(
     private readonly type: PostgresIdType<I>,
-    stringifiers: StringifierRegistry = new StringifierRegistry(),
+    stringifiers: StringifierRegistry = defaultStringifierRegistry,
   ) {
-    this.#stringifiers = new StringifierRegistry(stringifiers);
+    this.#stringifiers =
+      stringifiers === defaultStringifierRegistry
+        ? stringifiers
+        : new StringifierRegistry(stringifiers);
     this.postgresType = PostgresIdTypes.type(type);
   }
 

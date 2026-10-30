@@ -14,7 +14,25 @@ evidence of completed work and are not current operating instructions. Every
 future `master` merge triggers NPM publication and therefore carries a new
 common workspace version under D-0115.
 
-Current work: [SQL delivery and subscription reliability](tasks/sql-delivery-reliability/TASK.md)
+Current work: [Shared environment and storage lifecycle](tasks/environment-lifecycle/TASK.md)
+on `environment-lifecycle`, based on freshly fetched official master `ff6c866`.
+Storage retention is first. The accepted proposal includes dynamic TenantIndex,
+shared Delivery, explicit and lazy preparation, JVM PR 1698 and complete Agent
+recovery removal. No migration work is authorized. The original lifecycle work and the subsequent storage-layout work are implemented
+in the existing draft [PR #20](https://github.com/SpineEventEngine/spine-ts/pull/20).
+The current continuation adds readable Event Store names, automatic default
+stringifiers, and the revised provider-by-provider storage guide; its detailed
+record is [STORAGE_DEFAULTS.md](tasks/environment-lifecycle/STORAGE_DEFAULTS.md).
+Independent reviews and local release verification passed before pushing
+`2925ef86c`. Current-head Security passed. Build CI exposed a private-package test
+import violation and a multi-machine Delivery fixture timeout. Both are corrected
+and independently reviewed; the corrected tree passes all release checks with
+6,290 Vitest tests and 39 generated Node tests. Exact-SHA CI remains before final
+acceptance. Version `2.0.0-snapshot.25` remains the common
+workspace version. Updating this existing PR is authorized; creating another PR
+or mutating master is not.
+
+Previous work: [SQL delivery and subscription reliability](tasks/sql-delivery-reliability/TASK.md)
 on `sql-delivery-subscription-reliability` in
 [PR #19](https://github.com/SpineEventEngine/spine-ts/pull/19). The author requested
 integration of official `master`, including the Agent feature from PR #18.

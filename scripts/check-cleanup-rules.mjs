@@ -3156,21 +3156,21 @@ function isEventIdRead(source, node, apiName) {
     apiName !== "EventIdSchema" ||
     !ts.isIdentifier(node) ||
     node.text !== "EventIdSchema" ||
-    !hasExactNamedImport(source, "@spine-event-engine/core", "AnyMessages") ||
+    !hasExactNamedImport(source, "@spine-event-engine/core", "AnyPacker") ||
     !hasExactNamedImport(source, "@spine-event-engine/proto", "EventIdSchema")
   )
     return false;
   if (ts.isImportSpecifier(node.parent) && node.parent.name === node) return true;
   if (!ts.isCallExpression(node.parent) || node.parent.arguments[1] !== node) return false;
   for (let scope = node.parent.parent; scope && !ts.isSourceFile(scope); scope = scope.parent) {
-    if (scopeDeclaredNames(scope).includes("AnyMessages")) return false;
+    if (scopeDeclaredNames(scope).includes("AnyPacker")) return false;
   }
   const call = node.parent.expression;
   if (
     !ts.isPropertyAccessExpression(call) ||
-    call.name.text !== "unpack" ||
+    !["unpack", "tryUnpack"].includes(call.name.text) ||
     !ts.isIdentifier(call.expression) ||
-    call.expression.text !== "AnyMessages"
+    call.expression.text !== "AnyPacker"
   )
     return false;
   return true;

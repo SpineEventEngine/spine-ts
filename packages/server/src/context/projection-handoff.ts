@@ -14,6 +14,7 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import type { TenantId } from "@spine-event-engine/proto";
+import { deliveryTenantKey } from "../delivery/delivery-tenant.js";
 
 import { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
@@ -42,7 +43,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
   readonly #readiness: DeliveryReadiness;
 
-  readonly #keepTenant: (tenantId: TenantId) => Promise<void>;
+  readonly #onAdmit: (tenantId?: TenantId) => Promise<void>;
 
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
 
@@ -56,17 +57,17 @@ export class LocalProjectionInbox implements ProjectionInbox {
    * Creates a local projection inbox.
    * @param contextName Names the bounded context that owns this inbox.
    * @param readiness Coordinates delivery readiness after persistence.
-   * @param keepTenant Records a tenant before its message is persisted.
+   * @param onAdmit Checks current tenant membership before persistence or replay.
    */
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
-    keepTenant: (tenantId: TenantId) => Promise<void> = () => Promise.resolve(),
+    onAdmit: (tenantId?: TenantId) => Promise<void> = () => Promise.resolve(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
       readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
-    this.#keepTenant = keepTenant;
+    this.#onAdmit = onAdmit;
   }
 
   /**
@@ -130,7 +131,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     input: ProjectionInput,
     deliveryTenantId?: TenantId,
   ): Promise<InboxMessage> {
-    if (deliveryTenantId !== undefined) await this.#keepTenant(deliveryTenantId);
+    await this.#onAdmit(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input);
     this.#trackMessage(written.message);
     try {
@@ -184,8 +185,9 @@ export class LocalProjectionInbox implements ProjectionInbox {
       node: this.#contextName,
       onReplay: (next) => this.#replay(next, deliveryTenantId),
       acceptMessage: (next) =>
-        InboxHandoff.sameMessageId(next.id, message.id) ||
-        (next.label === "UPDATE_SUBSCRIBER" && this.#targets.has(next.inboxId.targetTypeUrl)),
+        deliveryTenantKey(next) === deliveryTenantKey(message) &&
+        (InboxHandoff.sameMessageId(next.id, message.id) ||
+          (next.label === "UPDATE_SUBSCRIBER" && this.#targets.has(next.inboxId.targetTypeUrl))),
       onResolved: (next) => {
         this.#recordAcknowledgement(next);
       },
@@ -223,6 +225,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   async #replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
     receptionObservation.markManaged();
     LocalProjectionInbox.#assert(message);
+    await this.#onAdmit(deliveryTenantId);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
 

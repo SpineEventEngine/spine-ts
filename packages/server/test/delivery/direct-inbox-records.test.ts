@@ -12,11 +12,12 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { AnyPacker } from "@spine-event-engine/core";
 
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
@@ -33,6 +34,21 @@ import { createMessage } from "./inbox-message-fixture.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("direct InboxMessage storage", () => {
+  it("retains one record handle for repeated reads and writes until close", async () => {
+    const factory = new InMemoryStorageFactory();
+    const opened = vi.spyOn(factory, "createRecordStorage");
+    const storage = new InboxStorage({
+      context: { name: "RetainedInbox", multitenant: false },
+      storageFactory: factory,
+    });
+    const message = createMessage("retained", "signal", 1n);
+    await storage.write(message);
+    await storage.readMessage(message.id);
+    expect(opened).toHaveBeenCalledTimes(1);
+    await storage.close();
+    await expect(storage.readMessage(message.id)).rejects.toThrow("closed");
+  });
+
   it("preserves microsecond order across an Inbox page anchor", async () => {
     const storage = new InboxStorage({
       context: { name: "Precise", multitenant: false },
@@ -71,8 +87,6 @@ describe("direct InboxMessage storage", () => {
     expect(inboxRecordSpec.recordType).toBe(InboxMessageSchema);
     expect(inboxRecordSpec.idType).toBe(InboxMessageIdSchema);
     expect(inboxRecordSpec.columns.map((column) => [column.name, column.type.kind])).toEqual([
-      ["inbox_id", "message"],
-      ["signal_id", "message"],
       ["shard_index", "scalar"],
       ["shard_total", "scalar"],
       ["status", "enum"],
@@ -123,18 +137,12 @@ describe("direct InboxMessage storage", () => {
   it("round-trips command and event payloads while rejecting corrupt direct fields", () => {
     const command = {
       ...createMessage("command", "signal-command", 1n),
-      signal: create(AnySchema, {
-        typeUrl: "type.spine.io/spine.core.Command",
-        value: toBinary(CommandSchema, create(CommandSchema)),
-      }),
+      signal: AnyPacker.pack(CommandSchema, create(CommandSchema)),
       label: "HANDLE_COMMAND" as const,
     };
     const event = {
       ...createMessage("event", "signal-event", 2n),
-      signal: create(AnySchema, {
-        typeUrl: "type.spine.io/spine.core.Event",
-        value: toBinary(EventSchema, create(EventSchema)),
-      }),
+      signal: AnyPacker.pack(EventSchema, create(EventSchema)),
       label: "REACT_UPON_EVENT" as const,
     };
 
@@ -332,9 +340,22 @@ describe("direct InboxMessage storage", () => {
     ).resolves.toEqual([second]);
   });
 
-  it("validates direct read bounds, clock output, and multitenant storage context", async () => {
+  it("rejects a tenant-specific Inbox before opening storage", () => {
+    const factory = new InMemoryStorageFactory();
+    const opened = vi.spyOn(factory, "createRecordStorage");
+    expect(
+      () =>
+        new InboxStorage({
+          context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+          storageFactory: factory,
+        }),
+    ).toThrow("Inbox storage requires a single-tenant Delivery context.");
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it("validates direct read bounds and clock output", async () => {
     const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+      context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
       now: () => new Date(Number.NaN),
     });

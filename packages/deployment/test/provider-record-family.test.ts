@@ -45,10 +45,10 @@ describe("node-discovery provider configuration", () => {
     expect((storage as unknown as { readonly tableName: string }).tableName).toBe(
       "application_node_leases",
     );
-    factory.close();
+    await factory.close();
   });
 
-  it("selects Datastore custom storage for the node-discovery record family", () => {
+  it("selects Datastore custom storage for the node-discovery record family", async () => {
     const fallback = new InMemoryStorageFactory();
     let selected = false;
     const factory = DatastoreStorageFactory.newBuilder()
@@ -62,6 +62,8 @@ describe("node-discovery provider configuration", () => {
     const registry = new LeasedNodeRegistry({ factory, namespace: "provider-selection" });
 
     expect(selected).toBe(true);
-    void registry.close();
+    await registry.close();
+    await factory.close();
+    await fallback.close();
   });
 });

@@ -12,7 +12,6 @@
  * the License.
  */
 
-import { createHash, randomUUID } from "node:crypto";
 import {
   clone,
   create,
@@ -26,7 +25,6 @@ import type { EntityQueryPlan } from "@spine-event-engine/core/spi/entity-query-
 import type { EntityQueryDescription } from "@spine-event-engine/core/codegen";
 import {
   AnySchema,
-  FileDescriptorProtoSchema,
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
@@ -39,7 +37,7 @@ import {
   RejectionThrowable,
   Validate,
   TypeUrls,
-  AnyMessages,
+  AnyPacker,
   Identifiers,
   StringifierRegistry,
   Time,
@@ -82,7 +80,12 @@ import {
   type NormalizedQueryEntry,
   StorageQueryPolicy,
 } from "@spine-event-engine/storage";
-import { TenantBoundary } from "@spine-event-engine/storage/provider";
+import {
+  TenantBoundary,
+  eventStoreAccess,
+  StoragePreparations,
+  type StoragePreparationMode,
+} from "@spine-event-engine/storage/provider";
 import type {
   EntityEventHistoryPort,
   EntityRecordStorage,
@@ -99,44 +102,16 @@ import {
   type AgentHistoryView,
 } from "@spine-event-engine/storage/provider";
 import {
-  AgentExecutionStorageFactories,
-  type AgentExecutionStorage,
-  type AgentPendingCursor,
-  type AgentPendingPage,
-} from "@spine-event-engine/storage/provider";
-import {
   AgentHistoryEntrySchema,
   AgentInvocationTerminatedSchema,
   AgentModelSelectionChangedSchema as SelectionChangedSchema,
   AiModelKind,
-  AiDiagnosticIdSchema,
   ModelRefSchema,
-  ToolEffect,
+  ModelPreferenceSchema,
   type AgentHistoryEntry,
   type ConversationRecord,
   ConversationIdSchema,
 } from "@spine-event-engine/proto/agent";
-import {
-  AgentInvocationKeySchema,
-  AgentExecutionStartSchema,
-  type AgentExecutionStart,
-  AgentExecutionCompletionSchema,
-  AgentInvocationBoundsSchema,
-  type AgentInvocationBounds,
-  AgentInvocationStatus,
-  AgentOutgoingCommandSchema,
-  type AgentOutgoingCommand,
-  AgentSignalKeySchema,
-  type AgentSignalKey,
-  AgentSavedDispatchTargetSchema as SavedTargetSchema,
-  AgentSavedRepositoryFamily,
-  AgentSavedTargetKind,
-  type AgentSavedDispatchPlan,
-  type AgentSavedDispatchTarget,
-  type AgentInvocationKey,
-  type AgentExecutionRecord,
-  type AgentSelectedModel,
-} from "@spine-event-engine/proto/generated/spine/server/agent/execution_record_pb.js";
 import type {
   AiControl,
   AiDefaultModels,
@@ -170,23 +145,25 @@ import { RoutingDeclarations, type RoutingDeclarationSnapshot } from "./routing-
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
-import {
-  SavedDispatcherBindings,
-  type SavedCommandBinding,
-} from "../bus/saved-dispatcher-binding.js";
-import { Delivery } from "../delivery/delivery.js";
+import type { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
-import { commitFenced } from "./commit-fence.js";
+import { commitFenced, withDeliveryCommitFence } from "./commit-fence.js";
 import { AgentHistoryReads, type AgentHistoryScope } from "../agent/agent-history.js";
-import { AgentReadRuntime } from "../agent/agent-read-runtime.js";
-import { AgentAdmission, type AgentAdmissionInput } from "../agent/agent-admission.js";
-import { AgentRevisions } from "../agent/agent-revisions.js";
-import { AgentExecutionSession } from "../agent/agent-execution-session.js";
-import { AgentExecutionFault } from "../agent/agent-execution-fault.js";
+import { AgentLiveAiRuntime } from "../agent/agent-live-ai-runtime.js";
+import { AgentLiveAudit } from "../agent/agent-live-audit.js";
+import { AgentLiveBudget } from "../agent/agent-live-budget.js";
+import { AgentLiveReadRuntime } from "../agent/agent-live-read-runtime.js";
+import { AgentLiveInteractionEvents } from "../agent/agent-live-interaction-events.js";
+import { AgentLiveFault } from "../agent/agent-live-fault.js";
+import type {
+  AgentLiveInvocation,
+  AgentLiveModel,
+  AgentSource,
+} from "../agent/agent-live-inputs.js";
+import { AgentDeliveryScope } from "../delivery/agent-delivery-scope.js";
+import type { AgentCapacityReservation } from "../agent/agent-execution-capacity.js";
+import type { AgentAcceptanceReceipts } from "../agent/agent-acceptance-receipts.js";
 import { AgentModelSelection } from "../agent/agent-model-selection.js";
-import { AgentAiRuntime, AgentUncertainAttemptError } from "../agent/agent-ai-runtime.js";
-import { AgentInteractionEvents } from "../agent/agent-interaction-events.js";
-import { AgentInteractionAudit } from "../agent/agent-interaction-audit.js";
 import { AgentAiBindings } from "../agent/agent-ai-binding.js";
 import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -303,13 +280,6 @@ export interface AgentReadScope {
    */
   readonly tenantId?: TenantId;
 }
-
-/**
- * Public projection of one recorded Agent invocation phase.
- * Missing records are represented by `undefined`, not a terminal phase.
- */
-export type AgentExecutionStatus =
-  "accepted" | "active" | "completed-pending-commands" | "completed" | "terminated";
 
 /**
  * Indexed, newest-first reads of retained Agent history.
@@ -574,11 +544,6 @@ interface RepositoryOptionsBase<
    * Generated Event schemas that Aggregate, Process Manager, or Agent handlers may emit.
    */
   readonly events?: readonly MessageSchema[];
-
-  /**
-   * Revision of Agent handler code retained for accepted-execution recovery.
-   */
-  readonly agentCodeRevision?: string;
 
   /**
    * Models and deployment policy available to this Agent repository.
@@ -939,12 +904,13 @@ export class Repository<
   }
 
   /**
-   * Sets whether future state-history rows are appended for this repository.
+   * Sets state-history storage for future acquisitions. Admitted stores retain
+   * the setting captured when they began, and prior configurations stay reusable.
    *
    * This JVM-parity switch is for controlled administration/testing, not
    * routine request-time behavior. It never deletes or reconstructs history.
    *
-   * @param enabled Whether later successful stores append state-history rows.
+   * @param enabled Whether newly admitted stores append state-history rows.
    */
   setStateHistoryEnabled(enabled: boolean): void {
     if (typeof enabled !== "boolean") {
@@ -953,11 +919,6 @@ export class Repository<
     const configuration = RepositoryStorage.historyConfiguration(this);
     if (configuration.stateHistory === enabled) return;
     configuration.stateHistory = enabled;
-    const handles = repositoryEntityHandles.get(this);
-    if (handles !== undefined) {
-      for (const handle of handles.values()) handle.close();
-      handles.clear();
-    }
   }
 
   /**
@@ -1022,30 +983,6 @@ export class Repository<
     scope: AgentReadScope,
   ): AgentHistoryReader {
     return RepositoryAgentReads.history(this, id, scope);
-  }
-
-  /**
-   * Reads the exact recorded phase for one accepted Command or Event.
-   * The trusted application must authorize the caller before using this read.
-   *
-   * @param this Registered Agent repository.
-   * @param id Typed Agent identifier.
-   * @param source Original Command or Event ID.
-   * @param scope Explicit tenant boundary; pass `{}` in a single-tenant Bounded Context.
-   * @returns Recorded phase, or `undefined` when no invocation was recorded.
-   */
-  agentExecution(
-    this: EntityType["prototype"] extends Agent<
-      RepositoryEntityId<EntityType>,
-      RepositoryStateSchema<EntityType>
-    >
-      ? Repository<EntityType>
-      : never,
-    id: NoInfer<RepositoryEntityId<EntityType>>,
-    source: CommandId | EventId,
-    scope: AgentReadScope,
-  ): Promise<AgentExecutionStatus | undefined> {
-    return RepositoryAgentReads.execution(this, id, source, scope);
   }
 
   /**
@@ -1190,13 +1127,14 @@ const RepositoryAgentReads = {
   ): Promise<HistoryPage<AgentHistoryEntry>> {
     if (repositoryRuntimes.get(repository) !== captured.runtime)
       throw new Error("Agent read requires an active repository.");
-    const input = RepositoryStorage.entityStorageInput(repository, captured.context);
-    const history = AgentHistoryStorageFactories.create(captured.runtime.storageFactory, {
-      context: captured.context,
-      stateType: repository.stateSchema.typeName,
-      id: { key: input.id.key },
-    });
-    try {
+    await captured.runtime.onAdmit(captured.context.tenantId);
+    return RepositoryStorage.track(repository, async () => {
+      const input = RepositoryStorage.entityStorageInput(repository, captured.context);
+      const history = RepositoryStorage.openRepositoryAgentHistory(
+        repository,
+        captured.runtime.storageFactory,
+        input,
+      );
       const page = await AgentHistoryReads.readBound(
         {
           storage: history,
@@ -1210,9 +1148,7 @@ const RepositoryAgentReads = {
         items: page.items,
         ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
       };
-    } finally {
-      history.close();
-    }
+    });
   },
 
   /**
@@ -1236,83 +1172,6 @@ const RepositoryAgentReads = {
       items,
       ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
     } as unknown as HistoryPage<K extends "conversationRecord" ? ConversationRecord : Event>;
-  },
-
-  /**
-   * Reads the exact saved invocation and exposes only its phase.
-   *
-   * @param repository Registered Agent repository.
-   * @param id Typed Agent identifier.
-   * @param source Original Command or Event ID.
-   * @param scope Explicit tenant selection.
-   * @returns Current phase, or `undefined` for no saved invocation.
-   */
-  async execution(
-    repository: RepositoryView,
-    id: unknown,
-    source: CommandId | EventId,
-    scope: AgentReadScope,
-  ): Promise<AgentExecutionStatus | undefined> {
-    const captured = this.capture(repository, id, scope);
-    const sourceSignal = this.source(source);
-    const input = RepositoryStorage.entityStorageInput(repository, captured.context);
-    const key = create(AgentInvocationKeySchema, {
-      scope: { stateType: repository.stateSchema.typeName, agentKey: input.id.key(captured.id) },
-      sourceSignal,
-    });
-    if (repositoryRuntimes.get(repository) !== captured.runtime)
-      throw new Error("Agent read requires an active repository.");
-    const storage = AgentExecutionStorageFactories.create(captured.runtime.storageFactory, {
-      entity: input,
-      stateType: repository.stateSchema.typeName,
-    });
-    try {
-      const record = await storage.read(key);
-      return record === undefined ? undefined : this.status(record.status);
-    } finally {
-      storage.close();
-    }
-  },
-
-  /**
-   * Copies an original signal identifier into the private execution key.
-   *
-   * @param source Original Command or Event ID.
-   * @returns Typed private source key.
-   */
-  source(source: CommandId | EventId): AgentSignalKey {
-    if (source.$typeName === CommandIdSchema.typeName && source.uuid.length > 0)
-      return create(AgentSignalKeySchema, {
-        id: { case: "command", value: clone(CommandIdSchema, source) },
-      });
-    if (source.$typeName === EventIdSchema.typeName && source.value.length > 0)
-      return create(AgentSignalKeySchema, {
-        id: { case: "event", value: clone(EventIdSchema, source) },
-      });
-    throw new TypeError("Agent execution requires an original CommandId or EventId.");
-  },
-
-  /**
-   * Returns the public status for a private execution phase.
-   *
-   * @param status Saved private phase.
-   * @returns Public phase string.
-   */
-  status(status: AgentInvocationStatus): AgentExecutionStatus {
-    switch (status) {
-      case AgentInvocationStatus.AGENT_INVOCATION_ACCEPTED:
-        return "accepted";
-      case AgentInvocationStatus.AGENT_INVOCATION_ACTIVE:
-        return "active";
-      case AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS:
-        return "completed-pending-commands";
-      case AgentInvocationStatus.AGENT_INVOCATION_COMPLETED:
-        return "completed";
-      case AgentInvocationStatus.AGENT_INVOCATION_TERMINATED:
-        return "terminated";
-      default:
-        throw new Error("Agent execution provider returned an unsupported phase.");
-    }
   },
 };
 
@@ -1404,18 +1263,29 @@ const repositoryProjectionDirect = new WeakMap<
   (event: Event, rebuild?: boolean) => Promise<void>
 >();
 const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
-const repositoryEntityHandles = new WeakMap<
-  RepositoryView,
-  Map<
-    string,
-    {
-      /**
-       * Closes the retained Entity storage handle.
-       */
-      close(): void;
-    }
-  >
->();
+interface RepositoryClosePort {
+  /**
+   * Closes this physical storage port.
+   */
+  close(): void;
+}
+type RepositoryReadEntityPort = ReturnType<EntityStorageFactory["createEntityStorage"]>;
+interface RetainedEntitySlot {
+  readonly entity: RepositoryReadEntityPort;
+  full?: RepositoryEntityStorage<unknown, Message>;
+}
+interface RepositoryStorageLifetime {
+  readonly entities: Map<string, Map<string | symbol, RetainedEntitySlot>>;
+  readonly histories: Map<string, Map<string | symbol, AgentHistoryStorage<unknown>>>;
+  readonly ports: Set<RepositoryClosePort>;
+  readonly commits: Set<EntityCommitStorage>;
+  readonly active: Set<Promise<unknown>>;
+  eventStore?: EventStore;
+  closing?: Promise<void>;
+  idleOutcome?: { error?: Error };
+  open: boolean;
+}
+const repositoryStorageLifetimes = new WeakMap<RepositoryView, RepositoryStorageLifetime>();
 const entityStateHistoryCaches = new WeakMap<
   object,
   {
@@ -1435,7 +1305,6 @@ const repositoryHistoryConfigurations = new WeakMap<
   RepositoryHistoryConfiguration
 >();
 const repositoryAiConfigurations = new WeakMap<RepositoryView, RepositoryAiOptions>();
-const repositoryAgentCodeRevisions = new WeakMap<RepositoryView, string>();
 interface DispatchGuard {
   readonly completed: Set<string>;
   readonly order: string[];
@@ -1499,7 +1368,7 @@ const RepositoryRegistration = {
   },
 
   /**
-   * Captures Agent capability and code revisions during repository registration.
+   * Captures Agent capability policy during repository registration.
    *
    * @typeParam EntityType Concrete generated Entity constructor.
    * @param repository Registered Entity repository for this operation.
@@ -1515,8 +1384,6 @@ const RepositoryRegistration = {
   ): void {
     if (family !== "agent") return;
     if (options.ai !== undefined) repositoryAiConfigurations.set(repository, options.ai);
-    if (options.agentCodeRevision !== undefined)
-      repositoryAgentCodeRevisions.set(repository, options.agentCodeRevision);
   },
 
   /**
@@ -1730,6 +1597,21 @@ export interface RepositoryAccess {
   snapshot(repository: RepositoryView): RepositoryIdentitySnapshot;
 
   /**
+   * Prepares the repository's actual current, history and Agent declarations.
+   * @param repository Registered repository model.
+   * @param context Complete selected storage scope.
+   * @param factory Its configured provider.
+   * @param mode Creation or compatibility inspection.
+   * @returns Completion after every required family is established.
+   */
+  prepareStorage(
+    repository: RepositoryView,
+    context: StorageContext,
+    factory: StorageFactory,
+    mode: StoragePreparationMode,
+  ): Promise<void>;
+
+  /**
    * Returns schemas for events that the repository can produce.
    *
    * @param repository the repository to inspect.
@@ -1738,55 +1620,14 @@ export interface RepositoryAccess {
   producedEventSchemas(repository: RepositoryView): readonly MessageSchema[];
 
   /**
-   * Returns Command outcomes declared by generated handlers in this repository.
-   *
-   * @param repository Registered repository to inspect.
-   * @returns Generated Command outcome descriptors.
-   */
-  producedCommandSchemas(repository: RepositoryView): readonly MessageSchema[];
-
-  /**
-   * Returns the Agent's registered capabilities and recovery code revision.
+   * Returns the Agent's registered live model policy.
    *
    * @param repository Agent repository registration.
    * @returns Configured Agent policy, when present.
    */
   agentConfiguration(repository: RepositoryView): {
     readonly ai?: RepositoryAiOptions;
-    readonly codeRevision?: string;
   };
-
-  /**
-   * Processes one provider-claimed Agent invocation for framework scheduling.
-   *
-   * @param repository Registered Agent repository.
-   * @param tenantId Complete tenant for this accepted invocation.
-   * @param key Stored invocation key from a bounded pending page.
-   * @param signal Cancellation of this scheduled execution.
-   * @returns When the claimed invocation advances or its provider error propagates.
-   */
-  runAcceptedAgent(
-    repository: RepositoryView,
-    tenantId: TenantId | undefined,
-    key: AgentInvocationKey,
-    signal?: AbortSignal,
-  ): Promise<void>;
-
-  /**
-   * Reads one bounded, provider-indexed Agent head page for framework scheduling.
-   *
-   * @param repository Registered Agent repository to scan.
-   * @param tenantId Complete tenant selected for this scan.
-   * @param after Provider continuation from the preceding head page.
-   * @param count Maximum number of eligible heads to return.
-   * @returns Eligible heads and their next continuation.
-   */
-  pendingAcceptedAgents(
-    repository: RepositoryView,
-    tenantId: TenantId | undefined,
-    after: AgentPendingCursor | undefined,
-    count: number,
-  ): Promise<AgentPendingPage>;
 
   /**
    * Reads retained Agent history for the package's testing observation seam.
@@ -1926,8 +1767,16 @@ export interface RepositoryAccess {
    * Clears runtime state and open storage handles for a repository.
    *
    * @param repository The repository to detach.
+   * @returns Completion after admitted work and retained storage close.
    */
-  clearRuntime(repository: RepositoryView): void;
+  clearRuntime(repository: RepositoryView): Promise<void>;
+
+  /**
+   * Clears a repository during synchronous assembly rollback when no work is active.
+   *
+   * @param repository Repository to detach.
+   */
+  clearRuntimeIdle(repository: RepositoryView): void;
 }
 
 /**
@@ -1963,6 +1812,33 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
   },
 
   /**
+   * Prepares actual Entity and Agent families from the captured repository definition.
+   * @param repository Registered repository model.
+   * @param context Complete selected storage scope.
+   * @param factory Configured provider factory.
+   * @param mode Creation or compatibility inspection.
+   * @returns Completion after all required physical families are ready.
+   */
+  async prepareStorage(
+    repository: RepositoryView,
+    context: StorageContext,
+    factory: StorageFactory,
+    mode: StoragePreparationMode,
+  ): Promise<void> {
+    const input = RepositoryStorage.entityStorageInput(repository, context);
+    const preparation = StoragePreparations.for(factory);
+    if (repository.entityFamily !== "agent") {
+      await preparation.prepareEntity(input, mode);
+      return;
+    }
+    await preparation.prepareAgentCommit(input, mode);
+    await preparation.prepareAgentHistory(
+      { context, stateType: input.sourceType.typeName, id: { key: input.id.key } },
+      mode,
+    );
+  },
+
+  /**
    * Reads schemas for Events this repository can emit.
    *
    * @param repository Repository to inspect.
@@ -1978,52 +1854,9 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return schemas;
   },
 
-  producedCommandSchemas(repository: RepositoryView): readonly MessageSchema[] {
-    const routing = repositoryRoutings.get(repository);
-    if (routing === undefined)
-      throw new TypeError("Produced Command schemas require a Repository instance.");
-    return routing.producedCommandSchemas;
-  },
-
   agentConfiguration(repository: RepositoryView) {
     const ai = repositoryAiConfigurations.get(repository);
-    const codeRevision = repositoryAgentCodeRevisions.get(repository);
-    return {
-      ...(ai === undefined ? {} : { ai }),
-      ...(codeRevision === undefined ? {} : { codeRevision }),
-    };
-  },
-
-  runAcceptedAgent(
-    repository: RepositoryView,
-    tenantId: TenantId | undefined,
-    key: AgentInvocationKey,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    return AgentExecutionRunner.run(repository, tenantId, key, signal);
-  },
-
-  pendingAcceptedAgents(
-    repository: RepositoryView,
-    tenantId: TenantId | undefined,
-    after: AgentPendingCursor | undefined,
-    count: number,
-  ): Promise<AgentPendingPage> {
-    const runtime = repositoryRuntimes.get(repository);
-    if (runtime === undefined || repository.entityFamily !== "agent")
-      throw new Error("Agent pending discovery requires a registered Agent repository.");
-    const input = RepositoryStorage.entityStorageInput(
-      repository,
-      RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
-    );
-    const storage = RepositoryStorage.openRepositoryEntityStorage(
-      repository,
-      runtime.storageFactory,
-      input,
-    );
-    if (storage.agentExecution === undefined)
-      throw new Error("Agent pending discovery requires execution storage.");
-    return storage.agentExecution.pending({ count, ...(after === undefined ? {} : { after }) });
+    return ai === undefined ? {} : { ai };
   },
 
   /**
@@ -2052,17 +1885,15 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     const runtime = repositoryRuntimes.get(repository);
     if (runtime === undefined) throw new Error("Agent history requires an active repository.");
     const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
+    await runtime.onAdmit(context.tenantId);
     const input = RepositoryStorage.entityStorageInput(repository, context);
-    const history = AgentHistoryStorageFactories.create(runtime.storageFactory, {
-      context,
-      stateType: repository.stateSchema.typeName,
-      id: { key: input.id.key },
-    });
-    try {
-      return await history.read({ entityId, view, ...read });
-    } finally {
-      history.close();
-    }
+    return RepositoryStorage.track(repository, () =>
+      RepositoryStorage.openRepositoryAgentHistory(repository, runtime.storageFactory, input).read({
+        entityId,
+        view,
+        ...read,
+      }),
+    );
   },
 
   async agentHistoryPage(
@@ -2076,14 +1907,15 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     const runtime = repositoryRuntimes.get(repository);
     if (runtime === undefined) throw new Error("Agent history requires an active repository.");
     const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
+    await runtime.onAdmit(context.tenantId);
     const input = RepositoryStorage.entityStorageInput(repository, context);
-    const history = AgentHistoryStorageFactories.create(runtime.storageFactory, {
-      context,
-      stateType: repository.stateSchema.typeName,
-      id: { key: input.id.key },
-    });
-    try {
-      return await AgentHistoryReads.readBound(
+    return RepositoryStorage.track(repository, () => {
+      const history = RepositoryStorage.openRepositoryAgentHistory(
+        repository,
+        runtime.storageFactory,
+        input,
+      );
+      return AgentHistoryReads.readBound(
         {
           storage: history,
           entityId,
@@ -2092,9 +1924,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
         { kind: "full" },
         request,
       );
-    } finally {
-      history.close();
-    }
+    });
   },
 
   /**
@@ -2237,6 +2067,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
    */
   bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void {
     repositoryRuntimes.set(repository, Object.freeze(runtime));
+    repositoryStorageLifetimes.set(repository, RepositoryStorage.newLifetime());
   },
 
   /**
@@ -2244,14 +2075,22 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
    *
    * @param repository Repository to detach.
    */
-  clearRuntime(repository: RepositoryView): void {
+  clearRuntime(repository: RepositoryView): Promise<void> {
     repositoryRuntimes.delete(repository);
     repositoryDispatchGuards.delete(repository);
-    const handles = repositoryEntityHandles.get(repository);
-    if (handles !== undefined) {
-      for (const handle of handles.values()) handle.close();
-      handles.clear();
-    }
+    return RepositoryStorage.closeRuntime(repository);
+  },
+
+  /**
+   * Closes idle repository storage during synchronous assembly rollback.
+   *
+   * @param repository Repository to detach.
+   */
+  clearRuntimeIdle(repository: RepositoryView): void {
+    RepositoryStorage.assertIdle(repository);
+    repositoryRuntimes.delete(repository);
+    repositoryDispatchGuards.delete(repository);
+    RepositoryStorage.closeRuntimeIdle(repository);
   },
 });
 
@@ -2425,6 +2264,7 @@ interface RoutingInput<Id> {
 interface RepositoryRuntime {
   readonly context: StorageMode;
   readonly storageFactory: StorageFactory;
+  readonly onAdmit: (tenantId: TenantId | undefined) => Promise<void>;
   readonly ai?: AiRegistry;
   readonly stand: Stand;
   readonly signalMetadata: SignalMetadata;
@@ -2434,11 +2274,11 @@ interface RepositoryRuntime {
   readonly registerEventSchema: (schema: MessageSchema) => void;
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
   readonly publishAgentEvent: (event: Event) => Promise<void>;
-  readonly prepareSavedCommand: (command: Command) => Promise<AgentSavedDispatchPlan>;
-  readonly publishSavedCommand: (command: Command, plan: AgentSavedDispatchPlan) => Promise<void>;
   readonly publishAgentSystemEvent: (event: Event) => Promise<void>;
-  readonly recordAcceptedSaved: (signal: Command) => void;
-  readonly wakeAcceptedAgent: (repository: RepositoryView, tenantId: TenantId | undefined) => void;
+  readonly agentReceipts: AgentAcceptanceReceipts;
+  readonly agentSignal: AbortSignal;
+  readonly reserveAgent: (key: string, signal: AbortSignal) => AgentCapacityReservation | undefined;
+  readonly deferAgent: (message: InboxMessage, tenantId: TenantId | undefined) => void;
 }
 
 type AgentOutput =
@@ -2471,6 +2311,13 @@ interface LoadedAggregate {
   readonly states: EntityStateHistoryPort<unknown, Message>;
   readonly events: EntityEventHistoryPort<unknown>;
   readonly version: bigint;
+  readonly storageInput: EntityStorageInput<unknown, Message>;
+}
+
+interface BoundRepositoryStorage {
+  readonly commits: EntityCommitStorage;
+  readonly events: EntityEventHistoryPort<unknown>;
+  readonly agentHistory?: AgentHistoryStorage<unknown>;
   readonly storageInput: EntityStorageInput<unknown, Message>;
 }
 
@@ -2706,16 +2553,16 @@ class RepositoryReadScope<
       throw new Error("Repository read access has finished.");
     if (query.schema !== this.#repository.stateSchema)
       throw new TypeError("Repository query must select the receiving Entity state schema.");
+    await this.#runtime.onAdmit(this.#context.tenantId);
     const plan = RepositoryReadPredicates.plan(query.buildPlan());
-    const storage = RepositoryStorage.openReadEntityStorage(
-      this.#runtime.storageFactory,
-      RepositoryStorage.entityStorageInput(this.#repository, this.#context),
-    );
-    try {
-      return await storage.current.query(plan);
-    } finally {
-      storage.close();
-    }
+    return RepositoryStorage.track(this.#repository, () => {
+      const storage = RepositoryStorage.repositoryReadEntityStorage(
+        this.#repository,
+        this.#runtime.storageFactory,
+        RepositoryStorage.entityStorageInput(this.#repository, this.#context),
+      );
+      return storage.current.query(plan);
+    });
   }
 }
 
@@ -2860,12 +2707,34 @@ class AggregateExecutionSupport {
     );
     const entity = this.#instantiateAggregate(entityId, current);
     RepositoryHistoryInternals.bindEntityHistory(
+      this.#repository,
       entity,
       storage,
       entityId,
       this.#repository.stateSchema,
+      this.#storageContext.tenantId,
     );
 
+    return this.#loadedAggregate(entityId, current, entity, storage, storageInput);
+  }
+
+  /**
+   * Returns one restored Aggregate with its captured storage configuration.
+   *
+   * @param entityId Aggregate identifier.
+   * @param current Stored Aggregate snapshot, if present.
+   * @param entity Restored Aggregate instance.
+   * @param storage Retained Entity storage.
+   * @param storageInput Captured storage configuration.
+   * @returns Loaded Aggregate for command execution.
+   */
+  #loadedAggregate(
+    entityId: unknown,
+    current: Awaited<ReturnType<typeof standAccess.readCurrent>>,
+    entity: object,
+    storage: RepositoryEntityStorage<unknown, Message>,
+    storageInput: EntityStorageInput<unknown, Message>,
+  ): LoadedAggregate {
     return Object.freeze({
       commits: storage.commits,
       current:
@@ -2987,9 +2856,7 @@ class AggregateExecutionSupport {
       entity: loaded.storageInput,
       entityId,
       next: record,
-      ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
-        ? { states: [record] }
-        : {}),
+      ...(loaded.storageInput.stateHistory ? { states: [record] } : {}),
       diagnostics: diagnostics.map((event) => clone(EventSchema, event)),
       events,
     });
@@ -3292,13 +3159,15 @@ class AggregateCommandExecution {
       );
       const signals = this.#support.normalizeProducedSignals(produced);
       if (signals.length === 0)
-        throw new Error("Repository aggregate command handlers must return at least one event.");
+        throw receptionObservation.recordPostHandlerFailure(
+          new Error("Repository aggregate command handlers must return at least one event."),
+        );
       RepositoryHandlers.requireDeclaredOutputs(handler, signals);
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current, true),
       );
       if (commit.status === "rejected") {
-        throw new TransitionValidationError(commit.validation.error);
+        throw EntityInvocation.rejectedTransition(commit.validation.error);
       }
 
       return produced;
@@ -3372,7 +3241,7 @@ class AggregateCommandExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, message as never),
+      message: RepositorySignals.packProduced(schema, message as never),
       context: metadata.context,
     });
   }
@@ -3643,7 +3512,8 @@ class AggregateEventExecution {
     const commit = await commitFenced(entity, (current) =>
       transactionalEntityAccess.commit(current, producedEvents),
     );
-    if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
+    if (commit.status === "rejected")
+      throw EntityInvocation.rejectedTransition(commit.validation.error);
   }
 
   /**
@@ -3689,7 +3559,7 @@ class AggregateEventExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packProduced(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
@@ -3991,9 +3861,7 @@ class ProjectionEventExecution {
       entity: loaded.storageInput,
       entityId,
       next: record,
-      ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
-        ? { states: [record] }
-        : {}),
+      ...(loaded.storageInput.stateHistory ? { states: [record] } : {}),
     });
   }
 
@@ -4057,7 +3925,7 @@ class ProjectionEventExecution {
         transactionalEntityAccess.commit(current),
       );
       if (commit.status === "rejected") {
-        throw new TransitionValidationError(commit.validation.error);
+        throw EntityInvocation.rejectedTransition(commit.validation.error);
       }
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
@@ -4092,8 +3960,10 @@ class ProjectionEventExecution {
       context,
     );
     if (result !== undefined)
-      throw new Error(
-        `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+      throw receptionObservation.recordPostHandlerFailure(
+        new Error(
+          `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+        ),
       );
   }
 
@@ -4122,15 +3992,17 @@ class ProjectionEventExecution {
           context,
         );
         if (result !== undefined)
-          throw new Error(
-            `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+          throw receptionObservation.recordPostHandlerFailure(
+            new Error(
+              `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+            ),
           );
       }
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current),
       );
       if (commit.status === "rejected")
-        throw new TransitionValidationError(commit.validation.error);
+        throw EntityInvocation.rejectedTransition(commit.validation.error);
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
       throw error;
@@ -4400,12 +4272,7 @@ class ProcessManagerExecutionSupport {
     const priorNumber = loaded.current?.version?.number ?? 0;
     if (version.number === priorNumber) {
       await this.#appendUnchangedDiagnostics(loaded, diagnostics);
-      const store = new EventStore(this.#runtime.context, this.#runtime.storageFactory);
-      try {
-        await store.appendAll(producedEvents);
-      } finally {
-        store.close();
-      }
+      await RepositoryStorage.eventStore(this.#repository, this.#runtime).appendAll(producedEvents);
       await this.#appendAgentEvents(loaded, producedEvents);
       return true;
     }
@@ -4525,7 +4392,7 @@ class ProcessManagerExecutionSupport {
       entity: loaded.storageInput,
       entityId,
       next: record,
-      ...(history.stateHistory ? { states: [record] } : {}),
+      ...(loaded.storageInput.stateHistory ? { states: [record] } : {}),
       ...(history.processManagerEventHistory
         ? { diagnostics: diagnostics.map((event) => clone(EventSchema, event)) }
         : {}),
@@ -4556,820 +4423,9 @@ class ProcessManagerExecutionSupport {
 }
 
 /**
- * Advances admitted Agent work only under a provider claim and exact record fence.
+ * Binds normal outgoing Agent signals from one live turn.
  */
-const AgentExecutionRunner = {
-  /**
-   * Processes one accepted Agent transition under its provider claim.
-   *
-   * @param repository Registered Agent repository.
-   * @param tenantId Tenant selected for this invocation.
-   * @param key Exact accepted invocation key.
-   * @param signal Cancellation signal for the current accepted execution.
-   * @returns When the fenced repository operation completes.
-   */
-  async run(
-    repository: RepositoryView,
-    tenantId: TenantId | undefined,
-    key: AgentInvocationKey,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    if (signal?.aborted) return;
-    const runtime = repositoryRuntimes.get(repository);
-    if (runtime?.ai === undefined || repository.entityFamily !== "agent")
-      throw new Error("Agent execution requires a bound Agent repository and AI registry.");
-    const input = RepositoryStorage.entityStorageInput(
-      repository,
-      RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
-    );
-    const storage = RepositoryStorage.openRepositoryEntityStorage(
-      repository,
-      runtime.storageFactory,
-      input,
-    );
-    const executions = storage.agentExecution;
-    if (executions === undefined) throw new Error("Agent execution storage is required.");
-    const token = randomUUID();
-    const claimed = await executions.claim(key, token, addMillis(Time.currentTime(), 30_000));
-    if (claimed === undefined) return;
-    const session = new AgentExecutionSession(
-      executions,
-      claimed.record,
-      token,
-      claimed.preferences,
-    );
-    await this.runClaimed(repository, runtime, tenantId, session, signal);
-  },
-
-  /**
-   * Updates and releases one exact claim while its saved work advances.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param signal Cancellation signal for the current accepted execution.
-   * @returns When the fenced repository operation completes.
-   */
-  async runClaimed(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    const abort = () => {
-      session.stop();
-    };
-    signal?.addEventListener("abort", abort, { once: true });
-    if (signal?.aborted) abort();
-    const renewal = setInterval(() => {
-      // spine-log-boundary: server.agent_lease_renewal
-      void session.renew(addMillis(Time.currentTime(), 30_000)).catch(() => undefined);
-    }, 10_000);
-    try {
-      if (session.signal.aborted) return;
-      await this.advanceClaimed(repository, runtime, tenantId, session);
-    } catch (error) {
-      if (signal?.aborted) return;
-      await this.handleRunFailure(repository, runtime, tenantId, session, error);
-    } finally {
-      clearInterval(renewal);
-      signal?.removeEventListener("abort", abort);
-      session.stop();
-    }
-  },
-
-  /**
-   * Handles transient failures while giving expired work a final audit.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param error Failure raised while processing this accepted signal.
-   * @returns When the fenced repository operation completes.
-   */
-  async handleRunFailure(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    error: unknown,
-  ): Promise<void> {
-    if (
-      session.record().status ===
-        AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS ||
-      session.record().status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED
-    )
-      throw error;
-    if (error instanceof AgentUncertainAttemptError) {
-      const reason = this.hasUnresolvedToolWrite(session.record())
-        ? "TOOL_OUTCOME_UNKNOWN"
-        : "MODEL_OUTCOME_UNKNOWN";
-      return this.terminate(repository, runtime, tenantId, session, reason);
-    }
-    if (error instanceof AgentExecutionFault) {
-      if (session.signal.aborted) throw error;
-      return this.terminate(repository, runtime, tenantId, session, error.reason);
-    }
-    if (this.deadlineExpired(session.record()))
-      return this.terminate(repository, runtime, tenantId, session, "DEADLINE_EXCEEDED");
-    throw error;
-  },
-
-  /**
-   * Processes one claimed record according to its saved completion or request state.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @returns When the fenced repository operation completes.
-   */
-  async advanceClaimed(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-  ): Promise<void> {
-    if (this.hasUnresolvedPhysicalRequest(session.record()))
-      return this.terminate(
-        repository,
-        runtime,
-        tenantId,
-        session,
-        this.hasUnresolvedToolWrite(session.record())
-          ? "TOOL_OUTCOME_UNKNOWN"
-          : "MODEL_OUTCOME_UNKNOWN",
-      );
-    if (
-      session.record().status === AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS
-    )
-      return this.deliverCommands(runtime, session);
-    if (this.deadlineExpired(session.record()))
-      return this.terminate(repository, runtime, tenantId, session, "DEADLINE_EXCEEDED");
-    return this.execute(repository, runtime, tenantId, session);
-  },
-
-  /**
-   * Tests the original saved deadline without granting recovery fresh time.
-   *
-   * @param record Durable Agent execution record.
-   * @returns Whether the checked condition holds.
-   */
-  deadlineExpired(record: AgentExecutionRecord): boolean {
-    const deadline = record.started?.deadline;
-    return (
-      deadline !== undefined &&
-      Time.currentTimeMillis() >=
-        Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000)
-    );
-  },
-
-  /**
-   * Checks for a dispatched model reservation whose response was never saved.
-   *
-   * @param record Durable Agent execution record.
-   * @returns Whether the checked condition holds.
-   */
-  hasUnresolvedPhysicalRequest(record: AgentExecutionRecord): boolean {
-    const model = record.journal.some((entry) => {
-      if (entry.evidence.case !== "attempt") return false;
-      const attempt = entry.evidence.value;
-      return (
-        attempt.transportReserved &&
-        attempt.response.case === undefined &&
-        !this.hasSavedOperationResult(record, attempt.operation?.value)
-      );
-    });
-    return model || this.hasUnresolvedToolWrite(record);
-  },
-
-  /**
-   * Checks for a dispatched write with no recorded tool result.
-   *
-   * @param record Durable Agent execution record.
-   * @returns Whether the checked condition holds.
-   */
-  hasUnresolvedToolWrite(record: AgentExecutionRecord): boolean {
-    return record.journal.some((entry) => {
-      if (entry.evidence.case !== "tool") return false;
-      const tool = entry.evidence.value;
-      return (
-        tool.request?.effect === ToolEffect.WRITE &&
-        tool.response === undefined &&
-        (tool.dispatched || tool.outcomeUnknown) &&
-        !this.hasSavedOperationResult(record, tool.operation?.value)
-      );
-    });
-  },
-
-  /**
-   * Checks for a settled named result even when physical evidence is incomplete.
-   *
-   * @param record Durable Agent execution record.
-   * @param id Saved signal, operation, or Entity identifier.
-   * @returns Whether the checked condition holds.
-   */
-  hasSavedOperationResult(record: AgentExecutionRecord, id: string | undefined): boolean {
-    return record.journal.some(
-      (entry) =>
-        entry.evidence.case === "operation" &&
-        entry.evidence.value.operation?.value === id &&
-        entry.evidence.value.result.case !== undefined,
-    );
-  },
-
-  /**
-   * Records termination of an unreplayable physical request under the provider fence.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param reason Safe terminal reason retained in Agent audit.
-   * @returns When the fenced repository operation completes.
-   */
-  async terminate(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    reason: string,
-  ): Promise<void> {
-    const record = session.record();
-    const event = this.terminationEvent(repository, runtime, tenantId, record, reason);
-    const occurredAt = event.context?.timestamp;
-    if (occurredAt === undefined) throw new Error("Agent termination Event requires Time.");
-    runtime.registerSystemEventSchema(AgentInvocationTerminatedSchema);
-    await session.update(
-      (next) => {
-        next.status = AgentInvocationStatus.AGENT_INVOCATION_TERMINATED;
-        next.terminalFailure = create(AiDiagnosticIdSchema, { value: randomUUID() });
-        return next;
-      },
-      [
-        create(AgentHistoryEntrySchema, {
-          occurredAt,
-          item: { case: "systemEvent", value: event },
-        }),
-      ],
-    );
-    await runtime.publishAgentSystemEvent(event);
-  },
-
-  /**
-   * Builds one original termination envelope for a saved terminal reason.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param record Durable Agent execution record.
-   * @param reason Safe terminal reason retained in Agent audit.
-   * @returns Original AgentInvocationTerminated System Event envelope.
-   */
-  terminationEvent(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    record: AgentExecutionRecord,
-    reason: string,
-  ): Event {
-    const accepted = record.accepted;
-    if (accepted?.recipientId === undefined)
-      throw new Error("Agent termination requires the original typed recipient.");
-    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
-    const unresolvedToolCalls = this.unresolvedToolCalls(record);
-    const payload = create(AgentInvocationTerminatedSchema, {
-      agent: scope.agent,
-      sourceSignal: scope.source,
-      reason,
-      unresolvedAttempts: this.unresolvedAttempts(record),
-      unresolvedToolCalls,
-      terminatedAt: Time.currentTime(),
-    });
-    return AgentInteractionEvents.envelope(
-      accepted,
-      runtime.signalMetadata,
-      accepted.recipientId,
-      AgentInvocationTerminatedSchema,
-      payload,
-    );
-  },
-
-  /**
-   * Returns IDs only for physically reserved model requests without saved outcomes.
-   *
-   * @param record Durable execution journal.
-   * @returns Original attempt IDs for unresolved physical sends.
-   */
-  unresolvedAttempts(record: AgentExecutionRecord) {
-    return record.journal.flatMap((entry) => {
-      if (entry.evidence.case !== "attempt") return [];
-      const attempt = entry.evidence.value;
-      return attempt.transportReserved &&
-        attempt.response.case === undefined &&
-        !this.hasSavedOperationResult(record, attempt.operation?.value) &&
-        attempt.attempt !== undefined
-        ? [attempt.attempt]
-        : [];
-    });
-  },
-
-  /**
-   * Returns exact IDs for dispatched write effects without saved results.
-   *
-   * @param record Durable Agent execution record.
-   * @returns Original ToolCall IDs for unresolved dispatched writes.
-   */
-  unresolvedToolCalls(record: AgentExecutionRecord) {
-    return record.journal.flatMap((entry) => {
-      if (entry.evidence.case !== "tool") return [];
-      const tool = entry.evidence.value;
-      return tool.request?.effect === ToolEffect.WRITE &&
-        tool.response === undefined &&
-        (tool.dispatched || tool.outcomeUnknown) &&
-        tool.request.call !== undefined
-        ? [tool.request.call]
-        : [];
-    });
-  },
-
-  /**
-   * Persists start facts, runs selected handlers, and conditionally completes a no-op.
-   *
-   * @param repository Agent registration.
-   * @param runtime Bound services.
-   * @param tenantId Complete tenant, when applicable.
-   * @param session Fenced Agent execution session.
-   * @returns When the fenced repository operation completes.
-   */
-  async execute(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-  ): Promise<void> {
-    const accepted = session.record().accepted;
-    if (accepted?.key === undefined || accepted.recipientId === undefined)
-      throw new Error("Claimed Agent invocation lacks accepted source and recipient.");
-    const entityId = InboxMessages.targetEntityId(accepted.recipientId, repository.idField);
-    const support = new ProcessManagerExecutionSupport(repository, runtime);
-    const loaded = await support.load(entityId, tenantId === undefined ? {} : { tenantId });
-    const handlers = this.handlers(repository, accepted);
-    const configuration = repositoryAccess.agentConfiguration(repository);
-    if (runtime.ai === undefined) throw new Error("Agent execution requires a bound AI registry.");
-    this.assertRevisions(repository, accepted, handlers, runtime.ai, configuration);
-    const record =
-      session.record().started === undefined
-        ? await this.start(repository, runtime, session, loaded, entityId, tenantId)
-        : await this.selectMissingModels(repository, runtime, session, accepted, tenantId);
-    if (session.signal.aborted) return;
-    const outputs = await this.completeExecution(
-      repository,
-      runtime,
-      tenantId,
-      session,
-      loaded,
-      accepted,
-      handlers,
-      entityId,
-      record.started?.initialVersion ?? create(VersionSchema),
-    );
-    await this.deliverInitial(runtime, session, outputs);
-  },
-
-  /**
-   * Creates or rejects the draft before one conditional Entity completion.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param loaded Loaded Entity and its repository storage state.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param handlers Generated handlers in their saved order.
-   * @param entityId Typed recipient Entity identifier.
-   * @param initialVersion Entity version before selected handlers run.
-   * @returns Record after conditional Entity and execution completion.
-   */
-  async completeExecution(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    loaded: LoadedRepositoryEntity,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    handlers: readonly RegisteredHandlerMetadata[],
-    entityId: unknown,
-    initialVersion: Version,
-  ): Promise<readonly AgentOutput[]> {
-    const outputs = await this.outputsOrRejection(
-      repository,
-      runtime,
-      tenantId,
-      session,
-      loaded.entity,
-      accepted,
-      handlers,
-      entityId,
-      initialVersion,
-    );
-    await this.complete(repository, runtime, tenantId, session, loaded, entityId, outputs);
-    return outputs;
-  },
-
-  /**
-   * Rejects a Command draft and persists only its declared rejection.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param entity Loaded recipient Entity instance.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param handlers Generated handlers in their saved order.
-   * @param entityId Typed recipient Entity identifier.
-   * @param initialVersion Entity version before selected handlers run.
-   * @returns Prepared outgoing signals, or only the declared rejection.
-   */
-  async outputsOrRejection(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    entity: object,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    handlers: readonly RegisteredHandlerMetadata[],
-    entityId: unknown,
-    initialVersion: Version,
-  ): Promise<readonly AgentOutput[]> {
-    try {
-      return await this.produceOutputs(
-        repository,
-        runtime,
-        tenantId,
-        session,
-        entity,
-        accepted,
-        handlers,
-        entityId,
-        initialVersion,
-      );
-    } catch (error) {
-      if (!RejectionThrowable.is(error) || accepted.signal.case !== "command") throw error;
-      const handler = handlers[0];
-      if (handler === undefined) throw new Error("Agent rejection requires a Command assignee.");
-      RepositorySignals.requireDeclaredRejection(handler.handler, error);
-      session.discardPreferenceChanges();
-      return [this.rejectionOutput(runtime, repository, accepted.signal.value, entityId, error)];
-    }
-  },
-
-  /**
-   * Wraps the original rejection Event for one normal EventBus handoff.
-   *
-   * @param runtime Bounded Context storage and publication services.
-   * @param repository Registered Entity repository for this operation.
-   * @param command Original typed Command envelope.
-   * @param entityId Typed recipient Entity identifier.
-   * @param error Failure raised while processing this accepted signal.
-   * @returns Prepared original rejection Event for one normal EventBus handoff.
-   */
-  rejectionOutput(
-    runtime: RepositoryRuntime,
-    repository: RepositoryView,
-    command: Command,
-    entityId: unknown,
-    error: RejectionThrowable,
-  ): AgentOutput {
-    return {
-      case: "event",
-      value: RepositorySignals.rejectionEvent(runtime, repository, command, entityId, error),
-    };
-  },
-
-  /**
-   * Restores handler results and binds their declared original output envelopes.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param entity Loaded recipient Entity instance.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param handlers Generated handlers in their saved order.
-   * @param entityId Typed recipient Entity identifier.
-   * @param initialVersion Entity version before selected handlers run.
-   * @returns Prepared outgoing signals from accepted handler results.
-   */
-  async produceOutputs(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    entity: object,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    handlers: readonly RegisteredHandlerMetadata[],
-    entityId: unknown,
-    initialVersion: Version,
-  ): Promise<readonly AgentOutput[]> {
-    const produced = await this.invoke(
-      repository,
-      runtime,
-      tenantId,
-      session,
-      entity,
-      accepted,
-      handlers,
-    );
-    return this.bindOutputs(repository, runtime, accepted, entityId, initialVersion, produced);
-  },
-
-  /**
-   * Commits changed state and the fenced execution record as one provider mutation.
-   *
-   * @param repository Agent registration.
-   * @param runtime Bounded Context Stand and provider services.
-   * @param tenantId Complete delivery tenant.
-   * @param session Serialized provider claim and current record.
-   * @param loaded Entity after handler transaction commit.
-   * @param entityId Original typed recipient.
-   * @param outputs Original emitted Event or Command envelopes.
-   * @returns Complete record after the atomic provider mutation.
-   */
-  async complete(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    loaded: LoadedRepositoryEntity,
-    entityId: unknown,
-    outputs: readonly AgentOutput[],
-  ): Promise<AgentExecutionRecord> {
-    await this.authorizePreferenceChanges(repository, runtime, tenantId, session);
-    const version = RepositoryEntities.repositoryVersion(loaded.entity);
-    const preferences = session.preferences();
-    const emitted = this.emittedHistory(outputs);
-    const preferenceEvents = this.preferenceEvents(repository, runtime, tenantId, session);
-    const historyEntries = [...emitted, ...this.preferenceHistory(preferenceEvents)];
-    const makeNext = (record: AgentExecutionRecord) =>
-      this.completionFacts(record, version, outputs, preferences);
-    const completed = await this.commitCompletion(
-      repository,
-      runtime,
-      tenantId,
-      session,
-      loaded,
-      entityId,
-      makeNext,
-      historyEntries,
-    );
-    for (const event of preferenceEvents) await runtime.publishAgentSystemEvent(event);
-    return completed;
-  },
-
-  /**
-   * Checks effective staged model changes before any completion mutation.
-   *
-   * @param repository Agent registration and model policy.
-   * @param runtime Bounded Context and AI registry.
-   * @param tenantId Accepted tenant when applicable.
-   * @param session Fenced Agent execution and staged preferences.
-   * @returns When every effective change is authorized.
-   */
-  async authorizePreferenceChanges(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-  ): Promise<void> {
-    const policy = repositoryAccess.agentConfiguration(repository).ai;
-    if (policy?.authorizeSelection === undefined) return;
-    const accepted = session.record().accepted;
-    if (runtime.ai === undefined || accepted === undefined)
-      throw new Error("Agent model preference requires accepted start facts.");
-    const deadlineMs = this.savedModelDeadline(session, "preference");
-    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
-    for (const kind of [AiModelKind.GENERATION, AiModelKind.DECISION]) {
-      const previous = this.preferenceModel(session.initialPreferences(), kind);
-      const selected = this.preferenceModel(session.preferences(), kind);
-      if (previous === undefined && selected === undefined) continue;
-      if (
-        previous !== undefined &&
-        selected !== undefined &&
-        equals(ModelRefSchema, previous, selected)
-      )
-        continue;
-      await AgentModelSelection.authorizeSelection(
-        runtime.ai,
-        policy,
-        scope,
-        selected,
-        session.signal,
-        deadlineMs,
-      );
-    }
-  },
-
-  /**
-   * Reads an optional saved model deadline and detects incomplete persisted bounds.
-   *
-   * @param session Fenced Agent execution session.
-   * @param context Selection or preference authorization context.
-   * @returns Saved absolute deadline, when configured.
-   */
-  savedModelDeadline(
-    session: AgentExecutionSession,
-    context: "preference" | "selection",
-  ): number | undefined {
-    const record = session.record();
-    const deadline = record.started?.deadline;
-    if (deadline === undefined && record.started?.bounds?.deadlineMillis !== undefined)
-      throw new Error(`Agent model ${context} deadline was not saved.`);
-    return deadline === undefined
-      ? undefined
-      : Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
-  },
-
-  /**
-   * Applies the same provider fence to preference events and Entity completion.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param loaded Loaded Entity and its repository storage state.
-   * @param entityId Typed recipient Entity identifier.
-   * @param makeNext Callback constructing the next durable execution record.
-   * @param historyEntries Agent history rows included in the fenced mutation.
-   * @returns Saved execution record after conditional completion.
-   */
-  commitCompletion(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    loaded: LoadedRepositoryEntity,
-    entityId: unknown,
-    makeNext: (record: AgentExecutionRecord) => AgentExecutionRecord,
-    historyEntries: readonly AgentHistoryEntry[],
-  ): Promise<AgentExecutionRecord> {
-    return RepositoryEntities.repositoryChanged(loaded.entity)
-      ? this.commitChanged(
-          repository,
-          runtime,
-          tenantId,
-          session,
-          loaded,
-          entityId,
-          makeNext,
-          historyEntries,
-        )
-      : session.complete(makeNext, historyEntries);
-  },
-
-  /**
-   * Wraps original preference Events as indexed Agent history entries.
-   *
-   * @param events Original Event envelopes retained for diagnostics.
-   * @returns Typed Agent history rows for saved preference changes.
-   */
-  preferenceHistory(events: readonly Event[]): readonly AgentHistoryEntry[] {
-    return events.map((event) => {
-      const occurredAt = event.context?.timestamp;
-      if (occurredAt === undefined) throw new Error("Agent preference Event requires Time.");
-      return create(AgentHistoryEntrySchema, {
-        occurredAt,
-        item: { case: "systemEvent", value: event },
-      });
-    });
-  },
-
-  /**
-   * Captures only effective preference changes committed by this signal.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @returns Original model-selection System Events.
-   */
-  preferenceEvents(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-  ): readonly Event[] {
-    const accepted = session.record().accepted;
-    if (accepted?.recipientId === undefined)
-      throw new Error("Agent preference requires accepted work.");
-    const scope = AgentModelSelection.scope(accepted, repository.stateSchema, tenantId);
-    return [AiModelKind.GENERATION, AiModelKind.DECISION].flatMap((kind) => {
-      const previous = this.preferenceModel(session.initialPreferences(), kind);
-      const selected = this.preferenceModel(session.preferences(), kind);
-      if (previous === undefined && selected === undefined) return [];
-      if (
-        previous !== undefined &&
-        selected !== undefined &&
-        equals(ModelRefSchema, previous, selected)
-      )
-        return [];
-      return [this.preferenceEvent(accepted, scope, kind, previous, selected, runtime)];
-    });
-  },
-
-  /**
-   * Builds one effective selection change with its original causal context.
-   *
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param scope Accepted actor, source, Bounded Context, and tenant.
-   * @param kind Generation or decision model kind.
-   * @param previous Previously selected model deployment.
-   * @param selected Newly selected model deployment.
-   * @param runtime Bounded Context storage and publication services.
-   * @returns Original model-selection System Event.
-   */
-  preferenceEvent(
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    scope: AiScope,
-    kind: AiModelKind,
-    previous: ModelRef | undefined,
-    selected: ModelRef | undefined,
-    runtime: RepositoryRuntime,
-  ): Event {
-    const recipientId = accepted.recipientId;
-    if (recipientId === undefined) throw new Error("Agent preference requires a recipient.");
-    const payload = create(SelectionChangedSchema, {
-      agent: scope.agent,
-      sourceSignal: scope.source,
-      kind,
-      ...(previous === undefined ? {} : { previousModel: previous }),
-      ...(selected === undefined ? {} : { selectedModel: selected }),
-      changedAt: Time.currentTime(),
-    });
-    runtime.registerSystemEventSchema(SelectionChangedSchema);
-    return AgentInteractionEvents.envelope(
-      accepted,
-      runtime.signalMetadata,
-      recipientId,
-      SelectionChangedSchema,
-      payload,
-    );
-  },
-
-  /**
-   * Reads an explicit model selection, including inherited defaults as absence.
-   *
-   * @param preferences Current Agent instance model preferences.
-   * @param kind Generation or decision model kind.
-   * @returns Selected deployment reference, or inherited default.
-   */
-  preferenceModel(
-    preferences: readonly ModelPreference[],
-    kind: AiModelKind,
-  ): ModelRef | undefined {
-    const selected = preferences.find((entry) => entry.kind === kind);
-    return selected?.selection.case === "model" ? selected.selection.value : undefined;
-  },
-
-  /**
-   * Builds the immutable completion image and emitted domain history.
-   *
-   * @param record Durable Agent execution record.
-   * @param version Entity version associated with the signal.
-   * @param outputs Prepared outgoing domain signals.
-   * @param preferences Current Agent instance model preferences.
-   * @returns Record completed with original outputs and resulting version.
-   */
-  completionFacts(
-    record: AgentExecutionRecord,
-    version: Version,
-    outputs: readonly AgentOutput[],
-    preferences: readonly ModelPreference[],
-  ) {
-    const initialVersion = record.started?.initialVersion;
-    if (initialVersion === undefined)
-      throw new Error("Agent completion requires its started Version.");
-    const commands = outputs
-      .filter(
-        (output): output is Extract<AgentOutput, { case: "command" }> => output.case === "command",
-      )
-      .map((output) => create(AgentOutgoingCommandSchema, { command: output.value }));
-    record.status =
-      commands.length === 0
-        ? AgentInvocationStatus.AGENT_INVOCATION_COMPLETED
-        : AgentInvocationStatus.AGENT_INVOCATION_COMPLETED_PENDING_COMMANDS;
-    record.completion = create(AgentExecutionCompletionSchema, {
-      initialVersion,
-      resultingVersion: version,
-      preferences: [...preferences],
-      commands,
-    });
-    return record;
-  },
-
+const AgentLiveOutputs = {
   /**
    * Stores only committed domain Events in the Agent's emitted history.
    *
@@ -5393,122 +4449,6 @@ const AgentExecutionRunner = {
   },
 
   /**
-   * Commits changed Entity state with the already prepared execution image.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param loaded Loaded Entity and its repository storage state.
-   * @param entityId Typed recipient Entity identifier.
-   * @param makeNext Callback constructing the next durable execution record.
-   * @param historyEntries Agent history rows included in the fenced mutation.
-   * @returns Saved execution record after the changed Entity commit.
-   */
-  async commitChanged(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    loaded: LoadedRepositoryEntity,
-    entityId: unknown,
-    makeNext: (record: AgentExecutionRecord) => AgentExecutionRecord,
-    historyEntries: readonly AgentHistoryEntry[],
-  ): Promise<AgentExecutionRecord> {
-    const version = RepositoryEntities.repositoryVersion(loaded.entity);
-    const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
-    const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
-    const deferred = await standAccess.deferUpdate(
-      runtime.stand,
-      repository.stateSchema,
-      state,
-      RepositoryStand.standUpdateOptions(tenantId, version, lifecycle),
-      repository.metadata,
-    );
-    const prepared = RepositoryStand.preparedRecord(repository, deferred, entityId);
-    return this.commitDeferred(
-      repository,
-      session,
-      loaded,
-      entityId,
-      makeNext,
-      historyEntries,
-      deferred,
-      prepared,
-    );
-  },
-
-  /**
-   * Applies the deferred Stand image only after fenced provider completion.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param session Fenced Agent execution session.
-   * @param loaded Loaded Entity and its repository storage state.
-   * @param entityId Typed recipient Entity identifier.
-   * @param makeNext Callback constructing the next durable execution record.
-   * @param historyEntries Agent history rows included in the fenced mutation.
-   * @param deferred Prepared Stand update awaiting conditional commit.
-   * @param prepared Prepared conditional Entity commit.
-   * @returns Saved execution record after the deferred Entity commit.
-   */
-  async commitDeferred(
-    repository: RepositoryView,
-    session: AgentExecutionSession,
-    loaded: LoadedRepositoryEntity,
-    entityId: unknown,
-    makeNext: (record: AgentExecutionRecord) => AgentExecutionRecord,
-    historyEntries: readonly AgentHistoryEntry[],
-    deferred: Awaited<ReturnType<typeof standAccess.deferUpdate>>,
-    prepared: EntityRecord,
-  ): Promise<AgentExecutionRecord> {
-    try {
-      const completed = await session.complete(makeNext, historyEntries, {
-        context: loaded.storageInput.context,
-        entity: loaded.storageInput,
-        entityId,
-        next: prepared,
-        ...(RepositoryStorage.historyConfiguration(repository).stateHistory
-          ? { states: [prepared] }
-          : {}),
-      });
-      deferred.notify();
-      return completed;
-    } catch (error) {
-      deferred.cancel();
-      throw error;
-    }
-  },
-
-  /**
-   * Binds declared generated Event and Command results in handler order.
-   *
-   * @param repository Agent declaration.
-   * @param runtime Signal metadata factory.
-   * @param accepted Original accepted envelope.
-   * @param entityId Typed recipient.
-   * @param version Entity Version before this transition.
-   * @param produced Handler results in declaration order.
-   * @returns Original outgoing envelopes ready for one conditional completion.
-   */
-  bindOutputs(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    entityId: unknown,
-    version: Version,
-    produced: readonly unknown[],
-  ): readonly AgentOutput[] {
-    const source = accepted.signal;
-    if (source.case !== "command" && source.case !== "event")
-      throw new Error("Agent output requires its accepted source signal.");
-    const routing = repositoryRoutings.get(repository);
-    if (routing === undefined) throw new Error("Agent output requires registered schemas.");
-    return produced.map((signal) =>
-      this.bindOutput(repository, runtime, routing, source, entityId, version, signal),
-    );
-  },
-
-  /**
    * Binds one declared result using its generated Event or Command role.
    *
    * @param repository Registered Entity repository for this operation.
@@ -5524,7 +4464,7 @@ const AgentExecutionRunner = {
     repository: RepositoryView,
     runtime: RepositoryRuntime,
     routing: RepositoryRouting,
-    source: NonNullable<AgentExecutionRecord["accepted"]>["signal"],
+    source: AgentSource,
     entityId: unknown,
     version: Version,
     signal: unknown,
@@ -5561,20 +4501,19 @@ const AgentExecutionRunner = {
   bindEventOutput(
     repository: RepositoryView,
     runtime: RepositoryRuntime,
-    source: NonNullable<AgentExecutionRecord["accepted"]>["signal"],
+    source: AgentSource,
     entityId: unknown,
     version: Version,
     signal: unknown,
     schema: MessageSchema,
   ): AgentOutput {
-    if (source.case !== "command" && source.case !== "event") throw new Error("Missing source.");
     const metadata =
       source.case === "command"
         ? runtime.signalMetadata.eventFromCommand(source.value, { version: version.number })
         : runtime.signalMetadata.eventFromEvent(source.value, { version: version.number });
     const event = create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packValidated(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         repository,
@@ -5596,664 +4535,35 @@ const AgentExecutionRunner = {
    */
   bindCommandOutput(
     runtime: RepositoryRuntime,
-    source: NonNullable<AgentExecutionRecord["accepted"]>["signal"],
+    source: AgentSource,
     signal: unknown,
     schema: MessageSchema,
   ): AgentOutput {
-    if (source.case !== "command" && source.case !== "event") throw new Error("Missing source.");
     const metadata =
       source.case === "command"
         ? runtime.signalMetadata.commandFromCommand(source.value)
         : runtime.signalMetadata.commandFromEvent(source.value);
     const command = create(CommandSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packValidated(schema, signal as never),
       context: metadata.context,
     });
     return { case: "command", value: command };
   },
+};
 
+/**
+ * Waits only for a current in-process handler invocation.
+ */
+const AgentLiveHandler = {
   /**
-   * Dispatches every emitted Event to the normal EventBus and advances saved Commands.
-   *
-   * @param runtime Bound normal bus acceptance callbacks.
-   * @param session Fenced record containing pending saved envelopes.
-   * @param outputs Locally produced outputs in original handler order.
-   * @returns When the fenced repository operation completes.
-   */
-  async deliverInitial(
-    runtime: RepositoryRuntime,
-    session: AgentExecutionSession,
-    outputs: readonly AgentOutput[],
-  ): Promise<void> {
-    let commandIndex = 0;
-    let failed = false;
-    let firstFailure: unknown;
-    for (const output of outputs) {
-      try {
-        if (output.case === "event") {
-          await runtime.publishAgentEvent(output.value);
-        } else {
-          await this.deliverCommand(runtime, session, commandIndex);
-        }
-      } catch (error) {
-        if (!failed) {
-          firstFailure = error;
-          failed = true;
-        }
-      }
-      if (output.case === "command") commandIndex += 1;
-    }
-    if (failed) throw firstFailure;
-  },
-
-  /**
-   * Retries pending saved Commands without rerunning the Agent handler.
-   *
-   * @param runtime Bound normal Command bus callbacks.
-   * @param session Fenced record containing saved Commands.
-   * @returns Completion after pending Command attempts.
-   */
-  async deliverCommands(runtime: RepositoryRuntime, session: AgentExecutionSession): Promise<void> {
-    for (const [index] of (session.record().completion?.commands ?? []).entries()) {
-      if (session.signal.aborted) return;
-      await this.deliverCommand(runtime, session, index);
-    }
-  },
-
-  /**
-   * Sends one saved Command under the current claim and records its acknowledgement.
-   *
-   * @param runtime Bound normal Command bus callbacks.
-   * @param session Fenced record containing saved Commands.
-   * @param index Command position in the saved completion.
-   * @returns Completion after the Command is acknowledged or already delivered.
-   */
-  async deliverCommand(
-    runtime: RepositoryRuntime,
-    session: AgentExecutionSession,
-    index: number,
-  ): Promise<void> {
-    const output = session.record().completion?.commands[index];
-    if (output === undefined || output.delivered) return;
-    const command = output.command;
-    if (command === undefined) throw new Error("Agent outgoing Command has no original envelope.");
-    const key = this.outputKey(output);
-    const plan = output.plan ?? (await runtime.prepareSavedCommand(command));
-    if (output.plan === undefined) {
-      await session.update((current) => {
-        const pending = current.completion?.commands[index];
-        if (
-          pending === undefined ||
-          pending.plan !== undefined ||
-          pending.command?.id?.uuid !== command.id?.uuid
-        )
-          throw new Error("Saved Agent Command changed before plan installation.");
-        pending.plan = plan;
-        return current;
-      });
-    }
-    await runtime.publishSavedCommand(command, plan);
-    await session.markDelivered([key]);
-    runtime.recordAcceptedSaved(command);
-  },
-
-  /**
-   * Returns the typed original ID of one completed outgoing Command.
-   *
-   * @param output Prepared outgoing Command.
-   * @returns Original durable Command ID.
-   */
-  outputKey(output: AgentOutgoingCommand): CommandId {
-    if (output.command?.id !== undefined) return output.command.id;
-    throw new Error("Agent outgoing Command requires its original typed ID.");
-  },
-
-  /**
-   * Validates every stored binding against the current generated selectors.
-   *
-   * @param repository Agent registration.
-   * @param accepted Immutable source and ordered bindings.
-   * @returns Current matching handler metadata.
-   */
-  handlers(
-    repository: RepositoryView,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-  ): readonly RegisteredHandlerMetadata[] {
-    const routing = repositoryRoutings.get(repository);
-    if (routing === undefined) throw new Error("Agent execution requires registered handlers.");
-    const current = this.selectedHandlers(routing, accepted);
-    if (accepted.handlers.length !== current.length || current.length === 0)
-      throw new AgentExecutionFault(
-        "REVISION_CHANGED",
-        "Accepted Agent handler binding changed before replay.",
-      );
-    for (const [ordinal, handler] of current.entries()) {
-      const binding = accepted.handlers[ordinal];
-      if (binding === undefined || !AgentAdmission.matchesHandler(binding, handler, ordinal))
-        throw new AgentExecutionFault(
-          "REVISION_CHANGED",
-          "Accepted Agent handler binding changed before replay.",
-        );
-    }
-    return current;
-  },
-
-  /**
-   * Finds current Command or Event handlers from the immutable source envelope.
-   *
-   * @param routing Registered generated handler routing metadata.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @returns Generated handlers selected for the accepted signal.
-   */
-  selectedHandlers(
-    routing: RepositoryRouting,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-  ): readonly RegisteredHandlerMetadata[] {
-    if (accepted.signal.case === "command") {
-      const binding = accepted.handlers[0];
-      const current = routing.commandReadiness?.findCommandAssignee(binding?.signalType ?? "");
-      return current === undefined ? [] : [current.registeredHandler];
-    }
-    if (accepted.signal.case !== "event") throw new Error("Agent source envelope is missing.");
-    const event = accepted.signal.value;
-    const packed = EntityInvocation.requireSignalMessage(event.message, "event");
-    const schema = RepositoryRoutes.schemaForTypeUrl(routing.eventSchemas, packed.typeUrl, "event");
-    const value = EntityInvocation.unpackRequired(packed, schema, "event");
-    const external = event.context?.external === true;
-    return [
-      ...routing.eventReactors(schema.typeName, value, external),
-      ...routing.commandReactions(schema.typeName, value, external),
-    ];
-  },
-
-  /**
-   * Records start facts and the original dispatch System Event before handler execution.
-   *
-   * @param repository Agent registration.
-   * @param runtime Bound services.
-   * @param session Fenced provider claim and current record.
-   * @param loaded Restored Entity and initial Version.
-   * @param entityId Original typed recipient.
-   * @param tenantId Accepted delivery tenant when applicable.
-   * @returns Updated record image for exact subsequent CAS.
-   */
-  async start(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    session: AgentExecutionSession,
-    loaded: LoadedRepositoryEntity,
-    entityId: unknown,
-    tenantId: TenantId | undefined,
-  ): Promise<AgentExecutionRecord> {
-    const accepted = session.record().accepted;
-    if (accepted === undefined) throw new Error("Agent start requires accepted work.");
-    const started = this.startFacts(repository, runtime, accepted, loaded);
-    const audit = this.startAudit(runtime, repository, accepted, entityId);
-    await session.update(
-      (current) => {
-        current.started = started;
-        return current;
-      },
-      [this.startHistory(audit)],
-    );
-    if (accepted.signal.case === "command") HandlerDispatchPublisher.publishCommand(runtime, audit);
-    else HandlerDispatchPublisher.publishReactor(runtime, audit);
-    return this.selectMissingModels(repository, runtime, session, accepted, tenantId);
-  },
-
-  /**
-   * Stores the original dispatch audit envelope in mandatory Agent history.
-   *
-   * @param audit Original Agent System event envelope.
-   * @returns Typed Agent history row for the original dispatch Event.
-   */
-  startHistory(audit: Event): AgentHistoryEntry {
-    const occurredAt = audit.context?.timestamp;
-    if (occurredAt === undefined) throw new Error("Agent dispatch audit requires its timestamp.");
-    return create(AgentHistoryEntrySchema, {
-      occurredAt,
-      item: { case: "systemEvent", value: audit },
-    });
-  },
-
-  /**
-   * Verifies admission revisions and fixes whole-invocation limits before execution.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param loaded Loaded Entity and its repository storage state.
-   * @returns Durable deadline, initial version, and whole-invocation bounds.
-   */
-  startFacts(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    loaded: LoadedRepositoryEntity,
-  ): AgentExecutionStart {
-    const configuration = repositoryAccess.agentConfiguration(repository);
-    const ai = runtime.ai;
-    if (accepted.key === undefined || ai === undefined || configuration.ai === undefined)
-      throw new Error("Agent execution start requires accepted work and AI policy.");
-    const limits = registryOptions(ai).invocationLimits ?? {};
-    return create(AgentExecutionStartSchema, {
-      ...(limits.deadlineMs === undefined
-        ? {}
-        : { deadline: addMillis(Time.currentTime(), limits.deadlineMs) }),
-      initialVersion: RepositoryEntities.priorVersion(loaded.current),
-      bounds: this.invocationBounds(limits),
-    });
-  },
-
-  /**
-   * Persists each model kind without a saved connection identity.
-   *
-   * @param repository Agent registration and permitted capabilities.
-   * @param runtime Bound AI registry.
-   * @param session Current fenced execution record.
-   * @param accepted Original accepted signal and actor.
-   * @param tenantId Accepted tenant when applicable.
-   * @returns Record after each missing identity has been saved.
-   */
-  async selectMissingModels(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    session: AgentExecutionSession,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    tenantId: TenantId | undefined,
-  ): Promise<AgentExecutionRecord> {
-    const ai = runtime.ai;
-    const configuration = repositoryAccess.agentConfiguration(repository).ai;
-    if (ai === undefined || configuration === undefined)
-      throw new Error("Agent model selection requires saved start facts and AI policy.");
-    const deadlineMs = this.savedModelDeadline(session, "selection");
-    const source = accepted.signal.value?.message;
-    for (const kind of ["generation", "decision"] as const) {
-      if (!configuration.models.some((model) => model.definition.kind === kind)) continue;
-      const modelKind = AgentModelSelection.kind(kind);
-      if (session.record().started?.models.some((model) => model.kind === modelKind)) continue;
-      const selected = await AgentModelSelection.selectKind(
-        ai,
-        configuration,
-        AgentModelSelection.scope(accepted, repository.stateSchema, tenantId),
-        session.initialPreferences(),
-        session.signal,
-        deadlineMs,
-        kind,
-        source,
-      );
-      await this.saveSelectedModel(session, selected);
-    }
-    return session.record();
-  },
-
-  /**
-   * Writes one selected model under the current Agent claim.
-   *
-   * @param session Fenced Agent execution session.
-   * @param selected Authorized deployment and connection identity.
-   * @returns When the selection is durable.
-   */
-  async saveSelectedModel(
-    session: AgentExecutionSession,
-    selected: AgentSelectedModel,
-  ): Promise<void> {
-    await session.update((record) => {
-      if (record.started === undefined) throw new Error("Agent start facts disappeared.");
-      record.started.models.push(selected);
-      return record;
-    });
-  },
-
-  /**
-   * Rejects accepted work when its exact handler and AI policy changed.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param handlers Generated handlers in their saved order.
-   * @param ai Configured AI registry for this Bounded Context.
-   * @param configuration Repository and AI policy used for revision checks.
-   */
-  assertRevisions(
-    repository: RepositoryView,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    handlers: readonly RegisteredHandlerMetadata[],
-    ai: AiRegistry,
-    configuration: ReturnType<typeof repositoryAccess.agentConfiguration>,
-  ): void {
-    if (configuration.ai === undefined) throw new Error("Agent AI policy is required.");
-    const revisions = AgentRevisions.atAdmission(
-      repository.stateSchema,
-      handlers,
-      ai,
-      configuration.ai,
-    );
-    if (
-      accepted.codeRevision?.value !== configuration.codeRevision ||
-      accepted.schemaRevision?.value !== revisions.schema ||
-      accepted.policyRevision?.value !== revisions.policy
-    )
-      throw new AgentExecutionFault(
-        "REVISION_CHANGED",
-        "Accepted Agent code, schema, or policy changed before execution.",
-      );
-  },
-
-  /**
-   * Copies the whole-invocation budget into its durable integer fields.
-   *
-   * @param limits Configured whole-invocation limits.
-   * @returns Whole-transition limits persisted at invocation start.
-   */
-  invocationBounds(limits: AiInvocationLimits): AgentInvocationBounds {
-    return create(AgentInvocationBoundsSchema, {
-      ...(limits.operations === undefined ? {} : { operations: BigInt(limits.operations) }),
-      ...(limits.modelRequests === undefined
-        ? {}
-        : { modelRequests: BigInt(limits.modelRequests) }),
-      ...(limits.toolCalls === undefined ? {} : { toolCalls: BigInt(limits.toolCalls) }),
-      ...(limits.recordedReads === undefined
-        ? {}
-        : { recordedReads: BigInt(limits.recordedReads) }),
-      ...(limits.deadlineMs === undefined ? {} : { deadlineMillis: BigInt(limits.deadlineMs) }),
-      ...(limits.totalInputBytes === undefined
-        ? {}
-        : { totalInputBytes: BigInt(limits.totalInputBytes) }),
-      ...(limits.totalOutputBytes === undefined
-        ? {}
-        : { totalOutputBytes: BigInt(limits.totalOutputBytes) }),
-      ...(limits.maxRecoveryBytes === undefined
-        ? {}
-        : { maxRecoveryBytes: BigInt(limits.maxRecoveryBytes) }),
-    });
-  },
-
-  /**
-   * Creates a genuine source-specific dispatch System Event before the handler.
-   *
-   * @param runtime Bounded Context storage and publication services.
-   * @param repository Registered Entity repository for this operation.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param entityId Typed recipient Entity identifier.
-   * @returns Original dispatch System Event envelope.
-   */
-  startAudit(
-    runtime: RepositoryRuntime,
-    repository: RepositoryView,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    entityId: unknown,
-  ): Event {
-    const source = accepted.signal;
-    if (source.case === "command")
-      return HandlerDispatchPublisher.commandEvent(runtime, repository, source.value, entityId);
-    if (source.case === "event")
-      return HandlerDispatchPublisher.reactorEvent(runtime, repository, source.value, entityId);
-    throw new Error("Agent start requires its accepted envelope.");
-  },
-
-  /**
-   * Invokes saved Command or Event bindings inside one Entity transaction.
-   *
-   * @param entity Restored Agent instance.
-   * @param accepted Original accepted signal.
-   * @param handlers Validated current handler bindings.
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @returns Outputs returned by the selected generated handlers.
-   */
-  async invoke(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    entity: object,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    handlers: readonly RegisteredHandlerMetadata[],
-  ): Promise<readonly unknown[]> {
-    transactionalEntityAccess.start(entity);
-    try {
-      const signals: unknown[] = [];
-      for (const [ordinal, handler] of handlers.entries()) {
-        signals.push(
-          ...(await this.invokeBoundHandler(
-            repository,
-            runtime,
-            tenantId,
-            session,
-            entity,
-            accepted,
-            handler,
-            ordinal,
-          )),
-        );
-      }
-      await this.commitInvokedEntity(entity);
-      return signals;
-    } catch (error) {
-      transactionalEntityAccess.rollback(entity);
-      throw error;
-    }
-  },
-
-  /**
-   * Validates the transaction result before Agent output completion.
-   *
-   * @param entity Loaded recipient Entity instance.
-   * @returns When the fenced repository operation completes.
-   */
-  async commitInvokedEntity(entity: object): Promise<void> {
-    const commit = await commitFenced(entity, (current) =>
-      transactionalEntityAccess.commit(current),
-    );
-    if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
-  },
-
-  /**
-   * Binds named AI and history reads around one generated handler call.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param entity Loaded recipient Entity instance.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param handler Generated handler selected for this signal.
-   * @param ordinal Saved position of the selected handler.
-   * @returns Outputs returned by one generated handler.
-   */
-  async invokeBoundHandler(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    entity: object,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    handler: RegisteredHandlerMetadata,
-    ordinal: number,
-  ): Promise<readonly unknown[]> {
-    const facade = this.handlerFacade(repository, runtime, tenantId, session, accepted, ordinal);
-    const reads = new AgentReadRuntime(session, ordinal);
-    const release = this.bindHandlerCapabilities(
-      entity,
-      runtime,
-      tenantId,
-      accepted,
-      reads,
-      facade,
-    );
-    try {
-      const deadlineEpochMs = this.handlerDeadline(session);
-      const signals = await this.awaitHandler(
-        this.invokeHandler(entity, accepted, handler),
-        session.signal,
-        deadlineEpochMs,
-      );
-      reads.finish();
-      facade.finish();
-      return signals;
-    } finally {
-      facade.close();
-      release();
-    }
-  },
-
-  /**
-   * Binds Agent AI, indexed history and routed projection queries for one handler.
-   *
-   * @param entity Loaded recipient Entity instance.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param reads Handler-scoped durable read facade.
-   * @param facade Handler-scoped AI facade.
-   * @returns Release callback for handler-scoped AI and read facades.
-   */
-  bindHandlerCapabilities(
-    entity: object,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    reads: AgentReadRuntime,
-    facade: AgentAiRuntime,
-  ): () => void {
-    const releaseHistory = AgentHistoryReads.withJournal(
-      entity,
-      (scope, view, request, live, maxBytes) => reads.history(scope, view, request, live, maxBytes),
-    );
-    let releaseQuery: (() => void) | undefined;
-    try {
-      releaseQuery = ProcessManagerQueries.bind(
-        entity,
-        runtime,
-        accepted.actor,
-        tenantId,
-        (schema, query, live) => reads.query(schema, query, live),
-      );
-      const releaseAi = AgentAiBindings.bind(entity, facade);
-      return () => {
-        releaseQuery?.();
-        releaseHistory();
-        releaseAi();
-      };
-    } catch (error) {
-      releaseQuery?.();
-      releaseHistory();
-      throw error;
-    }
-  },
-
-  /**
-   * Creates one handler-scoped facade from its accepted model policy.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param tenantId Tenant selected for this accepted signal.
-   * @param session Fenced Agent execution session.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param ordinal Saved position of the selected handler.
-   * @returns AI facade bound to one selected handler.
-   */
-  handlerFacade(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    tenantId: TenantId | undefined,
-    session: AgentExecutionSession,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    ordinal: number,
-  ): AgentAiRuntime {
-    const ai = runtime.ai;
-    const configuration = repositoryAccess.agentConfiguration(repository).ai;
-    if (ai === undefined || configuration === undefined)
-      throw new Error("Agent handler requires its bound AI registry.");
-    return new AgentAiRuntime(
-      ai,
-      configuration,
-      AgentModelSelection.scope(accepted, repository.stateSchema, tenantId),
-      session,
-      ordinal,
-      new AgentInteractionAudit(
-        session,
-        accepted,
-        repository.stateSchema,
-        runtime.signalMetadata,
-        runtime.registerSystemEventSchema,
-        runtime.publishAgentSystemEvent,
-      ),
-    );
-  },
-
-  /**
-   * Invokes one selected generated handler and validates its declared results.
-   *
-   * @param entity Loaded recipient Entity instance.
-   * @param accepted Durable original signal and saved handler bindings.
-   * @param handler Generated handler selected for this signal.
-   * @returns Declared outputs returned by one generated handler.
-   */
-  async invokeHandler(
-    entity: object,
-    accepted: NonNullable<AgentExecutionRecord["accepted"]>,
-    handler: RegisteredHandlerMetadata,
-  ): Promise<readonly unknown[]> {
-    const source = accepted.signal;
-    if (source.case !== "command" && source.case !== "event")
-      throw new Error("Agent source envelope is missing.");
-    const kind = source.case;
-    const message = EntityInvocation.unpackRequired(
-      EntityInvocation.requireSignalMessage(source.value.message, kind),
-      handler.handler.schema,
-      kind,
-    );
-    const context =
-      source.case === "command"
-        ? EntityInvocation.commandHandlerContext(source.value)
-        : EntityInvocation.eventHandlerContext(source.value);
-    const produced = await EntityInvocation.invokeEntityMethod(
-      entity,
-      handler.handler.methodName,
-      message,
-      handler.handler.parameterCount,
-      context,
-    );
-    const signals: readonly unknown[] =
-      produced === undefined
-        ? []
-        : Array.isArray(produced)
-          ? Array.from(produced as readonly unknown[])
-          : [produced];
-    RepositoryHandlers.requireDeclaredOutputs(handler.handler, signals);
-    return signals;
-  },
-
-  /**
-   * Reads the original invocation deadline before starting an application callback.
-   *
-   * @param session Current fenced execution session.
-   * @returns Absolute saved deadline in milliseconds.
-   */
-  handlerDeadline(session: AgentExecutionSession): number | undefined {
-    const record = session.record();
-    const deadline = record.started?.deadline;
-    if (deadline === undefined && record.started?.bounds?.deadlineMillis !== undefined)
-      throw new Error("Agent handler requires its saved deadline.");
-    if (session.signal.aborted || this.deadlineExpired(record))
-      throw new Error("Agent handler deadline or claim ended.");
-    return deadline === undefined
-      ? undefined
-      : Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000);
-  },
-
-  /**
-   * Awaits an application handler within its saved deadline and current claim.
+   * Awaits an application handler within its live deadline and current session.
    *
    * @typeParam Value Handler result.
    * @param work Already-started generated handler invocation.
-   * @param signal Session cancellation when claim authority ends.
-   * @param deadlineEpochMs Original saved invocation deadline.
-   * @returns Handler result only while its claim and deadline remain valid.
+   * @param signal Cancellation when live authority ends.
+   * @param deadlineEpochMs Live invocation deadline.
+   * @returns Handler result only while its session and deadline remain valid.
    */
   async awaitHandler<Value>(
     work: Promise<Value>,
@@ -6264,7 +4574,7 @@ const AgentExecutionRunner = {
     let abort: () => void = () => undefined;
     const cutoff = new Promise<never>((_resolve, reject) => {
       abort = () => {
-        reject(new Error("Agent handler claim ended."));
+        reject(new Error("Agent handler session ended."));
       };
       const tick = () => {
         if (deadlineEpochMs === undefined) return;
@@ -6282,7 +4592,7 @@ const AgentExecutionRunner = {
         signal.aborted ||
         (deadlineEpochMs !== undefined && Time.currentTimeMillis() >= deadlineEpochMs)
       )
-        throw new Error("Agent handler deadline or claim ended.");
+        throw new Error("Agent handler deadline or session ended.");
       return result;
     } finally {
       clearTimeout(timer);
@@ -6291,21 +4601,782 @@ const AgentExecutionRunner = {
   },
 };
 
+type AgentLiveResult =
+  | { readonly case: "produced"; readonly values: readonly unknown[] }
+  | { readonly case: "rejected"; readonly output: AgentOutput };
+
+interface AgentLiveAdmit {
+  readonly repository: RepositoryView;
+  readonly runtime: RepositoryRuntime;
+  readonly context: StorageContext;
+  readonly message: InboxMessage;
+  readonly tenantId: TenantId | undefined;
+  readonly entityId: unknown;
+  readonly signal: AgentSource;
+  readonly handlers: readonly RegisteredHandlerMetadata[];
+  readonly reservation: AgentCapacityReservation;
+}
+
 /**
- * Adds a positive timeout to a Time-sampled Protobuf timestamp.
- *
- * @param at Provider-independent current time.
- * @param millis Bounded additional milliseconds.
- * @returns Absolute timestamp retaining nanosecond precision.
+ * Runs one receipt-admitted Agent signal without an execution record.
  */
-function addMillis(at: Timestamp, millis: number): Timestamp {
-  const nanos = at.nanos + (millis % 1000) * 1_000_000;
-  return {
-    ...at,
-    seconds:
-      at.seconds + BigInt(Math.floor(millis / 1000)) + BigInt(Math.floor(nanos / 1_000_000_000)),
-    nanos: nanos % 1_000_000_000,
-  };
+class AgentLiveRunner {
+  #deadlineEpochMs: number | undefined;
+
+  #deadlineSampled = false;
+
+  /**
+   * Binds one original signal, resolved handlers, and the current repository runtime.
+   *
+   * @param checkSession Callback that validates the current execution session.
+   * @param entityId Typed Entity identifier.
+   * @param handlers Registered generated handlers.
+   * @param invocation Captured live Agent invocation.
+   * @param repository Repository configured for this Entity.
+   * @param runtime Current bounded-context runtime.
+   * @param signal Signal or cancellation signal for this operation.
+   * @param tenantId Captured tenant identifier.
+   */
+  constructor(
+    private readonly repository: RepositoryView,
+    private readonly runtime: RepositoryRuntime,
+    private readonly tenantId: TenantId | undefined,
+    private readonly entityId: unknown,
+    private readonly invocation: AgentLiveInvocation,
+    private readonly handlers: readonly RegisteredHandlerMetadata[],
+    private readonly signal: AbortSignal,
+    private readonly checkSession: () => Promise<void>,
+  ) {}
+
+  /**
+   * Starts the serialized turn by loading current state and committed model preferences.
+   *
+   * @returns Completion after admitted Agent work finishes.
+   */
+  async run(): Promise<void> {
+    if (this.signal.aborted) return;
+    await this.checkSession();
+    await this.runtime.onAdmit(this.tenantId);
+    await RepositoryStorage.track(this.repository, async () => {
+      const loaded = await new ProcessManagerExecutionSupport(this.repository, this.runtime).load(
+        this.entityId,
+        this.tenantId === undefined ? {} : { tenantId: this.tenantId },
+      );
+      const expected = await loaded.commits.readAgentPreferences(this.entityId);
+      if (this.signal.aborted) return;
+      const ai = this.runtime.ai;
+      if (ai === undefined) throw new Error("Live Agent execution requires an AI registry.");
+      const preferences = expected?.map((entry) => clone(ModelPreferenceSchema, entry)) ?? [];
+      const audit = this.audit(loaded);
+      let selected: ReadonlyMap<AiModelKind, AgentLiveModel>;
+      try {
+        selected = await this.select(preferences);
+      } catch (error) {
+        if (!(error instanceof AgentLiveFault) || error.reason !== "MODEL_USE_DENIED") throw error;
+        await this.recordModelDenial(audit, error);
+        throw error;
+      }
+      const budget = new AgentLiveBudget(this.limits(ai));
+      await this.dispatchStart(loaded);
+      const produced = await this.produce(loaded, selected, preferences, audit, budget);
+      this.signal.throwIfAborted();
+      await this.checkSession();
+      await this.complete(loaded, expected, preferences, produced);
+    });
+  }
+
+  /**
+   * Writes only definite pre-handler model-use denial with its original source.
+   *
+   * @param audit Retained history audit for this invocation.
+   * @param denial Typed model-use denial to record.
+   * @returns Completion after the exact pre-handler denial is saved to Agent history.
+   */
+  private async recordModelDenial(
+    audit: AgentLiveAudit<unknown>,
+    denial: AgentLiveFault,
+  ): Promise<void> {
+    const agent = create(MessageIdSchema, {
+      id: this.invocation.recipientId,
+      typeUrl: TypeUrls.derive(this.repository.stateSchema),
+    });
+    const fact = create(AgentInvocationTerminatedSchema, {
+      agent,
+      sourceSignal: AgentLiveInteractionEvents.sourceRef(this.invocation),
+      reason: "MODEL_USE_DENIED",
+      terminatedAt: Time.currentTime(),
+    });
+    await audit.saveDenial(fact, denial);
+  }
+
+  /**
+   * Converts only a declared Command rejection into a normal outgoing Event.
+   *
+   * @param audit Retained history audit for this invocation.
+   * @param budget Invocation-wide resource budget.
+   * @param loaded Current Entity and retained storage for this turn.
+   * @param preferences Current or staged model preferences.
+   * @param selected Models or selection retained for this invocation.
+   * @returns The declared rejection Event, when a Command rejects.
+   */
+  private async produce(
+    loaded: LoadedRepositoryEntity,
+    selected: ReadonlyMap<AiModelKind, AgentLiveModel>,
+    preferences: ModelPreference[],
+    audit: AgentLiveAudit<unknown>,
+    budget: AgentLiveBudget,
+  ): Promise<AgentLiveResult> {
+    try {
+      return {
+        case: "produced",
+        values: await this.invoke(loaded, selected, preferences, audit, budget),
+      };
+    } catch (error) {
+      if (!RejectionThrowable.is(error) || this.invocation.source.case !== "command") throw error;
+      const handler = this.handlers[0];
+      if (handler === undefined) throw new Error("Agent rejection requires a Command assignee.");
+      RepositorySignals.requireDeclaredRejection(handler.handler, error);
+      preferences.length = 0;
+      const output = RepositorySignals.rejectionEvent(
+        this.runtime,
+        this.repository,
+        this.invocation.source.value,
+        this.entityId,
+        error,
+      );
+      return { case: "rejected", output: { case: "event", value: output } };
+    }
+  }
+
+  /**
+   * Finds each enabled model from the preference image loaded at turn start.
+   *
+   * @param preferences Current or staged model preferences.
+   * @returns The selected model image for the current Agent turn.
+   */
+  private async select(
+    preferences: readonly ModelPreference[],
+  ): Promise<ReadonlyMap<AiModelKind, AgentLiveModel>> {
+    const ai = this.runtime.ai;
+    const configuration = repositoryAccess.agentConfiguration(this.repository).ai;
+    if (ai === undefined || configuration === undefined)
+      throw new Error("Live Agent execution requires registered model policy.");
+    const scope = AgentModelSelection.scopeLive(
+      this.invocation,
+      this.repository.stateSchema,
+      this.runtime.signalMetadata,
+      this.tenantId,
+    );
+    const selected = new Map<AiModelKind, AgentLiveModel>();
+    for (const kind of ["generation", "decision"] as const) {
+      if (!configuration.models.some((model) => model.definition.kind === kind)) continue;
+      await this.checkSession();
+      const value = await AgentModelSelection.selectLiveKind(
+        ai,
+        configuration,
+        scope,
+        preferences,
+        this.signal,
+        this.deadline(ai),
+        kind,
+        this.invocation.source.value.message,
+      );
+      selected.set(value.kind, value);
+    }
+    return selected;
+  }
+
+  /**
+   * Captures the configured live invocation deadline.
+   *
+   * @param ai Configured AI capability.
+   * @returns The sampled live invocation deadline, when configured.
+   */
+  private deadline(ai: AiRegistry): number | undefined {
+    if (this.#deadlineSampled) return this.#deadlineEpochMs;
+    this.#deadlineSampled = true;
+    const duration = this.limits(ai).deadlineMs;
+    this.#deadlineEpochMs =
+      duration === undefined ? undefined : Time.currentTimeMillis() + duration;
+    return this.#deadlineEpochMs;
+  }
+
+  /**
+   * Applies only the narrower per-repository bounds to the shared registry policy.
+   *
+   * @param ai Configured AI capability.
+   * @returns The current configured limits for the start audit.
+   */
+  private limits(ai: AiRegistry): AiInvocationLimits {
+    const global = registryOptions(ai).invocationLimits ?? {};
+    const local = repositoryAccess.agentConfiguration(this.repository).ai?.invocationLimits ?? {};
+    const limits: Partial<Record<keyof AiInvocationLimits, number>> = {};
+    const keys = [
+      "operations",
+      "modelRequests",
+      "toolCalls",
+      "recordedReads",
+      "deadlineMs",
+      "totalInputBytes",
+      "totalOutputBytes",
+    ] as const;
+    for (const key of keys) {
+      const first = global[key];
+      const second = local[key];
+      const value =
+        first === undefined ? second : second === undefined ? first : Math.min(first, second);
+      if (value !== undefined) limits[key] = value;
+    }
+    return limits;
+  }
+
+  /**
+   * Binds one original System audit writer to retained Agent history.
+   *
+   * @param loaded Current Entity and retained storage for this turn.
+   * @returns The history writer bound to this Agent and source.
+   */
+  private audit(loaded: LoadedRepositoryEntity): AgentLiveAudit<unknown> {
+    const history = loaded.agentHistory;
+    if (history === undefined) throw new Error("Live Agent execution requires history storage.");
+    return new AgentLiveAudit(
+      this.invocation,
+      this.repository.stateSchema,
+      this.entityId,
+      loaded.storageInput.id.key(this.entityId),
+      history,
+      this.runtime.signalMetadata,
+      this.runtime.registerSystemEventSchema,
+      this.runtime.publishAgentSystemEvent,
+      async () => {
+        this.signal.throwIfAborted();
+        await this.checkSession();
+        this.signal.throwIfAborted();
+      },
+    );
+  }
+
+  /**
+   * Writes the genuine dispatch System row before publishing its original Event.
+   *
+   * @param loaded Current Entity and retained storage for this turn.
+   * @returns Completion after the original dispatch System Event is saved.
+   */
+  private async dispatchStart(loaded: LoadedRepositoryEntity): Promise<void> {
+    await this.checkSession();
+    const source = this.invocation.source;
+    const event =
+      source.case === "command"
+        ? HandlerDispatchPublisher.commandEvent(
+            this.runtime,
+            this.repository,
+            source.value,
+            this.entityId,
+          )
+        : HandlerDispatchPublisher.reactorEvent(
+            this.runtime,
+            this.repository,
+            source.value,
+            this.entityId,
+          );
+    const occurredAt = event.context?.timestamp;
+    if (occurredAt === undefined || loaded.agentHistory === undefined)
+      throw new Error("Agent dispatch audit requires timestamp and history.");
+    await loaded.agentHistory.appendAll(this.entityId, [
+      create(AgentHistoryEntrySchema, { occurredAt, item: { case: "systemEvent", value: event } }),
+    ]);
+    await this.checkSession();
+    if (source.case === "command") HandlerDispatchPublisher.publishCommand(this.runtime, event);
+    else HandlerDispatchPublisher.publishReactor(this.runtime, event);
+  }
+
+  /**
+   * Executes current generated handlers inside the Entity's local transaction.
+   *
+   * @param audit Retained history audit for this invocation.
+   * @param budget Invocation-wide resource budget.
+   * @param loaded Current Entity and retained storage for this turn.
+   * @param preferences Current or staged model preferences.
+   * @param selected Models or selection retained for this invocation.
+   * @returns The typed model result with its operation identifier.
+   */
+  private async invoke(
+    loaded: LoadedRepositoryEntity,
+    selected: ReadonlyMap<AiModelKind, AgentLiveModel>,
+    preferences: ModelPreference[],
+    audit: AgentLiveAudit<unknown>,
+    budget: AgentLiveBudget,
+  ): Promise<readonly unknown[]> {
+    transactionalEntityAccess.start(loaded.entity);
+    try {
+      const produced: unknown[] = [];
+      for (const handler of this.handlers)
+        produced.push(
+          ...(await this.invokeHandler(loaded, handler, selected, preferences, audit, budget)),
+        );
+      const commit = await commitFenced(loaded.entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
+      if (commit.status === "rejected")
+        throw new TransitionValidationError(commit.validation.error);
+      return produced;
+    } catch (error) {
+      transactionalEntityAccess.rollback(loaded.entity);
+      throw error;
+    }
+  }
+
+  /**
+   * Executes one handler with live AI and read facades scoped to its returned work.
+   *
+   * @param audit Retained history audit for this invocation.
+   * @param budget Invocation-wide resource budget.
+   * @param handler Selected generated handler.
+   * @param loaded Current Entity and retained storage for this turn.
+   * @param preferences Current or staged model preferences.
+   * @param selected Models or selection retained for this invocation.
+   * @returns The declared handler result scoped to live capabilities.
+   */
+  private async invokeHandler(
+    loaded: LoadedRepositoryEntity,
+    handler: RegisteredHandlerMetadata,
+    selected: ReadonlyMap<AiModelKind, AgentLiveModel>,
+    preferences: ModelPreference[],
+    audit: AgentLiveAudit<unknown>,
+    budget: AgentLiveBudget,
+  ): Promise<readonly unknown[]> {
+    const { facade, actor, deadline } = this.handlerFacade(selected, preferences, audit, budget);
+    const historyScope = repositoryAccess.agentHistoryScope(
+      loaded.storageInput.context,
+      loaded.storageInput,
+      this.entityId,
+    );
+    const reads = new AgentLiveReadRuntime(historyScope, budget, this.checkSession);
+    const release = this.bind(loaded.entity, facade, reads, actor);
+    try {
+      const output = await AgentLiveHandler.awaitHandler(
+        this.callHandler(loaded.entity, handler),
+        this.signal,
+        deadline,
+      );
+      reads.finish();
+      facade.finish();
+      return output;
+    } finally {
+      facade.close();
+      release();
+    }
+  }
+
+  /**
+   * Creates live AI and actor capabilities to one generated handler.
+   *
+   * @param audit Retained history audit for this invocation.
+   * @param budget Invocation-wide resource budget.
+   * @param preferences Current or staged model preferences.
+   * @param selected Models or selection retained for this invocation.
+   * @returns The handler facade with live AI and actor capabilities.
+   */
+  private handlerFacade(
+    selected: ReadonlyMap<AiModelKind, AgentLiveModel>,
+    preferences: ModelPreference[],
+    audit: AgentLiveAudit<unknown>,
+    budget: AgentLiveBudget,
+  ) {
+    const ai = this.runtime.ai;
+    const policy = repositoryAccess.agentConfiguration(this.repository).ai;
+    if (ai === undefined || policy === undefined) throw new Error("Agent AI policy is missing.");
+    const scope = AgentModelSelection.scopeLive(
+      this.invocation,
+      this.repository.stateSchema,
+      this.runtime.signalMetadata,
+      this.tenantId,
+    );
+    const facade = new AgentLiveAiRuntime(
+      ai,
+      policy,
+      scope,
+      selected,
+      budget,
+      this.signal,
+      this.deadline(ai),
+      (kind, model) => {
+        this.stage(preferences, kind, model);
+      },
+      audit,
+      this.checkSession,
+    );
+    return { facade, actor: scope.actor, deadline: this.deadline(ai) };
+  }
+
+  /**
+   * Prepares a per-kind selection without changing the observed preference image.
+   *
+   * @param kind Declared model or operation kind.
+   * @param model Selected AI model for this invocation.
+   * @param preferences Current or staged model preferences.
+   */
+  private stage(
+    preferences: ModelPreference[],
+    kind: AiModelKind,
+    model: ModelRef | undefined,
+  ): void {
+    const index = preferences.findIndex((entry) => entry.kind === kind);
+    if (index >= 0) preferences.splice(index, 1);
+    if (model !== undefined)
+      preferences.push(
+        create(ModelPreferenceSchema, { kind, selection: { case: "model", value: model } }),
+      );
+  }
+
+  /**
+   * Binds current protected history, query, and AI capabilities to one handler.
+   *
+   * @param actor Captured signal actor context.
+   * @param entity Current Entity instance.
+   * @param facade Handler-facing operation facade.
+   * @param reads Retained Agent history reader.
+   * @returns The handler bound to current protected history and AI capabilities.
+   */
+  private bind(
+    entity: object,
+    facade: AgentLiveAiRuntime,
+    reads: AgentLiveReadRuntime,
+    actor: ActorContext,
+  ): () => void {
+    const history = AgentHistoryReads.withReadInterceptor(
+      entity,
+      (scope, request, live, maxBytes) => reads.history(scope, request, live, maxBytes),
+    );
+    let query: (() => void) | undefined;
+    try {
+      query = ProcessManagerQueries.bind(
+        entity,
+        this.runtime,
+        actor,
+        this.tenantId,
+        (schema, request, live) => reads.query(schema, request, live),
+      );
+      const ai = AgentAiBindings.bind(entity, facade);
+      return () => {
+        ai();
+        query?.();
+        history();
+      };
+    } catch (error) {
+      query?.();
+      history();
+      throw error;
+    }
+  }
+
+  /**
+   * Invokes and validates one declared generated Command or Event handler.
+   *
+   * @param entity Current Entity instance.
+   * @param handler Selected generated handler.
+   * @returns The validated generated handler result.
+   */
+  private async callHandler(
+    entity: object,
+    handler: RegisteredHandlerMetadata,
+  ): Promise<readonly unknown[]> {
+    const source = this.invocation.source;
+    const kind = source.case;
+    const message = EntityInvocation.unpackRequired(
+      EntityInvocation.requireSignalMessage(source.value.message, kind),
+      handler.handler.schema,
+      kind,
+    );
+    const context =
+      kind === "command"
+        ? EntityInvocation.commandHandlerContext(source.value)
+        : EntityInvocation.eventHandlerContext(source.value);
+    const produced = await EntityInvocation.invokeEntityMethod(
+      entity,
+      handler.handler.methodName,
+      message,
+      handler.handler.parameterCount,
+      context,
+    );
+    const outputs =
+      produced === undefined
+        ? []
+        : Array.isArray(produced)
+          ? Array.from(produced as readonly unknown[])
+          : [produced];
+    RepositoryHandlers.requireDeclaredOutputs(handler.handler, outputs);
+    return outputs;
+  }
+
+  /**
+   * Commits the observed state/preferences image and its final audit atomically.
+   *
+   * @param expected Expected persisted value or version.
+   * @param loaded Current Entity and retained storage for this turn.
+   * @param preferences Current or staged model preferences.
+   * @param produced Declared outgoing signals.
+   * @returns Completion after the conditional state, preferences, and final audit commit.
+   */
+  private async complete(
+    loaded: LoadedRepositoryEntity,
+    expected: readonly ModelPreference[] | undefined,
+    preferences: readonly ModelPreference[],
+    produced: AgentLiveResult,
+  ): Promise<void> {
+    const version = RepositoryEntities.repositoryVersion(loaded.entity);
+    const routing = repositoryRoutings.get(this.repository);
+    if (routing === undefined) throw new Error("Live Agent output requires registered routing.");
+    const outputs =
+      produced.case === "rejected"
+        ? [produced.output]
+        : produced.values.map((item) =>
+            AgentLiveOutputs.bindOutput(
+              this.repository,
+              this.runtime,
+              routing,
+              this.invocation.source,
+              this.entityId,
+              version,
+              item,
+            ),
+          );
+    await this.authorizePreferences(expected ?? [], preferences);
+    await this.checkSession();
+    const preferenceEvents = this.preferenceEvents(expected ?? [], preferences);
+    const history = [
+      ...AgentLiveOutputs.emittedHistory(outputs),
+      ...preferenceEvents.map((event) => this.systemEntry(event)),
+    ];
+    await this.commit(loaded, expected, preferences, history);
+    await this.checkSession();
+    for (const event of preferenceEvents) await this.runtime.publishAgentSystemEvent(event);
+    this.publish(outputs);
+  }
+
+  /**
+   * Applies final conditional state and preference mutation under the observed Version.
+   *
+   * @param expected Expected persisted value or version.
+   * @param history Retained history entries or history port.
+   * @param loaded Current Entity and retained storage for this turn.
+   * @param preferences Current or staged model preferences.
+   * @returns The atomic conditional commit result for the observed version.
+   */
+  private async commit(
+    loaded: LoadedRepositoryEntity,
+    expected: readonly ModelPreference[] | undefined,
+    preferences: readonly ModelPreference[],
+    history: readonly AgentHistoryEntry[],
+  ): Promise<void> {
+    const deferred = await this.deferredUpdate(loaded);
+    try {
+      const prepared =
+        deferred === undefined
+          ? undefined
+          : RepositoryStand.preparedRecord(this.repository, deferred, this.entityId);
+      await this.checkSession();
+      await loaded.commits.commitAgent({
+        entityId: this.entityId,
+        expectedVersion: loaded.current?.version?.number ?? 0,
+        expectedPreferences: expected,
+        preferences,
+        historyEntries: history,
+        ...(prepared === undefined ? {} : { entityCommit: this.entityCommit(loaded, prepared) }),
+      });
+      deferred?.notify();
+    } catch (error) {
+      deferred?.cancel();
+      throw error;
+    }
+  }
+
+  /**
+   * Creates current state and its enabled history only for a changed Entity.
+   *
+   * @param loaded Current Entity and retained storage for this turn.
+   * @param prepared Prepared Entity mutation and outputs.
+   * @returns The changed Entity image and enabled history for the commit.
+   */
+  private entityCommit(
+    loaded: LoadedRepositoryEntity,
+    prepared: ReturnType<typeof RepositoryStand.preparedRecord>,
+  ) {
+    return {
+      context: loaded.storageInput.context,
+      entity: loaded.storageInput,
+      entityId: this.entityId,
+      next: prepared,
+      ...(loaded.storageInput.stateHistory ? { states: [prepared] } : {}),
+    };
+  }
+
+  /**
+   * Prepares the changed Entity state for publication only after atomic commit.
+   *
+   * @param loaded Current Entity and retained storage for this turn.
+   * @returns The Stand update deferred until the atomic commit succeeds.
+   */
+  private deferredUpdate(loaded: LoadedRepositoryEntity) {
+    if (!RepositoryEntities.repositoryChanged(loaded.entity)) return Promise.resolve(undefined);
+    return standAccess.deferUpdate(
+      this.runtime.stand,
+      this.repository.stateSchema,
+      RepositoryEntities.repositoryState(loaded.entity) as Message,
+      RepositoryStand.standUpdateOptions(
+        this.tenantId,
+        RepositoryEntities.repositoryVersion(loaded.entity),
+        RepositoryEntities.repositoryLifecycle(loaded.entity),
+      ),
+      this.repository.metadata,
+    );
+  }
+
+  /**
+   * Checks authorization of effective changed selections before final persistence.
+   *
+   * @param after Proposed value after the transition.
+   * @param before Persisted value before the transition.
+   * @returns Completion after changed model selections pass authorization.
+   */
+  private async authorizePreferences(
+    before: readonly ModelPreference[],
+    after: readonly ModelPreference[],
+  ): Promise<void> {
+    const ai = this.runtime.ai;
+    const policy = repositoryAccess.agentConfiguration(this.repository).ai;
+    if (ai === undefined || policy?.authorizeSelection === undefined) return;
+    const scope = AgentModelSelection.scopeLive(
+      this.invocation,
+      this.repository.stateSchema,
+      this.runtime.signalMetadata,
+      this.tenantId,
+    );
+    for (const kind of [AiModelKind.GENERATION, AiModelKind.DECISION]) {
+      const previous = this.preference(before, kind);
+      const selected = this.preference(after, kind);
+      if (previous === undefined && selected === undefined) continue;
+      if (
+        previous !== undefined &&
+        selected !== undefined &&
+        equals(ModelRefSchema, previous, selected)
+      )
+        continue;
+      await AgentModelSelection.authorizeSelection(
+        ai,
+        policy,
+        scope,
+        selected,
+        this.signal,
+        this.deadline(ai),
+      );
+    }
+  }
+
+  /**
+   * Returns the explicit model reference for one kind, or inherited absence.
+   *
+   * @param kind Declared model or operation kind.
+   * @param values Typed values being committed.
+   * @returns The explicit model reference for the kind, or inherited absence.
+   */
+  private preference(values: readonly ModelPreference[], kind: AiModelKind): ModelRef | undefined {
+    const selected = values.find((entry) => entry.kind === kind);
+    return selected?.selection.case === "model" ? selected.selection.value : undefined;
+  }
+
+  /**
+   * Creates original selection System Events for changed committed preferences.
+   *
+   * @param after Proposed value after the transition.
+   * @param before Persisted value before the transition.
+   * @returns The original selection System Events for changed preferences.
+   */
+  private preferenceEvents(
+    before: readonly ModelPreference[],
+    after: readonly ModelPreference[],
+  ): readonly Event[] {
+    const scope = AgentModelSelection.scopeLive(
+      this.invocation,
+      this.repository.stateSchema,
+      this.runtime.signalMetadata,
+      this.tenantId,
+    );
+    return [AiModelKind.GENERATION, AiModelKind.DECISION].flatMap((kind) => {
+      const previous = this.preference(before, kind);
+      const selected = this.preference(after, kind);
+      if (previous === undefined && selected === undefined) return [];
+      if (
+        previous !== undefined &&
+        selected !== undefined &&
+        equals(ModelRefSchema, previous, selected)
+      )
+        return [];
+      return [this.selectionEvent(scope, kind, previous, selected)];
+    });
+  }
+
+  /**
+   * Creates one original committed model-selection System Event.
+   *
+   * @param kind Declared model or operation kind.
+   * @param previous Persisted value before the update.
+   * @param scope Captured invocation or tenant scope.
+   * @param selected Models or selection retained for this invocation.
+   * @returns The original committed model-selection System Event.
+   */
+  private selectionEvent(
+    scope: AiScope,
+    kind: AiModelKind,
+    previous: ModelRef | undefined,
+    selected: ModelRef | undefined,
+  ): Event {
+    const payload = create(SelectionChangedSchema, {
+      agent: scope.agent,
+      sourceSignal: scope.source,
+      kind,
+      ...(previous === undefined ? {} : { previousModel: previous }),
+      ...(selected === undefined ? {} : { selectedModel: selected }),
+      changedAt: Time.currentTime(),
+    });
+    this.runtime.registerSystemEventSchema(SelectionChangedSchema);
+    return AgentLiveInteractionEvents.envelope(
+      this.invocation,
+      this.runtime.signalMetadata,
+      this.invocation.recipientId,
+      SelectionChangedSchema,
+      payload,
+    );
+  }
+
+  /**
+   * Wraps one committed original System Event in indexed history.
+   *
+   * @param event Original typed Event envelope.
+   * @returns The indexed history entry for the original System Event.
+   */
+  private systemEntry(event: Event): AgentHistoryEntry {
+    const occurredAt = event.context?.timestamp;
+    if (occurredAt === undefined) throw new Error("Agent System Event requires Time.");
+    return create(AgentHistoryEntrySchema, {
+      occurredAt,
+      item: { case: "systemEvent", value: event },
+    });
+  }
+
+  /**
+   * Publishes produced signals through ordinary tracked publication after commit.
+   *
+   * @param outputs Declared outgoing Command or Event envelopes.
+   */
+  private publish(outputs: readonly AgentOutput[]): void {
+    for (const output of outputs) {
+      if (output.case === "command") void this.runtime.publisher.publishCommand(output.value);
+      else if (output.value.context?.rejection !== undefined)
+        void this.runtime.publisher.publishRejectionEvent(output.value);
+      else void this.runtime.publisher.publishReactorEvent(output.value);
+    }
+  }
 }
 
 /**
@@ -6601,7 +5672,9 @@ class ProcessManagerCommandExecution {
       );
       const signals = this.#support.normalizeProducedSignals(produced);
       if (signals.length === 0)
-        throw new Error("Repository command handlers must return a signal.");
+        throw receptionObservation.recordPostHandlerFailure(
+          new Error("Repository command handlers must return a signal."),
+        );
       RepositoryHandlers.requireDeclaredOutputs(assignee.handler, signals);
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(
@@ -6609,10 +5682,8 @@ class ProcessManagerCommandExecution {
           assignee.handler.kind === "command-assignment" && signals.length > 0,
         ),
       );
-      if (commit.status === "rejected") {
-        throw new TransitionValidationError(commit.validation.error);
-      }
-
+      if (commit.status === "rejected")
+        throw EntityInvocation.rejectedTransition(commit.validation.error);
       return signals;
     } catch (error) {
       transactionalEntityAccess.rollback(entity);
@@ -6662,7 +5733,7 @@ class ProcessManagerCommandExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packProduced(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
@@ -6691,7 +5762,7 @@ class ProcessManagerCommandExecution {
         const metadata = this.#runtime.signalMetadata.commandFromCommand(this.#command);
         return create(CommandSchema, {
           id: metadata.id,
-          message: AnyMessages.pack(schema, signal as never),
+          message: RepositorySignals.packProduced(schema, signal as never),
           context: metadata.context,
         });
       }),
@@ -6863,7 +5934,7 @@ class ProcessManagerEventExecution {
    *
    * @param entityId Target Entity identifier.
    * @param intake Decoded Event and matching handlers.
-   * @returns Completion after accepted results are published.
+   * @returns Completion after accepted results are registered for publication.
    */
   async #executeEntity(
     entityId: unknown,
@@ -6896,7 +5967,7 @@ class ProcessManagerEventExecution {
     if (!committed) return;
     this.#publishChangedState(loaded, entityId);
     this.#postEvents(events);
-    await this.#postCommands(commands);
+    this.#postCommands(commands);
   }
 
   /**
@@ -7080,7 +6151,8 @@ class ProcessManagerEventExecution {
     const commit = await commitFenced(entity, (current) =>
       transactionalEntityAccess.commit(current, producedEvents),
     );
-    if (commit.status === "rejected") throw new TransitionValidationError(commit.validation.error);
+    if (commit.status === "rejected")
+      throw EntityInvocation.rejectedTransition(commit.validation.error);
   }
 
   /**
@@ -7125,7 +6197,7 @@ class ProcessManagerEventExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(schema, signal as never),
+      message: RepositorySignals.packProduced(schema, signal as never),
       context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
@@ -7157,7 +6229,7 @@ class ProcessManagerEventExecution {
 
         return create(CommandSchema, {
           id: metadata.id,
-          message: AnyMessages.pack(schema, signal as never),
+          message: RepositorySignals.packProduced(schema, signal as never),
           context: metadata.context,
         });
       }),
@@ -7168,11 +6240,11 @@ class ProcessManagerEventExecution {
    * Publishes each produced Command in handler order.
    *
    * @param commands Bound Commands to publish.
-   * @returns Completion after all Commands are published.
    */
-  async #postCommands(commands: readonly Command[]): Promise<void> {
+  #postCommands(commands: readonly Command[]): void {
     for (const command of commands) {
-      await this.#runtime.publisher.publishCommand(command);
+      // spine-log-boundary: server.process_manager_command_follow_up
+      void this.#runtime.publisher.publishCommand(command);
     }
   }
 
@@ -7227,12 +6299,6 @@ interface RepositoryEntityStorage<I, S extends Message> {
   readonly events: EntityEventHistoryPort<I>;
   readonly commits: EntityCommitStorage;
   readonly agentHistory?: AgentHistoryStorage<I>;
-  readonly agentExecution?: AgentExecutionStorage<I, S>;
-
-  /**
-   * Closes the Entity history and commit storage handles.
-   */
-  close(): void;
 }
 
 /**
@@ -7620,6 +6686,20 @@ Object.freeze(RepositoryIdentity);
  */
 const EntityInvocation = {
   /**
+   * Returns a rejected Entity transition as an exact reception failure.
+   *
+   * @param validationError The rejected transition detail.
+   * @returns The original transition error for propagation.
+   */
+  rejectedTransition(
+    validationError: ConstructorParameters<typeof TransitionValidationError>[0],
+  ): TransitionValidationError {
+    return receptionObservation.recordPostHandlerFailure(
+      new TransitionValidationError(validationError),
+    );
+  },
+
+  /**
    * Reads a generated message's type name or rejects malformed output.
    *
    * @param message Handler result to inspect.
@@ -7715,7 +6795,7 @@ const EntityInvocation = {
     schema: MessageSchema,
     signalKind: "command" | "event" | "state update",
   ): unknown {
-    const unpacked = AnyMessages.unpack(message, schema);
+    const unpacked = AnyPacker.tryUnpack(message, schema);
 
     if (unpacked === undefined) {
       throw new Error(`Repository ${signalKind} execution requires a readable message.`);
@@ -7764,12 +6844,7 @@ const RepositoryEntities = {
     tenantId: TenantId | undefined,
     entityId: unknown,
     entity: object,
-  ): {
-    readonly commits: EntityCommitStorage;
-    readonly events: EntityEventHistoryPort<unknown>;
-    readonly agentHistory?: AgentHistoryStorage<unknown>;
-    readonly storageInput: EntityStorageInput<unknown, Message>;
-  } {
+  ): BoundRepositoryStorage {
     const storageInput = RepositoryStorage.entityStorageInput(
       repository,
       RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
@@ -7779,9 +6854,16 @@ const RepositoryEntities = {
       runtime.storageFactory,
       storageInput,
     );
-    RepositoryHistoryInternals.bindEntityHistory(entity, storage, entityId, repository.stateSchema);
+    RepositoryHistoryInternals.bindEntityHistory(
+      repository,
+      entity,
+      storage,
+      entityId,
+      repository.stateSchema,
+      storageInput.context.tenantId,
+    );
     if (repository.entityFamily === "agent")
-      this.bindAgentHistory(entity, entityId, storageInput, storage.agentHistory);
+      this.bindAgentHistory(repository, entity, entityId, storageInput, storage.agentHistory);
     return {
       commits: storage.commits,
       events: storage.events,
@@ -7793,21 +6875,31 @@ const RepositoryEntities = {
   /**
    * Attaches the indexed history port to one restored Agent.
    *
+   * @param repository Repository tracking the captured runtime.
    * @param entity Restored Agent instance.
    * @param entityId Typed Agent identifier.
    * @param input Entity storage scope.
    * @param history Mandatory Agent history port.
    */
   bindAgentHistory(
+    repository: RepositoryView,
     entity: object,
     entityId: unknown,
     input: EntityStorageInput<unknown, Message>,
     history: AgentHistoryStorage<unknown> | undefined,
   ): void {
     if (history === undefined) throw new Error("Agent history storage is required.");
+    const lifetime = RepositoryStorage.lifetime(repository);
+    const runtime = repositoryRuntimes.get(repository);
     AgentHistoryReads.bind(entity, {
       storage: history,
       entityId,
+      onAdmit: async (onRead) => {
+        if (runtime === undefined || repositoryRuntimes.get(repository) !== runtime)
+          throw new Error("Agent history requires its active runtime.");
+        await runtime.onAdmit(input.context.tenantId);
+        return RepositoryStorage.track(repository, onRead, lifetime);
+      },
       scope: {
         context: input.context.name,
         tenant: JSON.stringify(input.context.tenantId ?? null),
@@ -7963,6 +7055,35 @@ Object.freeze(RepositoryEntities);
  */
 const RepositorySignals = {
   /**
+   * Packs one handler-produced signal and records only its validation failure.
+   *
+   * @typeParam Schema Generated schema for the signal.
+   * @param schema Generated schema for the signal.
+   * @param message Handler-produced message.
+   * @returns Validated packed signal.
+   */
+  packProduced<Schema extends MessageSchema>(schema: Schema, message: MessageShape<Schema>): Any {
+    try {
+      return RepositorySignals.packValidated(schema, message);
+    } catch (error) {
+      throw receptionObservation.recordPostHandlerFailure(error);
+    }
+  },
+
+  /**
+   * Packs a repository-produced value after checking its domain constraints.
+   *
+   * @typeParam Schema Generated schema for the value.
+   * @param schema Generated schema for the value.
+   * @param message Repository-produced message to pack.
+   * @returns Validated packed message.
+   */
+  packValidated<Schema extends MessageSchema>(schema: Schema, message: MessageShape<Schema>): Any {
+    Validate.check(schema, message);
+    return AnyPacker.pack(schema, message);
+  },
+
+  /**
    * Validates that a rejection type was declared by the invoked handler.
    *
    * @param handler Handler declaration that raised the rejection.
@@ -8079,7 +7200,7 @@ const RepositorySignals = {
     const metadata = runtime.signalMetadata.eventFromCommand(command, {});
     return create(EventSchema, {
       id: metadata.id,
-      message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
+      message: RepositorySignals.packValidated(rejection.schema, rejection.messageThrown()),
       context: create(EventContextSchema, {
         ...RepositorySignals.eventContextWithProducer(metadata.context, repository, entityId),
         rejection: create(RejectionEventContextSchema, {
@@ -8145,7 +7266,7 @@ interface EntityCommitChange {
  * Identifies the signal that caused a committed Entity transition.
  */
 interface EventOrigin {
-  readonly id: NonNullable<ReturnType<typeof AnyMessages.pack>>;
+  readonly id: NonNullable<ReturnType<typeof AnyPacker.pack>>;
   readonly typeUrl: string;
 }
 
@@ -8202,7 +7323,7 @@ class EntityStateChangePublishing {
           version,
         }),
       {
-        id: AnyMessages.pack(CommandIdSchema, command.id as never),
+        id: RepositorySignals.packValidated(CommandIdSchema, command.id as never),
         typeUrl: command.message?.typeUrl ?? "",
       },
       { repository, entityId, oldState, oldLifecycle, newState, lifecycle, version },
@@ -8240,7 +7361,7 @@ class EntityStateChangePublishing {
           version,
         }),
       {
-        id: AnyMessages.pack(EventIdSchema, source.id as never),
+        id: RepositorySignals.packValidated(EventIdSchema, source.id as never),
         typeUrl: source.message?.typeUrl ?? "",
       },
       { repository, entityId, oldState, oldLifecycle, newState, lifecycle, version },
@@ -8267,7 +7388,7 @@ class EntityStateChangePublishing {
       runtime.registerSystemEventSchema(draft.schema);
       const event = create(EventSchema, {
         id: metadata.id,
-        message: AnyMessages.pack(
+        message: RepositorySignals.packValidated(
           draft.schema,
           draft.messageAt(metadata.context.timestamp) as never,
         ),
@@ -8312,7 +7433,7 @@ class EntityStateChangePublishing {
     return {
       entity,
       signalId: [create(MessageIdSchema, { id: origin.id, typeUrl: origin.typeUrl })],
-      state: AnyMessages.pack(change.repository.stateSchema, change.newState),
+      state: RepositorySignals.packValidated(change.repository.stateSchema, change.newState),
       version: create(VersionSchema, { number: change.version }),
     };
   }
@@ -8361,7 +7482,10 @@ class EntityStateChangePublishing {
           ...(change.oldState === undefined
             ? {}
             : {
-                oldState: AnyMessages.pack(change.repository.stateSchema, change.oldState as never),
+                oldState: RepositorySignals.packValidated(
+                  change.repository.stateSchema,
+                  change.oldState as never,
+                ),
               }),
           newState: fields.state,
           signalId: fields.signalId,
@@ -8552,7 +7676,7 @@ class HandlerDispatchPublishing {
     });
     return create(EventSchema, {
       id: runtime.signalMetadata.eventId(),
-      message: AnyMessages.pack(
+      message: RepositorySignals.packValidated(
         EntityLog.CommandDispatchedToHandlerSchema,
         this.#message(repository, command, entityId, context.timestamp),
       ),
@@ -8636,7 +7760,7 @@ class HandlerDispatchPublishing {
     });
     return create(EventSchema, {
       id: runtime.signalMetadata.eventId(),
-      message: AnyMessages.pack(
+      message: RepositorySignals.packValidated(
         EntityLog.EventDispatchedToReactorSchema,
         this.#eventMessage(
           EntityLog.EventDispatchedToReactorSchema,
@@ -8684,7 +7808,7 @@ class HandlerDispatchPublishing {
       });
       const diagnostic = create(EventSchema, {
         id: runtime.signalMetadata.eventId(),
-        message: AnyMessages.pack(
+        message: RepositorySignals.packValidated(
           schema,
           this.#eventMessage(schema, repository, event, entityId, context.timestamp) as never,
         ),
@@ -8800,6 +7924,7 @@ Object.freeze(RepositorySignals);
 
 /**
  * Internal repository stand operations.
+ *
  * @internal
  */
 export const RepositoryStand = {
@@ -8845,13 +7970,6 @@ export const RepositoryStand = {
       lifecycle,
     });
   },
-
-  /**
-   * Maps one Event position to its Process Manager producer version.
-   *
-   * @param sequence One-based position among produced Events.
-   * @returns Producer sequence number for Event metadata.
-   */
 };
 Object.freeze(RepositoryStand);
 
@@ -8859,56 +7977,6 @@ Object.freeze(RepositoryStand);
  * Internal repository tenants operations.
  */
 const RepositoryTenants = {
-  /**
-   * Builds tenant-aware storage context for Entity inbox delivery.
-   *
-   * @param context Bounded context storage mode.
-   * @param tenantId Delivery tenant when multitenant.
-   * @returns Storage context for durable Entity inbox rows.
-   */
-  entityInboxDeliveryContext(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
-    if (!context.multitenant) {
-      return Object.freeze({ name: context.name, multitenant: false });
-    }
-
-    const tid = tenantId;
-    if (tid === undefined) {
-      throw new Error(`Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`);
-    }
-
-    return Object.freeze({
-      name: context.name,
-      multitenant: true,
-      tenantId: RepositoryTenants.require(tid),
-    });
-  },
-
-  /**
-   * Builds tenant-aware storage context for Projection inbox delivery.
-   *
-   * @param context Bounded context storage mode.
-   * @param tenantId Delivery tenant when multitenant.
-   * @returns Storage context for durable Projection inbox rows.
-   */
-  projectionDeliveryContext(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
-    if (!context.multitenant) {
-      return Object.freeze({ name: context.name, multitenant: false });
-    }
-
-    const tid = tenantId;
-    if (tid === undefined) {
-      throw new Error(
-        `Multitenant projection inbox handoff for "${context.name}" requires tenantId.`,
-      );
-    }
-
-    return Object.freeze({
-      name: context.name,
-      multitenant: true,
-      tenantId: RepositoryTenants.require(tid),
-    });
-  },
-
   /**
    * Validates an Event tenant before Projection inbox handoff.
    *
@@ -9138,10 +8206,15 @@ const RepositoryHandlers = {
   requireDeclaredOutputs(handler: HandlerMetadata, signals: readonly unknown[]): void {
     const schemas = HandlerMetadataValues.returnedSchemas(handler);
     for (const signal of signals) {
-      const typeName = EntityInvocation.messageTypeName(signal);
+      let typeName: string;
+      try {
+        typeName = EntityInvocation.messageTypeName(signal);
+      } catch (error) {
+        throw receptionObservation.recordPostHandlerFailure(error);
+      }
       if (!schemas.some((schema) => schema.typeName === typeName)) {
-        throw new Error(
-          `Handler "${handler.methodName}" returned undeclared message "${typeName}".`,
+        throw receptionObservation.recordPostHandlerFailure(
+          new Error(`Handler "${handler.methodName}" returned undeclared message "${typeName}".`),
         );
       }
     }
@@ -9994,7 +9067,7 @@ const RepositoryRoutes = {
     context: Command["context"] | undefined,
     reads: RepositoryReadQueries<RepositoryEntityType>,
   ): Promise<Id> {
-    const unpacked = AnyMessages.unpack(message, schema);
+    const unpacked = AnyPacker.tryUnpack(message, schema);
     if (unpacked === undefined) {
       throw new Error("Repository command routing requires a readable Command message.");
     }
@@ -10236,14 +9309,14 @@ const RepositoryRoutes = {
     if (message?.typeUrl !== TypeUrls.derive(EntityLog.EntityStateChangedSchema)) {
       throw new Error(`${operation} requires an EntityStateChanged System event.`);
     }
-    const changed = AnyMessages.unpack(message, EntityLog.EntityStateChangedSchema);
+    const changed = AnyPacker.tryUnpack(message, EntityLog.EntityStateChangedSchema);
     const packedState = changed?.newState;
     if (packedState === undefined || packedState.typeUrl === "") {
       throw new Error(`${operation} requires EntityStateChanged.newState.`);
     }
     const schema = schemas.find((candidate) => TypeUrls.derive(candidate) === packedState.typeUrl);
     if (schema === undefined) return undefined;
-    const state = AnyMessages.unpack(packedState, schema);
+    const state = AnyPacker.tryUnpack(packedState, schema);
     if (state === undefined) throw new Error(`${operation} requires a readable Entity state.`);
     return Object.freeze({ schema, state });
   },
@@ -10299,7 +9372,7 @@ const RepositoryRoutes = {
     targetIdField: DescriptorFieldMetadata,
     reads: RepositoryReadQueries<RepositoryEntityType>,
   ): Promise<readonly Id[]> {
-    const unpacked = AnyMessages.unpack(message, schema);
+    const unpacked = AnyPacker.tryUnpack(message, schema);
     if (unpacked === undefined) {
       throw new Error("Repository event routing requires a readable Event message.");
     }
@@ -10369,7 +9442,7 @@ const RepositoryRoutes = {
     schema: MessageSchema,
     signalKind: "command" | "event",
   ): unknown {
-    const unpacked = AnyMessages.unpack(message, schema);
+    const unpacked = AnyPacker.tryUnpack(message, schema);
     const firstField = schema.fields[0];
 
     if (unpacked === undefined || firstField === undefined) {
@@ -10679,6 +9752,228 @@ Object.freeze(RepositoryRoutes);
  */
 const RepositoryStorage = {
   /**
+   * Returns one retained EventStore for unchanged Process Manager output.
+   *
+   * @param repository Registered Process Manager repository.
+   * @param runtime Its captured runtime services.
+   * @returns Tenant-aware EventStore for produced Events.
+   */
+  eventStore(repository: RepositoryView, runtime: RepositoryRuntime): EventStore {
+    const lifetime = this.lifetime(repository);
+    lifetime.eventStore ??= new EventStore(runtime.context, runtime.storageFactory);
+    return lifetime.eventStore;
+  },
+
+  /**
+   * Creates one repository runtime's retained storage registry.
+   *
+   * @returns Empty registry accepting storage work.
+   */
+  newLifetime(): RepositoryStorageLifetime {
+    return {
+      entities: new Map(),
+      histories: new Map(),
+      ports: new Set(),
+      commits: new Set(),
+      active: new Set(),
+      open: true,
+    };
+  },
+
+  /**
+   * Returns the active storage registry for one registered repository.
+   *
+   * @param repository Registered repository.
+   * @returns Its current retained-storage registry.
+   */
+  lifetime(repository: RepositoryView): RepositoryStorageLifetime {
+    const lifetime = repositoryStorageLifetimes.get(repository);
+    if (lifetime?.open !== true) throw new Error("Repository storage requires an active runtime.");
+    return lifetime;
+  },
+
+  /**
+   * Admits one complete physical storage operation before runtime closure.
+   *
+   * @typeParam T Result of the operation.
+   * @param repository Registered repository.
+   * @param work Work that acquires and uses retained storage.
+   * @param expected Captured lifetime for a bound history reader, if any.
+   * @returns The operation result or its original failure.
+   */
+  async track<T>(
+    repository: RepositoryView,
+    work: () => Promise<T>,
+    expected?: RepositoryStorageLifetime,
+  ): Promise<T> {
+    const lifetime = this.lifetime(repository);
+    if (expected !== undefined && lifetime !== expected)
+      throw new Error("Repository history requires its active runtime.");
+    const result = work();
+    lifetime.active.add(result);
+    return result.finally(() => {
+      lifetime.active.delete(result);
+    });
+  },
+
+  /**
+   * Starts repository shutdown after new admissions are fenced.
+   *
+   * @param repository Repository being detached.
+   * @returns Completion after admitted operations and every close attempt.
+   */
+  closeRuntime(repository: RepositoryView): Promise<void> {
+    const lifetime = repositoryStorageLifetimes.get(repository);
+    if (lifetime === undefined) return Promise.resolve();
+    if (lifetime.closing !== undefined) return lifetime.closing;
+    if (lifetime.idleOutcome !== undefined) {
+      const error = lifetime.idleOutcome.error;
+      return error === undefined ? Promise.resolve() : Promise.reject(error);
+    }
+    lifetime.open = false;
+    lifetime.closing = this.drainLifetime(lifetime);
+    return lifetime.closing;
+  },
+
+  /**
+   * Rejects synchronous rollback while repository storage work remains active.
+   *
+   * @param repository Repository being rolled back.
+   */
+  assertIdle(repository: RepositoryView): void {
+    const lifetime = repositoryStorageLifetimes.get(repository);
+    if (lifetime !== undefined && (lifetime.active.size > 0 || lifetime.closing !== undefined))
+      throw new Error("Repository idle cleanup requires no active storage work.");
+  },
+
+  /**
+   * Closes retained resources synchronously during idle assembly rollback.
+   *
+   * @param repository Repository being rolled back.
+   */
+  closeRuntimeIdle(repository: RepositoryView): void {
+    const lifetime = repositoryStorageLifetimes.get(repository);
+    if (lifetime === undefined) return;
+    if (lifetime.idleOutcome !== undefined) {
+      if (lifetime.idleOutcome.error !== undefined) throw lifetime.idleOutcome.error;
+      return;
+    }
+    lifetime.open = false;
+    const errors: unknown[] = [];
+    if (lifetime.eventStore !== undefined) {
+      try {
+        eventStoreAccess.closeIdle(lifetime.eventStore);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    errors.push(...this.closeLifetimePortsIdle(lifetime));
+    const failure = this.closeFailure(errors);
+    lifetime.idleOutcome = failure === undefined ? {} : { error: failure };
+    if (failure !== undefined) throw failure;
+  },
+
+  /**
+   * Waits for admitted storage operations, closes the retained EventStore, and releases all ports.
+   *
+   * @param lifetime Repository storage registry being closed.
+   * @returns Completion after every close attempt.
+   */
+  async drainLifetime(lifetime: RepositoryStorageLifetime): Promise<void> {
+    await Promise.allSettled([...lifetime.active]);
+    const errors: unknown[] = [];
+    if (lifetime.eventStore !== undefined) {
+      try {
+        await lifetime.eventStore.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    errors.push(...(await this.closeLifetimePorts(lifetime)));
+    const failure = this.closeFailure(errors);
+    if (failure !== undefined) throw failure;
+  },
+
+  /**
+   * Closes each retained physical port once.
+   *
+   * @param lifetime Repository storage registry being closed.
+   * @returns Every close failure in attempt order.
+   */
+  async closeLifetimePorts(lifetime: RepositoryStorageLifetime): Promise<unknown[]> {
+    const commits = [...lifetime.commits];
+    lifetime.commits.clear();
+    const ports = [...lifetime.ports];
+    lifetime.ports.clear();
+    const errors: unknown[] = [];
+    const closing = commits.map((commit) => {
+      try {
+        return commit.close();
+      } catch (error) {
+        errors.push(error);
+        return Promise.resolve();
+      }
+    });
+    for (const result of await Promise.allSettled(closing))
+      if (result.status === "rejected") errors.push(result.reason);
+    for (const port of ports) {
+      try {
+        port.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    lifetime.entities.clear();
+    lifetime.histories.clear();
+    delete lifetime.eventStore;
+    return errors;
+  },
+
+  /**
+   * Closes ports synchronously during assembly rollback.
+   *
+   * @param lifetime The captured repository storage lifetime.
+   * @returns Synchronous cleanup failures, if any.
+   */
+  closeLifetimePortsIdle(lifetime: RepositoryStorageLifetime): unknown[] {
+    const commits = [...lifetime.commits];
+    lifetime.commits.clear();
+    const ports = [...lifetime.ports];
+    lifetime.ports.clear();
+    lifetime.entities.clear();
+    lifetime.histories.clear();
+    delete lifetime.eventStore;
+    const errors: unknown[] = [];
+    for (const commit of commits) {
+      try {
+        commit.closeIdle();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    for (const port of ports) {
+      try {
+        port.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    return errors;
+  },
+
+  /**
+   * Returns one close failure or aggregates multiple failures.
+   *
+   * @param errors Physical port cleanup failures.
+   * @returns The reported cleanup failure, if any.
+   */
+  closeFailure(errors: readonly unknown[]): Error | undefined {
+    if (errors.length === 0) return undefined;
+    if (errors.length === 1) return errors[0] as Error;
+    return new AggregateError(errors, "Repository storage close failed.");
+  },
+
+  /**
    * Opens provider Entity storage for one read scope without a commit handle.
    *
    * @typeParam I Entity identifier type.
@@ -10698,80 +9993,135 @@ const RepositoryStorage = {
   },
 
   /**
-   * Opens Entity storage and an atomic commit port from a storage factory.
+   * Returns the canonical tenant/model/history bucket for Entity storage.
    *
-   * @typeParam I Entity identifier type.
-   * @typeParam S Generated Entity state type.
-   * @param factory Provider storage factory.
-   * @param input Entity storage location and schema.
-   * @param agent Whether to open mandatory Agent history.
-   * @returns Storage ports closed together by one handle.
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @param lifetime Active repository storage registry.
+   * @param input Captured Entity storage configuration.
+   * @returns Slots for one model and history configuration.
    */
-  openEntityStorage<I, S extends Message>(
-    factory: StorageFactory,
+  entityBucket<I, S extends Message>(
+    lifetime: RepositoryStorageLifetime,
     input: EntityStorageInput<I, S>,
-    agent = false,
-  ): RepositoryEntityStorage<I, S> {
-    const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
-    if (candidate.createEntityStorage === undefined)
-      throw new Error("StorageFactory does not provide required atomic Entity commit storage.");
-    const entity = candidate.createEntityStorage(input);
-    const commits = EntityCommitStorageFactories.create(factory, input);
-    let ports:
-      | { agentHistory: AgentHistoryStorage<I>; agentExecution: AgentExecutionStorage<I, S> }
-      | undefined;
-    try {
-      if (agent) ports = this.openAgentPorts(factory, input);
-    } catch (error) {
-      commits.close();
-      entity.close();
-      throw error;
+  ): Map<string | symbol, RetainedEntitySlot> {
+    const key = JSON.stringify({
+      context: input.context.name,
+      state: input.sourceType.typeName,
+      history: input.stateHistory,
+    });
+    let bucket = lifetime.entities.get(key);
+    if (bucket === undefined) {
+      bucket = new Map();
+      lifetime.entities.set(key, bucket);
     }
-    return {
-      ...entity,
-      commits,
-      ...ports,
-      close: () => {
-        ports?.agentExecution.close();
-        ports?.agentHistory.close();
-        commits.close();
-        entity.close();
-      },
-    };
+    return bucket;
   },
 
   /**
-   * Opens both mandatory Agent ports and closes the first if the second fails.
+   * Returns the canonical tenant/model bucket for Agent audit history.
    *
    * @typeParam I Typed Agent identifier.
-   * @typeParam S Generated Agent state message.
-   * @param factory Storage factory registered with the Bounded Context.
-   * @param input Original Inbox or storage input.
-   * @returns Indexed history and execution handles for the same tenant.
+   * @typeParam S Generated Agent state.
+   * @param lifetime Active repository storage registry.
+   * @param input Captured Agent storage configuration.
+   * @returns Audit ports independent of the state-history switch.
    */
-  openAgentPorts<I, S extends Message>(
+  historyBucket<I, S extends Message>(
+    lifetime: RepositoryStorageLifetime,
+    input: EntityStorageInput<I, S>,
+  ): Map<string | symbol, AgentHistoryStorage<unknown>> {
+    const key = JSON.stringify({ context: input.context.name, state: input.sourceType.typeName });
+    let bucket = lifetime.histories.get(key);
+    if (bucket === undefined) {
+      bucket = new Map();
+      lifetime.histories.set(key, bucket);
+    }
+    return bucket;
+  },
+
+  /**
+   * Returns retained read-only Entity storage without acquiring a commit port.
+   *
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @param repository Registered repository.
+   * @param factory Repository storage factory.
+   * @param input Captured Entity storage configuration.
+   * @returns Reusable current, state-history, and event-history ports.
+   */
+  repositoryReadEntityStorage<I, S extends Message>(
+    repository: RepositoryView,
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
-  ): { agentHistory: AgentHistoryStorage<I>; agentExecution: AgentExecutionStorage<I, S> } {
-    const agentHistory = AgentHistoryStorageFactories.create(factory, {
+  ): ReturnType<EntityStorageFactory["createEntityStorage"]> {
+    const lifetime = this.lifetime(repository);
+    const bucket = this.entityBucket(lifetime, input);
+    const key = TenantBoundary.of(input.context).key;
+    const existing = bucket.get(key);
+    if (existing !== undefined) return existing.entity;
+    const entity = this.openReadEntityStorage(factory, input);
+    bucket.set(key, { entity });
+    lifetime.ports.add(entity);
+    return entity;
+  },
+
+  /**
+   * Returns shared Agent audit history for one tenant and model.
+   *
+   * @typeParam I Typed Agent identifier.
+   * @typeParam S Generated Agent state.
+   * @param repository Registered Agent repository.
+   * @param factory Repository storage factory.
+   * @param input Captured Entity storage configuration.
+   * @returns Reusable Agent audit-history port.
+   */
+  openRepositoryAgentHistory<I, S extends Message>(
+    repository: RepositoryView,
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+  ): AgentHistoryStorage<I> {
+    const lifetime = this.lifetime(repository);
+    const bucket = this.historyBucket(lifetime, input);
+    const key = TenantBoundary.of(input.context).key;
+    const existing = bucket.get(key);
+    if (existing !== undefined) return existing;
+    const history = AgentHistoryStorageFactories.create(factory, {
       context: input.context,
       stateType: input.sourceType.typeName,
       id: { key: input.id.key },
     });
-    try {
-      const agentExecution = AgentExecutionStorageFactories.create(factory, {
-        entity: input,
-        stateType: input.sourceType.typeName,
-      });
-      return { agentHistory, agentExecution };
-    } catch (error) {
-      agentHistory.close();
-      throw error;
-    }
+    bucket.set(key, history);
+    lifetime.ports.add(history);
+    return history;
   },
 
   /**
-   * Returns one shared Entity storage handle per context and state type.
+   * Closes every acquired port, retaining the first failure and any later failures.
+   *
+   * @param ports Acquired ports in close order.
+   * @param acquisitionError Earlier acquisition failure, if any.
+   */
+  closePorts(
+    ports: readonly (RepositoryClosePort | EntityCommitStorage)[],
+    acquisitionError?: unknown,
+  ): void {
+    const errors: unknown[] = acquisitionError === undefined ? [] : [acquisitionError];
+    for (const port of ports) {
+      try {
+        if ("closeIdle" in port) port.closeIdle();
+        else port.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, "Entity storage cleanup failed.");
+  },
+
+  /**
+   * Returns one retained Entity storage handle per context, tenant, state type,
+   * and captured state-history configuration.
    *
    * @typeParam I Entity identifier type.
    * @typeParam S Generated Entity state type.
@@ -10785,24 +10135,97 @@ const RepositoryStorage = {
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
   ): RepositoryEntityStorage<I, S> {
-    const key = JSON.stringify({ context: input.context, state: input.sourceType.typeName });
-    let handles = repositoryEntityHandles.get(repository);
-    const handle = RepositoryStorage.openEntityStorage(
+    const lifetime = this.lifetime(repository);
+    const bucket = this.entityBucket(lifetime, input);
+    const key = TenantBoundary.of(input.context).key;
+    const existing = bucket.get(key);
+    if (existing?.full !== undefined) return existing.full as RepositoryEntityStorage<I, S>;
+    return this.upgradeRepositoryEntityStorage(
+      repository,
       factory,
       input,
-      repository.entityFamily === "agent",
+      lifetime,
+      bucket,
+      key,
+      existing,
     );
-    if (handles === undefined) {
-      handles = new Map();
-      repositoryEntityHandles.set(repository, handles);
+  },
+
+  /**
+   * Adds commit and Agent ports to a retained or newly acquired Entity port.
+   *
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @param repository Registered repository.
+   * @param factory Repository storage factory.
+   * @param input Captured Entity storage configuration.
+   * @param lifetime Active repository registry.
+   * @param bucket Entity slots for this model and history configuration.
+   * @param key Canonical tenant key.
+   * @param existing Read-only slot if one was opened earlier.
+   * @returns Complete retained write storage.
+   */
+  upgradeRepositoryEntityStorage<I, S extends Message>(
+    repository: RepositoryView,
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+    lifetime: RepositoryStorageLifetime,
+    bucket: Map<string | symbol, RetainedEntitySlot>,
+    key: string | symbol,
+    existing?: RetainedEntitySlot,
+  ): RepositoryEntityStorage<I, S> {
+    const entity = existing?.entity ?? this.openReadEntityStorage(factory, input);
+    let commits: EntityCommitStorage | undefined;
+    try {
+      const commit = EntityCommitStorageFactories.create(factory, input);
+      commits = commit;
+      const agentHistory =
+        repository.entityFamily === "agent"
+          ? this.openRepositoryAgentHistory(repository, factory, input)
+          : undefined;
+      const full = {
+        ...entity,
+        commits: commit,
+        ...(agentHistory === undefined ? {} : { agentHistory }),
+      } as unknown as RepositoryEntityStorage<I, S>;
+      this.retainUpgradedSlot(lifetime, bucket, key, existing, full, entity, commit);
+      return full;
+    } catch (error) {
+      const rollback: (RepositoryClosePort | EntityCommitStorage)[] =
+        commits === undefined ? [] : [commits];
+      if (existing === undefined) rollback.push(entity);
+      this.closePorts(rollback, error);
+      throw error;
     }
-    const existing = handles.get(key);
-    if (existing !== undefined) {
-      handle.close();
-      return existing as RepositoryEntityStorage<I, S>;
-    }
-    handles.set(key, handle);
-    return handle;
+  },
+
+  /**
+   * Records a completed Entity storage upgrade in the current lifetime.
+   *
+   * @typeParam I Typed Entity identifier.
+   * @typeParam S Generated Entity state.
+   * @param lifetime Active repository registry.
+   * @param bucket Entity slots for one model and history configuration.
+   * @param key Canonical tenant key.
+   * @param existing Previously retained read-only slot, if any.
+   * @param full Completed Entity storage.
+   * @param entity Shared Entity read port.
+   * @param commit Newly acquired commit port.
+   */
+  retainUpgradedSlot<I, S extends Message>(
+    lifetime: RepositoryStorageLifetime,
+    bucket: Map<string | symbol, RetainedEntitySlot>,
+    key: string | symbol,
+    existing: RetainedEntitySlot | undefined,
+    full: RepositoryEntityStorage<I, S>,
+    entity: RepositoryReadEntityPort,
+    commit: EntityCommitStorage,
+  ): void {
+    const slot = existing ?? { entity };
+    slot.full = full;
+    bucket.set(key, slot);
+    lifetime.ports.add(entity);
+    lifetime.commits.add(commit);
   },
 
   /**
@@ -10816,16 +10239,19 @@ const RepositoryStorage = {
     repository: RepositoryView,
     context: StorageContext,
   ): EntityStorageInput<unknown, Message> {
+    const snapshot = repositorySnapshots.get(repository);
+    if (snapshot === undefined)
+      throw new TypeError("Entity storage requires a Repository instance.");
     const descriptor = entityStorageDescriptor(
       context,
-      repositorySpecScanner.scan(repository.entityType, repository.metadata),
-      repository.metadata,
+      repositorySpecScanner.scan(snapshot.entityType, snapshot.metadata),
+      snapshot.metadata,
     ) as EntityStorageInput<unknown, Message>;
     const history = RepositoryStorage.historyConfiguration(repository);
     return {
       ...descriptor,
       stateHistory: history.stateHistory,
-      eventHistory: repository.entityFamily === "aggregate" || history.processManagerEventHistory,
+      eventHistory: snapshot.entityFamily === "aggregate" || history.processManagerEventHistory,
     };
   },
 
@@ -10893,42 +10319,195 @@ const RepositoryHistoryInternals = {
   /**
    * Binds state and Event history readers to one restored Entity instance.
    *
+   * @param repository Registered repository admitting history reads.
    * @param entity Instance receiving the history accessors.
    * @param storage Entity storage used for reads and maintenance.
    * @param entityId Identifier used to select history records.
    * @param schema Schema used to unpack state records.
+   * @param tenantId Captured tenant for later live membership checks.
    */
   bindEntityHistory(
+    repository: RepositoryView,
     entity: object,
-    storage: ReturnType<EntityStorageFactory["createEntityStorage"]>,
+    storage: Pick<RepositoryReadEntityPort, "states" | "events">,
     entityId: unknown,
     schema: DescriptorMessageSchema,
+    tenantId?: TenantId,
   ): void {
-    const stateCache = RepositoryHistoryInternals.createHistoryCache(
+    const lifetime = RepositoryStorage.lifetime(repository);
+    const runtime = repositoryRuntimes.get(repository);
+    const onAdmit = async (): Promise<void> => {
+      if (runtime === undefined || repositoryRuntimes.get(repository) !== runtime)
+        throw new Error("Repository history requires its active runtime.");
+      await runtime.onAdmit(tenantId);
+    };
+    const { stateCache, eventCache } = this.boundHistoryCaches(storage, entityId, schema);
+    entityStateHistoryCaches.set(entity, stateCache);
+    entityHistoryAccess.bind(entity, {
+      stateAt: async (time) => {
+        await onAdmit();
+        return this.readBoundStateAt(repository, lifetime, storage, entityId, time);
+      },
+      states: async (depth) => {
+        await onAdmit();
+        return this.readBoundStates(repository, lifetime, schema, stateCache, depth);
+      },
+      events: async (depth) => {
+        await onAdmit();
+        return this.readBoundEvents(repository, lifetime, eventCache, depth);
+      },
+      stateMaintenance: this.boundStateMaintenance(repository, lifetime, storage.states, onAdmit),
+      eventMaintenance: this.boundEventMaintenance(repository, lifetime, storage.events, onAdmit),
+    });
+  },
+
+  /**
+   * Creates state and Event caches over retained history ports.
+   *
+   * @param storage Retained history ports.
+   * @param entityId Captured Entity identifier.
+   * @param schema State schema for record version decoding.
+   * @returns Bound state and Event caches.
+   */
+  boundHistoryCaches(
+    storage: Pick<RepositoryReadEntityPort, "states" | "events">,
+    entityId: unknown,
+    schema: DescriptorMessageSchema,
+  ) {
+    const stateCache = this.createHistoryCache(
       (depth, startingFromVersion) => storage.states.backward(entityId, depth, startingFromVersion),
       (record) => BigInt(EntityRecords.unpack(schema, record).versionMessage.number),
       { requireDescendingVersions: true },
     );
-    entityStateHistoryCaches.set(entity, stateCache);
-    const eventCache = RepositoryHistoryInternals.createHistoryCache(
+    const eventCache = this.createHistoryCache(
       (depth, startingFromVersion) => storage.events.backward(entityId, depth, startingFromVersion),
       (event) => RepositorySignals.readEventVersion(event),
       { cacheCompleteVersionGroups: true },
     );
-    entityHistoryAccess.bind(entity, {
-      stateAt: async (time) =>
-        RepositoryHistoryInternals.cloneHistoryState(await storage.states.stateAt(entityId, time)),
-      states: async (depth) =>
-        RepositoryHistoryInternals.freezeHistoryStates(
-          (await stateCache.read(depth)).map(
-            (record) => EntityRecords.unpack(schema, record).state,
-          ),
+    return { stateCache, eventCache };
+  },
+
+  /**
+   * Admits complete state-history maintenance against a captured runtime.
+   *
+   * @param repository Repository with the bound Entity.
+   * @param lifetime Runtime that provided the retained port.
+   * @param states Retained state-history port.
+   * @param onAdmit Checks current membership before physical work.
+   * @returns Guarded maintenance methods.
+   */
+  boundStateMaintenance(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    states: EntityStateHistoryPort<unknown, Message>,
+    onAdmit: () => Promise<void>,
+  ): Pick<EntityStateHistoryPort<unknown, Message>, "trim" | "truncate"> {
+    return {
+      trim: async (id, keep) => {
+        await onAdmit();
+        return RepositoryStorage.track(repository, () => states.trim(id, keep), lifetime);
+      },
+      truncate: async (time) => {
+        await onAdmit();
+        return RepositoryStorage.track(repository, () => states.truncate(time), lifetime);
+      },
+    };
+  },
+
+  /**
+   * Admits complete Event-history maintenance against a captured runtime.
+   *
+   * @param repository Repository with the bound Entity.
+   * @param lifetime Runtime that provided the retained port.
+   * @param events Retained Event-history port.
+   * @param onAdmit Checks current membership before physical work.
+   * @returns Guarded maintenance method.
+   */
+  boundEventMaintenance(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    events: EntityEventHistoryPort<unknown>,
+    onAdmit: () => Promise<void>,
+  ): Pick<EntityEventHistoryPort<unknown>, "truncate"> {
+    return {
+      truncate: async (time) => {
+        await onAdmit();
+        return RepositoryStorage.track(repository, () => events.truncate(time), lifetime);
+      },
+    };
+  },
+
+  /**
+   * Reads one bound historical state within repository admission.
+   *
+   * @param repository Registered repository.
+   * @param lifetime Captured repository storage lifetime.
+   * @param storage Retained Entity read port.
+   * @param entityId Captured Entity identifier.
+   * @param time Historical instant.
+   * @returns Historical state, if present.
+   */
+  readBoundStateAt(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    storage: Pick<RepositoryReadEntityPort, "states">,
+    entityId: unknown,
+    time: Timestamp,
+  ): Promise<Message | undefined> {
+    return RepositoryStorage.track(
+      repository,
+      async () => this.cloneHistoryState(await storage.states.stateAt(entityId, time)),
+      lifetime,
+    );
+  },
+
+  /**
+   * Reads a complete bound state-history page within repository admission.
+   *
+   * @param repository Registered repository.
+   * @param lifetime Captured repository storage lifetime.
+   * @param schema State schema used to unpack rows.
+   * @param cache Bound state-history cache.
+   * @param depth Requested history depth.
+   * @returns Frozen historical states.
+   */
+  readBoundStates(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    schema: DescriptorMessageSchema,
+    cache: { readonly read: (depth: number) => Promise<readonly EntityRecord[]> },
+    depth: number,
+  ): Promise<readonly Message[]> {
+    return RepositoryStorage.track(
+      repository,
+      async () =>
+        this.freezeHistoryStates(
+          (await cache.read(depth)).map((record) => EntityRecords.unpack(schema, record).state),
         ),
-      events: async (depth) =>
-        RepositoryHistoryInternals.freezeHistoryEvents(await eventCache.read(depth)),
-      stateMaintenance: storage.states,
-      eventMaintenance: storage.events,
-    });
+      lifetime,
+    );
+  },
+
+  /**
+   * Reads a complete bound Event-history page within repository admission.
+   *
+   * @param repository Registered repository.
+   * @param lifetime Captured repository storage lifetime.
+   * @param cache Bound Event-history cache.
+   * @param depth Requested history depth.
+   * @returns Frozen historical Events.
+   */
+  readBoundEvents(
+    repository: RepositoryView,
+    lifetime: RepositoryStorageLifetime,
+    cache: { readonly read: (depth: number) => Promise<readonly Event[]> },
+    depth: number,
+  ): Promise<readonly Event[]> {
+    return RepositoryStorage.track(
+      repository,
+      async () => this.freezeHistoryEvents(await cache.read(depth)),
+      lifetime,
+    );
   },
 
   /**
@@ -11427,13 +11006,15 @@ const DispatchGuards = {
       repository,
       RepositoryTenants.storageContextForEvent(runtime.context, event),
     );
-    const storage = RepositoryStorage.openEntityStorage(runtime.storageFactory, input);
-    try {
+    return RepositoryStorage.track(repository, async () => {
+      const storage = RepositoryStorage.repositoryReadEntityStorage(
+        repository,
+        runtime.storageFactory,
+        input,
+      );
       const persisted = await storage.events.backward(entityId, depth);
       return persisted.some((candidate) => candidate.id?.value === journalEventId);
-    } finally {
-      storage.close();
-    }
+    });
   },
 
   /**
@@ -11596,7 +11177,7 @@ const InboxMessages = {
     }
 
     const command =
-      message.signal === undefined ? undefined : AnyMessages.unpack(message.signal, CommandSchema);
+      message.signal === undefined ? undefined : AnyPacker.tryUnpack(message.signal, CommandSchema);
 
     if (command === undefined) {
       throw CommandValidationError.invalidPayload();
@@ -11661,7 +11242,7 @@ const InboxMessages = {
             typeUrl: message.signal.typeUrl,
             value: new Uint8Array(message.signal.value),
           });
-    const event = signal === undefined ? undefined : AnyMessages.unpack(signal, EventSchema);
+    const event = signal === undefined ? undefined : AnyPacker.tryUnpack(signal, EventSchema);
 
     if (event === undefined) {
       throw new Error(unreadableMessage);
@@ -11798,8 +11379,7 @@ const InboxReplay = {
       message,
       tenantId,
       route.entityId,
-      { kind: "command", value: command },
-      command.context?.actorContext ?? create(ActorContextSchema),
+      { case: "command", value: command },
       [assignee.registeredHandler],
     );
   },
@@ -11843,8 +11423,7 @@ const InboxReplay = {
       message,
       tenantId,
       route.entityIds[0],
-      { kind: "event", value: event },
-      runtime.signalMetadata.originFromEvent(event).actorContext ?? create(ActorContextSchema),
+      { case: "event", value: event },
       handlers,
     );
   },
@@ -11881,7 +11460,6 @@ const InboxReplay = {
    * @param tenantId Selected delivery tenant.
    * @param entityId Typed target from the stored route.
    * @param signal Original source envelope.
-   * @param actor Original actor metadata.
    * @param handlers Selected handler metadata in execution order.
    * @returns When the fenced repository operation completes.
    */
@@ -11891,83 +11469,188 @@ const InboxReplay = {
     message: InboxMessage,
     tenantId: TenantId | undefined,
     entityId: unknown,
-    signal: AgentAdmissionInput["signal"],
-    actor: ActorContext,
+    signal: AgentSource,
     handlers: readonly RegisteredHandlerMetadata[],
   ): Promise<void> {
-    const revisions = InboxReplay.agentRevisions(repository, runtime, handlers);
-    const input = RepositoryStorage.entityStorageInput(
+    const context = RepositoryTenants.storageContextForTenant(runtime.context, tenantId);
+    const input = RepositoryStorage.entityStorageInput(repository, context);
+    const deliverySignal = AgentDeliveryScope.signal();
+    if (deliverySignal === undefined) throw new Error("Agent admission requires delivery scope.");
+    const cancellation = AbortSignal.any([deliverySignal, runtime.agentSignal]);
+    const key = InboxReplay.capacityKeyFor(repository, input.context, input.id.key(entityId));
+    const reservation = runtime.reserveAgent(key, cancellation);
+    if (reservation === undefined) {
+      runtime.deferAgent(message, tenantId);
+      AgentDeliveryScope.record({ kind: "deferred" });
+      return;
+    }
+    await InboxReplay.admitReservedAgent({
       repository,
-      RepositoryTenants.storageContextForTenant(runtime.context, tenantId),
-    );
-    const execution = InboxReplay.agentExecutionHandle(repository, runtime, input);
-    await execution.admit(
-      AgentAdmission.create({
-        stateType: repository.stateSchema.typeName,
-        agentKey: input.id.key(entityId),
-        recipientId: message.inboxId.targetId,
+      runtime,
+      context: input.context,
+      message,
+      tenantId,
+      entityId,
+      signal,
+      handlers,
+      reservation,
+    });
+  },
+
+  /**
+   * Serializes the complete local Agent identity for one capacity slot.
+   *
+   * @param context Captured tenant storage context.
+   * @param stateType Declared Agent state type.
+   * @param id Canonical typed Agent identifier.
+   * @returns Stable local capacity key for this Agent and tenant.
+   */
+  agentCapacityKey(context: StorageContext, stateType: string, id: string): string {
+    return JSON.stringify([context.name, String(TenantBoundary.of(context).key), stateType, id]);
+  },
+
+  /**
+   * Builds a capacity key for one repository entity in the selected tenant.
+   *
+   * @param repository Agent repository declaring the state type.
+   * @param context Captured tenant storage context.
+   * @param id Canonical typed Agent identifier.
+   * @returns Stable local capacity key for this repository entity.
+   */
+  capacityKeyFor(repository: RepositoryView, context: StorageContext, id: string): string {
+    return this.agentCapacityKey(context, repository.stateSchema.typeName, id);
+  },
+
+  /**
+   * Completes receipt admission or returns a nonacknowledging provider error.
+   * @param input Captured signal, runtime, and local capacity reservation.
+   * @returns Completion of receipt admission or recorded provider failure.
+   */
+  async admitReservedAgent(input: AgentLiveAdmit): Promise<void> {
+    const { repository, runtime, context, message, signal, reservation } = input;
+    try {
+      const accepted = await InboxReplay.acceptAgentReceipt(
+        runtime,
+        context,
+        repository,
+        message,
         signal,
-        actor,
-        inbox: message,
-        handlers,
-        codeRevision: revisions.codeRevision,
-        schemaRevision: revisions.schema,
-        policyRevision: revisions.policy,
-      }),
-    );
-    runtime.wakeAcceptedAgent(repository, tenantId);
+      );
+      if (!accepted) {
+        reservation.release();
+        AgentDeliveryScope.record({ kind: "duplicate" });
+        return;
+      }
+      InboxReplay.recordAcceptedAgent(input);
+    } catch (error) {
+      reservation.release();
+      AgentDeliveryScope.record({ kind: "error", error });
+    }
   },
 
   /**
-   * Opens the actual tenant's mandatory execution handle.
-   *
-   * @typeParam I Typed Agent identifier.
-   * @typeParam S Generated Agent state message.
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param input Original Inbox or storage input.
-   * @returns Fenced execution handle for the accepted tenant.
+   * Records one accepted typed signal to its post-ack serialized live turn.
+   * @param input Accepted signal and its retained capacity reservation.
    */
-  agentExecutionHandle<I, S extends Message>(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    input: EntityStorageInput<I, S>,
-  ): AgentExecutionStorage<I, S> {
-    const storage = RepositoryStorage.openRepositoryEntityStorage(
-      repository,
-      runtime.storageFactory,
-      input,
-    );
-    if (storage.agentExecution === undefined)
-      throw new Error("Agent Inbox replay requires durable execution storage.");
-    return storage.agentExecution;
-  },
-
-  /**
-   * Records the registered code, schema, and AI policy before Inbox handoff.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param runtime Bounded Context storage and publication services.
-   * @param handlers Generated handlers in their saved order.
-   * @returns Pinned code, schema, and AI policy digests.
-   */
-  agentRevisions(
-    repository: RepositoryView,
-    runtime: RepositoryRuntime,
-    handlers: readonly RegisteredHandlerMetadata[],
-  ): { codeRevision: string; schema: string; policy: string } {
-    const ai = runtime.ai;
-    const configuration = repositoryAccess.agentConfiguration(repository);
-    if (
-      ai === undefined ||
-      configuration.ai === undefined ||
-      configuration.codeRevision === undefined
-    )
-      throw new Error("Agent Inbox replay requires registered AI capabilities and revisions.");
-    return {
-      codeRevision: configuration.codeRevision,
-      ...AgentRevisions.atAdmission(repository.stateSchema, handlers, ai, configuration.ai),
+  recordAcceptedAgent(input: AgentLiveAdmit): void {
+    const { repository, runtime, message, tenantId, entityId, signal, handlers, reservation } =
+      input;
+    const invocation: AgentLiveInvocation = {
+      stateType: repository.stateSchema.typeName,
+      recipientId: clone(AnySchema, message.inboxId.targetId),
+      source: signal,
     };
+    AgentDeliveryScope.record({
+      kind: "accepted",
+      discard: () => {
+        reservation.release();
+      },
+      run: (fence, checkSession) => {
+        const cancellation = AbortSignal.any([fence, runtime.agentSignal]);
+        const checkAgentSession = InboxReplay.agentSessionGuard(cancellation, checkSession);
+        return reservation.run(() =>
+          withDeliveryCommitFence(checkAgentSession, () =>
+            new AgentLiveRunner(
+              repository,
+              runtime,
+              tenantId,
+              entityId,
+              invocation,
+              handlers,
+              cancellation,
+              checkAgentSession,
+            ).run(),
+          ),
+        );
+      },
+    });
+  },
+
+  /**
+   * Verifies context cancellation on both sides of asynchronous shard validation.
+   * @param cancellation Combined context and shard cancellation signal.
+   * @param checkSession Validates the current shard session.
+   * @returns A guard for live Agent effects and commits.
+   */
+  agentSessionGuard(
+    cancellation: AbortSignal,
+    checkSession: () => Promise<void>,
+  ): () => Promise<void> {
+    return async () => {
+      cancellation.throwIfAborted();
+      await checkSession();
+      cancellation.throwIfAborted();
+    };
+  },
+
+  /**
+   * Writes one typed receipt after a local Agent capacity reservation.
+   * @param context Captured tenant storage context.
+   * @param message Original Inbox row with the typed recipient.
+   * @param repository Agent repository declaring the state type.
+   * @param runtime Bound repository runtime containing the receipt port.
+   * @param signal Original Command or Event signal.
+   * @returns Whether this exact Agent signal was newly accepted.
+   */
+  acceptAgentReceipt(
+    runtime: RepositoryRuntime,
+    context: StorageContext,
+    repository: RepositoryView,
+    message: InboxMessage,
+    signal: AgentSource,
+  ): Promise<boolean> {
+    const source =
+      signal.case === "command"
+        ? { kind: "command" as const, id: InboxReplay.requireAgentCommandId(signal.value) }
+        : { kind: "event" as const, id: InboxReplay.requireAgentEventId(signal.value) };
+    return runtime.agentReceipts.accept(context, {
+      stateType: repository.stateSchema.typeName,
+      recipientId: message.inboxId.targetId,
+      source,
+      action: message.label,
+    });
+  },
+
+  /**
+   * Validates the original typed Command ID before writing an Agent receipt.
+   * @param command Original Command addressed to the Agent.
+   * @returns Original nonempty typed Command ID.
+   */
+  requireAgentCommandId(command: Command): CommandId {
+    if (command.id === undefined || command.id.uuid.trim().length === 0)
+      throw new Error("Agent acceptance requires the original Command ID.");
+    return command.id;
+  },
+
+  /**
+   * Validates the original typed Event ID before writing an Agent receipt.
+   * @param event Original Event addressed to the Agent.
+   * @returns Original nonempty typed Event ID.
+   */
+  requireAgentEventId(event: Event): EventId {
+    if (event.id === undefined || event.id.value.trim().length === 0)
+      throw new Error("Agent acceptance requires the original Event ID.");
+    return event.id;
   },
 
   /**
@@ -12165,7 +11848,7 @@ const InboxReplay = {
       commandMessage.typeUrl,
       "command",
     );
-    const payload = AnyMessages.unpack(commandMessage, commandSchema);
+    const payload = AnyPacker.tryUnpack(commandMessage, commandSchema);
 
     if (payload === undefined) {
       throw CommandValidationError.invalidPayload();
@@ -12203,7 +11886,7 @@ const InboxReplay = {
       eventMessage.typeUrl,
       "event",
     );
-    const payload = AnyMessages.unpack(eventMessage, eventSchema);
+    const payload = AnyPacker.tryUnpack(eventMessage, eventSchema);
 
     if (payload === undefined) {
       throw new Error(invalidPayloadMessage);
@@ -12470,11 +12153,7 @@ const InboxHandoff = {
     const commandId = RepositorySignals.requireCommandId(command);
     const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireCommandTenant(runtime.context, command);
-    const delivery = new Delivery({
-      context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
-      storageFactory: runtime.storageFactory,
-      strategy: runtime.entityInbox.strategy(),
-    });
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
     await runtime.entityInbox.receive(
       delivery,
@@ -12484,7 +12163,7 @@ const InboxHandoff = {
           targetTypeUrl: TypeUrls.derive(repository.stateSchema),
         },
         signalId: commandId.uuid,
-        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
+        signal: AnyPacker.pack(CommandSchema, command),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
         keepUntil,
@@ -12511,10 +12190,7 @@ const InboxHandoff = {
     const eventId = RepositorySignals.requireEventId(event);
     const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requireProjectionTenant(runtime.context, event);
-    const delivery = new Delivery({
-      context: RepositoryTenants.projectionDeliveryContext(runtime.context, deliveryTenantId),
-      storageFactory: runtime.storageFactory,
-    });
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
     await runtime.projectionInbox.receive(
       delivery,
@@ -12524,7 +12200,7 @@ const InboxHandoff = {
           targetTypeUrl: TypeUrls.derive(repository.stateSchema),
         },
         signalId: eventId.value,
-        signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+        signal: AnyPacker.pack(EventSchema, event),
         label: "UPDATE_SUBSCRIBER",
         status: "TO_DELIVER",
         shard: ShardIndex.single(),
@@ -12552,11 +12228,7 @@ const InboxHandoff = {
     const eventId = RepositorySignals.requireEventId(event);
     const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
-    const delivery = new Delivery({
-      context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
-      storageFactory: runtime.storageFactory,
-      strategy: runtime.entityInbox.strategy(),
-    });
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
 
     await runtime.entityInbox.receive(
       delivery,
@@ -12583,11 +12255,7 @@ const InboxHandoff = {
     const eventId = RepositorySignals.requireEventId(event);
     const keepUntil = new Date(Time.currentTimeMillis() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
-    const delivery = new Delivery({
-      context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
-      storageFactory: runtime.storageFactory,
-      strategy: runtime.entityInbox.strategy(),
-    });
+    const delivery = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
     for (let start = 0; start < entityIds.length; start += 1_000) {
       const inputs = entityIds
         .slice(start, start + 1_000)
@@ -12621,7 +12289,7 @@ const InboxHandoff = {
         targetTypeUrl: TypeUrls.derive(repository.stateSchema),
       },
       signalId,
-      signal: AnyMessages.pack(EventSchema, event, { validate: false }),
+      signal: AnyPacker.pack(EventSchema, event),
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
       keepUntil,
@@ -12629,241 +12297,6 @@ const InboxHandoff = {
   },
 };
 Object.freeze(InboxHandoff);
-
-/**
- * Rebinds generated repository recipients without repeating accepted route queries.
- */
-const SavedRepositoryDispatch = {
-  /**
-   * Maps a generated repository family to its serialized binding value.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @returns Repository family encoded in a saved dispatch target.
-   */
-  family(repository: RepositoryView): AgentSavedRepositoryFamily {
-    switch (repository.entityFamily) {
-      case "aggregate":
-        return AgentSavedRepositoryFamily.AGENT_SAVED_AGGREGATE;
-      case "projection":
-        return AgentSavedRepositoryFamily.AGENT_SAVED_PROJECTION;
-      case "process-manager":
-        return AgentSavedRepositoryFamily.AGENT_SAVED_PROCESS_MANAGER;
-      case "agent":
-        return AgentSavedRepositoryFamily.AGENT_SAVED_AGENT;
-    }
-  },
-
-  /**
-   * Finds the current generated handlers that determine an Event handoff.
-   *
-   * @param routing Registered generated handler routing metadata.
-   * @param event Original typed Event envelope.
-   * @returns Generated handlers matching the outgoing Event.
-   */
-  eventHandlers(routing: RepositoryRouting, event: Event): readonly RegisteredHandlerMetadata[] {
-    const packed = EntityInvocation.requireSignalMessage(event.message, "event");
-    const schema = RepositoryRoutes.schemaForTypeUrl(routing.eventSchemas, packed.typeUrl, "event");
-    const value = EntityInvocation.unpackRequired(packed, schema, "event");
-    const external = event.context?.external === true;
-    return [
-      ...routing.eventReactors(schema.typeName, value, external),
-      ...routing.commandReactions(schema.typeName, value, external),
-      ...routing
-        .eventSubscribers(schema.typeName, value, external)
-        .map((entry) => entry.registeredHandler),
-    ];
-  },
-
-  /**
-   * Calculates a digest of ordered generated metadata and message descriptors.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param handlers Generated handlers in their saved order.
-   * @returns Digest of ordered generated handler metadata.
-   */
-  fingerprint(repository: RepositoryView, handlers: readonly RegisteredHandlerMetadata[]): string {
-    const selected = handlers.map(({ entity, handler }, ordinal) => ({
-      ordinal,
-      receiver: entity.schema.typeName,
-      kind: handler.kind,
-      method: handler.methodName,
-      signal: handler.messageFullTypeName,
-      origin: handler.origin,
-      parameters: handler.parameterCount,
-      where: handler.where === undefined ? null : [handler.where.eventField, handler.where.equals],
-      descriptor: Buffer.from(
-        toBinary(FileDescriptorProtoSchema, handler.schema.file.proto),
-      ).toString("base64"),
-    }));
-    const state = Buffer.from(
-      toBinary(FileDescriptorProtoSchema, repository.stateSchema.file.proto),
-    );
-    return createHash("sha256").update(state).update(JSON.stringify(selected)).digest("hex");
-  },
-
-  /**
-   * Restores a typed ID only when its canonical wire representation is unchanged.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param packed Original typed Protobuf payload.
-   * @returns Typed recipient identifier from the frozen route.
-   */
-  recipient(repository: RepositoryView, packed: Any): unknown {
-    const id = InboxMessages.targetEntityId(packed, repository.idField);
-    if (!equals(AnySchema, InboxMessages.inboxTargetId(id, repository.idField), packed))
-      throw new Error("Saved Agent output recipient ID is not canonical for its repository.");
-    return id;
-  },
-
-  /**
-   * Checks the stable repository and signal identity before saved transport.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param target Frozen recipient binding.
-   * @param kind Generation or decision model kind.
-   * @returns Whether the checked condition holds.
-   */
-  matches(
-    repository: RepositoryView,
-    target: AgentSavedDispatchTarget,
-    kind: AgentSavedTargetKind,
-  ): boolean {
-    return (
-      target.kind === kind &&
-      target.receiverStateType === repository.stateSchema.typeName &&
-      target.repositoryFamily === SavedRepositoryDispatch.family(repository)
-    );
-  },
-
-  /**
-   * Prepares one typed Command recipient with its selected generated assignee.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param routing Registered generated handler routing metadata.
-   * @param command Original typed Command envelope.
-   * @returns Validated frozen Command recipient target.
-   */
-  async prepareCommand(
-    repository: CommandRoutingRepository,
-    routing: RepositoryRouting,
-    command: Command,
-  ): Promise<AgentSavedDispatchTarget> {
-    const route = await repository.routeCommand(command);
-    const assignee = routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
-    if (assignee === undefined) throw new Error("Saved Agent Command has no generated assignee.");
-    return create(SavedTargetSchema, {
-      kind: AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND,
-      receiverStateType: repository.stateSchema.typeName,
-      repositoryFamily: SavedRepositoryDispatch.family(repository),
-      signalType: route.messageFullTypeName,
-      bindingFingerprint: SavedRepositoryDispatch.fingerprint(repository, [
-        assignee.registeredHandler,
-      ]),
-      recipients: [InboxMessages.inboxTargetId(route.entityId, repository.idField)],
-    });
-  },
-
-  /**
-   * Resolves the original Command recipient without calling its route again.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param routing Registered generated handler routing metadata.
-   * @param command Original typed Command envelope.
-   * @param target Frozen recipient binding.
-   * @returns When the fenced repository operation completes.
-   */
-  bindCommand(
-    repository: CommandRoutingRepository,
-    routing: RepositoryRouting,
-    command: Command,
-    target: AgentSavedDispatchTarget,
-  ): Promise<() => Promise<void>> {
-    const { runtime, signalType, recipient } = SavedRepositoryDispatch.requireCommandBinding(
-      repository,
-      routing,
-      command,
-      target,
-    );
-    const entityId = SavedRepositoryDispatch.recipient(repository, recipient);
-    const route: RepositoryCommandRoute = {
-      entityId,
-      messageFullTypeName: signalType,
-      invocation: "deferred",
-    };
-    return Promise.resolve(() =>
-      InboxHandoff.handoffEntityCommand(repository, runtime, command, route),
-    );
-  },
-
-  /**
-   * Checks saved Command metadata, typed target presence, and runtime registration.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param routing Registered generated handler routing metadata.
-   * @param command Original typed Command envelope.
-   * @param target Frozen recipient binding.
-   * @returns Registered Command route and original recipient.
-   */
-  requireCommandBinding(
-    repository: CommandRoutingRepository,
-    routing: RepositoryRouting,
-    command: Command,
-    target: AgentSavedDispatchTarget,
-  ): { runtime: RepositoryRuntime; signalType: string; recipient: Any } {
-    const packed = EntityInvocation.requireSignalMessage(command.message, "command");
-    const schema = RepositoryRoutes.schemaForTypeUrl(
-      routing.commandSchemas,
-      packed.typeUrl,
-      "command",
-    );
-    const assignee = routing.commandReadiness?.findCommandAssignee(schema.typeName);
-    const fingerprint =
-      assignee === undefined
-        ? ""
-        : SavedRepositoryDispatch.fingerprint(repository, [assignee.registeredHandler]);
-    const recipient = target.recipients[0];
-    const runtime = repositoryRuntimes.get(repository);
-    if (
-      !SavedRepositoryDispatch.matches(
-        repository,
-        target,
-        AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND,
-      ) ||
-      target.signalType !== schema.typeName ||
-      target.bindingFingerprint !== fingerprint ||
-      target.recipients.length !== 1 ||
-      recipient === undefined ||
-      runtime === undefined
-    )
-      throw new Error("Saved Agent Command repository binding changed before delivery.");
-    return { runtime, signalType: schema.typeName, recipient };
-  },
-
-  /**
-   * Creates one internal Command binding from the repository registration.
-   *
-   * @param repository Registered Entity repository for this operation.
-   * @param routing Registered generated handler routing metadata.
-   * @returns Saved Command binding for this registration.
-   */
-  commandBinding(
-    repository: CommandRoutingRepository,
-    routing: RepositoryRouting,
-  ): SavedCommandBinding {
-    return {
-      prepare: (command) => SavedRepositoryDispatch.prepareCommand(repository, routing, command),
-      matches: (target) =>
-        SavedRepositoryDispatch.matches(
-          repository,
-          target,
-          AgentSavedTargetKind.AGENT_SAVED_REPOSITORY_COMMAND,
-        ),
-      bind: (command, target) =>
-        SavedRepositoryDispatch.bindCommand(repository, routing, command, target),
-    };
-  },
-};
-Object.freeze(SavedRepositoryDispatch);
 
 /**
  * Connects bus dispatchers and Inbox replay to repository execution.
@@ -12906,10 +12339,7 @@ const RepositoryDispatch = {
       dispatch: (command: Command): Promise<void> =>
         RepositoryDispatch.dispatchRepositoryCommand(repository, routing, command),
     });
-    return SavedDispatcherBindings.command(
-      dispatcher,
-      SavedRepositoryDispatch.commandBinding(repository, routing),
-    );
+    return dispatcher;
   },
 
   /**

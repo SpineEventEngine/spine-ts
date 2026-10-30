@@ -13,11 +13,16 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyPacker } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { Server, SignalMetadata } from "@spine-event-engine/server";
-import { describe, expect, it, vi } from "vitest";
+import { ServerTests } from "@spine-event-engine/server/testing";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+afterEach(async () => {
+  await ServerTests.resetEnvironment();
+});
 
 import {
   CreateOrderSchema,
@@ -43,7 +48,7 @@ describe("cross-context Orders example", () => {
         create(CommandSchema, {
           id: metadata.commandId(),
           context: metadata.commandContext({ actorContext }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             RegisterSkuSchema,
             create(RegisterSkuSchema, { id: "sku-1", displayName: "Blue mug" }),
           ),
@@ -57,7 +62,7 @@ describe("cross-context Orders example", () => {
         create(CommandSchema, {
           id: metadata.commandId(),
           context: metadata.commandContext({ actorContext }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             CreateOrderSchema,
             create(CreateOrderSchema, { id: "order-1", skuId: "sku-1" }),
           ),
@@ -101,7 +106,7 @@ describe("cross-context Orders example", () => {
         create(CommandSchema, {
           id: metadata.commandId(),
           context: metadata.commandContext({ actorContext }),
-          message: AnyMessages.pack(
+          message: AnyPacker.pack(
             CreateOrderSchema,
             create(CreateOrderSchema, { id: "order-missing", skuId: "sku-missing" }),
           ),

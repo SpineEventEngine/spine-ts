@@ -13,7 +13,7 @@
  */
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
-import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type CommandContext,
@@ -35,7 +35,7 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   Aggregate,
@@ -48,6 +48,11 @@ import {
   SpineServices,
   type EntityHandlersMetadata,
 } from "../../src/index.js";
+import {
+  ServerEnvironment,
+  ServerEnvironmentLifecycle,
+  serverEnvironmentAccess,
+} from "../../src/server/server-environment.js";
 import {
   NativeProjectStateSchema,
   NativeProcessManagerStateSchema,
@@ -72,6 +77,16 @@ import {
   TaskIdSchema,
   TaskListIdSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+
+beforeEach(async () => {
+  await ServerEnvironment.instance().completeSetup();
+});
+
+afterEach(async () => {
+  const environment = ServerEnvironment.instance();
+  for (const context of serverEnvironmentAccess.openContexts(environment)) await context.close();
+  await ServerEnvironmentLifecycle.resetForTest();
+});
 
 class NativeAggregate extends Aggregate<string, typeof NativeProjectStateSchema> {
   assign(command: AssignReviewTask): TaskCreated {
@@ -145,7 +160,7 @@ class NativeProcessManager extends ProcessManager<string, typeof NativeProcessMa
 
 describe("native service subscriptions", () => {
   it("acknowledges an attached idle subscription before any business update", async () => {
-    const context = BoundedContext.multitenant("NativeIdleAck")
+    const context = await BoundedContext.multitenant("NativeIdleAck")
       .add(
         new Repository({
           entityType: NativeAggregate,
@@ -157,6 +172,9 @@ describe("native service subscriptions", () => {
       .build();
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const subscription = await handlers.subscribe(
         createEntityTopic(NativeProjectStateSchema, "idle-ack"),
@@ -175,7 +193,7 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers an Aggregate commit through the registered command handler", async () => {
-    const context = BoundedContext.multitenant("NativeAggregate")
+    const context = await BoundedContext.multitenant("NativeAggregate")
       .add(
         new Repository({
           entityType: NativeAggregate,
@@ -187,6 +205,9 @@ describe("native service subscriptions", () => {
       .build();
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
@@ -211,7 +232,7 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers a Projection commit through the registered event handler", async () => {
-    const context = BoundedContext.multitenant("NativeProjection")
+    const context = await BoundedContext.multitenant("NativeProjection")
       .add(
         new Repository({
           entityType: NativeProjection,
@@ -226,6 +247,9 @@ describe("native service subscriptions", () => {
       .build();
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
@@ -251,9 +275,12 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers a Process Manager command commit through the registered command handler", async () => {
-    const context = createProcessManagerContext("NativeProcessManagerCommand");
+    const context = await createProcessManagerContext("NativeProcessManagerCommand");
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
@@ -278,9 +305,12 @@ describe("native service subscriptions", () => {
   });
 
   it("delivers a Process Manager event commit through the registered event handler", async () => {
-    const context = createProcessManagerContext("NativeProcessManagerEvent");
+    const context = await createProcessManagerContext("NativeProcessManagerEvent");
 
     try {
+      await context.tenantIndex.keep(
+        create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+      );
       const handlers = registeredSubscriptionHandlers(context);
       const iterator = handlers
         .activate(
@@ -377,7 +407,7 @@ function nativeProcessManagerHandlers(): EntityHandlersMetadata<
   >;
 }
 
-function createProcessManagerContext(name: string): BoundedContext {
+function createProcessManagerContext(name: string): Promise<BoundedContext> {
   return BoundedContext.multitenant(name)
     .add(
       new Repository({
@@ -405,7 +435,7 @@ function createAggregateCommand(id: string, name: string) {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: `command-${id}` }),
     context: create(CommandContextSchema, { actorContext: createActorContext() }),
-    message: AnyMessages.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema, { id, name })),
+    message: AnyPacker.pack(AssignReviewTaskSchema, create(AssignReviewTaskSchema, { id, name })),
   });
 }
 
@@ -414,9 +444,9 @@ function createProjectionEvent(id: string, name: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
-      producerId: AnyMessages.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
+      producerId: AnyPacker.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id, name }),
     ),
@@ -428,9 +458,9 @@ function createProjectionTriggerEvent(id: string, title: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
-      producerId: AnyMessages.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
+      producerId: AnyPacker.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id, name: title }),
     ),
@@ -442,9 +472,9 @@ function createAggregateEvent(id: string, name: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
-      producerId: AnyMessages.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
+      producerId: AnyPacker.pack(TaskIdSchema, create(TaskIdSchema, { value: id })),
     }),
-    message: AnyMessages.pack(
+    message: AnyPacker.pack(
       TaskCreatedSchema,
       create(TaskCreatedSchema, {
         id: create(TaskIdSchema, { value: id }),
@@ -500,7 +530,7 @@ async function expectNativeState<Schema extends MessageSchema>(
   if (state?.case !== "state") {
     throw new Error("Expected a native EntityStateChanged subscription update.");
   }
-  expect(AnyMessages.unpack(state.value, schema)).toEqual(create(schema, expected));
+  expect(AnyPacker.tryUnpack(state.value, schema)).toEqual(create(schema, expected));
 }
 
 async function nextSubscriptionUpdate(

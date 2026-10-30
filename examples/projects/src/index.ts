@@ -22,6 +22,7 @@ import {
   Projection,
   React,
   Server,
+  ServerEnvironment,
   Subscribe,
   type EntityOptions,
   type BoundedContextBuilder,
@@ -886,10 +887,7 @@ export async function createProjectManagementContext(
     .add(ProjectAggregate)
     .add(TaskAggregate)
     .add(PersonAggregate);
-  return ProjectRegistration.processes(
-    ProjectRegistration.projections(builder),
-    weights,
-  ).buildAsync();
+  return ProjectRegistration.processes(ProjectRegistration.projections(builder), weights).build();
 }
 
 /**
@@ -987,6 +985,7 @@ export type ProjectManagementServer = RunningServer;
 export async function startProjectManagementServer(
   options: ProjectManagementServerOptions = {},
 ): Promise<ProjectManagementServer> {
+  await ServerEnvironment.instance().completeSetup();
   return Server.atPort(options.port ?? 0, { host: options.host ?? "127.0.0.1" })
     .add(await createProjectManagementContext())
     .start();

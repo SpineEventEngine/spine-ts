@@ -37,3 +37,16 @@ message SupportReplyAgentState {
   // Latest proposed text admitted from the typed AI capability.
   string proposed_reply = 2;
 }
+
+// Tracks a support reply drafted after escalation to a second Agent.
+message EscalatedSupportReplyAgentState {
+  option (entity).kind = ENTITY;
+
+  SupportReplyAgentId id = 1 [
+    (required) = true,
+    (validate) = true,
+    (set_once) = true
+  ];
+  string proposed_reply = 2;
+  int32 escalation_count = 3;
+}

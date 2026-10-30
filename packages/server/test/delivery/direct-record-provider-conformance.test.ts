@@ -12,11 +12,16 @@
  * the License.
  */
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { access } from "node:fs/promises";
-import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import {
+  AnyPacker,
+  Identifiers,
+  StringifierRegistry,
+  TypeRegistry,
+} from "@spine-event-engine/core";
 import {
   InboxMessageSchema,
   ShardSessionRecordSchema,
@@ -80,7 +85,7 @@ describe("direct durable record provider selection", () => {
       [...new Set(selected.map((type) => (type as { readonly typeName: string }).typeName))].sort(),
     ).toEqual([InboxMessageSchema.typeName, ShardSessionRecordSchema.typeName].sort());
 
-    factory.close();
+    await factory.close();
   });
 
   it("opens the configured MySQL table for each direct durable record family", async () => {
@@ -142,7 +147,7 @@ describe("direct durable record provider selection", () => {
     expect(schema).not.toContain("provider-inbox");
     expect(schema).not.toContain("provider-shard");
 
-    factory.close();
+    await factory.close();
   });
 });
 
@@ -154,10 +159,7 @@ function message() {
       targetTypeUrl: "type.spine.io/test.Entity",
     },
     signalId: "signal",
-    signal: create(AnySchema, {
-      typeUrl: "type.spine.io/spine.core.Command",
-      value: toBinary(CommandSchema, create(CommandSchema)),
-    }),
+    signal: AnyPacker.pack(CommandSchema, create(CommandSchema)),
     label: "HANDLE_COMMAND" as const,
     status: "TO_DELIVER" as const,
     shard: new ShardIndex(0, 1),

@@ -262,15 +262,6 @@ export class SignalPublisher {
     return Object.freeze({ close: () => this.#observers.delete(observer) });
   }
 
-  /**
-   * Records one saved Agent Command after its original ID is durably acknowledged.
-   *
-   * @param signal Saved Command with an acknowledged original ID.
-   */
-  recordAcceptedSaved(signal: Command): void {
-    this.#observe("command", signal);
-  }
-
   #publish(
     kind: PublicationKind,
     signal: Command | Event,
@@ -283,7 +274,6 @@ export class SignalPublisher {
       });
       return rejected;
     }
-    this.#observe(kind, signal);
     const handled = Promise.resolve()
       .then(() => {
         if (this.#state === "closed") throw new Error("SignalPublisher is closed.");
@@ -296,6 +286,7 @@ export class SignalPublisher {
     void handled.then(() => {
       this.#inFlight.delete(handled);
     });
+    this.#observe(kind, signal);
     return handled;
   }
 

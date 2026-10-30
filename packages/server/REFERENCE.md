@@ -33,7 +33,7 @@ versioned registries are rejected and must be regenerated.
 Generated standalone handlers extend `AbstractAssignee`, `AbstractCommander`,
 `AbstractEventReactor`, or `AbstractEventSubscriber`. Register instances with
 `addAssignee()`, `addCommandDispatcher()`, or `addEventDispatcher()` as their
-role requires, then use `buildAsync()` to load generated receiver metadata and
+role requires, then use `build()` to load generated receiver metadata and
 match the exact constructor. Assignees consume Commands and produce Events;
 commanders consume Commands, Events, or rejections and produce Commands;
 reactors consume Events or rejections and may produce Events; subscribers
@@ -139,7 +139,8 @@ valid event with no interested external receptor is simply not delivered.
 ## Server environment facilities
 
 `ServerEnvironment.instance()` is a process-wide singleton. Production
-resolution requires storage and the complete application schema registry:
+resolution requires the complete application schema registry; storage defaults to
+in-memory when `storageFactory` is omitted:
 
 ```ts
 import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
@@ -153,9 +154,52 @@ ServerEnvironment.when(EnvironmentType.Production).use({
   storageFactory,
   typeRegistry,
 });
+await ServerEnvironment.instance().completeSetup();
 ```
 
-`storageFactory` supplies records and events. `typeRegistry` is the complete
+Call `completeSetup()` explicitly before building any Bounded Context. It
+checks the storage connection, initializes integration transport, and opens the
+shared Delivery. Concurrent callers join one setup attempt; a failed attempt
+closes acquired facilities and prevents context assembly. Building a context
+does not start setup. The environment logs an INFO message after each successful
+phase without implying that every Entity model has been prepared.
+
+`BoundedContextBuilder.build({ createStorageStructures, startSubscriptionMonitoring })`
+awaits both model preparation and the first subscription reconciliation by
+default. Each option can be set to `false` independently. A deferred phase runs
+before the first valid Command, Event, query, subscription operation, or Inbox
+replay for the receiving context; lazy multitenant preparation selects only that
+input's currently registered tenant. A failed lazy attempt rejects its current
+input and can be retried by a later input. Monitoring requires the shared
+subscription registry, so `startSubscriptionMonitoring: true` prepares that
+registry even when `createStorageStructures: false`; it does not prepare all
+tenant Entity families. An eager required preparation or initial monitoring
+failure stops accepting new input and triggers attempt-all cleanup.
+After a successful first pass, a failed periodic reconciliation logs a WARN
+with the context name and bounded error name or code, leaves unaffected observers active,
+and retries on the existing ten-second schedule. Closing the context cancels
+the timer and drains an admitted pass before detaching observers.
+
+`context.runtime.createStorageStructures(...tenantIds)` and
+`context.runtime.checkStructureCompatibility(...tenantIds)` prepare declared
+Record, Entity, history, and Agent audit structures through the configured
+provider. The check is read-only; a successful provider check also satisfies
+later creation readiness. Explicit IDs must be registered in the context's
+effective tenant index. With no IDs, a multitenant context traverses its current
+index in finite pages; a single-tenant context prepares its neutral destination
+without registering a synthetic tenant. `context.runtime.startSubscriptionMonitoring()`
+performs the first registry pass independently of per-tenant Entity preparation.
+The environment's no-argument structure methods include both kinds of completed,
+open context. With explicit IDs, they select only matching multitenant contexts,
+respect each `withTenantIndex` override, and reject an ID absent from all current
+indexes before provider work. They validate every supplied ID before preparing
+any structures. Database-backed providers require an existing database; these
+calls do not provision one or register a tenant. Required explicit provider or initial-monitor
+failure stops new input and triggers automatic cleanup. Unknown or malformed IDs,
+directory lookup failure, and local API misuse reject only that operation;
+lazy first-input provider failures remain request-local and retryable.
+
+`storageFactory` supplies records and events to every context. `typeRegistry` is the complete
 application schema universe used by `ThirdPartyContext` to encode outgoing
 imported events. An optional `integrationChannelFactory` overrides the
 process-wide private
@@ -163,6 +207,26 @@ integration message channel factory. When it is absent, all local bounded
 contexts share one in-memory factory, including in production. Local and test
 environments default storage in memory and use the core registry only as a
 fallback; those defaults are not production configuration.
+
+`tenantIndex` selects a live application membership directory. When omitted,
+the environment uses its storage factory's native catalog where available, or
+a transient in-memory index for a custom factory without a catalog. The
+transient index lasts only for this environment instance. `contains()` checks
+membership without preparing storage; `keep()` makes a registration visible to
+later reads and may reject for a read-only catalog. PostgreSQL and MySQL
+catalogs expose only configured tenant entries: `keep()` is idempotent for
+those entries and rejects unknown IDs. A dynamic SQL tenant resolver does not
+register or enumerate tenants. Single-tenant contexts do not insert a synthetic
+member into this directory.
+
+Multitenant receiving contexts check current index membership before Command,
+Event, query, direct repository/history, and subscription work. Inbox persistence
+and later replay check separately, so removing a tenant prevents saved work from
+restoring it. Input does not call `keep()` implicitly. A confirmed missing member
+raises `TenantUnknownError` with the complete tenant ID and context name; native
+services return `NotFound` with a structured `spine.base.Error` detail whose type
+is `TENANT_UNKNOWN`. Lookup failures remain operational errors. Single-tenant
+work does not consult the directory.
 
 To override the default channel factory, add
 `integrationChannelFactory: customFactory` to the same settings object.
@@ -265,8 +329,8 @@ callbacks receive that scope as their third argument while they run.
 
 For contexts registered with one `Server`, the target Entity's type URL selects
 its context. No context name or network request is required. The Server rejects
-duplicate Entity type registrations before starting delivery recovery or
-listening, identifying the type and both contexts. Contexts used without a
+duplicate Entity type registrations before opening the listener, identifying
+the type and both contexts. Contexts used without a
 Server retain local querying; separate Servers do not share query routes.
 
 Cross-context targets must declare `query` or `full` visibility. This applies
@@ -282,9 +346,11 @@ partition in a multitenant destination. The query never replaces the tenant to
 suit the target. A valid query with no matching record keeps its ordinary empty
 result (`undefined` from `findById()`). Reads remain eventually consistent.
 
-Routes are available before recovered handlers execute. Server shutdown drains
-accepted handlers across contexts before closing any target read-side; failed
-startup validation participates in context and resource cleanup.
+Routes are available before ordinary Inbox work resumes. An accepted Agent
+interaction never resumes after interruption; a fresh signal starts fresh work.
+Server shutdown drains admitted handlers across contexts before closing any
+target read-side; failed startup validation participates in context and
+resource cleanup.
 
 ```ts
 import type { Message } from "@bufbuild/protobuf";
@@ -506,7 +572,7 @@ const repository = new Repository<typeof ApprovalCoordinator>({
   schema: CoordinationStateSchema,
   handlers: handlers as EntityHandlersMetadata<ApprovalCoordinator, typeof CoordinationStateSchema>,
 });
-const context = BoundedContext.singleTenant("Projects").add(repository).build();
+const context = await BoundedContext.singleTenant("Projects").add(repository).build();
 await context.commandBus().post(
   SignalEnvelopes.command({
     context: create(CommandContextSchema),
@@ -521,7 +587,7 @@ The generated record declares `ApproveProjectSchema` as the input and
 manual decorator materialization, constructs the output-bearing metadata.
 Application builds emit the record to
 `generated/handler/generated-handler-registry.js`; those applications use
-`buildAsync()` with their compiled package root.
+`build()` with their compiled package root.
 
 One `@Where({ eventField, equals })` equality filter may narrow an event- or
 rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type
@@ -531,18 +597,24 @@ repeated declarations fail closed. It is not an alternative routing mechanism.
 Configure logging through `ServerEnvironment` when assembling the server. The
 server installs that logger into its runtime components, where warnings and
 failures carry operation context. Durable facts belong in events or storage.
-Entity Inbox replay sends persisted accepted work through the normal handler
-path, so handler effects must be replay-safe.
+Ordinary Aggregate, Process Manager, and Projection Inbox replay sends persisted
+accepted work through the normal handler path, so those handler effects must be
+replay-safe. An accepted Agent interaction is recorded by its receipt and is
+never re-executed after interruption.
 
 ## Context assembly and entities
 
 Create a context with `BoundedContext.singleTenant(name)` or
 `BoundedContext.multitenant(name)`. Names are immutable. Use
-`withStorageFactory(factory)` to supply record/event storage.
+`ServerEnvironment.when(type).use({ storageFactory: factory })` before explicit
+environment setup to supply record/event storage to all contexts.
+`withTenantIndex(index)` selects a different live membership directory for one
+context; `context.tenantIndex` and `ServerEnvironment.instance().tenantIndex`
+return the configured objects. Closing a context does not close either index.
 `withGeneratedRegistryRoot(root)` enables framework discovery of the generated
 handler registry for classes registered with `add(EntityClass)`;
-`buildAsync()` performs that discovery and assembly. `build()` remains for
-explicit `Repository` registration. A built context contains `CommandBus`,
+`build()` asynchronously performs that discovery and assembly, including
+explicit `Repository` registration. Await it before using the context. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 Trusted server-side code can call `context.getRepository(EntityClass)` to obtain
 the already registered repository for that exact constructor. The lookup does
@@ -654,24 +726,24 @@ start a new autonomous Entity loop.
 ### Configuration
 
 Register a factory-created `AiRegistry`, enable `persistSystemEvents()`, and
-configure `agentCodeRevision` plus `ai.models` for each Agent repository. Use
+configure `ai.models` for each Agent repository. Use
 an empty `models` array when that Agent has no model calls. Readiness requires
-indexed Agent history and execution storage from the selected provider.
+indexed Agent history and atomic live Agent commits from the selected provider.
 The [Support Bounded Context](../../examples/support/src/index.ts) uses generated
 registration with these options.
 
 Configuration has these scopes:
 
-| Scope           | Setting                                  | Effect                                                                   |
-| --------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
-| Server          | `Server.withAi(registry)`                | Default registry for Bounded Context builders assembled by that server.  |
-| Bounded Context | `BoundedContextBuilder.withAi(registry)` | Explicit registry replacing the server default for that Bounded Context. |
-| Repository      | `ai.defaultModels`                       | Generation and decision defaults before the registry's defaults.         |
-| Repository      | `ai.allowedModels`                       | Deployment references the Agent may use.                                 |
-| Repository      | `ai.resolveModel`                        | Optional accepted-source choice before the Agent handler.                |
-| Repository      | `ai.authorizeSelection`                  | Authorizes explicit choices and staged preference changes.               |
-| Repository      | `ai.invocationLimits`                    | Limits that can narrow the registry's whole-signal limits.               |
-| Instance        | `this.ai.select(kind, ref)`              | A saved preference applied to later accepted signals.                    |
+| Scope           | Setting                                    | Effect                                                           |
+| --------------- | ------------------------------------------ | ---------------------------------------------------------------- |
+| Environment     | `ServerEnvironment.when(type).use({ ai })` | Default registry for Bounded Contexts.                           |
+| Bounded Context | `BoundedContextBuilder.withAi(registry)`   | Overrides environment AI for one Bounded Context.                |
+| Repository      | `ai.defaultModels`                         | Generation and decision defaults before the registry's defaults. |
+| Repository      | `ai.allowedModels`                         | Deployment references the Agent may use.                         |
+| Repository      | `ai.resolveModel`                          | Optional accepted-source choice before the Agent handler.        |
+| Repository      | `ai.authorizeSelection`                    | Authorizes explicit choices and staged preference changes.       |
+| Repository      | `ai.invocationLimits`                      | Limits that can narrow the registry's whole-signal limits.       |
+| Instance        | `this.ai.select(kind, ref)`                | A saved preference applied to later accepted signals.            |
 
 A prebuilt Bounded Context already has its registry; adding it to a server does not
 reconfigure it. An instance preference takes precedence over its repository
@@ -687,7 +759,7 @@ signal; `undefined` preserves it. This allows an Agent without a configured
 default to start after a deployment is appended to the bound registry. The
 runtime checks repository allowlists, capabilities and `authorizeSelection`
 before saving the selection and connection identity. A saved selection is reused
-on continuation. Resolver and authorization callbacks receive linked cancellation
+for the current signal. Resolver and authorization callbacks receive linked cancellation
 and the smaller of the invocation deadline and registry hook timeout. An
 effective `this.ai.select()` change, including reset to inheritance, is
 authorized before the Entity transition and preference Events commit; a no-op
@@ -702,60 +774,30 @@ See [adapter configuration](../ai-vercel-ax/README.md).
 
 ### Acceptance and completion
 
-Before acknowledging Agent intake, the runtime saves the original signal,
-recipient, selected handlers and code/schema/policy revisions. The scheduler
-processes one accepted signal at a time per Agent instance, under a provider
-claim. Different instances can run concurrently within configured limits.
-Bounded Contexts using the same registry object share its capacity within the process.
-Signals beyond the bounded in-memory waiting queue remain durably pending.
-Waiting before a fresh execution starts precedes its deadline. Once execution
-starts, recovery continues with the saved deadline and counts. The same deadline
-bounds an awaited application handler. Expiry or Bounded Context shutdown ends that wait
-and prevents late handler results from changing Entity state or emitting signals;
-it cannot stop arbitrary application JavaScript or undo external effects.
-
-Newly accepted work supplies its repository and tenant to prompt discovery.
-Periodic discovery reads tenant pages and constructs repository scopes as they
-are needed. It retains at most one page of 16 tenants, four periodic scan scopes,
-and 64 scopes awaiting a prompt scan. A turn requests at most one tenant page
-and reads at most four pending-work pages. It does not load the complete tenant
-catalog or retain a scan position for every tenant.
-
-A sweep finishes before another begins. The next starts no earlier than five
-seconds after the preceding sweep started, measured by `Time`; longer sweeps
-restart after completion. This lets discovery reach tenants near the end of a
-large catalog and find later admissions on the next sweep. Periodic scans keep
-their turn during new arrivals, including while execution capacity is full.
-A pending catalog request does not block prompt scans of known scopes.
-
-Bounded Context shutdown stops waiting for discovery reads even if a provider ignores
-cancellation. Late results cannot submit work or restart scanning. Built-in
-adapters use their available cancellation and timeout controls; detaching the
-scheduler does not guarantee cancellation of an already issued native request.
+An accepted signal and recipient are admitted through ordinary Delivery. A
+typed receipt prevents a duplicate signal from starting the same Agent turn.
+Within one process, live capacity serializes turns for one Agent instance and
+permits different instances up to configured limits. The shared registry's
+capacity applies across Bounded Contexts using that registry. A waiting signal
+stays in the ordinary Inbox until capacity can admit it; capacity release wakes
+the ordinary Delivery worker. There is no Agent-specific discovery scheduler.
 
 The signal's matching handlers share one Entity draft. Each handler can await
-`this.ai.invoke()` through the protected Spine facade. Calls in one handler must
-be sequential and finish before it returns. Requests, results and
-validation failures are saved as the operation progresses. The final accepted
-state, Version, history and outgoing Command obligations are committed under the
-same execution claim. Emitted domain Events enter immutable Agent history but are
-not stored as delivery obligations. A no-op still completes its execution record. Waiting for
-a provider does not hold a database transaction open.
+`this.ai.invoke()` through the protected Spine facade. Calls in one handler
+must be sequential and finish before it returns. Requests, results, and
+validation failures are saved as audited history while work progresses. The
+final accepted state, Version, preference changes, and Agent history use an
+atomic live Agent commit. Outgoing Commands enter ordinary command delivery;
+there is no saved Agent-private list to finish after a restart. Emitted domain Events
+enter immutable Agent history before normal EventBus publication. A no-op or
+preference-only turn can commit without a state Version increase. Waiting for a
+provider does not hold a database transaction open.
 
-Recovery compares the registered handler, schema and policy with accepted work.
-A saved named call can reuse its result; changing that call's input or prepared
-request is a mismatch, not a new attempt. Domain code should derive its decisions
-from accepted signals and recorded reads. Arbitrary external effects performed
-by handler code are outside the model/tool journal.
-
-After completion, emitted domain Events are handed once to the Bounded Context's
-normal EventBus. The Agent does not track Event recipients, retry a failed handoff,
-or replay Event delivery after restart. Immutable Agent history remains readable
-independently of EventBus delivery. Saved outgoing Commands retain their original
-IDs and recipient bindings for recovery without rerunning the producing handler
-or model. Generated repository and standalone Command receivers provide the
-required binding metadata; matching raw custom Command dispatchers without it
-are rejected.
+An admitted turn uses a current session and cancellation guard. Shutdown drains
+tracked work and prevents late results from changing Entity state or emitting
+signals. It cannot undo external effects already performed by application code.
+A restarted process can read retained receipts and audit history, but it does
+not replay a model response or re-enter an interrupted Agent handler.
 
 ### Retained history
 
@@ -775,7 +817,7 @@ persistent provider when records must survive process termination.
 All methods return newest entries first. A request supplies positive `pageSize`
 and an optional opaque cursor; `nextCursor` continues toward older entries.
 There is no fixed 100-item or page-byte ceiling. Reads made during a handler count
-toward any configured invocation limits for recorded reads and recovery data. Ordering
+toward any configured invocation limits for recorded reads. Ordering
 uses the full Spine `Time` timestamp, category and existing record ID. There is
 no repository-managed history counter. Cursors cannot be transferred across
 Agents, tenants, categories or conversations.
@@ -795,19 +837,15 @@ For a trusted application bridge, `context.getRepository(AgentClass)` returns
 the registered Agent `Repository`, which exposes
 `agentHistory(id, scope)` with the same four history methods and page contracts.
 The scope is explicit: pass `{}` in a single-tenant Bounded Context or
-`{ tenantId }` in a multitenant Bounded Context. The repository also exposes
-`agentExecution(id, sourceCommandOrEventId, scope)` for the exact recorded phase:
-`accepted`, `active`, `completed-pending-commands`, `completed`, or `terminated`.
-An absent record returns `undefined`; it does not establish completion. These
-reads use indexed storage without restoring an Agent. The application bridge
-must authorize access before calling either method; actor metadata does not
-grant read permission.
+`{ tenantId }` in a multitenant Bounded Context. Reads use indexed storage
+without restoring an Agent. The application bridge must authorize access;
+actor metadata does not grant read permission.
 
-If a selected model's `authorizeUse` callback explicitly returns `false` at
-Agent claim time, the execution becomes `terminated` with one
-`AgentInvocationTerminated` System Event carrying `MODEL_USE_DENIED`. No Agent
-handler runs and no application-domain result Event is emitted. Callback
-exceptions and infrastructure failures remain distinct from this denial.
+If a selected model's `authorizeUse` callback explicitly returns `false`
+before the handler, the turn records one `AgentInvocationTerminated` System
+Event carrying `MODEL_USE_DENIED`. No handler runs, no application-domain
+result Event is invented, and other failures remain distinct. Applications
+may correlate this fact with the original source through paged Agent history.
 
 ## Signals, validation, and rejection behavior
 
@@ -815,8 +853,10 @@ exceptions and infrastructure failures remain distinct from this denial.
 before dispatcher or repository handler code runs. It raises the framework's
 command-validation failure, which `SpineServices` maps to
 `COMMAND_VALIDATION_ERROR` with a packed `spine.validation.ValidationError`.
-Entity transition validation failures map to
-`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with the same detail type.
+Entity transition validation failures that escape service processing map to
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with the same detail type. Managed
+reception of ordinary Entity work sends post-handler transition rejection to `DeliveryMonitor`;
+its default action acknowledges the failed input without storing invalid state.
 Framework-created runtime command and event metadata uses fresh Node secure
 UUIDs; fixed IDs belong only to existing source envelopes retained through the
 normal origin chain.
@@ -1021,7 +1061,9 @@ delivery, global update ordering, nor cluster-complete notification delivery.
 ## Delivery and environment
 
 `Inbox`, `InboxStorage`, `ShardIndex`, and `ShardedWorkRegistry` provide the
-local durable-row abstraction. Read limits are 1–1000; work leases are
+local durable-row abstraction. Inbox and shard storage require a single-tenant
+Delivery storage context shared by all tenants; the packed signal supplies
+the dispatch tenant. Read limits are 1–1000; work leases are
 1000–2147483647 ms. Framework replay supports command handling, projection
 updates, and process-manager reactions. Callbacks are at-least-once/replay-safe:
 lost renewal can prevent stale finalization but cannot undo a callback already
@@ -1059,24 +1101,53 @@ without an atomic compare-and-delete guarantee from this client. Pending,
 retryable, non-delivered, and still-protected rows are skipped by cleanup. There
 is no additional retention configuration, timer, or scheduler.
 
-`BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
-immutable strategy for its Entity Inbox; the default is one shard. For example,
-use the public builder chain:
+Configure one Delivery strategy for the environment before setup. It maps
+targets to shards across all contexts; the default is one shard. For example:
 
 ```ts
-import { BoundedContext, UniformAcrossAllShards } from "@spine-event-engine/server";
+import {
+  BoundedContext,
+  EnvironmentType,
+  ServerEnvironment,
+  UniformAcrossAllShards,
+} from "@spine-event-engine/server";
 
-const context = BoundedContext.singleTenant("Tasks")
-  .withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))
-  .build();
+ServerEnvironment.when(EnvironmentType.Local).use({
+  deliveryStrategy: UniformAcrossAllShards.forNumber(3),
+});
+await ServerEnvironment.instance().completeSetup();
+const context = await BoundedContext.singleTenant("Tasks").build();
 ```
 
 Aggregate commands and Process Manager or Agent commands/events derive their target shard
 internally and persist their envelope in the target Entity Inbox before any
-handler runs. Local intake can directly drain the persisted Inbox in the
-current request path. Attached `ServerEnvironment` ports acknowledge admission
-and delivery workers replay it through the same path. Projection rows remain
-separate.
+handler runs. Projection input uses the same environment Delivery and shared
+Inbox, with its separate recipient identity.
+
+Local posting waits for the result of that signal's delivery attempt. For an
+Agent, successful acceptance and Inbox acknowledgement let posting finish while
+the live handler continues. If Agent execution capacity is unavailable, the input
+stays pending and the local call reports the existing command-posting error.
+
+With remote Delivery and its environment supervisor, posting completes after the
+remote Inbox accepts the input and the shard notification is submitted. Processing
+may still be pending on another process. For example, importing an Event can return
+while another process holds its shard; the Projection update arrives after that
+process can dispatch the Event. Reception alone does not acknowledge delivery,
+create an Agent acceptance receipt, or prove that a handler ran.
+
+A rejected remote receive operation rejects posting. If a local notification
+observer fails after reception succeeds, the failure is logged and the existing
+notifications and safety scan can find the pending work. The environment selects
+this behavior from its installed supervision; contexts have no attachment step or
+completion switch. Supplying custom ports without a source does not install remote
+supervision. Explicit `Delivery.run()` still returns the actual run result,
+including `SKIPPED` when another process is handling the shard.
+For ordinary Entity Inbox work, post-handler output and transition validation
+failures reach the reception monitor. Pre-handler input and routing errors and
+storage failures remain outside that monitor. Accepted Agent work has already
+acknowledged its Inbox row and does not enter this reception action. A detached
+run that throws emits a contained terminal error without exposing its message.
 
 `DeliveryBuilder` constructs a controlled `Delivery`; `DeliverySupervisor`
 receives `{ source, delivery, onMessage }`, manages bounded shard notifications
@@ -1141,33 +1212,33 @@ work, and then closes buses, subscriptions, Stands, and repository bindings.
 Cleanup failures are aggregated and may be retried. A committed Entity Event,
 reactor or Process Manager Event, and System Event receives one first-publication
 attempt; a contained failure is logged and does not schedule publication again.
-Persisted System Events use a separate fixed storage group. Command acceptance
+Persisted System Events use a storage group derived from their System Context
+name and role, separate from domain Event history. Command acceptance
 alone does not promise recipient completion. Processing retries for Inbox rows
 and acknowledgement recovery remain separate Delivery behavior.
 
 `Environment` resolves the Node `local` or `production` profile once from
 `NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that
-profile and exposes its `storageFactory`, optional `delivery`, optional
-`tracerFactory`, `nodeId`, and `close()` lifecycle. Applications do
-not manage internal server attachments through this public API. Neither API
-authenticates requests or supplies a production scheduler, remote topology,
-storage adapter, or deployment policy.
+profile and exposes its `storageFactory`, `tenantIndex`, `nodeId`, and
+`close()` lifecycle. A healthy close with active contexts rejects without
+teardown; after required startup failure, close joins automatic cleanup and
+reports the original cause plus cleanup failures. After explicit
+`completeSetup()`, its `delivery` property
+is the usable shared public `Delivery` facade. A Bounded Context cannot build
+before setup, and a server does not start setup on the application's behalf.
+Neither API authenticates requests or supplies remote topology or a deployment
+policy.
 
-`ServerEnvironmentDelivery` extends the existing closeable facility shape with
-`open()` plus generic `inbox` and `workRegistry` ports. After readiness, the
-environment supplies those ports to both existing delivery paths: direct finite
-`Delivery` construction and the supervisor's `DeliveryBuilder`. The environment
-invokes `open()` once before attachment admission and coalesces concurrent
-callers; rejection admits no attachment and a later attempt retries open. A
-close-only local delivery remains source-compatible. After attachments retire,
-environment close runs delivery, tracer, then storage and preserves retry
-checkpoints for failed phases.
-
-`ServerEnvironmentDelivery.source` is optional. When present, its Admin source
-is used by the environment supervisor for remote snapshots and
-shard-update hints; when absent, the existing local source remains the fallback.
-Applications configure and close only the delivery facility through the
-environment: attachment supervisors and their source reads belong to that facility.
+`ServerEnvironmentDelivery` supplies an optional remote facility with `open()`,
+`inbox`, and `workRegistry` ports. Setup opens it once before creating the
+shared Delivery; failure closes acquired facilities. Its optional `source`
+supports remote shard snapshots and notifications through the environment's
+single supervisor. Local Delivery uses the environment's configured storage
+factory for its shared Inbox and work registry; the default factory is in-memory.
+Contexts register recipients with the same Delivery and never close that shared
+facility individually. Environment shutdown stops intake, drains local admitted
+work, then closes shared Delivery and configured facilities. Pending remote rows
+do not make a closing context wait indefinitely for other processes to finish.
 
 ## Signal identity and Aggregate semantics
 

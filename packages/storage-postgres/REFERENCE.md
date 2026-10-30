@@ -6,7 +6,7 @@ agents.
 ## Public entry point
 
 Import `PostgresStorageFactory`, `PostgresStorageFactoryBuilder`,
-`PostgresStorageFactoryOptions`, `PostgresTenantStorageOptions`,
+`PostgresStorageFactoryOptions`, `PostgresTenantStorageOptions`, `PostgresTenantResolver`,
 `PostgresEntityStorageHandle`, `PostgresTableSpec`,
 `PostgresCreateOperation`, `PostgresCreateOperationFactory`, and
 `PostgresColumnSpec` from the package root. Provider errors are
@@ -16,19 +16,37 @@ Import `PostgresStorageFactory`, `PostgresStorageFactoryBuilder`,
 
 ## Configuration
 
-`PostgresStorageFactory.newBuilder().setOptions(options).build()` configures a
-single database and schema. `setTenantOptions(entries)` configures one database
-and pool per complete generated `TenantId`; every operation selects its tenant
-pool before table, metadata, transaction, lock, or data work. Options include a
+`PostgresStorageFactory.newBuilder().setOptions(options).build()` assembles a
+logical factory without connecting. Shared `setOptions()` is required;
+`setTenantOptions(entries)` or `setTenantResolver(resolver)` additionally selects
+one database per complete generated `TenantId`. The two tenant selection modes
+cannot be combined. A resolver may return options asynchronously; concurrent
+first uses of one tenant share resolution, failed attempts may retry, and a
+successful binding stays fixed for this factory. Options include a
 PostgreSQL URL, pool maximum, connection timeout, TLS CA/certificate/key,
 server-certificate verification, and optional schema name. URLs must include a
 database and cannot bypass the explicit options model with fragments or driver
-parameters. The factory proves configured connections during build and
-sanitizes provider errors.
+parameters. `checkConnection()` checks only the shared destination using
+read-only SQL; it does not resolve tenants, create tables, or check a model.
+Provider integrations can use `StoragePreparations.for(factory)` to create or
+check a declared Record, Entity current/enabled history, or surviving Agent
+audit family. Check mode inspects the selected tenant's actual schema, table,
+and required audit indexes without DDL or custom creation SQL. A successful
+compatible preparation is reused by later handles and operations in this
+factory. Explicit preparation uses and releases a temporary pool when no runtime
+pool exists; otherwise it reuses the retained runtime pool. Failed requirements
+can be retried without discarding
+earlier compatible families.
+
+The default shared registry converts message-valued IDs and columns using
+generated descriptors registered on module import. A registry supplied with
+`setStringifierRegistry(registry)` is snapshotted at factory construction.
+`setEventStoreTable(contextName, table, role?)` selects one physical Event Store
+table for the exact bounded-context name and domain or system role.
 
 PostgreSQL creates tables but not databases or schemas. A missing schema is a
-configuration error. Without an explicit schema, `current_schema()` is resolved
-once while building the target and the validated result is qualified into every
+configuration error on `checkConnection()` or first use. Without an explicit schema, `current_schema()`
+is resolved from the server on first use and the validated result qualifies every
 table and metadata statement.
 
 ## Physical layout and queries
@@ -96,23 +114,23 @@ B-tree entry limits still apply to exceptionally long record IDs. Pages use
 bounded SQL chunks and sum serialized entry bytes; a fetched chunk can be
 larger than the returned byte budget.
 
-## Agent execution
+## Agent live persistence
 
-Agent execution records and per-instance pending entries are stored in separate
-tenant database tables. Indexed queries select the next eligible instance and
-the first unresolved signal within it. Required B-tree indexes use complete
-binary-comparable ordering keys and are checked before admission.
-
-Claims, history updates and conditional Entity completion use the same native
-transaction connection. Completion compares the original Entity Version before
-writing the resulting state, history, preferences and outgoing Commands. Reopening
-a factory can read the saved work. No database transaction remains open while a
-model request runs.
+Agent audit entries use the indexed tenant-scoped `agent_history` family above.
+`appendAll()` writes the complete immutable group in one PostgreSQL transaction.
+Live Agent completion uses `EntityCommitStorage.commitAgent()` to compare the
+exact Entity state image and model preferences, and to commit state, preference,
+and history changes atomically. A no-op or preference-only turn does not need a
+new Entity Version. The typed admission receipt is a separate record family;
+it is not a replayable execution record. No database transaction remains open
+while a model request runs. Factory shutdown drains admitted operations before
+closing their retained connections.
 
 ## Lifecycle and errors
 
-`factory.close()` is idempotent, closes registered handles, prevents new handle
-creation, and drains pools. Record and Entity handles can close independently.
+Await `factory.close()` to observe cleanup failures. It synchronously prevents new handle
+creation, waits for admitted Entity commits, then closes registered handles and pools.
+Repeated calls return the same completion. Record and Entity handles can close independently.
 Acquired clients are released in `finally` blocks. History maintenance applies
 each deletion page independently. Top-level provider error messages and public
 responses omit URLs, credentials, SQL text, and driver details. The original

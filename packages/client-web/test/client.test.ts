@@ -14,8 +14,15 @@
 
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import { FieldMaskSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import type { Interceptor, Transport, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
-import { AnyMessages, Time } from "@spine-event-engine/core";
+import {
+  Code,
+  ConnectError,
+  type Interceptor,
+  type Transport,
+  type UnaryRequest,
+  type UnaryResponse,
+} from "@connectrpc/connect";
+import { AnyPacker, Time } from "@spine-event-engine/core";
 import {
   AckSchema,
   ActorContextSchema,
@@ -575,7 +582,7 @@ describe("Client", () => {
               create(EventSchema, {
                 id: create(EventIdSchema, { value: "late" }),
                 context: create(EventContextSchema),
-                message: AnyMessages.pack(
+                message: AnyPacker.pack(
                   ProjectCreatedSchema,
                   create(ProjectCreatedSchema, {
                     id: "project-1",
@@ -638,7 +645,7 @@ describe("Client", () => {
             event: [
               create(EventSchema, {
                 id: create(EventIdSchema, { value: "after-notice" }),
-                message: AnyMessages.pack(
+                message: AnyPacker.pack(
                   ProjectCreatedSchema,
                   create(ProjectCreatedSchema, {
                     id: "project-3",
@@ -1219,7 +1226,7 @@ describe("Client", () => {
                   }),
                   message: [
                     create(EntityStateWithVersionSchema, {
-                      state: AnyMessages.pack(
+                      state: AnyPacker.pack(
                         ProjectOverviewStateSchema,
                         create(ProjectOverviewStateSchema, {
                           id: "task-1",
@@ -1309,7 +1316,7 @@ describe("Client", () => {
     if (!resynchronization.done && resynchronization.value.kind === "resynchronization") {
       const recovered = resynchronization.value.response.message[0]?.state;
       if (recovered === undefined) throw new Error("Expected recovered Entity state.");
-      expect(AnyMessages.unpack(recovered, ProjectOverviewStateSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(recovered, ProjectOverviewStateSchema)).toEqual(
         create(ProjectOverviewStateSchema, {
           id: "task-1",
           name: "Complete",
@@ -1685,6 +1692,102 @@ describe("Client", () => {
       await client.close();
       expect(cancels).toBe(2);
     }
+  });
+
+  it("surfaces structured unknown-tenant subscription failure without retry", async () => {
+    const unknown = new ConnectError("Tenant is not registered.", Code.NotFound, undefined, [
+      { desc: ErrorSchema, value: create(ErrorSchema, { type: "TENANT_UNKNOWN" }) },
+    ]);
+    let subscribes = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport((method) => {
+          if (method.name === "Subscribe") {
+            subscribes++;
+            throw unknown;
+          }
+          return create(ResponseSchema);
+        }),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+
+    await expect(subscription.activate()).rejects.toBe(unknown);
+    await expect(updates.next()).rejects.toBe(unknown);
+    expect(subscribes).toBe(1);
+    await client.close();
+  });
+
+  it("stops reconnecting when a previously accepted tenant becomes unknown", async () => {
+    const unknown = new ConnectError("Tenant is not registered.", Code.NotFound, undefined, [
+      { desc: ErrorSchema, value: create(ErrorSchema, { type: "TENANT_UNKNOWN" }) },
+    ]);
+    let subscribes = 0;
+    const cancelled: string[] = [];
+    const streamEnd = Promise.withResolvers<undefined>();
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              if (subscribes === 2) throw unknown;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "accepted-tenant" }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel")
+              cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+            return create(ResponseSchema);
+          },
+          undefined,
+          () =>
+            (async function* () {
+              await streamEnd.promise;
+              yield* emptyUpdates();
+            })(),
+        ),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    try {
+      await subscription.activate();
+      streamEnd.resolve(undefined);
+      await expect(updates.next()).rejects.toBe(unknown);
+      await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+      await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+      await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+      await expect(lifecycle.next()).resolves.toMatchObject({
+        value: { state: "failed", error: unknown },
+      });
+      expect(cancelled).toEqual(["accepted-tenant"]);
+      expect(subscribes).toBe(2);
+    } finally {
+      streamEnd.resolve(undefined);
+      await client.close();
+    }
+    expect(subscribes).toBe(2);
   });
 
   it("cleans an initially accepted wire when Activate iterator setup fails before retrying", async () => {
@@ -2328,7 +2431,7 @@ describe("Client", () => {
         if (method.name === "Post") {
           const command = input as { readonly id?: { readonly uuid?: string } };
           return create(AckSchema, {
-            messageId: AnyMessages.pack(
+            messageId: AnyPacker.pack(
               CommandIdSchema,
               create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
             ),
@@ -3698,7 +3801,7 @@ describe("Client", () => {
         expect(method.name).toBe("Post");
         const command = input as { id?: { uuid?: string } };
         return create(AckSchema, {
-          messageId: AnyMessages.pack(
+          messageId: AnyPacker.pack(
             CommandIdSchema,
             create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
           ),
@@ -3720,17 +3823,17 @@ describe("Client", () => {
   });
 
   it("sends invalid commands so the server can return its validation result", async () => {
-    let packedMessage: Parameters<typeof AnyMessages.unpack>[0] | undefined;
+    let packedMessage: Parameters<typeof AnyPacker.unpack>[0] | undefined;
     const client = Client.usingTransport({
       transport: unaryTransport((method, input) => {
         expect(method.name).toBe("Post");
         const command = input as {
           readonly id?: { readonly uuid?: string };
-          readonly message?: Parameters<typeof AnyMessages.unpack>[0];
+          readonly message?: Parameters<typeof AnyPacker.unpack>[0];
         };
         packedMessage = command.message;
         return create(AckSchema, {
-          messageId: AnyMessages.pack(
+          messageId: AnyPacker.pack(
             CommandIdSchema,
             create(CommandIdSchema, {
               uuid: requireValue(command.id?.uuid, "command ID"),
@@ -3746,9 +3849,9 @@ describe("Client", () => {
     await expect(client.asGuest().post(UserIdSchema, create(UserIdSchema))).resolves.toMatchObject({
       kind: "error",
     });
-    expect(AnyMessages.unpack(requireValue(packedMessage, "packed command"), UserIdSchema)).toEqual(
-      create(UserIdSchema),
-    );
+    expect(
+      AnyPacker.tryUnpack(requireValue(packedMessage, "packed command"), UserIdSchema),
+    ).toEqual(create(UserIdSchema));
     await client.close();
   });
 
@@ -3760,7 +3863,7 @@ describe("Client", () => {
         return create(AckSchema, {
           messageId: malformed
             ? undefined
-            : AnyMessages.pack(
+            : AnyPacker.pack(
                 CommandIdSchema,
                 create(CommandIdSchema, {
                   uuid: `${requireValue(command.id?.uuid, "command ID")}-other`,
@@ -3786,7 +3889,7 @@ describe("Client", () => {
       transport: unaryTransport((_method, input) => {
         const command = input as { id?: { uuid?: string } };
         return create(AckSchema, {
-          messageId: AnyMessages.pack(
+          messageId: AnyPacker.pack(
             CommandIdSchema,
             create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
           ),
@@ -3950,7 +4053,7 @@ describe("Client", () => {
                 }),
                 message: [
                   create(EntityStateWithVersionSchema, {
-                    state: AnyMessages.pack(
+                    state: AnyPacker.pack(
                       ProjectOverviewStateSchema,
                       create(ProjectOverviewStateSchema, {
                         id: tenant,
@@ -3978,7 +4081,7 @@ describe("Client", () => {
                         create(EntityStateUpdateSchema, {
                           kind: {
                             case: "state",
-                            value: AnyMessages.pack(
+                            value: AnyPacker.pack(
                               ProjectOverviewStateSchema,
                               create(ProjectOverviewStateSchema, {
                                 id: tenant,
@@ -4035,7 +4138,7 @@ describe("Client", () => {
           throw new Error(`Expected ${tenant} resynchronization`);
         const state = recovered.value.response.message[0]?.state;
         if (state === undefined) throw new Error(`Missing ${tenant} recovered state`);
-        expect(AnyMessages.unpack(state, ProjectOverviewStateSchema)).toEqual(
+        expect(AnyPacker.tryUnpack(state, ProjectOverviewStateSchema)).toEqual(
           create(ProjectOverviewStateSchema, {
             id: tenant,
             name: `recovered-${tenant}`,
@@ -4051,7 +4154,7 @@ describe("Client", () => {
           throw new Error(`Expected ${tenant} live Entity update`);
         const liveState = live.value.update.update.value.update[0]?.kind;
         if (liveState?.case !== "state") throw new Error(`Missing ${tenant} live state`);
-        expect(AnyMessages.unpack(liveState.value, ProjectOverviewStateSchema)).toEqual(
+        expect(AnyPacker.tryUnpack(liveState.value, ProjectOverviewStateSchema)).toEqual(
           create(ProjectOverviewStateSchema, { id: tenant, name: `live-${tenant}`, priority: 8 }),
         );
         expect(attempts.get(tenant)).toEqual({ subscribes: 2, streams: 2 });
@@ -4321,7 +4424,7 @@ function groupedTransport(
       } else if (method.name === "Post") {
         const command = input as import("@spine-event-engine/proto").Command;
         message = create(AckSchema, {
-          messageId: AnyMessages.pack(CommandIdSchema, command.id ?? create(CommandIdSchema)),
+          messageId: AnyPacker.pack(CommandIdSchema, command.id ?? create(CommandIdSchema)),
           status: create(StatusSchema, {
             status:
               postStatus === "ok"
@@ -4416,7 +4519,7 @@ function projectOutcome(wire: Subscription, id: string): SubscriptionUpdate {
         event: [
           create(EventSchema, {
             id: create(EventIdSchema, { value: id }),
-            message: AnyMessages.pack(
+            message: AnyPacker.pack(
               ProjectCreatedSchema,
               create(ProjectCreatedSchema, {
                 id: `project-${id}`,
@@ -4433,7 +4536,7 @@ function projectOutcome(wire: Subscription, id: string): SubscriptionUpdate {
 
 function acceptedAck(command: Command) {
   return create(AckSchema, {
-    messageId: AnyMessages.pack(CommandIdSchema, requireValue(command.id, "posted Command ID")),
+    messageId: AnyPacker.pack(CommandIdSchema, requireValue(command.id, "posted Command ID")),
     status: create(StatusSchema, { status: { case: "ok", value: {} } }),
   });
 }
@@ -4611,7 +4714,7 @@ function browserResponse(
   if (method !== "Post") return create(QueryResponseSchema);
   const command = input as { id?: { uuid?: string } };
   return create(AckSchema, {
-    messageId: AnyMessages.pack(
+    messageId: AnyPacker.pack(
       CommandIdSchema,
       create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
     ),

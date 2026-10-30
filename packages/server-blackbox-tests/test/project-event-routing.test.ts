@@ -14,14 +14,15 @@
 
 import { create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import type { Any } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, RejectionThrowable, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
-  AnyMessages,
-  RejectionThrowable,
-  SignalEnvelopes,
-  TypeUrls,
-} from "@spine-event-engine/core";
-import { CommandContextSchema, type CommandContext, type Event } from "@spine-event-engine/proto";
+  ActorContextSchema,
+  CommandContextSchema,
+  UserIdSchema,
+  type CommandContext,
+  type Event,
+} from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
   type QueryResponse,
@@ -38,9 +39,11 @@ import {
   ProcessManager,
   Projection,
   Repository,
+  ServerEnvironment,
 } from "@spine-event-engine/server";
+import { ServerTests } from "@spine-event-engine/server/testing";
 import type { GeneratedHandlerRegistry } from "@spine-event-engine/server/spi/handler-registry";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { BlackBox } from "@spine-event-engine/testing";
 import {
@@ -79,9 +82,11 @@ import {
 
 class Project extends Aggregate<ProjectId, typeof ProjectStateSchema> {
   static scheduledStatuses: string[] = [];
+  static scheduleGate: (() => Promise<void>) | undefined;
 
   static reset(): void {
     this.scheduledStatuses = [];
+    this.scheduleGate = undefined;
   }
   create(command: CreateProject): ProjectCreated {
     const project = command.project;
@@ -99,6 +104,7 @@ class Project extends Aggregate<ProjectId, typeof ProjectStateSchema> {
   }
 
   async schedule(command: ScheduleProject): Promise<ProjectScheduled> {
+    await Project.scheduleGate?.();
     await Promise.resolve();
     if (command.status === "rejected") {
       throw RejectionThrowable.create(ProjectSchedulingRejectedSchema, { project: this.id });
@@ -294,7 +300,7 @@ function query<Id extends Message>(schema: GenMessage<Message>, idSchema: GenMes
       type: TypeUrls.derive(schema),
       criterion: {
         case: "filters",
-        value: create(TargetFiltersSchema, { idFilter: { id: [AnyMessages.pack(idSchema, id)] } }),
+        value: create(TargetFiltersSchema, { idFilter: { id: [AnyPacker.pack(idSchema, id)] } }),
       },
     }),
   });
@@ -310,7 +316,7 @@ function queryState<Schema extends GenMessage<Message>>(
   }
   const state = response.message[0]?.state;
   if (state === undefined) throw new Error("Query response state is missing.");
-  const unpacked = AnyMessages.unpack(state, schema);
+  const unpacked = AnyPacker.tryUnpack(state, schema);
   if (unpacked === undefined)
     throw new Error(`Query response does not contain ${schema.typeName}.`);
   return unpacked;
@@ -398,7 +404,7 @@ function context(
   planning: PlanningId,
   staffing: StaffingId,
   deliveredRejections?: Event[],
-): BoundedContext {
+): Promise<BoundedContext> {
   const builder = BoundedContext.singleTenant("project event routing")
     .add(projectRepository())
     .add(planningRepository(routeTo(planning)))
@@ -463,7 +469,7 @@ async function awaitProjectWorkflowStates(
 async function createProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
   await boundedContext.commandBus().post(
     SignalEnvelopes.command({
-      context: create(CommandContextSchema),
+      context: projectCommandContext(),
       schema: CreateProjectSchema,
       message: create(CreateProjectSchema, { project: id, name: "roadmap" }),
     }),
@@ -472,11 +478,19 @@ async function createProject(boundedContext: BoundedContext, id: ProjectId): Pro
 async function approveProject(boundedContext: BoundedContext, id: ProjectId): Promise<void> {
   await boundedContext.commandBus().post(
     SignalEnvelopes.command({
-      context: create(CommandContextSchema),
+      context: projectCommandContext(),
       schema: ApproveProjectSchema,
       message: create(ApproveProjectSchema, { project: id, status: "approved" }),
     }),
   );
+}
+function projectCommandContext(): CommandContext {
+  return create(CommandContextSchema, {
+    actorContext: create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "project-test-user" }),
+      timestamp: create(TimestampSchema, { seconds: 1_700_000_000n }),
+    }),
+  });
 }
 function ids() {
   return {
@@ -512,9 +526,11 @@ function expectProjectWorkflowIds(
 }
 
 describe("project workflow Event routing", () => {
+  beforeEach(async () => ServerEnvironment.instance().completeSetup());
+  afterEach(async () => ServerTests.resetEnvironment());
   it("delivers a client and server-context Command through a command-substituting Process Manager", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
     try {
       await createProject(boundedContext, project);
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
@@ -543,7 +559,7 @@ describe("project workflow Event routing", () => {
 
   it("drains a command substitution's produced command when the context closes immediately", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
     Project.reset();
     await createProject(boundedContext, project);
     await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
@@ -552,10 +568,39 @@ describe("project workflow Event routing", () => {
     expect(Project.scheduledStatuses).toContain("approved");
   });
 
+  it("settles a Process Manager Event while its published Command handler is held", async () => {
+    const { project, planning, staffing, portfolio } = ids();
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    Project.reset();
+    Project.scheduleGate = () => {
+      entered.resolve(undefined);
+      return release.promise;
+    };
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
+    try {
+      const posting = createProject(boundedContext, project);
+      await entered.promise;
+      await posting;
+      expect(Project.scheduledStatuses).not.toContain("scheduled");
+      await expect(
+        boundedContext.stand().read(CoordinationStateSchema, project),
+      ).resolves.toMatchObject({ projectName: "roadmap" });
+      const closing = boundedContext.close();
+      release.resolve(undefined);
+      await closing;
+      expect(Project.scheduledStatuses).toContain("scheduled");
+    } finally {
+      release.resolve(undefined);
+      await boundedContext.close();
+      Project.reset();
+    }
+  });
+
   it("updates custom- and producer-ID-routed persisted Entity states", async () => {
     const { project, planning, staffing, portfolio } = ids();
     expectProjectWorkflowIds(project, planning, staffing, portfolio);
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
     try {
       await createProject(boundedContext, project);
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio);
@@ -601,7 +646,7 @@ describe("project workflow Event routing", () => {
   it("suppresses only the portfolio with an empty custom Event route", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const none = EventRouting.create<PortfolioId>().route(ProjectCreatedSchema, () => []);
-    const boundedContext = context(none, planning, staffing);
+    const boundedContext = await context(none, planning, staffing);
     try {
       await createProject(boundedContext, project);
       await awaitProjectWorkflowStates(boundedContext, project, planning, staffing, portfolio, {
@@ -645,7 +690,7 @@ describe("project workflow Event routing", () => {
 
   it("reaches the same persisted states through the public BlackBox API", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const boundedContext = context(routeTo(portfolio), planning, staffing);
+    const boundedContext = await context(routeTo(portfolio), planning, staffing);
     const blackBox = await BlackBox.from(boundedContext);
     try {
       const scope = blackBox.asGuest();
@@ -660,7 +705,7 @@ describe("project workflow Event routing", () => {
         (events) => events.length === 2,
       );
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(producedEvents[0], "ProjectCreated"),
           ProjectCreatedSchema,
         ),
@@ -669,7 +714,7 @@ describe("project workflow Event routing", () => {
         name: "roadmap",
       });
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(producedEvents[1], "ProjectScheduled"),
           ProjectScheduledSchema,
         ),
@@ -684,13 +729,13 @@ describe("project workflow Event routing", () => {
         (commands) => commands.length === 2,
       );
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(producedCommands[0], "scheduled ScheduleProject"),
           ScheduleProjectSchema,
         ),
       ).toEqual(create(ScheduleProjectSchema, { project, status: "scheduled" }));
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(producedCommands[1], "approved ScheduleProject"),
           ScheduleProjectSchema,
         ),
@@ -710,7 +755,7 @@ describe("project workflow Event routing", () => {
           return (
             candidate.every((response) => response.message.length === 1) &&
             state !== undefined &&
-            AnyMessages.unpack(state, ProjectStateSchema)?.status === "approved"
+            AnyPacker.tryUnpack(state, ProjectStateSchema)?.status === "approved"
           );
         },
       );
@@ -746,7 +791,7 @@ describe("project workflow Event routing", () => {
 
   it("captures a committed Aggregate reactor Event once in production order", async () => {
     const { project, planning, staffing, portfolio } = ids();
-    const blackBox = await BlackBox.from(context(routeTo(portfolio), planning, staffing));
+    const blackBox = await BlackBox.from(await context(routeTo(portfolio), planning, staffing));
     try {
       const posted = await blackBox
         .asGuest()
@@ -760,10 +805,10 @@ describe("project workflow Event routing", () => {
         (candidate) => candidate.length >= 3,
       );
       expect(
-        AnyMessages.unpack(producedMessage(events[0], "ProjectCreated"), ProjectCreatedSchema),
+        AnyPacker.tryUnpack(producedMessage(events[0], "ProjectCreated"), ProjectCreatedSchema),
       ).toMatchObject({ project, name: "reactor-output" });
       expect(
-        AnyMessages.unpack(
+        AnyPacker.tryUnpack(
           producedMessage(events[1], "reacted ProjectScheduled"),
           ProjectScheduledSchema,
         ),
@@ -772,7 +817,7 @@ describe("project workflow Event routing", () => {
         events.filter(
           (event) =>
             event.message !== undefined &&
-            AnyMessages.unpack(event.message, ProjectScheduledSchema)?.status === "reacted",
+            AnyPacker.tryUnpack(event.message, ProjectScheduledSchema)?.status === "reacted",
         ),
       ).toHaveLength(1);
     } finally {
@@ -783,7 +828,12 @@ describe("project workflow Event routing", () => {
   it("delivers an async domain rejection without capturing it as a committed event", async () => {
     const { project, planning, staffing, portfolio } = ids();
     const deliveredRejections: Event[] = [];
-    const boundedContext = context(routeTo(portfolio), planning, staffing, deliveredRejections);
+    const boundedContext = await context(
+      routeTo(portfolio),
+      planning,
+      staffing,
+      deliveredRejections,
+    );
     const blackBox = await BlackBox.from(boundedContext);
     try {
       const scope = blackBox.asGuest();
@@ -811,7 +861,7 @@ describe("project workflow Event routing", () => {
       expect(rejection.message, "ProjectSchedulingRejected payload is required.").toBeDefined();
       if (rejection.message === undefined)
         throw new Error("ProjectSchedulingRejected payload is required.");
-      expect(AnyMessages.unpack(rejection.message, ProjectSchedulingRejectedSchema)).toEqual(
+      expect(AnyPacker.tryUnpack(rejection.message, ProjectSchedulingRejectedSchema)).toEqual(
         create(ProjectSchedulingRejectedSchema, { project }),
       );
       expect(blackBox.assertEvents()).toEqual(eventsBeforeRejection);
