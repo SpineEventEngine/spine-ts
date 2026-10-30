@@ -129,6 +129,15 @@ describe("NodeCoordinator", () => {
     ).rejects.toMatchObject({ code: 14 });
   });
 
+  it("exposes Execute as unavailable until application handlers can be selected", async () => {
+    const coordinator = await NodeCoordinator.open({ members: new TestReadyMembers([]), port: 0 });
+    closeables.push(() => coordinator.close());
+    const client = createClient(QueryService, createGrpcTransport({ baseUrl: coordinator.baseUrl }));
+    await expect(client.execute(create(QueryService.method.execute.input))).rejects.toMatchObject({
+      code: Code.Unimplemented,
+    });
+  });
+
   it("returns unavailable when a subscription has no ready replica", async () => {
     const coordinator = await NodeCoordinator.open({ members: new TestReadyMembers([]), port: 0 });
     closeables.push(() => coordinator.close());

@@ -481,7 +481,13 @@ before the update, omitted when no prior state existed, so subscribers may
 retain or mutate it after delivery.
 `SpineServices` adapts built-context command buses and stands to the real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
-routes. `QueryService.Read` supports ID-filter reads for any registered state
+routes. Application query declarations in a `_queries.proto` file generate grouped
+`Query`/`Response` aliases and schema values for each paired operation. Importing the
+generated model companion augments `AppQueryResponseFor<Query>` through the ordinary
+core type map; both messages also enter the ordinary Proto module, Any, validation,
+and stringifier registries. `AppQueryHandler<Query, Response>` describes a concrete
+server implementation, but `QueryService.Execute` remains unavailable until server
+registration is added. `QueryService.Read` supports ID-filter reads for any registered state
 route and projection-state `Target.include_all = true` reads, packing
 `EntityStateWithVersion` replies from
 `Stand.queryVersioned()`. Column filters support `EQUAL`, `GREATER_THAN`,

@@ -8,6 +8,7 @@
     "spine/auth/authentication_service.proto",
     "spine/base/error.proto",
     "spine/base/field_path.proto",
+    "spine/client/app_query.proto",
     "spine/client/command_service.proto",
     "spine/client/entities.proto",
     "spine/client/filters.proto",
@@ -67,6 +68,7 @@
     "spine/auth/authentication_service.proto": "generated/spine/auth/authentication_service_pb.js",
     "spine/base/error.proto": "generated/spine/base/error_pb.js",
     "spine/base/field_path.proto": "generated/spine/base/field_path_pb.js",
+    "spine/client/app_query.proto": "generated/spine/client/app_query_pb.js",
     "spine/client/command_service.proto": "generated/spine/client/command_service_pb.js",
     "spine/client/entities.proto": "generated/spine/client/entities_pb.js",
     "spine/client/filters.proto": "generated/spine/client/filters_pb.js",
@@ -122,5 +124,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "09386b98-2608-430d-8064-32acabfd67ba"
+  "generationId": "374081cf-3554-42a8-bae2-a5ad54431b17"
 }

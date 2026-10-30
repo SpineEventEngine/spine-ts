@@ -494,8 +494,30 @@ export function createNativeGatewayServices(
     query: {
       read: async (request, context) =>
         NativeGatewayValues.queryResponse(options, request, context),
+      execute: () => {
+        return Promise.reject(
+          new ConnectError("App Query execution is unavailable.", Code.Unimplemented),
+        );
+      },
     },
-    subscription: {
+    subscription: NativeGatewayValues.subscriptionService(options),
+  };
+}
+
+/**
+ * Converts native Connect gateway inputs, responses, and errors.
+ */
+const NativeGatewayValues = Object.freeze({
+  /**
+   * Binds native subscription handlers to the existing gateway policy.
+   *
+   * @param options Subscription gateway and request facts.
+   * @returns Connect implementation for subscription lifecycle methods.
+   */
+  subscriptionService(
+    options: NativeGatewayServicesOptions,
+  ): NativeGatewayServices["subscription"] {
+    return {
       subscribe: async (request, context) => {
         const result = await options.subscriptions.handle(
           NativeGatewayValues.subscriptionRequest(
@@ -521,14 +543,9 @@ export function createNativeGatewayServices(
         if (result.kind !== "cancelled") throw NativeGatewayValues.gatewayResultError(result);
         return create(SubscriptionService.method.cancel.output);
       },
-    },
-  };
-}
+    };
+  },
 
-/**
- * Converts native Connect gateway inputs, responses, and errors.
- */
-const NativeGatewayValues = Object.freeze({
   /**
    * Removes backend transport headers before another Connect server serializes the error.
    * @param error The native RPC failure.

@@ -16,6 +16,23 @@ export const targetFiltersAdaptation = Object.freeze({
 });
 
 /**
+ * The exact local QueryService import and method addition.
+ */
+export const queryServiceAdaptation = Object.freeze({
+  path: "packages/proto/proto/spine/client/query_service.proto",
+  kind: "query-service-execute",
+  imports: Object.freeze({
+    before: 'import "spine/client/query.proto";',
+    after: 'import "spine/client/query.proto";\nimport "spine/client/app_query.proto";',
+  }),
+  method: Object.freeze({
+    before: "    rpc Read(Query) returns (QueryResponse);",
+    after:
+      "    rpc Read(Query) returns (QueryResponse);\n    rpc Execute(AppQuery) returns (AppQueryResponse);",
+  }),
+});
+
+/**
  * Restores upstream bytes from the exact approved TargetFilters delta.
  *
  * @param source Manifest entry with optional local adaptation.
@@ -24,15 +41,25 @@ export const targetFiltersAdaptation = Object.freeze({
  */
 export function restoreUpstreamSource(source, contents) {
   if (source.localAdaptation === undefined) return contents;
-  const { path, kind, before, after } = targetFiltersAdaptation;
-  if (source.localPath !== path || source.localAdaptation.kind !== kind) {
+  const adaptation = [targetFiltersAdaptation, queryServiceAdaptation].find(
+    (candidate) =>
+      source.localPath === candidate.path && source.localAdaptation.kind === candidate.kind,
+  );
+  if (adaptation === undefined) {
     throw new Error("unapproved local Proto adaptation");
   }
-  const text = contents.toString("utf8");
-  if (text.split(after).length !== 2) {
-    throw new Error("TargetFilters adaptation must occur exactly once");
+  let text = contents.toString("utf8");
+  const edits =
+    adaptation === targetFiltersAdaptation
+      ? [targetFiltersAdaptation]
+      : [queryServiceAdaptation.method, queryServiceAdaptation.imports];
+  for (const { before, after } of edits) {
+    if (text.split(after).length !== 2) {
+      throw new Error(`${adaptation.kind} adaptation must occur exactly once`);
+    }
+    text = text.replace(after, before);
   }
-  return Buffer.from(text.replace(after, before), "utf8");
+  return Buffer.from(text, "utf8");
 }
 
 function parseArgs(argv) {
@@ -176,11 +203,12 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
   const adaptation = source.localAdaptation;
   if (
     adaptation !== undefined &&
-    (localPath !== targetFiltersAdaptation.path ||
-      adaptation === null ||
+    (adaptation === null ||
       typeof adaptation !== "object" ||
       Array.isArray(adaptation) ||
-      adaptation.kind !== targetFiltersAdaptation.kind ||
+      ![targetFiltersAdaptation, queryServiceAdaptation].some(
+        (candidate) => localPath === candidate.path && adaptation.kind === candidate.kind,
+      ) ||
       !/^[0-9a-f]{64}$/.test(adaptation.sha256) ||
       Object.keys(adaptation).sort().join(",") !== "kind,sha256")
   ) {

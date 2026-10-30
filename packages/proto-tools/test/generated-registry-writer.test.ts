@@ -34,6 +34,38 @@ import {
 } from "../src/generation/generated-registry-writer.js";
 
 describe("generated registry writer", () => {
+  it("keeps App Query implementation metadata passive and tied to its exact class", () => {
+    const repoRoot = createCompileFixture();
+    const outputFile = join(repoRoot, "packages/demo/generated/spine-metadata.ts");
+    const source = new GeneratedRegistryWriter().render(
+      {
+        receivers: [],
+        diagnostics: [],
+        appQueries: [
+          {
+            className: "TopIssuesHandler",
+            sourceFile: join(repoRoot, "packages/demo/src/top-issues.ts"),
+            queryTypeName: "example.issues.SummarizeTopIssues.Query",
+            querySchema: schema(
+              "../generated/issue_queries_pb.js",
+              "SummarizeTopIssues_QuerySchema",
+            ),
+            responseSchema: schema(
+              "../generated/issue_queries_pb.js",
+              "SummarizeTopIssues_ResponseSchema",
+            ),
+          },
+        ],
+      },
+      { outputFile },
+    );
+    expect(source).toContain("appQueries: [");
+    expect(source).toContain("handlerType: TopIssuesHandler");
+    expect(source).toContain('queryTypeName: "example.issues.SummarizeTopIssues.Query"');
+    expect(source).toContain("querySchema: SummarizeTopIssues_QuerySchema");
+    expect(source).toContain("responseSchema: SummarizeTopIssues_ResponseSchema");
+    expect(source).not.toContain("new TopIssuesHandler");
+  });
   it("renders a passive bootstrap that registers local metadata once imported", () => {
     const source = new GeneratedRegistryWriter().renderBootstrap();
 

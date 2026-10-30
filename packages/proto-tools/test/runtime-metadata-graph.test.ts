@@ -119,7 +119,7 @@ describe("runtime metadata graph", () => {
       ["cjs.cjs", "exports.spineMetadata = { receivers: [] };\n"],
       ["esm.d.mts", "export declare const spineMetadata: { receivers: [] };\n"],
       ["cjs.d.cts", "export declare const spineMetadata: { receivers: [] };\n"],
-    ])
+    ] as const)
       writeFileSync(join(model, "dist/generated", name), source);
 
     expect(RuntimeMetadataGraph.resolve(app, [], "import")[0]?.typesFile).toBe(

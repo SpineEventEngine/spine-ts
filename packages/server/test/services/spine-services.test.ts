@@ -605,6 +605,10 @@ describe("SpineServices", () => {
 
       const response = await client.read(createQuery("task-1"));
 
+      await expect(client.execute(create(QueryService.method.execute.input))).rejects.toMatchObject({
+        code: Code.Unimplemented,
+      });
+
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
       expect(

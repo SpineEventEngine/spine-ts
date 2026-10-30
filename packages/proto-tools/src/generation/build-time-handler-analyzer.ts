@@ -13,7 +13,7 @@
  */
 
 import { Buffer } from "node:buffer";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 
@@ -42,9 +42,55 @@ export interface BuildHandlerAnalysis {
   readonly receivers: readonly BuildReceiverHandlers[];
 
   /**
+   * Concrete application query implementations paired to generated schemas.
+   */
+  readonly appQueries?: readonly BuildAppQueryHandler[];
+
+  /**
    * Deterministic diagnostics for unsupported handler declarations.
    */
   readonly diagnostics: readonly BuildHandlerDiagnostic[];
+}
+
+/**
+ * Passive build-time description of one concrete application query handler.
+ */
+export interface BuildAppQueryHandler {
+  /**
+   * Exported implementation class.
+   *
+   */
+  readonly className: string;
+
+  /**
+   * Whether the implementation uses a default export.
+   *
+   */
+  readonly defaultExport?: boolean;
+
+  /**
+   * Source file containing the implementation.
+   *
+   */
+  readonly sourceFile: string;
+
+  /**
+   * Exact generated request message name.
+   *
+   */
+  readonly queryTypeName: string;
+
+  /**
+   * Exact generated request schema.
+   *
+   */
+  readonly querySchema: SchemaReference;
+
+  /**
+   * Exact generated result schema.
+   *
+   */
+  readonly responseSchema: SchemaReference;
 }
 
 /**
@@ -247,6 +293,7 @@ export type BuildHandlerDiagnosticCode =
   | "INVALID_HANDLER_VISIBILITY"
   | "INVALID_PARAMETER_COUNT"
   | "INVALID_SIGNAL_TYPE"
+  | "INVALID_APP_QUERY_PAIR"
   | "INVALID_EXTERNAL_ORIGIN"
   | "EXTERNAL_COMMAND_RECEIVER"
   | "INVALID_SUBSCRIBE_RETURN"
@@ -341,6 +388,7 @@ export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
   ): BuildHandlerAnalysis {
     PackageDependencies.load(program);
     const receivers: BuildReceiverHandlers[] = [];
+    const appQueries: BuildAppQueryHandler[] = [];
     const diagnostics: BuildHandlerDiagnostic[] = [];
 
     for (const source of sourceFiles) {
@@ -362,9 +410,10 @@ export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
       };
       const sourceReceivers = HandlerSources.analyzeSource(scope);
       receivers.push(...sourceReceivers);
+      appQueries.push(...AppQuerySources.analyzeSource(scope));
     }
 
-    return { receivers, diagnostics };
+    return { receivers, appQueries, diagnostics };
   },
 });
 
@@ -443,6 +492,7 @@ interface GeneratedExports {
 
 interface GeneratedFile {
   readonly sourceFile: string;
+  readonly packageName: string;
   readonly messages: readonly DescriptorMessage[];
 }
 
@@ -455,6 +505,7 @@ interface DescriptorMessage {
 interface DescriptorMessageSelection {
   readonly descriptor: DescriptorMessage;
   readonly exportName: string;
+  readonly typePath: string;
 }
 
 interface TypeWalk {
@@ -464,7 +515,7 @@ interface TypeWalk {
 
 type HandlerDecorator = "Assign" | "Command" | "React" | "Subscribe";
 type ServerDecorator = HandlerDecorator | "Where" | "Throws";
-type SignalKind = "command" | "event" | "rejection" | "state";
+type SignalKind = "command" | "event" | "rejection" | "state" | "app-query" | "app-response";
 
 interface DecoratorUse {
   readonly hasArguments: boolean;
@@ -3881,8 +3932,27 @@ const HandlerSources = Object.freeze({
       found: true,
       kind: message?.descriptor.isEntityState
         ? "state"
-        : HandlerSources.signalKindFromProto(file.sourceFile, indexes),
+        : file.sourceFile.endsWith("_queries.proto")
+          ? HandlerSources.appQueryKind(indexes, message)
+          : HandlerSources.signalKindFromProto(file.sourceFile, indexes),
     };
+  },
+
+  /**
+   * Determines only nested Query/Response messages in an application query operation. This
+   * distinguishes application pairs from unrelated generated nested messages.
+   *
+   * @param indexes Descriptor path beneath the source file.
+   * @param message Resolved nested descriptor and generated export name.
+   * @returns The query member role, or undefined for unrelated messages.
+   */
+  appQueryKind(
+    indexes: readonly number[] | undefined,
+    message: DescriptorMessageSelection | undefined,
+  ): SignalKind | undefined {
+    if (indexes?.length !== 2) return undefined;
+    if (message?.descriptor.name === "Query") return "app-query";
+    return message?.descriptor.name === "Response" ? "app-response" : undefined;
   },
 
   /**
@@ -3934,7 +4004,13 @@ const HandlerSources = Object.freeze({
       messages = message.nested;
     }
 
-    return message === undefined ? undefined : { descriptor: message, exportName: path.join("_") };
+    return message === undefined
+      ? undefined
+      : {
+          descriptor: message,
+          exportName: path.join("_"),
+          typePath: path.join("."),
+        };
   },
 
   /**
@@ -3960,6 +4036,7 @@ const HandlerSources = Object.freeze({
         ? undefined
         : {
             sourceFile: file.name,
+            packageName: file.package,
             messages: file.messageType.map(HandlerSources.descriptorMessage),
           };
     } catch {
@@ -4047,28 +4124,518 @@ const HandlerSources = Object.freeze({
   },
 });
 
+interface QuerySchemaUse {
+  readonly kind: SignalKind | undefined;
+  readonly typeName: string;
+  readonly reference: SchemaReference;
+}
+
+interface AppQueryBase {
+  readonly clause: ts.ExpressionWithTypeArguments;
+  readonly bindings: ReadonlyMap<ts.Symbol, ts.TypeNode>;
+}
+
+/**
+ * Resolves concrete App Query subclasses through the same generated descriptor inventory.
+ */
+const AppQuerySources = Object.freeze({
+  /**
+   * Finds exported concrete App Query implementations in one source file.
+   *
+   * @param scope The source, imports, and diagnostic collection.
+   * @returns Concrete query implementations found in the source.
+   */
+  analyzeSource(scope: AnalyzerScope): readonly BuildAppQueryHandler[] {
+    const records: BuildAppQueryHandler[] = [];
+    for (const statement of scope.source.statements) {
+      if (
+        !ts.isClassDeclaration(statement) ||
+        HandlerTypes.hasModifier(statement, ts.SyntaxKind.AbstractKeyword)
+      )
+        continue;
+      const base = AppQuerySources.baseFor(statement, scope, new Set());
+      if (base === undefined) continue;
+      const record = AppQuerySources.record(statement, base, scope);
+      if (record !== undefined) records.push(record);
+    }
+    return records;
+  },
+
+  /**
+   * Finds the declared AppQueryHandler base through imported concrete or abstract classes.
+   *
+   * @param node Class whose ancestry is inspected.
+   * @param scope Source and imports for this class.
+   * @param seen Class declarations already visited on this ancestry path.
+   * @param bindings Concrete type substitutions collected from the subclass.
+   * @returns The framework base clause, or undefined for unrelated classes.
+   */
+  baseFor(
+    node: ts.ClassDeclaration,
+    scope: AnalyzerScope,
+    seen: Set<ts.ClassDeclaration>,
+    bindings: ReadonlyMap<ts.Symbol, ts.TypeNode> = new Map(),
+  ): AppQueryBase | undefined {
+    if (seen.has(node)) return undefined;
+    seen.add(node);
+    for (const clause of node.heritageClauses ?? [])
+      for (const type of clause.types) {
+        if (AppQuerySources.isBase(type.expression, scope)) return { clause: type, bindings };
+        const parent = HandlerSources.classDeclarationFor(type.expression, scope);
+        if (parent === undefined) continue;
+        const source = parent.getSourceFile();
+        const inherited = AppQuerySources.baseFor(
+          parent,
+          {
+            ...scope,
+            source,
+            imports: HandlerSources.buildImportState(source, scope.program),
+          },
+          seen,
+          AppQuerySources.bindings(parent, type, scope, bindings),
+        );
+        if (inherited !== undefined) return inherited;
+      }
+    return undefined;
+  },
+
+  /**
+   * Maps an imported parent class's generic parameters to concrete child arguments.
+   *
+   * @param parent Resolved parent class declaration.
+   * @param use Child's instantiated heritage clause.
+   * @param scope Child source and TypeScript program.
+   * @param inherited Existing substitutions from a lower subclass.
+   * @returns Substitutions available when walking the parent.
+   */
+  bindings(
+    parent: ts.ClassDeclaration,
+    use: ts.ExpressionWithTypeArguments,
+    scope: AnalyzerScope,
+    inherited: ReadonlyMap<ts.Symbol, ts.TypeNode>,
+  ): ReadonlyMap<ts.Symbol, ts.TypeNode> {
+    const bound = new Map(inherited);
+    const checker = scope.program.getTypeChecker();
+    for (const [index, parameter] of (parent.typeParameters ?? []).entries()) {
+      const symbol = checker.getSymbolAtLocation(parameter.name);
+      const argument = use.typeArguments?.[index];
+      if (symbol === undefined || argument === undefined) continue;
+      const inheritedSymbol = ts.isTypeReferenceNode(argument)
+        ? checker.getSymbolAtLocation(argument.typeName)
+        : undefined;
+      bound.set(
+        symbol,
+        inheritedSymbol === undefined ? argument : (inherited.get(inheritedSymbol) ?? argument),
+      );
+    }
+    return bound;
+  },
+
+  /**
+   * Checks for only the framework AppQueryHandler import or namespace member. This
+   * excludes lookalike classes that did not import the server contract.
+   *
+   * @param expression Base-class expression in an extends clause.
+   * @param scope Source, import index and TypeScript program.
+   * @returns Whether the expression names the framework base.
+   */
+  isBase(expression: ts.Expression, scope: AnalyzerScope): boolean {
+    const imports = scope.imports;
+    if (ts.isIdentifier(expression))
+      if (imports.serverSymbols.get(expression.text) === "AppQueryHandler") return true;
+    if (
+      ts.isPropertyAccessExpression(expression) &&
+      ts.isIdentifier(expression.expression) &&
+      imports.serverNamespaces.has(expression.expression.text) &&
+      expression.name.text === "AppQueryHandler"
+    )
+      return true;
+    const checker = scope.program.getTypeChecker();
+    const location = ts.isPropertyAccessExpression(expression) ? expression.name : expression;
+    const found = checker.getSymbolAtLocation(location);
+    const symbol =
+      found?.flags && found.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(found) : found;
+    return (
+      symbol?.declarations?.some(
+        (declaration) =>
+          ts.isClassDeclaration(declaration) &&
+          declaration.name?.text === "AppQueryHandler" &&
+          PackageIdentity.nameFor(declaration.getSourceFile().fileName) ===
+            "@spine-event-engine/server",
+      ) === true
+    );
+  },
+
+  /**
+   * Validates generated Query/Response provenance and their shared operation.
+   *
+   * @param node Concrete implementation class.
+   * @param base AppQueryHandler heritage clause.
+   * @param scope The source, imports, and diagnostic collection.
+   * @returns Passive description after both generated members are paired.
+   */
+  record(
+    node: ts.ClassDeclaration,
+    base: AppQueryBase,
+    scope: AnalyzerScope,
+  ): BuildAppQueryHandler | undefined {
+    const className = node.name?.text ?? "DefaultAppQueryHandler";
+    const issue = HandlerSources.receiverExportIssue(node, scope.source);
+    if (issue !== undefined) {
+      HandlerTypes.pushDiagnostic(scope, issue.code, node, issue.message, className);
+      return undefined;
+    }
+    const pair = AppQuerySources.validatedPair(base, scope, className);
+    if (pair === undefined) return undefined;
+    return {
+      className,
+      sourceFile: scope.source.fileName,
+      queryTypeName: pair.query.typeName,
+      querySchema: pair.query.reference,
+      responseSchema: pair.response.reference,
+      ...(HandlerTypes.hasModifier(node, ts.SyntaxKind.DefaultKeyword)
+        ? { defaultExport: true }
+        : {}),
+    };
+  },
+
+  /**
+   * Resolves and checks a complete generated request/result pair.
+   *
+   * @param base AppQueryHandler heritage clause.
+   * @param scope The source, imports, and diagnostic collection.
+   * @param className Implementation name for a located diagnostic.
+   * @returns The paired generated schema uses, or undefined on error.
+   */
+  validatedPair(
+    base: AppQueryBase,
+    scope: AnalyzerScope,
+    className: string,
+  ): { readonly query: QuerySchemaUse; readonly response: QuerySchemaUse } | undefined {
+    const [queryNode, responseNode] = base.clause.typeArguments ?? [];
+    const query = AppQuerySources.resolve(queryNode, scope, new Set(), base.bindings);
+    const response = AppQuerySources.resolve(responseNode, scope, new Set(), base.bindings);
+    const pair = AppQuerySources.pair(query, response);
+    if (pair !== undefined) return pair;
+    HandlerTypes.pushDiagnostic(
+      scope,
+      "INVALID_APP_QUERY_PAIR",
+      base.clause,
+      "AppQueryHandler requires a matching generated _queries.proto Query/Response pair.",
+      className,
+    );
+    return undefined;
+  },
+
+  /**
+   * Matches operation names from generated Query and Response descriptors. Both
+   * members must come from the same declared application operation.
+   *
+   * @param query Resolved request type and schema.
+   * @param response Resolved result type and schema.
+   * @returns The matched pair, or undefined when the declarations differ.
+   */
+  pair(
+    query: QuerySchemaUse | undefined,
+    response: QuerySchemaUse | undefined,
+  ): { readonly query: QuerySchemaUse; readonly response: QuerySchemaUse } | undefined {
+    if (query?.kind !== "app-query" || response?.kind !== "app-response") return undefined;
+    return query.typeName.slice(0, -".Query".length) ===
+      response.typeName.slice(0, -".Response".length)
+      ? { query, response }
+      : undefined;
+  },
+
+  /**
+   * Reads imported and grouped type aliases to the generated message declaration. Symbol
+   * identity prevents accepting a structurally compatible unrelated type.
+   *
+   * @param node Declared generic message type argument.
+   * @param scope The source, imports, and program.
+   * @param seen Alias symbols already visited on this path.
+   * @param bindings Concrete generic type substitutions from handler ancestry.
+   * @returns Generated schema use and message name, if resolved.
+   */
+  resolve(
+    node: ts.TypeNode | undefined,
+    scope: AnalyzerScope,
+    seen: Set<ts.Symbol>,
+    bindings: ReadonlyMap<ts.Symbol, ts.TypeNode> = new Map(),
+  ): QuerySchemaUse | undefined {
+    if (node === undefined || !ts.isTypeReferenceNode(node)) return undefined;
+    const checker = scope.program.getTypeChecker();
+    const found = checker.getSymbolAtLocation(node.typeName);
+    if (found === undefined || seen.has(found)) return undefined;
+    seen.add(found);
+    const bound = bindings.get(found);
+    if (bound !== undefined) return AppQuerySources.resolve(bound, scope, seen, bindings);
+    const symbol = found.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(found) : found;
+    for (const declaration of symbol.declarations ?? []) {
+      if (!ts.isTypeAliasDeclaration(declaration)) continue;
+      const source = declaration.getSourceFile();
+      if (/(^|\/)generated\/.+_pb\.d\.ts$/u.test(source.fileName))
+        return AppQuerySources.installed(declaration, source, scope);
+      if (/(^|\/)generated\/.+_pb\.ts$/u.test(source.fileName))
+        return AppQuerySources.generated(declaration, source, scope);
+      const alias = AppQuerySources.resolve(declaration.type, scope, seen, bindings);
+      if (alias !== undefined) return alias;
+    }
+    return undefined;
+  },
+
+  /**
+   * Checks a packaged declaration against its published Proto manifest and descriptor JS.
+   *
+   * @param declaration Generated message type declaration.
+   * @param source Published declaration module.
+   * @param scope Handler source and TypeScript program.
+   * @returns Schema reference through the package export when provenance agrees.
+   */
+  installed(
+    declaration: ts.TypeAliasDeclaration,
+    source: ts.SourceFile,
+    scope: AnalyzerScope,
+  ): QuerySchemaUse | undefined {
+    const packageRoot = PackageIdentity.rootFor(source.fileName);
+    if (packageRoot === undefined) return undefined;
+    try {
+      const modulePath = relative(packageRoot, source.fileName)
+        .replace(/^dist\//u, "")
+        .replace(/\.d\.ts$/u, ".js");
+      const name = AppQuerySources.publishedPackage(packageRoot, modulePath);
+      if (name === undefined) return undefined;
+      return AppQuerySources.publishedSchema(
+        declaration,
+        source,
+        scope,
+        packageRoot,
+        name,
+        modulePath,
+      );
+    } catch {
+      return undefined;
+    }
+  },
+
+  /**
+   * Resolves a generated module to its package after checking the published Proto provenance.
+   *
+   * @param root Installed package location.
+   * @param modulePath Generated module path relative to the package's dist directory.
+   * @returns Published package name when its manifest contains this query source.
+   */
+  publishedPackage(root: string, modulePath: string): string | undefined {
+    const info = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+      name?: string;
+      version?: string;
+    };
+    const manifest = JSON.parse(readFileSync(join(root, "spine-proto-manifest.json"), "utf8")) as {
+      packageName?: string;
+      packageVersion?: string;
+      protoFiles?: string[];
+      generatedExports?: Record<string, string>;
+    };
+    if (
+      !info.name ||
+      manifest.packageName !== info.name ||
+      manifest.packageVersion !== info.version
+    )
+      return undefined;
+    const proto = Object.entries(manifest.generatedExports ?? {}).find(
+      ([, exported]) => exported === modulePath,
+    )?.[0];
+    return proto?.endsWith("_queries.proto") && manifest.protoFiles?.includes(proto)
+      ? info.name
+      : undefined;
+  },
+
+  /**
+   * Parses published generated JavaScript as data without evaluating package code.
+   *
+   * @param path Published runtime module.
+   * @returns Source syntax containing descriptor initializers.
+   */
+  publishedRuntime(path: string): ts.SourceFile {
+    return ts.createSourceFile(
+      path,
+      readFileSync(path, "utf8"),
+      ts.ScriptTarget.ESNext,
+      true,
+      ts.ScriptKind.JS,
+    );
+  },
+
+  /**
+   * Reads a published runtime descriptor without importing or executing the module.
+   *
+   * @param declaration Generated message type declaration.
+   * @param source Published declaration module.
+   * @param scope Handler source and TypeScript program.
+   * @param root Installed package location.
+   * @param name Package export name.
+   * @param modulePath Manifest-listed generated module path.
+   * @returns Verified schema reference for emitted metadata.
+   */
+  publishedSchema(
+    declaration: ts.TypeAliasDeclaration,
+    source: ts.SourceFile,
+    scope: AnalyzerScope,
+    root: string,
+    name: string,
+    modulePath: string,
+  ): QuerySchemaUse | undefined {
+    const specifier = `${name}/${modulePath}`;
+    const runtimePath = createRequire(scope.source.fileName).resolve(specifier);
+    if (realpathSync(runtimePath) !== realpathSync(join(root, "dist", modulePath)))
+      return undefined;
+    const runtime = AppQuerySources.publishedRuntime(runtimePath);
+    const schemaName = `${declaration.name.text}Schema`;
+    const declarations = HandlerSources.exportedNames(source);
+    const exported = HandlerSources.exportedNames(runtime);
+    const typeName = AppQuerySources.typeName(declaration);
+    if (
+      !declarations.types.has(declaration.name.text) ||
+      !declarations.values.has(schemaName) ||
+      !exported.values.has(schemaName) ||
+      typeName === undefined ||
+      typeName !== AppQuerySources.descriptorName(runtime, schemaName)
+    )
+      return undefined;
+    return {
+      kind: exported.schemaRoles.get(schemaName),
+      typeName,
+      reference: { moduleSpecifier: specifier, exportName: schemaName },
+    };
+  },
+
+  /**
+   * Checks one generated declaration against its decoded Proto descriptor role.
+   *
+   * @param declaration Generated message type alias.
+   * @param source Generated Protobuf-ES module.
+   * @param scope The handler source and program.
+   * @returns Its exact schema use, if the generated declaration is coherent.
+   */
+  generated(
+    declaration: ts.TypeAliasDeclaration,
+    source: ts.SourceFile,
+    scope: AnalyzerScope,
+  ): QuerySchemaUse | undefined {
+    const schemaName = `${declaration.name.text}Schema`;
+    const exports = HandlerSources.exportedNames(source);
+    const kind = exports.schemaRoles.get(schemaName);
+    const typeName = AppQuerySources.typeName(declaration);
+    if (
+      !exports.types.has(declaration.name.text) ||
+      !exports.values.has(schemaName) ||
+      typeName === undefined ||
+      typeName !== AppQuerySources.descriptorName(source, schemaName)
+    )
+      return undefined;
+    const path = relative(dirname(scope.source.fileName), source.fileName).replace(/\.ts$/u, ".js");
+    return {
+      kind,
+      typeName,
+      reference: {
+        moduleSpecifier: path.startsWith(".") ? path : `./${path}`,
+        exportName: schemaName,
+      },
+    };
+  },
+
+  /**
+   * Reads the canonical message name from the generated schema's binary file descriptor.
+   *
+   * @param source Generated Protobuf-ES module.
+   * @param schemaName Generated schema export name.
+   * @returns Descriptor-derived message name, if the schema initializer is coherent.
+   */
+  descriptorName(source: ts.SourceFile, schemaName: string): string | undefined {
+    const declarations = source.statements
+      .filter(ts.isVariableStatement)
+      .flatMap((statement) => [...statement.declarationList.declarations]);
+    const schema = declarations.find(
+      (declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === schemaName,
+    );
+    const call = HandlerSources.callExpression(schema?.initializer, "messageDesc");
+    const fileName = call?.arguments[0];
+    if (call === undefined || fileName === undefined || !ts.isIdentifier(fileName))
+      return undefined;
+    const file = HandlerSources.generatedFiles(source).get(fileName.text);
+    if (file === undefined) return undefined;
+    const selected = HandlerSources.descriptorMessageAt(
+      file,
+      HandlerSources.messageDescIndexes(call),
+    );
+    return selected === undefined ? undefined : `${file.packageName}.${selected.typePath}`;
+  },
+
+  /**
+   * Reads Protobuf-ES's literal Message type argument without trusting a structural lookalike.
+   *
+   * @param declaration Generated message type alias.
+   * @returns Its literal Protobuf name, if present.
+   */
+  typeName(declaration: ts.TypeAliasDeclaration): string | undefined {
+    const parts = ts.isIntersectionTypeNode(declaration.type)
+      ? declaration.type.types
+      : [declaration.type];
+    const message = parts.find(
+      (part) =>
+        ts.isTypeReferenceNode(part) &&
+        ts.isIdentifier(part.typeName) &&
+        part.typeName.text === "Message",
+    );
+    if (message === undefined || !ts.isTypeReferenceNode(message)) return undefined;
+    const name = message.typeArguments?.[0];
+    return name !== undefined && ts.isLiteralTypeNode(name) && ts.isStringLiteral(name.literal)
+      ? name.literal.text
+      : undefined;
+  },
+});
+
 /**
  * Finds the package identity that owns an analyzed source file.
  */
-export const PackageIdentity: Readonly<{ nameFor(sourceFile: string): string | undefined }> =
-  Object.freeze({
-    nameFor(sourceFile: string): string | undefined {
-      let directory = resolve(dirname(sourceFile));
-      let manifest = join(directory, "package.json");
-      while (!existsSync(manifest)) {
-        const parent = dirname(directory);
-        if (parent === directory) return undefined;
-        directory = parent;
-        manifest = join(directory, "package.json");
-      }
-      try {
-        const { name } = JSON.parse(readFileSync(manifest, "utf8")) as { name?: unknown };
-        return typeof name === "string" ? name : undefined;
-      } catch {
-        return undefined;
-      }
-    },
-  });
+export const PackageIdentity: Readonly<{
+  nameFor(sourceFile: string): string | undefined;
+  rootFor(sourceFile: string): string | undefined;
+}> = Object.freeze({
+  /**
+   * Locates the nearest package manifest above a declaration.
+   *
+   * @param sourceFile Source within the package.
+   * @returns Package directory when a manifest exists.
+   */
+  rootFor(sourceFile: string): string | undefined {
+    let directory = resolve(dirname(sourceFile));
+    while (!existsSync(join(directory, "package.json"))) {
+      const parent = dirname(directory);
+      if (parent === directory) return undefined;
+      directory = parent;
+    }
+    return directory;
+  },
+
+  /**
+   * Reads the nearest package's declared name.
+   *
+   * @param sourceFile Source within the package.
+   * @returns Declared package name, if readable.
+   */
+  nameFor(sourceFile: string): string | undefined {
+    const root = PackageIdentity.rootFor(sourceFile);
+    if (root === undefined) return undefined;
+    try {
+      const { name } = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+        name?: unknown;
+      };
+      return typeof name === "string" ? name : undefined;
+    } catch {
+      return undefined;
+    }
+  },
+});
 
 const PackageDependencies = Object.freeze({
   /**

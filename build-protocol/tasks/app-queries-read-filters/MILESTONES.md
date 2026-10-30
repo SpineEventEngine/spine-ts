@@ -3,8 +3,8 @@
 The [approved proposal](PROPOSAL.md) and [requirements ledger](TASK.md) remain
 binding. Shared validation, Command/Event admission, read-service status mapping,
 unknown-subscription activation, and passive local metadata migration are
-implemented, including dependency discovery. App Query generation is next;
-the remaining implementation follows below.
+implemented, including dependency discovery and App Query generation. Trusted
+reader context is next; the remaining implementation follows below.
 
 Each slice includes focused behavior tests, affected generated/build checks,
 format/lint/TSDoc checks, coverage inspection and the relevant existing review
@@ -12,33 +12,6 @@ concerns. Use the existing implementation context for corrections and collect
 one review wave before returning a correction batch. Keep detailed evidence
 outside Git. Run the unchanged full release profile and final security review
 after integration converges; a slice checkpoint does not complete this task.
-
-## M07 — App Query declarations and generated associations
-
-**Depends on:** M05–M06. **Class:** high-risk serialized/generated contract.
-**Paths:** new `packages/proto/proto/spine/client/app_query.proto`, existing
-`query_service.proto`, `packages/proto/src/client/index.ts`, Proto source
-manifest; existing proto-tools Proto and TS analysis stages; core public
-`AppQueryResponses` declaration; minimal server `AppQueryHandler` and context
-contract modules under `packages/server/src/` and server exports.
-
-Add the approved AppQuery/AppQueryResponse envelopes and QueryService.Execute.
-Discover nested Query/Response pairs only in `_queries.proto`; generate grouped
-type/schema aliases and automatic augmentation keyed by Q's literal type name.
-Include these schemas in general registries. Analyze real generated types in
-`AppQueryHandler<Q,R>` subclasses, including grouped aliases and imports, and
-emit exact-constructor descriptions referencing the paired schemas. Keep
-client model association modules free of handler or Server imports.
-
-**Acceptance/tests:** accepted pair and class, wrong Q/R pairing, missing pair,
-ambiguous/generated-type provenance, neutral message misuse, and separate
-browser/Node compilation. Several implementation classes for one pair are
-valid metadata. Grouped aliases refer to the same actual schemas/messages.
-Generated declarations expose augmentation automatically; no marker option,
-annotation, Definition object, or second generation command. Test analyzer,
-writer, package consumer, and Proto manifests; gate API/style review. Existing
-service implementations compile with Execute explicitly unavailable until M09,
-without accidentally dispatching unregistered handlers.
 
 ## M08 — Trusted reader context through existing ports
 
@@ -134,8 +107,8 @@ container-specific behavior from the proposal; it does not prune the parent.
 **Acceptance/tests:** root opt-in distinctions; parent-first replacement with
 new children; deterministic ordering; singular/list/map/oneof/Any removal;
 registered prefix preservation; isolation from source and retained returned
-objects across later filters and consumers; same-type enforcement; bounded
-depth/work and cycles/unserializable replacement rejection; cancellation;
+objects across later filters and consumers; same-type enforcement; stack-safe
+traversal, cancellation, and cycles/unserializable replacement rejection; cancellation;
 unknown/undecodable nested Any errors when inspection is required. Never
 revalidate outgoing state constraints or fall back to unfiltered data. Gate
 focused filter tests, API/style/reliability review. Excludes storage mutation,

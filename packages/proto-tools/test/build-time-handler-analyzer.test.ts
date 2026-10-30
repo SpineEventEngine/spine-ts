@@ -13,7 +13,9 @@
  */
 
 import { Buffer } from "node:buffer";
-import { resolve, sep } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve, sep } from "node:path";
 
 import { create, setExtension, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema, MessageOptionsSchema } from "@bufbuild/protobuf/wkt";
@@ -37,6 +39,220 @@ function entityReceivers(analysis: ReturnType<typeof BuildHandlerAnalyzer.analyz
 }
 
 describe("build-time handler analyzer", () => {
+  it("associates grouped and imported generated App Query types with a concrete handler", () => {
+    const program = programWithSources("src/top-issues.ts", {
+      "src/top-issues.ts": `
+        import { AppQueryHandler } from "@spine-event-engine/server";
+        import { SummarizeTopIssues as Issues } from "../generated/issue_queries_app_query.js";
+        type Requested = Issues.Query;
+        export class TopIssuesHandler extends AppQueryHandler<Requested, Issues.Response> {
+          execute(query: Requested): Issues.Response { throw Error(String(query)); }
+        }
+      `,
+      "generated/issue_queries_app_query.ts": `
+        import type { SummarizeTopIssues_Query, SummarizeTopIssues_Response } from "./issue_queries_pb.js";
+        export namespace SummarizeTopIssues {
+          export type Query = SummarizeTopIssues_Query;
+          export type Response = SummarizeTopIssues_Response;
+        }
+      `,
+      "generated/issue_queries_pb.ts": generatedAppQueryModule(),
+    });
+    const result = analyzeBuildHandlers(program);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.appQueries).toEqual([
+      {
+        className: "TopIssuesHandler",
+        sourceFile: "src/top-issues.ts",
+        queryTypeName: "example.issues.SummarizeTopIssues.Query",
+        querySchema: schema("../generated/issue_queries_pb.js", "SummarizeTopIssues_QuerySchema"),
+        responseSchema: schema(
+          "../generated/issue_queries_pb.js",
+          "SummarizeTopIssues_ResponseSchema",
+        ),
+      },
+    ]);
+  });
+
+  it("rejects a generated response from a different App Query operation", () => {
+    const program = programWithSources("src/wrong.ts", {
+      "src/wrong.ts": `
+        import { AppQueryHandler } from "@spine-event-engine/server";
+        import { type SummarizeTopIssues_Query, type OtherIssues_Response } from "../generated/issue_queries_pb.js";
+        export class WrongHandler extends AppQueryHandler<SummarizeTopIssues_Query, OtherIssues_Response> {
+          execute(query: SummarizeTopIssues_Query): OtherIssues_Response { throw Error(String(query)); }
+        }
+      `,
+      "generated/issue_queries_pb.ts": generatedAppQueryModule(),
+    });
+    const result = analyzeBuildHandlers(program);
+    expect(result.appQueries).toEqual([]);
+    expect(result.diagnostics.map(({ code }) => code)).toEqual(["INVALID_APP_QUERY_PAIR"]);
+  });
+
+  it("rejects a declaration whose literal message name disagrees with its descriptor", () => {
+    const program = programWithSources("src/forged.ts", {
+      "src/forged.ts": `
+        import { AppQueryHandler } from "@spine-event-engine/server";
+        import { type SummarizeTopIssues_Query } from "../generated/issue_queries_pb.js";
+        import { type SummarizeTopIssues_Response } from "../generated/issue_queries_pb.js";
+        export class Forged extends AppQueryHandler<SummarizeTopIssues_Query, SummarizeTopIssues_Response> {
+          execute(query: SummarizeTopIssues_Query): SummarizeTopIssues_Response { throw Error(String(query)); }
+        }
+      `,
+      "generated/issue_queries_pb.ts": generatedAppQueryModule().replace(
+        'Message<"example.issues.SummarizeTopIssues.Query">',
+        'Message<"example.issues.OtherIssues.Query">',
+      ),
+    });
+    const result = analyzeBuildHandlers(program);
+    expect(result.appQueries).toEqual([]);
+    expect(result.diagnostics.map(({ code }) => code)).toEqual(["INVALID_APP_QUERY_PAIR"]);
+  });
+
+  it("retains separate concrete implementations of the same generated pair", () => {
+    const program = programWithSources("src/two.ts", {
+      "src/two.ts": `
+        import { AppQueryHandler } from "@spine-event-engine/server";
+        import { type SummarizeTopIssues_Query } from "../generated/issue_queries_pb.js";
+        import { type SummarizeTopIssues_Response } from "../generated/issue_queries_pb.js";
+        export class First extends AppQueryHandler<SummarizeTopIssues_Query, SummarizeTopIssues_Response> {
+          execute(query: SummarizeTopIssues_Query): SummarizeTopIssues_Response { throw Error(String(query)); }
+        }
+        export class Second extends AppQueryHandler<SummarizeTopIssues_Query, SummarizeTopIssues_Response> {
+          execute(query: SummarizeTopIssues_Query): SummarizeTopIssues_Response { throw Error(String(query)); }
+        }
+      `,
+      "generated/issue_queries_pb.ts": generatedAppQueryModule(),
+    });
+    const result = analyzeBuildHandlers(program);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.appQueries?.map(({ className }) => className)).toEqual(["First", "Second"]);
+  });
+
+  it("associates a concrete subclass through an imported abstract query base", () => {
+    const program = programWithSources("src/concrete.ts", {
+      "src/concrete.ts": `
+        import { OverviewBase } from "./base.js";
+        export class ConcreteOverview extends OverviewBase {}
+      `,
+      "src/base.ts": `
+        import { AppQueryHandler } from "@spine-event-engine/server";
+        import { type SummarizeTopIssues_Query as Q } from "../generated/issue_queries_pb.js";
+        import { type SummarizeTopIssues_Response as R } from "../generated/issue_queries_pb.js";
+        export abstract class OverviewBase extends AppQueryHandler<Q, R> {
+          execute(query: Q): R { throw Error(String(query)); }
+        }
+      `,
+      "generated/issue_queries_pb.ts": generatedAppQueryModule(),
+    });
+    const result = analyzeBuildHandlers(program);
+    expect(result.diagnostics).toEqual([]);
+    expect(
+      result.appQueries?.map(({ className, queryTypeName }) => [className, queryTypeName]),
+    ).toEqual([["ConcreteOverview", "example.issues.SummarizeTopIssues.Query"]]);
+  });
+
+  it("substitutes generated query types through an imported generic base", () => {
+    const program = programWithSources("src/generic-overview.ts", {
+      "src/generic-overview.ts": `
+        import { GenericBase } from "./generic-base.js";
+        import { SummarizeTopIssues as Issues } from "../generated/issue_queries_app_query.js";
+        export class GenericOverview extends GenericBase<Issues.Query, Issues.Response> {}
+      `,
+      "src/generic-base.ts": `
+        import type { Message } from "@bufbuild/protobuf";
+        import { AppQueryHandler } from "@spine-event-engine/server";
+        export abstract class GenericBase<Q extends Message, R extends Message> extends AppQueryHandler<Q, R> {}
+      `,
+      "generated/issue_queries_app_query.ts": `
+        import type { SummarizeTopIssues_Query, SummarizeTopIssues_Response } from "./issue_queries_pb.js";
+        export namespace SummarizeTopIssues {
+          export type Query = SummarizeTopIssues_Query;
+          export type Response = SummarizeTopIssues_Response;
+        }
+      `,
+      "generated/issue_queries_pb.ts": generatedAppQueryModule(),
+    });
+    const result = analyzeBuildHandlers(program);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.appQueries?.map(({ className }) => className)).toEqual(["GenericOverview"]);
+  });
+
+  it("recognizes a re-exported framework base but excludes an unrelated lookalike", () => {
+    const program = programWithSources(
+      "src/barrel-overview.ts",
+      {
+        "src/barrel-overview.ts": `
+        import { AppQueryHandler } from "./barrel.js";
+        import { AppQueryHandler as LocalHandler } from "./lookalike.js";
+        import { type SummarizeTopIssues_Query as Q } from "../generated/issue_queries_pb.js";
+        import { type SummarizeTopIssues_Response as R } from "../generated/issue_queries_pb.js";
+        export class BarrelOverview extends AppQueryHandler<Q, R> {
+          execute(query: Q): R { throw Error(String(query)); }
+        }
+        export class LookalikeOverview extends LocalHandler<Q, R> {
+          execute(query: Q): R { throw Error(String(query)); }
+        }
+      `,
+        "src/barrel.ts": `export { AppQueryHandler } from "@spine-event-engine/server";`,
+        "src/lookalike.ts": `export abstract class AppQueryHandler<Q, R> { abstract execute(query: Q): R; }`,
+        "generated/issue_queries_pb.ts": generatedAppQueryModule(),
+      },
+      true,
+    );
+    const result = analyzeBuildHandlers(program);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.appQueries?.map(({ className }) => className)).toEqual(["BarrelOverview"]);
+  });
+
+  it("reads an installed model declaration through its published descriptor and export", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-installed-query-"));
+    const packagePath = join(root, "node_modules/@spine-event-engine/server-test-fixtures");
+    try {
+      mkdirSync(resolve(packagePath, ".."), { recursive: true });
+      symlinkSync(resolve("packages/server/test-fixtures"), packagePath, "dir");
+      const source = join(root, "overview.ts");
+      const program = programWithSources(
+        source,
+        {
+          [source]: `
+          import { AppQueryHandler } from "@spine-event-engine/server";
+          import { GetProjectOverview as Overview } from
+            "@spine-event-engine/server-test-fixtures/generated/repository-routing/project_queries_app_query.js";
+          export class OverviewHandler extends AppQueryHandler<Overview.Query, Overview.Response> {
+            execute(query: Overview.Query): Overview.Response { throw Error(String(query)); }
+          }
+        `,
+        },
+        true,
+      );
+      const result = analyzeBuildHandlers(program);
+      expect(result.diagnostics).toEqual([]);
+      expect(result.appQueries?.[0]?.querySchema.moduleSpecifier).toBe(
+        "@spine-event-engine/server-test-fixtures/generated/repository-routing/project_queries_pb.js",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects query-shaped nested messages from a neutral Proto file", () => {
+    const program = programWithSources("src/neutral.ts", {
+      "src/neutral.ts": `
+        import { AppQueryHandler } from "@spine-event-engine/server";
+        import { type SummarizeTopIssues_Query } from "../generated/issue_queries_pb.js";
+        import { type SummarizeTopIssues_Response } from "../generated/issue_queries_pb.js";
+        export class Neutral extends AppQueryHandler<SummarizeTopIssues_Query, SummarizeTopIssues_Response> {
+          execute(query: SummarizeTopIssues_Query): SummarizeTopIssues_Response { throw Error(String(query)); }
+        }
+      `,
+      "generated/issue_queries_pb.ts": generatedAppQueryModule("issue_messages.proto"),
+    });
+    const result = analyzeBuildHandlers(program);
+    expect(result.appQueries).toEqual([]);
+    expect(result.diagnostics.map(({ code }) => code)).toEqual(["INVALID_APP_QUERY_PAIR"]);
+  });
   it("discovers Agent native handlers and rejects subscriptions", () => {
     const result = analyzeBuildHandlers(
       programWithSources("src/support-agent.ts", {
@@ -2759,6 +2975,31 @@ function generatedNestedModule(protoSource: string, parent: string, nested: stri
     `export const ${file} = fileDesc("${encodedDescriptor}");`,
     `export interface ${parent}_${nested} {}`,
     `export const ${parent}_${nested}Schema = messageDesc(${file}, 0, 0);`,
+  ].join("\n");
+}
+
+function generatedAppQueryModule(fileName = "issue_queries.proto"): string {
+  const descriptor = create(FileDescriptorProtoSchema, {
+    name: `example/issues/${fileName}`,
+    package: "example.issues",
+    messageType: ["SummarizeTopIssues", "OtherIssues"].map((name) => ({
+      name,
+      nestedType: [{ name: "Query" }, { name: "Response" }],
+    })),
+  });
+  const encoded = Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64");
+  return [
+    'import type { Message } from "@bufbuild/protobuf";',
+    "declare function fileDesc(source: string): unknown;",
+    "declare function messageDesc(file: unknown, parent: number, nested: number): unknown;",
+    `export const file_example_issues_issue_queries = fileDesc("${encoded}");`,
+    ...["SummarizeTopIssues", "OtherIssues"].flatMap((operation, parent) =>
+      ["Query", "Response"].flatMap((member, nested) => [
+        `export type ${operation}_${member} = Message<"example.issues.${operation}.${member}">;`,
+        `export const ${operation}_${member}Schema = messageDesc(` +
+          `file_example_issues_issue_queries, ${String(parent)}, ${String(nested)});`,
+      ]),
+    ),
   ].join("\n");
 }
 

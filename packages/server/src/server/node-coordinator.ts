@@ -18,7 +18,13 @@ import type { AddressInfo } from "node:net";
 
 import { clone, create, equals, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
+import {
+  Code,
+  ConnectError,
+  createClient,
+  type ConnectRouter,
+  type HandlerContext,
+} from "@connectrpc/connect";
 import {
   connectNodeAdapter,
   createGrpcTransport,
@@ -324,21 +330,7 @@ export class NodeCoordinator {
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
-          router.service(CommandService, {
-            post: async (command, context) => {
-              return coordinator.#post(command, context);
-            },
-          });
-          router.service(QueryService, {
-            read: async (query, context) => {
-              return coordinator.#read(query, context);
-            },
-          });
-          router.service(SubscriptionService, {
-            subscribe: (topic, context) => coordinator.#subscribe(topic, context),
-            activate: (subscription, context) => coordinator.#activate(subscription, context),
-            cancel: (subscription, context) => coordinator.#cancel(subscription, context),
-          });
+          this.#routes(router, () => coordinator);
         },
         readMaxBytes,
         writeMaxBytes,
@@ -349,6 +341,31 @@ export class NodeCoordinator {
     coordinator = new NodeCoordinator(options, server, address, sessions);
     await coordinator.#reconcile();
     return coordinator;
+  }
+
+  /**
+   * Registers native service routes after the listener receives its Coordinator instance.
+   *
+   * @param router Connect router for the private listener.
+   * @param current Returns the initialized Coordinator at request time.
+   */
+  static #routes(router: ConnectRouter, current: () => NodeCoordinator): void {
+    router.service(CommandService, {
+      post: (command, context) => current().#post(command, context),
+    });
+    router.service(QueryService, {
+      read: (query, context) => current().#read(query, context),
+      execute: () => {
+        return Promise.reject(
+          new ConnectError("App Query execution is unavailable.", Code.Unimplemented),
+        );
+      },
+    });
+    router.service(SubscriptionService, {
+      subscribe: (topic, context) => current().#subscribe(topic, context),
+      activate: (subscription, context) => current().#activate(subscription, context),
+      cancel: (subscription, context) => current().#cancel(subscription, context),
+    });
   }
 
   /**

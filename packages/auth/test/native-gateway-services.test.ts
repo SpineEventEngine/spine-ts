@@ -151,6 +151,19 @@ async function errorCode(effect: Promise<unknown>): Promise<Code> {
 }
 
 describe("createNativeGatewayServices", () => {
+  it("keeps App Query Execute unavailable before Server execution support is installed", async () => {
+    const gateway = services(
+      unary({ kind: "resolved", value: new Uint8Array() }).fake,
+      subscriptions(() => Promise.resolve({ kind: "cancelled" })).fake,
+    );
+    expect(
+      await errorCode(
+        Promise.resolve(
+          gateway.query.execute(create(QueryService.method.execute.input), context()),
+        ),
+      ),
+    ).toBe(Code.Unimplemented);
+  });
   it("delegates ResolveContext through the configured unary gateway", async () => {
     const response = create(ResolveContextResponseSchema);
     const gateway = services(

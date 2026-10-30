@@ -67,7 +67,11 @@
       "upstreamPath": "client/src/main/proto/spine/client/query_service.proto",
       "sourceUrl": "https://github.com/SpineEventEngine/core-java/blob/a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b/client/src/main/proto/spine/client/query_service.proto",
       "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/core-java/a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b/client/src/main/proto/spine/client/query_service.proto",
-      "sha256": "8ad31ac9e18d17c38ed3419f80210f60e7d1b4b1bfc94f0949ba993e19934f41"
+      "sha256": "8ad31ac9e18d17c38ed3419f80210f60e7d1b4b1bfc94f0949ba993e19934f41",
+      "localAdaptation": {
+        "kind": "query-service-execute",
+        "sha256": "e2d8527abb4d2113bf882cf8d68a6aa1b332be3cff15d82c6e047d0bddffb017"
+      }
     },
     {
       "localPath": "packages/proto/proto/spine/client/query.proto",
@@ -422,6 +426,10 @@
     }
   ],
   "ownedSources": [
+    {
+      "localPath": "packages/proto/proto/spine/client/app_query.proto",
+      "sha256": "6f9481e1c2a1572f69878b8286296a55a9fb4e9791b54d6d91d98eab865c5a06"
+    },
     {
       "localPath": "packages/proto/proto/spine/server/agent/acceptance_receipt.proto",
       "sha256": "daa0f8e724849523cb539b9b6a7503aa8eab0de3f23d926d1aa9d117bd44f007"

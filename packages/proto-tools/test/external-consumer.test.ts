@@ -118,7 +118,7 @@ function installTarballsWithPnpm(directory: string, packages: readonly PackedPac
     private: true,
     type: "module",
     dependencies,
-    devDependencies: { typescript: "6.0.3" },
+    devDependencies: { "@types/node": "24.13.2", typescript: "6.0.3" },
   });
   writeFileSync(
     join(directory, "pnpm-workspace.yaml"),
@@ -400,6 +400,115 @@ function assertPortableModel(directory: string): void {
 }
 
 describe("packed external model consumer", () => {
+  it("generates a separate handler from installed grouped query types and relocates its package", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-packed-query-handler-"));
+    try {
+      const tarballs = join(root, "tarballs");
+      mkdirSync(tarballs);
+      const spinePackages = packSpinePackages(tarballs);
+      execFileSync("npm", ["pack", "--ignore-scripts", "--pack-destination", tarballs], {
+        cwd: join(repositoryRoot, "packages/server/test-fixtures"),
+        stdio: "pipe",
+        timeout: processTimeoutMs,
+        env: { ...process.env, npm_config_cache: join(root, ".npm-cache") },
+      });
+      const fixture = {
+        name: "@spine-event-engine/server-test-fixtures",
+        tarball: join(tarballs, `spine-event-engine-server-test-fixtures-${spineVersion}.tgz`),
+      };
+      const handler = join(root, "handler-package");
+      mkdirSync(handler);
+      installTarballsWithPnpm(handler, [...spinePackages, fixture]);
+      writeJson(handler, "package.json", {
+        name: "@external/overview-handler",
+        version: "1.0.0",
+        type: "module",
+        files: ["dist", "spine-proto.json"],
+        exports: {
+          "./spine": {
+            types: "./dist/generated/spine-metadata.d.ts",
+            default: "./dist/generated/spine-metadata.js",
+          },
+        },
+        dependencies: {
+          "@bufbuild/protobuf": "2.12.1",
+          "@spine-event-engine/server": spineVersion,
+          "@spine-event-engine/server-test-fixtures": spineVersion,
+        },
+      });
+      writeJson(handler, "spine-proto.json", {
+        formatVersion: 1,
+        mode: "application",
+        modelPackages: [fixture.name],
+        registryOutput: "generated/spine-metadata.ts",
+      });
+      writeJson(handler, "tsconfig.json", {
+        compilerOptions: {
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          target: "ES2024",
+          strict: true,
+          declaration: true,
+          rootDir: ".",
+          outDir: "dist",
+          types: ["node"],
+        },
+        include: ["src/**/*.ts", "generated/**/*.ts"],
+      });
+      mkdirSync(join(handler, "src"));
+      writeFileSync(
+        join(handler, "src/overview.ts"),
+        [
+          'import { AppQueryHandler } from "@spine-event-engine/server";',
+          "import { GetProjectOverview as Overview } from " +
+            '"@spine-event-engine/server-test-fixtures/generated/repository-routing/project_queries_app_query.js";',
+          "export class OverviewHandler extends AppQueryHandler<Overview.Query, Overview.Response> {",
+          "  execute(query: Overview.Query): Overview.Response { throw Error(String(query)); }",
+          "}",
+        ].join("\n"),
+      );
+      run(
+        process.execPath,
+        [
+          join(handler, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"),
+          "handlers",
+        ],
+        handler,
+      );
+      const metadata = readFileSync(join(handler, "generated/spine-metadata.ts"), "utf8");
+      expect(metadata).toContain(
+        `${fixture.name}/generated/repository-routing/project_queries_pb.js`,
+      );
+      run(
+        process.execPath,
+        [join(handler, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+        handler,
+      );
+      run("npm", ["pack", "--ignore-scripts", "--pack-destination", tarballs], handler);
+      const packed = {
+        name: "@external/overview-handler",
+        tarball: join(tarballs, "external-overview-handler-1.0.0.tgz"),
+      };
+      const relocated = join(root, "relocated-consumer");
+      mkdirSync(relocated);
+      installTarballsWithPnpm(relocated, [...spinePackages, fixture, packed]);
+      run(
+        process.execPath,
+        [
+          "--input-type=module",
+          "--eval",
+          'const m=await import("@external/overview-handler/spine");' +
+            "if(m.spineMetadata.appQueries?.[0]?.queryTypeName!==" +
+            '"repository_routing.GetProjectOverview.Query")' +
+            'throw Error("relocated metadata missing query");',
+        ],
+        relocated,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("builds, packs, and executes composed Spine and application Proto modules without workspace links", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-external-consumer-"));
     try {

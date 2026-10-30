@@ -88,6 +88,22 @@ import {
 
 export { Time, type TimeProvider } from "./time/index.js";
 
+/**
+ * Generated application Query message type name to its paired Response type.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Generated companions augment this open type map.
+export interface AppQueryResponses {}
+
+/**
+ * Resolves a generated application Query to its declared response message.
+ *
+ * @typeParam Query Generated application request message.
+ */
+export type AppQueryResponseFor<Query extends Message> =
+  Query["$typeName"] extends keyof AppQueryResponses
+    ? AppQueryResponses[Query["$typeName"]]
+    : never;
+
 export {
   EntityColumn,
   type EntityColumnDefinition,

@@ -80,12 +80,12 @@ is recorded in MILESTONES.md. Detailed execution and review records remain outsi
 ## Current work
 
 Shared validation, read-side RPC status mapping, unknown-subscription activation,
-and local metadata migration are implemented. Transitive metadata discovery has passed focused checks and
-independent review. App Query generation is next, followed by trusted reader
-context, execution/client APIs, filters and integrated release verification,
-as listed in MILESTONES.md.
+metadata discovery, and App Query declarations and generation are implemented.
+Trusted reader context is next, followed by execution/client APIs, filters and
+integrated release verification, as listed in MILESTONES.md. Execute remains
+explicitly unavailable until Server registration and execution are implemented.
 
-The latest discovery preflight passed generation, clean TypeScript build,
-generated freshness and focused tests. Independent review corrections for export selection and publication
-confinement are resolved. Full release coverage and
-final security review remain due after the remaining implementation.
+The App Query preflight passed generated/source compatibility checks, builds,
+focused tests, documentation and independent review. Installed model and handler
+packages were checked through generation, compilation and relocation. Full
+release coverage and final security review remain due after implementation.

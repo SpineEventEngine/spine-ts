@@ -258,6 +258,11 @@ export class SpineServices {
     });
     router.service(QueryService, {
       read: (query) => this.#read(query),
+      execute: () => {
+        return Promise.reject(
+          new ConnectError("App Query execution is unavailable.", Code.Unimplemented),
+        );
+      },
     });
     router.service(SubscriptionService, {
       subscribe: (topic) => this.#subscribe(topic),

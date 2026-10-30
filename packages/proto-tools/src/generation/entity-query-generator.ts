@@ -24,6 +24,7 @@ import {
 import { createEcmaScriptPlugin, runNodeJs, type Schema } from "@bufbuild/protoplugin";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { AppQueryGenerator } from "./app-query-generator.js";
 
 type QueryOutput = ReturnType<Schema["generateFile"]>;
 type Imported = ReturnType<QueryOutput["import"]>;
@@ -406,6 +407,7 @@ const plugin = createEcmaScriptPlugin({
 
   generateTs: (schema) => {
     EntityQueryGenerator.generate(schema);
+    AppQueryGenerator.generate(schema);
   },
 });
 

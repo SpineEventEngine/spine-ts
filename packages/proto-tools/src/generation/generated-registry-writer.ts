@@ -17,6 +17,7 @@ import { closeSync, constants, lstatSync, mkdirSync, openSync, writeFileSync } f
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type {
+  BuildAppQueryHandler,
   BuildHandlerAnalysis,
   BuildHandlerRecord,
   BuildReceiverHandlers,
@@ -273,7 +274,8 @@ export class GeneratedRegistryWriter {
     const registryName = options.registryName ?? defaultRegistryConst;
     const registryModule = options.registryModuleSpecifier ?? defaultRegistryModule;
     const receivers = analysis.receivers;
-    const refs = RegistrySource.buildRefs(receivers, outputFile);
+    const appQueries = analysis.appQueries ?? [];
+    const refs = RegistrySource.buildRefs(receivers, appQueries, outputFile);
 
     RegistrySource.assertRegistryName(registryName, RegistrySource.importNames(refs));
     const protoModule = RegistrySource.bindProtoModule(options, registryName, refs);
@@ -284,6 +286,7 @@ export class GeneratedRegistryWriter {
       "",
       ...RegistrySource.renderRegistry(
         receivers,
+        appQueries,
         outputFile,
         registryName,
         refs,
@@ -370,35 +373,120 @@ const RegistrySource = Object.freeze({
    *
    * @param outputFile Generated output file used for import or publication paths.
    * @param receivers Analyzed receiver descriptions.
+   * @param appQueries Analyzed application query implementations.
    * @returns Bound class and schema import references.
    */
-  buildRefs(receivers: readonly BuildReceiverHandlers[], outputFile: string): RenderRefs {
+  buildRefs(
+    receivers: readonly BuildReceiverHandlers[],
+    appQueries: readonly BuildAppQueryHandler[],
+    outputFile: string,
+  ): RenderRefs {
     const used = new Set<string>();
     const entityRefs = new Map<string, string>();
     const entityImports: ImportRef[] = [];
     const schemaRaw = new Map<string, ImportRef>();
     const entityRaw = new Map<string, ImportRef>();
-    for (const receiver of receivers) {
-      RegistrySource.addReceiverRef(
-        receiver,
+    RegistrySource.addReceiverRefs(
+      receivers,
+      outputFile,
+      entityRaw,
+      entityRefs,
+      entityImports,
+      schemaRaw,
+      used,
+    );
+    for (const query of appQueries) {
+      RegistrySource.addQueryRefs(
+        query,
         outputFile,
         entityRaw,
         entityRefs,
         entityImports,
+        schemaRaw,
         used,
       );
-      RegistrySource.addReceiverSchemas(receiver, outputFile, schemaRaw);
     }
     const { schemaImports, schemaRefs } = RegistrySource.bindSchemaRefs(schemaRaw, used);
+    return RegistrySource.finishRefs(entityRefs, schemaRefs, entityImports, schemaImports, used);
+  },
+
+  /**
+   * Builds the render reference table from allocated class and schema imports.
+   *
+   * @param entities Bound implementation class names.
+   * @param schemas Bound generated schema names.
+   * @param entityImports Ordered implementation imports.
+   * @param schemaImports Ordered generated schema imports.
+   * @param used Reserved local names.
+   * @returns References for metadata rendering.
+   */
+  finishRefs(
+    entities: ReadonlyMap<string, string>,
+    schemas: ReadonlyMap<string, string>,
+    entityImports: readonly ImportRef[],
+    schemaImports: readonly ImportRef[],
+    used: ReadonlySet<string>,
+  ): RenderRefs {
     return {
-      entityNames: entityRefs,
-      schemaNames: schemaRefs,
+      entityNames: entities,
+      schemaNames: schemas,
       imports: [
         ...entityImports.map(RegistrySource.renderImport),
         ...RegistrySource.renderSchemaImports(schemaImports),
       ],
       localNames: used,
     };
+  },
+
+  /**
+   * Adds all receiver classes and schemas to the shared reference allocation.
+   *
+   * @param receivers Descriptions to import.
+   * @param outputFile Generated metadata path.
+   * @param raw Unbound class imports.
+   * @param names Bound class names.
+   * @param imports Ordered class imports.
+   * @param schemas Unbound schema imports.
+   * @param used Reserved local names.
+   */
+  addReceiverRefs(
+    receivers: readonly BuildReceiverHandlers[],
+    outputFile: string,
+    raw: Map<string, ImportRef>,
+    names: Map<string, string>,
+    imports: ImportRef[],
+    schemas: Map<string, ImportRef>,
+    used: Set<string>,
+  ): void {
+    for (const receiver of receivers) {
+      RegistrySource.addReceiverRef(receiver, outputFile, raw, names, imports, used);
+      RegistrySource.addReceiverSchemas(receiver, outputFile, schemas);
+    }
+  },
+
+  /**
+   * Adds one query class and its two generated schemas to shared import allocation.
+   *
+   * @param query Analyzed implementation and paired schemas.
+   * @param outputFile Generated metadata location.
+   * @param raw Class import references.
+   * @param names Bound class names.
+   * @param imports Ordered class imports.
+   * @param schemas Generated schema imports.
+   * @param used Already reserved local identifiers.
+   */
+  addQueryRefs(
+    query: BuildAppQueryHandler,
+    outputFile: string,
+    raw: Map<string, ImportRef>,
+    names: Map<string, string>,
+    imports: ImportRef[],
+    schemas: Map<string, ImportRef>,
+    used: Set<string>,
+  ): void {
+    RegistrySource.addReceiverRef(query, outputFile, raw, names, imports, used);
+    RegistrySource.addSchemaRef(schemas, outputFile, query.sourceFile, query.querySchema);
+    RegistrySource.addSchemaRef(schemas, outputFile, query.sourceFile, query.responseSchema);
   },
 
   /**
@@ -412,7 +500,7 @@ const RegistrySource = Object.freeze({
    * @param used Already allocated local identifiers.
    */
   addReceiverRef(
-    receiver: BuildReceiverHandlers,
+    receiver: Pick<BuildAppQueryHandler, "className" | "sourceFile" | "defaultExport">,
     outputFile: string,
     raw: Map<string, ImportRef>,
     names: Map<string, string>,
@@ -489,12 +577,14 @@ const RegistrySource = Object.freeze({
    * @param outputFile Generated output file used for import or publication paths.
    * @param protoModuleExport Value used by this operation.
    * @param receivers Analyzed receiver descriptions.
+   * @param appQueries Analyzed application query implementations.
    * @param refs Allocated import and receiver references.
    * @param registryName Generated metadata export name.
    * @returns Complete passive metadata source.
    */
   renderRegistry(
     receivers: readonly BuildReceiverHandlers[],
+    appQueries: readonly BuildAppQueryHandler[],
     outputFile: string,
     registryName: string,
     refs: RenderRefs,
@@ -509,9 +599,52 @@ const RegistrySource = Object.freeze({
     receivers.forEach((receiver) => {
       lines.push(...RegistrySource.renderReceiver(receiver, outputFile, refs));
     });
-    lines.push("  ],", "};");
+    lines.push("  ],");
+    if (appQueries.length > 0)
+      lines.push(
+        "  appQueries: [",
+        ...appQueries.flatMap((query) => RegistrySource.renderAppQuery(query, outputFile, refs)),
+        "  ],",
+      );
+    lines.push("};");
 
     return lines;
+  },
+
+  /**
+   * Renders one passive query implementation reference.
+   *
+   * @param query Analyzed implementation and paired schemas.
+   * @param outputFile Generated metadata location.
+   * @param refs Bound import identifiers.
+   * @returns Constructor and schema data without executing the handler.
+   */
+  renderAppQuery(
+    query: BuildAppQueryHandler,
+    outputFile: string,
+    refs: RenderRefs,
+  ): readonly string[] {
+    const handler = RegistrySource.entityName(refs, outputFile, query);
+    const request = RegistrySource.schemaName(
+      refs,
+      outputFile,
+      query.sourceFile,
+      query.querySchema,
+    );
+    const response = RegistrySource.schemaName(
+      refs,
+      outputFile,
+      query.sourceFile,
+      query.responseSchema,
+    );
+    return [
+      "    {",
+      `      handlerType: ${handler},`,
+      `      queryTypeName: ${RegistrySource.stringLiteral(query.queryTypeName)},`,
+      `      querySchema: ${request},`,
+      `      responseSchema: ${response},`,
+      "    },",
+    ];
   },
 
   /**
@@ -805,7 +938,11 @@ const RegistrySource = Object.freeze({
    * @param refs Allocated import and receiver references.
    * @returns Allocated Entity class identifier.
    */
-  entityName(refs: RenderRefs, outputFile: string, entity: BuildReceiverHandlers): string {
+  entityName(
+    refs: RenderRefs,
+    outputFile: string,
+    entity: Pick<BuildAppQueryHandler, "className" | "sourceFile">,
+  ): string {
     return RegistrySource.refName(
       refs.entityNames,
       RegistrySource.entityKey(

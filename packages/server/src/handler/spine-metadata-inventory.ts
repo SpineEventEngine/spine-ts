@@ -12,7 +12,10 @@
  * the License.
  */
 
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { ProtoModule } from "@spine-event-engine/proto";
+import { AppQueryHandler } from "./app-query-handler.js";
 
 import {
   HandlerRegistryIngestor,
@@ -30,6 +33,36 @@ export interface SpineMetadata extends GeneratedHandlerRegistry {
    * Local model module registered through the ordinary Proto inventory.
    */
   readonly protoModule?: ProtoModule;
+
+  /**
+   * Passive application query implementations declared in this package.
+   */
+  readonly appQueries?: readonly AppQueryDescription[];
+}
+
+/**
+ * Exact implementation constructor and generated request/result schemas.
+ */
+export interface AppQueryDescription {
+  /**
+   * Concrete handler class; registration does not construct it.
+   */
+  readonly handlerType: { readonly name: string; readonly prototype: object };
+
+  /**
+   * Generated request message name.
+   */
+  readonly queryTypeName: string;
+
+  /**
+   * Generated request schema.
+   */
+  readonly querySchema: GenMessage<Message>;
+
+  /**
+   * Generated result schema.
+   */
+  readonly responseSchema: GenMessage<Message>;
 }
 
 interface RegisteredReceiver {
@@ -46,6 +79,10 @@ interface ReceiverConstructor {
 }
 
 const receivers = new Map<ReceiverConstructor, RegisteredReceiver>();
+const queries = new Map<
+  AppQueryDescription["handlerType"],
+  { readonly description: AppQueryDescription; readonly moduleId: string }
+>();
 
 /**
  * Registers validated passive descriptions without selecting application handlers.
@@ -55,7 +92,11 @@ const receivers = new Map<ReceiverConstructor, RegisteredReceiver>();
  */
 export const SpineMetadataInventory: Readonly<{
   register(metadata: SpineMetadata, moduleId: string): void;
+  validateQuery(query: AppQueryDescription): void;
   select(constructors: readonly ReceiverConstructor[]): GeneratedHandlerRegistry;
+  selectQueries(
+    constructors: readonly AppQueryDescription["handlerType"][],
+  ): readonly AppQueryDescription[];
 }> = Object.freeze({
   /**
    * Registers validated passive descriptions without selecting application handlers.
@@ -66,6 +107,15 @@ export const SpineMetadataInventory: Readonly<{
   register(metadata: SpineMetadata, moduleId: string): void {
     if (moduleId.trim().length === 0) throw new TypeError("Spine metadata module ID is required.");
     new HandlerRegistryIngestor().ingest(metadata);
+    const stagedQueries = new Map<AppQueryDescription["handlerType"], AppQueryDescription>();
+    for (const query of metadata.appQueries ?? []) {
+      SpineMetadataInventory.validateQuery(query);
+      const prior =
+        stagedQueries.get(query.handlerType) ?? queries.get(query.handlerType)?.description;
+      if (prior !== undefined && prior !== query)
+        throw new Error(`Spine App Query metadata for ${query.handlerType.name} conflicts.`);
+      stagedQueries.set(query.handlerType, query);
+    }
     const staged = new Map<ReceiverConstructor, RegisteredReceiver>();
     for (const receiver of metadata.receivers) {
       const constructor = receiver.receiverType as ReceiverConstructor;
@@ -77,6 +127,36 @@ export const SpineMetadataInventory: Readonly<{
       staged.set(constructor, { receiver, moduleId });
     }
     for (const [constructor, entry] of staged) receivers.set(constructor, entry);
+    for (const [constructor, description] of stagedQueries)
+      queries.set(constructor, { description, moduleId });
+  },
+
+  /**
+   * Checks a passive query description before it enters process metadata.
+   *
+   * @param query Generated constructor and paired schema description.
+   */
+  validateQuery(query: AppQueryDescription): void {
+    const value = query as unknown as {
+      handlerType?: { prototype?: object };
+      queryTypeName?: string;
+      querySchema?: { kind?: string; typeName?: string };
+      responseSchema?: { kind?: string; typeName?: string };
+    } | null;
+    if (
+      value?.handlerType?.prototype === undefined ||
+      !(value.handlerType.prototype instanceof AppQueryHandler)
+    )
+      throw new TypeError("App Query metadata requires a concrete AppQueryHandler class.");
+    if (
+      value.querySchema?.kind !== "message" ||
+      value.querySchema.typeName !== value.queryTypeName ||
+      !value.queryTypeName?.endsWith(".Query")
+    )
+      throw new TypeError("App Query metadata requires its generated Query schema.");
+    const expected = `${value.queryTypeName.slice(0, -".Query".length)}.Response`;
+    if (value.responseSchema?.kind !== "message" || value.responseSchema.typeName !== expected)
+      throw new TypeError("App Query metadata requires its paired Response schema.");
   },
 
   /**
@@ -96,6 +176,25 @@ export const SpineMetadataInventory: Readonly<{
       return entry.receiver;
     });
     return Object.freeze({ receivers: Object.freeze(selected) });
+  },
+
+  /**
+   * Selects passive query descriptions by exact implementation constructor.
+   *
+   * @param constructors Application-supplied handler classes.
+   * @returns Only matching descriptions in caller order.
+   */
+  selectQueries(
+    constructors: readonly AppQueryDescription["handlerType"][],
+  ): readonly AppQueryDescription[] {
+    return Object.freeze(
+      constructors.map((constructor) => {
+        const query = queries.get(constructor);
+        if (query === undefined)
+          throw new Error(`Generated App Query metadata for ${constructor.name} is missing.`);
+        return query.description;
+      }),
+    );
   },
 });
 
@@ -119,5 +218,6 @@ export const spineMetadataTestAccess: Readonly<{ clear(): void }> = Object.freez
    */
   clear(): void {
     receivers.clear();
+    queries.clear();
   },
 });

@@ -258,6 +258,8 @@ const expectedAuthExports = [
   "TransportFacts",
 ];
 const expectedCoreExports = [
+  "AppQueryResponses",
+  "AppQueryResponseFor",
   "DEFAULT_TYPE_URL_PREFIX",
   "TypeRegistry",
   "TypeRegistryLookup",
@@ -623,6 +625,8 @@ const expectedTestingExports = [
   "BlackBoxTimeoutError",
 ];
 const expectedServerExports = [
+  "AppQueryContext",
+  "AppQueryHandler",
   "Aggregate",
   "AbstractAssignee",
   "AbstractCommander",
@@ -1369,6 +1373,8 @@ const publishedModuleInventories = [
     documentedModulePath: "packages/server/src/spi/handler-registry",
     sourcePath: join("packages", "server", "src", "spi", "handler-registry.ts"),
     expectedDeclaredExports: [
+      "SpineMetadata",
+      "registerSpineMetadata",
       "GeneratedEntityHandlerGroup",
       "GeneratedEntityHandlers",
       "GeneratedHandlerKind",
@@ -1380,6 +1386,8 @@ const publishedModuleInventories = [
       "GeneratedStandaloneHandlerGroup",
     ],
     expectedDocumentedExports: [
+      "SpineMetadata",
+      "registerSpineMetadata",
       "GeneratedEntityHandlerGroup",
       "GeneratedEntityHandlers",
       "GeneratedHandlerKind",

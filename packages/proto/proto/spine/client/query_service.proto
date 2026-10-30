@@ -36,6 +36,7 @@ option java_multiple_files = true;
 option java_outer_classname = "QueryServiceProto";
 
 import "spine/client/query.proto";
+import "spine/client/app_query.proto";
 import "google/protobuf/type.proto";
 
 // A service for querying the read-side from clients.
@@ -43,4 +44,5 @@ service QueryService {
 
     // Reads certain data from the read-side by setting the criteria via Query.
     rpc Read(Query) returns (QueryResponse);
+    rpc Execute(AppQuery) returns (AppQueryResponse);
 }

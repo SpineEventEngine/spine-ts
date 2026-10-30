@@ -86,6 +86,7 @@ export {
 } from "./server/server-environment.js";
 
 export { CommandBus } from "./bus/command-bus.js";
+export { AppQueryHandler, type AppQueryContext } from "./handler/app-query-handler.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";
 export { EventBus } from "./bus/event-bus.js";
 export type { EventDispatcher } from "./bus/event-dispatcher.js";

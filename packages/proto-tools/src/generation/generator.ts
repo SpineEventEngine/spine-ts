@@ -776,7 +776,9 @@ const protoGeneration = Object.freeze({
   assertRejectionRuntimeDependency(packageRoot: string, packageName: string, output: string): void {
     const files = protoGeneration.files(output);
     const rejections = files.some((file) => file.endsWith("rejections.ts"));
-    const queries = files.some((file) => file.endsWith("_query.ts"));
+    const queries = files.some(
+      (file) => file.endsWith("_query.ts") || file.endsWith("_app_query.ts"),
+    );
     if (!rejections && !queries) return;
     let dependencies: unknown;
     try {

@@ -20,7 +20,6 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import {
   restoreUpstreamSource,
-  targetFiltersAdaptation,
   verifyProtoSources,
 } from "../../../scripts/verify-proto-sources.mjs";
 
@@ -124,8 +123,8 @@ function buildOriginalFrozenDescriptorSet(root) {
   const manifest = JSON.parse(
     readFileSync(resolve(root, "packages/proto/proto/spine-sources.json"), "utf8"),
   );
-  const adaptation = manifest.sources.find((source) => source.localAdaptation !== undefined);
-  if (adaptation === undefined) return buildFrozenDescriptorSet(root);
+  const adaptations = manifest.sources.filter((source) => source.localAdaptation !== undefined);
+  if (adaptations.length === 0) return buildFrozenDescriptorSet(root);
   verifyProtoSources({ repoRoot: root });
 
   const temporaryRoot = mkdtempSync(join(tmpdir(), "spine-original-descriptors-"));
@@ -135,11 +134,13 @@ function buildOriginalFrozenDescriptorSet(root) {
       recursive: true,
     });
     symlinkSync(resolve(root, "node_modules"), resolve(temporaryRoot, "node_modules"), "dir");
-    const localPath = resolve(root, targetFiltersAdaptation.path);
-    writeFileSync(
-      resolve(temporaryRoot, targetFiltersAdaptation.path),
-      restoreUpstreamSource(adaptation, readFileSync(localPath)),
-    );
+    for (const adaptation of adaptations) {
+      const localPath = resolve(root, adaptation.localPath);
+      writeFileSync(
+        resolve(temporaryRoot, adaptation.localPath),
+        restoreUpstreamSource(adaptation, readFileSync(localPath)),
+      );
+    }
     return buildFrozenDescriptorSet(temporaryRoot);
   } finally {
     rmSync(temporaryRoot, { force: true, recursive: true });

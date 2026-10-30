@@ -129,7 +129,9 @@ export function protoRoleFailures(source, path) {
  */
 export function fixtureProtoNameFailures(path) {
   if (!/^packages\/[^/]+\/test-fixtures\/proto\//u.test(path)) return [];
-  return /(?:commands|events|states|identifiers|rejections|types)\.proto$/u.test(basename(path))
+  return /(?:commands|events|states|identifiers|rejections|types|queries)\.proto$/u.test(
+    basename(path),
+  )
     ? []
     : [`${path}: test-fixture Proto filename needs a role suffix`];
 }
