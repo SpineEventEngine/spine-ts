@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./spine": {
+      "types": "./dist/generated/spine-metadata.d.ts",
+      "default": "./dist/generated/spine-metadata.js"
+    },
     "./project-workflow": {
       "types": "./dist/test-fixtures/project-workflow.d.ts",
       "default": "./dist/test-fixtures/project-workflow.js"

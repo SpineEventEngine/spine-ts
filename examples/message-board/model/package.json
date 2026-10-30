@@ -9,6 +9,10 @@
     "prepack": "pnpm clean:generated-dist && tsc -b"
   },
   "exports": {
+    "./spine": {
+      "types": "./dist/generated/spine-metadata.d.ts",
+      "default": "./dist/generated/spine-metadata.js"
+    },
     ".": {
       "types": "./dist/generated/proto-module.d.ts",
       "default": "./dist/generated/proto-module.js"

@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./spine": {
+      "types": "./dist/generated/spine-metadata.d.ts",
+      "default": "./dist/generated/spine-metadata.js"
+    },
     "./internal": "./internal.mjs",
     "./entity/*.js": {
       "types": "./dist/generated/entity-metadata/*.d.ts",

@@ -79,6 +79,21 @@ sufficient because `TypeRegistry.from()` follows declared dependencies.
 
 `handlers` must run after a decorated handler or its generated command, event,
 or state types change. Compile the generated registry with the application.
+It also inspects declared runtime dependencies transitively. A participating
+package publishes its passive generated metadata through a `./spine` export
+with JavaScript and declaration targets; build dependency packages before
+generating the consumer. The application bootstrap statically registers these
+descriptions, while Bounded Context assembly still selects the handler classes
+explicitly. Regenerate the consumer after changing its installed dependency
+layout, a participant's published metadata, or its effective TypeScript
+configuration. Changes to inherited `outDir` or `declarationDir` settings also
+require regeneration so adapter paths are recalculated.
+Generation writes source and emitted `spine-dependencies.js` adapters with
+matching declarations. The normal clean build restores the emitted adapters
+from the generated record before TypeScript compiles. If a separate build step
+deletes those emitted files, regenerate the application against its installed
+dependency tree before compiling. Rebuilding after an output-directory change
+retires the previous adapter locations.
 
 Explicit handler return annotations may resolve to one generated message, a
 union, a flat array, or a fixed tuple (including readonly, named, optional, and

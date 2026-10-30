@@ -73,7 +73,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/todo/src/todo-app.ts",
+    "file": "examples/todo/src/todo-domain.ts",
     "kind": "function-declaration",
     "identity": "createTodoContext()#1",
     "name": "createTodoContext",

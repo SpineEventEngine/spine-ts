@@ -1985,6 +1985,10 @@ describe("BoundedContext assembly", () => {
   });
 
   it("builds an explicitly selected Entity after passive metadata registration", async () => {
+    expect(Object.keys(metadataSpi)).toEqual(["registerSpineMetadata"]);
+    expectTypeOf(metadataSpi).toEqualTypeOf<{
+      registerSpineMetadata: typeof registerSpineMetadata;
+    }>();
     const register: unknown = Reflect.get(metadataSpi, "registerSpineMetadata");
     expect(register).toBeTypeOf("function");
     (register as (value: unknown, moduleId: string) => void)(

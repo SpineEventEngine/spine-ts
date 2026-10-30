@@ -53,42 +53,62 @@ const receivers = new Map<ReceiverConstructor, RegisteredReceiver>();
  * @param metadata Generated package descriptions.
  * @param moduleId Generated metadata module identifier for diagnostics.
  */
-export function registerSpineMetadata(metadata: SpineMetadata, moduleId: string): void {
-  if (moduleId.trim().length === 0) throw new TypeError("Spine metadata module ID is required.");
-  new HandlerRegistryIngestor().ingest(metadata);
-  const staged = new Map<ReceiverConstructor, RegisteredReceiver>();
-  for (const receiver of metadata.receivers) {
-    const constructor = receiver.receiverType as ReceiverConstructor;
-    const prior = staged.get(constructor) ?? receivers.get(constructor);
-    if (prior !== undefined && prior.receiver !== receiver)
-      throw new Error(
-        `Spine metadata for ${constructor.name} conflicts between ${prior.moduleId} and ${moduleId}.`,
-      );
-    staged.set(constructor, { receiver, moduleId });
-  }
-  for (const [constructor, entry] of staged) receivers.set(constructor, entry);
-}
+export const SpineMetadataInventory: Readonly<{
+  register(metadata: SpineMetadata, moduleId: string): void;
+  select(constructors: readonly ReceiverConstructor[]): GeneratedHandlerRegistry;
+}> = Object.freeze({
+  /**
+   * Registers validated passive descriptions without selecting application handlers.
+   *
+   * @param metadata Generated package descriptions.
+   * @param moduleId Generated metadata module identifier for diagnostics.
+   */
+  register(metadata: SpineMetadata, moduleId: string): void {
+    if (moduleId.trim().length === 0) throw new TypeError("Spine metadata module ID is required.");
+    new HandlerRegistryIngestor().ingest(metadata);
+    const staged = new Map<ReceiverConstructor, RegisteredReceiver>();
+    for (const receiver of metadata.receivers) {
+      const constructor = receiver.receiverType as ReceiverConstructor;
+      const prior = staged.get(constructor) ?? receivers.get(constructor);
+      if (prior !== undefined && prior.receiver !== receiver)
+        throw new Error(
+          `Spine metadata for ${constructor.name} conflicts between ${prior.moduleId} and ${moduleId}.`,
+        );
+      staged.set(constructor, { receiver, moduleId });
+    }
+    for (const [constructor, entry] of staged) receivers.set(constructor, entry);
+  },
+
+  /**
+   * Selects passive descriptions by exact constructor identity.
+   *
+   * @param constructors Entity and standalone constructors selected by an application.
+   * @returns Only descriptions for selected classes.
+   */
+  select(constructors: readonly ReceiverConstructor[]): GeneratedHandlerRegistry {
+    const selected = constructors.map((constructor) => {
+      const entry = receivers.get(constructor);
+      if (entry === undefined)
+        throw new Error(
+          `Generated metadata for ${constructor.name} is missing. Generate and import the ` +
+            `package's spine-bootstrap.js before BoundedContext assembly.`,
+        );
+      return entry.receiver;
+    });
+    return Object.freeze({ receivers: Object.freeze(selected) });
+  },
+});
 
 /**
- * Returns passive descriptions for explicitly selected classes by constructor identity.
- *
- * @param constructors Entity and standalone constructors selected by an application.
- * @returns Only descriptions for the selected classes.
+ * Preserves compatibility with bootstraps emitted before grouped inventory registration.
  */
-export function spineMetadataFor(
-  constructors: readonly ReceiverConstructor[],
-): GeneratedHandlerRegistry {
-  const selected = constructors.map((constructor) => {
-    const entry = receivers.get(constructor);
-    if (entry === undefined)
-      throw new Error(
-        `Generated metadata for ${constructor.name} is missing. Generate and import the ` +
-          `package's spine-bootstrap.js before BoundedContext assembly.`,
-      );
-    return entry.receiver;
-  });
-  return Object.freeze({ receivers: Object.freeze(selected) });
-}
+export const registerSpineMetadata: typeof SpineMetadataInventory.register =
+  SpineMetadataInventory.register;
+
+/**
+ * Preserves compatibility with direct inventory selection callers.
+ */
+export const spineMetadataFor: typeof SpineMetadataInventory.select = SpineMetadataInventory.select;
 
 /**
  * Test-facing reset for independent metadata assembly cases.

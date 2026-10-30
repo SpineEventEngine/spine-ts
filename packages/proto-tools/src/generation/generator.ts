@@ -1111,6 +1111,29 @@ const protoGeneration = Object.freeze({
       generatedSource(lines.join("\n"), sources),
       "utf8",
     );
+    protoGeneration.writePassiveMetadata(output, exportName, sources);
+  },
+
+  /**
+   * Writes model-only metadata beside the generated Proto module.
+   *
+   * @param output Staged generated-output directory.
+   * @param exportName Local Proto module export.
+   * @param sources Proto sources recorded in the generated notice.
+   */
+  writePassiveMetadata(output: string, exportName: string, sources: readonly string[]): void {
+    const source = [
+      'import type { ProtoModule } from "@spine-event-engine/proto";',
+      `import { ${exportName} } from "./proto-module.js";`,
+      "",
+      "/** Passive model descriptions for this package. */",
+      "export const spineMetadata: { readonly protoModule: ProtoModule; readonly receivers: readonly [] } = {",
+      `  protoModule: ${exportName},`,
+      "  receivers: [],",
+      "};",
+      "",
+    ].join("\n");
+    writeFileSync(join(output, "spine-metadata.ts"), generatedSource(source, sources), "utf8");
   },
 
   /**

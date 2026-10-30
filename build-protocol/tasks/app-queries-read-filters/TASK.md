@@ -75,4 +75,17 @@ final security review and final-SHA CI where repository triggers permit.
 One architecture decomposition using existing requirements_splitter, followed
 by one bounded production implementer at a time. Independent read-only checks
 and concern-specific reviews may overlap. No grandchildren. Detailed sequence
-is recorded in MILESTONES.md; per-slice records track implementation and acceptance.
+is recorded in MILESTONES.md. Detailed execution and review records remain outside Git.
+
+## Current work
+
+Shared validation, read-side RPC status mapping, unknown-subscription activation,
+and local metadata migration are implemented. Transitive metadata discovery has passed focused checks and
+independent review. App Query generation is next, followed by trusted reader
+context, execution/client APIs, filters and integrated release verification,
+as listed in MILESTONES.md.
+
+The latest discovery preflight passed generation, clean TypeScript build,
+generated freshness and focused tests. Independent review corrections for export selection and publication
+confinement are resolved. Full release coverage and
+final security review remain due after the remaining implementation.

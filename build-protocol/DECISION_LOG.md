@@ -7069,3 +7069,18 @@ whole records, or silently accepts unknown subscription activation. It preserves
 complete stored Entity state while permitting arbitrary returned-view edits.
 Implementation follows the task ledger and bounded milestones; no PR or merge
 is authorized.
+
+### Transitive metadata imports (M06)
+
+The [focused resolution](tasks/app-queries-read-filters/M06_RESOLUTION.md)
+addresses a participant installed only beneath a nonparticipating dependency.
+Generation resolves the published metadata export, then emits static source and
+compiled-location JavaScript/declaration adapters behind one stable bootstrap
+import. Existing generation transactions and clean-build restoration include
+these generated assets. No runtime discovery or manual registry path is added.
+
+Generate against the installed dependency graph before compiling or bundling.
+Relocating the complete generated application and dependency closure preserves
+relative imports. Installing a different graph requires ordinary regeneration;
+published dependency metadata remains reusable by each consuming application's
+build. This is an internal build decision within the approved discovery contract.

@@ -54,7 +54,8 @@ export const HandlerGeneration: Readonly<{ generate(applicationRoot: string): vo
         { appRoot: applicationRoot },
         {
           write(path, source) {
-            writeFileSync(path, generatedSource(source, sources), "utf8");
+            const typedSource = /\.spine-(?:metadata|bootstrap)\.ts\./u.test(path);
+            writeFileSync(path, typedSource ? generatedSource(source, sources) : source, "utf8");
           },
         },
       );

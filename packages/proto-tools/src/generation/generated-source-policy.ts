@@ -131,23 +131,29 @@ const generatedPolicy = Object.freeze({
           path,
         ) ||
           /[\\/]interfaces[\\/].+\.ts$/u.test(path))
-      ) {
-        const source = readFileSync(path, "utf8");
-        const derived = [
-          ...source.matchAll(/from "(?:[^" ]+\/generated\/)?([^" ]+)_pb\.js"/gu),
-        ].map(
-          (match) =>
-            (match[1] ?? "").replace(/^\.\//u, "").replace(/^.*?spine\//u, "spine/") + ".proto",
-        );
-        const generated = [...source.matchAll(/@generated from file ([^\s)]+)/gu)].map(
-          (match) => match[1] ?? "",
-        );
-        const provenance =
-          generated.length > 0 ? generated : derived.length > 0 ? derived : sources;
-        if (provenance.length > 0)
-          writeFileSync(path, generatedPolicy.generatedSource(source, provenance), "utf8");
-      }
+      )
+        generatedPolicy.normalizeGeneratedFile(path, sources);
     }
+  },
+
+  /**
+   * Restores stable Proto provenance for one generated TypeScript file.
+   *
+   * @param path Generated file path.
+   * @param sources Stable fallback Proto source paths.
+   */
+  normalizeGeneratedFile(path: string, sources: readonly string[]): void {
+    const source = readFileSync(path, "utf8");
+    const derived = [...source.matchAll(/from "(?:[^" ]+\/generated\/)?([^" ]+)_pb\.js"/gu)].map(
+      (match) =>
+        (match[1] ?? "").replace(/^\.\//u, "").replace(/^.*?spine\//u, "spine/") + ".proto",
+    );
+    const generated = [...source.matchAll(/@generated from file ([^\s)]+)/gu)].map(
+      (match) => match[1] ?? "",
+    );
+    const provenance = generated.length > 0 ? generated : derived.length > 0 ? derived : sources;
+    if (provenance.length > 0)
+      writeFileSync(path, generatedPolicy.generatedSource(source, provenance), "utf8");
   },
 
   /**

@@ -18,7 +18,7 @@ import {
 } from "node:fs";
 import { constants } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 import { reusableGenerationId } from "../packages/proto-tools/src/generation/generation-reuse.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
@@ -48,15 +48,15 @@ export const generatedTargets = [
  */
 export const modelAtomicTargets = [
   {
+    displayPath: "packages/server/test-fixtures/generated",
+    packagePath: "packages/server/test-fixtures",
+    moduleName: "ServerTestFixtures",
+  },
+  {
     displayPath: "packages/server-blackbox-tests/generated",
     packagePath: "packages/server-blackbox-tests",
     moduleName: "ServerBlackBoxTests",
     handlerProjectPath: "packages/server-blackbox-tests/tsconfig.json",
-  },
-  {
-    displayPath: "packages/server/test-fixtures/generated",
-    packagePath: "packages/server/test-fixtures",
-    moduleName: "ServerTestFixtures",
   },
   {
     displayPath: "packages/core/test-fixtures/generated",
@@ -723,6 +723,16 @@ function validatePublicationJournal(root, journal) {
     ...allowedManifests,
     join(root, "examples/message-board/app/src/model-registry.ts"),
   ]);
+  const adapterTarget = (path) =>
+    modelAtomicTargets.some((target) => {
+      if (target.handlerProjectPath === undefined) return false;
+      const application = join(root, dirname(target.handlerProjectPath));
+      const within = relative(application, path).split(sep);
+      return (
+        within[0] === "dist" &&
+        ["spine-dependencies.js", "spine-dependencies.d.ts"].includes(basename(path))
+      );
+    });
   if (!Array.isArray(files) || new Set(files.map((entry) => entry?.target)).size !== files.length)
     throw new Error("invalid publication journal");
   if (journal.state === "committing" && files.length === 0)
@@ -736,7 +746,9 @@ function validatePublicationJournal(root, journal) {
       typeof file.backup !== "string" ||
       typeof file.hadPrevious !== "boolean" ||
       typeof file.contents !== "string" ||
-      !allowedFiles.has(file.target) ||
+      (file.retire !== undefined && file.retire !== true) ||
+      (file.retire === true && !adapterTarget(file.target)) ||
+      (!allowedFiles.has(file.target) && !adapterTarget(file.target)) ||
       !isStagedSibling(dirname(file.target), file.staged) ||
       dirname(file.backup) !== dirname(file.target) ||
       !(
@@ -817,8 +829,10 @@ function recoverPublication(root, operations = defaultPublicationOperations) {
   const committed =
     journal.state === "committed" ||
     (journal.state === "committing" &&
-      journalFiles(journal).every(
-        (file) => existsSync(file.target) && readFileSync(file.target, "utf8") === file.contents,
+      journalFiles(journal).every((file) =>
+        file.retire === true
+          ? !existsSync(file.target)
+          : existsSync(file.target) && readFileSync(file.target, "utf8") === file.contents,
       ));
 
   if (!committed) {
@@ -1028,7 +1042,7 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
       writePublicationJournal(journalPath, journal, operations);
       for (const file of journalFiles(journal)) {
         if (file.hadPrevious) operations.rename(file.target, file.backup);
-        operations.rename(file.staged, file.target);
+        if (file.retire !== true) operations.rename(file.staged, file.target);
       }
     }
     journal.state = "committed";
@@ -1049,8 +1063,78 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
 
 function removeStagedTargets(stagedTargets) {
   for (const stagedTarget of stagedTargets) {
+    for (const file of stagedTarget.files ?? [])
+      if (basename(file.target).startsWith("spine-dependencies."))
+        rmSync(dirname(file.staged), { recursive: true, force: true });
     rmSync(stagedTarget.stageRoot, { recursive: true, force: true });
   }
+}
+
+function stageRuntimeAdapters(application, generatedRoot, root) {
+  const record = join(generatedRoot, "spine-dependencies.json");
+  if (!existsSync(record)) throw new Error(`Missing generated dependency adapters: ${record}`);
+  const payload = JSON.parse(readFileSync(record, "utf8"));
+  if (
+    payload.formatVersion !== 2 ||
+    !Array.isArray(payload.inputs) ||
+    !Array.isArray(payload.edges) ||
+    !Array.isArray(payload.runtime)
+  )
+    throw new Error(`Malformed generated dependency adapters: ${record}`);
+  const previousRecord = join(application, "generated/spine-dependencies.json");
+  const previous = existsSync(previousRecord)
+    ? JSON.parse(readFileSync(previousRecord, "utf8"))
+    : { runtime: [] };
+  if (!Array.isArray(previous.runtime))
+    throw new Error(`Malformed prior generated dependency adapters: ${previousRecord}`);
+  const current = payload.runtime.map((asset) => ({
+    ...asset,
+    target: adapterTarget(application, asset, root),
+  }));
+  const currentPaths = new Set(current.map(({ target }) => target));
+  const retired = previous.runtime
+    .map((asset) => ({
+      target: adapterTarget(application, asset, root),
+      source: "",
+      retire: true,
+    }))
+    .filter(({ target }) => !currentPaths.has(target) && existsSync(target));
+  const staged = [];
+  try {
+    for (const asset of [...current, ...retired]) {
+      const stage = mkdtempSync(join(dirname(asset.target), ".generated-"));
+      const file = join(stage, basename(asset.target));
+      staged.push({
+        target: asset.target,
+        staged: file,
+        ...(asset.retire === true ? { retire: true } : {}),
+      });
+      writeFileSync(file, asset.source);
+    }
+    return staged;
+  } catch (error) {
+    for (const asset of staged) rmSync(dirname(asset.staged), { recursive: true, force: true });
+    throw error;
+  }
+}
+
+function adapterTarget(application, asset, root) {
+  if (
+    typeof asset?.path !== "string" ||
+    (asset.source !== undefined && typeof asset.source !== "string")
+  )
+    throw new Error("Malformed generated dependency adapter");
+  const target = resolve(application, asset.path);
+  const within = relative(application, target);
+  if (
+    within.startsWith("..") ||
+    isAbsolute(within) ||
+    !["spine-dependencies.js", "spine-dependencies.d.ts"].includes(basename(target)) ||
+    !assertGeneratedPathSafe(root, relative(root, dirname(target)))
+  )
+    throw new Error(`Unsafe generated dependency adapter: ${asset.path}`);
+  mkdirSync(dirname(target), { recursive: true });
+  return target;
 }
 
 function createTargetStage(target, root = repoRoot) {
@@ -1207,6 +1291,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
   const output = join(packageRoot, "generated");
   const run = options.runModelCommand ?? runCommandIn;
   let handlerStagedTarget;
+  let runtimeFiles = [];
   try {
     for (const name of ["package.json", "spine-proto.json", "proto"]) {
       cpSync(join(livePackageRoot, name), join(packageRoot, name), {
@@ -1351,6 +1436,10 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
           );
     if (handlerStatus !== 0)
       throw new Error(`${target.moduleName} handler registry post-step failed`);
+    if (target.handlerProjectPath !== undefined) {
+      runtimeFiles = stageRuntimeAdapters(consumerRoot, handlerOutput, root);
+      if (handlerStagedTarget !== undefined) handlerStagedTarget.files = runtimeFiles;
+    }
     const modelSources = findProtoFiles(join(livePackageRoot, "proto")).map((path) =>
       relative(join(livePackageRoot, "proto"), path).split(sep).join("/"),
     );
@@ -1378,6 +1467,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
             target: join(livePackageRoot, "spine-proto-manifest.json"),
             staged: join(packageRoot, "spine-proto-manifest.json"),
           },
+          ...(handlerStagedTarget === undefined ? runtimeFiles : []),
         ],
       },
       ...(handlerStagedTarget === undefined ? {} : { handlerStagedTarget }),
@@ -1388,6 +1478,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
     );
     if (handlerStagedTarget !== undefined)
       rmSync(handlerStagedTarget.stageRoot, { recursive: true, force: true });
+    for (const file of runtimeFiles) rmSync(dirname(file.staged), { recursive: true, force: true });
     rmSync(stageRoot, { recursive: true, force: true });
     return { status: 1 };
   }
@@ -1577,10 +1668,11 @@ export function generateTargets(options = {}) {
               staged: stagedFile.staged,
               backup: join(
                 dirname(stagedFile.target),
-                `.spine-proto-manifest.backup-${randomUUID()}`,
+                `.${basename(stagedFile.target)}.backup-${randomUUID()}`,
               ),
               hadPrevious: existsSync(stagedFile.target),
               contents: readFileSync(stagedFile.staged, "utf8"),
+              ...(stagedFile.retire === true ? { retire: true } : {}),
             });
           }
         }

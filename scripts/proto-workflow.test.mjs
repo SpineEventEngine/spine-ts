@@ -347,6 +347,7 @@ function rootStageCommand(label, _executable, args) {
     const output = args[args.indexOf("--out") + 1];
     mkdirSync(dirname(output), { recursive: true });
     writeFileSync(output, "handler\n");
+    writeMockAdapterRecord(output);
     return 0;
   }
   const template = readFileSync(args.at(-1), "utf8");
@@ -402,6 +403,7 @@ function writeTodoGenerationState(packageRoot, generationId, options = {}) {
   if (options.handler === true) {
     writeFileSync(join(generatedRoot, "spine-metadata.ts"), "handler\n");
     writeFileSync(join(generatedRoot, "spine-bootstrap.ts"), "bootstrap\n");
+    writeMockAdapterRecord(join(generatedRoot, "spine-metadata.ts"));
     normalizeGeneratedTypeScriptTree(generatedRoot, ["todo.proto"]);
   }
   writeFileSync(
@@ -428,8 +430,24 @@ function todoStageCommand(failure, writeManifest = true, configure) {
     mkdirSync(dirname(output), { recursive: true });
     writeFileSync(output, "handler\n");
     writeFileSync(join(dirname(output), "spine-bootstrap.ts"), "bootstrap\n");
+    writeMockAdapterRecord(output);
     return 0;
   };
+}
+
+function writeMockAdapterRecord(output) {
+  writeFileSync(
+    join(dirname(output), "spine-dependencies.json"),
+    JSON.stringify({
+      formatVersion: 2,
+      inputs: [],
+      edges: [],
+      runtime: [
+        { path: "dist/generated/spine-dependencies.js", source: "export {};\n" },
+        { path: "dist/generated/spine-dependencies.d.ts", source: "export {};\n" },
+      ],
+    }),
+  );
 }
 
 function messageBoardCompositionCommand(failure) {
@@ -495,6 +513,7 @@ function applicationModelStageCommand(failure) {
     if (output === undefined) return 1;
     mkdirSync(dirname(output), { recursive: true });
     writeFileSync(output, "handler\n");
+    writeMockAdapterRecord(output);
     return 0;
   };
 }
@@ -1170,8 +1189,8 @@ describe("proto-workflow", () => {
       "packages/proto/generated",
     ]);
     expect(modelAtomicTargets.map((target) => target.displayPath)).toEqual([
-      "packages/server-blackbox-tests/generated",
       "packages/server/test-fixtures/generated",
+      "packages/server-blackbox-tests/generated",
       "packages/core/test-fixtures/generated",
       "packages/testing/test-fixtures/generated",
       "examples/todo/generated",
@@ -1183,8 +1202,8 @@ describe("proto-workflow", () => {
     ]);
     expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
-      "packages/server-blackbox-tests/generated",
       "packages/server/test-fixtures/generated",
+      "packages/server-blackbox-tests/generated",
       "packages/core/test-fixtures/generated",
       "packages/testing/test-fixtures/generated",
       "examples/todo/generated",
@@ -1304,6 +1323,7 @@ describe("proto-workflow", () => {
             mkdirSync(dirname(output), { recursive: true });
             writeFileSync(output, "handler\n");
             writeFileSync(join(dirname(output), "spine-bootstrap.ts"), "bootstrap\n");
+            writeMockAdapterRecord(output);
             return 0;
           }
           return 1;
@@ -1339,6 +1359,38 @@ describe("proto-workflow", () => {
 
   it("executes handler analysis against staged schemas behind a workspace package symlink", () => {
     const fixture = stagedHandlerRegistryFixture();
+    writeFileSync(
+      join(fixture.appRoot, "package.json"),
+      JSON.stringify({
+        name: "@example/app",
+        version: "1.0.0",
+        dependencies: { "@example/model": "1.0.0" },
+      }),
+    );
+    const modelManifest = join(fixture.modelRoot, "package.json");
+    const modelPackage = JSON.parse(readFileSync(modelManifest, "utf8"));
+    writeFileSync(
+      modelManifest,
+      JSON.stringify({
+        ...modelPackage,
+        version: "1.0.0",
+        exports: {
+          ...modelPackage.exports,
+          "./spine": {
+            types: "./dist/generated/spine-metadata.d.ts",
+            default: "./dist/generated/spine-metadata.js",
+          },
+        },
+      }),
+    );
+    writeFileSync(
+      join(fixture.liveRoot, "spine-metadata.js"),
+      "export const spineMetadata = { receivers: [] };\n",
+    );
+    writeFileSync(
+      join(fixture.liveRoot, "spine-metadata.d.ts"),
+      "export declare const spineMetadata: object;\n",
+    );
     const generatedRoot = join(fixture.appRoot, "generated");
     const output = join(generatedRoot, "handler-registry.ts");
     const script = fileURLToPath(new URL("./generate-handler-registry.mjs", import.meta.url));
@@ -1382,6 +1434,12 @@ describe("proto-workflow", () => {
       expect(readFileSync(output, "utf8")).toContain("TaskAggregate");
       expect(readFileSync(output, "utf8")).toContain("CreateTaskSchema");
       expect(readFileSync(output, "utf8")).toContain("TaskCreatedSchema");
+      expect(readFileSync(join(generatedRoot, "spine-bootstrap.ts"), "utf8")).toContain(
+        'from "./spine-dependencies.js"',
+      );
+      expect(readFileSync(join(generatedRoot, "spine-dependencies.js"), "utf8")).toContain(
+        "packages/model/dist/generated/spine-metadata.js",
+      );
     } finally {
       rmSync(fixture.root, { recursive: true, force: true });
     }
@@ -1523,6 +1581,39 @@ describe("proto-workflow", () => {
       cleanupStagedTargets(staged.stagedTargets);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("retires the previous emitted adapter paths when generation moves output", () => {
+    const root = todoTransactionFixture();
+    const app = join(root, "examples/todo");
+    const old = join(app, "dist/old-generated/spine-dependencies.js");
+    try {
+      mkdirSync(dirname(old), { recursive: true });
+      writeFileSync(old, "prior adapter\n");
+      writeFileSync(
+        join(app, "generated/spine-dependencies.json"),
+        JSON.stringify({
+          formatVersion: 1,
+          runtime: [
+            { path: "dist/old-generated/spine-dependencies.js", source: "prior adapter\n" },
+          ],
+        }),
+      );
+
+      expect(
+        generateTargets({
+          repoRoot: root,
+          runCommand: rootStageCommand,
+          runModelCommand: todoStageCommand(undefined),
+        }),
+      ).toBe(0);
+      expect(existsSync(old)).toBe(false);
+      expect(readFileSync(join(app, "dist/generated/spine-dependencies.js"), "utf8")).toBe(
+        "export {};\n",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 
@@ -2754,6 +2845,56 @@ describe("proto-workflow", () => {
     ).toThrow("manifest replacement failed");
 
     expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("previous output\n");
+  });
+
+  it("retires a prior adapter after an output move and restores it on publication failure", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-proto-adapter-retire-"));
+    const directory = join(root, "examples/todo/dist/old-generated");
+    mkdirSync(directory, { recursive: true });
+    const target = join(directory, "spine-dependencies.js");
+    const staged = join(directory, ".generated-retire/spine-dependencies.js");
+    const backup = join(directory, ".spine-dependencies.js.backup-test");
+    mkdirSync(dirname(staged), { recursive: true });
+    writeFileSync(target, "prior adapter\n");
+    writeFileSync(staged, "");
+    const file = { target, staged, backup, hadPrevious: true, contents: "", retire: true };
+    const nextDirectory = join(root, "examples/todo/dist/new-generated");
+    const nextTarget = join(nextDirectory, "spine-dependencies.d.ts");
+    const nextStage = join(nextDirectory, ".generated-next/spine-dependencies.d.ts");
+    mkdirSync(dirname(nextStage), { recursive: true });
+    writeFileSync(nextStage, "next adapter\n");
+    const nextFile = {
+      target: nextTarget,
+      staged: nextStage,
+      backup: join(nextDirectory, ".spine-dependencies.d.ts.backup-test"),
+      hadPrevious: false,
+      contents: "next adapter\n",
+    };
+    let failed = false;
+
+    expect(() =>
+      publishGeneratedTargets([], root, {
+        files: [file, nextFile],
+        operations: {
+          rename(from, to) {
+            if (!failed && from === nextStage && to === nextTarget) {
+              failed = true;
+              throw new Error("later failure");
+            }
+            renameSync(from, to);
+          },
+        },
+      }),
+    ).toThrow("later failure");
+    expect(readFileSync(target, "utf8")).toBe("prior adapter\n");
+    expect(existsSync(nextTarget)).toBe(false);
+    mkdirSync(dirname(staged), { recursive: true });
+    writeFileSync(staged, "");
+    mkdirSync(dirname(nextStage), { recursive: true });
+    writeFileSync(nextStage, "next adapter\n");
+    publishGeneratedTargets([], root, { files: [file, nextFile] });
+    expect(existsSync(target)).toBe(false);
+    expect(readFileSync(nextTarget, "utf8")).toBe("next adapter\n");
   });
 
   it("restores prior output when the staged-root rename fails", () => {

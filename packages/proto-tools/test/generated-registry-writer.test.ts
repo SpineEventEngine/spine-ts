@@ -41,7 +41,7 @@ describe("generated registry writer", () => {
     expect(source).toContain('registerSpineMetadata(spineMetadata, "./spine-metadata.js")');
     expect(source).not.toContain("new Server");
   });
-  it.each(["customMetadata", "registerSpineMetadata"])(
+  it.each(["customMetadata", "SpineMetadataInventory", "registerSpineMetadata"])(
     "uses supported metadata export %s in the compiled bootstrap",
     (registryName) => {
       const repoRoot = createCompileFixture();
@@ -59,6 +59,10 @@ describe("generated registry writer", () => {
         ),
       );
       writeFileSync(bootstrapFile, writer.renderBootstrap({ registryName }));
+      writeFileSync(
+        join(repoRoot, "packages/demo/generated/spine-dependencies.d.ts"),
+        "export {};\n",
+      );
 
       expect(readFileSync(bootstrapFile, "utf8")).toContain(`import { ${registryName} }`);
       expect(compileIsolatedDeclarations(bootstrapFile)).toEqual([]);

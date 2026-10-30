@@ -28,6 +28,8 @@ import ts from "typescript";
 
 import { BuildHandlerAnalyzer } from "./build-time-handler-analyzer.js";
 import { GeneratedRegistryWriter } from "./generated-registry-writer.js";
+import { RuntimeMetadataAssets } from "./runtime-metadata-assets.js";
+import { RuntimeMetadataGraph } from "./runtime-metadata-graph.js";
 
 /**
  * Options for application-local generated handler registry production.
@@ -115,42 +117,59 @@ export function generateHandlerRegistry(
 ): void {
   const appRoot = HandlerFiles.directory(resolve(options.appRoot), "Application root");
   const project = HandlerFiles.file(appRoot, join(appRoot, "tsconfig.json"), "Project");
-  const generatedRoot = HandlerFiles.path(appRoot, join(appRoot, "generated"), "Generated root");
-  const outputFile = HandlerFiles.path(
-    generatedRoot,
-    join(generatedRoot, "spine-metadata.ts"),
-    "Generated output",
-  );
+  const { outputFile, bootstrapFile, oldOutput } = HandlerFiles.outputPaths(appRoot);
   const { program, sources } = HandlerFiles.program(appRoot, project);
   const analysis = BuildHandlerAnalyzer.analyze(program, sources);
-
   if (analysis.diagnostics.length > 0)
     throw new Error(HandlerFiles.diagnostics(analysis.diagnostics));
-
   const writer = new GeneratedRegistryWriter();
   const source = writer.render(analysis, { ...options, outputFile });
-  const bootstrapFile = HandlerFiles.path(
-    generatedRoot,
-    join(generatedRoot, "spine-bootstrap.ts"),
-    "Generated bootstrap",
-  );
-  const oldOutput = HandlerFiles.path(
-    generatedRoot,
-    join(generatedRoot, "handler/generated-handler-registry.ts"),
-    "Superseded output",
-  );
   (operations.mkdir ?? defaultOperations.mkdir)(dirname(outputFile));
-  HandlerFiles.writePair(
-    outputFile,
-    source,
+  const format = RuntimeMetadataGraph.format(appRoot);
+  const dependencies = RuntimeMetadataGraph.resolve(appRoot, [], format);
+  const bootstrap = writer.renderBootstrap({ dependencies });
+  const assets = RuntimeMetadataAssets.render(
+    project,
     bootstrapFile,
-    writer.renderBootstrap(),
-    oldOutput,
-    operations,
+    bootstrapFile,
+    dependencies,
+    writer,
+    format,
   );
+  const files = [
+    { file: outputFile, source },
+    { file: bootstrapFile, source: bootstrap },
+    ...assets.source,
+    ...assets.runtime,
+    assets.record,
+  ];
+  HandlerFiles.writePair(appRoot, files, oldOutput, operations);
 }
 
 const HandlerFiles = Object.freeze({
+  /**
+   * Validates all generated handler paths before any output is published.
+   *
+   * @param appRoot Confined application package root.
+   * @returns Metadata, bootstrap, and retired output paths.
+   */
+  outputPaths(appRoot: string): { outputFile: string; bootstrapFile: string; oldOutput: string } {
+    const root = HandlerFiles.path(appRoot, join(appRoot, "generated"), "Generated root");
+    return {
+      outputFile: HandlerFiles.path(root, join(root, "spine-metadata.ts"), "Generated output"),
+      bootstrapFile: HandlerFiles.path(
+        root,
+        join(root, "spine-bootstrap.ts"),
+        "Generated bootstrap",
+      ),
+      oldOutput: HandlerFiles.path(
+        root,
+        join(root, "handler/generated-handler-registry.ts"),
+        "Superseded output",
+      ),
+    };
+  },
+
   /**
    * Creates a bounded TypeScript program from an application project.
    *
@@ -174,7 +193,9 @@ const HandlerFiles = Object.freeze({
       throw new Error("Project references are not supported for handler generation.");
     if (parsed.fileNames.length > maxCompilerRoots)
       throw new Error(`Handler source count exceeds ${String(maxCompilerRoots)}.`);
-    const roots = parsed.fileNames.map((file) => HandlerFiles.typeScriptFile(appRoot, file));
+    const roots = parsed.fileNames
+      .filter((file) => file !== join(appRoot, "generated/spine-dependencies.d.ts"))
+      .map((file) => HandlerFiles.typeScriptFile(appRoot, file));
     const program = ts.createProgram({
       rootNames: roots,
       options: parsed.options,
@@ -427,41 +448,36 @@ const HandlerFiles = Object.freeze({
   },
 
   /**
-   * Publishes both generated files, restoring live metadata on publication failure.
+   * Publishes generated source and adapter files with rollback on failure.
    *
-   * @param metadataFile Published metadata path.
-   * @param metadataSource Generated metadata source.
-   * @param bootstrapFile Published bootstrap path.
-   * @param bootstrapSource Generated bootstrap source.
+   * @param appRoot Confined application package root.
+   * @param files Published files and their generated content.
    * @param retiredFile Superseded generated output removed after both files publish.
    * @param operations Filesystem hooks for publication.
    */
   writePair(
-    metadataFile: string,
-    metadataSource: string,
-    bootstrapFile: string,
-    bootstrapSource: string,
+    appRoot: string,
+    files: readonly { readonly file: string; readonly source: string }[],
     retiredFile: string,
     operations: Partial<HandlerCodegenOperations>,
   ): void {
+    for (const { file } of files) HandlerFiles.path(appRoot, file, "Generated adapter");
     const fileOperations = { ...defaultOperations, ...operations };
-    const metadataStage = HandlerFiles.stage(metadataFile);
-    const bootstrapStage = HandlerFiles.stage(bootstrapFile);
+    const unique = [...new Map(files.map(({ file, source }) => [file, source])).entries()];
     const stages: string[] = [];
-    const priorMetadata = existsSync(metadataFile) ? readFileSync(metadataFile, "utf8") : undefined;
-    const priorBootstrap = existsSync(bootstrapFile)
-      ? readFileSync(bootstrapFile, "utf8")
-      : undefined;
     const published: { readonly file: string; readonly previous: string | undefined }[] = [];
     try {
-      stages.push(metadataStage);
-      fileOperations.write(metadataStage, metadataSource);
-      stages.push(bootstrapStage);
-      fileOperations.write(bootstrapStage, bootstrapSource);
-      fileOperations.rename(metadataStage, metadataFile);
-      published.push({ file: metadataFile, previous: priorMetadata });
-      fileOperations.rename(bootstrapStage, bootstrapFile);
-      published.push({ file: bootstrapFile, previous: priorBootstrap });
+      for (const [file, source] of unique) {
+        fileOperations.mkdir(dirname(file));
+        const staged = HandlerFiles.stage(file);
+        stages.push(staged);
+        fileOperations.write(staged, source);
+      }
+      for (const [index, [file]] of unique.entries()) {
+        const previous = existsSync(file) ? readFileSync(file, "utf8") : undefined;
+        fileOperations.rename(stages[index] ?? "", file);
+        published.push({ file, previous });
+      }
       fileOperations.remove(retiredFile);
     } catch (primary) {
       HandlerFiles.restorePair(primary, published, stages, fileOperations);

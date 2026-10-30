@@ -87,7 +87,7 @@ import type {
   DescriptorFieldMetadata,
   EntityMetadata,
 } from "../entity/entity-metadata.js";
-import { spineMetadataFor } from "../handler/spine-metadata-inventory.js";
+import { SpineMetadataInventory } from "../handler/spine-metadata-inventory.js";
 import {
   HandlerRegistryIngestor,
   type GeneratedEntityHandlerGroup,
@@ -2990,7 +2990,7 @@ export class BoundedContextBuilder {
       ...entityTypes,
       ...this.#standaloneInstances().map((instance) => instance.constructor),
     ];
-    const registries = [spineMetadataFor(selected)];
+    const registries = [SpineMetadataInventory.select(selected)];
     const metadata = ContextParts.ingestGeneratedRegistries(registries);
 
     const repositories = Object.freeze(
