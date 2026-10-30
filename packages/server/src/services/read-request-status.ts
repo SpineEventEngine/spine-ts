@@ -34,6 +34,24 @@ export type ReadRequestKind = "query" | "topic" | "subscription";
  */
 export const ReadRequestStatus = {
   /**
+   * Creates the status for a well-formed activation without a registry record.
+   *
+   * @returns A structured NotFound status for direct and managed clients.
+   */
+  unknownSubscription(): ConnectError {
+    const message = "Subscription is unknown to this server.";
+    const value = create(ErrorSchema, {
+      type: "spine.client.SubscriptionValidationError",
+      code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+      message,
+    });
+    const metadata = new Headers({
+      "spine-error-bin": Buffer.from(toBinary(ErrorSchema, value)).toString("base64"),
+    });
+    return new ConnectError(message, Code.NotFound, metadata, [{ desc: ErrorSchema, value }]);
+  },
+
+  /**
    * Validates a complete request and sanitizes unexpected validator failures.
    *
    * @param kind The public request kind.

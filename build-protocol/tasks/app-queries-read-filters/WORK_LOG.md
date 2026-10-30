@@ -279,3 +279,32 @@ Next: M04 under existing app_query_implementation, explicitly configured
 Sol/medium. Estimate: 0.75–1.25 hours for unknown activation, bounded client
 recovery, focused tests, review and synchronization. Scope and acceptance are
 in M04.md. No permission pause, PR, master write or merge.
+
+## M03 remote synchronization and M13 preparation
+
+Feature commit 54520ee63796349725a4a8100a0429285606e29d pushed successfully
+to origin/app-queries-read-filters; remote ref equality was checked. M04 is
+active under the existing implementer.
+
+Read-only preparation: reuse app_query_baseline, explicitly configured
+gpt-6-luna / low, to map Entity/Event subscription delivery roots, original
+identity, Topic/context copies, queues/cancellation and managed fan-out for
+M13. Write only M13_BASELINE.md; no production/test changes or test runs.
+This is independent source inventory, not a security or implementation review.
+Runtime metadata remains unavailable.
+
+## M04 acceptance and M05 dispatch preparation
+
+M04 is accepted: native unknown/expired activation reports the structured reason,
+Coordinator preserves it, and client recovery is bounded with fresh IDs. All
+four reviewer concerns are resolved. Main confirmed complete domain fixtures
+and the idempotent-cancel wording; final diff check passes. Commit/push follows.
+The corrected M13 read-only baseline is accepted; source history views remain
+M12 filtering scope and ordinary removal notices remain distinct from recovery.
+
+Next M05 under the existing explicit Sol/medium implementer: passive
+generated/spine-metadata.ts, local bootstrap and removal of per-BC registry
+roots, with directly affected consumers/tests. Estimate 1.5–2.5 hours includes
+generation/runtime changes, consumer migration, tests and review. M06 adds
+transitive package discovery afterward. No runtime filesystem scans or new
+registry-root API. Full accepted details are in M05.md and M05_BASELINE.md.

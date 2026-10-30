@@ -52,6 +52,7 @@ import {
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionService,
+  SubscriptionValidationError,
   SubscriptionUpdateSchema,
   TopicSchema,
   TopicIdSchema,
@@ -534,6 +535,40 @@ describe("NodeCoordinator", () => {
     await vi.waitFor(() => {
       expect(replica.cancellations()).toBe(1);
     });
+  });
+
+  it("forwards a child's structured unknown-subscription activation failure", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.SubscriptionValidationError",
+      code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+      message: "Subscription is unknown to this server.",
+    });
+    const replica = await backend("unknown-child", {
+      activateError: new ConnectError(detail.message, Code.NotFound, undefined, [
+        { desc: ErrorSchema, value: detail },
+      ]),
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    const iterator = client.activate(subscription)[Symbol.asyncIterator]();
+    const failure = await iterator.next().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(ConnectError);
+    expect((failure as ConnectError).code).toBe(Code.NotFound);
+    expect((failure as ConnectError).findDetails(ErrorSchema)).toEqual([detail]);
+    expect(replica.activations()).toBe(1);
   });
 
   it("cancels active native streams when the public subscription stream aborts", async () => {
@@ -1299,6 +1334,7 @@ async function backend(
     readonly cancelFailures?: number;
     readonly subscribeGate?: Promise<undefined>;
     readonly subscriptionStarted?: { readonly resolve: (value: undefined) => void };
+    readonly activateError?: ConnectError;
   } = {},
 ): Promise<{
   readonly member: ReadyMember;
@@ -1344,6 +1380,7 @@ async function backend(
           },
           activate: async function* (subscription, context) {
             value.activations++;
+            if (options.activateError !== undefined) throw options.activateError;
             if (options.observeActivationAbort)
               context.signal.addEventListener(
                 "abort",

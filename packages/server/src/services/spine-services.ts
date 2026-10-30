@@ -553,7 +553,7 @@ export class SpineServices {
    */
   async #startActivationRecord(id: string): Promise<SubscriptionRecord | undefined> {
     const record = this.#subscriptions.get(id) ?? (await this.#findSubscription(id));
-    if (record === undefined) return undefined;
+    if (record === undefined) throw ReadRequestStatus.unknownSubscription();
     let attached: SubscriptionRecord | undefined;
     await this.#requireSubscriptionTenant(record, async () => {
       attached = await this.#activateKnownRecord(record, id);
@@ -576,8 +576,9 @@ export class SpineServices {
     const activation = await boundedContextAccess
       .subscriptionRegistry(record.route.context)
       .activate(create(SubscriptionIdSchema, { value: id }));
-    if (activation.kind === "missing" || activation.kind === "expired" || record.delivery.closed)
-      return undefined;
+    if (activation.kind === "missing" || activation.kind === "expired")
+      throw ReadRequestStatus.unknownSubscription();
+    if (record.delivery.closed) return undefined;
     try {
       this.#subscriptions.set(id, record);
       await this.#activateRecord(record);

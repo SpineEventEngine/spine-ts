@@ -51,6 +51,7 @@ import {
   QueryResponseSchema,
   QueryService,
   SubscriptionService,
+  SubscriptionValidationError,
   SubscriptionUpdateSchema,
   TargetSchema,
   TopicSchema,
@@ -1778,12 +1779,25 @@ class TopicSubscription implements Subscription {
    * @returns Whether the failure permits another connection attempt.
    */
   #retryable(error: unknown): boolean {
-    if (
-      error instanceof ConnectError &&
-      error.code === Code.NotFound &&
-      error.findDetails(ErrorSchema).some((detail) => detail.type === "TENANT_UNKNOWN")
-    )
-      return false;
+    if (error instanceof ConnectError) {
+      if (error.code === Code.NotFound) {
+        const unknownReason: number = SubscriptionValidationError.UNKNOWN_SUBSCRIPTION;
+        return error
+          .findDetails(ErrorSchema)
+          .some(
+            (detail) =>
+              detail.type === "spine.client.SubscriptionValidationError" &&
+              detail.code === unknownReason,
+          );
+      }
+      return (
+        error.code === Code.Unavailable ||
+        error.code === Code.DeadlineExceeded ||
+        error.code === Code.Aborted ||
+        error.code === Code.Internal ||
+        error.code === Code.Unknown
+      );
+    }
     return (
       error instanceof SubscriptionStreamEndedError ||
       (error instanceof Error &&

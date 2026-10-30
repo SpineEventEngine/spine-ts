@@ -230,3 +230,60 @@ Correction evidence: 3 red then 3 green tests, 175/175 affected tests, 375/375 s
 97.6% changed statements and 96.4% branch arms, affected build and cheap checks. The earlier
 456-test shared/transport run and installed consumer remain valid for untouched
 core/Proto code. Full release and security gates remain M14.
+
+## M04 planned review assignments
+
+Base: accepted/pushed 54520ee63. Dispatch after frozen handoff and focused
+preflight. Read TASK ledger, M04.md and the unknown-activation/recovery section
+of PROPOSAL.md. Existing reviewers retain their explicitly configured profiles;
+actual runtime metadata remains unavailable. No source edits or descendants.
+
+- app_query_m01_api, TypeScript/API, gpt-6-sol / medium: enum-qualified
+  UNKNOWN_SUBSCRIPTION and NOT_FOUND contract, native/Connect details, exact
+  client error classification and preservation of valid/invalid distinctions.
+- app_query_m03_reliability, performance/reliability, gpt-6-sol / medium:
+  registry missing/expired versus duplicate/closed behavior, activation races,
+  bounded fresh-ID recovery, cancellation, Entity resynchronization/Event gaps.
+- app_query_m03_style, style/maintainability, gpt-6-sol / medium: bounded
+  runtime changes, reuse of queues/status helpers, domain fixtures, TSDoc.
+- app_query_m03_docs, documentation, gpt-6-luna / medium: changed lifecycle
+  and retry claims in current API/package docs, no broad tutorial expansion.
+
+Collect the complete relevant wave before corrections. Final security and
+release gate remain M14. Deterministic record wording corrections to M13 source
+inventory are complete; they do not add a runtime review lane.
+
+### M04 review dispatch
+
+Final 291-test focused run, affected generated build and cheap checks passed.
+Changed coverage is 93.8% statements and 94.7% branch arms. Main independently
+confirmed git diff --check and inspected M04 evidence. The three technical
+reviewers are dispatched with their immutable explicit Sol/medium profiles;
+documentation follows as a slot becomes available. Estimate: 0.2–0.4 hours
+for review and bounded corrections. Production remains frozen.
+
+## M04 complete wave and correction batch
+
+All four concern reviews completed using recorded explicit profiles; no visible
+mismatch, runtime self-introspection unavailable. API and reliability are clean.
+Accept style P2: new mocked successful recovery paths must use complete,
+domain-correct Topics and authoritative Query requests, not empty Topics or a
+fictitious Entity type URL. Validate requests observed by the mock transport
+where useful so it cannot silently accept shapes the actual service rejects.
+This is a fixture correction, not runtime expansion. Accept docs P3: state
+that well-formed unknown cancellation remains OK.
+
+One correction batch to existing implementer; estimate 0.1–0.2 hours for valid
+fixtures, focused tests and documentation checks. Runtime is unchanged, so
+reuse runtime coverage/build evidence; focused client suite and fixture
+validation checks suffice. Main will inspect deterministic corrections; no new
+complete review wave or broad test run.
+
+### M04 convergence
+
+API and reliability clean; style fixture and documentation corrections are
+resolved by main inspection. Seven fixture-validation failures reproduced the
+issue before correction; the complete client suite passes 115/115 afterward.
+Scoped lint/format/docs/diff checks pass. Runtime stayed unchanged, so the
+291-test runtime evidence and coverage/build remain current. All four concern
+dispositions accepted, with no remaining finding. Checkpoint ready to push.

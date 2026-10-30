@@ -506,16 +506,26 @@ sanitized `INTERNAL`. A valid read with no matching states succeeds with an
 empty message list.
 `Subscribe` validates the complete Topic before allocating an opaque ID and creating one pending
 definition in the context's Stand registry. `Activate` changes that definition
-to active before attaching this process's delivery; missing or expired
-definitions, and a definition already active for this process, produce no
-updates. `Cancel` and stream finalization release local delivery and physically
-delete the shared definition. Pending definitions expire after 30 seconds.
+to active before attaching this process's delivery. A well-formed activation
+for a missing or expired definition returns `NOT_FOUND` with structured
+`spine.client.SubscriptionValidationError` reason `UNKNOWN_SUBSCRIPTION`;
+an already active definition still produces no duplicate stream. `Cancel` and
+stream finalization release local delivery and physically
+delete the shared definition. Cancelling a well-formed unknown or already removed
+subscription returns OK, preserving idempotent cancellation. Pending definitions
+expire after 30 seconds.
 Malformed Topics reject with `INVALID_ARGUMENT` and structured
 `spine.client.TopicValidationError` reason `INVALID_TOPIC`; unsupported Topic
 targets use `UNSUPPORTED_TOPIC_TARGET`. Malformed `Activate` and `Cancel`
 requests use `spine.client.SubscriptionValidationError` reason
 `INVALID_SUBSCRIPTION`. Declared constraint failures carry packed
 `ValidationError` field paths in the Spine Error detail.
+The managed browser client recreates only a structured `UNKNOWN_SUBSCRIPTION`
+with a fresh server-issued ID within its bounded retry episode. Entity
+subscriptions query authoritative state after reconnecting; Event subscriptions
+emit `gapPossible` because the stream cannot replay missed events. Invalid,
+denied, unauthenticated, tenant-unknown, and unrelated `NOT_FOUND` failures are
+terminal.
 
 The built-in registry has no global quota for retained definitions, and active
 definitions have no framework TTL. Application or ingress admission must bound

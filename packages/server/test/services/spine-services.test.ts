@@ -86,6 +86,7 @@ import {
   type SubscriptionUpdate,
   type Topic,
   SubscriptionIdSchema,
+  SubscriptionValidationError,
   SubscriptionSchema,
   TopicIdSchema,
   TopicSchema,
@@ -3926,7 +3927,7 @@ describe("SpineServices", () => {
     expect(() => handlers.cancel(create(SubscriptionSchema))).toThrow(ConnectError);
   });
 
-  it("keeps registry-missing and expired subscriptions inert during activation", async () => {
+  it("reports registry-missing and expired subscriptions with the structured unknown reason", async () => {
     for (const outcome of ["missing", "expired"] as const) {
       const context = await BoundedContext.singleTenant(`Subscription-${outcome}`)
         .withSubscriptionRegistry(new InertActivationRegistry(outcome))
@@ -3936,12 +3937,19 @@ describe("SpineServices", () => {
 
       try {
         const subscription = await handlers.subscribe(createTopic());
-        await expect(
-          withTimeout(
-            handlers.activate(subscription)[Symbol.asyncIterator]().next(),
-            `${outcome} subscription activation`,
-          ),
-        ).resolves.toEqual({ done: true, value: undefined });
+        const failure = await withTimeout(
+          handlers.activate(subscription)[Symbol.asyncIterator]().next(),
+          `${outcome} subscription activation`,
+        ).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(failure).toBeInstanceOf(ConnectError);
+        expect((failure as ConnectError).code).toBe(Code.NotFound);
+        expect((failure as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+          type: "spine.client.SubscriptionValidationError",
+          code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+        });
       } finally {
         await context.close();
       }
@@ -4438,7 +4446,13 @@ describe("SpineServices", () => {
         topic: createTopic(),
       });
       const unknownIterator = client.activate(unknown)[Symbol.asyncIterator]();
-      const unknownNext = await withTimeout(unknownIterator.next(), "unknown subscription close");
+      const unknownFailure = await withTimeout(
+        unknownIterator.next(),
+        "unknown subscription rejection",
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
       const cancel = await client.cancel(unknown);
       const missingIdCancel = await client.cancel(create(SubscriptionSchema)).then(
         () => undefined,
@@ -4456,7 +4470,21 @@ describe("SpineServices", () => {
       expect(AnyPacker.tryUnpack(state.value, ProjectOverviewStateSchema)).toEqual(
         createState("task-live", "Live"),
       );
-      expect(unknownNext.done).toBe(true);
+      expect(unknownFailure).toMatchObject({ code: Code.NotFound });
+      expect((unknownFailure as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+        type: "spine.client.SubscriptionValidationError",
+        code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+      });
+      const nativeDetail = (unknownFailure as ConnectError).findDetails(ErrorSchema)[0];
+      expect(
+        fromBinary(
+          ErrorSchema,
+          Buffer.from(
+            (unknownFailure as ConnectError).metadata.get("spine-error-bin") ?? "",
+            "base64",
+          ),
+        ),
+      ).toEqual(nativeDetail);
       expect(cancel.status?.status.case).toBe("ok");
       expect(missingIdCancel).toMatchObject({ code: Code.InvalidArgument });
       await client.cancel(subscription);
