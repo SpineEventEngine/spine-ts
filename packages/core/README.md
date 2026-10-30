@@ -102,7 +102,11 @@ Validate.check(UserIdSchema, userId);
 ```
 
 Use `Validate.message()` when the caller needs the returned violations instead
-of an exception.
+of an exception. Pass the application's `TypeRegistryLookup` as the third
+argument when annotated `Any` fields can contain types outside the root
+descriptor's dependency closure. Known malformed payloads and missing members
+of required collections become sanitized violations. Validator failures throw
+a technical error.
 
 ## 📦 Pack and unpack a message
 

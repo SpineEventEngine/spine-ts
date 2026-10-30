@@ -137,12 +137,16 @@ columns and their query operands.
 
 ## Validation
 
-`Validate.message(schema, message)` returns a `MessageValidationResult` whose
+`Validate.message(schema, message, registry?)` returns a `MessageValidationResult` whose
 `valid` discriminator controls access to either an empty violation list or a
-non-empty list and a `ValidationError`. It sanitizes validation details and
-turns a validation-runtime failure into a structured invalid result.
+non-empty list and a `ValidationError`. Pass an application `TypeRegistryLookup`
+for annotated `Any` fields whose payload types are outside the root descriptor's
+dependencies. Known malformed payloads and missing-valued members of required
+collections produce sanitized violations. Unknown `Any` types retain the
+model's allowance, and unannotated fields remain opaque. Validator or
+configuration failures throw a sanitized technical `Error`.
 
-`Validate.check(schema, message)` returns the supplied message when valid and
+`Validate.check(schema, message, registry?)` returns the supplied message when valid and
 throws `ValidationException` otherwise. `ValidationException.asMessage()`
 returns the structured validation message. `Validate.transition(request,
 rules)` applies only the supplied state-transition rules; it does not perform

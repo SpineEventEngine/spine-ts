@@ -43,6 +43,7 @@ import {
   type FileOptions,
 } from "@bufbuild/protobuf/wkt";
 import { validate as validateWithSpine } from "@spine-event-engine/validation";
+import { RegistryValidation } from "./validation/registry-validation.js";
 import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import {
   ActorContextSchema,
@@ -332,7 +333,7 @@ export type MessageValidationResult =
       // prettier-ignore
 
       /**
-       * The message failed validation or the validation runtime failed.
+       * The message failed a declared validation constraint.
        */
       readonly valid: false;
 
@@ -595,22 +596,24 @@ export const Validate = {
    * @typeParam Schema Generated schema of the message being validated.
    * @param schema The message schema.
    * @param message The message to validate.
+   * @param registry Application type lookup for annotated packed messages.
    * @returns The sanitized validation result.
+   * @throws Error if the validator or its configuration fails.
    */
   message<Schema extends MessageSchema>(
     schema: Schema,
     message: MessageShape<Schema>,
+    registry?: TypeRegistryLookup,
   ): MessageValidationResult {
     try {
       return ValidationResults.from(
-        validateWithSpine(schema, message).map((violation) =>
-          ValidationResults.violation(violation),
-        ),
+        [
+          ...validateWithSpine(schema, message),
+          ...RegistryValidation.collect(schema, message, registry),
+        ].map((violation) => ValidationResults.violation(violation)),
       );
     } catch {
-      return ValidationResults.from([
-        ValidationResults.failure(schema.typeName, VALIDATION_RUNTIME_FAILURE_MESSAGE),
-      ]);
+      throw new Error(VALIDATION_RUNTIME_FAILURE_MESSAGE);
     }
   },
 
@@ -619,13 +622,16 @@ export const Validate = {
    * @typeParam Schema Generated schema of the message being validated.
    * @param schema The message schema.
    * @param message The message to validate.
+   * @param registry Application type lookup for annotated packed messages.
    * @returns The validated message.
+   * @throws ValidationException for field constraints, or Error for validator failures.
    */
   check<Schema extends MessageSchema>(
     schema: Schema,
     message: MessageShape<Schema>,
+    registry?: TypeRegistryLookup,
   ): MessageShape<Schema> {
-    const result = Validate.message(schema, message);
+    const result = Validate.message(schema, message, registry);
     if (!result.valid) throw new ValidationException(result.error);
     return message;
   },

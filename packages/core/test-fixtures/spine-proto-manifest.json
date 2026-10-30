@@ -1,17 +1,21 @@
 {
   "formatVersion": 2,
-  "generationId": "592d64cc-6104-4b8a-8302-83b4f886d037",
+  "generationId": "d3db4267-6526-45a8-acc0-9b2506177253",
   "packageName": "@spine-event-engine/core-test-fixtures",
   "packageVersion": "2.0.0-snapshot.25",
   "protoFiles": [
+    "criteria_types.proto",
     "project_commands.proto",
     "project_events.proto",
-    "project_states.proto"
+    "project_states.proto",
+    "project_types.proto"
   ],
   "generatedExports": {
+    "criteria_types.proto": "generated/criteria_types_pb.js",
     "project_commands.proto": "generated/project_commands_pb.js",
     "project_events.proto": "generated/project_events_pb.js",
-    "project_states.proto": "generated/project_states_pb.js"
+    "project_states.proto": "generated/project_states_pb.js",
+    "project_types.proto": "generated/project_types_pb.js"
   },
   "dependencies": [
     "@spine-event-engine/proto"
