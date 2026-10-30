@@ -7056,3 +7056,16 @@ specifies builder APIs, collision scope, registry mutation and test acceptance.
 No migration, dual writes, tenant-routing change or Event ID change is authorized.
 Remove the unused Inbox `inbox_id` and `signal_id` materializations while retaining
 both Protobuf fields and all query-dependent columns.
+
+## App Queries and read-side filtering (2026-10-30)
+
+Status: approved for implementation, not yet delivered.
+
+The human approved [the integrated proposal](tasks/app-queries-read-filters/PROPOSAL.md)
+and explicitly authorized a separate worktree with early origin pushes. This
+contract supersedes earlier planning that places App Query registration on
+ServerEnvironment, requires generated-registry roots, restricts filters to
+whole records, or silently accepts unknown subscription activation. It preserves
+complete stored Entity state while permitting arbitrary returned-view edits.
+Implementation follows the task ledger and bounded milestones; no PR or merge
+is authorized.

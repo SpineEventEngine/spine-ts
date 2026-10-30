@@ -1,5 +1,10 @@
 # Spine TS Project Completion Plan
 
+Current human-authorized implementation: [App Queries and read-side filtering](tasks/app-queries-read-filters/TASK.md).
+The approved proposal includes automatic metadata discovery, validation/status
+corrections, trusted reader context, and Entity/Event read-side filters. This
+feature branch starts from official master3135caaa2; implementation is active.
+
 ## Current Repository Workflow
 
 `https://github.com/SpineEventEngine/spine-ts` is the sole development
