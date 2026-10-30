@@ -47,3 +47,42 @@ no tracked runtime edits, commits or pushes. Dependency installation succeeded;
 optional wrong-architecture browser package skipped and delivery executable links
 await the initial build. Build CI triggers only on PRs, so final remote CI is
 not attainable from the currently authorized branch push alone.
+
+## Baseline and initial synchronization
+
+Initial approved-plan checkpoint 5ef79715f pushed to origin and remote SHA
+verified. Baseline Luna/low assignment accepted: explicit fields present, no
+visible mismatch; runtime introspection unavailable. Generation, generated
+TypeScript build, six focused files / 290 tests pass. See BASELINE.md. All16
+manifest changes were mechanically proven generationId-only and restored from
+HEAD before implementation; no source/checksum content lost.
+
+Library check: npm metadata confirms @spine-event-engine/validation latest and
+snapshot tags both2.0.0-snapshot.7, official repository validation-ts. Existing
+public API has no application-registry argument. Reuse that dependency and
+existing Buf descriptors, TypeRegistry, TS compiler, and Node package resolution.
+Shared validation correction must ship inside published core artifacts; a
+workspace-only pnpm dependency patch is insufficient. No external repository
+edit/publication is authorized. JVM guardrail read: spine-jvm-docs validation
+notes plus latest JVM RequestValidator.validate/validateMessage: declared
+constraints precede support/operation checks, validation details in SpineError.
+
+## M01 dispatch
+
+Architecture supplied first bounded shared-validation slice; orchestrator
+accepted with packaging correction (generic core integration, no workspace-only
+patch). Full decomposition continues independently in MILESTONES.md. Existing
+implementer expected/configured gpt-6-sol/medium, explicit dispatch, fork none;
+scope in M01.md. No overlapping production writer. Baseline commands complete.
+
+## Architecture acceptance
+
+Single frozen-wave architecture pass accepted: existing requirements_splitter
+explicit Astra/high, no mismatch; runtime selfmetadata unavailable. Fourteen
+sequential slices recorded in MILESTONES.md. All approved contracts covered;
+no demonstrated product blocker. Pinned filters.proto and query_service.proto
+will use narrowly recorded TS local adaptations retaining original upstream
+provenance and descriptor compatibility checks; M01 leaves those files intact.
+Remaining source/protocol work stays with the one implementer. Architecture
+assignment completed; no further architecture pass planned absent material
+contract change or demonstrated blocker.
