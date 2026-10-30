@@ -1,7 +1,7 @@
 # App Queries and read-side filters: implementation slices
 
-Status: architecture decomposition complete; M01 implementation dispatched by
-the orchestrator. Slice acceptance remains tracked in the implementation logs.
+Status: architecture decomposition complete; M01 and M02 accepted. M03 is next.
+Slice acceptance remains tracked in implementation logs.
 
 This is the single frozen-wave architecture pass for the approved
 [proposal](PROPOSAL.md), against `3135caaa202cdc2de71d249f2859cc4c4329b8c3`.

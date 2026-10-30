@@ -849,10 +849,15 @@ may correlate this fact with the original source through paged Agent history.
 
 ## Signals, validation, and rejection behavior
 
-`CommandBus` validates every accepted command from Proto validation options
-before dispatcher or repository handler code runs. It raises the framework's
-command-validation failure, which `SpineServices` maps to
-`COMMAND_VALIDATION_ERROR` with a packed `spine.validation.ValidationError`.
+`CommandBus` checks the nonempty Command ID, nondefault message and context,
+and declared payload constraints before admission or dispatcher code runs.
+Annotated packed messages use generated Proto modules registered in the process.
+`SpineServices` reports invalid Commands in an error Ack with type
+`spine.core.CommandValidationError`, numeric `INVALID_COMMAND` code, and a
+packed `spine.validation.ValidationError`. Unsupported Commands use the same
+enum type and numeric `UNSUPPORTED_COMMAND` code.
+Technical validator failures use a sanitized `COMMAND_POST_ERROR` Ack without
+constraint details; they are distinct from invalid Command input.
 Entity transition validation failures that escape service processing map to
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with the same detail type. Managed
 reception of ordinary Entity work sends post-handler transition rejection to `DeliveryMonitor`;
@@ -871,6 +876,8 @@ an internal diagnostic, not a retry guarantee.
 Every domain context has an internal paired System Context. Domain events use
 the domain `EventBus` and domain `EventStore`. System events use only the
 System Context `EventBus`, so they never enter the domain EventStore.
+Each EventBus validates the Event envelope and domain payload before admission,
+storage, or delivery.
 `persistSystemEvents()` enables the paired System Context's separate storage.
 Bounded Contexts with Agents must enable it. For other Bounded Contexts it is optional; without
 it, the bus validates, dispatches and notifies without appending. Schemas may come from an external dispatcher or

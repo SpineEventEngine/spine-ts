@@ -75,4 +75,4 @@ final security review and final-SHA CI where repository triggers permit.
 One architecture decomposition using existing requirements_splitter, followed
 by one bounded production implementer at a time. Independent read-only checks
 and concern-specific reviews may overlap. No grandchildren. Detailed sequence
-will be recorded in MILESTONES.md before implementation.
+is recorded in MILESTONES.md; per-slice records track implementation and acceptance.

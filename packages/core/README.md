@@ -103,8 +103,9 @@ Validate.check(UserIdSchema, userId);
 
 Use `Validate.message()` when the caller needs the returned violations instead
 of an exception. Pass the application's `TypeRegistryLookup` as the third
-argument when annotated `Any` fields can contain types outside the root
-descriptor's dependency closure. Known malformed payloads and missing members
+argument only to override the registry assembled from generated Proto modules
+registered in the process. Annotated `Any` fields use that module inventory by
+default. Known malformed payloads and missing members
 of required collections become sanitized violations. Validator failures throw
 a technical error.
 

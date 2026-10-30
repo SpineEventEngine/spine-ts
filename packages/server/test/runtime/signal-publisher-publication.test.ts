@@ -143,6 +143,9 @@ function systemCreatedEvent() {
   const entityId = create(TaskIdSchema, { value: "task-1" });
   return create(EventSchema, {
     id: create(EventIdSchema, { value: "created-task-1" }),
+    context: create(EventContextSchema, {
+      producerId: AnyPacker.pack(TaskIdSchema, entityId),
+    }),
     message: AnyPacker.pack(
       EntityCreatedSchema,
       create(EntityCreatedSchema, {

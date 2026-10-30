@@ -35,6 +35,7 @@ import type { MessageSchema } from "@spine-event-engine/core";
 import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import {
   CommandIdSchema,
+  CommandValidationError as CommandValidationErrorCode,
   type Command,
   type TenantId,
   TenantIdSchema,
@@ -271,17 +272,36 @@ export class SpineServices {
    */
   async #post(command: Command): Promise<Ack> {
     const messageId = command.id && AnyPacker.pack(CommandIdSchema, command.id);
-    const typeUrl = command.message?.typeUrl;
-    if (typeUrl === undefined || typeUrl.length === 0)
+    try {
+      CommandValidationError.checkEnvelope(command);
+    } catch (error) {
+      const failure = ServiceValues.commandPostError(error);
       return ServiceValues.commandErrorAck(
         messageId,
-        "INVALID_COMMAND",
-        "Command message type is required.",
+        failure.type,
+        failure.message,
+        failure.code,
+        failure.details,
       );
+    }
+    const typeUrl = command.message.typeUrl;
     const admission = this.#commandAdmission(command, messageId, typeUrl);
     if ("ack" in admission) return admission.ack;
-    const { route } = admission;
+    return this.#dispatchCommand(admission.route, command, messageId);
+  }
 
+  /**
+   * Dispatches an admitted Command and maps its completed or failed outcome.
+   * @param route Selected Command route.
+   * @param command Validated Command envelope.
+   * @param messageId Packed ID for the acknowledgement.
+   * @returns The completed Command acknowledgement.
+   */
+  async #dispatchCommand(
+    route: CommandRoute,
+    command: Command,
+    messageId: Any | undefined,
+  ): Promise<Ack> {
     try {
       await route.context.commandBus().post(command);
       return create(AckSchema, {
@@ -294,7 +314,12 @@ export class SpineServices {
       this.#logCommandPostFailure(route, command, error);
       return create(AckSchema, {
         messageId,
-        status: ServiceValues.errorStatus(postError.type, postError.message, postError.details),
+        status: ServiceValues.errorStatus(
+          postError.type,
+          postError.message,
+          postError.details,
+          postError.code,
+        ),
       });
     }
   }
@@ -317,8 +342,9 @@ export class SpineServices {
       return {
         ack: ServiceValues.commandErrorAck(
           messageId,
-          "UNSUPPORTED_COMMAND",
+          "spine.core.CommandValidationError",
           "No bounded context accepted the command.",
+          CommandValidationErrorCode.UNSUPPORTED_COMMAND,
         ),
       };
     }
@@ -1040,13 +1066,14 @@ function okStatus(): Status {
   });
 }
 
-function errorStatus(type: string, message: string, details?: Any): Status {
+function errorStatus(type: string, message: string, details?: Any, code?: number): Status {
   return create(StatusSchema, {
     status: {
       case: "error",
       value: create(ErrorSchema, {
         type,
         message,
+        ...(code === undefined ? {} : { code }),
         ...(details === undefined ? {} : { details }),
       }),
     },
@@ -2026,6 +2053,7 @@ interface ContractError {
   readonly type: string;
   readonly message: string;
   readonly details?: Any;
+  readonly code?: number;
 }
 
 function commandPostError(error: unknown): ContractError {
@@ -2039,7 +2067,8 @@ function commandPostError(error: unknown): ContractError {
 
   if (error instanceof CommandValidationError) {
     return {
-      type: "COMMAND_VALIDATION_ERROR",
+      type: "spine.core.CommandValidationError",
+      code: CommandValidationErrorCode.INVALID_COMMAND,
       message: "Command payload validation failed.",
       details: AnyPacker.pack(ValidationErrorSchema, error.validationError),
     };
@@ -2282,12 +2311,20 @@ const ServiceValues = Object.freeze({
    * Builds a stable Command rejection acknowledgement.
    *
    * @param messageId The packed Command ID, if supplied.
-   * @param type The public error code.
+   * @param type The error type.
    * @param message The public error message.
+   * @param code Numeric Proto error code when available.
+   * @param details Packed structured validation details when available.
    * @returns A sanitized Ack.
    */
-  commandErrorAck(messageId: Any | undefined, type: string, message: string): Ack {
-    return create(AckSchema, { messageId, status: errorStatus(type, message) });
+  commandErrorAck(
+    messageId: Any | undefined,
+    type: string,
+    message: string,
+    code?: number,
+    details?: Any,
+  ): Ack {
+    return create(AckSchema, { messageId, status: errorStatus(type, message, details, code) });
   },
   commandTenant,
   createReadPlan,

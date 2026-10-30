@@ -596,7 +596,7 @@ export const Validate = {
    * @typeParam Schema Generated schema of the message being validated.
    * @param schema The message schema.
    * @param message The message to validate.
-   * @param registry Application type lookup for annotated packed messages.
+   * @param registry Optional type lookup overriding the registered Proto-module inventory.
    * @returns The sanitized validation result.
    * @throws Error if the validator or its configuration fails.
    */
@@ -609,7 +609,7 @@ export const Validate = {
       return ValidationResults.from(
         [
           ...validateWithSpine(schema, message),
-          ...RegistryValidation.collect(schema, message, registry),
+          ...RegistryValidation.collect(schema, message, registry ?? GeneratedDescriptors.types()),
         ].map((violation) => ValidationResults.violation(violation)),
       );
     } catch {
@@ -622,7 +622,7 @@ export const Validate = {
    * @typeParam Schema Generated schema of the message being validated.
    * @param schema The message schema.
    * @param message The message to validate.
-   * @param registry Application type lookup for annotated packed messages.
+   * @param registry Optional type lookup overriding the registered Proto-module inventory.
    * @returns The validated message.
    * @throws ValidationException for field constraints, or Error for validator failures.
    */
@@ -1777,6 +1777,7 @@ export class StringifierRegistry {
 
 let descriptorSnapshot: readonly ProtoModule[] | undefined;
 let descriptorRegistry: Registry | undefined;
+let descriptorTypes: TypeRegistry | undefined;
 
 /**
  * Reuses descriptor composition until another generated module registers.
@@ -1792,9 +1793,19 @@ const GeneratedDescriptors = Object.freeze({
     if (current !== descriptorSnapshot) {
       const types = TypeRegistry.from(...current);
       descriptorRegistry = createRegistry(...types.list().map((item) => item.descriptor));
+      descriptorTypes = types;
       descriptorSnapshot = current;
     }
     return descriptorRegistry;
+  },
+
+  /**
+   * Resolves generated types for annotated packed-message validation.
+   * @returns The current module-derived type lookup.
+   */
+  types(): TypeRegistryLookup | undefined {
+    GeneratedDescriptors.current();
+    return descriptorTypes;
   },
 });
 

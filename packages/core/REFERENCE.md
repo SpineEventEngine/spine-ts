@@ -139,9 +139,9 @@ columns and their query operands.
 
 `Validate.message(schema, message, registry?)` returns a `MessageValidationResult` whose
 `valid` discriminator controls access to either an empty violation list or a
-non-empty list and a `ValidationError`. Pass an application `TypeRegistryLookup`
-for annotated `Any` fields whose payload types are outside the root descriptor's
-dependencies. Known malformed payloads and missing-valued members of required
+non-empty list and a `ValidationError`. Annotated `Any` fields use the generated
+Proto modules registered in the process; pass a `TypeRegistryLookup` only to
+override that inventory. Known malformed payloads and missing-valued members of required
 collections produce sanitized violations. Unknown `Any` types retain the
 model's allowance, and unannotated fields remain opaque. Validator or
 configuration failures throw a sanitized technical `Error`.

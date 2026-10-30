@@ -125,3 +125,58 @@ acceptance applies to all four reviewer roles. No generated source tracked.
 Unrelated manifest-ID churn was restored only after contents comparison; ignored
 markers matched those existing IDs and current-output check passed. Full release
 profile remains M14; this milestone is not whole-feature completion.
+
+## M01 synchronization and M02 dispatch
+
+M01 commit3227be3ac pushed successfully to official origin feature branch.
+No PR or master mutation. M02 now assigned to existing app_query_implementation,
+immutable implementer configured Sol/medium with explicit original dispatch.
+45–75minute estimate; scope and acceptance in M02.md. No overlapping writer.
+Use registered application Proto modules at admission, retaining shared generic
+validation; no separate command/query registry. Four relevant reviewer concerns
+will receive scoped assignments after focused checks. Runtime introspection
+unavailable; configured role metadata remains accepted.
+
+## M03 preparation guardrail (read-only during M02)
+
+Read latest JVM f2926a58 QueryService (InvalidRequestException mapper vs raw
+technical onError), stand/RequestValidator (constraints before support and
+operation-specific checks), transport/Statuses and MetadataConverter locations.
+Read current TS read/subscribe service boundaries, native gateway publicError
+metadata preservation, frozen-source verifier and descriptor-baseline verifier.
+TargetFilters uses deprecated required_field; supported equivalent is
+(require).fields with identical id_filter|filter expression. M03 must preserve
+original upstream source digest and frozen descriptor baseline while documenting
+that exact local adaptation; no blanket reset of compatibility hashes.
+
+## M03 read-only preparation assignment
+
+Orchestrator-dispatched scanning function reused via app_query_baseline,
+immutable explicit gpt-6-luna/low configuration. While implementer handles M02,
+map current Query/Topic/Subscription validation/status callers and focused test
+sets; inspect only, write M03_BASELINE.md only. No runtime edits, build/generation,
+commits, network mutations, or descendants. This is mechanical source inventory,
+not a second architecture pass. Historical text is not a current finding unless
+adopted by active claims. Main already inspected latest JVM guardrail sources.
+
+M03 scan completed and accepted: configured existing Luna/low dispatch retained,
+no mismatch, runtime introspection unavailable. M03_BASELINE.md supplies exact
+service/forwarding/client paths and fixtures to migrate. No tests/build/source
+changes by scanner. Main clarified its final statement to mean no verification
+commands (source search/read commands did run). M02 remains the only production
+writer; this preparation does not claim M03 implementation or test success.
+
+## M02 acceptance and M03 dispatch preparation
+
+M02 complete: 245 focused tests, generated build and cheap checks pass; main
+independent bus/service rerun passed 152 tests. Changed-code coverage is 97.2%
+statements and 95.8% branch arms. Targeted API confirmation resolved decoded
+default payload acceptance; remaining full-wave dispositions are in REVIEW.md.
+Configured implementer/reviewer profiles match their explicit dispatches; runtime
+self-introspection remains unavailable. Push the feature checkpoint before M03.
+
+Next assignment: existing implementer app_query_implementation, explicit
+configured gpt-6-sol/medium retained. Scope M03.md and M03_BASELINE.md, 1–2 hours
+for validation/status implementation, provenance checks, tests, review and
+integration. One production writer, no descendants. Full release gate remains
+M14. No product blocker or new permission is required.

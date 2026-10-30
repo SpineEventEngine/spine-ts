@@ -36,6 +36,7 @@ import {
   ScheduleReviewTaskSchema,
 } from "../../test-fixtures/generated/handler-registry/commands_pb.js";
 import { CreateReviewProjectSchema } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
+import { CreateNumberedProjectSchema } from "../../test-fixtures/generated/repository-routing/project_commands_pb.js";
 
 describe("CommandBus", () => {
   it("posts commands asynchronously to exactly one matching dispatcher", async () => {
@@ -168,7 +169,7 @@ describe("CommandBus", () => {
           id: create(CommandIdSchema, { uuid: "command-without-message" }),
         }),
       ),
-    ).rejects.toThrow(/command.message.typeUrl/);
+    ).rejects.toBeInstanceOf(CommandValidationError);
   });
 
   it("rejects commands with a blank message type URL", async () => {
@@ -179,7 +180,7 @@ describe("CommandBus", () => {
       command.message.typeUrl = "";
     }
 
-    await expect(bus.post(command)).rejects.toThrow(/command.message.typeUrl/);
+    await expect(bus.post(command)).rejects.toBeInstanceOf(CommandValidationError);
   });
 
   it("rejects invalid command payloads before a custom dispatcher runs", async () => {
@@ -194,6 +195,88 @@ describe("CommandBus", () => {
     ).rejects.toBeInstanceOf(CommandValidationError);
 
     expect(observed).toEqual([]);
+  });
+
+  it("rejects a decoded default Command payload before admission or custom dispatch", async () => {
+    const observed: string[] = [];
+    const bus = new CommandBus([
+      {
+        messageSchemas: () => [CreateNumberedProjectSchema],
+        dispatch: () => {
+          observed.push("dispatch");
+          return Promise.resolve();
+        },
+      },
+    ]);
+    commandBusAccess.setAdmission(bus, () => {
+      observed.push("admit");
+      return Promise.resolve();
+    });
+    const command = create(CommandSchema, {
+      id: create(CommandIdSchema, { uuid: "default-numbered-command" }),
+      context: create(CommandContextSchema, {
+        actorContext: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "user-1" }),
+        }),
+      }),
+      message: AnyPacker.pack(CreateNumberedProjectSchema, create(CreateNumberedProjectSchema)),
+    });
+
+    await expect(bus.post(command)).rejects.toMatchObject({
+      validationError: { constraintViolation: [{ fieldPath: { fieldName: ["message"] } }] },
+    });
+    expect(observed).toEqual([]);
+  });
+
+  it("rejects missing and empty IDs before tenant admission or custom dispatch", async () => {
+    const observed: string[] = [];
+    const bus = new CommandBus([
+      createCommandDispatcher([AssignReviewTaskSchema], () => observed.push("dispatch")),
+    ]);
+    commandBusAccess.setAdmission(bus, () => {
+      observed.push("admit");
+      return Promise.resolve();
+    });
+    for (const id of [undefined, create(CommandIdSchema)]) {
+      const command = createAssignReviewTask("valid-non-uuid-id");
+      command.id = id;
+      await expect(bus.post(command)).rejects.toBeInstanceOf(CommandValidationError);
+    }
+    expect(observed).toEqual([]);
+    await expect(bus.post(createAssignReviewTask("valid-non-uuid-id"))).resolves.toBeUndefined();
+    expect(observed).toEqual(["admit", "dispatch"]);
+  });
+
+  it("rejects a default context before tenant admission or dispatch", async () => {
+    const observed: string[] = [];
+    const bus = new CommandBus([
+      createCommandDispatcher([AssignReviewTaskSchema], () => observed.push("dispatch")),
+    ]);
+    commandBusAccess.setAdmission(bus, () => {
+      observed.push("admit");
+      return Promise.resolve();
+    });
+    const command = createAssignReviewTask("context-missing");
+    command.context = create(CommandContextSchema);
+    await expect(bus.post(command)).rejects.toBeInstanceOf(CommandValidationError);
+    expect(observed).toEqual([]);
+  });
+
+  it("keeps a validator execution failure separate from invalid input", () => {
+    const command = createAssignReviewTask("validator-failure");
+    const packed = command.message;
+    let reads = 0;
+    Object.defineProperty(command, "message", {
+      get: () => {
+        reads++;
+        if (reads > 1) throw new Error("private validator detail");
+        return packed;
+      },
+    });
+
+    expect(() => {
+      CommandValidationError.checkEnvelope(command);
+    }).toThrow("Validation runtime failed.");
   });
 
   it("rejects incompatible command payload bytes before a custom dispatcher runs", async () => {

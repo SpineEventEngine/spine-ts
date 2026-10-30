@@ -36,6 +36,7 @@ import {
   ActorContextSchema,
   AckSchema,
   CommandSchema,
+  CommandValidationError as CommandValidationErrorCode,
   CommandContextSchema,
   CommandIdSchema,
   Command_SystemPropertiesSchema,
@@ -149,6 +150,7 @@ import {
   type CreateReviewProject,
   CreateReviewProjectSchema,
 } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
+import { CreateNumberedProjectSchema } from "../../test-fixtures/generated/repository-routing/project_commands_pb.js";
 import { ReviewProjectStateSchema } from "../../test-fixtures/generated/validation-refusal/project_states_pb.js";
 
 beforeEach(async () => {
@@ -919,6 +921,7 @@ describe("SpineServices", () => {
       const queryClient = createClient(QueryService, transport);
 
       const ack = await commandClient.post(createCommandWithoutId());
+      const unsupported = await commandClient.post(createProjectionCommand("unsupported-id"));
       const noTarget = await queryClient.read(
         create(QuerySchema, {
           id: create(QueryIdSchema, { value: "q-no-target" }),
@@ -946,7 +949,15 @@ describe("SpineServices", () => {
 
       expect(ack.messageId).toBeUndefined();
       expect(ack.status?.status.case).toBe("error");
-      expect(errorMessage(ack.status?.status)).toBe("No bounded context accepted the command.");
+      expect(errorType(ack.status?.status)).toBe("spine.core.CommandValidationError");
+      expect(errorCode(ack.status?.status)).toBe(CommandValidationErrorCode.INVALID_COMMAND);
+      expect(errorMessage(unsupported.status?.status)).toBe(
+        "No bounded context accepted the command.",
+      );
+      expect(errorType(unsupported.status?.status)).toBe("spine.core.CommandValidationError");
+      expect(errorCode(unsupported.status?.status)).toBe(
+        CommandValidationErrorCode.UNSUPPORTED_COMMAND,
+      );
       expect(noTarget.response?.status?.status.case).toBe("error");
       expect(objectId.response?.status?.status.case).toBe("ok");
       expect(objectId.message).toHaveLength(0);
@@ -1753,7 +1764,7 @@ describe("SpineServices", () => {
     const response = await queryHandlers.read(createQuery("task-1"));
 
     expect(ack.status?.status.case).toBe("error");
-    expect(errorMessage(ack.status?.status)).toBe("Command message type is required.");
+    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
     expect(response.response?.status?.status.case).toBe("error");
     expect(responseErrorMessage(response)).toBe("Query read failed.");
   });
@@ -1874,9 +1885,55 @@ describe("SpineServices", () => {
     const ack = await handlers.post(createValidatedCommand("command-invalid", "task-invalid", ""));
 
     expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorType(ack.status?.status)).toBe("spine.core.CommandValidationError");
+    expect(errorCode(ack.status?.status)).toBe(CommandValidationErrorCode.INVALID_COMMAND);
     expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
     expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+  });
+
+  it("returns an INVALID_COMMAND Ack for a decoded default Command payload", async () => {
+    const dispatched: string[] = [];
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher({
+        messageSchemas: () => [CreateNumberedProjectSchema],
+        dispatch: () => {
+          dispatched.push("dispatch");
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const handlers = registeredCommandHandlers(context);
+    const command = create(CommandSchema, {
+      id: create(CommandIdSchema, { uuid: "default-numbered-service-command" }),
+      context: create(CommandContextSchema, { actorContext: createActorContext() }),
+      message: AnyPacker.pack(CreateNumberedProjectSchema, create(CreateNumberedProjectSchema)),
+    });
+
+    const ack = await handlers.post(command);
+
+    expect(errorType(ack.status?.status)).toBe("spine.core.CommandValidationError");
+    expect(errorCode(ack.status?.status)).toBe(CommandValidationErrorCode.INVALID_COMMAND);
+    expect(
+      validationDetails(ack.status?.status)?.constraintViolation[0]?.fieldPath?.fieldName,
+    ).toEqual(["message"]);
+    expect(dispatched).toEqual([]);
+  });
+
+  it("rejects an incomplete Command envelope through an error Ack", async () => {
+    const context = await BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(createValidatedCommandDispatcher(() => undefined))
+      .build();
+    const handlers = registeredCommandHandlers(context);
+    const command = createValidatedCommand("ignored", "task-1", "Task");
+    command.id = create(CommandIdSchema);
+
+    const ack = await handlers.post(command);
+
+    expect(errorType(ack.status?.status)).toBe("spine.core.CommandValidationError");
+    expect(errorCode(ack.status?.status)).toBe(CommandValidationErrorCode.INVALID_COMMAND);
+    expect(
+      validationDetails(ack.status?.status)?.constraintViolation[0]?.fieldPath?.fieldName,
+    ).toEqual(["id", "uuid"]);
   });
 
   it("returns stable Ack errors with details for invalid custom-dispatcher command payloads", async () => {
@@ -1893,7 +1950,8 @@ describe("SpineServices", () => {
     const ack = await handlers.post(createValidatedCommand("command-invalid", "task-invalid", ""));
 
     expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorType(ack.status?.status)).toBe("spine.core.CommandValidationError");
+    expect(errorCode(ack.status?.status)).toBe(CommandValidationErrorCode.INVALID_COMMAND);
     expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
     expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
     expect(dispatched).toEqual([]);
@@ -1914,7 +1972,8 @@ describe("SpineServices", () => {
     const details = validationDetails(ack.status?.status);
 
     expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorType(ack.status?.status)).toBe("spine.core.CommandValidationError");
+    expect(errorCode(ack.status?.status)).toBe(CommandValidationErrorCode.INVALID_COMMAND);
     expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
     expect(details?.constraintViolation).toHaveLength(1);
   });
@@ -5179,7 +5238,7 @@ async function postEntityStateChanged(
     context,
     create(EventSchema, {
       id: { value: `state-change-${String(++stateChangeSequence)}` },
-      ...(tenantId === undefined ? {} : { context: createEventContext("state-change", tenantId) }),
+      context: createEventContext("state-change", tenantId),
       message: AnyPacker.pack(
         EntityLog.EntityStateChangedSchema,
         create(EntityLog.EntityStateChangedSchema, {
@@ -5267,6 +5326,18 @@ function errorType(status: unknown) {
   const value = "value" in status ? status.value : undefined;
 
   return typeof value === "object" && value !== null && "type" in value ? value.type : undefined;
+}
+
+function errorCode(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  )
+    return undefined;
+  const value = "value" in status ? status.value : undefined;
+  return typeof value === "object" && value !== null && "code" in value ? value.code : undefined;
 }
 
 function validationDetails(status: unknown) {

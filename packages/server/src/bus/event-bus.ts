@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { clone } from "@bufbuild/protobuf";
+import { clone, create, equals } from "@bufbuild/protobuf";
 import { AnyPacker, Validate, type MessageSchema } from "@spine-event-engine/core";
-import { EventSchema, type Event } from "@spine-event-engine/proto";
+import { EventContextSchema, EventSchema, type Event } from "@spine-event-engine/proto";
 import * as AgentInteraction from "@spine-event-engine/proto/agent";
 import type { EventStore } from "@spine-event-engine/storage";
 import { eventStoreAccess } from "@spine-event-engine/storage/provider";
@@ -403,14 +403,13 @@ export class EventBus {
       throw new Error("EventBus requires event.message.typeUrl.");
     }
 
+    this.#validate(event, typeUrl);
     const onAdmit = eventAdmissions.get(this);
-    if (onAdmit !== undefined) this.#validate(event, typeUrl);
     await onAdmit?.(event);
 
     const dispatchers = this.#registry.find(typeUrl, event.context?.external === true);
 
     if (forgettingBuses.has(this)) {
-      if (onAdmit === undefined) this.#validate(event, typeUrl);
       const accepted = await this.#accept(event, dispatchers);
       await this.#deliverAccepted(event, accepted);
       return;
@@ -423,7 +422,6 @@ export class EventBus {
 
     let acceptedDispatchers: readonly AcceptedEventDispatcher[] = [];
     const stored = await eventStore.acceptThenAppend(event, async (accepted) => {
-      if (onAdmit === undefined) this.#validate(accepted, typeUrl);
       acceptedDispatchers = await this.#accept(accepted, dispatchers);
     });
 
@@ -511,6 +509,15 @@ export class EventBus {
   }
 
   #validate(event: Event, typeUrl: string): void {
+    if (event.id?.value === undefined || event.id.value === "") {
+      throw new Error("EventBus requires non-empty event.id.value.");
+    }
+    if (
+      event.context === undefined ||
+      equals(EventContextSchema, event.context, create(EventContextSchema))
+    ) {
+      throw new Error("EventBus requires a non-default event.context.");
+    }
     const schema = this.#registry.schema(typeUrl);
 
     if (schema === undefined) {
@@ -526,6 +533,7 @@ export class EventBus {
       throw new Error("Event payload does not match its registered schema.");
     }
 
+    Validate.check(EventSchema, event);
     Validate.check(schema, message);
   }
 

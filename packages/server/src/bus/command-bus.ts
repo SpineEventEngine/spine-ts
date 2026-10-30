@@ -12,8 +12,14 @@
  * the License.
  */
 
-import { clone } from "@bufbuild/protobuf";
-import { ValidationException, Validate, AnyPacker } from "@spine-event-engine/core";
+import { clone, create, equals } from "@bufbuild/protobuf";
+import type { Any } from "@bufbuild/protobuf/wkt";
+import {
+  ValidationException,
+  Validate,
+  AnyPacker,
+  type MessageSchema,
+} from "@spine-event-engine/core";
 import { CommandSchema, type Command } from "@spine-event-engine/proto";
 
 import {
@@ -270,11 +276,8 @@ export class CommandBus {
   }
 
   #checkedDispatcher(command: Command): CommandDispatcher {
+    CommandValidationError.checkEnvelope(command);
     const packed = command.message;
-
-    if (packed === undefined || packed.typeUrl === "") {
-      throw new Error("CommandBus requires command.message.typeUrl.");
-    }
     const typeUrl = packed.typeUrl;
 
     const registration = this.#registry.find(typeUrl);
@@ -283,26 +286,40 @@ export class CommandBus {
       throw new Error(`No command dispatcher registered for "${typeUrl}".`);
     }
 
-    const message = AnyPacker.tryUnpack(packed, registration.schema);
+    this.#validatePayload(packed, registration.schema);
+    return registration.dispatcher;
+  }
 
+  /**
+   * Checks a decoded domain Command against its schema and implicit ID rule.
+   * @param packed Packed domain Command message.
+   * @param schema Registered domain Command schema.
+   */
+  #validatePayload(packed: Any, schema: MessageSchema): void {
+    const message = AnyPacker.tryUnpack(packed, schema);
     if (message === undefined) {
       throw CommandValidationError.invalidPayload();
     }
 
+    if (equals(schema, message, create(schema))) {
+      throw CommandValidationError.invalidEnvelope(
+        ["message"],
+        "Non-default command message must be set.",
+      );
+    }
+
     try {
-      Validate.check(registration.schema, message);
+      Validate.check(schema, message);
     } catch (error) {
       if (error instanceof ValidationException) {
         throw new CommandValidationError(error.asMessage());
       }
       throw error;
     }
-    const implicitId = ImplicitRequiredIds.validateCommand(registration.schema, message);
+    const implicitId = ImplicitRequiredIds.validateCommand(schema, message);
     if (!implicitId.valid) {
       throw new CommandValidationError(implicitId.error);
     }
-
-    return registration.dispatcher;
   }
 }
 
