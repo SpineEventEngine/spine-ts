@@ -121,7 +121,6 @@ export const StudioRuntime = {
       workerExecutable: executable,
       workerPath: worker,
       workerCwd: app.getPath("userData"),
-      registryRoot: new URL(".", import.meta.url),
       plan,
     });
     const window = StudioBootstrap.studioWindow();

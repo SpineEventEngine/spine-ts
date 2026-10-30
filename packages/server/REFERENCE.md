@@ -585,9 +585,8 @@ await context.commandBus().post(
 The generated record declares `ApproveProjectSchema` as the input and
 `ScheduleProjectSchema` as the emitted Command schema; registry ingestion, not
 manual decorator materialization, constructs the output-bearing metadata.
-Application builds emit the record to
-`generated/handler/generated-handler-registry.js`; those applications use
-`build()` with their compiled package root.
+Application builds emit the record to `generated/spine-metadata.js` and import
+`generated/spine-bootstrap.js` before `build()` selects registered classes.
 
 One `@Where({ eventField, equals })` equality filter may narrow an event- or
 rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type
@@ -611,9 +610,9 @@ environment setup to supply record/event storage to all contexts.
 `withTenantIndex(index)` selects a different live membership directory for one
 context; `context.tenantIndex` and `ServerEnvironment.instance().tenantIndex`
 return the configured objects. Closing a context does not close either index.
-`withGeneratedRegistryRoot(root)` enables framework discovery of the generated
-handler registry for classes registered with `add(EntityClass)`;
-`build()` asynchronously performs that discovery and assembly, including
+The application imports its generated `spine-bootstrap.js` before registering
+classes with `add(EntityClass)`; `build()` then selects passive descriptions
+by exact constructor and performs assembly, including
 explicit `Repository` registration. Await it before using the context. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 Trusted server-side code can call `context.getRepository(EntityClass)` to obtain

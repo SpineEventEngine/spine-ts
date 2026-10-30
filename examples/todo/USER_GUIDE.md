@@ -239,7 +239,7 @@ when it stops.
 ## Build and server lifecycle
 
 From the repository root, run `pnpm typecheck:build`. It generates
-`examples/todo/generated/handler/generated-handler-registry.ts` and compiles
+`examples/todo/generated/spine-metadata.ts` and `spine-bootstrap.ts`, then compiles
 the package. Both generated and compiled directories are ignored.
 
 Start the process with:
@@ -254,10 +254,13 @@ context. For programmatic local tests, the public package exports
 server's `close()` method. The command-line process keeps its listener until
 `Ctrl-C` stops it. Each start has fresh in-memory state.
 
-`createTodoContext()` adds `TaskAggregate` and `TaskListProjection`, then loads
-the compiled registry from the package root before `build()`. If the
-generated registry is missing or unreadable, context creation fails with its
-module path; rerun `pnpm typecheck:build` and retry. Application handlers keep
+Importing Todo's application entrypoint runs its generated
+`generated/spine-bootstrap.js` before `createTodoContext()` assembles the
+context. The function adds `TaskAggregate` and `TaskListProjection`; `build()`
+selects their registered descriptions by class. If bootstrap import is omitted,
+context creation reports the class with missing metadata and the required
+bootstrap import. Rerun `pnpm typecheck:build` if the generated bootstrap is
+absent. Application handlers keep
 their bare `@Assign` and `@Subscribe` decorators: they do not manually register
 handler schemas.
 

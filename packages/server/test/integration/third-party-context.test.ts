@@ -41,6 +41,7 @@ import {
   ServerEnvironment,
 } from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
+import { registerSpineMetadata } from "@spine-event-engine/server/spi/handler-registry";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ThirdPartyContext as DirectSourceThirdPartyContext } from "../../src/integration/third-party-context.js";
@@ -93,6 +94,7 @@ function generatedStateRegistryRoot(): {
       },
     ],
   } satisfies GeneratedHandlerRegistry;
+  registerSpineMetadata(registry, slot);
   (globalThis as Record<string, unknown>)[slot] = registry;
   writeFileSync(
     join(directory, "generated-handler-registry.js"),
@@ -340,7 +342,6 @@ describe("Wave 13 ThirdPartyContext", () => {
       "external",
     );
     const stateContext = await BoundedContext.singleTenant("Wave13ExternalState")
-      .withGeneratedRegistryRoot(stateRegistry.root)
       .add(ExternalStateProjection)
       .build();
     const received: Event[] = [];

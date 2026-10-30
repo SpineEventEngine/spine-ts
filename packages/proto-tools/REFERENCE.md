@@ -30,10 +30,11 @@ whose `spine-proto.json` it should read:
 - `spine-proto compose` accepts only application configuration and writes the
   configured model registry source;
 - `spine-proto handlers` accepts an application package and writes
-  `generated/handler/generated-handler-registry.ts`. The emitted module imports
-  `GeneratedHandlerRegistry` as a type from
+  `generated/spine-metadata.ts` and `generated/spine-bootstrap.ts`. The metadata module imports
+  `SpineMetadata` as a type from
   `@spine-event-engine/server/spi/handler-registry`; handler analysis and
-  rendering remain tooling-owned and never load Server at CLI runtime.
+  rendering remain tooling-owned and never load Server at CLI runtime. Import
+  the bootstrap once before Bounded Context assembly.
 
 The package also exposes `manifestFormatVersion`, `ProtoConfig`, and
 `ProtoManifest` for build tooling that needs to read or validate the same

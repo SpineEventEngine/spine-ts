@@ -165,11 +165,6 @@ export interface StudioStartOptions {
   readonly workerCwd: string;
 
   /**
-   * Generated handler registry root for the packaged Bounded Context.
-   */
-  readonly registryRoot?: URL;
-
-  /**
    * Trusted account model selection and credential connection.
    */
   readonly plan: Pick<PlanModelSelection, "activeBinding"> &
@@ -485,7 +480,6 @@ export class ReleaseStudio {
     const bySource = new Map<string, GenerationAdmission>();
     ReleaseStudio.registerGit(registry, options, bySource);
     const context = await ReleaseNotesContext.create(registry, new InMemoryStorageFactory(), {
-      ...(options.registryRoot ? { registryRoot: options.registryRoot } : {}),
       resolveModel: (kind, scope, source) =>
         ReleaseStudio.bindModel(kind, scope, source, admissions, bySource),
     });

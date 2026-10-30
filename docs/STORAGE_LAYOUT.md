@@ -5239,7 +5239,6 @@ const environment = ServerEnvironment.instance();
 await environment.completeSetup();
 
 const support = await BoundedContext.singleTenant("Support")
-  .withGeneratedRegistryRoot(generatedRegistryRoot)
   .withAi(ai)
   .persistSystemEvents()
   .add(new Repository({ entityType: TicketAggregate, schema: TicketSchema, stateHistory: true }))

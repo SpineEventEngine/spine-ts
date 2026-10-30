@@ -1,6 +1,6 @@
 # App Queries and read-side filters: implementation slices
 
-Status: architecture decomposition complete; M01–M04 accepted. M05 is next.
+Status: architecture decomposition complete; M01–M05 accepted. M06 is next.
 Slice acceptance remains tracked in implementation logs.
 
 This is the single frozen-wave architecture pass for the approved

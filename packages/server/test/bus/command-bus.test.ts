@@ -231,7 +231,9 @@ describe("CommandBus", () => {
   it("rejects missing and empty IDs before tenant admission or custom dispatch", async () => {
     const observed: string[] = [];
     const bus = new CommandBus([
-      createCommandDispatcher([AssignReviewTaskSchema], () => observed.push("dispatch")),
+      createCommandDispatcher([AssignReviewTaskSchema], () => {
+        observed.push("dispatch");
+      }),
     ]);
     commandBusAccess.setAdmission(bus, () => {
       observed.push("admit");
@@ -250,7 +252,9 @@ describe("CommandBus", () => {
   it("rejects a default context before tenant admission or dispatch", async () => {
     const observed: string[] = [];
     const bus = new CommandBus([
-      createCommandDispatcher([AssignReviewTaskSchema], () => observed.push("dispatch")),
+      createCommandDispatcher([AssignReviewTaskSchema], () => {
+        observed.push("dispatch");
+      }),
     ]);
     commandBusAccess.setAdmission(bus, () => {
       observed.push("admit");

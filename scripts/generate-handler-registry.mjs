@@ -37,6 +37,13 @@ async function main(argv = process.argv.slice(2)) {
       generatedRoot: options.generatedRoot,
       outputFile: options.outputFile,
       publishedOutputFile: options.publishedOutputFile,
+      protoModuleExport: options.protoModuleExport,
+      protoModuleSpecifier: options.protoModuleSpecifier,
+    });
+    new GeneratedRegistryWriter().writeBootstrap({
+      repoRoot: options.repoRoot,
+      generatedRoot: options.generatedRoot,
+      outputFile: join(dirname(options.outputFile), "spine-bootstrap.ts"),
     });
     return 0;
   } catch (error) {
@@ -57,6 +64,8 @@ function parseArgs(argv) {
     sourceGeneratedRoot: undefined,
     stagedSourceGeneratedRoot: undefined,
     sourceGeneratedRedirects: undefined,
+    protoModuleExport: undefined,
+    protoModuleSpecifier: undefined,
   };
 
   for (let index = 0; index < argv.length; index += 2) {
@@ -91,6 +100,12 @@ function parseArgs(argv) {
         break;
       case "--published-out":
         options.publishedOutputFile = resolve(value);
+        break;
+      case "--proto-module-export":
+        options.protoModuleExport = value;
+        break;
+      case "--proto-module-specifier":
+        options.protoModuleSpecifier = value;
         break;
       default:
         throw new Error(`Unknown option: ${flag}`);

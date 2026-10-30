@@ -12,7 +12,16 @@
  * the License.
  */
 
-import { lstatSync, mkdirSync, opendirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  opendirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import ts from "typescript";
@@ -30,6 +39,16 @@ export interface HandlerCodegenOptions {
    * Application root containing its TypeScript project.
    */
   readonly appRoot: string;
+
+  /**
+   * Exported model Proto module when the application composes one locally.
+   */
+  readonly protoModuleExport?: string;
+
+  /**
+   * Model package import for the exported Proto module.
+   */
+  readonly protoModuleSpecifier?: string;
 }
 
 /**
@@ -99,7 +118,7 @@ export function generateHandlerRegistry(
   const generatedRoot = HandlerFiles.path(appRoot, join(appRoot, "generated"), "Generated root");
   const outputFile = HandlerFiles.path(
     generatedRoot,
-    join(generatedRoot, "handler/generated-handler-registry.ts"),
+    join(generatedRoot, "spine-metadata.ts"),
     "Generated output",
   );
   const { program, sources } = HandlerFiles.program(appRoot, project);
@@ -108,12 +127,37 @@ export function generateHandlerRegistry(
   if (analysis.diagnostics.length > 0)
     throw new Error(HandlerFiles.diagnostics(analysis.diagnostics));
 
-  const source = new GeneratedRegistryWriter().render(analysis, { outputFile });
+  const writer = new GeneratedRegistryWriter();
+  const source = writer.render(analysis, { ...options, outputFile });
+  const bootstrapFile = HandlerFiles.path(
+    generatedRoot,
+    join(generatedRoot, "spine-bootstrap.ts"),
+    "Generated bootstrap",
+  );
+  const oldOutput = HandlerFiles.path(
+    generatedRoot,
+    join(generatedRoot, "handler/generated-handler-registry.ts"),
+    "Superseded output",
+  );
   (operations.mkdir ?? defaultOperations.mkdir)(dirname(outputFile));
-  HandlerFiles.write(outputFile, source, operations);
+  HandlerFiles.writePair(
+    outputFile,
+    source,
+    bootstrapFile,
+    writer.renderBootstrap(),
+    oldOutput,
+    operations,
+  );
 }
 
 const HandlerFiles = Object.freeze({
+  /**
+   * Creates a bounded TypeScript program from an application project.
+   *
+   * @param appRoot Application root used for confinement.
+   * @param project Application TypeScript project path.
+   * @returns Program and confined source files.
+   */
   program(appRoot: string, project: string): { program: ts.Program; sources: ts.SourceFile[] } {
     const config = ts.readConfigFile(project, (path) => ts.sys.readFile(path));
     if (config.error !== undefined) throw new Error(HandlerFiles.configDiagnostics([config.error]));
@@ -144,6 +188,12 @@ const HandlerFiles = Object.freeze({
     return { program, sources };
   },
 
+  /**
+   * Rejects configuration includes that escape the application root.
+   *
+   * @param appRoot Application root used for confinement.
+   * @param value Value being read or validated.
+   */
   assertIncludes(value: unknown, appRoot: string): void {
     if (!Array.isArray(value)) return;
     for (const include of value) {
@@ -153,11 +203,25 @@ const HandlerFiles = Object.freeze({
     }
   },
 
+  /**
+   * Reads a named property from a configuration value when it is an object.
+   *
+   * @param key Stable reference key.
+   * @param value Value being read or validated.
+   * @returns Property value when the input is an object.
+   */
   value(value: unknown, key: string): unknown {
     if (typeof value !== "object" || value === null) return undefined;
     return (value as Record<string, unknown>)[key];
   },
 
+  /**
+   * Creates a confined TypeScript configuration discovery host.
+   *
+   * @param appRoot Application root used for confinement.
+   * @param currentDirectory Project directory used for TypeScript discovery.
+   * @returns Confined TypeScript configuration host.
+   */
   configHost(appRoot: string, currentDirectory: string): ts.ParseConfigHost {
     let entries = 0;
     // TypeScript 6.0.3 exports matchFiles at runtime but omits it from its declarations.
@@ -222,10 +286,22 @@ const HandlerFiles = Object.freeze({
     };
   },
 
+  /**
+   * Checks a resolved TypeScript source file.
+   *
+   * @param value Value being read or validated.
+   * @returns Whether a source file was resolved.
+   */
   sourceFile(value: ts.SourceFile | undefined): value is ts.SourceFile {
     return value !== undefined;
   },
 
+  /**
+   * Formats handler-analysis findings with source locations.
+   *
+   * @param diagnostics Compiler or analyzer findings to format.
+   * @returns Handler diagnostics with source locations.
+   */
   diagnostics(
     diagnostics: readonly {
       readonly sourceFile: string;
@@ -244,6 +320,12 @@ const HandlerFiles = Object.freeze({
       .join("\n");
   },
 
+  /**
+   * Formats TypeScript project configuration findings.
+   *
+   * @param diagnostics Compiler or analyzer findings to format.
+   * @returns Formatted TypeScript configuration diagnostics.
+   */
   configDiagnostics(diagnostics: readonly ts.Diagnostic[]): string {
     return ts.formatDiagnosticsWithColorAndContext(diagnostics, {
       getCanonicalFileName: (fileName) => fileName,
@@ -252,24 +334,54 @@ const HandlerFiles = Object.freeze({
     });
   },
 
+  /**
+   * Checks that a required project path is a regular file.
+   *
+   * @param label Diagnostic label for the checked path.
+   * @param root Confinement or generated-tree root.
+   * @param value Value being read or validated.
+   * @returns Validated project file path.
+   */
   file(root: string, value: string, label: string): string {
     const path = HandlerFiles.path(root, value, label);
     if (!lstatSync(path).isFile()) throw new Error(`${label} must be a regular file: ${path}`);
     return path;
   },
 
+  /**
+   * Checks that a compiler root is a confined TypeScript source file.
+   *
+   * @param root Confinement or generated-tree root.
+   * @param value Value being read or validated.
+   * @returns Validated TypeScript source path.
+   */
   typeScriptFile(root: string, value: string): string {
     if (!value.endsWith(".ts") || value.endsWith(".d.ts"))
       throw new Error(`Handler source must be a TypeScript file: ${value}`);
     return HandlerFiles.file(root, value, "Handler source");
   },
 
+  /**
+   * Checks that a required application path is a directory.
+   *
+   * @param label Diagnostic label for the checked path.
+   * @param path Path or Proto import path to inspect.
+   * @returns Validated application directory path.
+   */
   directory(path: string, label: string): string {
     HandlerFiles.assertNoSymlinkAncestors(path, label);
     if (!lstatSync(path).isDirectory()) throw new Error(`${label} must be a directory: ${path}`);
     return path;
   },
 
+  /**
+   * Checks that a generated path remains inside its root.
+   *
+   * @param label Diagnostic label for the checked path.
+   * @param path Path or Proto import path to inspect.
+   * @param root Confinement or generated-tree root.
+   * @returns Validated generated path.
+   */
   path(root: string, path: string, label: string): string {
     const value = relative(root, path);
     if (value === "" || value.startsWith("..") || isAbsolute(value))
@@ -278,6 +390,14 @@ const HandlerFiles = Object.freeze({
     return path;
   },
 
+  /**
+   * Checks confinement and symlink safety for an existing path.
+   *
+   * @param label Diagnostic label for the checked path.
+   * @param path Path or Proto import path to inspect.
+   * @param root Confinement or generated-tree root.
+   * @returns Confined path without symlink traversal.
+   */
   containedPath(root: string, path: string, label: string): string {
     const value = relative(root, path);
     if (value.startsWith("..") || isAbsolute(value))
@@ -286,6 +406,12 @@ const HandlerFiles = Object.freeze({
     return path;
   },
 
+  /**
+   * Rejects symlinks along a compiler or generated path.
+   *
+   * @param label Diagnostic label for the checked path.
+   * @param path Path or Proto import path to inspect.
+   */
   assertNoSymlinkAncestors(path: string, label: string): void {
     const parts = resolve(path).split(sep).filter(Boolean);
     let current: string = sep;
@@ -300,25 +426,94 @@ const HandlerFiles = Object.freeze({
     }
   },
 
-  write(outputFile: string, source: string, operations: Partial<HandlerCodegenOperations>): void {
+  /**
+   * Publishes both generated files, restoring live metadata on publication failure.
+   *
+   * @param metadataFile Published metadata path.
+   * @param metadataSource Generated metadata source.
+   * @param bootstrapFile Published bootstrap path.
+   * @param bootstrapSource Generated bootstrap source.
+   * @param retiredFile Superseded generated output removed after both files publish.
+   * @param operations Filesystem hooks for publication.
+   */
+  writePair(
+    metadataFile: string,
+    metadataSource: string,
+    bootstrapFile: string,
+    bootstrapSource: string,
+    retiredFile: string,
+    operations: Partial<HandlerCodegenOperations>,
+  ): void {
     const fileOperations = { ...defaultOperations, ...operations };
-    const stage = join(
+    const metadataStage = HandlerFiles.stage(metadataFile);
+    const bootstrapStage = HandlerFiles.stage(bootstrapFile);
+    const stages: string[] = [];
+    const priorMetadata = existsSync(metadataFile) ? readFileSync(metadataFile, "utf8") : undefined;
+    const priorBootstrap = existsSync(bootstrapFile)
+      ? readFileSync(bootstrapFile, "utf8")
+      : undefined;
+    const published: { readonly file: string; readonly previous: string | undefined }[] = [];
+    try {
+      stages.push(metadataStage);
+      fileOperations.write(metadataStage, metadataSource);
+      stages.push(bootstrapStage);
+      fileOperations.write(bootstrapStage, bootstrapSource);
+      fileOperations.rename(metadataStage, metadataFile);
+      published.push({ file: metadataFile, previous: priorMetadata });
+      fileOperations.rename(bootstrapStage, bootstrapFile);
+      published.push({ file: bootstrapFile, previous: priorBootstrap });
+      fileOperations.remove(retiredFile);
+    } catch (primary) {
+      HandlerFiles.restorePair(primary, published, stages, fileOperations);
+    }
+  },
+
+  /**
+   * Restores the prior metadata and removes staging files after a failed publication.
+   *
+   * @param primary Original publication failure.
+   * @param published Files already replaced and their previous contents.
+   * @param stages Staging paths to remove.
+   * @param operations Filesystem hooks for rollback.
+   * @returns Never returns; throws the original or aggregate failure.
+   */
+  restorePair(
+    primary: unknown,
+    published: readonly { readonly file: string; readonly previous: string | undefined }[],
+    stages: readonly string[],
+    operations: HandlerCodegenOperations,
+  ): never {
+    const failures = [primary];
+    for (const { file, previous } of [...published].reverse()) {
+      try {
+        if (previous === undefined) operations.remove(file);
+        else operations.write(file, previous);
+      } catch (cleanup) {
+        failures.push(cleanup);
+      }
+    }
+    for (const stage of stages) {
+      try {
+        operations.remove(stage);
+      } catch (cleanup) {
+        failures.push(cleanup);
+      }
+    }
+    if (failures.length > 1)
+      throw new AggregateError(failures, "Generated handler registry publication failed.");
+    throw primary;
+  },
+
+  /**
+   * Creates an isolated staging path beside its generated output.
+   *
+   * @param outputFile Published generated file path.
+   * @returns Unique staging file path.
+   */
+  stage(outputFile: string): string {
+    return join(
       dirname(outputFile),
       `.${basename(outputFile)}.${String(process.pid)}.${crypto.randomUUID()}.tmp`,
     );
-    try {
-      fileOperations.write(stage, source);
-      fileOperations.rename(stage, outputFile);
-    } catch (primary) {
-      try {
-        fileOperations.remove(stage);
-      } catch (cleanup) {
-        throw new AggregateError(
-          [primary, cleanup],
-          "Generated handler registry publication failed.",
-        );
-      }
-      throw primary;
-    }
   },
 });

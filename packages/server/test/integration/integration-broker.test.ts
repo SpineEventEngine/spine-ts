@@ -15,12 +15,8 @@
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyPacker, type MessageSchema } from "@spine-event-engine/core";
+import { AnyPacker, Identifiers, type MessageSchema } from "@spine-event-engine/core";
 import { TypeUrls } from "@spine-event-engine/core";
 import {
   EventContextSchema,
@@ -44,6 +40,11 @@ import {
   ServerEnvironment,
 } from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
+import {
+  registerSpineMetadata,
+  type SpineMetadata,
+} from "@spine-event-engine/server/spi/handler-registry";
+import { spineMetadataTestAccess } from "../../dist/handler/spine-metadata-inventory.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -119,9 +120,10 @@ function event(
     : taskEvent(id, tenantId);
 }
 function eventContext(tenantId?: string) {
-  return create(
-    EventContextSchema,
-    tenantId === undefined
+  return create(EventContextSchema, {
+    producerId: Identifiers.pack("string", "review-task-1"),
+    version: create(VersionSchema, { number: 1 }),
+    ...(tenantId === undefined
       ? {}
       : {
           origin: {
@@ -130,8 +132,8 @@ function eventContext(tenantId?: string) {
               tenantId: create(TenantIdSchema, { kind: { case: "value", value: tenantId } }),
             },
           },
-        },
-  );
+        }),
+  });
 }
 function taskEvent(id: string, tenantId?: string) {
   return create(EventSchema, {
@@ -161,20 +163,10 @@ async function close(...contexts: BoundedContext[]) {
   await Promise.all(contexts.map((context) => context.close()));
 }
 
-function createStandaloneGeneratedRegistryRoot(receivers: readonly object[]): URL {
-  const slot = `__spineIntegrationStandaloneRegistry_${Math.random().toString(36).slice(2)}`;
-  const root = mkdtempSync(join(tmpdir(), "spine-integration-standalone-registry-"));
-  const moduleDir = join(root, "generated/handler");
-  mkdirSync(moduleDir, { recursive: true });
-  (globalThis as Record<string, unknown>)[slot] = Object.freeze({
-    receivers: Object.freeze(receivers),
-  });
-  writeFileSync(
-    join(moduleDir, "generated-handler-registry.js"),
-    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
-    "utf8",
-  );
-  return pathToFileURL(root);
+function createStandaloneGeneratedRegistryRoot(receivers: readonly object[]): SpineMetadata {
+  const metadata = { receivers } as SpineMetadata;
+  registerSpineMetadata(metadata, "integration-broker-fixture");
+  return metadata;
 }
 
 function createEntityGeneratedRegistryRoot(
@@ -183,7 +175,7 @@ function createEntityGeneratedRegistryRoot(
     readonly stateSchema: GenMessage<Message>;
     readonly handlers: readonly object[];
   }[],
-): URL {
+): SpineMetadata {
   return createStandaloneGeneratedRegistryRoot(
     receivers.map(({ entityType, ...receiver }) => ({
       receiverKind: "entity" as const,
@@ -194,7 +186,10 @@ function createEntityGeneratedRegistryRoot(
 }
 
 describe("Wave 13 IntegrationBroker", () => {
-  beforeEach(async () => resetServerEnvironmentForTest());
+  beforeEach(async () => {
+    spineMetadataTestAccess.clear();
+    await resetServerEnvironmentForTest();
+  });
   afterEach(async () => resetServerEnvironmentForTest());
   it("RED-01 delivers one requested domestic event once between two same-process contexts", async () => {
     await broker("one producer / one consumer delivery");
@@ -226,7 +221,7 @@ describe("Wave 13 IntegrationBroker", () => {
       }
     }
     const subscriber = new ExternalSubscriber();
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    createStandaloneGeneratedRegistryRoot([
       {
         receiverKind: "standalone",
         receiverType: ExternalSubscriber,
@@ -242,7 +237,6 @@ describe("Wave 13 IntegrationBroker", () => {
       },
     ]);
     const consumer = await BoundedContext.singleTenant("StandaloneExternalConsumer")
-      .withGeneratedRegistryRoot(registryRoot)
       .addEventDispatcher(subscriber)
       .build();
     const producer = await BoundedContext.singleTenant("StandaloneExternalProducer")
@@ -455,8 +449,8 @@ describe("Wave 13 IntegrationBroker", () => {
       await close(p, c);
     }
   });
-  it("loads an entity state schema from a standalone generated registry root", async () => {
-    const registryRoot = createEntityGeneratedRegistryRoot([
+  it("retains an entity state schema in passive metadata", () => {
+    const metadata = createEntityGeneratedRegistryRoot([
       {
         entityType: ReviewTaskAssignedOriginProjection,
         stateSchema: Wave13OriginStateSchema,
@@ -464,22 +458,12 @@ describe("Wave 13 IntegrationBroker", () => {
       },
     ]);
 
-    const registry = (await import(
-      new URL("generated/handler/generated-handler-registry.js", `${registryRoot.href}/`).href
-    )) as unknown as {
-      readonly generatedHandlerRegistry: {
-        readonly receivers: readonly { readonly stateSchema?: unknown }[];
-      };
-    };
-
-    expect(registry.generatedHandlerRegistry.receivers[0]?.stateSchema).toBe(
-      Wave13OriginStateSchema,
-    );
+    expect(metadata.receivers[0]).toMatchObject({ stateSchema: Wave13OriginStateSchema });
   });
   it("RED-15 validates the existing tenant boundary and isolates imported tenants", async () => {
     await broker("tenant-aware imported intake");
     await ServerEnvironment.instance().completeSetup();
-    const registryRoot = createEntityGeneratedRegistryRoot([
+    createEntityGeneratedRegistryRoot([
       {
         entityType: ReviewTaskAssignedOriginProjection,
         stateSchema: Wave13OriginStateSchema,
@@ -496,7 +480,6 @@ describe("Wave 13 IntegrationBroker", () => {
     ]);
     ReviewTaskAssignedOriginProjection.reset();
     const c = await BoundedContext.multitenant("Red15")
-      .withGeneratedRegistryRoot(registryRoot)
       .add(ReviewTaskAssignedOriginProjection, { eventRouting: taskEventOriginRouting })
       .build();
     const p = await BoundedContext.multitenant("Red15P")

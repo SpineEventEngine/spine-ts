@@ -24,9 +24,9 @@ import type {
   SchemaReference,
 } from "./build-time-handler-analyzer.js";
 
-const defaultRegistryConst = "generatedHandlerRegistry";
+const defaultRegistryConst = "spineMetadata";
 const defaultRegistryModule = "@spine-event-engine/server/spi/handler-registry";
-const registryTypeName = "GeneratedHandlerRegistry";
+const registryTypeName = "SpineMetadata";
 const identRe = /^[$A-Z_a-z][$\w]*$/;
 const reservedWords = new Set([
   "arguments",
@@ -113,6 +113,16 @@ export interface RegistryRenderOptions {
    * Exported constant name for the generated registry object.
    */
   readonly registryName?: string;
+
+  /**
+   * Exported Proto module in the generated local `proto-module.ts`, if present.
+   */
+  readonly protoModuleExport?: string;
+
+  /**
+   * Module specifier for the exported Proto module; local by default.
+   */
+  readonly protoModuleSpecifier?: string;
 }
 
 /**
@@ -144,6 +154,49 @@ export class GeneratedRegistryWriter {
   // prettier-ignore
 
   /**
+   * Renders the local application bootstrap without starting a Server.
+   *
+   * @param options Metadata export name used by the generated bootstrap.
+   * @returns Static metadata registration source.
+   */
+  renderBootstrap(options: Pick<RegistryRenderOptions, "registryName"> = {}): string {
+    const registryName = options.registryName ?? defaultRegistryConst;
+    RegistrySource.assertRegistryName(registryName, new Set([registryTypeName]));
+    const registerName =
+      registryName === "registerSpineMetadata" ? "registerSpineMetadata_2" : "registerSpineMetadata";
+    const registerImport =
+      registerName === "registerSpineMetadata"
+        ? "registerSpineMetadata"
+        : `registerSpineMetadata as ${registerName}`;
+    return [
+      `import { ${registerImport} } from "@spine-event-engine/server/spi/handler-registry";`,
+      `import { ${registryName} } from "./spine-metadata.js";`,
+      "",
+      `${registerName}(${registryName}, "./spine-metadata.js");`,
+      "",
+    ].join("\n");
+  }
+
+  /**
+   * Writes the generated bootstrap under the same output guard as metadata.
+   *
+   * @param options Output path and repository guards.
+   * @returns Written bootstrap source.
+   */
+  writeBootstrap(options: RegistryWriteOptions): string {
+    RegistrySource.assertWriteOptions(options);
+    const source = this.renderBootstrap(options);
+    const repoRoot = resolve(options.repoRoot);
+    const outputDir = dirname(resolve(options.outputFile));
+    RegistrySource.assertGitIgnored(repoRoot, options.outputFile);
+    mkdirSync(outputDir, { recursive: true });
+    RegistrySource.assertNoSymlinkPath(repoRoot, outputDir, "Generated output directory");
+    RegistrySource.assertNoSymlinkOutput(options.outputFile);
+    RegistrySource.writeOutput(options.outputFile, source);
+    return source;
+  }
+
+  /**
    * Renders generated registry source without writing to disk.
    *
    * @param analysis Analyzed receiver handlers to render.
@@ -158,11 +211,19 @@ export class GeneratedRegistryWriter {
     const refs = RegistrySource.buildRefs(receivers, outputFile);
 
     RegistrySource.assertRegistryName(registryName, RegistrySource.importNames(refs));
+    const protoModule = RegistrySource.bindProtoModule(options, registryName, refs);
     const lines = [
       `import type { ${registryTypeName} } from ${RegistrySource.stringLiteral(registryModule)};`,
+      ...(protoModule === undefined ? [] : [protoModule.importLine]),
       ...refs.imports,
       "",
-      ...RegistrySource.renderRegistry(receivers, outputFile, registryName, refs),
+      ...RegistrySource.renderRegistry(
+        receivers,
+        outputFile,
+        registryName,
+        refs,
+        protoModule?.localName,
+      ),
       "",
     ];
 
@@ -200,9 +261,49 @@ export class GeneratedRegistryWriter {
  * Renders deterministic generated registries and guards file output.
  */
 const RegistrySource = Object.freeze({
+  /**
+   * Binds a Proto module import distinct from metadata and receiver symbols.
+   *
+   * @param options Proto export and module specifier from caller configuration.
+   * @param registryName Generated metadata declaration name.
+   * @param refs Already bound class and schema imports.
+   * @returns Aliased import and local binding when a Proto module is requested.
+   */
+  bindProtoModule(
+    options: RegistryRenderOptions,
+    registryName: string,
+    refs: RenderRefs,
+  ): { readonly importLine: string; readonly localName: string } | undefined {
+    const exported = options.protoModuleExport;
+    if (exported === undefined) return undefined;
+    if (!identRe.test(exported) || reservedWords.has(exported))
+      throw new Error(`Invalid Proto module export: ${exported}`);
+    const used = new Set([...RegistrySource.importNames(refs), registryName]);
+    const localName = RegistrySource.allocName(exported, used);
+    const binding = localName === exported ? exported : `${exported} as ${localName}`;
+    return {
+      importLine: `import { ${binding} } from ${RegistrySource.stringLiteral(options.protoModuleSpecifier ?? "./proto-module.js")};`,
+      localName,
+    };
+  },
+
+  /**
+   * Collects local identifiers that generated imports must not shadow.
+   *
+   * @param refs Allocated import and receiver references.
+   * @returns Identifiers reserved by generated imports.
+   */
   importNames(refs: RenderRefs): ReadonlySet<string> {
     return new Set([registryTypeName, ...refs.localNames]);
   },
+
+  /**
+   * Binds receiver classes and schemas to deterministic TypeScript imports.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param receivers Analyzed receiver descriptions.
+   * @returns Bound class and schema import references.
+   */
   buildRefs(receivers: readonly BuildReceiverHandlers[], outputFile: string): RenderRefs {
     const used = new Set<string>();
     const entityRefs = new Map<string, string>();
@@ -231,6 +332,17 @@ const RegistrySource = Object.freeze({
       localNames: used,
     };
   },
+
+  /**
+   * Records the class import and local identifier for an analyzed receiver.
+   *
+   * @param imports Ordered bound import references.
+   * @param names Receiver keys mapped to local identifiers.
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param raw Collected unbound import references.
+   * @param receiver Analyzed handler receiver.
+   * @param used Already allocated local identifiers.
+   */
   addReceiverRef(
     receiver: BuildReceiverHandlers,
     outputFile: string,
@@ -259,6 +371,14 @@ const RegistrySource = Object.freeze({
     }
     names.set(RegistrySource.entityKey(ref.moduleSpecifier, ref.importedName), ref.localName);
   },
+
+  /**
+   * Collects Proto schemas referenced by a receiver and its handlers.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param receiver Analyzed handler receiver.
+   * @param schemas Mutable schema import collection.
+   */
   addReceiverSchemas(
     receiver: BuildReceiverHandlers,
     outputFile: string,
@@ -274,6 +394,14 @@ const RegistrySource = Object.freeze({
       handler.outcomes.thrown.forEach(add);
     }
   },
+
+  /**
+   * Binds stable local names for collected schema imports.
+   *
+   * @param raw Collected unbound import references.
+   * @param used Already allocated local identifiers.
+   * @returns Schema imports and their allocated local names.
+   */
   bindSchemaRefs(raw: Map<string, ImportRef>, used: Set<string>) {
     const schemaRefs = new Map<string, string>();
     const schemaImports = [...raw.values()].sort(RegistrySource.compareRef).map((ref) => {
@@ -286,13 +414,29 @@ const RegistrySource = Object.freeze({
     });
     return { schemaImports, schemaRefs };
   },
+
+  /**
+   * Renders the complete passive metadata source from bound receiver references.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param protoModuleExport Value used by this operation.
+   * @param receivers Analyzed receiver descriptions.
+   * @param refs Allocated import and receiver references.
+   * @param registryName Generated metadata export name.
+   * @returns Complete passive metadata source.
+   */
   renderRegistry(
     receivers: readonly BuildReceiverHandlers[],
     outputFile: string,
     registryName: string,
     refs: RenderRefs,
+    protoModuleExport?: string,
   ): readonly string[] {
-    const lines = [`export const ${registryName}: GeneratedHandlerRegistry = {`, "  receivers: ["];
+    const lines = [
+      `export const ${registryName}: ${registryTypeName} = {`,
+      ...(protoModuleExport === undefined ? [] : [`  protoModule: ${protoModuleExport},`]),
+      "  receivers: [",
+    ];
 
     receivers.forEach((receiver) => {
       lines.push(...RegistrySource.renderReceiver(receiver, outputFile, refs));
@@ -301,6 +445,15 @@ const RegistrySource = Object.freeze({
 
     return lines;
   },
+
+  /**
+   * Renders one generated entity or standalone receiver description.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param receiver Analyzed handler receiver.
+   * @param refs Allocated import and receiver references.
+   * @returns Receiver description source.
+   */
   renderReceiver(
     receiver: BuildReceiverHandlers,
     outputFile: string,
@@ -326,6 +479,16 @@ const RegistrySource = Object.freeze({
     lines.push("      ],", "    },");
     return lines;
   },
+
+  /**
+   * Renders one declared handler with its input and outcome schemas.
+   *
+   * @param handler Analyzed handler declaration.
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param refs Allocated import and receiver references.
+   * @param sourceFile Source file containing the referenced symbol.
+   * @returns Handler description source.
+   */
   renderHandler(
     handler: BuildHandlerRecord,
     sourceFile: string,
@@ -353,6 +516,13 @@ const RegistrySource = Object.freeze({
       "        },",
     ];
   },
+
+  /**
+   * Renders a declared event filter as a source expression.
+   *
+   * @param where Declared event filter.
+   * @returns Event filter source expression.
+   */
   renderWhere(where: BuildWhereOptions | undefined): readonly string[] {
     return where === undefined
       ? []
@@ -363,6 +533,15 @@ const RegistrySource = Object.freeze({
           "            },",
         ];
   },
+
+  /**
+   * Records an import reference for one Proto schema.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param schema Referenced Proto schema.
+   * @param schemaImports Collected Proto schema imports.
+   * @param sourceFile Source file containing the referenced symbol.
+   */
   addSchemaRef(
     schemaImports: Map<string, ImportRef>,
     outputFile: string,
@@ -386,12 +565,29 @@ const RegistrySource = Object.freeze({
       moduleSpecifier,
     });
   },
+
+  /**
+   * Resolves an Entity source module from the generated output.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param sourceFile Source file containing the referenced symbol.
+   * @returns Entity module import specifier.
+   */
   entityModule(outputFile: string, sourceFile: string): string {
     return RegistrySource.relativeModule(
       dirname(outputFile),
       RegistrySource.replaceSourceExtension(sourceFile),
     );
   },
+
+  /**
+   * Resolves a schema module import against the generated output.
+   *
+   * @param moduleSpecifier Imported module specifier.
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param sourceFile Source file containing the referenced symbol.
+   * @returns Schema module import specifier.
+   */
   importedSchemaModule(outputFile: string, sourceFile: string, moduleSpecifier: string): string {
     if (!moduleSpecifier.startsWith(".")) {
       return moduleSpecifier;
@@ -401,11 +597,26 @@ const RegistrySource = Object.freeze({
 
     return RegistrySource.relativeModule(dirname(outputFile), resolved);
   },
+
+  /**
+   * Builds a relative JavaScript module specifier between source paths.
+   *
+   * @param fromDirectory Importing source directory.
+   * @param targetPath Generated or compiler path to validate.
+   * @returns Relative JavaScript module specifier.
+   */
   relativeModule(fromDirectory: string, targetPath: string): string {
     const value = relative(fromDirectory, targetPath).split(sep).join("/");
 
     return value.startsWith(".") ? value : `./${value}`;
   },
+
+  /**
+   * Converts a TypeScript source path to its runtime JavaScript path.
+   *
+   * @param path Path or Proto import path to inspect.
+   * @returns Runtime JavaScript path.
+   */
   replaceSourceExtension(path: string): string {
     const extension = extname(path);
 
@@ -421,18 +632,42 @@ const RegistrySource = Object.freeze({
         return path;
     }
   },
+
+  /**
+   * Compares import references by stable module and symbol identity.
+   *
+   * @param left First value in stable ordering.
+   * @param right Second value in stable ordering.
+   * @returns Negative, zero, or positive stable comparison.
+   */
   compareRef(left: ImportRef, right: ImportRef): number {
     return (
       RegistrySource.compareString(left.moduleSpecifier, right.moduleSpecifier) ||
       RegistrySource.compareString(left.importedName, right.importedName)
     );
   },
+
+  /**
+   * Binds an unused local identifier to an import reference.
+   *
+   * @param ref Bound import reference.
+   * @param used Already allocated local identifiers.
+   * @returns Import reference with an allocated local identifier.
+   */
   bindRef(ref: ImportRef, used: Set<string>): ImportRef {
     return {
       ...ref,
       localName: RegistrySource.allocName(ref.importedName, used),
     };
   },
+
+  /**
+   * Returns a collision-free generated import identifier.
+   *
+   * @param base Preferred generated identifier.
+   * @param used Already allocated local identifiers.
+   * @returns Collision-free local identifier.
+   */
   allocName(base: string, used: Set<string>): string {
     let next = base;
     let index = 2;
@@ -445,6 +680,13 @@ const RegistrySource = Object.freeze({
     used.add(next);
     return next;
   },
+
+  /**
+   * Renders the import statement for a bound symbol.
+   *
+   * @param ref Bound import reference.
+   * @returns TypeScript import statement.
+   */
   renderImport(ref: ImportRef): string {
     if (ref.defaultExport === true) {
       return `import ${ref.localName} from ${RegistrySource.stringLiteral(ref.moduleSpecifier)};`;
@@ -456,6 +698,13 @@ const RegistrySource = Object.freeze({
 
     return `import { ${local} } from ${RegistrySource.stringLiteral(ref.moduleSpecifier)};`;
   },
+
+  /**
+   * Renders deterministic import statements for collected schemas.
+   *
+   * @param refs Allocated import and receiver references.
+   * @returns Ordered schema import statements.
+   */
   renderSchemaImports(refs: readonly ImportRef[]): readonly string[] {
     const grouped = new Map<string, string[]>();
 
@@ -479,6 +728,15 @@ const RegistrySource = Object.freeze({
         `import { ${names.join(", ")} } from ${RegistrySource.stringLiteral(moduleSpecifier)};`,
     );
   },
+
+  /**
+   * Finds the allocated local identifier for an Entity class.
+   *
+   * @param entity Entity class description.
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param refs Allocated import and receiver references.
+   * @returns Allocated Entity class identifier.
+   */
   entityName(refs: RenderRefs, outputFile: string, entity: BuildReceiverHandlers): string {
     return RegistrySource.refName(
       refs.entityNames,
@@ -488,6 +746,16 @@ const RegistrySource = Object.freeze({
       ),
     );
   },
+
+  /**
+   * Finds the allocated local identifier for a Proto schema.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param refs Allocated import and receiver references.
+   * @param schema Referenced Proto schema.
+   * @param sourceFile Source file containing the referenced symbol.
+   * @returns Allocated Proto schema identifier.
+   */
   schemaName(
     refs: RenderRefs,
     outputFile: string,
@@ -502,6 +770,14 @@ const RegistrySource = Object.freeze({
       ),
     );
   },
+
+  /**
+   * Finds a bound local name by its stable reference key.
+   *
+   * @param key Stable reference key.
+   * @param refs Allocated import and receiver references.
+   * @returns Bound local identifier.
+   */
   refName(refs: ReadonlyMap<string, string>, key: string): string {
     const value = refs.get(key);
 
@@ -511,14 +787,36 @@ const RegistrySource = Object.freeze({
 
     throw new Error(`Missing generated registry import binding for ${key}.`);
   },
+
+  /**
+   * Builds the stable module-and-symbol key for a receiver class.
+   *
+   * @param importedName Value used by this operation.
+   * @param moduleSpecifier Imported module specifier.
+   * @returns Stable receiver class key.
+   */
   entityKey(moduleSpecifier: string, importedName: string): string {
     return `${moduleSpecifier}::${importedName}`;
   },
+
+  /**
+   * Encodes a value as a safe TypeScript string literal.
+   *
+   * @param value Value being read or validated.
+   * @returns Escaped TypeScript string literal.
+   */
   stringLiteral(value: string): string {
     return JSON.stringify(value)
       .replace(/\u2028/g, "\\u2028")
       .replace(/\u2029/g, "\\u2029");
   },
+
+  /**
+   * Rejects a symbol name that cannot be emitted as an identifier.
+   *
+   * @param label Diagnostic label for the checked path.
+   * @param value Value being read or validated.
+   */
   assertIdentifier(value: string, label: string): void {
     if (identRe.test(value)) {
       return;
@@ -526,6 +824,13 @@ const RegistrySource = Object.freeze({
 
     throw new Error(`${label} must be a valid TypeScript identifier: ${value}`);
   },
+
+  /**
+   * Rejects an invalid or colliding metadata export name.
+   *
+   * @param localNames Already allocated local identifiers.
+   * @param value Value being read or validated.
+   */
   assertRegistryName(value: string, localNames: ReadonlySet<string>): void {
     RegistrySource.assertIdentifier(value, "Registry name");
 
@@ -537,6 +842,12 @@ const RegistrySource = Object.freeze({
       throw new Error(`Registry name collides with generated import binding: ${value}`);
     }
   },
+
+  /**
+   * Rejects analyzer findings before source publication.
+   *
+   * @param analysis Analyzed receiver descriptions and diagnostics.
+   */
   assertNoDiagnostics(analysis: BuildHandlerAnalysis): void {
     if (analysis.diagnostics.length === 0) {
       return;
@@ -552,6 +863,12 @@ const RegistrySource = Object.freeze({
       `Cannot write generated handler registry with analyzer diagnostics. First diagnostic: ${location}.`,
     );
   },
+
+  /**
+   * Validates generated output paths and publication settings.
+   *
+   * @param options Caller configuration for the operation.
+   */
   assertWriteOptions(options: RegistryWriteOptions): void {
     const repoRoot = resolve(options.repoRoot);
     const generatedRoot = resolve(options.generatedRoot);
@@ -576,6 +893,12 @@ const RegistrySource = Object.freeze({
     RegistrySource.assertNoSymlinkPath(repoRoot, generatedRoot, "Generated root");
     RegistrySource.assertNoSymlinkPath(repoRoot, dirname(outputFile), "Generated output directory");
   },
+
+  /**
+   * Checks that the repository root is a real directory.
+   *
+   * @param repoRoot Repository root used for output guards.
+   */
   assertRepoRoot(repoRoot: string): void {
     RegistrySource.assertNoSymlinkAncestors(repoRoot, "Repository root path");
     const stat = RegistrySource.lstatIfPresent(repoRoot);
@@ -592,6 +915,13 @@ const RegistrySource = Object.freeze({
       throw new Error(`Repository root must be a directory: ${repoRoot}`);
     }
   },
+
+  /**
+   * Rejects symlinks along a generated output path.
+   *
+   * @param label Diagnostic label for the checked path.
+   * @param targetPath Generated or compiler path to validate.
+   */
   assertNoSymlinkAncestors(targetPath: string, label: string): void {
     const parts = resolve(targetPath).split(sep).filter(Boolean);
     let current: string = sep;
@@ -609,6 +939,12 @@ const RegistrySource = Object.freeze({
       }
     }
   },
+
+  /**
+   * Rejects a symlink at the generated output file.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   */
   assertNoSymlinkOutput(outputFile: string): void {
     const stat = RegistrySource.lstatIfPresent(resolve(outputFile));
 
@@ -616,6 +952,13 @@ const RegistrySource = Object.freeze({
       throw new Error(`Generated output file must not be a symlink: ${outputFile}`);
     }
   },
+
+  /**
+   * Writes generated source through a temporary file and atomic rename.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param source Generated or source TypeScript text.
+   */
   writeOutput(outputFile: string, source: string): void {
     const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW;
     const fd = openSync(outputFile, flags, 0o666);
@@ -626,6 +969,14 @@ const RegistrySource = Object.freeze({
       closeSync(fd);
     }
   },
+
+  /**
+   * Checks that a target path remains inside its allowed root.
+   *
+   * @param label Diagnostic label for the checked path.
+   * @param root Confinement or generated-tree root.
+   * @param target Target path to validate.
+   */
   assertWithin(root: string, target: string, label: string): void {
     const value = relative(root, target);
 
@@ -633,6 +984,14 @@ const RegistrySource = Object.freeze({
       throw new Error(`${label} must stay within ${root}.`);
     }
   },
+
+  /**
+   * Checks every existing component of a generated path for symlinks.
+   *
+   * @param label Diagnostic label for the checked path.
+   * @param repoRoot Repository root used for output guards.
+   * @param targetPath Generated or compiler path to validate.
+   */
   assertNoSymlinkPath(repoRoot: string, targetPath: string, label: string): void {
     const relativePath = relative(repoRoot, targetPath);
 
@@ -660,6 +1019,13 @@ const RegistrySource = Object.freeze({
       }
     }
   },
+
+  /**
+   * Rejects generated output that is not ignored by Git.
+   *
+   * @param outputFile Generated output file used for import or publication paths.
+   * @param repoRoot Repository root used for output guards.
+   */
   assertGitIgnored(repoRoot: string, outputFile: string): void {
     const relativePath = relative(resolve(repoRoot), resolve(outputFile));
     const result = spawnSync("git", ["check-ignore", "--quiet", "--", relativePath], {
@@ -677,6 +1043,13 @@ const RegistrySource = Object.freeze({
 
     throw new Error(`Failed to verify Git ignore status for generated output: ${relativePath}`);
   },
+
+  /**
+   * Reads filesystem metadata when a path exists.
+   *
+   * @param path Path or Proto import path to inspect.
+   * @returns Filesystem metadata, or undefined for an absent path.
+   */
   lstatIfPresent(path: string) {
     try {
       return lstatSync(path);
@@ -688,6 +1061,14 @@ const RegistrySource = Object.freeze({
       throw error;
     }
   },
+
+  /**
+   * Compares strings deterministically for generated source.
+   *
+   * @param left First value in stable ordering.
+   * @param right Second value in stable ordering.
+   * @returns Negative, zero, or positive lexical comparison.
+   */
   compareString(left: string, right: string): number {
     if (left === right) {
       return 0;

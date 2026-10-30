@@ -16,8 +16,8 @@ import { Buffer } from "node:buffer";
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
-import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
-import { AnyPacker } from "@spine-event-engine/core";
+import { EventContextSchema, EventIdSchema, VersionSchema } from "@spine-event-engine/proto";
+import { AnyPacker, Identifiers } from "@spine-event-engine/core";
 import ts from "typescript";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -42,7 +42,6 @@ describe("Wave 13 external receptor origin", () => {
     const registry = createWave13OriginRegistry();
     Wave13OriginProjection.reset();
     const context = await BoundedContext.singleTenant("Red03MixedOrigin")
-      .withGeneratedRegistryRoot(registry.root)
       .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
       .build();
     try {
@@ -58,7 +57,6 @@ describe("Wave 13 external receptor origin", () => {
     const registry = createWave13OriginRegistry();
     Wave13OriginProjection.reset();
     const context = await BoundedContext.singleTenant("Red04MixedOrigin")
-      .withGeneratedRegistryRoot(registry.root)
       .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
       .build();
     try {
@@ -101,7 +99,7 @@ describe("Wave 13 external receptor origin", () => {
     const generated = new GeneratedRegistryWriter().render(result, {
       outputFile: "/tmp/wave13/generated/handler/generated-handler-registry.ts",
     });
-    expect(generated).toContain("GeneratedHandlerRegistry");
+    expect(generated).toContain("SpineMetadata");
     expect(generated).toContain("receivers: [");
     expect(generated).toContain('origin: "external"');
     expect(generated).toContain('origin: "domestic"');
@@ -131,7 +129,11 @@ function event(externalOrigin: boolean) {
   return {
     $typeName: "spine.core.Event",
     id: create(EventIdSchema, { value }),
-    context: create(EventContextSchema, { external: externalOrigin }),
+    context: create(EventContextSchema, {
+      external: externalOrigin,
+      producerId: Identifiers.pack("string", value),
+      version: create(VersionSchema, { number: 1 }),
+    }),
     message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id: value, name: value }),

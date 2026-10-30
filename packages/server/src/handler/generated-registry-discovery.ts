@@ -21,8 +21,8 @@ import {
 } from "./generated-handler-registry.js";
 import { HandlerMetadataRegistry } from "./handler-metadata.js";
 
-const defaultExportName = "generatedHandlerRegistry";
-const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
+const defaultExportName = "spineMetadata";
+const generatedRegistryFile = "generated/spine-metadata.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 
 /**
@@ -192,6 +192,12 @@ export class GeneratedRegistryDiscovery {
     return registry;
   }
 
+  /**
+   * Loads and validates explicitly listed generated metadata modules.
+   *
+   * @param options Caller configuration for the operation.
+   * @returns Validated metadata modules in request order.
+   */
   private async loadModules(
     options: GeneratedRegistryDiscoveryOptions,
   ): Promise<readonly LoadedGeneratedRegistry[]> {
@@ -221,6 +227,12 @@ interface LoadedGeneratedRegistry {
 }
 
 const RegistryModules = Object.freeze({
+  /**
+   * Loads one generated metadata module with a structured failure.
+   *
+   * @param moduleId Explicit module identifier.
+   * @returns Imported module namespace.
+   */
   async import(moduleId: string): Promise<unknown> {
     try {
       return await import(moduleId);
@@ -234,6 +246,13 @@ const RegistryModules = Object.freeze({
     }
   },
 
+  /**
+   * Adds a caller-supplied cache key to an explicit module URL.
+   *
+   * @param moduleId Explicit module identifier.
+   * @param options Caller configuration for the operation.
+   * @returns Module URL with the optional cache key.
+   */
   cacheable(moduleId: string, options: GeneratedRegistryDiscoveryOptions): string {
     if (options.cacheBust === undefined || options.cacheBust.length === 0) {
       return moduleId;
@@ -245,6 +264,14 @@ const RegistryModules = Object.freeze({
     return moduleUrl.href;
   },
 
+  /**
+   * Reads and validates the metadata export of one module.
+   *
+   * @param exportName Name of the metadata export.
+   * @param exports Imported module namespace.
+   * @param moduleId Explicit module identifier.
+   * @returns Validated generated registry.
+   */
   registry(exports: unknown, moduleId: string, exportName: string): GeneratedHandlerRegistry {
     const value = RegistryModules.export(exports, exportName);
 
@@ -267,6 +294,13 @@ const RegistryModules = Object.freeze({
     );
   },
 
+  /**
+   * Reads a named export from a module namespace.
+   *
+   * @param exportName Name of the metadata export.
+   * @param exports Imported module namespace.
+   * @returns Named export, if present.
+   */
   export(exports: unknown, exportName: string): unknown {
     if (exports === null || typeof exports !== "object") {
       return undefined;
@@ -275,6 +309,12 @@ const RegistryModules = Object.freeze({
     return (exports as Record<string, unknown>)[exportName];
   },
 
+  /**
+   * Checks the shape of a generated registry export.
+   *
+   * @param value Value being read or validated.
+   * @returns Whether the value has the generated registry shape.
+   */
   isRegistry(value: unknown): value is GeneratedHandlerRegistry {
     if (value === null || typeof value !== "object") {
       return false;
@@ -285,6 +325,12 @@ const RegistryModules = Object.freeze({
     return Array.isArray(receivers);
   },
 
+  /**
+   * Normalizes an explicit module reference to a URL.
+   *
+   * @param moduleRef Module path or URL reference.
+   * @returns Normalized module URL.
+   */
   normalize(moduleRef: string | URL): string {
     if (moduleRef instanceof URL) {
       return RegistryModules.url(moduleRef);
@@ -297,6 +343,12 @@ const RegistryModules = Object.freeze({
     return pathToFileURL(resolve(moduleRef)).href;
   },
 
+  /**
+   * Normalizes a generated metadata module URL.
+   *
+   * @param moduleUrl URL of the metadata module.
+   * @returns Normalized metadata module URL.
+   */
   url(moduleUrl: URL): string {
     if (moduleUrl.protocol !== "file:") {
       throw new GeneratedRegistryDiscoveryError(
@@ -326,10 +378,22 @@ const RegistryModules = Object.freeze({
     }
   },
 
+  /**
+   * Checks whether URL references from filesystem paths.
+   *
+   * @param moduleRef Module path or URL reference.
+   * @returns Whether the reference is a URL.
+   */
   isUrl(moduleRef: string): boolean {
     return moduleSchemeRe.test(moduleRef) && !/^[A-Za-z]:[\\/]/.test(moduleRef);
   },
 
+  /**
+   * Parses a module reference as a URL when possible.
+   *
+   * @param moduleRef Module path or URL reference.
+   * @returns Parsed URL when the reference is valid.
+   */
   parse(moduleRef: string): URL {
     try {
       return new URL(moduleRef);
@@ -343,6 +407,11 @@ const RegistryModules = Object.freeze({
     }
   },
 
+  /**
+   * Rejects repeated module IDs before importing metadata.
+   *
+   * @param moduleIds Value used by this operation.
+   */
   assertUnique(moduleIds: readonly string[]): void {
     const seen = new Set<string>();
 

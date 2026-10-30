@@ -12,11 +12,6 @@
  * the License.
  */
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-
 import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
@@ -54,6 +49,12 @@ import {
   type EntityRecordStorage,
 } from "@spine-event-engine/storage/provider";
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import {
+  registerSpineMetadata,
+  spineMetadataFor,
+  spineMetadataTestAccess,
+  type SpineMetadata,
+} from "../../src/handler/spine-metadata-inventory.js";
 
 import {
   Aggregate,
@@ -91,7 +92,8 @@ import {
 } from "../../src/server/server-environment.js";
 import { EnvironmentType } from "../../src/server/environment.js";
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
-import { GeneratedRegistryDiscovery } from "../../src/handler/generated-registry-discovery.js";
+import * as metadataSpi from "../../src/spi/handler-registry.js";
+import type { GeneratedEntityHandlerGroup } from "../../src/handler/generated-handler-registry.js";
 import {
   InMemorySubscriptionRegistry,
   StorageSubscriptionRegistry,
@@ -117,6 +119,8 @@ import {
 import { tenant } from "../tenant-fixture.js";
 
 beforeEach(async () => {
+  spineMetadataTestAccess.clear();
+  registeredReceiverClasses.clear();
   await ServerEnvironment.instance().completeSetup();
 });
 
@@ -446,7 +450,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("uses generated onCreate for a Process Manager constructor service", async () => {
-    const registryRoot = createGeneratedRegistryRoot([
+    registerGeneratedMetadata([
       {
         entityType: ConfiguredTaskAssignment,
         stateSchema: ProcessManagerStateSchema,
@@ -463,7 +467,7 @@ describe("BoundedContext assembly", () => {
     ]);
     const seen: number[] = [];
     const context = await BoundedContext.singleTenant("Tasks")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .add(ConfiguredTaskAssignment, {
         onCreate(options) {
           seen.push(options.version?.number ?? -1);
@@ -623,7 +627,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("describes configured supported delivery endpoints and their shards", async () => {
-    const registryRoot = createGeneratedRegistryRoot([
+    registerGeneratedMetadata([
       {
         entityType: GeneratedTaskProcessManager,
         stateSchema: ProcessManagerStateSchema,
@@ -652,7 +656,7 @@ describe("BoundedContext assembly", () => {
       },
     ]);
     const context = await BoundedContext.singleTenant("Tasks")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .add(GeneratedTaskProcessManager)
       .add(TaskProjection)
       .build();
@@ -681,7 +685,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("passes custom routing when adding an Entity class with generated handlers", async () => {
-    const registryRoot = createGeneratedRegistryRoot([
+    registerGeneratedMetadata([
       {
         entityType: TaskProjection,
         stateSchema: ProjectOverviewStateSchema,
@@ -701,7 +705,7 @@ describe("BoundedContext assembly", () => {
     ]);
     await expect(
       BoundedContext.singleTenant("CustomRouting")
-        .withGeneratedRegistryRoot(registryRoot)
+
         .add(TaskProjection, { eventRouting })
         .build(),
     ).rejects.toThrow(
@@ -725,7 +729,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("matches standalone generated metadata by exact registered constructor", async () => {
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneAssignee,
         "command-assignment",
@@ -737,17 +741,15 @@ describe("BoundedContext assembly", () => {
 
     await expect(
       BoundedContext.singleTenant("StandaloneExact")
-        .withGeneratedRegistryRoot(registryRoot)
+
         .addAssignee(new OtherStandaloneAssignee())
         .build(),
-    ).rejects.toThrow(
-      "Generated standalone receiver StandaloneAssignee has no explicitly registered instance",
-    );
+    ).rejects.toThrow("Generated metadata for OtherStandaloneAssignee is missing");
   });
 
   it("rejects duplicate standalone instances during generated assembly", async () => {
     const instance = new StandaloneAssignee();
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneAssignee,
         "command-assignment",
@@ -759,17 +761,17 @@ describe("BoundedContext assembly", () => {
 
     await expect(
       BoundedContext.singleTenant("StandaloneDuplicate")
-        .withGeneratedRegistryRoot(registryRoot)
+
         .addAssignee(instance)
         .addAssignee(instance)
         .build(),
-    ).rejects.toThrow("Standalone receiver StandaloneAssignee is registered more than once");
+    ).rejects.toThrow("Standalone command receptors conflict");
   });
 
   it("installs assignee and commander through their public registration paths", async () => {
     const assignee = new StandaloneAssignee();
     const commander = new StandaloneCommander();
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneAssignee,
         "command-assignment",
@@ -786,7 +788,7 @@ describe("BoundedContext assembly", () => {
       ),
     ]);
     const context = await BoundedContext.singleTenant("StandalonePaths")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .addAssignee(assignee)
       .addCommandDispatcher(commander)
       .build();
@@ -800,7 +802,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("rejects an assignee and commander generated for the same Command before intake", async () => {
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneAssignee,
         "command-assignment",
@@ -819,7 +821,7 @@ describe("BoundedContext assembly", () => {
 
     await expect(
       BoundedContext.singleTenant("StandaloneMixedReceptor")
-        .withGeneratedRegistryRoot(registryRoot)
+
         .addAssignee(new StandaloneAssignee())
         .addCommandDispatcher(new CollidingStandaloneCommander())
         .build(),
@@ -829,7 +831,7 @@ describe("BoundedContext assembly", () => {
   it("installs reactor and subscriber through the public Event dispatcher path", async () => {
     const reactor = new StandaloneReactor();
     const subscriber = new StandaloneSubscriber();
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneReactor,
         "event-reaction",
@@ -846,7 +848,7 @@ describe("BoundedContext assembly", () => {
       ),
     ]);
     const context = await BoundedContext.singleTenant("StandaloneEvents")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .addEventDispatcher(reactor)
       .addEventDispatcher(subscriber)
       .build();
@@ -862,7 +864,7 @@ describe("BoundedContext assembly", () => {
   it("delivers standalone-produced Commands and Events through this context buses", async () => {
     const commands: string[] = [];
     const events: string[] = [];
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneCommander,
         "command-substitution",
@@ -879,7 +881,7 @@ describe("BoundedContext assembly", () => {
       ),
     ]);
     const context = await BoundedContext.singleTenant("StandaloneProducedSignals")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .addCommandDispatcher(new StandaloneCommander())
       .addCommandDispatcher(
         createCommandDispatcher([AssignReviewTaskSchema], (command) => {
@@ -908,7 +910,7 @@ describe("BoundedContext assembly", () => {
   it("matches a dependency-injected standalone commander by its registered constructor", async () => {
     const names: string[] = [];
     const commander = new DependencyInjectedStandaloneCommander("dependency");
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         DependencyInjectedStandaloneCommander,
         "command-substitution",
@@ -918,7 +920,7 @@ describe("BoundedContext assembly", () => {
       ),
     ]);
     const context = await BoundedContext.singleTenant("DependencyInjectedStandalone")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .addCommandDispatcher(commander)
       .addCommandDispatcher(
         createCommandDispatcher([AssignReviewTaskSchema], (command) => {
@@ -942,7 +944,7 @@ describe("BoundedContext assembly", () => {
 
   it("drains a produced Command when close starts before its bus dispatch", async () => {
     const commands: string[] = [];
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneCommander,
         "command-substitution",
@@ -952,7 +954,7 @@ describe("BoundedContext assembly", () => {
       ),
     ]);
     const context = await BoundedContext.singleTenant("StandaloneCloseDrain")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .addCommandDispatcher(new StandaloneCommander())
       .addCommandDispatcher(
         createCommandDispatcher([AssignReviewTaskSchema], (command) => {
@@ -981,7 +983,7 @@ describe("BoundedContext assembly", () => {
   it("drains an ordinary Entity Command handed off before close", async () => {
     const backend = new InMemoryStorageBackend();
     await configureStorage(new InMemoryStorageFactory(backend));
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneCommander,
         "command-substitution",
@@ -997,7 +999,7 @@ describe("BoundedContext assembly", () => {
     ]);
     const build = () =>
       BoundedContext.singleTenant("OrdinaryHandoffClose")
-        .withGeneratedRegistryRoot(registryRoot)
+
         .addCommandDispatcher(new StandaloneCommander())
         .add(ReplayTaskAggregate)
         .build();
@@ -1045,7 +1047,7 @@ describe("BoundedContext assembly", () => {
   it("contains one standalone-produced Command failure without suppressing its later sibling", async () => {
     const delivered: string[] = [];
     const unhandled: unknown[] = [];
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         SiblingStandaloneCommander,
         "command-substitution",
@@ -1055,7 +1057,7 @@ describe("BoundedContext assembly", () => {
       ),
     ]);
     const context = await BoundedContext.singleTenant("StandaloneSiblingFailure")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .addCommandDispatcher(new SiblingStandaloneCommander())
       .addCommandDispatcher(
         createCommandDispatcher([AssignReviewTaskSchema], (command) => {
@@ -1116,7 +1118,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("rejects a raw command dispatcher that collides with generated standalone metadata", async () => {
-    const registryRoot = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneAssignee,
         "command-assignment",
@@ -1127,7 +1129,7 @@ describe("BoundedContext assembly", () => {
     ]);
     await expect(
       BoundedContext.singleTenant("StandaloneCollision")
-        .withGeneratedRegistryRoot(registryRoot)
+
         .addAssignee(new StandaloneAssignee())
         .addCommandDispatcher({
           messageSchemas: () => [AssignReviewTaskSchema],
@@ -1140,7 +1142,7 @@ describe("BoundedContext assembly", () => {
   it("enumerates every configured entity inbox shard from the context delivery strategy", async () => {
     const strategy = UniformAcrossAllShards.forNumber(3);
     await configureDelivery(new InMemoryStorageFactory(), strategy);
-    const registryRoot = createGeneratedRegistryRoot([
+    registerGeneratedMetadata([
       {
         entityType: GeneratedTaskProcessManager,
         stateSchema: ProcessManagerStateSchema,
@@ -1156,7 +1158,7 @@ describe("BoundedContext assembly", () => {
       },
     ]);
     const context = await BoundedContext.singleTenant("Tasks")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .add(GeneratedTaskProcessManager)
       .build();
 
@@ -1179,7 +1181,7 @@ describe("BoundedContext assembly", () => {
       },
     };
     await configureDelivery(storageFactory, strategy);
-    const registryRoot = createGeneratedRegistryRoot([
+    registerGeneratedMetadata([
       {
         entityType: GeneratedTaskProcessManager,
         stateSchema: ProcessManagerStateSchema,
@@ -1195,7 +1197,7 @@ describe("BoundedContext assembly", () => {
       },
     ]);
     const context = await BoundedContext.singleTenant("StrategyClone")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .add(GeneratedTaskProcessManager)
       .build();
 
@@ -1215,12 +1217,12 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new InMemoryStorageFactory();
     const strategy = UniformAcrossAllShards.forNumber(3);
     await configureDelivery(storageFactory, strategy);
-    const registry = createGeneratedRegistryFixture([
+    createGeneratedRegistryFixture([
       aggregateReplayRegistry(ReplayTaskAggregate),
       replayProcessManagerRegistry(ReplayTaskProcessManager),
     ]);
     const context = await BoundedContext.singleTenant("DescriptorReplay")
-      .withGeneratedRegistryRoot(registry.root)
+
       .add(ReplayTaskAggregate)
       .add(ReplayTaskProcessManager)
       .build();
@@ -1288,7 +1290,6 @@ describe("BoundedContext assembly", () => {
       );
     } finally {
       await context.close();
-      removeGeneratedRegistry(registry);
     }
   });
 
@@ -1296,12 +1297,12 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new InMemoryStorageFactory();
     const strategy = UniformAcrossAllShards.forNumber(3);
     await configureDelivery(storageFactory, strategy);
-    const registry = createGeneratedRegistryFixture([
+    createGeneratedRegistryFixture([
       aggregateReplayRegistry(ReplayTaskAggregate),
       replayProcessManagerRegistry(ReplayTaskProcessManager),
     ]);
     const context = await BoundedContext.singleTenant("ForgedDescriptorShard")
-      .withGeneratedRegistryRoot(registry.root)
+
       .add(ReplayTaskAggregate)
       .add(ReplayTaskProcessManager)
       .build();
@@ -1351,7 +1352,6 @@ describe("BoundedContext assembly", () => {
       ).resolves.toBeUndefined();
     } finally {
       await context.close();
-      removeGeneratedRegistry(registry);
     }
   });
 
@@ -1360,15 +1360,13 @@ describe("BoundedContext assembly", () => {
     const strategy = UniformAcrossAllShards.forNumber(3);
     await configureDelivery(storageFactory, strategy);
     const contextName = "FreshMultiShardDescriptor";
-    const registry = createGeneratedRegistryFixture([
-      replayProcessManagerRegistry(ReplayTaskProcessManager),
-    ]);
+    createGeneratedRegistryFixture([replayProcessManagerRegistry(ReplayTaskProcessManager)]);
     let first: BoundedContext | undefined;
     let recovered: BoundedContext | undefined;
 
     try {
       first = await BoundedContext.singleTenant(contextName)
-        .withGeneratedRegistryRoot(registry.root)
+
         .add(ReplayTaskProcessManager)
         .build();
       const firstDescriptor = internalDeliveryDescriptor(first);
@@ -1406,7 +1404,7 @@ describe("BoundedContext assembly", () => {
       first = undefined;
 
       recovered = await BoundedContext.singleTenant(contextName)
-        .withGeneratedRegistryRoot(registry.root)
+
         .add(ReplayTaskProcessManager)
         .build();
       const recoveryContext = requireRecoveryContext(recovered);
@@ -1448,7 +1446,6 @@ describe("BoundedContext assembly", () => {
     } finally {
       await first?.close();
       await recovered?.close();
-      removeGeneratedRegistry(registry);
     }
   });
 
@@ -1458,12 +1455,8 @@ describe("BoundedContext assembly", () => {
     const selectedIndex = TenantIndexes.fromFactory(storageFactory);
     const tenantId = tenant("tenant-first-row");
     const contextName = "FreshRecoveryTasks";
-    const firstRegistry = createGeneratedRegistryFixture([
-      processManagerRegistry(FreshRecoveryProcessManager),
-    ]);
-    const recoveryRegistry = createGeneratedRegistryFixture([
-      processManagerRegistry(FreshRecoveryProcessManager),
-    ]);
+    createGeneratedRegistryFixture([processManagerRegistry(FreshRecoveryProcessManager)]);
+    createGeneratedRegistryFixture([processManagerRegistry(FreshRecoveryProcessManager)]);
     let first: BoundedContext | undefined;
     let recovered: BoundedContext | undefined;
 
@@ -1471,7 +1464,7 @@ describe("BoundedContext assembly", () => {
       await selectedIndex.keep(tenantId);
       first = await BoundedContext.multitenant(contextName)
         .withTenantIndex(selectedIndex)
-        .withGeneratedRegistryRoot(firstRegistry.root)
+
         .add(FreshRecoveryProcessManager)
         .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
         .build();
@@ -1501,7 +1494,7 @@ describe("BoundedContext assembly", () => {
 
       recovered = await BoundedContext.multitenant(contextName)
         .withTenantIndex(selectedIndex)
-        .withGeneratedRegistryRoot(recoveryRegistry.root)
+
         .add(FreshRecoveryProcessManager)
         .addEventDispatcher(createEventDispatcher([ReviewTaskAssignedSchema], () => undefined))
         .build();
@@ -1521,8 +1514,6 @@ describe("BoundedContext assembly", () => {
     } finally {
       await first?.close();
       await recovered?.close();
-      removeGeneratedRegistry(firstRegistry);
-      removeGeneratedRegistry(recoveryRegistry);
     }
   });
 
@@ -1822,7 +1813,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("builds generated repositories from entity classes with build", async () => {
-    const registryRoot = createGeneratedRegistryRoot([
+    registerGeneratedMetadata([
       {
         entityType: GeneratedTaskAggregate,
         stateSchema: ProjectStateSchema,
@@ -1851,7 +1842,7 @@ describe("BoundedContext assembly", () => {
       },
     ]);
     const context = await BoundedContext.singleTenant("Tasks")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .add(GeneratedTaskAggregate)
       .add(TaskProjection)
       .build();
@@ -1871,7 +1862,7 @@ describe("BoundedContext assembly", () => {
 
   it("executes a generated process-manager repository assembled through build", async () => {
     const observed: Event[] = [];
-    const registryRoot = createGeneratedRegistryRoot([
+    registerGeneratedMetadata([
       {
         entityType: GeneratedTaskProcessManager,
         stateSchema: ProcessManagerStateSchema,
@@ -1887,7 +1878,7 @@ describe("BoundedContext assembly", () => {
       },
     ]);
     const context = await BoundedContext.singleTenant("Tasks")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .add(GeneratedTaskProcessManager)
       .addEventDispatcher(
         createEventDispatcher([ReviewTaskAssignedSchema], (event) => {
@@ -1938,7 +1929,7 @@ describe("BoundedContext assembly", () => {
   it("advertises producer-only event schemas without creating external routes", async () => {
     const storageFactory = new InMemoryStorageFactory();
     await configureStorage(storageFactory);
-    const registryRoot = createGeneratedRegistryRoot([
+    registerGeneratedMetadata([
       {
         entityType: GeneratedTaskProcessManager,
         stateSchema: ProcessManagerStateSchema,
@@ -1954,7 +1945,7 @@ describe("BoundedContext assembly", () => {
       },
     ]);
     const context = await BoundedContext.singleTenant("Tasks")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .add(GeneratedTaskProcessManager)
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
@@ -1987,186 +1978,112 @@ describe("BoundedContext assembly", () => {
     ]);
   });
 
-  it("requires an explicit generated registry root for entity-class assembly", async () => {
+  it("requires imported generated metadata before direct entity-class assembly", async () => {
     await expect(
       BoundedContext.singleTenant("Tasks").add(GeneratedTaskAggregate).build(),
-    ).rejects.toThrow("requires withGeneratedRegistryRoot(root)");
+    ).rejects.toThrow(/generated metadata.*bootstrap/i);
   });
 
-  it("accepts generated registry roots passed as file URL strings", async () => {
-    const registryRoot = createGeneratedRegistryRoot([
+  it("builds an explicitly selected Entity after passive metadata registration", async () => {
+    const register: unknown = Reflect.get(metadataSpi, "registerSpineMetadata");
+    expect(register).toBeTypeOf("function");
+    (register as (value: unknown, moduleId: string) => void)(
       {
-        entityType: GeneratedTaskAggregate,
-        stateSchema: ProjectStateSchema,
-        handlers: [],
+        receivers: [
+          {
+            receiverKind: "entity",
+            receiverType: GeneratedTaskAggregate,
+            stateSchema: ProjectStateSchema,
+            handlers: [],
+          },
+        ],
       },
-    ]);
+      "test:direct-context",
+    );
 
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot(registryRoot.href)
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).resolves.toBeInstanceOf(BoundedContext);
+    const context = await BoundedContext.singleTenant("PassiveTaskMetadata")
+      .add(GeneratedTaskAggregate)
+      .build();
+    await context.close();
   });
 
-  it("discovers receiver-only generated registries", async () => {
-    const registryRoot = createGeneratedRegistryRoot([
-      {
-        entityType: GeneratedTaskAggregate,
-        stateSchema: ProjectStateSchema,
-        handlers: [],
-      },
-    ]);
-
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot(registryRoot)
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).resolves.toBeInstanceOf(BoundedContext);
+  it("rejects malformed passive metadata at import time", () => {
+    expect(() => {
+      registerSpineMetadata(
+        { receivers: [{ receiverType: GeneratedTaskAggregate }] } as never,
+        "test:malformed",
+      );
+    }).toThrow();
   });
 
-  it("rejects malformed generated registry root URLs", async () => {
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot("file://%")
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).rejects.toThrow('Generated registry root "file://%" is not a valid URL.');
+  it("requires a nonempty metadata module ID", () => {
+    expect(() => {
+      registerSpineMetadata({ receivers: [] }, " ");
+    }).toThrow("Spine metadata module ID is required");
   });
 
-  it("rejects generated registry roots outside file URLs", async () => {
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot("https://example.com/generated")
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).rejects.toThrow("must use the file: URL scheme");
+  it("rejects conflicting modules without replacing the first class description", () => {
+    const first = {
+      receiverKind: "entity" as const,
+      receiverType: GeneratedTaskAggregate,
+      stateSchema: ProjectStateSchema,
+      handlers: [],
+    };
+    registerSpineMetadata({ receivers: [first] }, "test:first-module");
+
+    expect(() => {
+      registerSpineMetadata({ receivers: [{ ...first, handlers: [] }] }, "test:second-module");
+    }).toThrow(/conflicts between test:first-module and test:second-module/);
+    expect(spineMetadataFor([GeneratedTaskAggregate]).receivers).toEqual([first]);
   });
 
-  it("rejects generated registry root URL aliases with query or hash", async () => {
-    const registryRoot = createGeneratedRegistryRoot([
-      {
-        entityType: GeneratedTaskAggregate,
-        stateSchema: ProjectStateSchema,
-        handlers: [],
-      },
-    ]);
-    const aliasedRoot = new URL(registryRoot.href);
-
-    aliasedRoot.search = "cache=1";
-
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot(aliasedRoot)
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).rejects.toThrow("must not include a query or hash");
-
-    aliasedRoot.search = "";
-    aliasedRoot.hash = "generated";
-
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot(aliasedRoot)
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).rejects.toThrow("must not include a query or hash");
-  });
-
-  it("rejects generated registry modules that resolve outside the trusted root", async () => {
-    const fixture = createGeneratedRegistryFixture([
-      {
-        entityType: GeneratedTaskAggregate,
-        stateSchema: ProjectStateSchema,
-        handlers: [],
-      },
-    ]);
-    const root = mkdtempSync(join(tmpdir(), "spine-context-generated-registry-root-"));
-    const moduleDir = join(root, "generated/handler");
-
-    mkdirSync(moduleDir, { recursive: true });
-    symlinkSync(fixture.registryPath, join(moduleDir, "generated-handler-registry.js"));
-
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot(pathToFileURL(root))
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).rejects.toThrow("must resolve within the configured generated registry root");
-  });
-
-  it("checks the generated registry file before each import instead of using a stale module cache", async () => {
-    const fixture = createGeneratedRegistryFixture([
-      {
-        entityType: GeneratedTaskAggregate,
-        stateSchema: ProjectStateSchema,
-        handlers: [],
-      },
-    ]);
-
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot(fixture.root)
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).resolves.toBeInstanceOf(BoundedContext);
-
-    rmSync(fixture.registryPath);
-
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot(fixture.root)
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).rejects.toThrow("must exist and be readable");
-  });
-
-  it("retries a failed generated registry import from the same root and dispatches its Command", async () => {
-    const registry = createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
-    const original = readFileSync(registry.registryPath, "utf8");
-    writeFileSync(registry.registryPath, 'throw new Error("temporary registry import failure");\n');
-    const loader = vi.spyOn(GeneratedRegistryDiscovery.prototype, "load");
-    let context: BoundedContext | undefined;
-    try {
-      await expect(
-        BoundedContext.singleTenant("RegistryRetry")
-          .withGeneratedRegistryRoot(registry.root)
-          .add(ReplayTaskAggregate)
-          .build(),
-      ).rejects.toMatchObject({
-        code: "MODULE_IMPORT_FAILED",
-      });
-      expect(serverEnvironmentAccess.openContexts(ServerEnvironment.instance())).toEqual([]);
-      writeFileSync(registry.registryPath, original);
-      context = await BoundedContext.singleTenant("RegistryRetry")
-        .withGeneratedRegistryRoot(registry.root)
-        .add(ReplayTaskAggregate)
-        .build();
-      expect(loader.mock.calls.at(-1)?.[0].cacheBust).toBe("retry-1");
-      await context.commandBus().post(createAggregateCommand("registry-retry", "recovered-task"));
-      await expect(
-        context.stand().read(ProjectStateSchema, "recovered-task"),
-      ).resolves.toMatchObject({
-        name: "Task Ready",
-      });
-    } finally {
-      await context?.close();
-      loader.mockRestore();
-      removeGeneratedRegistry(registry);
+  it("does not match a same-named constructor from another module", async () => {
+    {
+      class GeneratedTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {}
+      registerSpineMetadata(
+        {
+          receivers: [
+            {
+              receiverKind: "entity",
+              receiverType: GeneratedTaskAggregate,
+              stateSchema: ProjectStateSchema,
+              handlers: [],
+            },
+          ],
+        },
+        "test:other-module",
+      );
     }
-  });
-
-  it("fails clearly when generated metadata is missing for an entity class", async () => {
-    const registryRoot = createGeneratedRegistryRoot([]);
 
     await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withGeneratedRegistryRoot(registryRoot)
-        .add(GeneratedTaskAggregate)
-        .build(),
-    ).rejects.toThrow("Generated handler registry is missing metadata for GeneratedTaskAggregate.");
+      BoundedContext.singleTenant("ExactMetadata").add(GeneratedTaskAggregate).build(),
+    ).rejects.toThrow("Generated metadata for GeneratedTaskAggregate is missing");
+  });
+
+  it("rejects a stale state schema for the selected class", async () => {
+    registerSpineMetadata(
+      {
+        receivers: [
+          {
+            receiverKind: "entity",
+            receiverType: GeneratedTaskAggregate,
+            stateSchema: ProjectOverviewStateSchema,
+            handlers: [],
+          },
+        ],
+      },
+      "test:stale-state",
+    );
+
+    await expect(
+      BoundedContext.singleTenant("StaleMetadata").add(GeneratedTaskAggregate).build(),
+    ).rejects.toThrow();
+  });
+
+  it("rejects a selected class absent from imported metadata", async () => {
+    await expect(
+      BoundedContext.singleTenant("Tasks").add(GeneratedTaskAggregate).build(),
+    ).rejects.toThrow(/Generated metadata for GeneratedTaskAggregate is missing/);
   });
 
   it("does not register repositories removed before build", async () => {
@@ -2800,7 +2717,7 @@ describe("BoundedContext assembly", () => {
       const command = createAggregateCommand("invalid-lazy-command");
       command.message = undefined;
       await expect(context.commandBus().post(command)).rejects.toThrow(
-        "CommandBus requires command.message.typeUrl.",
+        "Command validation failed.",
       );
       expect(prepareEntity).not.toHaveBeenCalled();
     } finally {
@@ -3163,24 +3080,24 @@ describe("BoundedContext assembly", () => {
     }
   });
 
-  it("waits for a metadata-loading build before automatic fatal facility cleanup", async () => {
+  it("waits for an in-flight preparation before automatic fatal facility cleanup", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const registry = createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
-    const load: unknown = Reflect.get(GeneratedRegistryDiscovery.prototype, "load");
-    if (typeof load !== "function") throw new Error("Expected generated registry loader.");
+    createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
     const order: string[] = [];
-    const loader = vi
-      .spyOn(GeneratedRegistryDiscovery.prototype, "load")
-      .mockImplementation(async function (this: GeneratedRegistryDiscovery, options) {
-        entered.resolve(undefined);
-        await release.promise;
-        order.push("metadata-settled");
-        return Reflect.apply(load, this, [options]) as ReturnType<
-          GeneratedRegistryDiscovery["load"]
-        >;
+    const preparation = StoragePreparations.for(factory);
+    const prepareEntity = preparation.prepareEntity.bind(preparation);
+    const preparing = vi
+      .spyOn(preparation, "prepareEntity")
+      .mockImplementation(async (input, mode) => {
+        if (input.stateSchema.typeName === ProjectStateSchema.typeName) {
+          entered.resolve(undefined);
+          await release.promise;
+          order.push("preparation-settled");
+        }
+        return prepareEntity(input, mode);
       });
     const factoryClose = factory.close.bind(factory);
     vi.spyOn(factory, "close").mockImplementation(async () => {
@@ -3198,12 +3115,11 @@ describe("BoundedContext assembly", () => {
     });
     try {
       const loading = BoundedContext.singleTenant("LoadingDuringFatal")
-        .withGeneratedRegistryRoot(registry.root)
         .add(ReplayTaskAggregate)
         .build();
       await entered.promise;
       const failure = new Error("required model preparation failed");
-      vi.spyOn(StoragePreparations.for(factory), "prepareEntity").mockRejectedValueOnce(failure);
+      preparing.mockImplementationOnce(() => Promise.reject(failure));
       const failing = BoundedContext.singleTenant("FailingDuringLoad")
         .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
         .build();
@@ -3214,11 +3130,11 @@ describe("BoundedContext assembly", () => {
       release.resolve(undefined);
       await expect(failing).rejects.toBe(failure);
       await expect(loading).rejects.toBe(failure);
-      expect(order).toEqual(["metadata-settled", "factory-close"]);
+      expect(order).toEqual(["preparation-settled", "factory-close"]);
       expect(serverEnvironmentAccess.openContexts(ServerEnvironment.instance())).toEqual([]);
     } finally {
       release.resolve(undefined);
-      loader.mockRestore();
+      preparing.mockRestore();
       closeSpy.mockRestore();
     }
   });
@@ -3238,30 +3154,28 @@ describe("BoundedContext assembly", () => {
       .build();
     const entered = Promise.withResolvers<undefined>();
     const release = Promise.withResolvers<undefined>();
-    const load: unknown = Reflect.get(GeneratedRegistryDiscovery.prototype, "load");
-    if (typeof load !== "function") throw new Error("Expected generated registry loader.");
-    const loader = vi
-      .spyOn(GeneratedRegistryDiscovery.prototype, "load")
-      .mockImplementation(async function (this: GeneratedRegistryDiscovery, options) {
-        entered.resolve(undefined);
-        await release.promise;
-        return Reflect.apply(load, this, [options]) as ReturnType<
-          GeneratedRegistryDiscovery["load"]
-        >;
+    const preparation = StoragePreparations.for(factory);
+    const prepareEntity = preparation.prepareEntity.bind(preparation);
+    const preparing = vi
+      .spyOn(preparation, "prepareEntity")
+      .mockImplementation(async (input, mode) => {
+        if (input.stateSchema.typeName === ProjectStateSchema.typeName) {
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        return prepareEntity(input, mode);
       });
     const observed: unknown[] = [];
     const onUnhandled = (error: unknown) => observed.push(error);
     process.on("unhandledRejection", onUnhandled);
     try {
+      createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
       const loading = BoundedContext.singleTenant("HeldDuringCompletedClose")
-        .withGeneratedRegistryRoot(
-          createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]).root,
-        )
         .add(ReplayTaskAggregate)
         .build();
       await entered.promise;
       const failure = new Error("required eager family failed");
-      vi.spyOn(StoragePreparations.for(factory), "prepareEntity").mockRejectedValueOnce(failure);
+      preparing.mockImplementationOnce(() => Promise.reject(failure));
       const failing = BoundedContext.singleTenant("TriggersCompletedClose")
         .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
         .build();
@@ -3276,7 +3190,7 @@ describe("BoundedContext assembly", () => {
       expect(earlyUnhandled).toEqual([]);
     } finally {
       release.resolve(undefined);
-      loader.mockRestore();
+      preparing.mockRestore();
       process.off("unhandledRejection", onUnhandled);
     }
   });
@@ -3517,7 +3431,7 @@ describe("BoundedContext assembly", () => {
         await Reflect.apply(close, this, []);
       });
     const instance = new StandaloneAssignee();
-    const root = createStandaloneGeneratedRegistryRoot([
+    registerStandaloneMetadata([
       standaloneReceiver(
         StandaloneAssignee,
         "command-assignment",
@@ -3529,7 +3443,7 @@ describe("BoundedContext assembly", () => {
     try {
       let settled = false;
       const result = BoundedContext.singleTenant("BusCleanup")
-        .withGeneratedRegistryRoot(root)
+
         .addAssignee(instance)
         .addAssignee(instance)
         .build()
@@ -3626,11 +3540,11 @@ describe("BoundedContext assembly", () => {
   });
 
   it("retrieves the actual repository assembled from generated handlers", async () => {
-    const registryRoot = createGeneratedRegistryRoot([
+    registerGeneratedMetadata([
       { entityType: GeneratedTaskAggregate, stateSchema: ProjectStateSchema, handlers: [] },
     ]);
     const context = await BoundedContext.singleTenant("Tasks")
-      .withGeneratedRegistryRoot(registryRoot)
+
       .add(GeneratedTaskAggregate)
       .build();
     expect(context.getRepository(GeneratedTaskAggregate).entityType).toBe(GeneratedTaskAggregate);
@@ -4039,9 +3953,9 @@ describe("BoundedContext assembly", () => {
   it("leaves a newly notified shared row pending while one recipient closes", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const registry = createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
+    createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
     const closingContext = await BoundedContext.singleTenant("ClosingRecipient")
-      .withGeneratedRegistryRoot(registry.root)
+
       .add(ReplayTaskAggregate)
       .build();
     const sibling = await BoundedContext.singleTenant("HealthySibling")
@@ -4086,9 +4000,9 @@ describe("BoundedContext assembly", () => {
   it("keeps a persisted ordinary Inbox row pending when lazy preparation fails", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const registry = createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
+    createGeneratedRegistryFixture([aggregateReplayRegistry(ReplayTaskAggregate)]);
     const context = await BoundedContext.singleTenant("LazyInboxReplay")
-      .withGeneratedRegistryRoot(registry.root)
+
       .add(ReplayTaskAggregate)
       .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
     const durable = serverEnvironmentAccess.coreDelivery(ServerEnvironment.instance());
@@ -4120,7 +4034,6 @@ describe("BoundedContext assembly", () => {
       ).toBe(true);
     } finally {
       await context.close();
-      removeGeneratedRegistry(registry);
     }
   });
 
@@ -4232,6 +4145,10 @@ describe("BoundedContext assembly", () => {
         context,
         create(EventSchema, {
           id: { value: "terminal-system-event" },
+          context: create(EventContextSchema, {
+            producerId: Identifiers.pack("string", "task-1"),
+            version: create(VersionSchema, { number: 1 }),
+          }),
           message: AnyPacker.pack(
             EntityLog.EntityStateChangedSchema,
             create(EntityLog.EntityStateChangedSchema, {
@@ -4658,7 +4575,7 @@ function createProjectionEvent(id: string, targetId = "task-1", tenantId?: Tenan
               value: create(ActorContextSchema, { tenantId }),
             },
           }),
-      producerId: AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
+      producerId: Identifiers.pack("string", "review-task-1"),
       version: create(VersionSchema, { number: 1 }),
     }),
     message: AnyPacker.pack(
@@ -4669,19 +4586,28 @@ function createProjectionEvent(id: string, targetId = "task-1", tenantId?: Tenan
 }
 
 function createReviewTaskAssigned(id: string, targetId = "task-1") {
-  return create(EventSchema, {
-    id: create(EventIdSchema, { value: id }),
-    context: create(EventContextSchema),
-    message: AnyPacker.pack(
-      ReviewTaskAssignedSchema,
-      create(ReviewTaskAssignedSchema, { id: targetId, name: "Task" }),
-    ),
+  return createProjectionEvent(id, targetId);
+}
+
+interface ReceiverConstructor {
+  readonly name: string;
+  readonly prototype: unknown;
+}
+const registeredReceiverClasses = new Set<ReceiverConstructor>();
+
+function registerTestMetadata(metadata: SpineMetadata, moduleId: string): void {
+  const receivers = metadata.receivers.filter((receiver) => {
+    const constructor = receiver.receiverType as ReceiverConstructor;
+    if (registeredReceiverClasses.has(constructor)) return false;
+    registeredReceiverClasses.add(constructor);
+    return true;
   });
+  registerSpineMetadata({ receivers }, moduleId);
 }
 
 function createGeneratedRegistryFixture(
   receivers: readonly {
-    readonly entityType: object;
+    readonly entityType: GeneratedEntityHandlerGroup["receiverType"];
     readonly stateSchema: GenMessage<Message>;
     readonly handlers: readonly {
       readonly kind:
@@ -4702,51 +4628,25 @@ function createGeneratedRegistryFixture(
       readonly parameterCount: 1 | 2;
     }[];
   }[],
-): { readonly root: URL; readonly registryPath: string } {
-  const slot = `__spineContextGeneratedRegistry_${Math.random().toString(36).slice(2)}`;
-  const root = mkdtempSync(join(tmpdir(), "spine-context-generated-registry-"));
-  const moduleDir = join(root, "generated/handler");
-  const registryPath = join(moduleDir, "generated-handler-registry.js");
-  const values = globalThis as Record<string, unknown>;
-
-  mkdirSync(moduleDir, { recursive: true });
-  values[slot] = Object.freeze({
-    receivers: receivers.map(({ entityType, ...receiver }) =>
-      Object.freeze({ receiverKind: "entity" as const, receiverType: entityType, ...receiver }),
-    ),
-  });
-  writeFileSync(
-    registryPath,
-    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
-    "utf8",
+): void {
+  registerTestMetadata(
+    {
+      receivers: receivers.map(({ entityType, ...receiver }) =>
+        Object.freeze({ receiverKind: "entity" as const, receiverType: entityType, ...receiver }),
+      ),
+    },
+    "test:generated-receiver",
   );
-
-  return Object.freeze({
-    root: pathToFileURL(root),
-    registryPath,
-  });
 }
 
-function createGeneratedRegistryRoot(
+function registerGeneratedMetadata(
   receivers: Parameters<typeof createGeneratedRegistryFixture>[0],
-): URL {
-  return createGeneratedRegistryFixture(receivers).root;
+): void {
+  createGeneratedRegistryFixture(receivers);
 }
 
-function createStandaloneGeneratedRegistryRoot(receivers: readonly object[]): URL {
-  const slot = `__spineStandaloneRegistry_${Math.random().toString(36).slice(2)}`;
-  const root = mkdtempSync(join(tmpdir(), "spine-standalone-generated-registry-"));
-  const moduleDir = join(root, "generated/handler");
-  mkdirSync(moduleDir, { recursive: true });
-  (globalThis as Record<string, unknown>)[slot] = Object.freeze({
-    receivers: Object.freeze(receivers),
-  });
-  writeFileSync(
-    join(moduleDir, "generated-handler-registry.js"),
-    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
-    "utf8",
-  );
-  return pathToFileURL(root);
+function registerStandaloneMetadata(receivers: readonly object[]): void {
+  registerTestMetadata({ receivers } as SpineMetadata, "test:standalone-receiver");
 }
 
 function standaloneReceiver(
@@ -4900,10 +4800,6 @@ async function persistDescriptorRow(input: {
     throw new Error("Expected descriptor fixture row to be written.");
   }
   return written.message;
-}
-
-function removeGeneratedRegistry(fixture: { readonly registryPath: string }): void {
-  rmSync(join(fixture.registryPath, "../../.."), { recursive: true, force: true });
 }
 
 function requireRecoveryContext(context: BoundedContext | undefined): BoundedContext {

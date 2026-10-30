@@ -33,7 +33,8 @@ import { BlackBox } from "@spine-event-engine/testing";
 import { readAgentHistory } from "@spine-event-engine/server/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { generatedHandlerRegistry } from "../dist/generated/handler/generated-handler-registry.js";
+import "../dist/generated/spine-bootstrap.js";
+import { spineMetadata } from "../dist/generated/spine-metadata.js";
 import {
   DraftSupportReplySchema,
   ReviewSupportReplySchema,
@@ -57,7 +58,7 @@ import {
   SupportDraftReceiptObserver,
 } from "../dist/src/agent/support-draft-receivers.js";
 
-const generatedHandlers = new HandlerRegistryIngestor().ingest(generatedHandlerRegistry);
+const generatedHandlers = new HandlerRegistryIngestor().ingest(spineMetadata);
 const discoveredAgent = generatedHandlers.find((entry) => entry.entityType === SupportReplyAgent);
 if (discoveredAgent === undefined)
   throw new Error("Generated registry did not discover SupportReplyAgent.");
@@ -98,7 +99,6 @@ function generatedSupportContext(
   subscriber = new SupportRejectionSubscriber(),
 ) {
   return supportContext(name)
-    .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
     .addAssignee(assignee)
     .addEventDispatcher(subscriber)
     .addEventDispatcher(new SupportDraftReceiptObserver())

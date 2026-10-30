@@ -50,7 +50,7 @@ describe("generated registry discovery", () => {
   it("loads generated registries from explicit file URLs", async () => {
     const module = createModuleFixture(
       "generated-registry.js",
-      "export const generatedHandlerRegistry = { receivers: [] };\n",
+      "export const spineMetadata = { receivers: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
@@ -80,11 +80,7 @@ describe("generated registry discovery", () => {
     const modulePath = GeneratedRegistryDiscovery.conventionalModulePath(packageRoot);
     const discovery = new GeneratedRegistryDiscovery();
 
-    writeFileSync(
-      modulePath,
-      "export const generatedHandlerRegistry = { receivers: [] };\n",
-      "utf8",
-    );
+    writeFileSync(modulePath, "export const spineMetadata = { receivers: [] };\n", "utf8");
 
     const registries = await discovery.load({ modules: [modulePath] });
 
@@ -107,7 +103,7 @@ describe("generated registry discovery", () => {
   it("rejects modules whose exported registry has the wrong top-level shape", async () => {
     const module = createModuleFixture(
       "invalid-registry.js",
-      'export const generatedHandlerRegistry = { version: "1", entities: [] };\n',
+      'export const spineMetadata = { version: "1", entities: [] };\n',
     );
     const discovery = new GeneratedRegistryDiscovery();
 
@@ -120,7 +116,7 @@ describe("generated registry discovery", () => {
   it("rejects modules whose exported registry uses an unsupported version", async () => {
     const module = createModuleFixture(
       "unsupported-version.js",
-      "export const generatedHandlerRegistry = { version: 2, entities: [] };\n",
+      "export const spineMetadata = { version: 2, entities: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
@@ -145,7 +141,7 @@ describe("generated registry discovery", () => {
     const slot = `__spineBlockedDataModule_${Math.random().toString(36).slice(2)}`;
     const source = [
       `globalThis[${JSON.stringify(slot)}] = true;`,
-      "export const generatedHandlerRegistry = { receivers: [] };",
+      "export const spineMetadata = { receivers: [] };",
     ].join(" ");
     const moduleUrl = new URL(`data:text/javascript,${encodeURIComponent(source)}`);
     const discovery = new GeneratedRegistryDiscovery();
@@ -160,7 +156,7 @@ describe("generated registry discovery", () => {
   it("rejects file URL query aliases before importing them", async () => {
     const module = createModuleFixture(
       "query-alias.js",
-      "export const generatedHandlerRegistry = { receivers: [] };\n",
+      "export const spineMetadata = { receivers: [] };\n",
     );
     const moduleUrl = new URL(module.moduleUrl.href);
     const discovery = new GeneratedRegistryDiscovery();
@@ -176,7 +172,7 @@ describe("generated registry discovery", () => {
   it("rejects file URL hash aliases before importing them", async () => {
     const module = createModuleFixture(
       "hash-alias.js",
-      "export const generatedHandlerRegistry = { receivers: [] };\n",
+      "export const spineMetadata = { receivers: [] };\n",
     );
     const moduleUrl = new URL(module.moduleUrl.href);
     const discovery = new GeneratedRegistryDiscovery();
@@ -220,7 +216,7 @@ describe("generated registry discovery", () => {
   it("rejects duplicate normalized generated registry module refs", async () => {
     const module = createModuleFixture(
       "duplicate-registry.js",
-      "export const generatedHandlerRegistry = { receivers: [] };\n",
+      "export const spineMetadata = { receivers: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
@@ -302,7 +298,7 @@ function createRegistryValueModule(registry: GeneratedHandlerRegistry): {
   values[slot] = registry;
   const module = createModuleFixture(
     `${slot}.js`,
-    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
+    `export const spineMetadata = globalThis[${JSON.stringify(slot)}];\n`,
   );
 
   return {
@@ -316,7 +312,7 @@ function createRegistryValueModule(registry: GeneratedHandlerRegistry): {
 function createPackageFixture(): string {
   const packageRoot = mkdtempSync(join(tempRoot(), "spine-generated-registry-package-"));
 
-  mkdirSync(join(packageRoot, "generated/handler"), { recursive: true });
+  mkdirSync(join(packageRoot, "generated"), { recursive: true });
 
   return packageRoot;
 }

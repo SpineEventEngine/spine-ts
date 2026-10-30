@@ -287,3 +287,92 @@ issue before correction; the complete client suite passes 115/115 afterward.
 Scoped lint/format/docs/diff checks pass. Runtime stayed unchanged, so the
 291-test runtime evidence and coverage/build remain current. All four concern
 dispositions accepted, with no remaining finding. Checkpoint ready to push.
+
+## M05 planned review scopes
+
+Base: accepted/pushed 044640283. Wait for completed consumer migration and
+preflight before review. Include every untracked runtime/generation module.
+Read TASK ledger, M05.md, M05_BASELINE.md and approved discovery contract.
+Existing profiles remain explicit Sol/medium for API, reliability and style;
+Luna/medium for docs. Runtime metadata unavailable; no visible fallback.
+
+- API: generated output/exports, removed root API, useful explicit registries,
+  exact-constructor lookup, ordinary Proto registration and model-only safety.
+- Reliability: passive imports, missing/stale/conflicting descriptions,
+  initialization-cycle diagnostics, class-selection isolation, staging/cleanup
+  atomicity and inventory behavior across contexts. No active handlers in globals.
+- Style: small runtime inventory and generator changes, existing mechanism reuse,
+  class/startup module separation and domain-correct fixtures.
+- Docs: narrow bootstrap/root migration and current public claims, examples and
+  packaging references. Transitive discovery and App Queries remain M06/M07.
+
+No dedicated security review until M14. Collect all relevant results before
+one correction batch; do not reopen previously accepted slices without new
+evidence in the affected execution paths.
+
+### M05 reviewer allocation before dispatch
+
+Use existing role identities with these explicit profiles after the frozen
+preflight handoff; dispatch is not yet started:
+
+- app_query_m05_api: typescript_api_docs_reviewer, gpt-6-sol / medium.
+- app_query_m05_reliability: performance_reliability_reviewer, gpt-6-sol / medium.
+- app_query_m03_style: reuse style_maintainability_reviewer, immutable explicit
+  gpt-6-sol / medium from its original dispatch.
+- app_query_m03_docs: reuse documentation_reviewer, immutable explicit
+  gpt-6-luna / medium from its original dispatch.
+
+New review contexts use fork_turns=none with both fields explicit. Runtime
+self-introspection remains unavailable; inspect visible metadata for mismatches.
+The prior API/reliability contexts are no longer listed on this execution surface.
+Review all introduced and exposed M05 behavior, including new files and bounded
+helper documentation. Historical task text is not active behavior unless the
+current task records or changed public documentation make that claim.
+
+### M05 preflight evidence received
+
+Affected runtime tests pass 422/422; final tooling batch passes 222/222.
+Generation/freshness, tooling typecheck, scoped ESLint including new declaration
+modules, canonical TSDoc, format, audience and whitespace checks pass. Four-file
+coverage run passes 194/194; changed production coverage is 74/76 statements
+(97.4%) and 29/30 branch arms (96.7%). Static image contract passes 4/4; the
+stale local image execution is explicitly pending rebuilt-image proof in M14.
+The required helper documentation is now clean without checker/debt changes.
+
+Main inspected the two prior CommandBus void callback fixes and record-only
+formatting changes. New source files are marked intent-to-add so all reviewers
+see them in the diff. Final M05 evidence handoff precedes dispatch. Estimated
+review/correction window: 0.3–0.6 hours; production remains frozen during review.
+
+### M05 complete wave and accepted correction batch
+
+All four concerns completed under the recorded explicit profiles; no visible
+mismatch. API and style overlap on custom registry names; consolidate this as
+P2 with style's additional Proto-module import collision case. Accept reliability
+P2: retired-output validation/removal must not throw after leaving a new pair
+live. Prevalidating the path alone is insufficient for a subsequent removal I/O
+failure; retain rollback for all operation failures. Accept the narrow current
+guide corrections, deduplicating the USER_GUIDE report.
+
+Existing implementer receives one correction batch: supported custom metadata
+export/bootstrap bindings and collision-free Proto module imports; safe retired
+file cleanup with failure regressions; current workflow/path wording. Estimate
+0.25–0.5 hours. Reuse unchanged runtime/BC evidence and run focused generator
+tests, affected tooling/typechecking and cheap checks. Targeted API/style and
+reliability confirmation only for their substantive corrections; main verifies
+deterministic documentation. No new whole-change review wave.
+
+### M05 convergence
+
+All accepted findings resolved. API/style confirm coherent bootstrap export
+bindings and collision-safe Proto imports, including the additional
+registerSpineMetadata export collision found by main during correction.
+Reliability confirms retired-path validation and rollback on removal failure.
+Main confirms current guide wording and paths. Same explicit profiles retained;
+no visible mismatch and runtime metadata unavailable.
+
+Seven regressions red then green; final generator suites 53/53 including compiled
+source proofs. The preceding affected generator/tooling batch passed 321/321.
+Build, tooling typecheck and cheap checks pass. Corrected generator coverage is
+371/383 statements and 176/189 branches; changed 60/61 statements and 28/29 arms.
+The unchanged BC/runtime evidence remains applicable. No further review wave.

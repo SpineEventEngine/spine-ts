@@ -31,7 +31,7 @@ before forwarding every request.
 
 `spine-proto compose` writes `src/model-registry.ts` from `spine-proto.json`.
 `spine-proto handlers` writes
-`generated/handler/generated-handler-registry.ts` from decorated classes.
+`generated/spine-metadata.ts` and `generated/spine-bootstrap.ts` from decorated classes.
 Both are generated outputs.
 
 ```bash

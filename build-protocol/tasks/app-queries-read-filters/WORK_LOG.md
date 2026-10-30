@@ -308,3 +308,59 @@ roots, with directly affected consumers/tests. Estimate 1.5–2.5 hours includes
 generation/runtime changes, consumer migration, tests and review. M06 adds
 transitive package discovery afterward. No runtime filesystem scans or new
 registry-root API. Full accepted details are in M05.md and M05_BASELINE.md.
+
+## M04 remote synchronization
+
+Commit 04464028350105a5653fc95b65842cfe17ef0bf7 pushed successfully to
+origin/app-queries-read-filters. The remote ref matches local HEAD. M05 remains
+active under the existing implementer; no source changes by the orchestrator.
+
+## M05 intermediate generation checkpoint
+
+Implementer inspected current pinned JVM BoundedContextBuilder registration.
+TS retains explicit class selection and uses passive constructor metadata.
+Source inventory found 158 old path/root references and examples combining
+classes with startup modules. Split declaration/startup modules where necessary
+to avoid static bootstrap initialization cycles; no handwritten runtime lookup
+adapters are authorized by this migration.
+
+Writer tests pass 30/30; missing-bootstrap and selected-constructor BC tests
+pass. Existing staged proto generation passed with spine-metadata.ts and
+spine-bootstrap.ts for configured handler projects, including Todo local models
+and Message Board model-package imports. Direct callers/entrypoints, compiled
+paths and final preflight are still in progress; M05 is not yet accepted.
+
+## M05 preflight scope correction
+
+Focused tests reached 422/422; tooling typecheck and generated build pass.
+Main formatted M01_RELIABILITY_REVIEW.md and M02_API_REVIEW.md only, and
+authorized the existing implementer to fix two earlier CommandBus test
+callbacks returning a number instead of void. These are deterministic fixes.
+
+The installed CommonJS tooling proof exposed bootstrap import.meta usage;
+implementation replaced it with a stable module label and the proof passes.
+The existing local Docker image predates the new bootstrap artifact. Static
+image-contract and compiled-file checks belong here; a rebuilt-image execution
+proof remains required in M14, with no claim that the stale-image run passed.
+
+TSDoc comparison found 246 diagnostics in four M05-touched production helper
+files. CODE_QUALITY.md requires semantic documentation for every method in a
+touched production file, so they cannot be waived as unchanged helper bodies.
+Existing implementer receives bounded comment-only correction scope; estimate
+0.25–0.5 hours. No checker weakening, new debt, or broad runtime refactoring.
+A separate 57-diagnostic baseline observed in untouched storage paths must be
+reported separately only if it persists in the final current-tree check.
+
+## M05 acceptance and M06 preparation
+
+M05 accepted after all four concerns and targeted correction confirmations.
+Local bootstrap, passive constructor metadata, root API removal and consumer
+migration are complete. Seven generator regressions reproduced then verified
+publication rollback and supported symbol bindings. Canonical preflight passes;
+main verified deterministic fixture/docs corrections. Commit/push follows.
+
+Next: M06 under existing app_query_implementation, immutable explicit
+gpt-6-sol / medium. Estimate 1.5–2.5 hours for transitive runtime dependency
+discovery, /spine exports, packaged/bundled proofs and focused review. M06.md
+and M05_BASELINE.md bound the work. Continue automatically after synchronization;
+no PR, master write or merge.

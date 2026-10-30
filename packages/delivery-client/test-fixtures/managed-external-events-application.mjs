@@ -12,10 +12,9 @@
  * the License.
  */
 
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { clearInterval, setInterval } from "node:timers";
-import { pathToFileURL } from "node:url";
 import process from "node:process";
 
 import { create } from "@bufbuild/protobuf";
@@ -38,6 +37,7 @@ import { UserIdSchema } from "@spine-event-engine/proto";
 import { ProjectCreatedSchema } from "@spine-event-engine/server-test-fixtures/entity/project_events_pb.js";
 import { ProjectOverviewStateSchema } from "@spine-event-engine/server-test-fixtures/entity/project_states_pb.js";
 import { managedServerApplicationAccess } from "@spine-event-engine/server-test-fixtures/internal";
+import { registerSpineMetadata } from "@spine-event-engine/server/spi/handler-registry";
 import { createManagedProjectContext } from "./managed-project-context.mjs";
 
 const endpoint = required("SPINE_MANAGED_REMOTE_DELIVERY_URL");
@@ -60,6 +60,28 @@ class ExternalProjectProjection extends Projection {
   }
 }
 
+registerSpineMetadata(
+  {
+    receivers: [
+      {
+        receiverKind: "entity",
+        receiverType: ExternalProjectProjection,
+        stateSchema: ExternalStateSchema,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "onExternalProjectCreated",
+            input: { schema: ProjectCreatedSchema, origin: "external" },
+            outcomes: { returned: [], thrown: [] },
+            parameterCount: 1,
+          },
+        ],
+      },
+    ],
+  },
+  import.meta.url,
+);
+
 if (isManagedChild) {
   process.env.NODE_ENV = "production";
   ServerEnvironment.when(EnvironmentType.Production).use({
@@ -75,7 +97,6 @@ const managed = await ManagedServerApplication.run({
   port: 0,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
-    const registry = await generatedRegistryRoot();
     await ServerEnvironment.instance().completeSetup();
     const server = Server.atPort(port, { host });
     server.add(
@@ -85,7 +106,6 @@ const managed = await ManagedServerApplication.run({
     );
     server.add(
       await BoundedContext.singleTenant("ExternalProjects")
-        .withGeneratedRegistryRoot(registry.root)
         .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
         .add(ExternalProjectProjection, {
           eventRouting: EventRouting.create().route(ProjectCreatedSchema, (event) => [event.id]),
@@ -122,7 +142,6 @@ const managed = await ManagedServerApplication.run({
     running.close = async () => {
       clearInterval(timer);
       await thirdParty.close();
-      await registry.clear();
       await close();
     };
     return running;
@@ -152,42 +171,6 @@ if (!isManagedChild) {
   process.once("SIGTERM", () => {
     void close().finally(() => process.exit(0));
   });
-}
-
-async function generatedRegistryRoot() {
-  const root = await mkdtemp("/tmp/spine-t0210-registry-");
-  const directory = join(root, "generated/handler");
-  const slot = `__spineT0210Registry_${process.pid}`;
-  await mkdir(directory, { recursive: true });
-  globalThis[slot] = {
-    receivers: [
-      {
-        receiverKind: "entity",
-        receiverType: ExternalProjectProjection,
-        stateSchema: ExternalStateSchema,
-        handlers: [
-          {
-            kind: "event-subscription",
-            methodName: "onExternalProjectCreated",
-            input: { schema: ProjectCreatedSchema, origin: "external" },
-            outcomes: { returned: [], thrown: [] },
-            parameterCount: 1,
-          },
-        ],
-      },
-    ],
-  };
-  await writeFile(
-    join(directory, "generated-handler-registry.js"),
-    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
-  );
-  return {
-    root: pathToFileURL(root),
-    clear: async () => {
-      Reflect.deleteProperty(globalThis, slot);
-      await rm(root, { recursive: true, force: true });
-    },
-  };
 }
 
 function required(name) {

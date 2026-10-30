@@ -141,7 +141,7 @@ test("MessageBoard commands share one artifact and required compiled modules imp
       "sha256sum",
       messageBoard,
       "node_modules/@spine-event-engine/example-message-board-app/dist/src/model-registry.js",
-      "node_modules/@spine-event-engine/example-message-board-app/dist/generated/handler/generated-handler-registry.js",
+      "node_modules/@spine-event-engine/example-message-board-app/dist/generated/spine-bootstrap.js",
     ],
     { encoding: "utf8" },
   );

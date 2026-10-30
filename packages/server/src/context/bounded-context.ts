@@ -12,10 +12,6 @@
  * the License.
  */
 
-import { constants as fsConstants } from "node:fs";
-import { access, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ILogLayer } from "loglayer";
 
 import { clone, create, getOption, hasOption, type Message } from "@bufbuild/protobuf";
@@ -91,7 +87,7 @@ import type {
   DescriptorFieldMetadata,
   EntityMetadata,
 } from "../entity/entity-metadata.js";
-import { GeneratedRegistryDiscovery } from "../handler/generated-registry-discovery.js";
+import { spineMetadataFor } from "../handler/spine-metadata-inventory.js";
 import {
   HandlerRegistryIngestor,
   type GeneratedEntityHandlerGroup,
@@ -527,11 +523,8 @@ interface FrameworkConstructionToken {
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
-const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const errorDetailLimit = 500;
-const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
-const generatedRegistryLoadAttempts = new Map<string, number>();
 const eventSubscribers = new WeakMap<
   BoundedContext,
   (typeUrl: string, subscriber: EventSubscriber) => EventSubscription
@@ -2322,8 +2315,6 @@ export class BoundedContextBuilder {
 
   #persistSystemEvents = false;
 
-  #generatedRegistryRoot: string | URL | undefined;
-
   /**
    * Registers the framework-only construction hook for this module.
    */
@@ -2582,17 +2573,6 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets a trusted compiled application root for generated handler metadata.
-   *
-   * @param root Names the compiled package or application root.
-   * @returns Returns this builder for further configuration.
-   */
-  withGeneratedRegistryRoot(root: string | URL): this {
-    this.#generatedRegistryRoot = root;
-    return this;
-  }
-
-  /**
    * Builds a context after loading generated handlers and preparing runtime resources.
    *
    * @param options Independent eager structure and subscription timing choices.
@@ -2633,7 +2613,7 @@ export class BoundedContextBuilder {
     options: BoundedContextBuildOptions,
     environment: ServerEnvironment,
   ): Promise<BoundedContext> {
-    const generated = await this.#loadGeneratedArtifacts([...this.#entityTypes]);
+    const generated = this.#loadGeneratedArtifacts([...this.#entityTypes]);
     serverEnvironmentAccess.requireAvailable(environment);
     const repositories = [...this.#repositories, ...generated.repositories];
 
@@ -2998,27 +2978,19 @@ export class BoundedContextBuilder {
     throw error;
   }
 
-  async #loadGeneratedArtifacts(entityTypes: readonly RepositoryEntityType[]): Promise<{
+  #loadGeneratedArtifacts(entityTypes: readonly RepositoryEntityType[]): {
     readonly repositories: readonly RepositoryView[];
     readonly standalone: readonly GeneratedStandaloneHandlerGroup[];
-  }> {
+  } {
     if (entityTypes.length === 0 && this.#standaloneInstances().length === 0) {
       return Object.freeze({ repositories: Object.freeze([]), standalone: Object.freeze([]) });
     }
 
-    const root = ContextParts.requireGeneratedRegistryRoot(this.#generatedRegistryRoot);
-    const discovery = new GeneratedRegistryDiscovery();
-    const registryModule = await ContextParts.trustedGeneratedRegistryModule(root);
-    const registryKey = registryModule.href;
-    const registries = (await discovery
-      .load({
-        modules: [registryModule],
-        ...ContextParts.generatedRegistryCacheBust(registryKey),
-      })
-      .catch((error: unknown) => {
-        ContextParts.recordGeneratedRegistryFailure(registryKey);
-        throw error;
-      })) as readonly GeneratedHandlerRegistry[];
+    const selected = [
+      ...entityTypes,
+      ...this.#standaloneInstances().map((instance) => instance.constructor),
+    ];
+    const registries = [spineMetadataFor(selected)];
     const metadata = ContextParts.ingestGeneratedRegistries(registries);
 
     const repositories = Object.freeze(
@@ -3797,186 +3769,6 @@ const ContextParts = Object.freeze({
         `${operation} requires a Repository instance. Use an entity class only with build().`,
       );
     }
-  },
-
-  /**
-   * Validates that a root exists when generated metadata must be loaded.
-   *
-   * @param root Configured registry location.
-   * @returns Configured root; throws when absent.
-   */
-  requireGeneratedRegistryRoot(root: string | URL | undefined): string | URL {
-    if (root !== undefined) {
-      return root;
-    }
-
-    throw new Error(
-      "BoundedContextBuilder.build() requires withGeneratedRegistryRoot(root) " +
-        "when assembling entity classes from generated metadata.",
-    );
-  },
-
-  /**
-   * Resolves the generated registry module and verifies it stays beneath the configured root.
-   *
-   * @param root Configured filesystem path or file URL.
-   * @returns Registry module file URL.
-   */
-  async trustedGeneratedRegistryModule(root: string | URL): Promise<URL> {
-    const trustedRoot = await ContextParts.canonicalGeneratedRegistryRoot(root);
-    const registryPath = resolve(trustedRoot, generatedRegistryFile);
-    const canonicalRegistryPath = await ContextParts.canonicalReadableRegistryPath(registryPath);
-
-    if (ContextParts.resolvesOutsideRoot(trustedRoot, canonicalRegistryPath)) {
-      throw new Error(
-        `Generated handler registry module "${canonicalRegistryPath}" must resolve within ` +
-          `the configured generated registry root "${trustedRoot}".`,
-      );
-    }
-
-    return pathToFileURL(canonicalRegistryPath);
-  },
-
-  /**
-   * Resolves a generated registry root to its canonical filesystem path.
-   *
-   * @param root Configured path or file URL.
-   * @returns Canonical directory path.
-   */
-  async canonicalGeneratedRegistryRoot(root: string | URL): Promise<string> {
-    const rootPath = ContextParts.generatedRegistryRootPath(root);
-
-    try {
-      return await realpath(rootPath);
-    } catch (error) {
-      throw new Error(
-        `Generated registry root "${rootPath}" must be an existing readable directory.`,
-        { cause: error },
-      );
-    }
-  },
-
-  /**
-   * Converts a registry root path or file URL to an absolute filesystem path.
-   *
-   * @param root Configured path or file URL.
-   * @returns Absolute filesystem path.
-   */
-  generatedRegistryRootPath(root: string | URL): string {
-    if (root instanceof URL) {
-      return ContextParts.fileUrlPath(root, "Generated registry root");
-    }
-
-    if (ContextParts.isUrlLike(root)) {
-      return ContextParts.fileUrlPath(ContextParts.parseRootUrl(root), "Generated registry root");
-    }
-
-    return resolve(root);
-  },
-
-  /**
-   * Validates a file URL and converts it to an absolute filesystem path.
-   *
-   * @param url File URL to convert.
-   * @param label Label used in validation errors.
-   * @returns Filesystem path.
-   */
-  fileUrlPath(url: URL, label: string): string {
-    if (url.protocol !== "file:") {
-      throw new Error(`${label} "${url.href}" must use the file: URL scheme.`);
-    }
-
-    if (url.search.length > 0 || url.hash.length > 0) {
-      throw new Error(`${label} "${url.href}" must not include a query or hash.`);
-    }
-
-    return resolve(fileURLToPath(url));
-  },
-
-  /**
-   * Parses a generated registry root string as a URL.
-   *
-   * @param root Registry root string.
-   * @returns Parsed URL.
-   */
-  parseRootUrl(root: string): URL {
-    try {
-      return new URL(root);
-    } catch (error) {
-      throw new Error(`Generated registry root "${root}" is not a valid URL.`, { cause: error });
-    }
-  },
-
-  /**
-   * Checks strings for a URL scheme, excluding Windows drive paths.
-   *
-   * @param value String to inspect.
-   * @returns True when the string has a URL scheme.
-   */
-  isUrlLike(value: string): boolean {
-    return moduleSchemeRe.test(value) && !/^[A-Za-z]:[\\/]/.test(value);
-  },
-
-  /**
-   * Verifies registry-module readability and resolves its canonical path.
-   *
-   * @param registryPath Registry module filesystem path.
-   * @returns Canonical readable path.
-   */
-  async canonicalReadableRegistryPath(registryPath: string): Promise<string> {
-    try {
-      await access(registryPath, fsConstants.R_OK);
-      return await realpath(registryPath);
-    } catch (error) {
-      throw new Error(
-        `Generated handler registry module "${registryPath}" must exist and be readable.`,
-        { cause: error },
-      );
-    }
-  },
-
-  /**
-   * Checks whether a canonical path escapes a canonical root.
-   *
-   * @param canonicalRoot Root directory.
-   * @param canonicalPath Candidate path.
-   * @returns True when the candidate escapes the root.
-   */
-  resolvesOutsideRoot(canonicalRoot: string, canonicalPath: string): boolean {
-    const relativePath = relative(canonicalRoot, canonicalPath);
-
-    return (
-      relativePath.startsWith("..") ||
-      relativePath === ".." ||
-      relativePath.split(sep).includes("..") ||
-      isAbsolute(relativePath)
-    );
-  },
-
-  /**
-   * Creates a cache-bust query after a prior registry load failure.
-   *
-   * @param registryKey Canonical registry identifier.
-   * @returns Retry query, or an empty object on the first attempt.
-   */
-  generatedRegistryCacheBust(
-    registryKey: string,
-  ): { readonly cacheBust: string } | Record<string, never> {
-    const attempt = generatedRegistryLoadAttempts.get(registryKey) ?? 0;
-
-    return attempt === 0 ? {} : { cacheBust: `retry-${attempt.toString()}` };
-  },
-
-  /**
-   * Records another failed load for a registry.
-   *
-   * @param registryKey Canonical registry identifier.
-   */
-  recordGeneratedRegistryFailure(registryKey: string): void {
-    generatedRegistryLoadAttempts.set(
-      registryKey,
-      (generatedRegistryLoadAttempts.get(registryKey) ?? 0) + 1,
-    );
   },
 
   /**

@@ -68,7 +68,7 @@ failed.` from the shared facade:
 ```js
 const m = create(IdFilterSchema);
 m.id = Array(1);
-validate(IdFilterSchema, m);         // [] from the pinned validator
+validate(IdFilterSchema, m); // [] from the pinned validator
 Validate.message(IdFilterSchema, m); // throws "Validation runtime failed."
 ```
 

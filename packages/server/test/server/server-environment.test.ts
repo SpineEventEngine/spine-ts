@@ -13,10 +13,9 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { rmSync } from "node:fs";
 import { create, type Message } from "@bufbuild/protobuf";
-import { SignalEnvelopes, spineCoreRegistry } from "@spine-event-engine/core";
-import { EventContextSchema, type TenantId } from "@spine-event-engine/proto";
+import { Identifiers, SignalEnvelopes, spineCoreRegistry } from "@spine-event-engine/core";
+import { EventContextSchema, VersionSchema, type TenantId } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
   StorageFactory,
@@ -549,7 +548,10 @@ describe("ServerEnvironment delivery lifecycle", () => {
     try {
       await producer.eventBus().post(
         SignalEnvelopes.event({
-          context: create(EventContextSchema),
+          context: create(EventContextSchema, {
+            producerId: Identifiers.pack("string", "server-producer"),
+            version: create(VersionSchema, { number: 1 }),
+          }),
           schema: ServerStartedSchema,
           message: create(ServerStartedSchema, { id: "default-channel-event", name: "Producer" }),
         }),
@@ -867,9 +869,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
 
     await environment.completeSetup();
     expect(snapshots).toBe(0);
-    const registry = serverStatusRegistry();
+    serverStatusRegistry();
     const context = await BoundedContext.singleTenant("RemoteSourceRecipient")
-      .withGeneratedRegistryRoot(registry.root)
+
       .add(ServerStatusProjection)
       .build();
     try {
@@ -877,7 +879,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     } finally {
       await context.close();
       await environment.close();
-      rmSync(registry.directory, { recursive: true, force: true });
     }
 
     expect(snapshots).toBeGreaterThan(0);

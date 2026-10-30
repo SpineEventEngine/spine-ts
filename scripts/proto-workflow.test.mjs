@@ -400,8 +400,8 @@ function writeTodoGenerationState(packageRoot, generationId, options = {}) {
   if (options.companion === true)
     writeFileSync(join(generatedRoot, "companion.txt"), "companion\n");
   if (options.handler === true) {
-    mkdirSync(join(generatedRoot, "handler"), { recursive: true });
-    writeFileSync(join(generatedRoot, "handler/generated-handler-registry.ts"), "handler\n");
+    writeFileSync(join(generatedRoot, "spine-metadata.ts"), "handler\n");
+    writeFileSync(join(generatedRoot, "spine-bootstrap.ts"), "bootstrap\n");
     normalizeGeneratedTypeScriptTree(generatedRoot, ["todo.proto"]);
   }
   writeFileSync(
@@ -427,6 +427,7 @@ function todoStageCommand(failure, writeManifest = true, configure) {
     const output = args[args.indexOf("--out") + 1];
     mkdirSync(dirname(output), { recursive: true });
     writeFileSync(output, "handler\n");
+    writeFileSync(join(dirname(output), "spine-bootstrap.ts"), "bootstrap\n");
     return 0;
   };
 }
@@ -1015,7 +1016,7 @@ describe("proto-workflow", () => {
 
       expect(result.status).toBe(0);
       expect(result.stderr).toBe("");
-      expect(readFileSync(output, "utf8")).toContain("GeneratedHandlerRegistry");
+      expect(readFileSync(output, "utf8")).toContain("SpineMetadata");
     } finally {
       rmSync(fixture.root, { recursive: true, force: true });
     }
@@ -1291,7 +1292,10 @@ describe("proto-workflow", () => {
           if (label === "MessageBoard model generation") {
             mkdirSync(join(cwd, "generated"), { recursive: true });
             writeFileSync(join(cwd, "generated/model.ts"), "export {};\n");
-            writeFileSync(join(cwd, "spine-proto-manifest.json"), "message board next\n");
+            writeFileSync(
+              join(cwd, "spine-proto-manifest.json"),
+              `${JSON.stringify({ moduleExport: "messageBoardProtoModule" })}\n`,
+            );
             return 0;
           }
           if (label === "MessageBoard handler registry post-step") {
@@ -1299,6 +1303,7 @@ describe("proto-workflow", () => {
             const output = args[args.indexOf("--out") + 1];
             mkdirSync(dirname(output), { recursive: true });
             writeFileSync(output, "handler\n");
+            writeFileSync(join(dirname(output), "spine-bootstrap.ts"), "bootstrap\n");
             return 0;
           }
           return 1;

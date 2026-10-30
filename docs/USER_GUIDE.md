@@ -256,16 +256,14 @@ const weights: AssignmentWeightService = {
   weightFor: () => 2,
 };
 
-const builder = BoundedContext.singleTenant("Assignments")
-  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
-  .add(TaskAssignment, {
-    // Keep Spine's ID, state, version, and lifecycle options intact.
-    onCreate: (options) => new TaskAssignment(options, weights),
-  });
+const builder = BoundedContext.singleTenant("Assignments").add(TaskAssignment, {
+  // Keep Spine's ID, state, version, and lifecycle options intact.
+  onCreate: (options) => new TaskAssignment(options, weights),
+});
 
 // Complete environment setup before building this Bounded Context.
 await ServerEnvironment.instance().completeSetup();
-// build() loads the generated handler registry for this application.
+// Importing the application entrypoint registers passive handler metadata before build().
 const context = await builder.build();
 await context.close();
 ```

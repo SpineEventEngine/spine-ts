@@ -78,13 +78,15 @@ import { TaskAssignment, type AssignmentWeightService } from "../src/index.js";
 
 // Create shared services before starting the context.
 const weights: AssignmentWeightService = { weightFor: () => 2 };
-const builder = BoundedContext.singleTenant("Assignments")
-  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
-  .add(TaskAssignment, {
-    // Forward Spine's options and add the service required by the constructor.
-    onCreate: (options) => new TaskAssignment(options, weights),
-  });
+const builder = BoundedContext.singleTenant("Assignments").add(TaskAssignment, {
+  // Forward Spine's options and add the service required by the constructor.
+  onCreate: (options) => new TaskAssignment(options, weights),
+});
 ```
+
+The application's `src/index.js` imports its generated `spine-bootstrap.js`
+before assembly, so `add(TaskAssignment)` finds the passive metadata for that
+exact class.
 
 Await `builder.build()` to assemble the context. The callback runs for each
 fresh or restored Entity object, not just once per ID. It also works for

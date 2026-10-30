@@ -1332,11 +1332,20 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
               "--source-generated-redirects",
               JSON.stringify(sourceRedirects),
               "--out",
-              join(handlerOutput, "handler/generated-handler-registry.ts"),
+              join(handlerOutput, "spine-metadata.ts"),
               "--published-out",
               target.handlerGeneratedPath === undefined
-                ? join(livePackageRoot, "generated/handler/generated-handler-registry.ts")
-                : join(root, target.handlerGeneratedPath, "handler/generated-handler-registry.ts"),
+                ? join(livePackageRoot, "generated/spine-metadata.ts")
+                : join(root, target.handlerGeneratedPath, "spine-metadata.ts"),
+              "--proto-module-export",
+              JSON.parse(readFileSync(join(packageRoot, "spine-proto-manifest.json"), "utf8"))
+                .moduleExport,
+              ...(target.handlerGeneratedPath === undefined
+                ? []
+                : [
+                    "--proto-module-specifier",
+                    `${packageNameAt(livePackageRoot)}/generated/proto-module.js`,
+                  ]),
             ],
             root,
           );
