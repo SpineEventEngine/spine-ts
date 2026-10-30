@@ -145,6 +145,9 @@ override that inventory. Known malformed payloads and missing-valued members of 
 collections produce sanitized violations. Unknown `Any` types retain the
 model's allowance, and unannotated fields remain opaque. Validator or
 configuration failures throw a sanitized technical `Error`.
+Selected oneof members receive their declared constraints on recursive
+`(validate)` edges, including members inside known annotated `Any` payloads;
+default singular nested messages retain the validator's skip semantics.
 
 `Validate.check(schema, message, registry?)` returns the supplied message when valid and
 throws `ValidationException` otherwise. `ValidationException.asMessage()`

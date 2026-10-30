@@ -157,3 +157,76 @@ M02 targeted API confirmation resolved the P1. No remaining P0–P2 finding.
 Style and documentation corrections were checked deterministically; reliability
 advisory disposition is recorded above. Configured profiles matched the explicit
 dispatches, with no visible fallback. M02 is accepted as an intermediate slice.
+
+## M03 review preparation
+
+Base: accepted/pushed `cc19b416d`. Freeze after current preflight, then reuse
+existing configured reviewers, whose original dispatches explicitly selected
+model and reasoning. Runtime metadata is unavailable; immutable profiles remain
+the acceptance evidence. No source writer overlaps review.
+
+- TypeScript/API: app_query_m01_api, gpt-6-sol/medium. Query/Topic/Subscription
+  admission and structured RPC contract, tenant distinctions, generic oneof/Any
+  validation and schema/provenance compatibility. Include untracked new status
+  module and the full TASK ledger, not only tracked diff.
+- Performance/reliability: app_query_m01_reliability, gpt-6-sol/medium.
+  Validation before side effects, caller isolation, native/gateway/coordinator
+  error propagation, lifecycle cleanup and shared validator traversal behavior.
+  M04 unknown activation and M08 trust changes are not current claims.
+- Style/maintainability: app_query_m01_style, gpt-6-sol/medium. New status helper,
+  shared validator view, exact source adaptation/verifier and affected runtime
+  structure/fixtures, with mechanical results supplied.
+- Documentation: app_query_m01_docs, gpt-6-luna/medium. Current package/API/status
+  claims and changed public examples only; immutable proposal and historical
+  records are context rather than current behavior documentation. If the role
+  cannot write a report, main records its returned findings.
+
+Collect the complete relevant wave before one correction batch. Security remains
+M14; no separate security review is invoked for this slice.
+
+### M03 dispatch and preflight acceptance
+
+Main confirmed the final diff check. M03 evidence records 381 focused tests,
+75 shared-runtime regressions, 96.2% changed-statement and 94.1% changed-branch
+coverage, generated build and installed-package proof. Review estimate is
+0.25–0.5 hours including corrections. API reuses the explicitly configured
+Sol/medium reviewer. Earlier reliability/style/docs contexts are no longer
+listed by the execution surface, so their existing roles are redispatched as
+app_query_m03_reliability and app_query_m03_style (explicit Sol/medium), and
+app_query_m03_docs (explicit Luna/medium), with the same bounded scopes above.
+No role is added or changed. Actual runtime metadata remains unavailable.
+
+## M03 complete wave and correction batch
+
+All four concerns completed with the explicit profiles recorded above; no
+visible mismatch and no runtime self-introspection. Main independently reran
+the final installed-consumer proof successfully. Production remained frozen.
+
+- API: clean.
+- Reliability P2, independently also style P2: accept lifecycle semantic gap.
+  Reject target-independent malformed Topic shapes, including includeAll=false
+  and empty filters, before Activate/Cancel lookup, mutation or Coordinator
+  pending-activation cleanup. Preserve canonical stored Topic routing and
+  idempotent valid unknown cancellation; do not invent client Topic equality.
+- Reliability P2: accept sanitization gap. Unexpected storage/read exceptions
+  remain technical faults even if wrapped as ConnectError. Preserve deliberately
+  produced framework tenant/auth/cancellation/availability statuses at their
+  correct boundaries; do not blindly expose arbitrary adapter errors.
+- Style P3: accept deletion of obsolete Query error-response helpers after
+  confirming no callers remain.
+- Docs P3: accept concise Topic/lifecycle status details in current API guide.
+
+One batch goes to the existing Sol/medium implementer. Estimate 0.25–0.5 hours
+for corrections and focused verification. Targeted reliability confirmation
+will cover the two behavioral corrections; deterministic helper/docs changes
+do not reopen full lanes. M04 remains pending acceptance and push of M03.
+
+### M03 convergence
+
+Targeted reliability confirmation resolved both P2 findings. Main confirmed
+obsolete helper removal and Topic/lifecycle documentation details, and reran
+git diff --check. All four concerns are accepted; no remaining accepted finding.
+Correction evidence: 3 red then 3 green tests, 175/175 affected tests, 375/375 scoped tests,
+97.6% changed statements and 96.4% branch arms, affected build and cheap checks. The earlier
+456-test shared/transport run and installed consumer remain valid for untouched
+core/Proto code. Full release and security gates remain M14.

@@ -108,6 +108,8 @@ registered in the process. Annotated `Any` fields use that module inventory by
 default. Known malformed payloads and missing members
 of required collections become sanitized violations. Validator failures throw
 a technical error.
+Selected oneof members on recursive `(validate)` edges receive declared
+constraints, including inside known annotated `Any` payloads.
 
 ## 📦 Pack and unpack a message
 

@@ -539,8 +539,8 @@ ordering directives are accepted. Absent or zero wire limits use an implicit
 1,000-row cap without requiring ordering; a positive limit of at most 1,000
 requires ordering. Non-negative storage offsets are applied after sorting and
 before limits. Undeclared columns, wrong value types, unsupported operators,
-invalid ordering or limits, missing criteria, and `include_all = false` return
-`INVALID_QUERY` before Stand storage reads. The
+invalid ordering or limits, missing criteria, and `include_all = false` reject
+with structured `INVALID_ARGUMENT` and `INVALID_QUERY` before Stand storage reads. The
 imported `ResponseFormat.field_mask` is ignored, so reads return complete states.
 Direct list reads and `QueryService.Read` include-all calls follow the same
 tenant rules as point reads: single-tenant contexts reject tenant options, and

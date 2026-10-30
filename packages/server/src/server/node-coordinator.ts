@@ -30,6 +30,7 @@ import {
   type BackendMembershipKernelOptions,
 } from "@spine-event-engine/deployment/spi/backend-membership";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
+import { Validate } from "@spine-event-engine/core";
 import {
   AckSchema,
   ResponseSchema,
@@ -42,6 +43,7 @@ import {
   type Query,
   type QueryResponse,
   QueryResponseSchema,
+  QuerySchema,
   CommandService,
   QueryService,
   type Subscription,
@@ -53,6 +55,7 @@ import {
   type Topic,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
+import { ReadRequestStatus } from "../services/read-request-status.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
@@ -430,6 +433,7 @@ export class NodeCoordinator {
   }
 
   async #read(query: Query, context: HandlerContext): Promise<QueryResponse> {
+    ReadRequestStatus.check("query", () => Validate.check(QuerySchema, query));
     const request: CoordinatorQuery = {
       kind: "query",
       query,
@@ -441,6 +445,7 @@ export class NodeCoordinator {
   }
 
   async #subscribe(topic: Topic, context: HandlerContext): Promise<Subscription> {
+    ReadRequestStatus.check("topic", () => Validate.check(TopicSchema, topic));
     if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: `s-${randomUUID()}` }),
@@ -475,6 +480,8 @@ export class NodeCoordinator {
     subscription: Subscription,
     context: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
+    ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
+    ReadRequestStatus.checkLifecycleCriterion(subscription);
     if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const definition = toBinary(SubscriptionSchema, subscription);
     this.#clearPendingActivation(subscription);
@@ -552,6 +559,8 @@ export class NodeCoordinator {
   }
 
   async #cancel(subscription: Subscription, context: HandlerContext): Promise<Response> {
+    ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
+    ReadRequestStatus.checkLifecycleCriterion(subscription);
     this.#clearPendingActivation(subscription);
     await this.#cancelDefinition(toBinary(SubscriptionSchema, subscription), context.signal);
     return create(ResponseSchema, {

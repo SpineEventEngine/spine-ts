@@ -25,6 +25,9 @@ import {
   ProjectCriteriaSetSchema,
   ProjectFilterGroupSchema,
   ProjectLabelSchema,
+  ProjectSearchTermSchema,
+  ProjectSelectionSchema,
+  ProjectAnyEnvelopeSchema,
   ProjectTier,
 } from "../test-fixtures/generated/project_types_pb.js";
 import { AnyPacker, TypeRegistry, TypeUrls, Validate } from "../src/index.js";
@@ -114,6 +117,82 @@ describe("shared validation with application types", () => {
     expect(result.violations.every((item) => item.typeName === FindProjectsSchema.typeName)).toBe(
       true,
     );
+  });
+
+  it("validates selected nondefault oneof messages through declared recursion", () => {
+    const invalid = create(FindProjectsSchema, {
+      projectId: ["p1"],
+      tags: { team: "platform" },
+      advanced: {
+        case: "selectedCriteria",
+        value: create(ProjectSearchTermSchema, { source: "catalog" }),
+      },
+    });
+    const defaults = create(FindProjectsSchema, {
+      projectId: ["p1"],
+      tags: { team: "platform" },
+      advanced: { case: "selectedCriteria", value: create(ProjectSearchTermSchema) },
+    });
+
+    expect(
+      Validate.message(FindProjectsSchema, invalid, registry).violations.map(
+        (item) => item.fieldPath?.fieldName,
+      ),
+    ).toEqual([["selected_criteria", "keyword"]]);
+    expect(Validate.message(FindProjectsSchema, defaults, registry).valid).toBe(true);
+  });
+
+  it("checks selected scalar oneof constraints and require presence", () => {
+    const selected = create(ProjectSelectionSchema, {
+      term: { case: "keyword", value: "BAD" },
+    });
+    const valid = create(ProjectSelectionSchema, {
+      term: { case: "keyword", value: "catalog" },
+    });
+
+    expect(
+      Validate.message(ProjectSelectionSchema, selected).violations.map(
+        (item) => item.fieldPath?.fieldName,
+      ),
+    ).toEqual([["keyword"]]);
+    expect(Validate.message(ProjectSelectionSchema, valid).valid).toBe(true);
+  });
+
+  it("checks a selected oneof inside known descriptor-closure Any without duplicates", () => {
+    const selection = create(ProjectSelectionSchema, {
+      term: { case: "keyword", value: "BAD" },
+    });
+    const query = create(FindProjectsSchema, {
+      criteria: AnyPacker.pack(ProjectSelectionSchema, selection),
+      projectId: ["p1"],
+      tags: { team: "platform" },
+    });
+
+    expect(
+      Validate.message(FindProjectsSchema, query).violations.map(
+        (item) => item.fieldPath?.fieldName,
+      ),
+    ).toEqual([["criteria", "keyword"]]);
+  });
+
+  it("preserves required Any presence for valid default payloads", () => {
+    const defaults = create(ProjectAnyEnvelopeSchema, {
+      requiredCriteria: AnyPacker.pack(ProjectLabelSchema, create(ProjectLabelSchema)),
+    });
+    const missing = create(ProjectAnyEnvelopeSchema, {
+      requiredCriteria: create(AnySchema),
+    });
+    const unknown = create(ProjectAnyEnvelopeSchema, {
+      requiredCriteria: create(AnySchema, { typeUrl: "type.spine.io/example.Unknown" }),
+    });
+
+    expect(Validate.message(ProjectAnyEnvelopeSchema, defaults).valid).toBe(true);
+    expect(
+      Validate.message(ProjectAnyEnvelopeSchema, missing).violations.map(
+        (item) => item.fieldPath?.fieldName,
+      ),
+    ).toEqual([["required_criteria"]]);
+    expect(Validate.message(ProjectAnyEnvelopeSchema, unknown).valid).toBe(true);
   });
 
   it("does not duplicate violations for a packed type already in descriptor dependencies", () => {

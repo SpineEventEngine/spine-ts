@@ -608,7 +608,10 @@ export const Validate = {
     try {
       return ValidationResults.from(
         [
-          ...validateWithSpine(schema, message),
+          ...validateWithSpine(
+            schema,
+            RegistryValidation.view(schema, message) as MessageShape<Schema>,
+          ),
           ...RegistryValidation.collect(schema, message, registry ?? GeneratedDescriptors.types()),
         ].map((violation) => ValidationResults.violation(violation)),
       );

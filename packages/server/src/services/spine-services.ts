@@ -32,7 +32,7 @@ import {
   UInt64ValueSchema,
 } from "@bufbuild/protobuf/wkt";
 import type { MessageSchema } from "@spine-event-engine/core";
-import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker, Validate } from "@spine-event-engine/core";
 import {
   CommandIdSchema,
   CommandValidationError as CommandValidationErrorCode,
@@ -58,6 +58,7 @@ import {
   EntityStateWithVersionSchema as EntityStateVersionSchema,
   OrderBy_Direction,
   QueryResponseSchema,
+  QuerySchema,
   type OrderBy,
   type Query,
   type QueryResponse,
@@ -96,6 +97,7 @@ import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import { type StandReadResult } from "../stand/stand.js";
 import { QueryReader } from "./query-reader.js";
+import { ReadRequestStatus } from "./read-request-status.js";
 import { RegisteredTargets } from "./registered-targets.js";
 import { emitServerError, emitServerWarning } from "../server/server-log.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
@@ -137,7 +139,8 @@ interface SpineServicesAccess {
  * Queries allow at most 100 IDs, 16 simple filters, 8 composites, and 8 orderings.
  * Use proto column names such as `open_task_count`, not generated TS local names
  * such as `openTaskCount`. Invalid columns, values, operators, and query shapes
- * return stable `INVALID_QUERY` responses before Stand storage is read.
+ * reject with structured `INVALID_ARGUMENT` and `INVALID_QUERY` details before
+ * Stand storage is read.
  *
  * `SubscriptionService.Subscribe` accepts known state targets with
  * `include_all` or validated ID/field filters and known event targets exposed
@@ -388,24 +391,20 @@ export class SpineServices {
    * Validates a public state query before reading its registered Stand.
    *
    * @param query Public query request.
-   * @returns States or a stable query error response.
+   * @returns States for an admitted Query.
+   * @throws ConnectError for invalid input or a sanitized read failure.
    */
   async #read(query: Query): Promise<QueryResponse> {
+    ReadRequestStatus.check("query", () => Validate.check(QuerySchema, query));
     const target = query.target;
     const route = this.#readRoute(target);
-
     if (target === undefined || route === undefined) {
-      return ServiceValues.queryErrorResponse(
-        "UNSUPPORTED_QUERY_TARGET",
-        "No bounded context owns query target.",
-      );
+      throw ReadRequestStatus.invalid("query", true, "No bounded context owns query target.");
     }
-
     const queryError = ServiceValues.validateReadQuery(query, target, route);
     if (queryError !== undefined) {
-      return ServiceValues.queryErrorResponse(queryError.type, queryError.message);
+      throw ReadRequestStatus.invalid("query", false, queryError.message);
     }
-
     return this.#readValidated(query, target, route);
   }
 
@@ -415,7 +414,7 @@ export class SpineServices {
    * @param query Validated public query.
    * @param target Registered query target.
    * @param route Route containing the target Stand and schema.
-   * @returns States or a stable tenant/read error response.
+   * @returns States when tenant admission and storage read succeed.
    */
   async #readValidated(query: Query, target: Target, route: StateRoute): Promise<QueryResponse> {
     const tenantId = ServiceValues.tenantValue(query.context?.tenantId);
@@ -425,7 +424,7 @@ export class SpineServices {
       "query",
     );
     if (tenantError !== undefined) {
-      return ServiceValues.queryErrorResponse(tenantError.type, tenantError.message);
+      throw ReadRequestStatus.tenant(tenantError.type, tenantError.message);
     }
 
     try {
@@ -438,7 +437,7 @@ export class SpineServices {
       );
     } catch (error) {
       if (error instanceof TenantUnknownError) throw TenantStatuses.unknown(error);
-      return ServiceValues.queryErrorResponse("QUERY_READ_ERROR", "Query read failed.");
+      throw new ConnectError("Query read failed.", Code.Internal);
     }
   }
 
@@ -472,9 +471,9 @@ export class SpineServices {
    * @returns Created subscription after admission.
    */
   #subscribe(topic: Topic): Promise<Subscription> {
+    ReadRequestStatus.check("topic", () => Validate.check(TopicSchema, topic));
     const route = this.#subscriptionRoute(topic);
-    ServiceValues.validateTopic(topic);
-    ServiceValues.createSubscriptionShape(topic, route);
+    ServiceValues.checkTopicSemantics(topic, route);
     const tenantId = ServiceValues.topicTenant(topic);
     const tenantError = ServiceValues.tenantMismatch(
       route.context.isMultitenant,
@@ -483,7 +482,7 @@ export class SpineServices {
     );
 
     if (tenantError !== undefined) {
-      throw new ConnectError(tenantError.message, Code.InvalidArgument);
+      throw ReadRequestStatus.tenant(tenantError.type, tenantError.message);
     }
 
     const subscription = create(SubscriptionSchema, {
@@ -503,6 +502,8 @@ export class SpineServices {
   }
 
   async *#activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> {
+    ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
+    ReadRequestStatus.checkLifecycleCriterion(subscription);
     const id = subscription.id?.value;
     if (id === undefined) {
       return;
@@ -618,6 +619,8 @@ export class SpineServices {
    * @returns Cancellation response after any required membership check.
    */
   #cancel(subscription: Subscription): Response | Promise<Response> {
+    ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
+    ReadRequestStatus.checkLifecycleCriterion(subscription);
     const id = subscription.id?.value;
 
     if (id === undefined) {
@@ -661,7 +664,7 @@ export class SpineServices {
         : (this.#stateRoutes.get(target.type) ?? this.#eventRoutes.get(target.type));
 
     if (target === undefined || route === undefined) {
-      throw new ConnectError("Unsupported subscription target.", Code.InvalidArgument);
+      throw ReadRequestStatus.invalid("topic", true, "Unsupported subscription target.");
     }
 
     return route;
@@ -1082,16 +1085,6 @@ function errorStatus(type: string, message: string, details?: Any, code?: number
 
 function okResponse(): Response {
   return create(ResponseSchema, { status: okStatus() });
-}
-
-function errorResponse(type: string, message: string): Response {
-  return create(ResponseSchema, { status: errorStatus(type, message) });
-}
-
-function queryErrorResponse(type: string, message: string): QueryResponse {
-  return create(QueryResponseSchema, {
-    response: errorResponse(type, message),
-  });
 }
 
 function validateReadQuery(
@@ -2155,6 +2148,23 @@ const VALUE_DECODERS = Object.freeze([
  */
 const ServiceValues = Object.freeze({
   /**
+   * Maps supported Topic shape errors to structured public failures.
+   * @param topic Constraint-valid Topic to inspect.
+   * @param route Registered state or Event route.
+   */
+  checkTopicSemantics(topic: Topic, route: SubscriptionRoute): void {
+    try {
+      ServiceValues.validateTopic(topic);
+      ServiceValues.createSubscriptionShape(topic, route);
+    } catch (error) {
+      if (error instanceof ConnectError && error.code === Code.InvalidArgument) {
+        throw ReadRequestStatus.invalid("topic", false, error.rawMessage);
+      }
+      throw new ConnectError("Topic validation failed.", Code.Internal);
+    }
+  },
+
+  /**
    * Checks one composite query filter and its current traversal bounds.
    *
    * @param filter The composite filter being traversed.
@@ -2338,7 +2348,6 @@ const ServiceValues = Object.freeze({
   okStatus,
   positiveInteger,
   packVersionedState,
-  queryErrorResponse,
   queryResultLimit: QueryLimits.resultCount,
   stateRouteIdField,
   subscriptionLimit,

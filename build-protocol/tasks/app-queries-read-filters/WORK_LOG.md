@@ -180,3 +180,102 @@ configured gpt-6-sol/medium retained. Scope M03.md and M03_BASELINE.md, 1–2 ho
 for validation/status implementation, provenance checks, tests, review and
 integration. One production writer, no descendants. Full release gate remains
 M14. No product blocker or new permission is required.
+
+## M05 read-only preparation
+
+While M03 is implemented, reuse app_query_baseline for a bounded mechanical
+source inventory of generated metadata and current registry-root consumers.
+Configured original dispatch is explicit gpt-6-luna/low; no runtime source
+changes, generation, builds or descendants. Write M05_BASELINE.md only. This
+prepares the approved M05/M06 plan and does not add an architecture review.
+
+M05/M06 inventory completed and accepted: M05_BASELINE.md maps the existing
+generation, BC loading and publication paths. Scanner retained configured
+Luna/low; no mismatch, runtime metadata unavailable. No source changes or
+verification were performed. M05 brief prepared from the approved plan.
+
+## M08 read-only preparation
+
+Reuse the existing app_query_baseline scanner with its explicit configured
+gpt-6-luna/low profile for the current authenticated-request forwarding path.
+Only map ports, identity representation, public/trusted ingress, subscription
+context persistence and tests; no architecture decisions or runtime edits.
+Write M08_BASELINE.md only while the production implementer continues M03.
+
+M08 inventory and bounded transport follow-through accepted (configured
+Luna/low, no visible mismatch; runtime metadata unavailable). Existing browser
+TLS server-name configuration is not forwarding-peer authentication. Current
+app-node service assembly has no direct-native auth adapter and its forwarding
+path has no authenticated peer context. M08 must establish trust through the
+approved replaceable port; blindly trusting new headers is not an implementation
+of the approved proposal. Evidence is in M08_BASELINE.md. No runtime changes
+were made during this preparation and no security review was invoked.
+
+## M03 intermediate independent evidence
+
+Main ran `node scripts/verify-proto-sources.mjs`: 57 checksums verified.
+Main ran `pnpm exec vitest run scripts/verify-proto-sources.test.mjs`: 8/8
+tests passed, including approved-adaptation acceptance and unrelated-drift
+rejection. Runtime implementation remains in progress, so these checks alone
+do not accept M03. Implementer isolated a native test cleanup failure after
+new malformed-Cancel rejection; its two-test reproduction and 128-test service
+suite are now green. Transport detail verification remains in progress.
+
+## M03 shared oneof-validation gap
+
+During service regression work, the implementer reproduced missing nested
+TargetFilters validation under a oneof. Main inspected pinned validation
+2.0.0-snapshot.7 `validation-contract.js` MessageFields.read: it reads
+message[field.localName] and does not unwrap Protobuf-ES oneof values.
+`options/validate.js` also deliberately skips singular default messages.
+This distinguishes the generic oneof-access defect from default-message
+semantics. A service-only checkFilters workaround cannot satisfy the approved
+shared deep-validation requirement for App Query and other domain inputs.
+The same implementer will close the generic seam without changing declared
+default/required semantics or creating a constraint engine, and retain existing
+Query/Topic semantic checks for an explicitly selected empty filter. Add core
+and installed-consumer regression proof; no external repository publication.
+Expected additional correction/check time: 0.5–1 hour, within the M03 estimate.
+
+## M03 review handoff
+
+M03 preflight and installed-package proof are green as recorded in M03.md.
+Main independently checked the final diff for whitespace errors. The production
+tree is frozen for the four concern reviews; estimate 0.25–0.5 hours for review
+and bounded corrections. Main continues future-slice preparation without
+changing production files.
+
+## Revised whole-task estimate
+
+After the generic oneof validator defect and source-confirmed absence of an
+authenticated forwarding-peer channel, revise the initial 6–10-hour estimate
+to 10–16 hours total uninterrupted work. This includes remaining metadata and
+package discovery, generated App Query contracts, trusted identity ports,
+runtime and clients, filter boundaries/subscriptions, examples, specialist and
+security reviews, full release verification, versioning and feature pushes.
+No external waiting is currently required. Continue accepted slices without
+pausing for routine approval; M03 corrections are in progress.
+
+## M12 read-only preparation assignment
+
+Reuse app_query_baseline for the existing orchestrator-dispatched repository
+scanning function, immutable explicitly configured gpt-6-luna / low. Map public
+Entity/Agent/Repository history and direct Stand read paths versus internal
+hydration, replay and restoration. Identify exact shared seams, tests and
+context/cursor carriers; no design decisions, runtime edits or verification
+runs. Only write M12_BASELINE.md. Actual runtime metadata unavailable. This
+read-only work is independent of M03 service corrections.
+
+## M03 acceptance and M04 dispatch preparation
+
+M03 complete-wave findings are resolved and targeted reliability confirmed.
+Shared oneof validation, declared read/lifecycle validation, structured RPC
+errors and exact TargetFilters source adaptation are accepted. Main confirmed
+docs/helper corrections and final diff check. Commit/push to the authorized
+feature branch follows immediately. M12 read-only inventory is accepted from
+the previously explicit Luna/low profile, with no runtime metadata exposed.
+
+Next: M04 under existing app_query_implementation, explicitly configured
+Sol/medium. Estimate: 0.75–1.25 hours for unknown activation, bounded client
+recovery, focused tests, review and synchronization. Scope and acceptance are
+in M04.md. No permission pause, PR, master write or merge.

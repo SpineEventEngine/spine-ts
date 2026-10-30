@@ -14,7 +14,7 @@
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
-import { AckSchema } from "@spine-event-engine/proto";
+import { AckSchema, ErrorSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
   EntityUpdatesSchema,
@@ -235,6 +235,41 @@ describe("NativeSubscriptionCreator", () => {
     expect(failure.metadata.get("content-type")).toBeNull();
     expect(failure.metadata.get("grpc-status")).toBeNull();
     expect(failure.metadata.get("x-application-trace")).toBe("trace-1");
+  });
+
+  it("preserves typed Query validation details and the native Spine trailer", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.QueryValidationError",
+      code: 2,
+      message: "query validation failed.",
+    });
+    const failure = new ConnectError(
+      "query validation failed.",
+      Code.InvalidArgument,
+      {
+        "grpc-status": "3",
+        "spine-error-bin": Buffer.from(toBinary(ErrorSchema, detail)).toString("base64"),
+      },
+      [{ desc: ErrorSchema, value: detail }],
+    );
+    const creator = new NativeSubscriptionCreator({
+      unary: () => Promise.reject(failure),
+    } as unknown as Transport);
+    const actual = await creator
+      .forward({
+        service: "spine.client.QueryService",
+        method: "Read",
+        value: toBinary(QueryService.method.read.input, create(QueryService.method.read.input)),
+      })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(actual).toBe(failure);
+    expect(failure.findDetails(ErrorSchema)).toEqual([detail]);
+    expect(failure.metadata.get("spine-error-bin")).toBeDefined();
+    expect(failure.metadata.get("grpc-status")).toBeNull();
   });
 
   it("uses shared descriptors and preserves supplied abort signals", async () => {

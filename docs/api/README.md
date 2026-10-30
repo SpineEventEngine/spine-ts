@@ -497,14 +497,25 @@ ordering directives are accepted. Absent or zero wire limits use an implicit
 requires ordering.
 The imported `ResponseFormat.field_mask` field is ignored; reads return complete states.
 Undeclared columns, wrong value types, unsupported operators, invalid ordering
-or limits, missing criteria, and `include_all = false` return `INVALID_QUERY`
-before reading Stand storage.
-`Subscribe` allocates an opaque ID, validates criteria, and creates one pending
+or limits, missing criteria, and `include_all = false` reject with gRPC
+`INVALID_ARGUMENT` and a `spine.base.Error` detail of type
+`spine.client.QueryValidationError` before reading Stand storage. Declared
+constraint failures include a packed `ValidationError`; native gRPC also sends
+the same Spine Error in `spine-error-bin`. Unexpected read failures reject with
+sanitized `INTERNAL`. A valid read with no matching states succeeds with an
+empty message list.
+`Subscribe` validates the complete Topic before allocating an opaque ID and creating one pending
 definition in the context's Stand registry. `Activate` changes that definition
 to active before attaching this process's delivery; missing or expired
 definitions, and a definition already active for this process, produce no
 updates. `Cancel` and stream finalization release local delivery and physically
 delete the shared definition. Pending definitions expire after 30 seconds.
+Malformed Topics reject with `INVALID_ARGUMENT` and structured
+`spine.client.TopicValidationError` reason `INVALID_TOPIC`; unsupported Topic
+targets use `UNSUPPORTED_TOPIC_TARGET`. Malformed `Activate` and `Cancel`
+requests use `spine.client.SubscriptionValidationError` reason
+`INVALID_SUBSCRIPTION`. Declared constraint failures carry packed
+`ValidationError` field paths in the Spine Error detail.
 
 The built-in registry has no global quota for retained definitions, and active
 definitions have no framework TTL. Application or ingress admission must bound

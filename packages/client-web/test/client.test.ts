@@ -3984,6 +3984,27 @@ describe("Client", () => {
     await expect(client.asGuest().send(query)).rejects.toThrow("client is closing");
   });
 
+  it("exposes the server's structured invalid Query status from send", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.QueryValidationError",
+      code: 2,
+      message: "query validation failed.",
+    });
+    const failure = new ConnectError("query validation failed.", Code.InvalidArgument, undefined, [
+      { desc: ErrorSchema, value: detail },
+    ]);
+    const client = Client.usingTransport({
+      transport: unaryTransport((method) => {
+        if (method.name === "Read") throw failure;
+        return create(ResponseSchema);
+      }),
+    });
+
+    await expect(client.asGuest().send(create(QuerySchema))).rejects.toBe(failure);
+    expect(failure.findDetails(ErrorSchema)).toEqual([detail]);
+    await client.close();
+  });
+
   it("reuses one generated query in concurrent tenant-scoped sends", async () => {
     const shared = ProjectOverviewStateQuery.create().name().is("ready").build();
     const seen: { readonly tenant: string | undefined; readonly actor: string | undefined }[] = [];

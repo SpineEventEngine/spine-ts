@@ -14,9 +14,10 @@
 
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
-import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
+  AnySchema,
   DoubleValueSchema,
   EmptySchema,
   FieldMaskSchema,
@@ -122,6 +123,7 @@ import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { TransitionValidationError } from "../../src/repository/command-errors.js";
 import { spineServicesAccess } from "../../src/services/spine-services.js";
+import { ReadRequestStatus } from "../../src/services/read-request-status.js";
 import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
@@ -406,6 +408,183 @@ describe("SpineServices", () => {
     }
   });
 
+  it("rejects malformed Query and lifecycle requests with structured argument details", async () => {
+    const context = createRejectingReadContext();
+    const queries = registeredQueryHandlers(context);
+    const subscriptions = registeredSubscriptionHandlers(context);
+
+    const malformedQuery = await queries.read(create(QuerySchema)).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(malformedQuery).toBeInstanceOf(ConnectError);
+    expect((malformedQuery as ConnectError).code).toBe(Code.InvalidArgument);
+    expect((malformedQuery as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+      type: "spine.client.QueryValidationError",
+      code: 2,
+    });
+    const queryDetail = (malformedQuery as ConnectError).findDetails(ErrorSchema)[0]?.details;
+    const queryViolations = queryDetail && AnyPacker.tryUnpack(queryDetail, ValidationErrorSchema);
+    expect(queryViolations?.constraintViolation.map((entry) => entry.fieldPath?.fieldName)).toEqual(
+      [["id"], ["target"], ["context"]],
+    );
+
+    expect(() => subscriptions.subscribe(create(TopicSchema))).toThrow(ConnectError);
+    const malformedTopic = await Promise.resolve()
+      .then(() => subscriptions.subscribe(create(TopicSchema)))
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(malformedTopic).toMatchObject({
+      code: Code.InvalidArgument,
+    });
+    expect(() => subscriptions.cancel(create(SubscriptionSchema))).toThrow(ConnectError);
+    const malformedCancel = await Promise.resolve()
+      .then(() => subscriptions.cancel(create(SubscriptionSchema)))
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(malformedCancel).toMatchObject({
+      code: Code.InvalidArgument,
+    });
+    const activation = subscriptions.activate(create(SubscriptionSchema))[Symbol.asyncIterator]();
+    await expect(activation.next()).rejects.toMatchObject({ code: Code.InvalidArgument });
+  });
+
+  it("sanitizes unexpected read-side validator failures", () => {
+    let failure: unknown;
+    try {
+      ReadRequestStatus.check("query", () => {
+        throw new Error("private validator details");
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(ConnectError);
+    expect((failure as ConnectError).code).toBe(Code.Internal);
+    expect((failure as ConnectError).message).not.toContain("private validator details");
+    expect((failure as ConnectError).findDetails(ErrorSchema)).toEqual([]);
+  });
+
+  it("rejects a Subscription with invalid nested TargetFilters before lookup", async () => {
+    const handlers = registeredSubscriptionHandlers(createRejectingReadContext());
+    const topic = createTopic();
+    if (topic.target === undefined) throw new Error("Expected topic target.");
+    topic.target.criterion = {
+      case: "filters",
+      value: create(TargetFiltersSchema, {
+        idFilter: { id: [create(AnySchema)] },
+      }),
+    };
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-missing" }),
+      topic,
+    });
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const failure = await iterator.next().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(ConnectError);
+    expect((failure as ConnectError).code).toBe(Code.InvalidArgument);
+    const detail = (failure as ConnectError).findDetails(ErrorSchema)[0];
+    expect(detail?.type).toBe("spine.client.SubscriptionValidationError");
+    const violations =
+      detail?.details && AnyPacker.tryUnpack(detail.details, ValidationErrorSchema);
+    expect(violations?.constraintViolation[0]?.fieldPath?.fieldName).toEqual([
+      "topic",
+      "target",
+      "filters",
+      "id_filter",
+      "id",
+      "0",
+    ]);
+  });
+
+  it("rejects empty lifecycle filters semantically before record lookup", async () => {
+    const handlers = registeredSubscriptionHandlers(createRejectingReadContext());
+    const topic = createTopic();
+    if (topic.target === undefined) throw new Error("Expected topic target.");
+    topic.target.criterion = { case: "filters", value: create(TargetFiltersSchema) };
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-missing" }),
+      topic,
+    });
+
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const activation = await iterator.next().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    const cancellation = await Promise.resolve()
+      .then(() => handlers.cancel(subscription))
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    for (const failure of [activation, cancellation]) {
+      expect(failure).toBeInstanceOf(ConnectError);
+      expect((failure as ConnectError).code).toBe(Code.InvalidArgument);
+      expect((failure as ConnectError).findDetails(ErrorSchema)[0]?.type).toBe(
+        "spine.client.SubscriptionValidationError",
+      );
+      expect((failure as ConnectError).findDetails(ErrorSchema)[0]?.details).toBeUndefined();
+    }
+  });
+
+  it("rejects false include-all lifecycle requests without changing a known definition", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectOverviewStateSchema,
+    });
+    const context = await BoundedContext.singleTenant("LifecycleCriteria").add(repository).build();
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createTopic());
+      const id = subscription.id;
+      if (id === undefined || subscription.topic?.target === undefined) {
+        throw new Error("Expected registered subscription topic and ID.");
+      }
+      const registry = boundedContextAccess.subscriptionRegistry(context);
+      const before = await registry.get(id);
+      const malformed = clone(SubscriptionSchema, subscription);
+      if (malformed.topic?.target === undefined) throw new Error("Expected topic target.");
+      malformed.topic.target.criterion = { case: "includeAll", value: false };
+
+      const iterator = handlers.activate(malformed)[Symbol.asyncIterator]();
+      const activation = await iterator.next().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      const cancellation = await Promise.resolve()
+        .then(() => handlers.cancel(malformed))
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      for (const failure of [activation, cancellation]) {
+        expect(failure).toBeInstanceOf(ConnectError);
+        expect((failure as ConnectError).code).toBe(Code.InvalidArgument);
+        expect((failure as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+          type: "spine.client.SubscriptionValidationError",
+          code: 2,
+        });
+      }
+      expect(await registry.get(id)).toEqual(before);
+      const unknown = create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: "s-unknown" }),
+        topic: createTopic(),
+      });
+      expect(((await handlers.cancel(unknown)) as Response).status?.status.case).toBe("ok");
+    } finally {
+      await context.close();
+    }
+  });
+
   it("reads Stand state through QueryService over a real gRPC transport", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
@@ -516,7 +695,7 @@ describe("SpineServices", () => {
       expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 2 }));
 
       const invalid = createColumnFilterQuery("priority", packStringId("wrong"));
-      const invalidResponse = await client.read(invalid);
+      const invalidResponse = await queryFailure(client.read(invalid));
       expect(responseErrorMessage(invalidResponse)).toBe(
         'QueryService.Read column filter "priority" has the wrong value type.',
       );
@@ -565,8 +744,10 @@ describe("SpineServices", () => {
     const handlers = registeredQueryHandlers(context);
 
     const response = await handlers.read(createMessageIdQuery(taskId));
-    const incompatible = await handlers.read(
-      createMessageIdQuery(create(TaskIdSchema, { value: "unused" }), packStringId("wrong")),
+    const incompatible = await queryFailure(
+      handlers.read(
+        createMessageIdQuery(create(TaskIdSchema, { value: "unused" }), packStringId("wrong")),
+      ),
     );
 
     expect(response.response?.status?.status.case).toBe("ok");
@@ -756,10 +937,10 @@ describe("SpineServices", () => {
       const queryClient = createClient(QueryService, transport);
 
       const ack = await commandClient.post(createProjectionCommand("command-unsupported"));
-      const response = await queryClient.read(createQuery("task-1"));
+      const response = await queryFailure(queryClient.read(createQuery("task-1")));
 
       expect(ack.status?.status.case).toBe("error");
-      expect(response.response?.status?.status.case).toBe("error");
+      expect(response.code).toBe(Code.InvalidArgument);
     } finally {
       await server.close();
     }
@@ -922,29 +1103,33 @@ describe("SpineServices", () => {
 
       const ack = await commandClient.post(createCommandWithoutId());
       const unsupported = await commandClient.post(createProjectionCommand("unsupported-id"));
-      const noTarget = await queryClient.read(
-        create(QuerySchema, {
-          id: create(QueryIdSchema, { value: "q-no-target" }),
-          context: createActorContext(),
-        }),
+      const noTarget = await queryFailure(
+        queryClient.read(
+          create(QuerySchema, {
+            id: create(QueryIdSchema, { value: "q-no-target" }),
+            context: createActorContext(),
+          }),
+        ),
       );
       const objectId = await queryClient.read(
         createQueryWithIds([
           AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "task-1" })),
         ]),
       );
-      const emptyFilter = await queryClient.read(
-        create(QuerySchema, {
-          id: create(QueryIdSchema, { value: "q-empty-filter" }),
-          target: create(TargetSchema, {
-            type: TypeUrls.derive(ProjectOverviewStateSchema),
-            criterion: {
-              case: "filters",
-              value: create(TargetFiltersSchema),
-            },
+      const emptyFilter = await queryFailure(
+        queryClient.read(
+          create(QuerySchema, {
+            id: create(QueryIdSchema, { value: "q-empty-filter" }),
+            target: create(TargetSchema, {
+              type: TypeUrls.derive(ProjectOverviewStateSchema),
+              criterion: {
+                case: "filters",
+                value: create(TargetFiltersSchema),
+              },
+            }),
+            context: createActorContext(),
           }),
-          context: createActorContext(),
-        }),
+        ),
       );
 
       expect(ack.messageId).toBeUndefined();
@@ -958,10 +1143,25 @@ describe("SpineServices", () => {
       expect(errorCode(unsupported.status?.status)).toBe(
         CommandValidationErrorCode.UNSUPPORTED_COMMAND,
       );
-      expect(noTarget.response?.status?.status.case).toBe("error");
+      expect(noTarget.code).toBe(Code.InvalidArgument);
+      const noTargetDetail = noTarget.findDetails(ErrorSchema)[0];
+      expect(noTargetDetail?.type).toBe("spine.client.QueryValidationError");
+      expect(noTargetDetail?.code).toBe(2);
+      const encodedSpineError = noTarget.metadata.get("spine-error-bin");
+      expect(encodedSpineError).toBeDefined();
+      expect(
+        toBinary(
+          ErrorSchema,
+          fromBinary(ErrorSchema, Buffer.from(encodedSpineError ?? "", "base64")),
+        ),
+      ).toEqual(toBinary(ErrorSchema, noTargetDetail ?? create(ErrorSchema)));
       expect(objectId.response?.status?.status.case).toBe("ok");
       expect(objectId.message).toHaveLength(0);
-      expect(emptyFilter.response?.status?.status.case).toBe("error");
+      expect(emptyFilter.code).toBe(Code.InvalidArgument);
+      expect(emptyFilter.findDetails(ErrorSchema)[0]?.type).toBe(
+        "spine.client.QueryValidationError",
+      );
+      expect(emptyFilter.findDetails(ErrorSchema)[0]?.details).toBeUndefined();
     } finally {
       await emptyServer.close();
       await server.close();
@@ -1193,11 +1393,11 @@ describe("SpineServices", () => {
     const context = createRejectingReadContext();
     const handlers = registeredQueryHandlers(context);
 
-    const response = await handlers.read(
-      createFormattedQuery(create(ResponseFormatSchema, { limit: 1 })),
+    const response = await queryFailure(
+      handlers.read(createFormattedQuery(create(ResponseFormatSchema, { limit: 1 }))),
     );
 
-    expect(response.response?.status?.status.case).toBe("error");
+    expect(response.code).toBe(Code.InvalidArgument);
     expect(responseErrorMessage(response)).toBe("QueryService.Read limit requires ordering.");
   });
 
@@ -1289,47 +1489,53 @@ describe("SpineServices", () => {
       });
     const handlers = registeredQueryHandlers(context);
 
-    const tenantA = await handlers.read(createIncludeAllQuery("tenant-a"));
+    const tenantA = await queryFailure(handlers.read(createIncludeAllQuery("tenant-a")));
     const tenantB = await handlers.read(createIncludeAllQuery("tenant-b"));
-    const tenantASystem = await handlers.read(
-      createFormattedIncludeAllQuery(
-        create(ResponseFormatSchema, {
-          orderBy: [
-            create(OrderBySchema, {
-              column: "version",
-              direction: OrderBy_Direction.ASCENDING,
-            }),
-          ],
-        }),
-        "tenant-a",
+    const tenantASystem = await queryFailure(
+      handlers.read(
+        createFormattedIncludeAllQuery(
+          create(ResponseFormatSchema, {
+            orderBy: [
+              create(OrderBySchema, {
+                column: "version",
+                direction: OrderBy_Direction.ASCENDING,
+              }),
+            ],
+          }),
+          "tenant-a",
+        ),
       ),
     );
-    const tenantAExplicit = await handlers.read(
-      createFormattedIncludeAllQuery(
-        create(ResponseFormatSchema, {
-          limit: 1,
-          orderBy: [
-            create(OrderBySchema, {
-              column: "name",
-              direction: OrderBy_Direction.ASCENDING,
-            }),
-          ],
-        }),
-        "tenant-a",
+    const tenantAExplicit = await queryFailure(
+      handlers.read(
+        createFormattedIncludeAllQuery(
+          create(ResponseFormatSchema, {
+            limit: 1,
+            orderBy: [
+              create(OrderBySchema, {
+                column: "name",
+                direction: OrderBy_Direction.ASCENDING,
+              }),
+            ],
+          }),
+          "tenant-a",
+        ),
       ),
     );
-    const tenantAExplicitSystem = await handlers.read(
-      createFormattedIncludeAllQuery(
-        create(ResponseFormatSchema, {
-          limit: 1,
-          orderBy: [
-            create(OrderBySchema, {
-              column: "version",
-              direction: OrderBy_Direction.ASCENDING,
-            }),
-          ],
-        }),
-        "tenant-a",
+    const tenantAExplicitSystem = await queryFailure(
+      handlers.read(
+        createFormattedIncludeAllQuery(
+          create(ResponseFormatSchema, {
+            limit: 1,
+            orderBy: [
+              create(OrderBySchema, {
+                column: "version",
+                direction: OrderBy_Direction.ASCENDING,
+              }),
+            ],
+          }),
+          "tenant-a",
+        ),
       ),
     );
 
@@ -1346,32 +1552,32 @@ describe("SpineServices", () => {
     const context = createRejectingReadContext();
     const handlers = registeredQueryHandlers(context);
 
-    const missingColumn = await handlers.read(
-      createFormattedQuery(
-        create(ResponseFormatSchema, {
-          orderBy: [create(OrderBySchema, { column: " " })],
-        }),
+    const missingColumn = await queryFailure(
+      handlers.read(
+        createFormattedQuery(
+          create(ResponseFormatSchema, {
+            orderBy: [create(OrderBySchema, { column: " " })],
+          }),
+        ),
       ),
     );
-    const unknownDirection = await handlers.read(
-      createFormattedQuery(
-        create(ResponseFormatSchema, {
-          orderBy: [
-            create(OrderBySchema, {
-              column: "name",
-              direction: OrderBy_Direction.OD_UNKNOWN,
-            }),
-          ],
-        }),
+    const unknownDirection = await queryFailure(
+      handlers.read(
+        createFormattedQuery(
+          create(ResponseFormatSchema, {
+            orderBy: [
+              create(OrderBySchema, {
+                column: "name",
+                direction: OrderBy_Direction.OD_UNKNOWN,
+              }),
+            ],
+          }),
+        ),
       ),
     );
 
-    expect(responseErrorMessage(missingColumn)).toBe(
-      "QueryService.Read order_by column is required.",
-    );
-    expect(responseErrorMessage(unknownDirection)).toBe(
-      "QueryService.Read order_by direction must be ASCENDING or DESCENDING.",
-    );
+    expect(responseErrorMessage(missingColumn)).toBe("query validation failed.");
+    expect(responseErrorMessage(unknownDirection)).toBe("query validation failed.");
   });
 
   it("rejects malformed ID-filter entries before storage query execution", async () => {
@@ -1391,12 +1597,10 @@ describe("SpineServices", () => {
     const filters = query.target.criterion.value;
     filters.idFilter?.id.push(undefined as unknown as Any);
 
-    const response = await handlers.read(query);
+    const response = await queryFailure(handlers.read(query));
 
-    expect(response.response?.status?.status.case).toBe("error");
-    expect(responseErrorMessage(response)).toBe(
-      "QueryService.Read id_filter entries are required.",
-    );
+    expect(response.code).toBe(Code.InvalidArgument);
+    expect(responseErrorMessage(response)).toBe("query validation failed.");
     expect(observedQuery).toBeUndefined();
   });
 
@@ -1445,13 +1649,15 @@ describe("SpineServices", () => {
     }
     missingField.fieldPath = undefined;
 
-    const empty = await handlers.read(createColumnFilterQuery("", packStringId("Open")));
-    const blank = await handlers.read(createColumnFilterQuery(" ", packStringId("Open")));
-    const undefinedColumn = await handlers.read(missing);
-
-    expect(responseErrorMessage(undefinedColumn)).toBe(
-      "QueryService.Read column filter field is required.",
+    const empty = await queryFailure(
+      handlers.read(createColumnFilterQuery("", packStringId("Open"))),
     );
+    const blank = await queryFailure(
+      handlers.read(createColumnFilterQuery(" ", packStringId("Open"))),
+    );
+    const undefinedColumn = await queryFailure(handlers.read(missing));
+
+    expect(responseErrorMessage(undefinedColumn)).toBe("query validation failed.");
     expect(responseErrorMessage(empty)).toBe("QueryService.Read column filter field is required.");
     expect(responseErrorMessage(blank)).toBe("QueryService.Read column filter field is required.");
   });
@@ -1460,37 +1666,45 @@ describe("SpineServices", () => {
     const context = createRejectingReadContext();
     const handlers = registeredQueryHandlers(context);
 
-    const tooManyIds = await handlers.read(
-      createQueryWithIds(Array.from({ length: 101 }, () => packStringId("x"))),
+    const tooManyIds = await queryFailure(
+      handlers.read(createQueryWithIds(Array.from({ length: 101 }, () => packStringId("x")))),
     );
-    const tooManyFilters = await handlers.read(createColumnFilterQueryWithFilters(17));
-    const tooManyInvalidFilters = await handlers.read(
-      createColumnFilterQueryWithFilters(17, "unknown"),
+    const tooManyFilters = await queryFailure(
+      handlers.read(createColumnFilterQueryWithFilters(17)),
     );
-    const tooManyComposites = await handlers.read(createColumnFilterQueryWithComposites(9));
-    const tooManyOrderings = await handlers.read(
-      createFormattedIncludeAllQuery(
-        create(ResponseFormatSchema, {
-          orderBy: new Array(9).fill(undefined).map(() =>
-            create(OrderBySchema, {
-              column: "name",
-              direction: OrderBy_Direction.ASCENDING,
-            }),
-          ),
-        }),
+    const tooManyInvalidFilters = await queryFailure(
+      handlers.read(createColumnFilterQueryWithFilters(17, "unknown")),
+    );
+    const tooManyComposites = await queryFailure(
+      handlers.read(createColumnFilterQueryWithComposites(9)),
+    );
+    const tooManyOrderings = await queryFailure(
+      handlers.read(
+        createFormattedIncludeAllQuery(
+          create(ResponseFormatSchema, {
+            orderBy: new Array(9).fill(undefined).map(() =>
+              create(OrderBySchema, {
+                column: "name",
+                direction: OrderBy_Direction.ASCENDING,
+              }),
+            ),
+          }),
+        ),
       ),
     );
-    const tooLargeLimit = await handlers.read(
-      createFormattedIncludeAllQuery(
-        create(ResponseFormatSchema, {
-          limit: 1_001,
-          orderBy: [
-            create(OrderBySchema, {
-              column: "name",
-              direction: OrderBy_Direction.ASCENDING,
-            }),
-          ],
-        }),
+    const tooLargeLimit = await queryFailure(
+      handlers.read(
+        createFormattedIncludeAllQuery(
+          create(ResponseFormatSchema, {
+            limit: 1_001,
+            orderBy: [
+              create(OrderBySchema, {
+                column: "name",
+                direction: OrderBy_Direction.ASCENDING,
+              }),
+            ],
+          }),
+        ),
       ),
     );
 
@@ -1518,17 +1732,21 @@ describe("SpineServices", () => {
     const context = createRejectingReadContext();
     const handlers = registeredQueryHandlers(context);
 
-    const filter = await handlers.read(createColumnFilterQuery("id", packStringId("task-1")));
-    const ordering = await handlers.read(
-      createFormattedIncludeAllQuery(
-        create(ResponseFormatSchema, {
-          orderBy: [
-            create(OrderBySchema, {
-              column: "id",
-              direction: OrderBy_Direction.ASCENDING,
-            }),
-          ],
-        }),
+    const filter = await queryFailure(
+      handlers.read(createColumnFilterQuery("id", packStringId("task-1"))),
+    );
+    const ordering = await queryFailure(
+      handlers.read(
+        createFormattedIncludeAllQuery(
+          create(ResponseFormatSchema, {
+            orderBy: [
+              create(OrderBySchema, {
+                column: "id",
+                direction: OrderBy_Direction.ASCENDING,
+              }),
+            ],
+          }),
+        ),
       ),
     );
 
@@ -1544,15 +1762,15 @@ describe("SpineServices", () => {
     const context = createRejectingReadContext();
     const handlers = registeredQueryHandlers(context);
 
-    const response = await handlers.read(
-      createColumnFilterQuery("name", packStringId("Open"), {
-        compositeOperator: CompositeFilter_CompositeOperator.CCF_CO_UNDEFINED,
-      }),
+    const response = await queryFailure(
+      handlers.read(
+        createColumnFilterQuery("name", packStringId("Open"), {
+          compositeOperator: CompositeFilter_CompositeOperator.CCF_CO_UNDEFINED,
+        }),
+      ),
     );
 
-    expect(responseErrorMessage(response)).toBe(
-      "QueryService.Read composite operator must be ALL or EITHER.",
-    );
+    expect(responseErrorMessage(response)).toBe("query validation failed.");
   });
 
   it("rejects empty and malformed simple filter shapes before reading storage", async () => {
@@ -1592,34 +1810,38 @@ describe("SpineServices", () => {
     unknownOperatorFilter.operator = Filter_Operator.CFO_UNDEFINED;
 
     const responses = await Promise.all([
-      handlers.read(empty),
-      handlers.read(missingField),
-      handlers.read(nestedField),
-      handlers.read(missingValue),
-      handlers.read(unknownOperator),
+      queryFailure(handlers.read(empty)),
+      queryFailure(handlers.read(missingField)),
+      queryFailure(handlers.read(nestedField)),
+      queryFailure(handlers.read(missingValue)),
+      queryFailure(handlers.read(unknownOperator)),
     ]);
 
     expect(responses.map(responseErrorMessage)).toEqual([
       "QueryService.Read composite filter must not be empty.",
-      "QueryService.Read column filter field is required.",
+      "query validation failed.",
       "QueryService.Read supports only top-level column filters.",
-      "QueryService.Read column filter value is required.",
-      "QueryService.Read comparison operator is not supported.",
+      "query validation failed.",
+      "query validation failed.",
     ]);
   });
 
   it("rejects descriptor-incompatible numeric wrappers before provider access", async () => {
     const handlers = registeredQueryHandlers(createRejectingReadContext());
-    const doubleWrapped = await handlers.read(
-      createColumnFilterQuery(
-        "priority",
-        AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value: 2 })),
+    const doubleWrapped = await queryFailure(
+      handlers.read(
+        createColumnFilterQuery(
+          "priority",
+          AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value: 2 })),
+        ),
       ),
     );
-    const unsignedWrapped = await handlers.read(
-      createColumnFilterQuery(
-        "priority",
-        AnyPacker.pack(UInt32ValueSchema, create(UInt32ValueSchema, { value: 2 })),
+    const unsignedWrapped = await queryFailure(
+      handlers.read(
+        createColumnFilterQuery(
+          "priority",
+          AnyPacker.pack(UInt32ValueSchema, create(UInt32ValueSchema, { value: 2 })),
+        ),
       ),
     );
 
@@ -1638,23 +1860,24 @@ describe("SpineServices", () => {
     const root = query.target.criterion.value.filter[0];
     if (root === undefined) throw new Error("Expected root composite.");
     root.filter = [];
-    const children = new Array<CompositeFilter>(9);
-    let childReads = 0;
-    Object.defineProperty(children, 0, {
-      configurable: true,
-      get() {
-        childReads += 1;
-        throw new Error("wide child must not be read");
-      },
-    });
-    root.compositeFilter = children;
+    root.compositeFilter = Array.from({ length: 9 }, () =>
+      create(CompositeFilterSchema, {
+        filter: [
+          create(FilterSchema, {
+            fieldPath: { fieldName: ["name"] },
+            value: packStringId("Open"),
+            operator: Filter_Operator.EQUAL,
+          }),
+        ],
+        operator: CompositeFilter_CompositeOperator.ALL,
+      }),
+    );
 
-    const response = await handlers.read(query);
+    const response = await queryFailure(handlers.read(query));
 
     expect(responseErrorMessage(response)).toBe(
       "QueryService.Read may contain at most 8 composite filters.",
     );
-    expect(childReads).toBe(0);
   });
 
   it("normalizes typed system-column predicates before provider access", async () => {
@@ -1721,32 +1944,34 @@ describe("SpineServices", () => {
     const context = createRejectingReadContext();
     const handlers = registeredQueryHandlers(context);
 
-    const missingCriterion = await handlers.read(
-      create(QuerySchema, {
-        id: create(QueryIdSchema, { value: "q-missing-criterion" }),
-        target: create(TargetSchema, {
-          type: TypeUrls.derive(ProjectOverviewStateSchema),
+    const missingCriterion = await queryFailure(
+      handlers.read(
+        create(QuerySchema, {
+          id: create(QueryIdSchema, { value: "q-missing-criterion" }),
+          target: create(TargetSchema, {
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
+          }),
+          context: createActorContext(),
         }),
-        context: createActorContext(),
-      }),
+      ),
     );
-    const falseIncludeAll = await handlers.read(
-      create(QuerySchema, {
-        id: create(QueryIdSchema, { value: "q-false-include-all" }),
-        target: create(TargetSchema, {
-          type: TypeUrls.derive(ProjectOverviewStateSchema),
-          criterion: {
-            case: "includeAll",
-            value: false,
-          },
+    const falseIncludeAll = await queryFailure(
+      handlers.read(
+        create(QuerySchema, {
+          id: create(QueryIdSchema, { value: "q-false-include-all" }),
+          target: create(TargetSchema, {
+            type: TypeUrls.derive(ProjectOverviewStateSchema),
+            criterion: {
+              case: "includeAll",
+              value: false,
+            },
+          }),
+          context: createActorContext(),
         }),
-        context: createActorContext(),
-      }),
+      ),
     );
 
-    expect(responseErrorMessage(missingCriterion)).toBe(
-      "QueryService.Read requires filters or include_all = true.",
-    );
+    expect(responseErrorMessage(missingCriterion)).toBe("query validation failed.");
     expect(responseErrorMessage(falseIncludeAll)).toBe(
       "QueryService.Read requires filters or include_all = true.",
     );
@@ -1761,11 +1986,11 @@ describe("SpineServices", () => {
     const queryHandlers = registeredQueryHandlers(readFailureContext);
 
     const ack = await commandHandlers.post(create(CommandSchema));
-    const response = await queryHandlers.read(createQuery("task-1"));
+    const response = await queryFailure(queryHandlers.read(createQuery("task-1")));
 
     expect(ack.status?.status.case).toBe("error");
     expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
-    expect(response.response?.status?.status.case).toBe("error");
+    expect(response.code).toBe(Code.Internal);
     expect(responseErrorMessage(response)).toBe("Query read failed.");
   });
 
@@ -1776,10 +2001,36 @@ describe("SpineServices", () => {
     });
     const handlers = registeredQueryHandlers(readFailureContext);
 
-    const response = await handlers.read(createIncludeAllQuery());
+    const response = await queryFailure(handlers.read(createIncludeAllQuery()));
 
-    expect(response.response?.status?.status.case).toBe("error");
+    expect(response.code).toBe(Code.Internal);
     expect(responseErrorMessage(response)).toBe("Query read failed.");
+  });
+
+  it("sanitizes private Connect errors from Stand reads", async () => {
+    const privateDetail = create(ErrorSchema, { type: "PRIVATE_STORAGE", message: "secret" });
+    const context = createFakeContext({
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
+      readVersioned: () =>
+        Promise.reject(
+          new ConnectError(
+            "private storage detail",
+            Code.PermissionDenied,
+            new Headers({ "x-private": "secret" }),
+            [{ desc: ErrorSchema, value: privateDetail }],
+          ),
+        ),
+    });
+
+    const failure = await queryFailure(
+      registeredQueryHandlers(context).read(createQuery("task-1")),
+    );
+
+    expect(failure.code).toBe(Code.Internal);
+    expect(responseErrorMessage(failure)).toBe("Query read failed.");
+    expect(failure.message).not.toContain("private storage detail");
+    expect(failure.findDetails(ErrorSchema)).toEqual([]);
+    expect(failure.metadata.get("x-private")).toBeNull();
   });
 
   it("wraps non-Error dispatcher failures in sanitized Spine command errors", async () => {
@@ -2545,9 +2796,12 @@ describe("SpineServices", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: singleServer.baseUrl }),
       );
-      await expect(singleClient.subscribe(createTopic("tenant-a"))).rejects.toMatchObject({
-        code: Code.InvalidArgument,
-      } satisfies Partial<ConnectError>);
+      const inapplicable = await singleClient.subscribe(createTopic("tenant-a")).then(
+        () => undefined,
+        (error: unknown) => error as ConnectError,
+      );
+      expect(inapplicable?.code).toBe(Code.InvalidArgument);
+      expect(inapplicable?.findDetails(ErrorSchema)[0]?.type).toBe("TENANT_INAPPLICABLE");
     } finally {
       await singleServer.close();
     }
@@ -2560,9 +2814,12 @@ describe("SpineServices", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: multiServer.baseUrl }),
       );
-      await expect(multiClient.subscribe(createTopic())).rejects.toMatchObject({
-        code: Code.InvalidArgument,
-      } satisfies Partial<ConnectError>);
+      const required = await multiClient.subscribe(createTopic()).then(
+        () => undefined,
+        (error: unknown) => error as ConnectError,
+      );
+      expect(required?.code).toBe(Code.InvalidArgument);
+      expect(required?.findDetails(ErrorSchema)[0]?.type).toBe("TENANT_REQUIRED");
     } finally {
       await multiServer.close();
     }
@@ -2629,8 +2886,9 @@ describe("SpineServices", () => {
         QueryService,
         createGrpcTransport({ baseUrl: singleServer.baseUrl }),
       );
-      const inapplicable = await singleClient.read(createQuery("task-1", "tenant-a"));
-      expect(inapplicable.response?.status?.status.case).toBe("error");
+      const inapplicable = await queryFailure(singleClient.read(createQuery("task-1", "tenant-a")));
+      expect(inapplicable.code).toBe(Code.InvalidArgument);
+      expect(inapplicable.findDetails(ErrorSchema)[0]?.type).toBe("TENANT_INAPPLICABLE");
       expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
     } finally {
       await singleServer.close();
@@ -2642,8 +2900,9 @@ describe("SpineServices", () => {
         QueryService,
         createGrpcTransport({ baseUrl: multiServer.baseUrl }),
       );
-      const missing = await multiClient.read(createQuery("task-1"));
-      expect(missing.response?.status?.status.case).toBe("error");
+      const missing = await queryFailure(multiClient.read(createQuery("task-1")));
+      expect(missing.code).toBe(Code.InvalidArgument);
+      expect(missing.findDetails(ErrorSchema)[0]?.type).toBe("TENANT_REQUIRED");
       expect(responseErrorMessage(missing)).toBe("Tenant is required for this query.");
     } finally {
       await multiServer.close();
@@ -2671,14 +2930,14 @@ describe("SpineServices", () => {
     const singleHandlers = registeredQueryHandlers(singleTenant);
     const multiHandlers = registeredQueryHandlers(multitenant);
 
-    const inapplicable = await singleHandlers.read(
-      createQuery("task-1", tenantEmail("tenant@example.test")),
+    const inapplicable = await queryFailure(
+      singleHandlers.read(createQuery("task-1", tenantEmail("tenant@example.test"))),
     );
     const accepted = await multiHandlers.read(
       createQuery("task-1", tenantDomain("tenant.example")),
     );
 
-    expect(inapplicable.response?.status?.status.case).toBe("error");
+    expect(inapplicable.code).toBe(Code.InvalidArgument);
     expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
     expect(accepted.response?.status?.status.case).toBe("ok");
     expect(capturedTenantKeys).toEqual([tenantDomain("tenant.example")]);
@@ -2707,14 +2966,14 @@ describe("SpineServices", () => {
     const singleHandlers = registeredQueryHandlers(singleTenant);
     const multiHandlers = registeredQueryHandlers(multitenant);
 
-    const inapplicable = await singleHandlers.read(
-      createIncludeAllQuery(tenantEmail("tenant@example.test")),
+    const inapplicable = await queryFailure(
+      singleHandlers.read(createIncludeAllQuery(tenantEmail("tenant@example.test"))),
     );
     const accepted = await multiHandlers.read(
       createIncludeAllQuery(tenantDomain("tenant.example")),
     );
 
-    expect(inapplicable.response?.status?.status.case).toBe("error");
+    expect(inapplicable.code).toBe(Code.InvalidArgument);
     expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
     expect(accepted.response?.status?.status.case).toBe("ok");
     expect(capturedTenantKeys).toEqual([tenantDomain("tenant.example")]);
@@ -3145,7 +3404,7 @@ describe("SpineServices", () => {
       type: TypeUrls.derive(TaskCreatedSchema),
       criterion: {
         case: "filters",
-        value: create(TargetFiltersSchema),
+        value: create(TargetFiltersSchema, { idFilter: { id: [packStringId("task-1")] } }),
       },
     });
 
@@ -3369,14 +3628,14 @@ describe("SpineServices", () => {
           target: createSubscriptionTarget(),
           context: createActorContext(),
         }),
-        message: "Subscription topic ID is required.",
+        message: "topic validation failed.",
       },
       {
         topic: create(TopicSchema, {
           id: create(TopicIdSchema, { value: "t-missing-context" }),
           target: createSubscriptionTarget(),
         }),
-        message: "Subscription topic context is required.",
+        message: "topic validation failed.",
       },
       {
         topic: create(TopicSchema, {
@@ -3384,7 +3643,7 @@ describe("SpineServices", () => {
           target: create(TargetSchema, { type: TypeUrls.derive(ProjectOverviewStateSchema) }),
           context: createActorContext(),
         }),
-        message: "Subscription topic criterion is required.",
+        message: "topic validation failed.",
       },
       {
         topic: create(TopicSchema, {
@@ -3495,7 +3754,7 @@ describe("SpineServices", () => {
           value: packStringId("Open"),
           operator: Filter_Operator.EQUAL,
         }),
-        message: "SubscriptionService.Subscribe field filter path is required.",
+        message: "topic validation failed.",
       },
       {
         filter: create(FilterSchema, {
@@ -3528,7 +3787,7 @@ describe("SpineServices", () => {
           fieldPath: { fieldName: ["name"] },
           operator: Filter_Operator.EQUAL,
         }),
-        message: "SubscriptionService.Subscribe field filter value is required.",
+        message: "topic validation failed.",
       },
     ];
 
@@ -3655,7 +3914,7 @@ describe("SpineServices", () => {
     }
   });
 
-  it("keeps missing subscription IDs inert", async () => {
+  it("rejects missing subscription IDs before lifecycle lookup", async () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
     );
@@ -3663,13 +3922,8 @@ describe("SpineServices", () => {
 
     await expect(
       withTimeout(iterator.next(), "missing subscription ID activation"),
-    ).resolves.toEqual({
-      done: true,
-      value: undefined,
-    });
-    expect((handlers.cancel(create(SubscriptionSchema)) as Response).status?.status.case).toBe(
-      "ok",
-    );
+    ).rejects.toMatchObject({ code: Code.InvalidArgument });
+    expect(() => handlers.cancel(create(SubscriptionSchema))).toThrow(ConnectError);
   });
 
   it("keeps registry-missing and expired subscriptions inert during activation", async () => {
@@ -3721,9 +3975,7 @@ describe("SpineServices", () => {
       context: createActorContext(),
     });
 
-    expect(() => handlers.subscribe(topic)).toThrow(
-      "SubscriptionService.Subscribe id_filter requires at least one ID.",
-    );
+    expect(() => handlers.subscribe(topic)).toThrow("topic validation failed.");
     expect(subscribeCalls).toBe(0);
   });
 
@@ -3993,7 +4245,10 @@ describe("SpineServices", () => {
       },
     });
     const handlers = registeredSubscriptionHandlers(context);
-    const id = { value: "object-id" } as unknown as Any;
+    const id = create(AnySchema, {
+      typeUrl: TypeUrls.derive(UserIdSchema),
+      value: new Uint8Array([0xff]),
+    });
     const topic = createFilteredTopicWithCriteria({
       idFilter: { id: [packStringId("ignored")] },
     });
@@ -4004,9 +4259,7 @@ describe("SpineServices", () => {
       throw new Error("Expected subscription ID filter.");
     }
     topic.target.criterion.value.idFilter.id[0] = id;
-    expect(() => handlers.subscribe(topic)).toThrow(
-      "SubscriptionService.Subscribe id_filter values must be packed Any messages.",
-    );
+    expect(() => handlers.subscribe(topic)).toThrow("topic validation failed.");
     expect(subscribeCalls).toBe(0);
   });
 
@@ -4142,9 +4395,7 @@ describe("SpineServices", () => {
       ],
     });
 
-    expect(() => handlers.subscribe(topic)).toThrow(
-      "SubscriptionService.Subscribe supports only ALL or EITHER composite filters.",
-    );
+    expect(() => handlers.subscribe(topic)).toThrow("topic validation failed.");
     expect(subscribeCalls).toBe(0);
   });
 
@@ -4189,7 +4440,10 @@ describe("SpineServices", () => {
       const unknownIterator = client.activate(unknown)[Symbol.asyncIterator]();
       const unknownNext = await withTimeout(unknownIterator.next(), "unknown subscription close");
       const cancel = await client.cancel(unknown);
-      const missingIdCancel = await client.cancel(create(SubscriptionSchema));
+      const missingIdCancel = await client.cancel(create(SubscriptionSchema)).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
 
       expect(delivered.done).toBe(false);
       if (update?.update.case !== "entityUpdates") {
@@ -4204,7 +4458,7 @@ describe("SpineServices", () => {
       );
       expect(unknownNext.done).toBe(true);
       expect(cancel.status?.status.case).toBe("ok");
-      expect(missingIdCancel.status?.status.case).toBe("ok");
+      expect(missingIdCancel).toMatchObject({ code: Code.InvalidArgument });
       await client.cancel(subscription);
     } finally {
       await server.close();
@@ -4466,7 +4720,7 @@ describe("SpineServices", () => {
           target,
         }),
       ),
-    ).toThrow("Subscription topic context is required.");
+    ).toThrow("topic validation failed.");
     expect(() =>
       handlers.subscribe(
         create(TopicSchema, {
@@ -4477,7 +4731,7 @@ describe("SpineServices", () => {
           context: createActorContext(),
         }),
       ),
-    ).toThrow("Subscription topic criterion is required.");
+    ).toThrow("topic validation failed.");
   });
 });
 
@@ -5168,6 +5422,7 @@ function createActorContext(tenantId?: TenantInput) {
           tenantId: typeof tenantId === "string" ? tenantValue(tenantId) : tenantId,
         }),
     actor: create(UserIdSchema, { value: "user-1" }),
+    timestamp: create(TimestampSchema, { seconds: 1n }),
   });
 }
 
@@ -5361,6 +5616,7 @@ function validationDetails(status: unknown) {
 }
 
 function responseErrorMessage(response: unknown) {
+  if (response instanceof ConnectError) return response.rawMessage;
   if (typeof response !== "object" || response === null || !("response" in response)) {
     return undefined;
   }
@@ -5378,6 +5634,15 @@ function responseErrorMessage(response: unknown) {
   }
 
   return errorMessage(status.status);
+}
+
+async function queryFailure(request: Promise<QueryResponse>): Promise<ConnectError> {
+  const failure = await request.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  expect(failure).toBeInstanceOf(ConnectError);
+  return failure as ConnectError;
 }
 
 function createRejectingReadContext() {

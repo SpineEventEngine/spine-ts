@@ -29,7 +29,29 @@ message FindProjects {
 
   oneof advanced {
     google.protobuf.Any advanced_criteria = 8 [(validate) = true];
+    ProjectSearchTerm selected_criteria = 9 [(validate) = true];
   }
+}
+
+message ProjectSearchTerm {
+  string keyword = 1 [(required) = true];
+  string source = 2;
+}
+
+message ProjectSelection {
+  option (require).fields = "keyword";
+
+  oneof term {
+    string keyword = 1 [(pattern).regex = "^[a-z]+$"];
+    string category = 2;
+  }
+}
+
+message ProjectAnyEnvelope {
+  google.protobuf.Any required_criteria = 1 [
+    (required) = true,
+    (validate) = true
+  ];
 }
 
 message ProjectFilterGroup {

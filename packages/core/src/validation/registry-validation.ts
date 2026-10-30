@@ -74,6 +74,55 @@ export const RegistryValidation = {
   },
 
   /**
+   * Exposes selected oneof members by local field name to the pinned validator.
+   *
+   * @param schema Descriptor of the generated message.
+   * @param message Generated message with Protobuf-ES oneof cases.
+   * @returns A read-only descriptor-aware validation view.
+   */
+  view(schema: DescMessage, message: Message): Message {
+    return new Proxy(message, {
+      get(target, property, receiver) {
+        const field = schema.fields.find((candidate) => candidate.localName === property);
+        if (field === undefined) return Reflect.get(target, property, receiver) as unknown;
+        const value = RegistryValidation.value(target, field);
+        if (!getOption(field, validate)) return value;
+        const nested = RegistryValidation.messageSchema(field);
+        if (nested === undefined) return value;
+        const wrap = (entry: Message | null | undefined): Message | null | undefined => {
+          if (entry === undefined || entry === null) return entry;
+          return nested.typeName === AnySchema.typeName
+            ? RegistryValidation.opaque(entry as Any)
+            : RegistryValidation.view(nested, entry);
+        };
+        if (field.fieldKind === "list" && Array.isArray(value))
+          return value.map((entry: Message) => wrap(entry));
+        if (field.fieldKind === "map" && value && typeof value === "object")
+          return Object.fromEntries(
+            Object.entries(value).map(([key, entry]) => [key, wrap(entry as Message)]),
+          );
+        return value && typeof value === "object" ? wrap(value as Message) : value;
+      },
+    });
+  },
+
+  /**
+   * Returns an opaque read view of annotated packed payloads without changing presence.
+   *
+   * @param packed Original packed value.
+   * @returns A read-only view that upstream cannot unpack by type URL.
+   */
+  opaque(packed: Any): Any {
+    return new Proxy(packed, {
+      get(target, property, receiver) {
+        return property === "typeUrl" && target.typeUrl
+          ? "type.spine.io/!validation-opaque"
+          : (Reflect.get(target, property, receiver) as unknown);
+      },
+    });
+  },
+
+  /**
    * Checks required collections and declared recursive validation edges.
    * @param schema Current message descriptor.
    * @param message Current message.
@@ -178,10 +227,8 @@ export const RegistryValidation = {
     if (schema === undefined) return;
     const message = RegistryValidation.decode(schema, packed, root, path, violations);
     if (message === undefined) return;
-    if (local === undefined) {
-      for (const item of validateWithSpine(schema, message)) {
-        violations.push(RegistryValidation.prefixed(item, root, path));
-      }
+    for (const item of validateWithSpine(schema, RegistryValidation.view(schema, message))) {
+      violations.push(RegistryValidation.prefixed(item, root, path));
     }
     const nestedCovered = local === undefined ? RegistryValidation.dependencies(schema) : covered;
     RegistryValidation.scan(schema, message, root, path, nestedCovered, registry, violations);

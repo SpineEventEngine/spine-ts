@@ -2,13 +2,27 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { Buffer } from "node:buffer";
 import console from "node:console";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import {
+  restoreUpstreamSource,
+  targetFiltersAdaptation,
+  verifyProtoSources,
+} from "../../../scripts/verify-proto-sources.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(packageRoot, "..", "..");
@@ -106,8 +120,34 @@ export function buildFrozenDescriptorSet(root = repoRoot) {
   return buildDescriptorSetFor(root, frozenSourcePaths(root));
 }
 
+function buildOriginalFrozenDescriptorSet(root) {
+  const manifest = JSON.parse(
+    readFileSync(resolve(root, "packages/proto/proto/spine-sources.json"), "utf8"),
+  );
+  const adaptation = manifest.sources.find((source) => source.localAdaptation !== undefined);
+  if (adaptation === undefined) return buildFrozenDescriptorSet(root);
+  verifyProtoSources({ repoRoot: root });
+
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "spine-original-descriptors-"));
+  try {
+    mkdirSync(resolve(temporaryRoot, "packages/proto"), { recursive: true });
+    cpSync(resolve(root, "packages/proto/proto"), resolve(temporaryRoot, "packages/proto/proto"), {
+      recursive: true,
+    });
+    symlinkSync(resolve(root, "node_modules"), resolve(temporaryRoot, "node_modules"), "dir");
+    const localPath = resolve(root, targetFiltersAdaptation.path);
+    writeFileSync(
+      resolve(temporaryRoot, targetFiltersAdaptation.path),
+      restoreUpstreamSource(adaptation, readFileSync(localPath)),
+    );
+    return buildFrozenDescriptorSet(temporaryRoot);
+  } finally {
+    rmSync(temporaryRoot, { force: true, recursive: true });
+  }
+}
+
 export function verifyFrozenDescriptorCompatibility(root = repoRoot) {
-  const descriptorSet = buildFrozenDescriptorSet(root);
+  const descriptorSet = buildOriginalFrozenDescriptorSet(root);
   const expectedDigest = readFileSync(
     resolve(root, "packages/proto/proto/frozen-descriptor-set.sha256"),
     "utf8",

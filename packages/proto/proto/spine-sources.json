@@ -54,7 +54,11 @@
       "upstreamPath": "client/src/main/proto/spine/client/filters.proto",
       "sourceUrl": "https://github.com/SpineEventEngine/core-java/blob/a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b/client/src/main/proto/spine/client/filters.proto",
       "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/core-java/a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b/client/src/main/proto/spine/client/filters.proto",
-      "sha256": "e2b4eef3d4e873cb5f0bc80896c19e538442182cddb54fa796d0ec640dcca6a5"
+      "sha256": "e2b4eef3d4e873cb5f0bc80896c19e538442182cddb54fa796d0ec640dcca6a5",
+      "localAdaptation": {
+        "kind": "target-filters-require",
+        "sha256": "6655d6d56b5e42d4e38bd630970aa2b43e52a1589dbbaed1c0d6ea4304adcc9e"
+      }
     },
     {
       "localPath": "packages/proto/proto/spine/client/query_service.proto",

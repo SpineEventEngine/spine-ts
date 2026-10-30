@@ -15,7 +15,8 @@
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
-import { create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import {
@@ -25,11 +26,12 @@ import {
   type DynamicUnaryClient,
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { AnyPacker } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
   ActorContextSchema,
   AckSchema,
+  ErrorSchema,
   CommandIdSchema,
   EventContextSchema,
   EventIdSchema,
@@ -37,18 +39,23 @@ import {
   ResponseSchema,
   StatusSchema,
   TenantIdSchema,
+  UserIdSchema,
 } from "@spine-event-engine/proto";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/auth";
 import {
   CommandService,
   QueryService,
   QueryResponseSchema,
+  QueryIdSchema,
+  QuerySchema,
   EventUpdatesSchema,
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionService,
   SubscriptionUpdateSchema,
   TopicSchema,
+  TopicIdSchema,
+  TargetSchema,
 } from "@spine-event-engine/proto/client";
 import {
   InMemoryStorageFactory,
@@ -64,6 +71,7 @@ import {
 } from "../../src/server/node-coordinator.js";
 import { DurableSubscriptionBindings } from "../../src/browser/durable-subscription-bindings.js";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
@@ -128,7 +136,7 @@ describe("NodeCoordinator", () => {
       createClient(
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
-      ).subscribe(create(TopicSchema)),
+      ).subscribe(coordinatorTopic()),
     ).rejects.toMatchObject({ code: Code.Unavailable });
   });
 
@@ -143,9 +151,74 @@ describe("NodeCoordinator", () => {
 
     await expect(
       createClient(QueryService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).read(
-        create(QueryService.method.read.input),
+        coordinatorQuery(),
       ),
     ).resolves.toEqual(create(QueryResponseSchema));
+  });
+
+  it("rejects malformed read-side requests before forwarding to a replica", async () => {
+    const replica = await backend("invalid-read");
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
+    const queries = createClient(QueryService, transport);
+    const subscriptions = createClient(SubscriptionService, transport);
+
+    await expect(queries.read(create(QueryService.method.read.input))).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    });
+    await expect(subscriptions.subscribe(create(TopicSchema))).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    });
+    await expect(subscriptions.cancel(create(SubscriptionSchema))).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    });
+    expect(replica.subscriptions()).toBe(0);
+    expect(replica.cancellations()).toBe(0);
+  });
+
+  it("preserves backend Query validation details through native Coordinator forwarding", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.QueryValidationError",
+      code: 2,
+      message: "query validation failed.",
+    });
+    const failure = new ConnectError(
+      "query validation failed.",
+      Code.InvalidArgument,
+      {
+        "spine-error-bin": Buffer.from(toBinary(ErrorSchema, detail)).toString("base64"),
+      },
+      [{ desc: ErrorSchema, value: detail }],
+    );
+    const replica = await backend("query-error", { read: () => Promise.reject(failure) });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const actual = await createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    )
+      .read(coordinatorQuery())
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(actual).toBeInstanceOf(ConnectError);
+    expect((actual as ConnectError).code).toBe(Code.InvalidArgument);
+    expect((actual as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+      type: "spine.client.QueryValidationError",
+      code: 2,
+    });
+    expect((actual as ConnectError).metadata.get("spine-error-bin")).toBeDefined();
   });
 
   it("creates a native subscription on every current replica", async () => {
@@ -161,7 +234,7 @@ describe("NodeCoordinator", () => {
     const subscription = await createClient(
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
-    ).subscribe(create(TopicSchema));
+    ).subscribe(coordinatorTopic());
 
     expect(subscription.id?.value).toMatch(/^s-[0-9a-f-]{36}$/u);
     expect(first.subscriptions()).toBe(1);
@@ -193,9 +266,49 @@ describe("NodeCoordinator", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
       );
-      await subscriptions.subscribe(create(TopicSchema));
+      await subscriptions.subscribe(coordinatorTopic());
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
 
+      await expect.poll(() => replica.cancellations()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("preserves a pending activation after malformed lifecycle criteria", async () => {
+    vi.useFakeTimers();
+    try {
+      const replica = await backend("malformed-pending");
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+      });
+      closeables.push(() => coordinator.close());
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      );
+      const subscription = await client.subscribe(coordinatorTopic());
+      const malformed = clone(SubscriptionSchema, subscription);
+      if (malformed.topic?.target === undefined) throw new Error("Expected topic target.");
+      malformed.topic.target.criterion = { case: "includeAll", value: false };
+
+      await expect(client.cancel(malformed)).rejects.toMatchObject({ code: Code.InvalidArgument });
+      const iterator = client.activate(malformed)[Symbol.asyncIterator]();
+      const failure = await iterator.next().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(ConnectError);
+      expect((failure as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+        type: "spine.client.SubscriptionValidationError",
+        code: 2,
+      });
+      expect(replica.cancellations()).toBe(0);
+      expect(replica.activations()).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
       await expect.poll(() => replica.cancellations()).toBe(1);
     } finally {
       vi.useRealTimers();
@@ -216,7 +329,7 @@ describe("NodeCoordinator", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
       );
-      await subscriptions.subscribe(create(TopicSchema));
+      await subscriptions.subscribe(coordinatorTopic());
 
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
       await expect.poll(() => replica.cancellations()).toBe(1);
@@ -245,7 +358,7 @@ describe("NodeCoordinator", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
       );
-      const subscription = await client.subscribe(create(TopicSchema));
+      const subscription = await client.subscribe(coordinatorTopic());
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS - 1);
       const controller = new AbortController();
       const updates = client
@@ -387,7 +500,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     expect(members.childActivations()).toBe(0);
     const updates = client.activate(subscription)[Symbol.asyncIterator]();
 
@@ -414,7 +527,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const updates = client.activate(subscription)[Symbol.asyncIterator]();
 
     await expect(updates.next()).rejects.toMatchObject({ code: Code.Internal });
@@ -435,7 +548,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const controller = new AbortController();
     const updates = client
       .activate(subscription, { signal: controller.signal })
@@ -464,7 +577,7 @@ describe("NodeCoordinator", () => {
     );
 
     await expect(client.cancel(create(SubscriptionSchema))).rejects.toMatchObject({
-      code: Code.Internal,
+      code: Code.InvalidArgument,
     });
   });
 
@@ -483,7 +596,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const updates = client.activate(subscription)[Symbol.asyncIterator]();
     await expect(updates.next()).resolves.toMatchObject({
       value: { response: { status: { status: { case: "ok" } } } },
@@ -515,7 +628,7 @@ describe("NodeCoordinator", () => {
     closeables.push(() => coordinator.close());
     const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
     const subscription = await createClient(SubscriptionService, transport).subscribe(
-      create(TopicSchema),
+      coordinatorTopic(),
     );
     const iterator = createClient(SubscriptionService, transport)
       .activate(subscription)
@@ -547,7 +660,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const controller = new AbortController();
     const iterator = client
       .activate(subscription, { signal: controller.signal })
@@ -577,7 +690,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const firstAbort = new AbortController();
     const firstUpdates = client
       .activate(subscription, { signal: firstAbort.signal })
@@ -591,7 +704,7 @@ describe("NodeCoordinator", () => {
     await expect(first).rejects.toMatchObject({ code: Code.Canceled });
     await expect.poll(() => replica.cancellations()).toBe(1);
     release.resolve(undefined);
-    const replacement = await client.subscribe(create(TopicSchema));
+    const replacement = await client.subscribe(coordinatorTopic());
     const second = client.activate(replacement)[Symbol.asyncIterator]();
     await expect(second.next()).resolves.toMatchObject({
       value: { response: { status: { status: { case: "ok" } } } },
@@ -612,7 +725,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const controller = new AbortController();
     const iterator = client
       .activate(subscription, { signal: controller.signal })
@@ -638,7 +751,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    await subscriptions.subscribe(create(TopicSchema));
+    await subscriptions.subscribe(coordinatorTopic());
 
     members.set([current.member, joining.member]);
     await expect.poll(() => joining.subscriptions()).toBe(1);
@@ -668,7 +781,7 @@ describe("NodeCoordinator", () => {
       await Promise.all([current.close(), joining.close()]);
     });
     const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
-    await createClient(SubscriptionService, transport).subscribe(create(TopicSchema));
+    await createClient(SubscriptionService, transport).subscribe(coordinatorTopic());
 
     members.setReady([current.member], [current.member, joining.member]);
     await subscriptionStarted.promise;
@@ -700,7 +813,7 @@ describe("NodeCoordinator", () => {
     const coordinator = await NodeCoordinator.open({ members, port: 0 });
     closeables.push(() => coordinator.close());
     const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
-    await createClient(SubscriptionService, transport).subscribe(create(TopicSchema));
+    await createClient(SubscriptionService, transport).subscribe(coordinatorTopic());
     expect(draining.subscriptions()).toBe(1);
 
     members.setReady([], [draining.member]);
@@ -727,8 +840,10 @@ describe("NodeCoordinator", () => {
     );
     const topic = create(TopicSchema, {
       id: { value: "drain-topic" },
+      target: coordinatorTarget(),
       context: create(ActorContextSchema, {
         actor: { value: "actor" },
+        timestamp: create(TimestampSchema, { seconds: 1n }),
         tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
       }),
     });
@@ -960,7 +1075,7 @@ describe("NodeCoordinator", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
       );
-      await subscriptions.subscribe(create(TopicSchema));
+      await subscriptions.subscribe(coordinatorTopic());
 
       await coordinator.close();
       const cancellationsAfterClose = replica.cancellations();
@@ -1123,13 +1238,45 @@ function dynamicCoordinatorClient(endpoint: string): DynamicUnaryClient {
   };
 }
 
+function coordinatorTarget() {
+  return create(TargetSchema, {
+    type: TypeUrls.derive(ProjectOverviewStateSchema),
+    criterion: { case: "includeAll", value: true },
+  });
+}
+
+function coordinatorActorContext() {
+  return create(ActorContextSchema, {
+    actor: create(UserIdSchema, { value: "actor" }),
+    timestamp: create(TimestampSchema, { seconds: 1n }),
+  });
+}
+
+function coordinatorTopic() {
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: "topic" }),
+    target: coordinatorTarget(),
+    context: coordinatorActorContext(),
+  });
+}
+
+function coordinatorQuery() {
+  return create(QuerySchema, {
+    id: create(QueryIdSchema, { value: "query" }),
+    target: coordinatorTarget(),
+    context: coordinatorActorContext(),
+  });
+}
+
 function trustedTopic(): Uint8Array {
   return toBinary(
     TopicSchema,
     create(TopicSchema, {
       id: { value: "topic" },
+      target: coordinatorTarget(),
       context: create(ActorContextSchema, {
         actor: { value: "actor" },
+        timestamp: create(TimestampSchema, { seconds: 1n }),
         tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
       }),
     }),
@@ -1140,6 +1287,9 @@ async function backend(
   name: string,
   options: {
     readonly post?: (context: HandlerContext) => Promise<never> | MessageShape<typeof AckSchema>;
+    readonly read?: (
+      context: HandlerContext,
+    ) => Promise<never> | MessageShape<typeof QueryResponseSchema>;
     readonly updates?: number;
     readonly mismatchedActivationAck?: boolean;
     readonly holdActivation?: boolean;
@@ -1179,7 +1329,8 @@ async function backend(
           },
         });
         router.service(QueryService, {
-          read: (): MessageShape<typeof QueryResponseSchema> => create(QueryResponseSchema),
+          read: (_query, context): MessageShape<typeof QueryResponseSchema> | Promise<never> =>
+            options.read?.(context) ?? create(QueryResponseSchema),
         });
         router.service(SubscriptionService, {
           subscribe: (topic) => {

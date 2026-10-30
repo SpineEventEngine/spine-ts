@@ -660,15 +660,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "errorResponse()#1",
-    "name": "errorResponse",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration errorResponse()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "errorStatus()#1",
     "name": "errorStatus",
     "disposition": "migration-debt",
@@ -799,15 +790,6 @@
     "name": "positiveInteger",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration positiveInteger()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "queryErrorResponse()#1",
-    "name": "queryErrorResponse",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration queryErrorResponse()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",

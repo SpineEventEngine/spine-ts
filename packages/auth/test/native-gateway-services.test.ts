@@ -24,6 +24,7 @@ import {
   ActorContextSchema,
   CommandContextSchema,
   CommandSchema,
+  ErrorSchema,
   TenantIdSchema,
   UserIdSchema,
 } from "@spine-event-engine/proto";
@@ -258,6 +259,36 @@ describe("createNativeGatewayServices", () => {
     });
     expect(post.calls[0]?.signal).toBeDefined();
     expect(read.calls[0]?.signal).toBeDefined();
+  });
+
+  it("preserves an application Query status through the native gateway", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.QueryValidationError",
+      code: 2,
+      message: "query validation failed.",
+    });
+    const failure = new ConnectError(
+      "query validation failed.",
+      Code.InvalidArgument,
+      {
+        "spine-error-bin": Buffer.from(toBinary(ErrorSchema, detail)).toString("base64"),
+      },
+      [{ desc: ErrorSchema, value: detail }],
+    );
+    const gateway = services(
+      { handle: () => Promise.reject(failure) },
+      subscriptions(() => Promise.resolve({ kind: "cancelled" })).fake,
+    );
+    const actual = await Promise.resolve()
+      .then(() => gateway.query.read(create(QueryService.method.read.input), context()))
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(actual).toBe(failure);
+    expect(failure.findDetails(ErrorSchema)).toEqual([detail]);
+    expect(failure.metadata.get("spine-error-bin")).toBeDefined();
   });
 
   it.each([

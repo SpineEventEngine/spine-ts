@@ -5,6 +5,36 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+/**
+ * The one approved local change to a pinned upstream Proto source.
+ */
+export const targetFiltersAdaptation = Object.freeze({
+  path: "packages/proto/proto/spine/client/filters.proto",
+  kind: "target-filters-require",
+  before: 'option (required_field) = "id_filter|filter";',
+  after: 'option (require).fields = "id_filter|filter";',
+});
+
+/**
+ * Restores upstream bytes from the exact approved TargetFilters delta.
+ *
+ * @param source Manifest entry with optional local adaptation.
+ * @param contents Local Proto source bytes.
+ * @returns Original upstream bytes after reversing the approved delta.
+ */
+export function restoreUpstreamSource(source, contents) {
+  if (source.localAdaptation === undefined) return contents;
+  const { path, kind, before, after } = targetFiltersAdaptation;
+  if (source.localPath !== path || source.localAdaptation.kind !== kind) {
+    throw new Error("unapproved local Proto adaptation");
+  }
+  const text = contents.toString("utf8");
+  if (text.split(after).length !== 2) {
+    throw new Error("TargetFilters adaptation must occur exactly once");
+  }
+  return Buffer.from(text.replace(after, before), "utf8");
+}
+
 function parseArgs(argv) {
   const options = {
     repoRoot: defaultRepoRoot,
@@ -143,6 +173,20 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
     failures.push(`${localPath}: sha256 must be a 64-character lowercase hex digest`);
   }
 
+  const adaptation = source.localAdaptation;
+  if (
+    adaptation !== undefined &&
+    (localPath !== targetFiltersAdaptation.path ||
+      adaptation === null ||
+      typeof adaptation !== "object" ||
+      Array.isArray(adaptation) ||
+      adaptation.kind !== targetFiltersAdaptation.kind ||
+      !/^[0-9a-f]{64}$/.test(adaptation.sha256) ||
+      Object.keys(adaptation).sort().join(",") !== "kind,sha256")
+  ) {
+    failures.push(`${localPath}: unapproved local Proto adaptation`);
+  }
+
   const filePath = resolve(repoRoot, localPath);
 
   if (!isUnderPath(filePath, protoRoot) && filePath !== protoRoot) {
@@ -168,6 +212,7 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
     localPath,
     filePath,
     sha256,
+    localAdaptation: adaptation,
   };
 }
 
@@ -277,9 +322,21 @@ export function verifyProtoSources(options = {}) {
   for (const source of validatedSources) {
     const contents = readFileSync(source.filePath);
     const actual = createHash("sha256").update(contents).digest("hex");
+    const expectedLocal = source.localAdaptation?.sha256 ?? source.sha256;
 
-    if (actual !== source.sha256) {
-      failures.push(`${source.localPath}: expected ${source.sha256}, got ${actual}`);
+    if (actual !== expectedLocal) {
+      failures.push(`${source.localPath}: expected ${expectedLocal}, got ${actual}`);
+    }
+    if (source.localAdaptation !== undefined) {
+      try {
+        const upstream = restoreUpstreamSource(source, contents);
+        const upstreamDigest = createHash("sha256").update(upstream).digest("hex");
+        if (upstreamDigest !== source.sha256) {
+          failures.push(`${source.localPath}: upstream source checksum does not match original`);
+        }
+      } catch (error) {
+        failures.push(`${source.localPath}: ${error.message}`);
+      }
     }
   }
 

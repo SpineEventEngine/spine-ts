@@ -1,4 +1,5 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -47,6 +48,33 @@ function runVerifier(repoRoot, manifest) {
 }
 
 describe("verify-proto-sources", () => {
+  it("accepts only the approved TargetFilters option adaptation", () => {
+    const repoRoot = createFixture();
+    const localPath = "packages/proto/proto/spine/client/filters.proto";
+    const upstream =
+      'syntax = "proto3";\nmessage TargetFilters { option (required_field) = "id_filter|filter"; }\n';
+    const adapted = upstream.replace(
+      'option (required_field) = "id_filter|filter";',
+      'option (require).fields = "id_filter|filter";',
+    );
+    mkdirSync(join(repoRoot, "packages/proto/proto/spine/client"), { recursive: true });
+    writeFileSync(join(repoRoot, localPath), adapted);
+    const source = manifestSource(localPath);
+    source.sha256 = createHash("sha256").update(upstream).digest("hex");
+    source.localAdaptation = {
+      kind: "target-filters-require",
+      sha256: createHash("sha256").update(adapted).digest("hex"),
+    };
+
+    expect(runVerifier(repoRoot, { schemaVersion: 1, sources: [source] }).status).toBe(0);
+
+    const drifted = adapted.replace("message TargetFilters", "message ChangedFilters");
+    writeFileSync(join(repoRoot, localPath), drifted);
+    source.localAdaptation.sha256 = createHash("sha256").update(drifted).digest("hex");
+    const rejected = runVerifier(repoRoot, { schemaVersion: 1, sources: [source] });
+    expect(rejected.status).toBe(1);
+    expect(rejected.stderr).toContain("upstream source checksum");
+  });
   it("accepts checksum-pinned Spine TS-owned contracts without inventing upstream provenance", () => {
     const repoRoot = createFixture();
     writeFileSync(join(repoRoot, "packages/proto/proto/spine/present.proto"), copiedProtoContents);
