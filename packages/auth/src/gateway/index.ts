@@ -25,7 +25,7 @@ import {
   ResolveContextRequestSchema,
   ResolveContextResponseSchema,
 } from "@spine-event-engine/proto/auth";
-import { QuerySchema } from "@spine-event-engine/proto/client";
+import { AppQuerySchema, QuerySchema } from "@spine-event-engine/proto/client";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import {
   snapshotTrustedReader,
@@ -37,6 +37,7 @@ import type {
   Clock,
   ContextResolver,
   IncomingCommand,
+  IncomingAppQuery,
   IncomingQuery,
   RequestCredential,
   SessionResolver,
@@ -255,11 +256,17 @@ type Operation =
       readonly method: "Read";
     }
   | {
+      readonly kind: "app-query";
+      readonly service: "spine.client.QueryService";
+      readonly method: "Execute";
+    }
+  | {
       readonly kind: "resolve-context";
       readonly service: "spine.auth.AuthenticationService";
       readonly method: "ResolveContext";
     };
 type ForwardOperation = Exclude<Operation, { readonly kind: "resolve-context" }>;
+type IncomingUnary = IncomingCommand | IncomingQuery | IncomingAppQuery;
 
 /**
  * Transport-neutral unary admission pipeline for Commands and Queries.
@@ -311,7 +318,7 @@ export class UnaryGateway {
    */
   async #handleAuthorized(
     operation: ForwardOperation,
-    source: IncomingCommand | IncomingQuery,
+    source: IncomingUnary,
     value: Uint8Array,
     transport: TransportRequestContext,
     request: UnaryGatewayRequest,
@@ -349,7 +356,7 @@ export class UnaryGateway {
     operation: ForwardOperation,
     value: Uint8Array,
     transport: TransportRequestContext,
-  ): IncomingCommand | IncomingQuery | undefined {
+  ): IncomingUnary | undefined {
     return UnaryGatewayValues.decode(
       operation,
       value,
@@ -370,7 +377,7 @@ export class UnaryGateway {
    */
   async #forwardTrusted(
     operation: ForwardOperation,
-    source: IncomingCommand | IncomingQuery,
+    source: IncomingUnary,
     trusted: AuthorizedRequestContext,
     principal: Parameters<AuthorizationPolicy["authorize"]>[0],
     signal: AbortSignal | undefined,
@@ -468,6 +475,8 @@ const UnaryGatewayValues = Object.freeze({
       return { kind: "command", service: request.service, method: request.method };
     if (request.service === "spine.client.QueryService" && request.method === "Read")
       return { kind: "query", service: request.service, method: request.method };
+    if (request.service === "spine.client.QueryService" && request.method === "Execute")
+      return { kind: "app-query", service: request.service, method: request.method };
     if (
       request.service === "spine.auth.AuthenticationService" &&
       request.method === "ResolveContext"
@@ -516,7 +525,7 @@ const UnaryGatewayValues = Object.freeze({
     value: Uint8Array,
     transport: TransportRequestContext,
     registry: TypeRegistryLookup | undefined,
-  ): IncomingCommand | IncomingQuery | undefined {
+  ): IncomingUnary | undefined {
     const input =
       operation.kind === "command"
         ? {
@@ -527,7 +536,9 @@ const UnaryGatewayValues = Object.freeze({
           }
         : { kind: operation.kind, value, transport };
     const result = IncomingRequests.decode(input);
-    return result?.kind === "command" || result?.kind === "query" ? result : undefined;
+    return result?.kind === "command" || result?.kind === "query" || result?.kind === "app-query"
+      ? result
+      : undefined;
   },
 
   /**
@@ -568,7 +579,7 @@ const UnaryGatewayValues = Object.freeze({
    * @param trusted The resolved context for identity checks or Query forwarding.
    * @returns The forwarded request bytes.
    */
-  rewrite(source: IncomingCommand | IncomingQuery, trusted: AuthorizedRequestContext): Uint8Array {
+  rewrite(source: IncomingUnary, trusted: AuthorizedRequestContext): Uint8Array {
     if (source.kind === "command") {
       const command = clone(CommandSchema, source.command);
       const commandContext =
@@ -586,6 +597,11 @@ const UnaryGatewayValues = Object.freeze({
       ...(trusted.zoneId === undefined ? {} : { zoneId: trusted.zoneId }),
       ...(trusted.language === undefined ? {} : { language: trusted.language }),
     });
+    if (source.kind === "app-query") {
+      const query = clone(AppQuerySchema, source.query);
+      query.context = context;
+      return toBinary(AppQuerySchema, query);
+    }
     const query = clone(QuerySchema, source.query);
     query.context = context;
     return toBinary(QuerySchema, query);

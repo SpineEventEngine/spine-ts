@@ -428,7 +428,7 @@
   "ownedSources": [
     {
       "localPath": "packages/proto/proto/spine/client/app_query.proto",
-      "sha256": "6f9481e1c2a1572f69878b8286296a55a9fb4e9791b54d6d91d98eab865c5a06"
+      "sha256": "dcc71578bf7880d1d556b6d34aaae66e32d60155bfd4bf72425962053f1d0c7a"
     },
     {
       "localPath": "packages/proto/proto/spine/server/agent/acceptance_receipt.proto",

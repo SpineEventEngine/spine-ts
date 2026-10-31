@@ -46,6 +46,8 @@ import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/prot
 import {
   CommandService,
   QueryService,
+  AppQueryResponseSchema,
+  AppQuerySchema,
   QueryResponseSchema,
   QueryIdSchema,
   QuerySchema,
@@ -74,6 +76,11 @@ import {
 import { DurableSubscriptionBindings } from "../../src/browser/durable-subscription-bindings.js";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  GetProjectOverview_QuerySchema,
+  GetProjectOverview_ResponseSchema,
+} from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
@@ -235,16 +242,123 @@ describe("NodeCoordinator", () => {
     ).rejects.toMatchObject({ code: 14 });
   });
 
-  it("exposes Execute as unavailable until application handlers can be selected", async () => {
+  it("returns unavailable for Execute when no application replica is ready", async () => {
     const coordinator = await NodeCoordinator.open({ members: new TestReadyMembers([]), port: 0 });
     closeables.push(() => coordinator.close());
     const client = createClient(
       QueryService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    await expect(client.execute(create(QueryService.method.execute.input))).rejects.toMatchObject({
-      code: Code.Unimplemented,
+    await expect(client.execute(coordinatorAppQuery())).rejects.toMatchObject({
+      code: Code.Unavailable,
     });
+  });
+
+  it("forwards an App Query and its verified reader to the selected application replica", async () => {
+    const observed: string[] = [];
+    const answer = create(GetProjectOverview_ResponseSchema, { project: { id: "project-1" } });
+    const replica = await backend("app-query", {
+      execute: async (query, context) => {
+        const reader = await ReaderForwarding.open(
+          context.requestHeader,
+          "spine.client.QueryService",
+          "Execute",
+          toBinary(AppQuerySchema, query),
+          { verify: (_bytes, proof) => proof === "coordinator-signed" },
+          context,
+          4_194_304,
+        );
+        observed.push(reader.principal?.id ?? "missing");
+        return create(AppQueryResponseSchema, {
+          response: create(ResponseSchema),
+          message: [AnyPacker.pack(GetProjectOverview_ResponseSchema, answer)],
+        });
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      forwardingProof: { issue: () => "coordinator-signed" },
+    });
+    closeables.push(() => coordinator.close());
+    const result = await createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    ).execute(coordinatorAppQuery());
+    expect(AnyPacker.tryUnpack(result.message[0], GetProjectOverview_ResponseSchema)).toEqual(
+      answer,
+    );
+    expect(observed).toEqual(["reader-a"]);
+  });
+
+  it("preserves structured Execute errors from the application replica", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.QueryValidationError",
+      code: 2,
+      message: "query validation failed.",
+    });
+    const replica = await backend("app-query-error", {
+      execute: () =>
+        Promise.reject(
+          new ConnectError("query validation failed.", Code.InvalidArgument, undefined, [
+            { desc: ErrorSchema, value: detail },
+          ]),
+        ),
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const failure = await createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    )
+      .execute(coordinatorAppQuery())
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(failure).toBeInstanceOf(ConnectError);
+    expect((failure as ConnectError).code).toBe(Code.InvalidArgument);
+    expect((failure as ConnectError).findDetails(ErrorSchema)).toEqual([detail]);
+  });
+
+  it("forwards Execute cancellation to the selected application replica", async () => {
+    let cancelled = false;
+    const replica = await backend("app-query-cancel", {
+      execute: (_query, context) =>
+        new Promise((_, reject) => {
+          context.signal.addEventListener(
+            "abort",
+            () => {
+              cancelled = true;
+              reject(new ConnectError("cancelled", Code.Canceled));
+            },
+            { once: true },
+          );
+        }),
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl, defaultTimeoutMs: 20 });
+    await expect(
+      transport.unary(
+        QueryService.method.execute,
+        undefined,
+        undefined,
+        undefined,
+        coordinatorAppQuery(),
+      ),
+    ).rejects.toMatchObject({ code: Code.DeadlineExceeded });
+    await expect.poll(() => cancelled).toBe(true);
   });
 
   it("returns unavailable when a subscription has no ready replica", async () => {
@@ -1451,6 +1565,19 @@ function coordinatorQuery() {
   });
 }
 
+function coordinatorAppQuery() {
+  return create(AppQuerySchema, {
+    id: create(QueryIdSchema, { value: "app-query" }),
+    message: AnyPacker.pack(
+      GetProjectOverview_QuerySchema,
+      create(GetProjectOverview_QuerySchema, {
+        project: create(ProjectIdSchema, { value: "project-1" }),
+      }),
+    ),
+    context: coordinatorActorContext(),
+  });
+}
+
 function trustedTopic(): Uint8Array {
   return toBinary(
     TopicSchema,
@@ -1474,6 +1601,12 @@ async function backend(
       context: HandlerContext,
     ) =>
       Promise<MessageShape<typeof QueryResponseSchema>> | MessageShape<typeof QueryResponseSchema>;
+    readonly execute?: (
+      query: MessageShape<typeof AppQuerySchema>,
+      context: HandlerContext,
+    ) =>
+      | Promise<MessageShape<typeof AppQueryResponseSchema>>
+      | MessageShape<typeof AppQueryResponseSchema>;
     readonly updates?: number;
     readonly mismatchedActivationAck?: boolean;
     readonly holdActivation?: boolean;
@@ -1519,6 +1652,8 @@ async function backend(
           },
         });
         router.service(QueryService, {
+          execute: (query, context) =>
+            options.execute?.(query, context) ?? create(AppQueryResponseSchema),
           read: (
             _query,
             context,

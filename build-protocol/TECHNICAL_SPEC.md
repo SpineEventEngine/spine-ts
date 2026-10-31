@@ -208,19 +208,22 @@ blocking requirements for all framework and example work.
   incomplete if an example uses framework envelopes, explicit schema decorators,
   or other internals that the public handler model forbids.
 
-## Generated Handler Registry Contract
+## Generated Metadata and Application Bootstrap
 
-Bare handler decorators are source declarations, not complete runtime metadata.
-The generated registry is the framework bridge from decorated TypeScript
-classes to canonical handler metadata. T-0015a defined the contract, and
-T-0015c implements the build-time analyzer that produces structured analysis
-records. T-0015d adds the internal package-level registry writer that renders
-guarded generated source under ignored `generated/` output. T-0015e adds
-explicit runtime loading from filesystem paths or clean `file:` URLs. Broad
-automatic package scanning and global runtime loading remain out of scope.
-T-0015g wires the first application package, the to-do example, by generating
-`examples/todo/generated/handler/generated-handler-registry.ts` during
-`proto:generate` and loading the compiled registry during context creation.
+Bare handler decorators are source declarations. The normal code-generation
+pipeline analyzes those declarations and writes `generated/spine-metadata.ts`.
+This file describes Entity and standalone receivers, their handlers, ordinary
+Proto schemas, and App Query handler classes with their query/response schema
+pairs. It contains descriptions, not active handler instances.
+
+The application imports `generated/spine-bootstrap.js` before constructing its
+Bounded Contexts or Server. The generated bootstrap registers the application's
+metadata and metadata discovered from its installed runtime dependencies. A
+participating dependency publishes its generated metadata through the `./spine`
+package export. Discovery follows declared runtime dependencies during the
+build and emits static imports; starting the application does not scan the
+filesystem for handlers. Applications do not supply a registry root to each
+Bounded Context builder.
 
 Build-time tooling must read ordinary application source, find bare
 `@Assign`, `@Command`, `@React`, and `@Subscribe` methods, and infer schemas
@@ -249,8 +252,9 @@ file names have no handler signal/emitted role. Neutral schemas remain usable
 for entity state, and neutral, missing, malformed, or unrelated descriptor data
 fails closed for handler signal and emitted-schema roles.
 
-The generated module exports an unversioned `GeneratedHandlerRegistry`.
-Its `receivers` array contains Entity or standalone declarations. An Entity
+The generated module exports unversioned `SpineMetadata`, which extends the
+receiver records described by `GeneratedHandlerRegistry`. Its `receivers` array
+contains Entity or standalone declarations. An Entity
 record has `receiverKind: "entity"`, `receiverType`, `stateSchema`, and `handlers`.
 A standalone record has `receiverKind: "standalone"`, `receiverType`, and
 `handlers`. Each handler has this logical shape:
@@ -296,30 +300,25 @@ envelope has none. Generated two-argument event subscribers are called as
 event envelope, or an empty generated `EventContext` when the envelope has
 none.
 
-Generated registry files belong under ignored generated output locations such
-as `packages/<package>/generated/`; they are regenerated build artifacts and
-must not be committed. T-0015d adds a deterministic build-time writer that
-renders registry source from analyzer output and writes it only
-when explicitly invoked, after validating analyzer diagnostics, generated-root
-ownership, Git-ignore coverage, and symlink safety. T-0015e adds the first
-runtime discovery anchor: framework code may load one or more explicit
-filesystem paths or clean `file:` URLs, or build the conventional runtime file
-location `generated/handler/generated-handler-registry.js` from a package or
-app root. Discovery does not scan package trees, load registries globally, or
-perform broad automatic runtime discovery; those behaviors remain out of scope
-for this slice. Non-`file:` URL schemes and `file:` URLs with query or hash
-aliases fail deterministically before import. Discovery validates the top-level
-module shape, reports deterministic import/export/module errors, and ingests
-the loaded registries through `HandlerRegistryIngestor` into a caller-supplied
-`HandlerMetadataRegistry`.
+Generated metadata and bootstrap files are ignored build artifacts. The normal
+pipeline generates Proto modules first, analyzes TypeScript declarations, writes
+metadata and bootstrap imports, and then compiles the application. Generation
+validates diagnostics, output locations, Git-ignore coverage, and symlink safety
+before publishing those artifacts. Dependency adapters use the resolved public
+package exports and the application's compiler output paths.
 
-For an application package, registry generation runs after generated protobuf
-files are present and before `tsc -b`. The generated TypeScript source remains
-ignored under `generated/`; the compiled JavaScript lives under the package
-output tree. Runtime code should pass the compiled package root to
-`GeneratedRegistryDiscovery.conventionalModulePath()` or otherwise provide the
-exact compiled registry module path. Missing or invalid registry modules fail
-while building the context, before command routing invokes an end-user handler.
+Importing metadata makes declarations available; it does not install every
+receiver into every Bounded Context. A builder selects metadata for the exact
+Entity classes and standalone instances passed to it. The Server similarly
+selects App Query descriptions for the handler instances registered with that
+Server. This permits the application package to construct a Bounded Context
+using Entity classes from one or several dependency packages. Missing or
+conflicting metadata fails before the selected handler can execute.
+
+Model-only dependencies publish Proto metadata with no receivers. Their ordinary
+Proto-module imports remain usable by browser and Node clients without importing
+the Server. App Query messages participate in the same Proto generation and
+registration as all other application messages.
 
 ## Command Target ID And Default Routing
 

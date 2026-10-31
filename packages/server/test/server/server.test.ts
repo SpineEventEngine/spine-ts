@@ -27,7 +27,7 @@ import {
   SubscriptionGateway,
 } from "@spine-event-engine/auth";
 import type { RequestCredential, SessionResolver } from "@spine-event-engine/auth";
-import { spineCoreRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { AnyPacker, spineCoreRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
 import {
@@ -41,6 +41,8 @@ import {
 } from "@spine-event-engine/proto";
 import {
   CommandService,
+  AppQuerySchema,
+  QueryIdSchema,
   QuerySchema,
   QueryService,
   SubscriptionService,
@@ -79,6 +81,8 @@ import { runningServerAccess, serverBuilderAccess } from "../../src/server/serve
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { attachDurableSubscriptionCleanup } from "../../src/browser/durable-subscription-bindings.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
+import { GetProjectOverview_QuerySchema } from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 import type { ILogLayer } from "loglayer";
 
 const observeHttp2Server = vi.hoisted(() =>
@@ -1066,6 +1070,21 @@ describe("Server", () => {
       await createClient(QueryService, transport)
         .read(create(QuerySchema, { context: create(ActorContextSchema, { actor }) }), { headers })
         .catch(() => undefined);
+      await createClient(QueryService, transport)
+        .execute(
+          create(AppQuerySchema, {
+            id: create(QueryIdSchema, { value: "browser-path-query" }),
+            context: create(ActorContextSchema, { actor }),
+            message: AnyPacker.pack(
+              GetProjectOverview_QuerySchema,
+              create(GetProjectOverview_QuerySchema, {
+                project: create(ProjectIdSchema, { value: "project-1" }),
+              }),
+            ),
+          }),
+          { headers },
+        )
+        .catch(() => undefined);
       const subscriptions = createClient(SubscriptionService, transport);
       const subscription = await subscriptions.subscribe(
         create(TopicSchema, { context: create(ActorContextSchema, { actor }) }),
@@ -1081,6 +1100,7 @@ describe("Server", () => {
       expect(paths).toEqual([
         "/spine.client.CommandService/Post",
         "/spine.client.QueryService/Read",
+        "/spine.client.QueryService/Execute",
         "/spine.client.SubscriptionService/Subscribe",
         "/spine.client.SubscriptionService/Activate",
         "/spine.client.SubscriptionService/Cancel",

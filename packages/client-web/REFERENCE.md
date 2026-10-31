@@ -15,6 +15,42 @@ Start with the [browser client overview](README.md) for a first connection.
 tenant; each request scope applies its actor and the client's tenant to a fresh wire query, so
 one value can be reused across scopes and clients.
 
+`query(generatedQ, options)` executes an application-defined request through
+`QueryService.Execute`. Import the generated `_app_query` companion for the
+grouped query (`GetProjectOverview` from `project_queries_app_query.js`, for
+example) so TypeScript sees the Query-to-Response association. Separately import
+the model package's ordinary Proto-module entry before calling `query()`; that entry registers the same Query and Response schemas
+used by `TypeRegistry` and `AnyPacker`. A leaf Query-schema import alone may not
+initialize the model module. The generated Q-to-R association infers the result
+type without importing Server handlers into browser code. The return value has a
+`response` status and a readonly `message` array containing zero or one decoded R.
+An unassociated Q is a TypeScript error; a missing registered pair, extra result,
+wrong type URL, or undecodable result raises `ClientProtocolError`. Transport
+errors retain their Connect status and typed details. The `signal` option cancels
+the call through the selected transport.
+
+In this fixture-backed example, the companion import supplies the TypeScript
+pairing and the separate Proto-module import registers the runtime schemas:
+
+<!-- docs-snippet-path: packages/client-web/test/client.test.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Client } from "@spine-event-engine/client-web";
+import "../../server/test-fixtures/generated/proto-module.js";
+import { GetProjectOverview } from "../../server/test-fixtures/generated/repository-routing/project_queries_app_query.js";
+import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+
+async function readOverview(client: ReturnType<typeof Client.usingTransport>) {
+  const result = await client.asGuest().query(
+    create(GetProjectOverview.querySchema, {
+      project: create(ProjectIdSchema, { value: "project-1" }),
+    }),
+  );
+  return result.message[0]?.project;
+}
+```
+
 ## Browser sessions
 
 `BrowserSession.cookie(options)` uses browser-managed cookies with Fetch credentials `include`; cookie values never enter JavaScript metadata. `BrowserSession.bearer({ token, ...options })` holds one bearer value only in memory with Fetch credentials `omit`. `replaceBearer` and `clearBearer` alter that memory value. Neither mode uses browser storage.

@@ -29,6 +29,8 @@ import {
   type SubscriptionActivationOptions,
 } from "@spine-event-engine/client-node";
 import { SignalEnvelopes } from "@spine-event-engine/core";
+import type { AppQueryResponseFor } from "@spine-event-engine/core";
+import type { AppQueryClientResponse } from "@spine-event-engine/client-node";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -992,6 +994,22 @@ class Request implements BlackBoxScope {
   ) {
     this.#internals.assertOpen();
     return this.#request.send(query, options);
+  }
+
+  /**
+   * Executes a paired generated App Query through this actor's client scope.
+   *
+   * @typeParam Q Generated application request with a paired result.
+   * @param query Generated domain request.
+   * @param options Optional cancellation signal.
+   * @returns Wire status with zero or one decoded results.
+   */
+  query<Q extends Message>(
+    query: Q & (AppQueryResponseFor<Q> extends never ? never : unknown),
+    options?: ClientOperationOptions,
+  ): Promise<AppQueryClientResponse<Q>> {
+    this.#internals.assertOpen();
+    return this.#request.query(query, options);
   }
 
   /**

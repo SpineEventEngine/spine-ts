@@ -906,8 +906,8 @@ separately when used. The final run-managed `run()` close closes its environment
 instances by exact constructor metadata before listening. Duplicate Q routes
 or missing metadata fail startup. On direct app-node ingress,
 `QueryService.Execute` validates a complete AppQuery envelope and Q, then
-returns one packed paired R. Gateway forwarding and `ClientRequest.query` are
-not available yet.
+returns one packed paired R. Native and browser Gateways and managed Coordinators
+forward Execute to an app node; `ClientRequest.query(generatedQ)` decodes its paired R.
 The internal
 `Server.query(generatedQ, executionContext)` accepts a generated Q and returns
 its paired generated R, using a detached request and the effective actor,
@@ -923,7 +923,7 @@ The repository `onCreate` callback can inject `(q, context) => server.query(q, c
 into a Process Manager or Agent. Within an active handler, pass a generated Q
 with `{ actorContext: this.currentActorContext }`; the actor/tenant snapshot
 does not supply verified principal or provider facts. The
-[scoped integration test](test/entity/process-manager-querying.test.ts) includes
+[scoped integration test](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/test/entity/process-manager-querying.test.ts) includes
 the full callback and handler invocation.
 
 This example uses the generated Project query and the current Process Manager

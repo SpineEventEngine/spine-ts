@@ -77,7 +77,7 @@ ID, or loopback connection does not establish a verified reader.
 
 Authenticated forwarding requires an issuer. Deliberate `publicAccess: true`
 forwards no principal or authority facts; the gateway's public admission marker
-does not become a user identity. See the [server reference](../server/REFERENCE.md#native-reader-admission)
+does not become a user identity. See the [server reference](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/REFERENCE.md#native-reader-admission)
 for direct native authentication and managed forwarding configuration.
 
 ## Browser and OIDC extensions

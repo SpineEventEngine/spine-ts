@@ -173,6 +173,7 @@ const expectedAuthExports = [
   "GitHubProviderOptions",
   "IdentityMapping",
   "IncomingCommand",
+  "IncomingAppQuery",
   "IncomingQuery",
   "IncomingRequest",
   "IncomingRequestInput",
@@ -309,6 +310,7 @@ const expectedCoreCodegenExports = [
   "GeneratedQueryBuilder",
 ];
 const expectedClientExports = [
+  "AppQueryClientResponse",
   "Client",
   "ClientKernel",
   "ClientOperationOptions",
@@ -349,6 +351,7 @@ const expectedClientCodegenExports = [
   "GeneratedEntityColumns",
 ];
 const expectedClientWebExports = [
+  "AppQueryClientResponse",
   "BearerBrowserSessionOptions",
   "BrowserClientOptions",
   "BrowserSession",

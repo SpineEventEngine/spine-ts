@@ -36,6 +36,7 @@ public contract.
 
 - ✅ Uses browser-compatible gRPC-Web or Connect transports.
 - ✅ Posts commands and sends entity queries without a UI-framework dependency.
+- ✅ Executes generated application queries and decodes their paired results.
 - ✅ Creates subscriptions with explicit activation and cancellation.
 - ✅ Supports cookie or bearer session metadata supplied by the application.
 

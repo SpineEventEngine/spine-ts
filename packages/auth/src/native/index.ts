@@ -24,6 +24,9 @@ import {
 import {
   CommandService,
   QueryService,
+  AppQuerySchema,
+  type AppQuery,
+  type AppQueryResponse,
   type Query,
   type QueryResponse,
   SubscriptionSchema,
@@ -312,30 +315,52 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   }): Promise<Uint8Array> {
     try {
       const headers = request.reader === undefined ? undefined : await this.readerHeaders(request);
-      const options = {
-        ...(request.signal === undefined ? {} : { signal: request.signal }),
-        ...(headers === undefined ? {} : { headers }),
-      };
-      if (request.service === "spine.client.CommandService" && request.method === "Post")
-        return toBinary(
-          CommandService.method.post.output,
-          await createClient(CommandService, this.#transport).post(
-            fromBinary(CommandService.method.post.input, request.value),
-            options,
-          ),
-        );
-      if (request.service === "spine.client.QueryService" && request.method === "Read")
-        return toBinary(
-          QueryService.method.read.output,
-          await createClient(QueryService, this.#transport).read(
-            fromBinary(QueryService.method.read.input, request.value),
-            options,
-          ),
-        );
-      throw new ConnectError("unsupported native unary operation", Code.Unimplemented);
+      return await this.#forwardResponse(request, headers);
     } catch (error) {
       throw NativeGatewayValues.publicError(error);
     }
+  }
+
+  /**
+   * Invokes the selected native unary descriptor using admitted headers and cancellation.
+   *
+   * @param request The canonical operation and wire bytes.
+   * @param headers Forwarded verified-reader proof, when configured.
+   * @returns Serialized native response bytes.
+   */
+  async #forwardResponse(
+    request: Parameters<NativeSubscriptionCreator["forward"]>[0],
+    headers: Readonly<Record<string, string>> | undefined,
+  ): Promise<Uint8Array> {
+    const options = {
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
+      ...(headers === undefined ? {} : { headers }),
+    };
+    if (request.service === "spine.client.CommandService" && request.method === "Post")
+      return toBinary(
+        CommandService.method.post.output,
+        await createClient(CommandService, this.#transport).post(
+          fromBinary(CommandService.method.post.input, request.value),
+          options,
+        ),
+      );
+    if (request.service === "spine.client.QueryService" && request.method === "Read")
+      return toBinary(
+        QueryService.method.read.output,
+        await createClient(QueryService, this.#transport).read(
+          fromBinary(QueryService.method.read.input, request.value),
+          options,
+        ),
+      );
+    if (request.service === "spine.client.QueryService" && request.method === "Execute")
+      return toBinary(
+        QueryService.method.execute.output,
+        await createClient(QueryService, this.#transport).execute(
+          fromBinary(QueryService.method.execute.input, request.value),
+          options,
+        ),
+      );
+    throw new ConnectError("unsupported native unary operation", Code.Unimplemented);
   }
 
   /**
@@ -615,11 +640,8 @@ export function createNativeGatewayServices(
     query: {
       read: async (request, context) =>
         NativeGatewayValues.queryResponse(options, request, context),
-      execute: () => {
-        return Promise.reject(
-          new ConnectError("App Query execution is unavailable.", Code.Unimplemented),
-        );
-      },
+      execute: async (request, context) =>
+        NativeGatewayValues.appQueryResponse(options, request, context),
     },
     subscription: NativeGatewayValues.subscriptionService(options),
   };
@@ -762,6 +784,31 @@ const NativeGatewayValues = Object.freeze({
     });
     if (result.kind === "rejected") throw NativeGatewayValues.unaryError(result);
     return fromBinary(QueryService.method.read.output, result.value);
+  },
+
+  /**
+   * Maps a forwarded application request to its public Execute response.
+   *
+   * @param options Gateway collaborators for this operation.
+   * @param request Complete App Query envelope.
+   * @param context Authenticated native request context.
+   * @returns The app-node's packed paired response.
+   */
+  async appQueryResponse(
+    options: NativeGatewayServicesOptions,
+    request: AppQuery,
+    context: HandlerContext,
+  ): Promise<AppQueryResponse> {
+    const result = await options.unary.handle({
+      service: "spine.client.QueryService",
+      method: "Execute",
+      value: toBinary(AppQuerySchema, request),
+      credential: options.requests.credential(context),
+      transport: options.requests.transport(context),
+      signal: context.signal,
+    });
+    if (result.kind === "rejected") throw NativeGatewayValues.unaryError(result);
+    return fromBinary(QueryService.method.execute.output, result.value);
   },
 
   /**

@@ -400,6 +400,116 @@ function assertPortableModel(directory: string): void {
 }
 
 describe("packed external model consumer", () => {
+  it("types paired App Query results for installed browser and Node clients without Server", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-packed-query-clients-"));
+    try {
+      const tarballs = join(root, "tarballs");
+      mkdirSync(tarballs);
+      const packages = ["core", "proto", "client-web", "client-node", "server/test-fixtures"];
+      const spinePackages = packages.map((path) => {
+        run(
+          "npm",
+          [
+            "pack",
+            "--ignore-scripts",
+            "--pack-destination",
+            tarballs,
+            join(repositoryRoot, "packages", path),
+          ],
+          root,
+        );
+        const suffix = path === "server/test-fixtures" ? "server-test-fixtures" : path;
+        return {
+          name: `@spine-event-engine/${suffix}`,
+          tarball: join(tarballs, `spine-event-engine-${suffix}-${spineVersion}.tgz`),
+        };
+      });
+      const consumer = join(root, "client-consumer");
+      mkdirSync(consumer);
+      installTarballsWithPnpm(consumer, spinePackages);
+      const model = "@spine-event-engine/server-test-fixtures";
+      const routing = `${model}/generated/repository-routing`;
+      const common = [
+        'import { create } from "@bufbuild/protobuf";',
+        `import "${model}/generated/proto-module.js";`,
+        `import { GetProjectOverview } from "${routing}/project_queries_app_query.js";`,
+        `import { type GetProjectOverview_Response } from "${routing}/project_queries_pb.js";`,
+        `import { ProjectIdSchema } from "${routing}/project_identifiers_pb.js";`,
+        `import { ProjectOverviewStateSchema } from "${routing}/project_states_pb.js";`,
+      ];
+      for (const [name, entry] of [
+        ["client-web", "browser.ts"],
+        ["client-node", "node.ts"],
+      ] as const) {
+        writeFileSync(
+          join(consumer, entry),
+          [
+            ...common,
+            `import { Client } from "@spine-event-engine/${name}";`,
+            "declare const client: ReturnType<typeof Client.usingTransport>;",
+            "async function check() {",
+            "  const query = create(GetProjectOverview.querySchema, {",
+            "    project: create(ProjectIdSchema, { value: 'project-1' }),",
+            "  });",
+            "  const result = await client.asGuest().query(query);",
+            "  const paired: GetProjectOverview_Response | undefined = result.message[0];",
+            "  void [paired, result.response];",
+            "  // @ts-expect-error The decoded result array is readonly.",
+            "  result.message[0] = paired;",
+            "  // @ts-expect-error An Entity state has no App Query result association.",
+            "  void client.asGuest().query(create(ProjectOverviewStateSchema));",
+            "}",
+            "void check;",
+          ].join("\n"),
+        );
+      }
+      writeJson(consumer, "tsconfig.json", {
+        compilerOptions: {
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          target: "ES2024",
+          strict: true,
+          noEmit: true,
+          types: ["node"],
+        },
+        include: ["browser.ts", "node.ts"],
+      });
+      run(
+        process.execPath,
+        [join(consumer, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+        consumer,
+      );
+      const browser = JSON.parse(
+        readFileSync(
+          join(consumer, "node_modules/@spine-event-engine/client-web/package.json"),
+          "utf8",
+        ),
+      ) as {
+        dependencies: Record<string, string>;
+      };
+      expect(browser.dependencies["@spine-event-engine/server"]).toBeUndefined();
+      run(
+        process.execPath,
+        [
+          "--input-type=module",
+          "--eval",
+          [
+            `import "${model}/generated/proto-module.js";`,
+            'import { registeredProtoModules } from "@spine-event-engine/proto/codegen";',
+            'import { TypeRegistry } from "@spine-event-engine/core";',
+            `import { GetProjectOverview } from "${routing}/project_queries_app_query.js";`,
+            "const registry = TypeRegistry.from(...registeredProtoModules());",
+            "if (!registry.findByFullName(GetProjectOverview.querySchema.typeName))",
+            '  throw Error("model unregistered");',
+          ].join("\n"),
+        ],
+        consumer,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("generates a separate handler from installed grouped query types and relocates its package", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-packed-query-handler-"));
     try {

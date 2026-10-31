@@ -4,8 +4,8 @@ The [approved proposal](PROPOSAL.md) and [requirements ledger](TASK.md) remain
 binding. Shared validation, Command/Event admission, read-service status mapping,
 unknown-subscription activation, and passive local metadata migration are
 implemented, including dependency discovery, App Query generation, trusted reader
-forwarding, retained subscription reader binding, and Server App Query execution.
-Remaining work follows below.
+forwarding, retained subscription reader binding, Server App Query execution,
+typed clients, and Execute transport support. Remaining work follows below.
 
 Each slice includes focused behavior tests, affected generated/build checks,
 format/lint/TSDoc checks, coverage inspection and the relevant existing review
@@ -13,28 +13,6 @@ concerns. Use the existing implementation context for corrections and collect
 one review wave before returning a correction batch. Keep detailed evidence
 outside Git. Run the unchanged full release profile and final security review
 after integration converges; a slice checkpoint does not complete this task.
-
-## M10 — Execute transport and typed client closure
-
-**Depends on:** M09. **Class:** high-risk external API/forwarding.
-**Paths:** `packages/client-web/src/client/client.ts`, client-web exports,
-`packages/client-node/src/{client/node-client,index}.ts`, auth native/gateway
-operation tables, `server/node-coordinator.ts`, process/browser adapters,
-`server/reserved-spine-rpc-paths.json`, and relevant transport/client tests.
-
-Complete Execute forwarding across each existing topology; execution occurs on
-app nodes after authentication. Add `ClientRequest.query(Q)` using generated
-Q-to-R typing, preserving Response and a readonly decoded R array. Enforce zero
-or one payload and the registered R type before decoding. Keep Entity `.send`
-behavior and its new RPC error contract. Direct internal calls bypass only the
-Server gRPC output-filter boundary, not input validation or BC child reads.
-
-**Acceptance/tests:** browser, native Node, gateway, coordinator, and managed app
-node success/error paths; no handler/filter execution at gateway. Separate
-packed Node/browser consumers infer R without server imports; unassociated Q
-fails typechecking, wrong R/count fails at runtime. Auth/status details survive
-all hops. Gate focused clients/transports and consumer declarations plus
-API/reliability review.
 
 ## M11 — Typed filter execution over detached message trees
 

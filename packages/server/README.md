@@ -208,7 +208,8 @@ Application queries use generated `_queries.proto` request/response companions.
 Pass concrete `AppQueryHandler<Q, R>` instances in `ServerOptions.appQueries`;
 generated metadata alone never enables a route. On direct app-node ingress,
 `QueryService.Execute` validates the wire envelope and Q before dispatch.
-Gateway forwarding and `ClientRequest.query` are not available yet. Application code calls
+Native and browser Gateways forward Execute to the app node; `ClientRequest.query(generatedQ)`
+returns the wire `Response` and zero or one decoded paired results. Application code calls
 `server.query(generatedQ, executionContext)` and receives the paired generated R.
 The trusted execution context supplies the current `actorContext`, optional
 verified principal and authority facts, and an optional cancellation signal.
@@ -222,7 +223,7 @@ no destination tenant to check. Direct calls do not run Server output filters.
 The [typed callback example](REFERENCE.md#services-reads-and-lifecycle) shows
 the repository `onCreate` injection and active handler call. The actor/tenant
 snapshot supplies no verified principal or provider facts; the
-[scoped integration test](test/entity/process-manager-querying.test.ts) shows
+[scoped integration test](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/test/entity/process-manager-querying.test.ts) shows
 the complete repository setup.
 
 Queries preserve the handler's actor and effective tenant; there is no tenant

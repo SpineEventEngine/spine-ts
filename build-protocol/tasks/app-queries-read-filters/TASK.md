@@ -82,10 +82,10 @@ is recorded in MILESTONES.md. Detailed execution and review records remain outsi
 Shared validation, read-side RPC status mapping, unknown-subscription activation,
 metadata discovery, App Query declarations and generation, trusted reader
 forwarding, subscription reader binding, and Server App Query execution are
-implemented. Client and gateway support come next, followed by filters and
-integrated release verification, as listed in MILESTONES.md. Server accepts
-explicit App Query handlers and supports direct app-node Execute and typed
-internal calls.
+implemented, including typed browser/Node clients and Execute forwarding through
+gateways and Coordinators. Server accepts explicit App Query handlers and
+supports direct app-node Execute and typed internal calls. Filters and integrated
+release verification remain, as listed in MILESTONES.md.
 
 The App Query preflight passed generated/source compatibility checks, builds,
 focused tests, documentation and independent review. Installed model and handler
@@ -93,5 +93,7 @@ packages were checked through generation, compilation and relocation. Trusted
 reader forwarding and retained identity passed focused transport, lifecycle,
 restart, and isolation checks and independent review. Server dispatch and scoped
 internal calls passed focused validation, isolation, cancellation, shutdown, and
-review checks. Full release coverage and final security review remain due after
-implementation.
+review checks. Typed clients passed installed browser/Node consumer checks;
+Execute passed browser, native, Coordinator, and real managed-child checks,
+including trusted reader forwarding and invalid input. Full release coverage
+and final security review remain due after implementation.

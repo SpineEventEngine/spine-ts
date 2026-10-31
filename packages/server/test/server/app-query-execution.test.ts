@@ -3,7 +3,13 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
+ *
  * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
  */
 
 import { create } from "@bufbuild/protobuf";
@@ -17,6 +23,7 @@ import {
   ActorContextSchema,
   ErrorSchema,
   TenantIdSchema,
+  UserIdSchema,
   type ActorContext,
 } from "@spine-event-engine/proto";
 import { AppQuerySchema, type AppQuery } from "@spine-event-engine/proto/client";
@@ -28,6 +35,7 @@ import {
   type AppQueryDescription,
 } from "../../src/handler/spine-metadata-inventory.js";
 import { Server, type ServerQueryExecutionContext } from "../../src/server/server.js";
+import { BrowserServer, type StandaloneBrowserServerOptions } from "../../src/browser/index.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import { ProcessManager, Projection } from "../../src/entity/entity.js";
 import { Repository } from "../../src/repository/repository.js";
@@ -606,6 +614,50 @@ describe("Server App Query execution", () => {
         "Overview",
       );
     } finally {
+      await running.close();
+    }
+  });
+
+  it("executes through a standalone public browser gateway without activating a handler there", async () => {
+    registerOverview(ProjectOverviewHandler);
+    const server = new Server({ appQueries: [new ProjectOverviewHandler()] });
+    const running = await server.start();
+    const browserOptions = {
+      port: 0,
+      origins: ["http://127.0.0.1:5173"],
+      publicAccess: true,
+      authorize: () => Promise.resolve(true),
+      contexts: {
+        resolve: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "reader-1" }),
+            timestamp: create(TimestampSchema, { seconds: 1n }),
+          }),
+        resolveContext: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "reader-1" }),
+            timestamp: create(TimestampSchema, { seconds: 1n }),
+          }),
+      },
+      clock: { now: () => create(TimestampSchema, { seconds: 1n }) },
+      backend: { baseUrl: running.baseUrl },
+    } satisfies StandaloneBrowserServerOptions;
+    const browser = await BrowserServer.open(undefined, browserOptions);
+    try {
+      const client = createClient(
+        QueryService,
+        createConnectTransport({ baseUrl: browser.baseUrl, httpVersion: "1.1" }),
+      );
+      const result = await client.execute(appQuery(), {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      const packed = result.message[0];
+      if (packed === undefined) throw new Error("Expected the paired project response.");
+      expect(AnyPacker.unpack(packed, GetProjectOverview_ResponseSchema).project?.name).toBe(
+        "Overview",
+      );
+    } finally {
+      await browser.close();
       await running.close();
     }
   });

@@ -17,13 +17,23 @@ import { EventEmitter } from "node:events";
 import { fork, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
-import { createClient } from "@connectrpc/connect";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker } from "@spine-event-engine/core";
+import { Code, createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import {
   CommandService,
+  QueryService,
+  AppQuerySchema,
   SubscriptionIdSchema,
   SubscriptionSchema,
 } from "@spine-event-engine/proto/client";
+import { ActorContextSchema } from "@spine-event-engine/proto";
+import {
+  GetProjectOverview_QuerySchema,
+  GetProjectOverview_ResponseSchema,
+} from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 
 import {
   InMemorySubscriptionRegistry,
@@ -384,6 +394,69 @@ describe("ManagedServerApplication", () => {
           resolve();
         });
       });
+    }
+  }, 20_000);
+  it("executes a generated App Query through a verified forked managed child", async () => {
+    const parent = fork(
+      fileURLToPath(new URL("./managed-server-app-query-parent.mjs", import.meta.url)),
+      [],
+      { silent: true },
+    );
+    try {
+      const endpoint = await new Promise<string>((resolve, reject) => {
+        parent.once("message", (message: unknown) => {
+          const value =
+            typeof message === "object" && message !== null
+              ? (message as { endpoint?: unknown }).endpoint
+              : undefined;
+          if (typeof value === "string") resolve(value);
+          else reject(new Error("Managed query parent did not report its endpoint."));
+        });
+        parent.once("error", reject);
+        parent.once("exit", (code) => {
+          reject(new Error(`Managed query parent exited ${String(code)} before readiness.`));
+        });
+      });
+      const client = createClient(QueryService, createGrpcTransport({ baseUrl: endpoint }));
+      const input = create(AppQuerySchema, {
+        id: { value: "managed-query-1" },
+        context: create(ActorContextSchema, {
+          actor: { value: "managed-reader" },
+          timestamp: create(TimestampSchema, { seconds: 1n }),
+        }),
+        message: AnyPacker.pack(
+          GetProjectOverview_QuerySchema,
+          create(GetProjectOverview_QuerySchema, {
+            project: create(ProjectIdSchema, { value: "managed-project" }),
+          }),
+        ),
+      });
+      const response = await client.execute(input);
+      const packed = response.message[0];
+      if (packed === undefined) throw new Error("Expected the managed result.");
+      expect(AnyPacker.unpack(packed, GetProjectOverview_ResponseSchema).project?.name).toBe(
+        "verified:managed-reader",
+      );
+      await expect(
+        client.execute(
+          create(AppQuerySchema, {
+            ...input,
+            message: AnyPacker.pack(
+              GetProjectOverview_QuerySchema,
+              create(GetProjectOverview_QuerySchema),
+            ),
+          }),
+        ),
+      ).rejects.toMatchObject({ code: Code.InvalidArgument });
+    } finally {
+      if (parent.exitCode === null) {
+        parent.kill("SIGTERM");
+        await new Promise<void>((resolve) =>
+          parent.once("exit", () => {
+            resolve();
+          }),
+        );
+      }
     }
   }, 20_000);
   it("treats one asynchronous child error and its later exit as one failed incarnation", async () => {

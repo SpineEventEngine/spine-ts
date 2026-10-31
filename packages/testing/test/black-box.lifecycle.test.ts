@@ -13,10 +13,72 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { Client as NodeClient } from "@spine-event-engine/client-node";
+import { AppQueryHandler, Server, ServerEnvironment } from "../../server/src/index.js";
+import {
+  registerSpineMetadata,
+  spineMetadataTestAccess,
+} from "../../server/src/handler/spine-metadata-inventory.js";
+import "../../server/test-fixtures/generated/proto-module.js";
+// prettier-ignore
+import {
+  GetProjectOverview,
+} from "../../server/test-fixtures/generated/repository-routing/project_queries_app_query.js";
+import {
+  GetProjectOverview_QuerySchema,
+  GetProjectOverview_ResponseSchema,
+  type GetProjectOverview_Query,
+} from "../../server/test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 
 import { BlackBoxTestAccess } from "../src/black-box/black-box.js";
 
 describe("BlackBox lifecycle seams", () => {
+  it("executes a generated App Query through a live scoped client and rejects it after close", async () => {
+    class OverviewHandler extends AppQueryHandler<
+      GetProjectOverview.Query,
+      GetProjectOverview.Response
+    > {
+      execute(query: GetProjectOverview_Query) {
+        return create(GetProjectOverview_ResponseSchema, {
+          project: { id: query.project?.value ?? "", name: "Scoped overview" },
+        });
+      }
+    }
+    registerSpineMetadata(
+      {
+        receivers: [],
+        appQueries: [
+          {
+            handlerType: OverviewHandler,
+            queryTypeName: GetProjectOverview_QuerySchema.typeName,
+            querySchema: GetProjectOverview_QuerySchema,
+            responseSchema: GetProjectOverview_ResponseSchema,
+          },
+        ],
+      },
+      "testing:scoped-overview",
+    );
+    await ServerEnvironment.instance().completeSetup();
+    const running = await new Server({ appQueries: [new OverviewHandler()] }).start();
+    const blackBox = BlackBoxTestAccess.create({
+      server: running,
+      client: NodeClient.connectTo(running.baseUrl),
+    });
+    const scope = blackBox.asGuest();
+    const request = create(GetProjectOverview.querySchema, {
+      project: create(ProjectIdSchema, { value: "scoped-project" }),
+    });
+    try {
+      const result = await scope.query(request);
+      expect(result.message[0]?.project?.name).toBe("Scoped overview");
+    } finally {
+      await blackBox.close();
+      spineMetadataTestAccess.clear();
+    }
+    expect(() => scope.query(request)).toThrow("closed");
+  });
   it("aggregates subscription, client, and server cleanup failures", async () => {
     const subscriptionFailure = new Error("subscription");
     const clientFailure = new Error("client");

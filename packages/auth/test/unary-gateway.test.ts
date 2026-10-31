@@ -26,7 +26,12 @@ import {
   ResolveContextRequestSchema,
   ResolveContextResponseSchema,
 } from "@spine-event-engine/proto/auth";
-import { QuerySchema } from "@spine-event-engine/proto/client";
+import { AppQuerySchema, QuerySchema } from "@spine-event-engine/proto/client";
+// prettier-ignore
+import {
+  GetProjectOverview_QuerySchema,
+} from "../../server/test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 import { TypeRegistry, type TypeRegistryLookup, AnyPacker } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
@@ -566,6 +571,58 @@ describe("UnaryGateway", () => {
       toBinary(QuerySchema, query),
     );
     expect(forwardedQuery.context).toMatchObject({ timestamp: { seconds: 2n } });
+  });
+
+  it("authorizes and rewrites Execute without changing its packed domain Q", async () => {
+    const appQuery = create(AppQuerySchema, {
+      id: { value: "query-1" },
+      context: requestedContext,
+      message: AnyPacker.pack(
+        GetProjectOverview_QuerySchema,
+        create(GetProjectOverview_QuerySchema, {
+          project: create(ProjectIdSchema, { value: "project-1" }),
+        }),
+      ),
+    });
+    const { calls, forwarded, gateway } = setup();
+    await expect(
+      gateway.handle(
+        request("spine.client.QueryService", "Execute", toBinary(AppQuerySchema, appQuery)),
+      ),
+    ).resolves.toMatchObject({ kind: "forwarded" });
+    expect(calls).toEqual(["session", "authorize", "resolve-request", "forward"]);
+    const entry = forwarded[0];
+    expect(entry).toMatchObject({ service: "spine.client.QueryService", method: "Execute" });
+    if (entry === undefined) throw new Error("Expected forwarded App Query.");
+    const rewritten = fromBinary(AppQuerySchema, entry.value);
+    expect(rewritten.message).toEqual(appQuery.message);
+    expect(rewritten.context).toMatchObject({ timestamp: { seconds: 2n } });
+  });
+
+  it("keeps Execute authentication, authorization, and tenant failures terminal", async () => {
+    const appQuery = create(AppQuerySchema, {
+      id: { value: "query-denied" },
+      context: requestedContext,
+      message: AnyPacker.pack(
+        GetProjectOverview_QuerySchema,
+        create(GetProjectOverview_QuerySchema, {
+          project: create(ProjectIdSchema, { value: "project-1" }),
+        }),
+      ),
+    });
+    for (const [overrides, reason] of [
+      [{ session: "missing" }, "unauthenticated"],
+      [{ authorized: false }, "forbidden"],
+      [{ trustedTenant: "tenant-2" }, "context-stale"],
+    ] as const) {
+      const { forwarded, gateway } = setup(overrides);
+      await expect(
+        gateway.handle(
+          request("spine.client.QueryService", "Execute", toBinary(AppQuerySchema, appQuery)),
+        ),
+      ).resolves.toEqual({ kind: "rejected", reason });
+      expect(forwarded).toEqual([]);
+    }
   });
 
   it("forwards detached verified reader and authority facts without credentials", async () => {

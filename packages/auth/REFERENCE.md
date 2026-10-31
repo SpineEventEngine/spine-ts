@@ -7,7 +7,7 @@ Start with the [authentication overview](README.md) when choosing a gateway shap
 
 The package supplies provider-neutral gateway building blocks. An application places its gateway in front of a Spine TS or Spine JVM backend, then supplies the listener, credential extraction, identity provider, session storage, authorization rules, actor/tenant resolution, and forwarding implementation. The framework does not enforce a particular proxy, route topology, identity provider, tenant policy, or deployment configuration.
 
-`TransportFacts.from()` exposes only allowlisted request facts. Credentials are passed only to `Authenticator` or `SessionResolver`; they are not included in `IncomingRequest`. `IncomingRequest` is a discriminated union for command, query, subscription creation, activation, and cancellation. Command facts can include a decoded message when a `TypeRegistryLookup` knows its packed type; unknown and malformed `Any` values remain type-URL-only facts.
+`TransportFacts.from()` exposes only allowlisted request facts. Credentials are passed only to `Authenticator` or `SessionResolver`; they are not included in `IncomingRequest`. `IncomingRequest` is a discriminated union for command, entity query, application query, subscription creation, activation, and cancellation. Command facts can include a decoded message when a `TypeRegistryLookup` knows its packed type; unknown and malformed `Any` values remain type-URL-only facts.
 
 `AuthorizationPolicy.authorize()` is evaluated separately for each incoming request. `ContextResolver.resolve()` returns the trusted actor, optional tenant, timestamp, zone, and language. The caller-provided `ActorContext` must match that resolved actor and tenant, otherwise `UnaryGateway` rejects the request as `context-stale`. Backends may rely on these identity checks only when the deployment routes traffic through an application-selected gateway.
 
@@ -40,7 +40,7 @@ a failed remote cleanup remains retryable.
 
 ## Unary requests
 
-`UnaryGateway` accepts `CommandService.Post`, `QueryService.Read`, and
+`UnaryGateway` accepts `CommandService.Post`, `QueryService.Read`, `QueryService.Execute`, and
 `AuthenticationService.ResolveContext`. Construct both `UnaryGateway` and
 `SubscriptionGateway` with exactly one admission mode: a `SessionResolver`, or
 `publicAccess: true`. Public access creates no login session and no synthetic
@@ -50,7 +50,7 @@ Gateway, its authorization policy admits the public principal, and its
 also require finite request limits, an authorization function,
 `ContextResolver`, clock, and the corresponding forwarding collaborator.
 
-For Post and Read, it bounds and decodes bytes, admits the request through the selected mode, authorizes the decoded request, resolves trusted context, checks requested actor/tenant, and forwards exactly once. In authenticated mode, admission resolves the supplied session. In public mode, it uses the public admission marker and no session. The forwarder receives service, method, bytes, detached `reader` facts, and an optional cancellation signal. It does not receive credentials or extra transport facts. It returns `forwarded`, `resolved`, or a rejection reason: `request-too-large`, `unknown-operation`, `malformed-request`, `unauthenticated`, `forbidden`, or `context-stale`. Mapping a rejection to HTTP or gRPC status is the native transport adapter's job.
+For Post, Read, and Execute, it bounds and decodes bytes, admits the request through the selected mode, authorizes the decoded request, resolves trusted context, checks requested actor/tenant, and forwards exactly once. In authenticated mode, admission resolves the supplied session. In public mode, it uses the public admission marker and no session. The forwarder receives service, method, bytes, detached `reader` facts, and an optional cancellation signal. It does not receive credentials or extra transport facts. It returns `forwarded`, `resolved`, or a rejection reason: `request-too-large`, `unknown-operation`, `malformed-request`, `unauthenticated`, `forbidden`, or `context-stale`. Mapping a rejection to HTTP or gRPC status is the native transport adapter's job.
 
 ResolveContext returns informational trusted actor and tenant facts in both modes. In authenticated mode, it validates the current session and also returns its expiry. In public mode, it resolves context for the framework-owned public principal and omits `expiresAt` because no session exists. It neither authorizes a business request nor creates a reusable credential. Later requests are independently admitted and authorized.
 

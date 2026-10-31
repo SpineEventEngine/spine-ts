@@ -25,6 +25,7 @@ import type {
 } from "@spine-event-engine/proto";
 import {
   type Query,
+  type AppQuery,
   type Subscription,
   type Target,
   type Topic,
@@ -158,6 +159,33 @@ export interface IncomingQuery {
 }
 
 /**
+ * Application Query facts available to authorization policy.
+ */
+export interface IncomingAppQuery {
+  // prettier-ignore
+
+  /**
+   * Identifies application query execution.
+   */
+  readonly kind: "app-query";
+
+  /**
+   * Carries the received App Query envelope and packed Q.
+   */
+  readonly query: AppQuery;
+
+  /**
+   * Carries the caller-requested actor and tenant.
+   */
+  readonly requestedContext: ActorContext;
+
+  /**
+   * Carries allowlisted transport facts.
+   */
+  readonly transport: TransportRequestContext;
+}
+
+/**
  * Subscription-creation facts available to authorization policy.
  */
 export interface IncomingSubscription {
@@ -249,6 +277,7 @@ export interface IncomingSubscriptionCancellation {
 export type IncomingRequest =
   | IncomingCommand
   | IncomingQuery
+  | IncomingAppQuery
   | IncomingSubscription
   | IncomingSubscriptionActivation
   | IncomingSubscriptionCancellation;
@@ -485,6 +514,24 @@ export type IncomingRequestInput =
 
       /**
        * Carries the serialized query bytes.
+       */
+      readonly value: Uint8Array;
+
+      /**
+       * Carries allowlisted transport facts.
+       */
+      readonly transport: TransportRequestContext;
+    }
+  | {
+      // prettier-ignore
+
+      /**
+       * Identifies an App Query wire envelope.
+       */
+      readonly kind: "app-query";
+
+      /**
+       * Carries serialized App Query bytes.
        */
       readonly value: Uint8Array;
 

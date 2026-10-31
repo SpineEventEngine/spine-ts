@@ -31,6 +31,7 @@ export {
   type PostAndSubscribeResult,
   type SubscriptionActivationOptions,
   type ClientRequest,
+  type AppQueryClientResponse,
   type ClientTransport,
   type CreateSubscriptionOptions,
   type EntitySubscriptionOptions,

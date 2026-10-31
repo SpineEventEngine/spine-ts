@@ -199,15 +199,15 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolve(responseRows("initial"));
+    request.queryDeferred.resolve(responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate();
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     await new Promise((resolve) => setTimeout(resolve, 0));
     request.subscription.emitUpdate();
-    request.query.resolveAt(1, responseRows("refresh one"));
+    request.queryDeferred.resolveAt(1, responseRows("refresh one"));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
-    request.query.resolveAt(2, responseRows("refresh two"));
+    request.queryDeferred.resolveAt(2, responseRows("refresh two"));
     await screen.findByText("refresh two");
   });
 
@@ -241,7 +241,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
 
     request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
@@ -255,7 +255,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate(stateUpdate(view("live")));
     await screen.findByText("live");
@@ -274,18 +274,18 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     request.subscription.emitUpdate(stateUpdate(view("live", "general", 2n)));
     await screen.findByText("live");
 
-    request.query.resolveAt(1, responseRows("stale recovery"));
+    request.queryDeferred.resolveAt(1, responseRows("stale recovery"));
 
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
     expect(screen.queryByText("stale recovery")).toBeNull();
-    request.query.resolveAt(2, responseRows("current recovery"));
+    request.queryDeferred.resolveAt(2, responseRows("current recovery"));
     await screen.findByText("current recovery");
   });
 
@@ -293,14 +293,14 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
 
     request.subscription.emitRecovery(responseRows("reconnected"));
     await screen.findByText("reconnected");
-    request.query.resolveAt(1, responseRows("stale recovery"));
+    request.queryDeferred.resolveAt(1, responseRows("stale recovery"));
     await Promise.resolve();
 
     expect(screen.queryByText("stale recovery")).toBeNull();
@@ -311,7 +311,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
@@ -320,7 +320,7 @@ describe("MessageBoardApp", () => {
     request.subscription.emitUpdate(stateUpdate(view("live two", "general", 3n)));
     await screen.findByText("live two");
 
-    request.query.resolveAt(1, responseRows("stale recovery"));
+    request.queryDeferred.resolveAt(1, responseRows("stale recovery"));
 
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
     expect(request.send).toHaveBeenCalledTimes(3);
@@ -332,15 +332,15 @@ describe("MessageBoardApp", () => {
       createElement(MessageBoardApp, { actor: "ada", request, board: "board-a" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseBoardRows("board-a initial", "board-a"));
+    request.queryDeferred.resolveAt(0, responseBoardRows("board-a initial", "board-a"));
     await screen.findByText("board-a initial");
     request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
 
     rendered.rerender(createElement(MessageBoardApp, { actor: "ada", request, board: "board-b" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
-    request.query.resolveAt(1, responseBoardRows("board-a stale", "board-a"));
-    request.query.resolveAt(2, responseBoardRows("board-b current", "board-b"));
+    request.queryDeferred.resolveAt(1, responseBoardRows("board-a stale", "board-a"));
+    request.queryDeferred.resolveAt(2, responseBoardRows("board-b current", "board-b"));
 
     await screen.findByText("board-b current");
     expect(screen.queryByText("board-a stale")).toBeNull();
@@ -352,14 +352,14 @@ describe("MessageBoardApp", () => {
       createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     const options = calledOptions(request.send, 1);
 
     rendered.unmount();
-    request.query.resolveAt(1, responseRows("late recovery"));
+    request.queryDeferred.resolveAt(1, responseRows("late recovery"));
 
     expect(options.signal.aborted).toBe(true);
     await Promise.resolve();
@@ -370,7 +370,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate();
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
@@ -378,10 +378,10 @@ describe("MessageBoardApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
     await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
 
-    request.query.rejectAt(1, new Error("hint unavailable"));
+    request.queryDeferred.rejectAt(1, new Error("hint unavailable"));
 
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
-    request.query.resolveAt(2, responseRows("posted after rejected refresh"));
+    request.queryDeferred.resolveAt(2, responseRows("posted after rejected refresh"));
     await screen.findByText("posted after rejected refresh");
   });
 
@@ -389,15 +389,15 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate();
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     request.subscription.emitUpdate();
     expect(request.send).toHaveBeenCalledTimes(2);
-    request.query.resolveAt(1, responseRows("first refresh"));
+    request.queryDeferred.resolveAt(1, responseRows("first refresh"));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
-    request.query.resolveAt(2, responseRows("second refresh"));
+    request.queryDeferred.resolveAt(2, responseRows("second refresh"));
     await screen.findByText("second refresh");
   });
 
@@ -407,14 +407,14 @@ describe("MessageBoardApp", () => {
       createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate();
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     const options = calledOptions(request.send, 1);
     rendered.unmount();
     expect(options.signal.aborted).toBe(true);
-    request.query.resolveAt(1, responseRows("late refresh"));
+    request.queryDeferred.resolveAt(1, responseRows("late refresh"));
     await Promise.resolve();
     expect(screen.queryByText("late refresh")).toBeNull();
   });
@@ -423,11 +423,11 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitUpdate();
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
-    request.query.rejectAt(1, new Error("hint unavailable"));
+    request.queryDeferred.rejectAt(1, new Error("hint unavailable"));
     await Promise.resolve();
     expect(screen.getByText("initial")).toBeTruthy();
   });
@@ -436,13 +436,13 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitRecovery(responseRows("recovered"));
     await screen.findByText("recovered");
     request.subscription.emitUpdate();
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
-    request.query.resolveAt(1, responseRows("fresh"));
+    request.queryDeferred.resolveAt(1, responseRows("fresh"));
     await screen.findByText("fresh");
     expect(screen.queryByText("recovered")).toBeNull();
   });
@@ -506,7 +506,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     fillPost("posted without update");
 
@@ -514,7 +514,7 @@ describe("MessageBoardApp", () => {
 
     await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
-    request.query.resolveAt(1, responseRows("posted without update"));
+    request.queryDeferred.resolveAt(1, responseRows("posted without update"));
     await screen.findByText("posted without update");
   });
 
@@ -523,7 +523,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitLifecycle({ state: "connected", generation: 1 });
     await screen.findByText("Updating live");
@@ -546,7 +546,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true, deferredPost: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     request.subscription.emitLifecycle({ state: "connected", generation: 1 });
     await screen.findByText("Updating live");
@@ -568,7 +568,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true, deferredPost: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     fillPost("connecting post");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
@@ -777,7 +777,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ queuedQueries: true });
     render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseRows("initial"));
+    request.queryDeferred.resolveAt(0, responseRows("initial"));
     await screen.findByText("initial");
     await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
     request.subscription.emitLifecycle({
@@ -795,7 +795,10 @@ describe("MessageBoardApp", () => {
 
     await waitFor(() => expect(request.postCalls).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
-    request.query.resolveAt(1, responseRows("initial", "posted without subscription update"));
+    request.queryDeferred.resolveAt(
+      1,
+      responseRows("initial", "posted without subscription update"),
+    );
     await screen.findByText("posted without subscription update");
   });
 
@@ -861,7 +864,7 @@ describe("MessageBoardApp", () => {
       createElement(MessageBoardApp, { actor: "ada", request, board: "board-a" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
-    request.query.resolveAt(0, responseBoardRows("board-a initial", "board-a"));
+    request.queryDeferred.resolveAt(0, responseBoardRows("board-a initial", "board-a"));
     await screen.findByText("board-a initial");
     const oldSubscription = request.subscription;
     request.subscription.emitUpdate();
@@ -885,7 +888,7 @@ describe("MessageBoardApp", () => {
     expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
       "",
     );
-    request.query.resolveAt(2, responseBoardRows("board-b initial", "board-b"));
+    request.queryDeferred.resolveAt(2, responseBoardRows("board-b initial", "board-b"));
     await screen.findByText("board-b initial");
     expect(screen.queryByText("board-a initial")).toBeNull();
     oldSubscription.emitRecovery(responseBoardRows("retired board-a", "board-a"));
@@ -906,7 +909,7 @@ describe("MessageBoardApp", () => {
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     rendered.unmount();
-    request.query.resolve(responseRows("late message"));
+    request.queryDeferred.resolve(responseRows("late message"));
     await waitFor(() => expect(request.subscription.cancel).toHaveBeenCalledTimes(1));
     expect(screen.queryByText("late message")).toBeNull();
   });
@@ -938,6 +941,9 @@ function requestFixture(
   return {
     postCalls,
     post: vi.fn<ClientRequest["post"]>(() => Promise.resolve({ kind: "ok" })),
+    query: vi.fn<ClientRequest["query"]>(() =>
+      Promise.reject(new Error("MessageBoard fixture does not issue App Queries.")),
+    ),
     send: vi.fn<FixtureSend>(() => {
       if (fixtureOptions.deferredQuery) return queries[0]!.promise;
       if (fixtureOptions.queuedQueries) {
@@ -978,7 +984,7 @@ function requestFixture(
     get postSubscription() {
       return postSubscriptions.at(-1)!;
     },
-    query: {
+    queryDeferred: {
       resolve(value: ReturnType<typeof responseRows>) {
         queries[0]!.resolve(value);
       },

@@ -57,6 +57,9 @@ import {
 } from "@spine-event-engine/proto";
 import {
   type AppQuery,
+  type AppQueryResponse,
+  AppQueryResponseSchema,
+  AppQuerySchema,
   type Query,
   type QueryResponse,
   QueryResponseSchema,
@@ -559,20 +562,29 @@ export class NodeCoordinator {
   }
 
   /**
-   * Rejects untrusted identity before the not-yet-active App Query route.
+   * Admits an App Query and forwards it to a ready application replica.
    *
    * @param query App Query envelope.
    * @param context Native RPC context.
-   * @returns The bounded operation result.
+   * @returns The application replica's response.
    */
-  async #execute(query: AppQuery, context: HandlerContext): Promise<never> {
-    await this.#admit(
+  async #execute(query: AppQuery, context: HandlerContext): Promise<AppQueryResponse> {
+    const reader = await this.#admit(
       "spine.client.QueryService",
       "Execute",
       toBinary(QueryService.method.execute.input, query),
       context,
     );
-    throw new ConnectError("App Query execution is unavailable.", Code.Unimplemented);
+    ReadRequestStatus.check("query", () => Validate.check(AppQuerySchema, query));
+    const request: CoordinatorAppQuery = {
+      kind: "app-query",
+      query,
+      context,
+      reader,
+      response: create(AppQueryResponseSchema),
+    };
+    await this.#forward(request);
+    return request.response;
   }
 
   /**
@@ -1017,7 +1029,14 @@ interface CoordinatorQuery {
   readonly reader: TrustedReaderContext;
   response: QueryResponse;
 }
-type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery;
+interface CoordinatorAppQuery {
+  readonly kind: "app-query";
+  readonly query: AppQuery;
+  readonly context: HandlerContext;
+  readonly reader: TrustedReaderContext;
+  response: AppQueryResponse;
+}
+type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery | CoordinatorAppQuery;
 
 interface PendingActivation {
   readonly definition: Uint8Array;
@@ -1435,7 +1454,7 @@ const NodeCoordinatorValues = Object.freeze({
   },
 
   /**
-   * Sends one native Command or Query to a ready member.
+   * Sends one native Command, entity read, or App Query to a ready member.
    *
    * @param transport The connected native transport.
    * @param request The request to forward.
@@ -1451,16 +1470,8 @@ const NodeCoordinatorValues = Object.freeze({
   ): Promise<Uint8Array> {
     const headers = await NodeCoordinatorValues.forwardHeaders(request, issuer, maxBytes);
     if (request.kind === "command") {
-      const response = await transport.unary(
-        CommandService.method.post,
-        request.context.signal,
-        request.context.timeoutMs(),
-        headers,
-        request.command,
-      );
-      NodeCoordinatorValues.responseMetadata(response.header, response.trailer, request.context);
-      request.response = response.message;
-    } else {
+      await NodeCoordinatorValues.forwardCommand(transport, request, headers);
+    } else if (request.kind === "query") {
       const response = await transport.unary(
         QueryService.method.read,
         request.context.signal,
@@ -1470,8 +1481,42 @@ const NodeCoordinatorValues = Object.freeze({
       );
       NodeCoordinatorValues.responseMetadata(response.header, response.trailer, request.context);
       request.response = response.message;
+    } else {
+      const response = await transport.unary(
+        QueryService.method.execute,
+        request.context.signal,
+        request.context.timeoutMs(),
+        headers,
+        request.query,
+      );
+      NodeCoordinatorValues.responseMetadata(response.header, response.trailer, request.context);
+      request.response = response.message;
     }
     return new Uint8Array();
+  },
+
+  /**
+   * Invokes the Command branch and retains its native response metadata.
+   *
+   * @param transport The selected native child transport.
+   * @param request The admitted Command and response slot.
+   * @param headers Operation-bound verified-reader metadata.
+   * @returns Completion after assigning the native response.
+   */
+  async forwardCommand(
+    transport: ReturnType<typeof createGrpcTransport>,
+    request: CoordinatorCommand,
+    headers: Headers,
+  ): Promise<void> {
+    const response = await transport.unary(
+      CommandService.method.post,
+      request.context.signal,
+      request.context.timeoutMs(),
+      headers,
+      request.command,
+    );
+    NodeCoordinatorValues.responseMetadata(response.header, response.trailer, request.context);
+    request.response = response.message;
   },
 
   /**
@@ -1489,11 +1534,14 @@ const NodeCoordinatorValues = Object.freeze({
   ): Promise<Headers> {
     const service =
       request.kind === "command" ? "spine.client.CommandService" : "spine.client.QueryService";
-    const method = request.kind === "command" ? "Post" : "Read";
+    const method =
+      request.kind === "command" ? "Post" : request.kind === "query" ? "Read" : "Execute";
     const value =
       request.kind === "command"
         ? toBinary(CommandService.method.post.input, request.command)
-        : toBinary(QuerySchema, request.query);
+        : request.kind === "query"
+          ? toBinary(QuerySchema, request.query)
+          : toBinary(AppQuerySchema, request.query);
     const headers = NodeCoordinatorValues.applicationHeaders(request.context.requestHeader);
     if (
       issuer === undefined &&

@@ -40,6 +40,7 @@ import {
 } from "@spine-event-engine/proto";
 import {
   QueryResponseSchema,
+  AppQueryResponseSchema,
   EntityStateWithVersionSchema,
   QueryIdSchema,
   type Query,
@@ -66,6 +67,7 @@ import {
   ClientProtocolError,
   SubscriptionActivationTimeoutError,
   type BrowserClientOptions,
+  type AppQueryClientResponse,
   type CreateSubscriptionOptions,
   type SubscriptionLifecycle,
   type SubscriptionRetryPolicy,
@@ -76,6 +78,18 @@ import {
   ProjectRegisteredSchema,
 } from "../../server/test-fixtures/generated/repository-routing/project_events_pb.js";
 import { CreateProjectSchema } from "../../server/test-fixtures/generated/repository-routing/project_commands_pb.js";
+import "../../server/test-fixtures/generated/proto-module.js";
+import {
+  GetProjectOverview_QuerySchema,
+  GetProjectOverview_ResponseSchema,
+  type GetProjectOverview_Query,
+  type GetProjectOverview_Response,
+} from "../../server/test-fixtures/generated/repository-routing/project_queries_pb.js";
+// prettier-ignore
+import {
+  GetProjectOverview,
+} from "../../server/test-fixtures/generated/repository-routing/project_queries_app_query.js";
+import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 // prettier-ignore
 import {
   ProjectOverviewStateQuery,
@@ -4279,6 +4293,105 @@ describe("Client", () => {
     expect(failure.findDetails(ErrorSchema)).toEqual([detail]);
     await client.close();
   });
+
+  it("infers the generated App Query response and preserves its Response envelope", async () => {
+    const resultMessage = create(GetProjectOverview_ResponseSchema, {
+      project: { id: "project-1", name: "Ready", priority: 2 },
+    });
+    const client = Client.usingTransport({
+      transport: unaryTransport((method, input) => {
+        if (method.name !== "Execute") return create(QueryResponseSchema);
+        expect(input).toMatchObject({
+          message: { typeUrl: TypeUrls.derive(GetProjectOverview_QuerySchema) },
+          context: { actor: { value: "reader-a" } },
+        });
+        return create(AppQueryResponseSchema, {
+          response: create(ResponseSchema),
+          message: [AnyPacker.pack(GetProjectOverview_ResponseSchema, resultMessage)],
+        });
+      }),
+    });
+    const result = await client.onBehalfOf("reader-a").query(
+      create(GetProjectOverview.querySchema, {
+        project: create(ProjectIdSchema, { value: "project-1" }),
+      }),
+    );
+    expectTypeOf(result.message[0]).toEqualTypeOf<GetProjectOverview_Response | undefined>();
+    expect(result.message[0]?.project?.name).toBe("Ready");
+    expect(result.response).toBeDefined();
+    await client.close();
+  });
+
+  it("accepts an empty App Query result and rejects extra, wrong, or undecodable results", async () => {
+    const request = create(GetProjectOverview.querySchema, {
+      project: create(ProjectIdSchema, { value: "project-1" }),
+    });
+    const paired = AnyPacker.pack(
+      GetProjectOverview_ResponseSchema,
+      create(GetProjectOverview_ResponseSchema, { project: { id: "project-1" } }),
+    );
+    const wrong = AnyPacker.pack(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, { id: "project-1" }),
+    );
+    for (const [messages, expected] of [
+      [[], undefined],
+      [[paired, paired], "more than one"],
+      [[wrong], "paired result"],
+      [[{ ...paired, value: new Uint8Array([255]) }], "paired result"],
+    ] as const) {
+      const client = Client.usingTransport({
+        transport: unaryTransport((method) =>
+          method.name === "Execute"
+            ? create(AppQueryResponseSchema, {
+                response: create(ResponseSchema),
+                message: [...messages],
+              })
+            : create(QueryResponseSchema),
+        ),
+      });
+      try {
+        const outcome = client.asGuest().query(request);
+        if (expected === undefined) expect((await outcome).message).toEqual([]);
+        else await expect(outcome).rejects.toThrow(expected);
+      } finally {
+        await client.close();
+      }
+    }
+  });
+
+  function rejectUnpairedAppQueryAtCompileTime(request: ReturnType<Client["asGuest"]>): void {
+    // @ts-expect-error Entity state has no generated App Query response association.
+    void request.query(create(ProjectOverviewStateSchema));
+  }
+
+  it("rejects an application response without its required Response status", async () => {
+    const client = Client.usingTransport({
+      transport: unaryTransport((method) =>
+        method.name === "Execute" ? create(AppQueryResponseSchema) : create(QueryResponseSchema),
+      ),
+    });
+    try {
+      await expect(
+        client.asGuest().query(
+          create(GetProjectOverview.querySchema, {
+            project: create(ProjectIdSchema, { value: "project-1" }),
+          }),
+        ),
+      ).rejects.toThrow("missing Response");
+    } finally {
+      await client.close();
+    }
+  });
+  void rejectUnpairedAppQueryAtCompileTime;
+
+  function rejectMutableResultAtCompileTime(
+    result: AppQueryClientResponse<GetProjectOverview_Query>,
+  ): void {
+    // @ts-expect-error Decoded App Query results are readonly.
+    result.message[0] = create(GetProjectOverview_ResponseSchema);
+  }
+  void rejectMutableResultAtCompileTime;
 
   it("reuses one generated query in concurrent tenant-scoped sends", async () => {
     const shared = ProjectOverviewStateQuery.create().name().is("ready").build();

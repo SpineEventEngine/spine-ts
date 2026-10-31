@@ -35,6 +35,8 @@ import {
   CompositeFilterSchema,
   FilterSchema,
   QueryService,
+  AppQuerySchema,
+  AppQueryResponseSchema,
   SubscriptionSchema,
   SubscriptionService,
   type SubscriptionUpdate,
@@ -44,6 +46,11 @@ import {
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
+// prettier-ignore
+import {
+  GetProjectOverview_QuerySchema,
+} from "../../server/test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 import {
   createNativeGatewayServices,
   SubscriptionUpdateRelay,
@@ -151,19 +158,6 @@ async function errorCode(effect: Promise<unknown>): Promise<Code> {
 }
 
 describe("createNativeGatewayServices", () => {
-  it("keeps App Query Execute unavailable before Server execution support is installed", async () => {
-    const gateway = services(
-      unary({ kind: "resolved", value: new Uint8Array() }).fake,
-      subscriptions(() => Promise.resolve({ kind: "cancelled" })).fake,
-    );
-    expect(
-      await errorCode(
-        Promise.resolve(
-          gateway.query.execute(create(QueryService.method.execute.input), context()),
-        ),
-      ),
-    ).toBe(Code.Unimplemented);
-  });
   it("delegates ResolveContext through the configured unary gateway", async () => {
     const response = create(ResolveContextResponseSchema);
     const gateway = services(
@@ -272,6 +266,36 @@ describe("createNativeGatewayServices", () => {
     });
     expect(post.calls[0]?.signal).toBeDefined();
     expect(read.calls[0]?.signal).toBeDefined();
+  });
+
+  it("forwards Execute through UnaryGateway with its complete domain request", async () => {
+    const forwarded = unary({
+      kind: "forwarded",
+      value: toBinary(AppQueryResponseSchema, create(AppQueryResponseSchema)),
+    });
+    const gateway = services(
+      forwarded.fake,
+      subscriptions(() => Promise.resolve({ kind: "cancelled" })).fake,
+    );
+    const query = create(AppQuerySchema, {
+      id: { value: "query-1" },
+      context: create(ActorContextSchema, { actor: { value: "ada" } }),
+      message: AnyPacker.pack(
+        GetProjectOverview_QuerySchema,
+        create(GetProjectOverview_QuerySchema, {
+          project: create(ProjectIdSchema, { value: "project-1" }),
+        }),
+      ),
+    });
+    await gateway.query.execute(query, context());
+    expect(forwarded.calls[0]).toMatchObject({
+      service: "spine.client.QueryService",
+      method: "Execute",
+      credential,
+      transport,
+    });
+    expect(forwarded.calls[0]?.signal).toBeDefined();
+    expect(forwarded.calls[0]?.value).toEqual(toBinary(AppQuerySchema, query));
   });
 
   it("preserves an application Query status through the native gateway", async () => {

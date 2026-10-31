@@ -16,6 +16,7 @@ import { create, fromBinary } from "@bufbuild/protobuf";
 import { ActorContextSchema, CommandSchema } from "@spine-event-engine/proto";
 import {
   QuerySchema,
+  AppQuerySchema,
   SubscriptionSchema,
   TargetSchema,
   TopicSchema,
@@ -48,6 +49,7 @@ export const IncomingRequests: Readonly<IncomingRequestDecoder> = Object.freeze(
       switch (input.kind) {
         case "command": return IncomingRequestValues.command(input);
         case "query": return IncomingRequestValues.query(input);
+        case "app-query": return IncomingRequestValues.appQuery(input);
         case "subscribe": return IncomingRequestValues.subscribe(input);
         case "activate":
         case "cancel": return IncomingRequestValues.subscription(input);
@@ -95,6 +97,22 @@ const IncomingRequestValues = Object.freeze({
       kind: "query",
       query,
       target: query.target ?? create(TargetSchema),
+      requestedContext: query.context ?? create(ActorContextSchema),
+      transport: input.transport,
+    };
+  },
+
+  /**
+   * Decodes an App Query without interpreting its domain payload at the gateway.
+   *
+   * @param input Serialized application query and safe transport facts.
+   * @returns Actor context and the original domain request envelope.
+   */
+  appQuery(input: IncomingRequestInput): IncomingRequest {
+    const query = fromBinary(AppQuerySchema, input.value);
+    return {
+      kind: "app-query",
+      query,
       requestedContext: query.context ?? create(ActorContextSchema),
       transport: input.transport,
     };
