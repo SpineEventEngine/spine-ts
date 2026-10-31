@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@spine-event-engine/client-web": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.25"
+    "@spine-event-engine/proto": "2.0.0-snapshot.26"
   },
   "devDependencies": {
     "@bufbuild/protobuf": "2.12.1",

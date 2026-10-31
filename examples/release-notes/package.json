@@ -38,7 +38,7 @@
     "@spine-event-engine/ai-vercel-ax": "workspace:*",
     "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.25",
+    "@spine-event-engine/proto": "2.0.0-snapshot.26",
     "@spine-event-engine/server": "workspace:*",
     "@spine-event-engine/storage": "workspace:*",
     "@mobrowser/api": "2.18.0",
@@ -52,7 +52,7 @@
   "devDependencies": {
     "@modelcontextprotocol/client": "2.3.1",
     "@playwright/test": "1.63.0",
-    "@spine-event-engine/proto-tools": "2.0.0-snapshot.25",
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.26",
     "@spine-event-engine/testing": "workspace:*",
     "esbuild": "0.28.2",
     "ts-proto": "2.15.0",
