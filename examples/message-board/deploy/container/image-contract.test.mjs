@@ -322,7 +322,6 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "--env",
     "BROWSER_ORIGIN=http://localhost:18081",
     "--env",
-    "--env",
     "DATASTORE_PROJECT_ID=spine-t0095",
     "--env",
     "DATASTORE_EMULATOR_HOST=datastore:8081",
