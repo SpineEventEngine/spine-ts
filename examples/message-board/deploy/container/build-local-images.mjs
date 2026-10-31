@@ -19,6 +19,7 @@ const context = mkdtempSync(join(tmpdir(), "spine-message-board-images-"));
 const tarballs = join(context, "tarballs");
 const store = join(context, "pnpm-store");
 const fullPackages = [
+  "packages/ai",
   "packages/auth",
   "packages/client-node",
   "packages/client-react",

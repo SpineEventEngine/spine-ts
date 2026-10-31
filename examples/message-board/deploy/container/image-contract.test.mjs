@@ -8,6 +8,7 @@ import { join } from "node:path";
 import process from "node:process";
 import test from "node:test";
 import { URL } from "node:url";
+import { runInNewContext } from "node:vm";
 
 const containerRoot = new URL(".", import.meta.url);
 const datastoreEmulator = "google/cloud-sdk:578.0.0-emulators";
@@ -20,6 +21,26 @@ test("local image builds regenerate application output before packing it", () =>
     builder.indexOf('phase("build Message Board application")') <
       builder.indexOf('phase("pack local artifacts")'),
   );
+});
+
+test("local image artifacts include same-release runtime package dependencies", () => {
+  const builder = readFileSync(new URL("build-local-images.mjs", containerRoot), "utf8");
+  const list = builder.match(/const fullPackages = (\[[\s\S]*?\]);/u)?.[1];
+  assert.ok(list, "the local image package list is present");
+  const paths = runInNewContext(list);
+  const manifests = paths.map((path) =>
+    JSON.parse(readFileSync(join(process.cwd(), path, "package.json"), "utf8")),
+  );
+  const names = new Set(manifests.map(({ name }) => name));
+  for (const manifest of manifests) {
+    for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
+      if (
+        name.startsWith("@spine-event-engine/") &&
+        (version === manifest.version || version.startsWith("workspace:"))
+      )
+        assert.ok(names.has(name), `${manifest.name} requires a local ${name} artifact`);
+    }
+  }
 });
 
 test("the Delivery-only image target prepares only Delivery runtime artifacts", () => {
