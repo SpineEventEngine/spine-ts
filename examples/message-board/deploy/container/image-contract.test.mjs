@@ -351,7 +351,6 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "DATASTORE_PROJECT_ID=spine-t0095",
     "--env",
     "DATASTORE_EMULATOR_HOST=datastore:8081",
-    "--env",
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
