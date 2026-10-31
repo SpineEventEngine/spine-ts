@@ -124,6 +124,9 @@ now cover generated handler metadata, App Query Q/R calls, Bounded Context and
 Server read policies, trusted-reader facts, and native Entity/Event delivery.
 Focused example, installed-consumer, bundled-discovery, generation, source
 quality, and documentation checks passed independent API, reliability, style,
-and documentation review. Direct Stand filtering still awaits its admission
-decision. Integrated security review, image rebuild, version alignment, and
-the full release verification remain pending.
+and documentation review. All workspace versions are aligned at
+`2.0.0-snapshot.26`, with the required version-only commit and separate dependency
+updates. Actual container build and runtime checks passed, including installed
+metadata imports, application/gateway startup, browser subscriptions, and clean
+shutdown. Direct Stand filtering still awaits its admission decision. Final
+security review and the full release verification remain pending.

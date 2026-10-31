@@ -71,12 +71,14 @@ prepared build/generation evidence instead of duplicate full runs. Any new
 behavior change after this gate requires its focused checks and risk-based
 verification disposition.
 
-Before review readiness, select an unused common workspace version and create
-the required version-only commit with exactly `Bump version -> <version>`;
-manifest top-level versions only. Put dependency pins/lockfile changes in a
-separate commit. The authorized orchestrator promptly pushes feature commits
-to official origin, including checkpoints/corrections; no PR, master write,
-merge, force push, or shared-ref deletion is authorized.
+The maintained multi-package example, migration guides, installed/bundled
+consumer checks, and actual image build/runtime checks are complete. Workspace
+versions are aligned at `2.0.0-snapshot.26`; the version-only commit is separate
+from dependency pins, lockfile, and generated metadata updates. Remaining work
+is direct Stand filtering and its migration guidance, followed by final security
+review and the full release gate. The authorized orchestrator promptly pushes
+feature commits to official origin, including checkpoints/corrections; no PR,
+master write, merge, force push, or shared-ref deletion is authorized.
 
 `.github/workflows/build.yml` currently triggers only on pull requests to
 master. A branch push alone cannot produce that Build/trial-publication result.
