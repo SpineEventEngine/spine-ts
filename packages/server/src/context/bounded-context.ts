@@ -107,12 +107,14 @@ import {
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { runtimeAccess } from "../runtime/runtime.js";
 import { Stand, standAccess } from "../stand/stand.js";
+import type { SubscriptionReadWork } from "../stand/subscription-read-filters.js";
 import { ReadSideFilter } from "../stand/read-side-filter.js";
 import { SubscriptionRuntime, subscriptionRuntimeAccess } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
   subscriptionRecordSpec,
   type StandSubscriptionRegistry,
+  type StandSubscriptionEntry,
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import type { DeliveryStrategy } from "../delivery/delivery-builder.js";
@@ -756,12 +758,16 @@ interface BoundedContextAccess {
    * @param context Context containing the subscription.
    * @param id Registered subscription ID.
    * @param onUpdate Callback receiving updates.
+   * @param onInvalidated Closes this delivery when the retained definition changes.
+   * @param expected Exact canonical entry admitted for this reader.
    * @returns Promise resolving to the subscription handle.
    */
   consumeSubscription(
     context: BoundedContext,
     id: string,
-    onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
+    onUpdate: (work: SubscriptionReadWork) => void,
+    onInvalidated?: () => void,
+    expected?: StandSubscriptionEntry,
   ): Promise<import("../stand/stand.js").StandSubscription>;
 
   /**
@@ -2185,13 +2191,25 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   consumeSubscription(
     context: BoundedContext,
     id: string,
-    onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
+    onUpdate: (work: SubscriptionReadWork) => void,
+    onInvalidated?: () => void,
+    expected?: StandSubscriptionEntry,
   ) {
     const runtime = contextSubscriptionRuntimes.get(context);
     if (runtime === undefined) {
       throw new TypeError("Subscription consumption requires a built BoundedContext instance.");
     }
-    return runtime.consume(id, onUpdate);
+    return runtime.consume(
+      id,
+      (update) => {
+        onUpdate({
+          update,
+          filter: (facts) => standAccess.filterSubscription(context.stand(), update, facts),
+        });
+      },
+      onInvalidated,
+      expected,
+    );
   },
 
   delivery(context: BoundedContext): ContextDeliveryDescriptor {

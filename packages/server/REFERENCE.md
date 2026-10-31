@@ -944,6 +944,15 @@ original continuation. Retained storage, hydration, and replay remain raw.
 Direct Stand and retained-history callbacks identify the producing Bounded
 Context. Protected history called from a handler carries its current signal
 actor; an out-of-handler diagnostic read has no actor or authenticated reader.
+Native SubscriptionService delivery filters already matched Entity states and
+Event payloads through the producing Bounded Context policy and then the
+Server policy. The `subscription` operation includes the original Topic and
+admitted subscription; its context carries the current verified reader facts,
+effective tenant, actor metadata, producing Bounded Context, and cancellation
+signal. Removing a state emits `no_longer_matching` with its original Entity
+ID; removing every Event payload suppresses that data batch. ACKs and existing
+removal controls remain unchanged. Policy failures end only that reader stream
+with a sanitized technical status.
 
 The operation describes the call that produced the value. `query` includes the
 actual Query and, during an App Query child read, the enclosing AppQuery. `app-query`
@@ -1083,7 +1092,11 @@ authoritative queries from current state and Entity subscriptions observe
 committed `EntityStateChanged` messages on the paired System Context EventBus,
 so a direct Stand write alone does not produce a subscription update. Consumer
 callback failures are isolated from post-commit observation and other
-consumers. The package does not guarantee cluster-complete observations,
+consumers. Native subscription updates enter the existing bounded delivery
+queue before asynchronous read policies run; a full queue closes that stream.
+For a surviving Event, policy replaces only its domain payload and retains the original envelope.
+Direct Stand subscriptions do not apply this RPC filter path. The package does
+not guarantee cluster-complete observations,
 subscription replay, event-gap repair, or exactly-once effects.
 
 ### Native and managed hosting

@@ -46,6 +46,7 @@ import { SubscriptionObservers, type StandObservedState } from "./subscription-o
 import type { EventBus, EventSubscription } from "../bus/event-bus.js";
 import type { Subscription, SubscriptionUpdate } from "@spine-event-engine/proto/client";
 import { ReadSideFilterEngine } from "./read-side-filter-engine.js";
+import { SubscriptionReadFilters } from "./subscription-read-filters.js";
 import { ReadSideMessages } from "./read-side-message.js";
 import type { ReadSideContext, ReadSideFilter, ReadSideOperation } from "./read-side-filter.js";
 import type { BoundedContext } from "../context/bounded-context.js";
@@ -1531,6 +1532,20 @@ interface StandAccess {
   filterEvent(stand: Stand, event: Event, context: ReadSideContext): Promise<Event | null>;
 
   /**
+   * Processes one already-matched native delivery using this Stand's BC policies.
+   *
+   * @param stand Producing context's Stand.
+   * @param update Original matched delivery update.
+   * @param context Verified current subscription context.
+   * @returns Visible update, or null when all domain data was removed.
+   */
+  filterSubscription(
+    stand: Stand,
+    update: SubscriptionUpdate,
+    context: ReadSideContext,
+  ): Promise<SubscriptionUpdate | null>;
+
+  /**
    * Attaches this context's ordered read policies before public reads begin.
    *
    * @param stand Context read facade.
@@ -1700,6 +1715,18 @@ export const standAccess: StandAccess = Object.freeze({
       ...(producer === undefined ? {} : { producingContext: producer }),
     });
     return message === null ? null : create(EventSchema, { ...clone(EventSchema, event), message });
+  },
+
+  filterSubscription(
+    stand: Stand,
+    update: SubscriptionUpdate,
+    context: ReadSideContext,
+  ): Promise<SubscriptionUpdate | null> {
+    const producer = standProducingContexts.get(stand);
+    return SubscriptionReadFilters.apply(update, standReadFilters.get(stand), {
+      ...context,
+      ...(producer === undefined ? {} : { producingContext: producer }),
+    });
   },
 
   /**

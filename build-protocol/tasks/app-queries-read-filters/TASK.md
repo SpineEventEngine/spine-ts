@@ -88,8 +88,10 @@ supports direct app-node Execute and typed internal calls. The typed filter
 engine is implemented with detached callback inputs, exact type matching, and
 nested-message traversal. Bounded Context filters now apply to outward Entity
 reads and retained Entity/Agent histories; Server filters apply to Entity Query
-and App Query gRPC results. Subscription filtering and integrated release
-verification remain, as listed in MILESTONES.md.
+and App Query gRPC results. Native Entity and Event subscriptions now apply
+Bounded Context and Server filters after original matching and queue admission.
+Direct Stand subscription delivery and integrated release verification remain,
+as listed in MILESTONES.md.
 
 The App Query preflight passed generated/source compatibility checks, builds,
 focused tests, documentation and independent review. Installed model and handler
@@ -110,3 +112,9 @@ Read-boundary integration passed focused boundary, history, cancellation, actor
 context, sanitized-status and data-isolation checks, followed by independent
 API, reliability, style and documentation review. The remaining direct
 subscription admission decision is recorded in MILESTONES.md.
+
+Native subscription filtering passed focused Entity/Event, reader isolation,
+activation-race, cancellation, transport and client recovery checks. Independent
+API, reliability, style and documentation review is complete, including a
+regression preventing delivery after cancellation between policy settlement
+and output. Direct Stand filtering remains pending the admission decision.

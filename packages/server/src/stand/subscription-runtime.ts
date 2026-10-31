@@ -13,6 +13,7 @@
  */
 
 import { create, toBinary } from "@bufbuild/protobuf";
+import { ReaderIdentities } from "@spine-event-engine/core/spi/trusted-reader";
 import type { ILogLayer } from "loglayer";
 import {
   SubscriptionIdSchema,
@@ -27,7 +28,7 @@ import { standAccess, type Stand, type StandSubscription } from "./stand.js";
 import type { StandSubscriptionEntry, StandSubscriptionRegistry } from "./subscription-registry.js";
 
 interface LocalSubscriptionAttachment {
-  readonly identity: Uint8Array;
+  readonly entry: StandSubscriptionEntry;
   readonly subscription: StandSubscription;
 }
 
@@ -85,7 +86,7 @@ export class SubscriptionRuntime {
 
   readonly #registry: StandSubscriptionRegistry;
 
-  readonly #consumers = new Map<string, Set<(update: SubscriptionUpdate) => void>>();
+  readonly #consumers = new Map<string, Set<RuntimeConsumer>>();
 
   readonly #attachments = new Map<string, LocalSubscriptionAttachment>();
 
@@ -164,20 +165,34 @@ export class SubscriptionRuntime {
    *
    * @param id Identifies the durable subscription definition.
    * @param onUpdate Receives rendered subscription updates.
+   * @param onInvalidated Closes this consumer when its retained entry changes or disappears.
+   * @param expected Admitted entry that must still be current before delivery.
    * @returns Resolves to the consumer removal handle.
    */
-  consume(id: string, onUpdate: (update: SubscriptionUpdate) => void): Promise<StandSubscription> {
+  consume(
+    id: string,
+    onUpdate: (update: SubscriptionUpdate) => void,
+    onInvalidated?: () => void,
+    expected?: StandSubscriptionEntry,
+  ): Promise<StandSubscription> {
     if (this.#closing) return Promise.reject(new Error("Subscription runtime is closing."));
-    let consumers = this.#consumers.get(id);
-    if (consumers === undefined) {
-      consumers = new Set();
-      this.#consumers.set(id, consumers);
-    }
-    consumers.add(onUpdate);
+    const consumer: RuntimeConsumer = {
+      onUpdate,
+      ...(onInvalidated === undefined ? {} : { onInvalidated }),
+      ...(expected === undefined ? {} : { expected }),
+      attaching: true,
+    };
+    const consumers = this.#consumers.get(id) ?? new Set<RuntimeConsumer>();
+    consumers.add(consumer);
+    this.#consumers.set(id, consumers);
     return this.reconcile()
-      .then(() => this.#consumerHandle(id, onUpdate))
+      .then(() => {
+        if (this.#closing) throw new Error("Subscription runtime is closing.");
+        consumer.attaching = false;
+        return this.#verifyConsumer(id, consumer);
+      })
       .catch((error: unknown) => {
-        this.#removeConsumer(id, onUpdate);
+        this.#removeConsumer(id, consumer);
         throw error;
       });
   }
@@ -250,7 +265,8 @@ export class SubscriptionRuntime {
    * @param id Identifies the durable subscription definition.
    */
   remove(id: string): void {
-    this.#consumers.delete(id);
+    for (const consumer of [...(this.#consumers.get(id) ?? [])])
+      this.#invalidateConsumer(id, consumer);
     this.#detach(id);
   }
 
@@ -262,8 +278,7 @@ export class SubscriptionRuntime {
   async #reconcileNonactive(id: string): Promise<void> {
     const current = await this.#registry.get(create(SubscriptionIdSchema, { value: id }));
     if (current?.phase === "active") await this.#attach(id, current);
-    else if (current === undefined) this.remove(id);
-    else this.#detach(id);
+    else this.#retireAttached(id);
   }
 
   #detach(id: string): void {
@@ -271,6 +286,22 @@ export class SubscriptionRuntime {
     if (attachment === undefined) return;
     this.#attachments.delete(id);
     attachment.subscription.unsubscribe();
+  }
+
+  /**
+   * Ends consumers attached to a prior entry while a fresh consumer finishes admission.
+   *
+   * @param id Retained subscription whose attachment is no longer current.
+   */
+  #retireAttached(id: string, current?: StandSubscriptionEntry): void {
+    for (const consumer of [...(this.#consumers.get(id) ?? [])])
+      if (
+        !consumer.attaching ||
+        (consumer.expected !== undefined &&
+          (current === undefined || !sameEntry(consumer.expected, current)))
+      )
+        this.#invalidateConsumer(id, consumer);
+    this.#detach(id);
   }
 
   /**
@@ -288,6 +319,8 @@ export class SubscriptionRuntime {
   beginClose(): void {
     this.#closing = true;
     if (this.#timer !== undefined) clearInterval(this.#timer);
+    for (const [id, consumers] of this.#consumers)
+      for (const consumer of [...consumers]) this.#invalidateConsumer(id, consumer);
   }
 
   /**
@@ -299,14 +332,13 @@ export class SubscriptionRuntime {
     this.beginClose();
     await this.#tail;
     const errors: unknown[] = [];
-    for (const id of [...this.#attachments.keys()]) {
+    for (const id of new Set([...this.#attachments.keys(), ...this.#consumers.keys()])) {
       try {
         this.remove(id);
       } catch (error) {
         errors.push(error);
       }
     }
-    this.#consumers.clear();
     if (errors.length > 0) throw new AggregateError(errors, "Subscription runtime close failed.");
   }
 
@@ -360,32 +392,65 @@ export class SubscriptionRuntime {
     await Promise.allSettled([this.drainClose(), registryClose]);
   }
 
-  #consumerHandle(id: string, onUpdate: (update: SubscriptionUpdate) => void): StandSubscription {
+  #consumerHandle(id: string, consumer: RuntimeConsumer): StandSubscription {
     let closed = false;
+    const active = () => this.#consumers.get(id)?.has(consumer) === true;
     return Object.freeze({
       get closed() {
-        return closed;
+        return closed || !active();
       },
       unsubscribe: () => {
         if (closed) return;
         closed = true;
-        this.#removeConsumer(id, onUpdate);
+        this.#removeConsumer(id, consumer);
       },
     });
   }
 
-  #removeConsumer(id: string, onUpdate: (update: SubscriptionUpdate) => void): void {
+  /**
+   * Confirms the attachment still represents this admission after reconciliation.
+   * @param id Canonical subscription ID.
+   * @param consumer Newly attached native reader.
+   * @returns Handle for the reader, closed if its entry changed.
+   */
+  async #verifyConsumer(id: string, consumer: RuntimeConsumer): Promise<StandSubscription> {
+    const current = await this.#registry.get(create(SubscriptionIdSchema, { value: id }));
+    if (
+      this.#consumers.get(id)?.has(consumer) === true &&
+      consumer.expected !== undefined &&
+      (current?.phase !== "active" || !sameEntry(consumer.expected, current))
+    )
+      this.#invalidateConsumer(id, consumer);
+    return this.#consumerHandle(id, consumer);
+  }
+
+  #removeConsumer(id: string, consumer: RuntimeConsumer): void {
     const consumers = this.#consumers.get(id);
-    consumers?.delete(onUpdate);
+    consumers?.delete(consumer);
     if (consumers?.size === 0) this.#consumers.delete(id);
+  }
+
+  /**
+   * Removes one consumer and signals its stream without affecting peer callbacks.
+   *
+   * @param id Retained subscription containing the consumer.
+   * @param consumer Callback whose entry has become stale.
+   */
+  #invalidateConsumer(id: string, consumer: RuntimeConsumer): void {
+    this.#removeConsumer(id, consumer);
+    try {
+      consumer.onInvalidated?.();
+    } catch {
+      SubscriptionRuntime.#warnConsumerFailure(subscriptionRuntimeLoggers.get(this), id);
+    }
   }
 
   async #attach(id: string, expected: StandSubscriptionEntry): Promise<void> {
     const current = await this.#registry.get(create(SubscriptionIdSchema, { value: id }));
     if (current?.phase !== "active" || !sameEntry(current, expected) || this.#closing) return;
-    const identity = entryIdentity(current);
-    if (sameBytes(this.#attachments.get(id)?.identity, identity)) return;
-    this.#detach(id);
+    const attached = this.#attachments.get(id);
+    if (attached !== undefined && sameEntry(attached.entry, current)) return;
+    if (attached !== undefined) this.#retireAttached(id, current);
     const state = standAccess.observedState(
       this.#domainStand,
       current.subscription.topic?.target?.type,
@@ -408,7 +473,8 @@ export class SubscriptionRuntime {
               this.#notify(id, update);
             },
           );
-    if (attachment !== undefined) this.#attachments.set(id, { identity, subscription: attachment });
+    if (attachment !== undefined)
+      this.#attachments.set(id, { entry: current, subscription: attachment });
   }
 
   static async #closePart(work: () => Promise<void>, errors: unknown[]): Promise<void> {
@@ -425,9 +491,15 @@ export class SubscriptionRuntime {
 
   #notify(id: string, update: SubscriptionUpdate): void {
     for (const consumer of [...(this.#consumers.get(id) ?? [])]) {
+      const attached = this.#attachments.get(id);
+      if (
+        consumer.expected !== undefined &&
+        (attached === undefined || !sameEntry(consumer.expected, attached.entry))
+      )
+        continue;
       const logger = subscriptionRuntimeLoggers.get(this);
       try {
-        const invoke: (next: SubscriptionUpdate) => unknown = consumer;
+        const invoke: (next: SubscriptionUpdate) => unknown = consumer.onUpdate;
         const outcome = invoke(update);
         if (SubscriptionRuntime.#isPromiseLike(outcome)) {
           // spine-log-boundary: server.subscription_consumer_async_delivery
@@ -509,6 +581,13 @@ export const subscriptionRuntimeAccess: SubscriptionRuntimeAccess = Object.freez
   },
 });
 
+interface RuntimeConsumer {
+  readonly onUpdate: (update: SubscriptionUpdate) => void;
+  readonly onInvalidated?: () => void;
+  readonly expected?: StandSubscriptionEntry;
+  attaching: boolean;
+}
+
 function entryIdentity(entry: StandSubscriptionEntry): Uint8Array {
   const subscription = toBinary(SubscriptionSchema, entry.subscription);
   const createdAt = new Uint8Array(8);
@@ -523,6 +602,7 @@ function sameEntry(left: StandSubscriptionEntry, right: StandSubscriptionEntry):
   return (
     left.phase === right.phase &&
     left.createdAt === right.createdAt &&
+    ReaderIdentities.same(left.reader, right.reader) &&
     sameBytes(entryIdentity(left), entryIdentity(right))
   );
 }

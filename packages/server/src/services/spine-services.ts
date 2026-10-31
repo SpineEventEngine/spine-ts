@@ -19,6 +19,7 @@ import { Code, ConnectError, type ConnectRouter, type HandlerContext } from "@co
 import {
   clone,
   create,
+  equals,
   toBinary,
   ScalarType,
   type DescField,
@@ -27,6 +28,7 @@ import {
 import type { ReaderProofVerifier } from "@spine-event-engine/core/spi/reader-forwarding";
 import {
   ReaderIdentities,
+  snapshotTrustedReader,
   type ReaderIdentity,
   type TrustedReaderContext,
 } from "@spine-event-engine/core/spi/trusted-reader";
@@ -116,8 +118,15 @@ import { TrustedReaderIngress, type DirectReaderAuthenticator } from "./trusted-
 import { RegisteredTargets } from "./registered-targets.js";
 import { emitServerError, emitServerWarning } from "../server/server-log.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
-import { type StandSubscriptionRegistry } from "../stand/subscription-registry.js";
+import {
+  type StandSubscriptionEntry,
+  type StandSubscriptionRegistry,
+} from "../stand/subscription-registry.js";
 import { ReadSideFilterEngine } from "../stand/read-side-filter-engine.js";
+import {
+  SubscriptionReadFilters,
+  type SubscriptionReadWork,
+} from "../stand/subscription-read-filters.js";
 import type { ReadSideContext } from "../stand/read-side-filter.js";
 
 const serviceLoggers = new WeakMap<SpineServices, ILogLayer>();
@@ -451,13 +460,15 @@ export class SpineServices {
     subscription: Subscription,
     context?: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
+    const captured = clone(SubscriptionSchema, subscription);
+    const signal = context?.signal;
     const reader = await this.#admit(
       "spine.client.SubscriptionService",
       "Activate",
-      toBinary(SubscriptionSchema, subscription),
+      toBinary(SubscriptionSchema, captured),
       context,
     );
-    yield* this.#activate(subscription, ReaderIdentities.from(reader));
+    yield* this.#activate(captured, snapshotTrustedReader(reader), signal);
   }
 
   /**
@@ -773,7 +784,8 @@ export class SpineServices {
    * @returns The update stream after admission.
    */ async *#activate(
     subscription: Subscription,
-    reader: ReaderIdentity,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
   ): AsyncIterable<SubscriptionUpdate> {
     ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
     ReadRequestStatus.checkLifecycleCriterion(subscription);
@@ -782,26 +794,88 @@ export class SpineServices {
       return;
     }
 
-    const record = await this.#activationRecord(id, reader);
+    const record = await this.#activationRecord(id, ReaderIdentities.from(reader), signal);
     if (record === undefined) return;
+    yield* this.#streamSubscription(record, reader);
+  }
 
+  /**
+   * Delivers one activation in source order while honoring its cancellation.
+   *
+   * @param record Attached subscription and existing admission queue.
+   * @param reader Verified facts of this activation.
+   * @returns ACK followed by surviving filtered data updates.
+   */
+  async *#streamSubscription(
+    record: SubscriptionRecord,
+    reader: TrustedReaderContext,
+  ): AsyncIterable<SubscriptionUpdate> {
     try {
+      const facts = SpineServices.#subscriptionFacts(record, reader);
+      if (record.delivery.closed) return;
       yield create(SubscriptionUpdateSchema, {
         subscription: clone(SubscriptionSchema, record.subscription),
         response: ServiceValues.okResponse(),
       });
       for (;;) {
-        const update = await record.delivery.next();
-        if (update === undefined) {
-          return;
+        const work = await record.delivery.next();
+        if (work === undefined) return;
+        const update = await record.delivery.settle(this.#filteredSubscription(work, facts));
+        if (update === undefined) return;
+        if (update !== null) {
+          if (record.delivery.signal.aborted) return;
+          yield update;
         }
-        yield update;
       }
+    } catch (error) {
+      record.delivery.close();
+      throw ReadRequestStatus.technical(error, "Subscription filtering failed.");
     } finally {
-      if (!record.delivery.closed) {
-        await this.#removeSubscription(id);
+      if (this.#subscriptions.get(record.id) === record) {
+        if (record.delivery.closed) this.#removeDetachedSubscription(record.id);
+        else await this.#removeSubscription(record.id);
       }
     }
+  }
+
+  /**
+   * Captures the original Topic and authenticated activation facts for policy code.
+   *
+   * @param record Current source route and canonical subscription.
+   * @param reader Verified facts of this activation.
+   * @returns Subscription operation context with a live cancellation signal.
+   */
+  static #subscriptionFacts(
+    record: SubscriptionRecord,
+    reader: TrustedReaderContext,
+  ): ReadSideContext {
+    const topic = record.subscription.topic;
+    if (topic === undefined) throw new TypeError("Activated subscription Topic is missing.");
+    return {
+      operation: { kind: "subscription", subscription: record.subscription, topic },
+      ...(topic.context === undefined ? {} : { actorContext: topic.context }),
+      ...(record.tenantId === undefined ? {} : { effectiveTenant: record.tenantId }),
+      producingContext: record.route.context,
+      ...reader,
+      signal: record.delivery.signal,
+    };
+  }
+
+  /**
+   * Applies the producing BC policy before this Server's final policy.
+   *
+   * @param work Queued matched update and lazy BC capability.
+   * @param facts Trusted activation and original Topic facts.
+   * @returns Surviving update or null for an empty domain-data batch.
+   */
+  async #filteredSubscription(
+    work: SubscriptionReadWork,
+    facts: ReadSideContext,
+  ): Promise<SubscriptionUpdate | null> {
+    const source = await work.filter(facts);
+    return source === null
+      ? null
+      : SubscriptionReadFilters.apply(source, serviceReadFilters.get(this), facts);
   }
 
   /**
@@ -814,10 +888,11 @@ export class SpineServices {
   async #activationRecord(
     id: string,
     reader: ReaderIdentity,
+    signal?: AbortSignal,
   ): Promise<SubscriptionRecord | undefined> {
     let attached: SubscriptionRecord | undefined;
     await this.#serializeActivation(id, async () => {
-      attached = await this.#startActivationRecord(id, reader);
+      attached = await this.#startActivationRecord(id, reader, signal);
     });
     return attached;
   }
@@ -832,13 +907,14 @@ export class SpineServices {
   async #startActivationRecord(
     id: string,
     reader: ReaderIdentity,
+    signal?: AbortSignal,
   ): Promise<SubscriptionRecord | undefined> {
     const record = this.#subscriptions.get(id) ?? (await this.#findSubscription(id));
     if (record === undefined) throw ReadRequestStatus.unknownSubscription();
     if (!ReaderIdentities.matches(record.reader, reader)) throw this.#readerDenied();
     let attached: SubscriptionRecord | undefined;
     await this.#requireSubscriptionTenant(record, async () => {
-      attached = await this.#activateKnownRecord(record, id, reader);
+      attached = await this.#activateKnownRecord(record, id, reader, signal);
     });
     return attached;
   }
@@ -855,20 +931,25 @@ export class SpineServices {
     record: SubscriptionRecord,
     id: string,
     reader: ReaderIdentity,
+    signal?: AbortSignal,
   ): Promise<SubscriptionRecord | undefined> {
     if (record.delivery.active) return undefined;
     const activation = await boundedContextAccess
       .subscriptionRegistry(record.route.context)
       .activate(create(SubscriptionIdSchema, { value: id }), reader);
     if (activation.kind === "denied") throw this.#readerDenied();
-    if (activation.kind === "missing" || activation.kind === "expired")
+    if (!("entry" in activation)) throw ReadRequestStatus.unknownSubscription();
+    if (!equals(SubscriptionSchema, record.subscription, activation.entry.subscription))
       throw ReadRequestStatus.unknownSubscription();
     if (record.delivery.closed) return undefined;
     try {
       this.#subscriptions.set(id, record);
-      await this.#activateRecord(record);
+      record.delivery.track(signal);
+      await this.#activateRecord(record, activation.entry);
+      await this.#checkAttachedRecord(record, id, reader, signal);
       return record;
     } catch (error) {
+      if (record.delivery.invalidated) throw error;
       try {
         await this.#removeSubscription(id);
       } catch (cleanupError) {
@@ -879,6 +960,28 @@ export class SpineServices {
       }
       throw error;
     }
+  }
+
+  /**
+   * Rejects an entry removed or replaced before its first activation ACK.
+   * @param record Attached delivery that may have been invalidated.
+   * @param id Canonical subscription ID.
+   * @param reader Reader admitted by the earlier activation.
+   * @param signal Transport cancellation, which ends the stream normally.
+   */
+  async #checkAttachedRecord(
+    record: SubscriptionRecord,
+    id: string,
+    reader: ReaderIdentity,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (!record.delivery.invalidated || signal?.aborted === true) return;
+    const current = await boundedContextAccess
+      .subscriptionRegistry(record.route.context)
+      .get(create(SubscriptionIdSchema, { value: id }));
+    if (current !== undefined && !ReaderIdentities.matches(current.reader, reader))
+      throw this.#readerDenied();
+    throw ReadRequestStatus.unknownSubscription();
   }
 
   /**
@@ -994,14 +1097,23 @@ export class SpineServices {
    *
    * @param record The durable subscription record.
    * @returns Completion after the operation settles.
-   */ async #activateRecord(record: SubscriptionRecord): Promise<void> {
+   * @param expected Exact entry activated for this reader.
+   */ async #activateRecord(
+    record: SubscriptionRecord,
+    expected: StandSubscriptionEntry,
+  ): Promise<void> {
     const consumer = await boundedContextAccess.consumeSubscription(
       record.route.context,
       record.id,
-      (update) => {
-        record.delivery.push(update);
+      (work) => {
+        record.delivery.push(work);
         if (record.delivery.closed) this.#removeDetachedSubscription(record.id);
       },
+      () => {
+        if (this.#subscriptions.get(record.id) === record) this.#subscriptions.delete(record.id);
+        record.delivery.invalidate();
+      },
+      expected,
     );
     record.delivery.attach(consumer);
     managedChildSubscriptionAccess.installed(record.id);
@@ -1335,15 +1447,23 @@ type SubscriptionShape =
  * Buffers subscription updates and wakes active stream readers.
  */
 class SubscriptionDelivery {
-  readonly #queue: SubscriptionUpdate[] = [];
+  readonly #queue: SubscriptionReadWork[] = [];
 
-  readonly #waiters: ((update: SubscriptionUpdate | undefined) => void)[] = [];
+  readonly #waiters: ((update: SubscriptionReadWork | undefined) => void)[] = [];
+
+  readonly #controller = new AbortController();
 
   readonly #queueLimit: number;
+
+  #activationSignal: AbortSignal | undefined;
+
+  #onActivationAbort: (() => void) | undefined;
 
   #subscription: SubscriptionAttachment | undefined;
 
   #closed = false;
+
+  #invalidated = false;
 
   /**
    * Sets the bounded update queue capacity.
@@ -1373,6 +1493,77 @@ class SubscriptionDelivery {
   }
 
   /**
+   * Returns source invalidation separately from transport cancellation before the first ACK.
+   * @returns Whether the admitted canonical entry changed or disappeared.
+   */
+  get invalidated(): boolean {
+    return this.#invalidated;
+  }
+
+  /**
+   * Closes this delivery after the admitted source entry changes.
+   */
+  invalidate(): void {
+    if (this.#closed) return;
+    this.#invalidated = true;
+    this.close();
+  }
+
+  /**
+   * Returns a cancellation signal for active policy when this consumer is removed.
+   *
+   * @returns Cancellation signal for the current activation.
+   */
+  get signal(): AbortSignal {
+    return this.#controller.signal;
+  }
+
+  /**
+   * Registers transport cancellation before the source attachment awaits.
+   *
+   * @param signal Cancellation of the admitted activation, when available.
+   */
+  track(signal?: AbortSignal): void {
+    if (signal === undefined) return;
+    if (signal.aborted) {
+      this.close();
+      return;
+    }
+    this.#activationSignal = signal;
+    this.#onActivationAbort = () => {
+      this.close();
+    };
+    signal.addEventListener("abort", this.#onActivationAbort, { once: true });
+  }
+
+  /**
+   * Stops waiting on one policy call when this activation closes.
+   *
+   * @param work The policy result; a late rejection remains observed by the race.
+   * @returns The result, or undefined after cancellation.
+   */
+  async settle(
+    work: Promise<SubscriptionUpdate | null>,
+  ): Promise<SubscriptionUpdate | null | undefined> {
+    if (this.#closed) {
+      void work.catch(() => undefined);
+      return undefined;
+    }
+    let onAbort: (() => void) | undefined;
+    const closed = new Promise<undefined>((resolve) => {
+      onAbort = () => {
+        resolve(undefined);
+      };
+      this.#controller.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    try {
+      return await Promise.race([work, closed]);
+    } finally {
+      if (onAbort !== undefined) this.#controller.signal.removeEventListener("abort", onAbort);
+    }
+  }
+
+  /**
    * Attaches a source subscription or immediately removes it after close.
    *
    * @param subscription Source attachment to track.
@@ -1391,7 +1582,7 @@ class SubscriptionDelivery {
    *
    * @param update State or Event update to deliver.
    */
-  push(update: SubscriptionUpdate): void {
+  push(update: SubscriptionReadWork): void {
     if (this.#closed) {
       return;
     }
@@ -1413,7 +1604,7 @@ class SubscriptionDelivery {
    *
    * @returns Next update, or `undefined` after closure.
    */
-  next(): Promise<SubscriptionUpdate | undefined> {
+  next(): Promise<SubscriptionReadWork | undefined> {
     const update = this.#queue.shift();
     if (update !== undefined || this.#closed) {
       return Promise.resolve(update);
@@ -1431,6 +1622,9 @@ class SubscriptionDelivery {
     }
 
     this.#closed = true;
+    this.#controller.abort();
+    if (this.#activationSignal !== undefined && this.#onActivationAbort !== undefined)
+      this.#activationSignal.removeEventListener("abort", this.#onActivationAbort);
     this.#queue.length = 0;
     this.#subscription?.unsubscribe();
     this.#subscription = undefined;

@@ -13,6 +13,7 @@
  */
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -489,6 +490,7 @@ function createActorContext() {
   return create(ActorContextSchema, {
     actor: create(UserIdSchema, { value: "native-user" }),
     tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
+    timestamp: create(TimestampSchema, { seconds: 1n }),
   });
 }
 

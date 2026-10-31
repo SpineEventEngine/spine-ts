@@ -6,7 +6,8 @@ unknown-subscription activation, and passive local metadata migration are
 implemented, including dependency discovery, App Query generation, trusted reader
 forwarding, retained subscription reader binding, Server App Query execution,
 typed clients, Execute transport support, and filter installation on outward
-Entity/App Query reads and retained histories. Remaining work follows below.
+Entity/App Query reads, retained histories, and native Entity/Event subscription
+deliveries. Remaining work follows below.
 
 Each slice includes focused behavior tests, affected generated/build checks,
 format/lint/TSDoc checks, coverage inspection and the relevant existing review
@@ -15,40 +16,34 @@ one review wave before returning a correction batch. Keep detailed evidence
 outside Git. Run the unchanged full release profile and final security review
 after integration converges; a slice checkpoint does not complete this task.
 
-## M13 — Filter Entity and Event subscription deliveries
+## M13 — Complete direct Stand subscription filtering
 
 **Depends on:** M04, M08, M11–M12. **Class:** high-risk concurrency/lifecycle.
-**Paths:** `stand/{stand,subscription-runtime,subscription-observer}.ts`,
-`services/spine-services.ts`, managed-child/coordinator/browser delivery seams,
-and native/client/BC subscription tests.
+**Paths:** direct Stand subscription delivery and its repository notification
+callers, affected declaration/behavior tests and migration documentation.
 
-Evaluate original Topic matching first, BC filters next, Server filters at
-gRPC output. Preserve original Entity ID/version independently of mutable
-state; root null emits existing `no_longer_matching`, and prior removal notices
-pass through. Filter Event domain payloads as roots, repack into the original
-envelope, retain ID/delivery metadata, suppress only that consumer's null
-Events, and omit all-removed data batches without losing control signals.
-Preserve each grouped Event child's BC/context. Admit original matched RPC
-updates to the existing native queue before asynchronous filtering, then process
-BC and Server filters in order. Cancellation prevents later delivery, and filter
-errors terminate the affected stream without failing the producing write.
+Native RPC subscriptions now admit original matched updates to their existing
+queue before BC and Server filtering. Entity null uses the original ID in
+`no_longer_matching`; Event null suppresses only that consumer's payload, with
+surviving envelopes and control messages preserved. Activation carries the
+verified reader and actual subscription/Bounded Context. Cancellation, source
+replacement/removal, overflow and policy faults invalidate pending delivery.
 
 Direct Stand subscriptions have no existing delivery queue or removal/error
 contract. Their asynchronous admission policy needs a human decision under the
 repository's prohibition on new artificial limits. The proposed per-consumer
 queue of 100 waiting updates plus one active update is not approved. The
 alternative changes producer completion and backpressure. Do not introduce the
-new capacity without approval; RPC integration can proceed independently.
+new capacity without approval. Other independent work can continue.
 
-**Acceptance/tests:** two consumers with fresh distinct Topics receive isolated
-views; ID edits still remove original identity; nested edits deliver state;
-stored/dispatched Events remain original; BC+Server order and each boundary's
-single application hold. Slow async filters preserve order and bounded work;
-cancel races stop delivery; errors never reveal unfiltered values. Re-run
-unknown activation recovery: Entity authoritative results are filtered and
-Events report gaps without invented replay. Test native/browser/fan-out paths
-and control acknowledgements. Gate subscription and recovery suites plus
-API/style/reliability review.
+After that decision, provide filtered state/removal delivery with original
+identity/version/tenant, separately filtered previous state, a terminal error
+channel and cancellation. Keep raw repository notifications private. Filters
+apply to outward data, without changing persistence or domain Event dispatch.
+Test independent consumers, FIFO processing, cancellation and late settlements,
+first-update removal, previous-state suppression, fault isolation and the chosen
+admission policy. Update affected examples and direct subscription migration
+instructions. Complete API/style/reliability review of this remaining contract.
 
 ## M14 — Consumer examples, migration, and release readiness
 

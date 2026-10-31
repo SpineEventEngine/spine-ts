@@ -230,7 +230,12 @@ describe("SubscriptionRuntime", () => {
       await bus.post(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "race-delivery" }),
-          context: create(EventContextSchema),
+          context: create(EventContextSchema, {
+            producerId: AnyPacker.pack(
+              TaskListIdSchema,
+              create(TaskListIdSchema, { value: "race-list" }),
+            ),
+          }),
           message: AnyPacker.pack(
             TaskCreatedSchema,
             create(TaskCreatedSchema, {
@@ -250,6 +255,61 @@ describe("SubscriptionRuntime", () => {
       await stand.close();
     }
   });
+
+  it.each(["replaced", "deleted"] as const)(
+    "invalidates an admitted reader when its definition is %s during attachment",
+    async (change) => {
+      const storageFactory = new InMemoryStorageFactory();
+      const stand = new Stand({
+        context: { name: "ReaderReplacement", multitenant: false },
+        storageFactory,
+      });
+      const bus = new EventBus(
+        new EventStore({ name: "ReaderReplacement", multitenant: false }, storageFactory),
+      );
+      const registry = new GatedCleanupRegistry();
+      const id = create(SubscriptionIdSchema, { value: "reader-replacement" });
+      const subscription = create(SubscriptionSchema, {
+        id,
+        topic: create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "reader-topic" }),
+          target: create(TargetSchema, {
+            type: TypeUrls.derive(TaskCreatedSchema),
+            criterion: { case: "includeAll", value: true },
+          }),
+        }),
+      });
+      const firstReader = { kind: "principal" as const, id: "reader-one" };
+      const nextReader = { kind: "principal" as const, id: "reader-two" };
+      await registry.create(subscription, firstReader);
+      const activated = await registry.activate(id, firstReader);
+      if (activated.kind !== "activated") throw new Error("Expected active first reader.");
+      const runtime = new SubscriptionRuntime(stand, stand, bus, bus, registry);
+      const invalidated = vi.fn();
+      try {
+        await runtime.start();
+        const consuming = runtime.consume(id.value, vi.fn(), invalidated, activated.entry);
+        await registry.cleanupStarted;
+        await registry.delete(id, firstReader);
+        if (change === "replaced") {
+          await registry.create(subscription, nextReader);
+          await registry.activate(id, nextReader);
+        }
+        registry.releaseCleanup();
+        const consumer = await consuming;
+        expect(invalidated).toHaveBeenCalledOnce();
+        expect(consumer.closed).toBe(true);
+        if (change === "replaced") expect((await registry.get(id))?.reader).toEqual(nextReader);
+        else expect(await registry.get(id)).toBeUndefined();
+        consumer.unsubscribe();
+      } finally {
+        registry.releaseCleanup();
+        await runtime.close();
+        await bus.close();
+        await stand.close();
+      }
+    },
+  );
 
   it("keeps an active Event observer usable through a failed periodic pass", async () => {
     vi.useFakeTimers();
@@ -287,7 +347,12 @@ describe("SubscriptionRuntime", () => {
       await bus.post(
         create(EventSchema, {
           id: create(EventIdSchema, { value: "monitor-event-1" }),
-          context: create(EventContextSchema),
+          context: create(EventContextSchema, {
+            producerId: AnyPacker.pack(
+              TaskListIdSchema,
+              create(TaskListIdSchema, { value: "monitor-list" }),
+            ),
+          }),
           message: AnyPacker.pack(
             TaskCreatedSchema,
             create(TaskCreatedSchema, {

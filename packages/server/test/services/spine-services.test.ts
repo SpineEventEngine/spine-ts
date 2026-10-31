@@ -112,6 +112,7 @@ import {
   Repository,
   Server,
   SpineServices,
+  Stand,
   EntityHandlers,
   HandlerRegistryIngestor,
   InMemorySubscriptionRegistry,
@@ -127,6 +128,7 @@ import { TransitionValidationError } from "../../src/repository/command-errors.j
 import { spineServicesAccess } from "../../src/services/spine-services.js";
 import { ReadRequestStatus } from "../../src/services/read-request-status.js";
 import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
+import { ReadSideFilter, type ReadSideContext } from "../../src/stand/read-side-filter.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
 import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
@@ -148,6 +150,7 @@ import {
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 // prettier-ignore
 import {
+  type ProjectSubmissionCreated,
   ProjectSubmissionCreatedSchema,
 } from "../../test-fixtures/generated/repository-routing/project_validation_events_pb.js";
 import {
@@ -939,11 +942,9 @@ describe("SpineServices", () => {
   });
 
   it("reads all aggregate states through QueryService include-all queries", async () => {
-    const context = createFakeContext({
+    const { context, stand } = await createRoutedFakeContext({
       entityFamily: "aggregate",
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      readAllVersioned: () =>
-        Promise.resolve([{ state: createState("task-aggregate", "Aggregate") }]),
+      states: [{ state: createState("task-aggregate", "Aggregate") }],
     });
     const handlers = registeredQueryHandlers(context);
 
@@ -953,14 +954,13 @@ describe("SpineServices", () => {
     expect(
       AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-aggregate", "Aggregate"));
+    await stand.close();
   });
 
   it("reads all process-manager states through QueryService include-all queries", async () => {
-    const context = createFakeContext({
+    const { context, stand } = await createRoutedFakeContext({
       entityFamily: "process-manager",
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      readAllVersioned: () =>
-        Promise.resolve([{ state: createState("task-pm", "Process manager") }]),
+      states: [{ state: createState("task-pm", "Process manager") }],
     });
     const handlers = registeredQueryHandlers(context);
 
@@ -970,22 +970,17 @@ describe("SpineServices", () => {
     expect(
       AnyPacker.tryUnpack(response.message[0]?.state ?? packMissing(), ProjectOverviewStateSchema),
     ).toEqual(createState("task-pm", "Process manager"));
+    await stand.close();
   });
 
   it("accepts declared and system-column filters for aggregate and process-manager routes", async () => {
     const plans: unknown[] = [];
-    const handlers = (["aggregate", "process-manager"] as const).map((entityFamily) =>
-      registeredQueryHandlers(
-        createFakeContext({
-          entityFamily,
-          stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-          queryVersioned: (_schema, plan) => {
-            plans.push(plan);
-            return Promise.resolve([]);
-          },
-        }),
+    const routed = await Promise.all(
+      (["aggregate", "process-manager"] as const).map((entityFamily) =>
+        createRoutedFakeContext({ entityFamily, onQuery: (plan) => plans.push(plan) }),
       ),
     );
+    const handlers = routed.map(({ context }) => registeredQueryHandlers(context));
     const queries = [
       createColumnFilterQuery("name", packStringId("Entity")),
       createColumnFilterQuery(
@@ -1005,6 +1000,7 @@ describe("SpineServices", () => {
       true,
     );
     expect(plans).toHaveLength(6);
+    await Promise.all(routed.map(({ stand }) => stand.close()));
   });
 
   it("returns Spine error statuses for unsupported command and query targets", async () => {
@@ -1483,11 +1479,9 @@ describe("SpineServices", () => {
 
   it("adds the implicit storage query cap without requiring ordering", async () => {
     const observedQueries: NormalizedQueryPlan<unknown>[] = [];
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      queryVersioned: (_schema, query) => {
-        observedQueries.push(query as NormalizedQueryPlan<unknown>);
-        return Promise.resolve([]);
+    const { context, stand } = await createRoutedFakeContext({
+      onQuery: (query) => {
+        observedQueries.push(query);
       },
     });
     const handlers = registeredQueryHandlers(context);
@@ -1538,6 +1532,7 @@ describe("SpineServices", () => {
     expect(observedQueries.map((query) => query.candidateLimit)).toEqual([
       1_000, 1_000, 1_000, 1_000,
     ]);
+    await stand.close();
   });
 
   it("applies tenant filtering before the implicit storage query cap", async () => {
@@ -1962,11 +1957,9 @@ describe("SpineServices", () => {
 
   it("normalizes typed system-column predicates before provider access", async () => {
     const plans: unknown[] = [];
-    const context = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
-      queryVersioned: (_schema, plan) => {
+    const { context, stand } = await createRoutedFakeContext({
+      onQuery: (plan) => {
         plans.push(plan);
-        return Promise.resolve([]);
       },
     });
     const handlers = registeredQueryHandlers(context);
@@ -2003,6 +1996,7 @@ describe("SpineServices", () => {
       true,
     );
     expect(plans).toHaveLength(3);
+    await stand.close();
   });
 
   it("accepts an empty response format as a no-op", async () => {
@@ -2995,16 +2989,18 @@ describe("SpineServices", () => {
       stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: false,
     });
-    const multitenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
+    const { context: multitenant, stand } = await createRoutedFakeContext({
       isMultitenant: true,
       admittedTenants: [tenantDomain("tenant.example")],
-      readVersioned: (_schema, _id, options) => {
-        capturedTenantKeys.push(options.tenantId);
-        return Promise.resolve({
+      states: [
+        {
           state: createState("task-1", "Tenant Domain"),
-          version: create(VersionSchema, { number: 11 }),
-        });
+          tenantId: tenantDomain("tenant.example"),
+          version: 11,
+        },
+      ],
+      onQuery: (_plan, tenantId) => {
+        capturedTenantKeys.push(tenantId);
       },
     });
     const singleHandlers = registeredQueryHandlers(singleTenant);
@@ -3021,6 +3017,7 @@ describe("SpineServices", () => {
     expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
     expect(accepted.response?.status?.status.case).toBe("ok");
     expect(capturedTenantKeys).toEqual([tenantDomain("tenant.example")]);
+    await stand.close();
   });
 
   it("treats include-all query tenant domain and email variants as present", async () => {
@@ -3029,18 +3026,18 @@ describe("SpineServices", () => {
       stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
       isMultitenant: false,
     });
-    const multitenant = createFakeContext({
-      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
+    const { context: multitenant, stand } = await createRoutedFakeContext({
       isMultitenant: true,
       admittedTenants: [tenantDomain("tenant.example")],
-      readAllVersioned: (_schema, options) => {
-        capturedTenantKeys.push(options.tenantId);
-        return Promise.resolve([
-          {
-            state: createState("task-1", "Tenant Domain"),
-            version: create(VersionSchema, { number: 11 }),
-          },
-        ]);
+      states: [
+        {
+          state: createState("task-1", "Tenant Domain"),
+          tenantId: tenantDomain("tenant.example"),
+          version: 11,
+        },
+      ],
+      onQuery: (_plan, tenantId) => {
+        capturedTenantKeys.push(tenantId);
       },
     });
     const singleHandlers = registeredQueryHandlers(singleTenant);
@@ -3057,6 +3054,7 @@ describe("SpineServices", () => {
     expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
     expect(accepted.response?.status?.status.case).toBe("ok");
     expect(capturedTenantKeys).toEqual([tenantDomain("tenant.example")]);
+    await stand.close();
   });
 
   it("activates and cancels explicit subscriptions over a real gRPC transport", async () => {
@@ -3116,6 +3114,764 @@ describe("SpineServices", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it.each(["deleted", "replaced-reader"] as const)(
+    "rejects a definition %s before native attachment without acknowledging it",
+    async (change) => {
+      const registry = new InMemorySubscriptionRegistry();
+      const context = await BoundedContext.singleTenant("DeletedDuringAttachment")
+        .withSubscriptionRegistry(registry)
+        .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+        .build();
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createTopic());
+      const id = subscription.id;
+      if (id === undefined) throw new Error("Expected subscription ID.");
+      const entered = Promise.withResolvers<undefined>();
+      const release = Promise.withResolvers<undefined>();
+      const cleanup = registry.cleanup.bind(registry);
+      vi.spyOn(registry, "cleanup").mockImplementationOnce(async () => {
+        entered.resolve(undefined);
+        await release.promise;
+        return cleanup();
+      });
+      try {
+        const first = handlers.activate(subscription)[Symbol.asyncIterator]().next();
+        await entered.promise;
+        await registry.delete(id);
+        if (change === "replaced-reader") {
+          await registry.create(subscription, { kind: "principal", id: "replacement-reader" });
+          await registry.activate(id, { kind: "principal", id: "replacement-reader" });
+        }
+        release.resolve(undefined);
+        const failure = await first.then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(failure).toBeInstanceOf(ConnectError);
+        if (change === "deleted") {
+          expect((failure as ConnectError).code).toBe(Code.NotFound);
+          expect((failure as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+            type: "spine.client.SubscriptionValidationError",
+            code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+          });
+          expect(await registry.get(id)).toBeUndefined();
+        } else {
+          expect((failure as ConnectError).code).toBe(Code.PermissionDenied);
+          expect((await registry.get(id))?.reader).toEqual({
+            kind: "principal",
+            id: "replacement-reader",
+          });
+        }
+      } finally {
+        release.resolve(undefined);
+        await context.close();
+      }
+    },
+  );
+
+  it("rejects a changed Topic between lookup and activation without removing its successor", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("ChangedActivationTopic")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const id = subscription.id;
+    if (id === undefined || subscription.topic === undefined)
+      throw new Error("Expected canonical subscription.");
+    const successor = clone(SubscriptionSchema, subscription);
+    if (successor.topic === undefined) throw new Error("Expected successor Topic.");
+    successor.topic.id = create(TopicIdSchema, { value: "successor-topic" });
+    const activate = registry.activate.bind(registry);
+    vi.spyOn(registry, "activate").mockImplementationOnce(async (nextId, reader) => {
+      await registry.delete(nextId, reader);
+      await registry.create(successor, reader);
+      return activate(nextId, reader);
+    });
+    try {
+      const failure = await handlers
+        .activate(subscription)
+        [Symbol.asyncIterator]()
+        .next()
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      expect(failure).toBeInstanceOf(ConnectError);
+      expect((failure as ConnectError).code).toBe(Code.NotFound);
+      expect((failure as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+        type: "spine.client.SubscriptionValidationError",
+        code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+      });
+      expect((await registry.get(id))?.subscription.topic?.id?.value).toBe("successor-topic");
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("filters native Entity updates after Topic matching without changing stored state", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    const seen: ReadSideContext[] = [];
+    class PublicState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState, facts: ReadSideContext): ProjectOverviewState {
+        seen.push(facts);
+        state.name = "Visible";
+        return state;
+      }
+    }
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectOverviewStateSchema,
+    });
+    const context = await BoundedContext.singleTenant("FilteredNativeStates")
+      .add(repository)
+      .addReadSideFilter(new PublicState())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = nextBusinessUpdate(iterator, subscription);
+    await awaitSubscriptionAttachment(context, subscription);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("filtered-1", "Raw"),
+    );
+    const delivered = await next;
+    const visible = delivered.value as SubscriptionUpdate | undefined;
+    if (visible?.update.case !== "entityUpdates") throw new Error("Expected Entity delivery.");
+    const state = visible.update.value.update[0]?.kind;
+    if (state?.case !== "state") throw new Error("Expected Entity state.");
+    expect(AnyPacker.unpack(state.value, ProjectOverviewStateSchema).name).toBe("Visible");
+    expect(seen[0]?.operation.kind).toBe("subscription");
+    await iterator.return?.();
+    await context.close();
+  });
+
+  it("passes admitted reader, actor, Topic, and producing context to subscription policy", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    const seen: ReadSideContext[] = [];
+    class ReaderState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState, facts: ReadSideContext): ProjectOverviewState {
+        seen.push(facts);
+        return state;
+      }
+    }
+    const context = await BoundedContext.singleTenant("TrustedFilterFacts")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new ReaderState())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            principal: { id: "reader/alice" },
+            authorityFacts: { roles: ["reader"] },
+          }),
+        },
+      },
+    });
+    const peer = {
+      requestHeader: new Headers({ authorization: "local reader" }),
+    } as HandlerContext;
+    const subscription = await handlers.subscribe(createTopic(), peer);
+    const iterator = handlers.activate(subscription, peer)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const next = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("reader-1", "Visible"),
+    );
+    await withTimeout(next, "admitted reader update");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.principal?.id).toBe("reader/alice");
+    expect(seen[0]?.authorityFacts).toEqual({ roles: ["reader"] });
+    expect(seen[0]?.producingContext).toBe(context);
+    expect(seen[0]?.actorContext).toEqual(subscription.topic?.context);
+    expect(seen[0]?.operation).toMatchObject({
+      kind: "subscription",
+      subscription,
+      topic: subscription.topic,
+    });
+    await iterator.return?.();
+    await context.close();
+  });
+
+  it("lets a peer reader progress while another reader's policy waits", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    class ReaderPolicy extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(
+        state: ProjectOverviewState,
+        facts: ReadSideContext,
+      ): ProjectOverviewState | Promise<ProjectOverviewState> {
+        if (facts.principal?.id !== "reader/alice") return state;
+        enter();
+        return new Promise(() => undefined);
+      }
+    }
+    const context = await BoundedContext.singleTenant("IndependentPolicyReaders")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new ReaderPolicy())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: ({ headers }) => ({
+            principal: { id: headers instanceof Headers ? (headers.get("x-reader") ?? "") : "" },
+          }),
+        },
+      },
+    });
+    const alice = { requestHeader: new Headers({ "x-reader": "reader/alice" }) } as HandlerContext;
+    const bob = { requestHeader: new Headers({ "x-reader": "reader/bob" }) } as HandlerContext;
+    const aliceSubscription = await handlers.subscribe(createTopic(), alice);
+    const bobSubscription = await handlers.subscribe(createTopic(), bob);
+    const aliceIterator = handlers.activate(aliceSubscription, alice)[Symbol.asyncIterator]();
+    const bobIterator = handlers.activate(bobSubscription, bob)[Symbol.asyncIterator]();
+    await Promise.all([
+      expectActivationAcknowledgement(aliceIterator, aliceSubscription),
+      expectActivationAcknowledgement(bobIterator, bobSubscription),
+    ]);
+    const aliceNext = aliceIterator.next();
+    const bobNext = bobIterator.next();
+    await Promise.all([
+      awaitSubscriptionAttachment(context, aliceSubscription),
+      awaitSubscriptionAttachment(context, bobSubscription),
+    ]);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("peer-1", "First"),
+    );
+    await withTimeout(entered, "blocked reader policy");
+    expect(
+      unpackEntityState(
+        (await withTimeout(bobNext, "peer reader update")).value as SubscriptionUpdate | undefined,
+      ),
+    ).toEqual(createState("peer-1", "First"));
+    await handlers.cancel(aliceSubscription, alice);
+    await expect(withTimeout(aliceNext, "cancelled reader update")).resolves.toMatchObject({
+      done: true,
+    });
+    const bobLater = bobIterator.next();
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("peer-2", "Second"),
+    );
+    expect(
+      unpackEntityState(
+        (await withTimeout(bobLater, "later peer update")).value as SubscriptionUpdate | undefined,
+      ),
+    ).toEqual(createState("peer-2", "Second"));
+    await bobIterator.return?.();
+    await context.close();
+  });
+
+  it("applies BC then Server policy once to a native Entity subscription", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    const order: string[] = [];
+    class VisibleState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor(private readonly stage: string) {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState, facts: ReadSideContext): ProjectOverviewState {
+        expect(facts.operation.kind).toBe("subscription");
+        order.push(this.stage);
+        state.name += ` ${this.stage}`;
+        return state;
+      }
+    }
+    const context = await BoundedContext.singleTenant("NativeFilterOrder")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new VisibleState("BC"))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const running = await new Server({
+      contexts: [context],
+      readSideFilters: [new VisibleState("Server")],
+    }).start();
+    try {
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: running.baseUrl }),
+      );
+      const subscription = await client.subscribe(createTopic());
+      const iterator = client.activate(subscription)[Symbol.asyncIterator]();
+      await expectActivationAcknowledgement(iterator, subscription);
+      const next = iterator.next();
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("ordered-1", "Raw"),
+      );
+      const delivered = await next;
+      const visible = delivered.value as SubscriptionUpdate | undefined;
+      if (visible?.update.case !== "entityUpdates") throw new Error("Expected Entity update.");
+      const state = visible.update.value.update[0]?.kind;
+      if (state?.case !== "state") throw new Error("Expected visible state.");
+      expect(AnyPacker.unpack(state.value, ProjectOverviewStateSchema).name).toBe("Raw BC Server");
+      expect(order).toEqual(["BC", "Server"]);
+      await iterator.return?.();
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("reports the original Entity ID when policy removes the first matched state", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    class RemoveState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(): null {
+        return null;
+      }
+    }
+    const context = await BoundedContext.singleTenant("RemovedNativeState")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new RemoveState())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const next = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("removed-1", "Private"),
+    );
+    const delivered = await withTimeout(next, "removed Entity update");
+    const visible = delivered.value as SubscriptionUpdate | undefined;
+    expect(entityUpdateKind(visible)?.case).toBe("noLongerMatching");
+    expect(
+      AnyPacker.unpack(entityUpdateId(visible) ?? packMissing(), StringValueSchema).value,
+    ).toBe("removed-1");
+    await iterator.return?.();
+    await context.close();
+  });
+
+  it("filters Event payloads while retaining their original envelope and suppressing removed events", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    class VisibleEvent extends ReadSideFilter<typeof ProjectSubmissionCreatedSchema> {
+      constructor() {
+        super(ProjectSubmissionCreatedSchema);
+      }
+      filter(event: ProjectSubmissionCreated): ProjectSubmissionCreated | null {
+        if (event.name === "Hidden") return null;
+        event.name = "Visible";
+        return event;
+      }
+    }
+    const context = await BoundedContext.singleTenant("FilteredNativeEvents")
+      .addEventDispatcher(createDomainEventDispatcher(ProjectSubmissionCreatedSchema))
+      .addReadSideFilter(new VisibleEvent())
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(
+      createEventTopic(undefined, ProjectSubmissionCreatedSchema),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const next = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    const domainEvent = (id: string, name: string) =>
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: id }),
+        context: createEventContext("project-1"),
+        message: AnyPacker.pack(
+          ProjectSubmissionCreatedSchema,
+          create(ProjectSubmissionCreatedSchema, { id: "project-1", name }),
+        ),
+      });
+    await context.eventBus().post(domainEvent("hidden", "Hidden"));
+    await context.eventBus().post(domainEvent("visible", "Raw"));
+    const delivered = await withTimeout(next, "visible Event update");
+    const visible = delivered.value as SubscriptionUpdate | undefined;
+    if (visible?.update.case !== "eventUpdates") throw new Error("Expected Event update.");
+    const [event] = visible.update.value.event;
+    expect(event?.id?.value).toBe("visible");
+    expect(event?.context).toEqual(domainEvent("visible", "Raw").context);
+    expect(
+      AnyPacker.unpack(event?.message ?? packMissing(), ProjectSubmissionCreatedSchema).name,
+    ).toBe("Visible");
+    await iterator.return?.();
+    await context.close();
+  });
+
+  it("retires a filtered subscription after policy failure without exposing private error details", async () => {
+    class BrokenState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(): ProjectOverviewState {
+        throw new Error("private filter detail");
+      }
+    }
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("FilteredFault")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new BrokenState())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const next = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("fault-1", "Raw"),
+    );
+    await expect(next).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof ConnectError &&
+        error.code === Code.Internal &&
+        !error.message.includes("private filter detail"),
+    );
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    expect(await registry.get(subscription.id)).toBeUndefined();
+    await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
+    await context.close();
+  });
+
+  it("does not yield a settled update when transport cancels before generator continuation", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    const transport = new AbortController();
+    class CancelAfterSettle extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState, facts: ReadSideContext): ProjectOverviewState {
+        const signal = facts.signal;
+        if (signal === undefined) throw new Error("Expected active policy signal.");
+        const remove = signal.removeEventListener.bind(signal) as (
+          type: string,
+          listener: EventListenerOrEventListenerObject | null,
+          options?: EventListenerOptions | boolean,
+        ) => void;
+        Object.defineProperty(signal, "removeEventListener", {
+          configurable: true,
+          value: (
+            type: string,
+            listener: EventListenerOrEventListenerObject | null,
+            options?: EventListenerOptions | boolean,
+          ) => {
+            remove(type, listener, options);
+            transport.abort();
+          },
+        });
+        return state;
+      }
+    }
+    const context = await BoundedContext.singleTenant("CancelSettledUpdate")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new CancelAfterSettle())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers
+      .activate(subscription, {
+        requestHeader: new Headers(),
+        signal: transport.signal,
+      } as HandlerContext)
+      [Symbol.asyncIterator]();
+    try {
+      await expectActivationAcknowledgement(iterator, subscription);
+      const next = iterator.next();
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("cancel-after-settle", "Raw"),
+      );
+      await expect(next).resolves.toMatchObject({ done: true });
+      expect(transport.signal.aborted).toBe(true);
+    } finally {
+      await iterator.return?.();
+      await context.close();
+    }
+  });
+
+  it("cancels a blocked filter, discards its late failure, and removes the retained record", async () => {
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    let fail!: (reason: Error) => void;
+    const pending = new Promise<ProjectOverviewState>((_, reject) => {
+      fail = reject;
+    });
+    class BlockedState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(): Promise<ProjectOverviewState> {
+        enter();
+        return pending;
+      }
+    }
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("CancelledPolicy")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new BlockedState())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const next = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("blocked-1", "Raw"),
+    );
+    await withTimeout(entered, "policy entry");
+    await handlers.cancel(subscription);
+    await expect(withTimeout(next, "cancelled filtered stream")).resolves.toMatchObject({
+      done: true,
+    });
+    fail(new Error("late private failure"));
+    await Promise.resolve();
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    expect(await registry.get(subscription.id)).toBeUndefined();
+    await context.close();
+  });
+
+  it("keeps native queue admission bounded while an asynchronous filter is blocked", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const pending = new Promise<ProjectOverviewState>(() => undefined);
+    let filterSignal: AbortSignal | undefined;
+    class BlockedState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(_state: ProjectOverviewState, facts: ReadSideContext): Promise<ProjectOverviewState> {
+        filterSignal = facts.signal;
+        enter();
+        return pending;
+      }
+    }
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("BoundedFilteredQueue")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new BlockedState())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, { queueLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const next = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("queue-1", "First"),
+    );
+    await withTimeout(entered, "blocked queue policy");
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("queue-2", "Second"),
+    );
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("queue-3", "Third"),
+    );
+    await expect(withTimeout(next, "overflowed filtered stream")).resolves.toMatchObject({
+      done: true,
+    });
+    expect(filterSignal?.aborted).toBe(true);
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    expect(await registry.get(subscription.id)).toBeUndefined();
+    await context.close();
+  });
+
+  it("stops a blocked policy when its producing subscription runtime closes", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    let policySignal: AbortSignal | undefined;
+    class BlockedState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(_state: ProjectOverviewState, facts: ReadSideContext): Promise<ProjectOverviewState> {
+        policySignal = facts.signal;
+        enter();
+        return new Promise(() => undefined);
+      }
+    }
+    const context = await BoundedContext.singleTenant("RuntimeClosePolicy")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new BlockedState())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const next = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("closing-1", "Raw"),
+    );
+    await withTimeout(entered, "policy before context close");
+    await context.close();
+    await expect(withTimeout(next, "runtime-closed delivery")).resolves.toMatchObject({
+      done: true,
+    });
+    expect(policySignal?.aborted).toBe(true);
+  });
+
+  it("retires blocked delivery when a retained ID is replaced without deleting its successor", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    class BlockedState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(): Promise<ProjectOverviewState> {
+        enter();
+        return new Promise(() => undefined);
+      }
+    }
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("ReplacedPolicy")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new BlockedState())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const original = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(original)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, original);
+    const oldNext = iterator.next();
+    await awaitSubscriptionAttachment(context, original);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("replaced-1", "Raw"),
+    );
+    await withTimeout(entered, "old policy before replacement");
+    if (original.id === undefined) throw new Error("Expected subscription ID.");
+    const replacement = clone(SubscriptionSchema, original);
+    if (replacement.topic?.id === undefined) throw new Error("Expected Topic ID.");
+    replacement.topic.id.value = "replacement-topic";
+    await registry.delete(original.id);
+    await registry.create(replacement, { kind: "anonymous" });
+    await registry.activate(original.id, { kind: "anonymous" });
+    const reconciled = await boundedContextAccess.consumeSubscription(
+      context,
+      original.id.value,
+      () => undefined,
+    );
+    reconciled.unsubscribe();
+    await expect(withTimeout(oldNext, "replaced filtered stream")).resolves.toMatchObject({
+      done: true,
+    });
+    expect(await registry.get(original.id)).toMatchObject({ subscription: replacement });
+    const newIterator = handlers.activate(replacement)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(newIterator, replacement);
+    await newIterator.return?.();
+    await context.close();
+  });
+
+  it("retires an active delivery when registry reconciliation makes its entry pending", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    class BlockedState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(): Promise<ProjectOverviewState> {
+        enter();
+        return new Promise(() => undefined);
+      }
+    }
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("PendingPolicy")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addReadSideFilter(new BlockedState())
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const next = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    await postEntityStateChanged(
+      context,
+      ProjectOverviewStateSchema,
+      createState("pending-1", "Raw"),
+    );
+    await withTimeout(entered, "policy before pending reconciliation");
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    await registry.delete(subscription.id);
+    await registry.create(subscription, { kind: "anonymous" });
+    const reconciled = await boundedContextAccess.consumeSubscription(
+      context,
+      subscription.id.value,
+      () => undefined,
+    );
+    reconciled.unsubscribe();
+    await expect(withTimeout(next, "pending filtered stream")).resolves.toMatchObject({
+      done: true,
+    });
+    expect(await registry.get(subscription.id)).toMatchObject({ phase: "pending" });
+    await context.close();
   });
 
   it("stores the canonical subscription lifecycle in the context Stand registry", async () => {
@@ -5916,6 +6672,65 @@ function createFakeContext(options: {
         queryPlanVersioned: queryVersioned ?? (() => Promise.resolve([])),
       }),
   } as unknown as BoundedContext;
+}
+
+async function createRoutedFakeContext(options: {
+  readonly isMultitenant?: boolean;
+  readonly admittedTenants?: readonly TenantId[];
+  readonly entityFamily?: "aggregate" | "projection" | "process-manager";
+  readonly states?: readonly {
+    readonly state: ProjectOverviewState;
+    readonly tenantId?: TenantId;
+    readonly version?: number;
+  }[];
+  readonly onQuery?: (plan: NormalizedQueryPlan<unknown>, tenantId?: TenantId) => void;
+}): Promise<{ readonly context: BoundedContext; readonly stand: Stand }> {
+  const storage = new InMemoryStorageFactory();
+  const createStorage = storage.createEntityStorage.bind(storage);
+  vi.spyOn(storage, "createEntityStorage").mockImplementation((input) => {
+    const handle = createStorage(input) as { readonly current: object; close(): void };
+    const current = new Proxy(handle.current, {
+      get(target, key, receiver): unknown {
+        if (key !== "query") {
+          const value = Reflect.get(target, key, receiver) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        const query = Reflect.get(target, key) as (
+          plan: NormalizedQueryPlan<unknown>,
+        ) => Promise<unknown>;
+        return (plan: NormalizedQueryPlan<unknown>) => {
+          const context = (input as { context: { tenantId?: TenantId } }).context;
+          options.onQuery?.(plan, context.tenantId);
+          return query.call(target, plan);
+        };
+      },
+    });
+    return new Proxy(handle, {
+      get(target, key, receiver): unknown {
+        return key === "current" ? current : (Reflect.get(target, key, receiver) as unknown);
+      },
+    });
+  });
+  const stand = new Stand({
+    context: { name: "RoutedTestContext", multitenant: options.isMultitenant ?? false },
+    storageFactory: storage,
+  });
+  stand.register(ProjectOverviewStateSchema);
+  for (const entry of options.states ?? []) {
+    await stand.update(ProjectOverviewStateSchema, entry.state, {
+      ...(entry.tenantId === undefined ? {} : { tenantId: entry.tenantId }),
+      ...(entry.version === undefined
+        ? {}
+        : { version: create(VersionSchema, { number: entry.version }) }),
+    });
+  }
+  const fake = createFakeContext({
+    ...(options.isMultitenant === undefined ? {} : { isMultitenant: options.isMultitenant }),
+    ...(options.admittedTenants === undefined ? {} : { admittedTenants: options.admittedTenants }),
+    ...(options.entityFamily === undefined ? {} : { entityFamily: options.entityFamily }),
+    stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
+  });
+  return { context: Object.assign(fake, { stand: () => stand }), stand };
 }
 
 function createFakeQueryVersioned(options: {
