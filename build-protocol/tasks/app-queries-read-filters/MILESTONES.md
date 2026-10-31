@@ -14,33 +14,6 @@ one review wave before returning a correction batch. Keep detailed evidence
 outside Git. Run the unchanged full release profile and final security review
 after integration converges; a slice checkpoint does not complete this task.
 
-## M11 — Typed filter execution over detached message trees
-
-**Depends on:** M01, M08–M09. **Class:** high-risk new read-side contract.
-**Paths:** a small `packages/server/src/stand/read-side-filter.ts` (public base
-and context) plus an internal traversal module if warranted, server exports,
-and focused domain-fixture tests.
-
-Implement schema-typed `ReadSideFilter` and ReadSideContext. Index exact
-registered type URLs, including prefixes. Capture operation, actor/effective
-tenant, verified principal/authority facts, cancellation, producing BC when
-present, and parent/field information. Process matching filters in registration
-order, then deterministic children of the surviving replacement. Default is
-roots only; `{ nested: true }` traverses intermediates, lists/maps/oneofs, and
-registry-decoded Any. Each callback gets a detached mutable message and a
-detached read-only parent snapshot. Null removes that occurrence with the
-container-specific behavior from the proposal; it does not prune the parent.
-
-**Acceptance/tests:** root opt-in distinctions; parent-first replacement with
-new children; deterministic ordering; singular/list/map/oneof/Any removal;
-registered prefix preservation; isolation from source and retained returned
-objects across later filters and consumers; same-type enforcement; stack-safe
-traversal, cancellation, and cycles/unserializable replacement rejection; cancellation;
-unknown/undecodable nested Any errors when inspection is required. Never
-revalidate outgoing state constraints or fall back to unfiltered data. Gate
-focused filter tests, API/style/reliability review. Excludes storage mutation,
-field-mask policy, and automatic value-copy tracking.
-
 ## M12 — Filter read boundaries and retained history
 
 **Depends on:** M09–M11. **Class:** high-risk read/persistence separation.

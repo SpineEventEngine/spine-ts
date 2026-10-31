@@ -919,6 +919,17 @@ injection can bind the query function to a Server. Scoped Entity reads require
 query/full visibility and destination tenant membership. Direct calls do not
 cross the Server's gRPC output-filter boundary.
 
+`ReadSideFilter<typeof MessageSchema>` declares a typed policy for a registered
+Proto message. Its protected constructor takes the generated schema and optional
+`{ nested: true }`; `filter(message, context)` receives a detached mutable value
+and may return the same type or `null` to remove that occurrence. The context
+separates actor metadata from verified reader facts and identifies the current
+operation, plus a detached containing message and field for nested calls.
+Read-only packed bytes remain available to Buf decoding through a detached
+`value.slice()` passed to `fromBinary`.
+Registration on read-producing boundaries is not available yet, so declaring a
+filter alone does not change Server output.
+
 The repository `onCreate` callback can inject `(q, context) => server.query(q, context)`
 into a Process Manager or Agent. Within an active handler, pass a generated Q
 with `{ actorContext: this.currentActorContext }`; the actor/tenant snapshot

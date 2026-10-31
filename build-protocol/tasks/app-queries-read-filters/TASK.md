@@ -84,8 +84,11 @@ metadata discovery, App Query declarations and generation, trusted reader
 forwarding, subscription reader binding, and Server App Query execution are
 implemented, including typed browser/Node clients and Execute forwarding through
 gateways and Coordinators. Server accepts explicit App Query handlers and
-supports direct app-node Execute and typed internal calls. Filters and integrated
-release verification remain, as listed in MILESTONES.md.
+supports direct app-node Execute and typed internal calls. The typed filter
+engine is implemented with detached callback inputs, exact type matching, and
+nested-message traversal. Filter installation at read and
+subscription boundaries and integrated release verification remain, as listed
+in MILESTONES.md.
 
 The App Query preflight passed generated/source compatibility checks, builds,
 focused tests, documentation and independent review. Installed model and handler
@@ -97,3 +100,7 @@ review checks. Typed clients passed installed browser/Node consumer checks;
 Execute passed browser, native, Coordinator, and real managed-child checks,
 including trusted reader forwarding and invalid input. Full release coverage
 and final security review remain due after implementation.
+
+The filter engine passed focused root/nested traversal, container removal, byte
+isolation, deep traversal, and readonly-context checks. Independent review
+confirmed the corrections for shared bytes and unnecessary parent-tree copies.
