@@ -677,12 +677,21 @@ completed cycle. This is best-effort per-node convergence, not a
 cluster-completeness, replay, ordering, gap-repair, or exactly-once guarantee.
 
 The registry accepts only a generated `SubscriptionId` for activate, get, and
-delete. `create(subscription)` returns `{ kind: "created", entry }` or
+delete. `create(subscription, reader?)` returns `{ kind: "created", entry }` or
 `{ kind: "existing", entry }`; the latter requires byte-equivalent canonical
-content and a different definition with the same ID throws `StandConflictError`.
-`activate(id)` returns `activated`, `active`, `missing`, or `expired`.
-`delete(id)` returns `deleted` or `missing`. Blank IDs or topics and malformed
-durable records fail closed.
+content and the same reader binding. A different definition or binding with the
+same ID throws `StandConflictError`. `activate(id, reader?)` returns `activated`,
+`active`, `missing`, `expired`, or `denied`. `delete(id, reader?)` returns `deleted`,
+`missing`, or `denied`. Blank IDs or topics and malformed durable records fail closed.
+
+Service requests always supply the admitted principal ID or an explicit anonymous
+binding. When supplied, the registry checks the binding again after every failed
+compare-and-set, before changing a reread record. The omitted argument is for
+trusted internal lifecycle work; it is not a way to admit an unauthenticated RPC.
+Reader identity is stored atomically with the subscription definition and phase.
+Attributes, authority facts, and credentials are not part of the stored identity.
+A missing legacy binding is not anonymous and cannot be claimed by a caller;
+the client must create a new subscription.
 
 Entries and nested subscriptions returned by create, activate, get, and
 snapshot are clone-safe views. Protobuf byte arrays remain mutable runtime
@@ -994,6 +1003,48 @@ gRPC-Web transport message accepted by the public listener, so the effective
 inbound limit is the stricter applicable limit. `writeMaxBytes` limits public
 transport responses independently.
 
+### Native reader admission
+
+Configure app-node admission at `ServerOptions.services.readerAdmission`:
+
+- `direct.authenticate({ service, method, value, headers, peer })` authenticates
+  a direct native request. It returns verified `{ principal, authorityFacts }`,
+  an empty object for deliberate public access, or `undefined` to deny access.
+  The request value contains canonical Proto bytes; `peer` is the Connect
+  `HandlerContext` for that invocation.
+- `forwarded.verify(bytes, proof, peer)` verifies an assertion from a trusted
+  forwarding peer. It must authenticate that peer and validate the supplied
+  proof over the exact bytes. `BrowserServerOptions.forwardingProof.issue(bytes)`
+  supplies the corresponding gateway adapter.
+
+Admission completes before service validation, routing, or subscription mutation.
+Principal IDs and authority facts are copied per invocation. `principal.attributes`
+remains a string map; `authorityFacts` accepts finite JSON values, including
+arrays and nested objects. ActorContext remains separate from authentication.
+Neither the framework nor these ports promise live provider information.
+
+With no admission adapters, native requests remain public. Internal identity
+headers are still rejected without a configured verifier. With a forwarding
+verifier but no direct adapter, a request without a forwarding assertion is
+rejected as unauthenticated. An application that also permits public direct
+requests can explicitly return an empty reader from its direct adapter.
+Malformed assertions and denied authentication return `UNAUTHENTICATED`;
+unexpected adapter faults return sanitized `INTERNAL`. Explicit cancellation,
+availability, and permission statuses retain their meaning.
+
+`ManagedServerApplication` accepts `readerAdmission` for its Coordinator listener
+and `forwardingProof` for Coordinator-to-child requests. Configure the receiving
+child Servers with their verifier as well. Each hop verifies its incoming
+assertion and issues a new proof for the actual outgoing operation and payload.
+Loopback placement alone does not authenticate a forwarding peer.
+
+Authenticated forwarding now requires an issuer; configure both gateway and
+receiving node when updating an existing authenticated deployment. The native
+Server root still does not load the optional auth package. The forwarding ports
+do not make a JVM endpoint understand the TS internal reader assertion.
+
+### Browser hosting
+
 For `BrowserServer` from `@spine-event-engine/server/browser`, origins must be unique canonical HTTP(S) origins with no path, query,
 fragment, or trailing slash. Requests without an allowed exact `Origin` receive
 403 before RPC handling. Allowed responses include credentialed exact-origin
@@ -1056,7 +1107,11 @@ never returns private native data through public subscription responses.
 The durable registry preserves one approved `GatewayAuthenticatedSubscription`
 per public subscription through a process restart. It validates the record ID,
 full Subscription, and expiry before use. The trusted Actor and Tenant remain
-inside the stored Topic and are checked for Activate and Cancel. Create assigns
+inside the stored Topic; a stable principal ID is stored beside it. Activate and
+Cancel check the newly admitted reader and Actor/Tenant before stream effects
+or record mutation. Changed authority facts do not change the principal ID.
+An explicit anonymous binding remains distinct from missing legacy identity;
+records with missing identity cannot be claimed by a caller. Create assigns
 the public ID directly; no quota, reservation, fingerprint, or lease is
 persisted. Cleanup remains bounded and restart-safe at the record level. It
 cleans the backend definition before deleting its record. It is not a cleaner

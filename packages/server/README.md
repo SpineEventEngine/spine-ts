@@ -388,6 +388,21 @@ and backend forwarding. Authenticated durable bindings are browser-host
 infrastructure, not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 before exposing a backend to a browser.
 
+## Native reader admission
+
+Native authentication is configured through `ServerOptions.services.readerAdmission`.
+Use `direct` to authenticate native callers or `forwarded` to verify reader
+assertions from an authenticated gateway. For browser forwarding, supply the
+corresponding issuer as `BrowserServerOptions.forwardingProof`. Configure both
+ends; the backend does not trust an actor ID or incoming identity header by
+itself. With neither admission adapter configured, the native server remains
+public and supplies no authenticated principal or authority facts.
+
+Subscription activation and cancellation also check the admitted principal
+against the stored reader binding. A different principal cannot reuse a
+subscription even with the same ActorContext. See [native reader admission](REFERENCE.md#native-reader-admission)
+for adapter signatures, public admission, and managed application configuration.
+
 ## Limits
 
 This package does not create an identity provider, browser session store,

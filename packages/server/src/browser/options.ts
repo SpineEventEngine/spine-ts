@@ -21,6 +21,7 @@ import type {
   SubscriptionBindings,
 } from "@spine-event-engine/auth";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
+import type { ReaderProofIssuer } from "@spine-event-engine/core/spi/reader-forwarding";
 import type { NodeDiscovery } from "@spine-event-engine/deployment";
 
 /**
@@ -115,6 +116,11 @@ export interface BrowserServerCollaborators {
    * Maximum accepted request bytes; defaults to 4 MiB.
    */
   readonly readMaxBytes?: number;
+
+  /**
+   * Produces operation-bound reader assertions for the configured application node.
+   */
+  readonly forwardingProof?: ReaderProofIssuer;
 
   /**
    * Maximum emitted response or auth callback bytes; defaults to 4 MiB.

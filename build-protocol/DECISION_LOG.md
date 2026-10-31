@@ -7084,3 +7084,14 @@ Relocating the complete generated application and dependency closure preserves
 relative imports. Installing a different graph requires ordinary regeneration;
 published dependency metadata remains reusable by each consuming application's
 build. This is an internal build decision within the approved discovery contract.
+
+### Durable subscription reader binding (M08)
+
+Keep stable reader identity in the existing TS-maintained subscription record,
+using its single-record compare-and-set lifecycle. Explicit anonymous admission
+is different from missing identity in an older record. Check the expected reader
+on every mutation retry and before disturbing a live stream. Reconnect supplies
+current verified authority facts after stable-ID matching. The
+[reader-binding decision](tasks/app-queries-read-filters/READER_BINDING.md) gives
+the storage, compatibility and failure rules. No sidecar, new transaction API,
+or frozen JVM descriptor change is needed.

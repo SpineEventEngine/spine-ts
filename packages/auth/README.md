@@ -54,6 +54,32 @@ Events can refer to the exact Command that caused them. Those metadata fields
 are supplied by the caller; they are not proof of identity. Queries and
 subscription Topics receive the context supplied by the gateway resolver.
 
+## Pass verified reader information to the application node
+
+The gateway also forwards the admitted principal and the `authorityFacts`
+returned by `ContextResolver.resolve()`. These facts may contain JSON values,
+including role arrays, booleans, and nested objects. They are detached from the
+session and resolver result before forwarding. The framework does not copy the
+request credential into them or fetch fresh information from an identity provider.
+Your resolver decides which facts to supply on each request.
+
+For a browser gateway, supply the issuer through
+`BrowserServerOptions.forwardingProof`. When assembling a native gateway,
+configure `NativeSubscriptionCreator(transport, { issuer, maxBytes })`; a custom
+unary forwarder must produce the same operation-bound proof. See
+[Verified reader forwarding](REFERENCE.md#verified-reader-forwarding) for the forwarding adapters.
+
+In either setup, configure `ServerOptions.services.readerAdmission.forwarded`
+on the receiving application node. The issuer produces a proof for the service,
+method, request bytes, and reader facts. The verifier checks that proof and the
+forwarding peer. Both are replaceable application adapters. A header name, actor
+ID, or loopback connection does not establish a verified reader.
+
+Authenticated forwarding requires an issuer. Deliberate `publicAccess: true`
+forwards no principal or authority facts; the gateway's public admission marker
+does not become a user identity. See the [server reference](../server/REFERENCE.md#native-reader-admission)
+for direct native authentication and managed forwarding configuration.
+
 ## Browser and OIDC extensions
 
 The package does not provide HTTP routes, browser pages, users, permissions,

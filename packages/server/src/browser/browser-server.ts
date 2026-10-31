@@ -96,38 +96,177 @@ type BrowserHostOptions = BrowserServerOptions & {
 type BrowserServerTestOptions = BrowserServerOptions & Partial<BrowserHostOptions>;
 
 /**
+ * Carries fixed browser listener policy into its per-request router.
+ */
+interface BrowserRouteContext {
+  readonly options: BrowserHostOptions;
+  readonly origins: ReadonlySet<string>;
+  readonly authRoutes: ReadonlyMap<string, BrowserAuthRoute>;
+  readonly activeAuth: Set<AbortController>;
+  readonly maxActiveAuthRequests: number;
+  readonly draining: () => boolean;
+  readonly handler: (request: http.IncomingMessage, response: http.ServerResponse) => void;
+}
+
+/**
+ * Returns assembled gateway services to the browser listener.
+ */
+interface BrowserListenerInput extends Omit<BrowserRouteContext, "handler"> {
+  readonly unary: UnaryGateway;
+  readonly subscriptions: SubscriptionGateway;
+  readonly requests: ReturnType<typeof browserServerImplementation.requests>;
+}
+
+/**
+ * Carries the started gateway graph into listener publication and rollback.
+ */
+interface BrowserStartedInput {
+  readonly options: BrowserHostOptions;
+  readonly running: RunningServer | undefined;
+  readonly subscriptions: SubscriptionGateway;
+  readonly stopDiscovery: (() => Promise<void>) | undefined;
+  readonly dynamic: DynamicUnaryForwarder;
+  readonly activeAuth: Set<AbortController>;
+  readonly server: http.Server;
+  readonly onDrain: () => void;
+}
+
+/**
  * Runs the private native endpoint behind one admitted browser listener.
  *
  * Hosts browser-facing Spine gateway routes independently from native server assembly.
  */
 export const browserServerImplementation: Readonly<{
+  /**
+   * Starts a browser listener against the supplied native backend.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns The listening browser endpoint with coordinated native-backend cleanup.
+   */
   open(native: RunningServer, options: BrowserServerOptions): Promise<RunningServer>;
+
+  /**
+   * Starts a browser listener against the supplied native backend.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns The listening browser endpoint with coordinated native-backend cleanup.
+   */
   open(
     native: string | readonly string[] | undefined,
     options: StandaloneBrowserServerOptions,
   ): Promise<RunningServer>;
+
+  /**
+   * Starts the browser host and registers it for process-level shutdown.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns The running host registered with the process coordinator.
+   */
   run(options: StandaloneBrowserServerOptions): Promise<RunningServer>;
+
+  /**
+   * Starts the browser host and registers it for process-level shutdown.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns The running host registered with the process coordinator.
+   */
   run(native: Server, options: BrowserServerOptions): Promise<RunningServer>;
+
+  /**
+   * Builds credential extraction and transport-fact adapters for browser requests.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns Adapters that the gateway uses to admit each incoming request.
+   */
   requests(options: BrowserServerOptions): {
+    /**
+     * Reads a configured cookie credential or a Bearer authorization value.
+     *
+     * @param context Incoming request headers; these do not establish authenticated identity.
+     * @returns The extracted credential, an empty bearer value for rejected cookies, or no credential.
+     */
     credential(context: { readonly requestHeader: Headers }):
       | {
           readonly kind: "bearer" | "cookie";
           readonly value: string;
         }
       | undefined;
+
+    /**
+     * Captures browser request headers and origin for admission policy.
+     *
+     * @param context Incoming request headers; these do not establish authenticated identity.
+     * @returns Transport facts containing the browser origin and request headers.
+     */
     transport(context: { readonly requestHeader: Headers }): ReturnType<typeof TransportFacts.from>;
   };
+
+  /**
+   * Validates a nonempty set of unique canonical HTTP(S) origins.
+   *
+   * @param origins Canonical browser origins permitted to access the listener.
+   * @returns The validated origins for exact admission checks.
+   */
   origins(origins: readonly string[]): ReadonlySet<string>;
+
+  /**
+   * Rejects backend URLs containing paths, credentials, queries, or fragments.
+   *
+   * @param value The backend origin to validate.
+   * @returns The original canonical backend origin.
+   */
   backendUrl(value: string): string;
+
+  /**
+   * Validates a nonempty list of distinct native backend origins.
+   *
+   * @param values Native backend origins in routing order.
+   * @returns The validated backend origins in their configured order.
+   */
   backendUrls(values: readonly string[]): readonly string[];
+
+  /**
+   * Selects the node endpoint and its configured TLS server name.
+   *
+   * @param node The application node whose native transport is being configured.
+   * @returns Transport settings preserving the node's TLS server-name override.
+   */
   dynamicTransportOptions(node: ApplicationNode): {
     readonly baseUrl: string;
     readonly nodeOptions?: { readonly servername: string };
   };
+
+  /**
+   * Checks admission ports and production subscription-persistence requirements.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @param production Whether production persistence requirements must be enforced.
+   */
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
+
+  /**
+   * Validates authentication routes and rejects duplicate or reserved RPC paths.
+   *
+   * @param routes Optional HTTP authentication endpoints to validate and index.
+   * @returns Validated routes indexed by their exact HTTP path.
+   */
   authRoutes(
     routes: readonly BrowserAuthRoute[] | undefined,
   ): ReadonlyMap<string, BrowserAuthRoute>;
+
+  /**
+   * Executes an authentication route within its configured origin, size, and time bounds.
+   *
+   * @param request The incoming HTTP request.
+   * @param response The HTTP response to complete with the route outcome.
+   * @param route The matched authentication endpoint and its admission constraints.
+   * @param active Controllers tracked so shutdown can abort active authentication requests.
+   * @param writeMaxBytes The existing transport bound for the authentication response body.
+   * @returns Completion after the HTTP response and request cleanup settle.
+   */
   dispatchAuth(
     request: http.IncomingMessage,
     response: http.ServerResponse,
@@ -135,10 +274,41 @@ export const browserServerImplementation: Readonly<{
     active: Set<AbortController>,
     writeMaxBytes: number,
   ): Promise<void>;
+
+  /**
+   * Binds the HTTP listener and propagates startup errors.
+   *
+   * @param server The HTTP listener being started or stopped.
+   * @param host The interface address on which to bind the listener.
+   * @param port The requested listener port; zero requests an ephemeral port.
+   * @returns The actual bound address, including an allocated ephemeral port.
+   */
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
+
+  /**
+   * Stops accepting connections and drains the HTTP listener.
+   *
+   * @param server The HTTP listener being started or stopped.
+   * @returns Completion after the listener closes; rejects on a close error.
+   */
   closeListener(server: http.Server): Promise<void>;
+
+  /**
+   * Applies listener defaults and checks browser admission configuration before startup.
+   *
+   * @param mode Whether a native server is started locally or supplied as a separate backend.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns Normalized listener options after all preflight checks pass.
+   */
   preflight(mode: "combined" | "standalone", options: BrowserServerOptions): BrowserHostOptions;
 }> = Object.freeze({
+  /**
+   * Starts a browser listener against the supplied native backend.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param input Browser configuration to validate before opening the listener.
+   * @returns The listening browser endpoint with coordinated native-backend cleanup.
+   */
   async open(
     native: RunningServer | string | readonly string[] | undefined,
     input: BrowserServerOptions,
@@ -156,220 +326,16 @@ export const browserServerImplementation: Readonly<{
       );
       throw error;
     }
-    const origins = BrowserServer.origins(options.origins);
-    const authRoutes = BrowserServer.authRoutes(options.authRoutes);
-    const activeAuth = new Set<AbortController>();
-    const maxActiveAuthRequests = options.maxActiveAuthRequests ?? 64;
-    if (!Number.isSafeInteger(maxActiveAuthRequests) || maxActiveAuthRequests < 1)
-      throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
-    let draining = false;
-    const backendBaseUrls =
-      native === undefined
-        ? options.backend === undefined
-          ? []
-          : BrowserServer.backendUrls(BrowserServerValues.backendUrlsFor(options.backend))
-        : Array.isArray(native)
-          ? BrowserServer.backendUrls(native)
-          : [
-              typeof native === "string"
-                ? native
-                : BrowserServerValues.requiredRunning(running).baseUrl,
-            ];
-    const fixedNodes = backendBaseUrls.map(
-      (endpoint, index) => new ApplicationNode({ id: `fixed/${index.toString()}`, endpoint }),
-    );
-    let dynamic: DynamicUnaryForwarder | undefined;
-    let stopDiscovery: (() => Promise<void>) | undefined;
-    const forwarder = (dynamic = new DynamicUnaryForwarder({
-      create: async (node) => {
-        const manager =
-          options.dynamicManagerFactory?.(node) ??
-          new Http2SessionManager(
-            node.endpoint,
-            undefined,
-            node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
-          );
-        const client = new NativeSubscriptionCreator(
-          createGrpcTransport({
-            ...BrowserServer.dynamicTransportOptions(node),
-            sessionManager: manager,
-          }),
-        );
-        return {
-          forward: client.forward.bind(client),
-          subscribe: client.subscribe.bind(client),
-          activate: client.activate.bind(client),
-          cancel: client.cancel.bind(client),
-          dispose: client.dispose.bind(client),
-          close: async () => {
-            manager.abort();
-          },
-        };
-      },
-    }));
-    const creator = new DynamicSubscriptionCreator(dynamic);
-    const bindings =
-      options.bindings ??
-      new InMemorySubscriptionBindings({
-        nextId: () => globalThis.crypto.randomUUID(),
-        dispose: (definition, signal) => creator.cancel({ wire: definition }, signal),
-      });
-    const requests = BrowserServer.requests(options);
-    const admission =
-      options.publicAccess === true
-        ? ({ publicAccess: true } as const)
-        : ({ sessions: options.sessions } as const);
-    const unary = new UnaryGateway({
-      ...(options.registry === undefined ? {} : { registry: options.registry }),
-      maxRequestBytes: 1_048_576,
-      ...admission,
-      authorize: options.authorize,
-      contexts: options.contexts,
-      clock: options.clock,
-      forward: forwarder.forward.bind(forwarder),
-    });
-    const subscriptions = new SubscriptionGateway({
-      bindings,
-      ...admission,
-      authorize: options.authorize,
-      contexts: options.contexts,
-      clock: options.clock,
-      creator,
-    });
-    try {
-      if (options.discovery !== undefined)
-        stopDiscovery = await BrowserServerValues.watch(options.discovery, dynamic);
-      else await dynamic.reconcile(fixedNodes);
-      if (isDurableSubscriptionBindings(bindings))
-        attachDurableSubscriptionCleanup(bindings, (definition, signal) =>
-          creator.cancel({ wire: definition }, signal),
-        );
-      const durableBindings = bindings as SubscriptionBindings;
-      if (durableBindings.recoverActive !== undefined) {
-        const now = options.clock.now();
-        const nowMs =
-          Number(now.seconds.toString()) * 1_000 +
-          Math.floor(Number(now.nanos.toString()) / 1_000_000);
-        if (Number.isSafeInteger(nowMs))
-          await durableBindings.recoverActive({
-            nowMs,
-            onDefinition: async (
-              definition: import("@spine-event-engine/auth").PublicSubscriptionWire,
-              whenExpires: number,
-            ) => {
-              await creator.rehydrate(definition);
-              subscriptions.scheduleExpiry(whenExpires);
-            },
-          });
-      }
-    } catch (error) {
-      const failures = [error];
-      for (const cleanup of [
-        () => subscriptions.close(),
-        () => stopDiscovery?.(),
-        () => dynamic.close(),
-        () => running?.close(),
-      ])
-        try {
-          await cleanup();
-        } catch (cleanupError) {
-          failures.push(cleanupError);
-        }
-      if (failures.length === 1) throw error;
-      throw new AggregateError(failures, "Browser subscription recovery startup rollback failed.");
-    }
-    const services = createNativeGatewayServices({ unary, subscriptions, requests });
-    const handler = connectNodeAdapter({
-      routes: (router: ConnectRouter) => {
-        router.service(AuthenticationService, services.authentication);
-        router.service(CommandService, services.command);
-        router.service(QueryService, services.query);
-        router.service(SubscriptionService, services.subscription);
-      },
-      readMaxBytes: options.readMaxBytes,
-      writeMaxBytes: options.writeMaxBytes,
-    });
-    const server = http.createServer((request, response) => {
-      if (draining) {
-        response.statusCode = 503;
-        response.end();
-        return;
-      }
-      const path = request.url ?? "";
-      const auth = authRoutes.get(path);
-      if (auth !== undefined && request.method === auth.method) {
-        if (activeAuth.size >= maxActiveAuthRequests) {
-          response.statusCode = 503;
-          response.end();
-          return;
-        }
-        void BrowserServer.dispatchAuth(request, response, auth, activeAuth, options.writeMaxBytes);
-        return;
-      }
-      if (auth !== undefined) {
-        const origin = request.headers.origin;
-        if (request.method === "OPTIONS" && origin !== undefined && auth.origins.includes(origin)) {
-          response.setHeader("access-control-allow-origin", origin);
-          response.setHeader("access-control-allow-methods", `${auth.method},OPTIONS`);
-          response.statusCode = 204;
-        } else response.statusCode = request.method === "OPTIONS" ? 403 : 405;
-        response.end();
-        return;
-      }
-      const origin = request.headers.origin;
-      if (origin === undefined || !origins.has(origin)) {
-        response.statusCode = 403;
-        response.end();
-        return;
-      }
-      response.setHeader("access-control-allow-origin", origin);
-      response.setHeader("access-control-allow-credentials", "true");
-      response.setHeader("access-control-expose-headers", "grpc-status,grpc-message");
-      response.setHeader("vary", "Origin");
-      if (request.method === "OPTIONS") {
-        response.setHeader("access-control-allow-methods", "POST,OPTIONS");
-        response.setHeader(
-          "access-control-allow-headers",
-          "authorization,content-type,connect-protocol-version,x-csrf-token",
-        );
-        response.setHeader("access-control-max-age", "600");
-        response.statusCode = 204;
-        response.end();
-        return;
-      }
-      handler(request, response);
-    });
-    let address: AddressInfo;
-    try {
-      address = await BrowserServer.listen(server, options.host, options.port);
-    } catch (error) {
-      const cleanup = await Promise.allSettled([
-        subscriptions.close(),
-        stopDiscovery?.(),
-        dynamic.close(),
-        BrowserServer.closeListener(server),
-        running?.close(),
-      ]);
-      const failures = cleanup.flatMap((result) =>
-        result.status === "rejected" ? [result.reason] : [],
-      );
-      if (failures.length > 0)
-        throw new AggregateError([error, ...failures], "Server browser startup rollback failed.");
-      throw error;
-    }
-    return new RunningBrowserServer(
-      server,
-      running,
-      subscriptions,
-      address,
-      activeAuth,
-      () => {
-        draining = true;
-      },
-      stopDiscovery,
-      dynamic,
-    );
+    return BrowserServerValues.openWithOptions(native, running, options);
   },
+
+  /**
+   * Starts the browser host and registers it for process-level shutdown.
+   *
+   * @param nativeOrOptions The local Server to start, or options for a standalone browser gateway.
+   * @param suppliedOptions Browser configuration when a local Server is supplied separately.
+   * @returns The running host registered with the process coordinator.
+   */
   async run(
     nativeOrOptions: Server | BrowserServerOptions,
     suppliedOptions?: BrowserServerOptions,
@@ -392,6 +358,14 @@ export const browserServerImplementation: Readonly<{
       () => undefined,
     );
   },
+
+  /**
+   * Applies listener defaults and checks browser admission configuration before startup.
+   *
+   * @param mode Whether a native server is started locally or supplied as a separate backend.
+   * @param input Browser configuration to validate before opening the listener.
+   * @returns Normalized listener options after all preflight checks pass.
+   */
   preflight(mode, input): BrowserHostOptions {
     const options: BrowserHostOptions = {
       ...input,
@@ -418,6 +392,13 @@ export const browserServerImplementation: Readonly<{
       throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
     return options;
   },
+
+  /**
+   * Builds credential extraction and transport-fact adapters for browser requests.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns Adapters that the gateway uses to admit each incoming request.
+   */
   requests(options: BrowserServerOptions) {
     return {
       credential: (context: { readonly requestHeader: Headers }) => {
@@ -442,6 +423,13 @@ export const browserServerImplementation: Readonly<{
       },
     };
   },
+
+  /**
+   * Validates a nonempty set of unique canonical HTTP(S) origins.
+   *
+   * @param values Browser origins to validate and deduplicate.
+   * @returns The validated origins for exact admission checks.
+   */
   origins(values: readonly string[]): ReadonlySet<string> {
     const origins = new Set(
       values.map((value) => {
@@ -467,6 +455,13 @@ export const browserServerImplementation: Readonly<{
       throw new Error("Server browser origins must be unique and non-empty.");
     return origins;
   },
+
+  /**
+   * Rejects backend URLs containing paths, credentials, queries, or fragments.
+   *
+   * @param value The backend origin to validate.
+   * @returns The original canonical backend origin.
+   */
   backendUrl(value: string): string {
     let backend: URL;
     try {
@@ -487,6 +482,13 @@ export const browserServerImplementation: Readonly<{
     }
     return value;
   },
+
+  /**
+   * Validates a nonempty list of distinct native backend origins.
+   *
+   * @param values Native backend origins in routing order.
+   * @returns The validated backend origins in their configured order.
+   */
   backendUrls(values: readonly string[]): readonly string[] {
     if (values.length < 1)
       throw new Error("Server browser backends must contain at least one origin.");
@@ -495,6 +497,13 @@ export const browserServerImplementation: Readonly<{
       throw new Error("Server browser backends must be unique canonical HTTP(S) origins.");
     return urls;
   },
+
+  /**
+   * Selects the node endpoint and its configured TLS server name.
+   *
+   * @param node The application node whose native transport is being configured.
+   * @returns Transport settings preserving the node's TLS server-name override.
+   */
   dynamicTransportOptions(node: ApplicationNode) {
     return {
       baseUrl: node.endpoint,
@@ -503,6 +512,13 @@ export const browserServerImplementation: Readonly<{
         : { nodeOptions: { servername: node.tlsServerName } }),
     };
   },
+
+  /**
+   * Checks admission ports and production subscription-persistence requirements.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @param production Whether production persistence requirements must be enforced.
+   */
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
     const supplied = options as unknown as UncheckedBrowserAdmission;
     const standalone = options.backend !== undefined || options.discovery !== undefined;
@@ -549,6 +565,13 @@ export const browserServerImplementation: Readonly<{
         "Production standalone browser server requires named durable subscription bindings.",
       );
   },
+
+  /**
+   * Validates authentication routes and rejects duplicate or reserved RPC paths.
+   *
+   * @param routes Optional HTTP authentication endpoints to validate and index.
+   * @returns Validated routes indexed by their exact HTTP path.
+   */
   authRoutes(
     routes: readonly BrowserAuthRoute[] | undefined,
   ): ReadonlyMap<string, BrowserAuthRoute> {
@@ -584,6 +607,17 @@ export const browserServerImplementation: Readonly<{
     }
     return result;
   },
+
+  /**
+   * Executes an authentication route within its configured origin, size, and time bounds.
+   *
+   * @param request The incoming HTTP request.
+   * @param response The HTTP response to complete with the route outcome.
+   * @param route The matched authentication endpoint and its admission constraints.
+   * @param active Controllers tracked so shutdown can abort active authentication requests.
+   * @param writeMaxBytes The existing transport bound for the authentication response body.
+   * @returns Completion after the HTTP response and request cleanup settle.
+   */
   async dispatchAuth(
     request: http.IncomingMessage,
     response: http.ServerResponse,
@@ -698,6 +732,15 @@ export const browserServerImplementation: Readonly<{
       active.delete(controller);
     }
   },
+
+  /**
+   * Binds the HTTP listener and propagates startup errors.
+   *
+   * @param server The HTTP listener being started or stopped.
+   * @param host The interface address on which to bind the listener.
+   * @param port The requested listener port; zero requests an ephemeral port.
+   * @returns The actual bound address, including an allocated ephemeral port.
+   */
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo> {
     return new Promise((resolve, reject) => {
       const onError = (error: Error) => {
@@ -710,6 +753,13 @@ export const browserServerImplementation: Readonly<{
       });
     });
   },
+
+  /**
+   * Stops accepting connections and drains the HTTP listener.
+   *
+   * @param server The HTTP listener being started or stopped.
+   * @returns Completion after the listener closes; rejects on a close error.
+   */
   closeListener(server: http.Server): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!server.listening) {
@@ -738,19 +788,76 @@ type BrowserServerTestAccess = Omit<
   typeof browserServerImplementation,
   "open" | "run" | "requests" | "requireDurableBindings" | "preflight"
 > & {
+  /**
+   * Starts a browser listener against the supplied native backend.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns The listening browser endpoint with coordinated native-backend cleanup.
+   */
   open(
     native: RunningServer | string | readonly string[] | undefined,
     options: BrowserServerTestOptions,
   ): Promise<RunningServer>;
+
+  /**
+   * Starts the browser host and registers it for process-level shutdown.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns The running host registered with the process coordinator.
+   */
   run(options: BrowserServerTestOptions): Promise<RunningServer>;
+
+  /**
+   * Starts the browser host and registers it for process-level shutdown.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns The running host registered with the process coordinator.
+   */
   run(native: Server, options: BrowserServerTestOptions): Promise<RunningServer>;
+
+  /**
+   * Builds credential extraction and transport-fact adapters for browser requests.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns Adapters that the gateway uses to admit each incoming request.
+   */
   requests(options: BrowserServerTestOptions): {
+    /**
+     * Reads a configured cookie credential or a Bearer authorization value.
+     *
+     * @param context Incoming request headers; these do not establish authenticated identity.
+     * @returns The extracted credential, an empty bearer value for rejected cookies, or no credential.
+     */
     credential(context: {
       readonly requestHeader: Headers;
     }): { readonly kind: "bearer" | "cookie"; readonly value: string } | undefined;
+
+    /**
+     * Captures browser request headers and origin for admission policy.
+     *
+     * @param context Incoming request headers; these do not establish authenticated identity.
+     * @returns Transport facts containing the browser origin and request headers.
+     */
     transport(context: { readonly requestHeader: Headers }): ReturnType<typeof TransportFacts.from>;
   };
+
+  /**
+   * Checks admission ports and production subscription-persistence requirements.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @param production Whether production persistence requirements must be enforced.
+   */
   requireDurableBindings(options: BrowserServerTestOptions, production: boolean): void;
+
+  /**
+   * Applies listener defaults and checks browser admission configuration before startup.
+   *
+   * @param mode Whether a native server is started locally or supplied as a separate backend.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns Normalized listener options after all preflight checks pass.
+   */
   preflight(mode: "combined" | "standalone", options: BrowserServerTestOptions): BrowserHostOptions;
 };
 
@@ -766,6 +873,555 @@ export const browserServerTestAccess: BrowserServerTestAccess = Object.freeze({
 const BrowserServer = browserServerImplementation;
 
 const BrowserServerValues = Object.freeze({
+  /**
+   * Builds the admitted browser listener from normalized options.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param running The local native listener to include in coordinated cleanup, when present.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns The listening host after membership and durable recovery are ready.
+   */
+  async openWithOptions(
+    native: RunningServer | string | readonly string[] | undefined,
+    running: RunningServer | undefined,
+    options: BrowserHostOptions,
+  ): Promise<RunningServer> {
+    const activeAuth = new Set<AbortController>();
+    let draining = false;
+    const { dynamic, requests, unary, subscriptions, stopDiscovery } =
+      await BrowserServerValues.readyGraph(native, running, options);
+    const server = BrowserServerValues.admittedListener(
+      options,
+      activeAuth,
+      () => draining,
+      unary,
+      subscriptions,
+      requests,
+    );
+    return BrowserServerValues.finishBrowser({
+      options,
+      running,
+      subscriptions,
+      stopDiscovery,
+      dynamic,
+      activeAuth,
+      server,
+      onDrain: () => {
+        draining = true;
+      },
+    });
+  },
+
+  /**
+   * Starts discovery and durable recovery after assembling the gateway graph.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param running The local native listener to include in coordinated cleanup, when present.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns Gateway collaborators and the discovery cleanup callback, when discovery is configured.
+   */
+  async readyGraph(
+    native: RunningServer | string | readonly string[] | undefined,
+    running: RunningServer | undefined,
+    options: BrowserHostOptions,
+  ) {
+    const graph = BrowserServerValues.prepareBrowser(native, running, options);
+    const stopDiscovery = await BrowserServerValues.startMembership(
+      options,
+      running,
+      graph.fixedNodes,
+      graph.dynamic,
+      graph.creator,
+      graph.bindings,
+      graph.subscriptions,
+    );
+    return { ...graph, stopDiscovery };
+  },
+
+  /**
+   * Applies configured browser origin and auth-route policy to the listener.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @param activeAuth Controllers tracked for cancellation during browser-host shutdown.
+   * @param draining Reports whether shutdown has stopped admission of new requests.
+   * @param unary The gateway that admits and forwards unary Spine requests.
+   * @param subscriptions The gateway managing admitted browser subscriptions.
+   * @param requests Adapters for extracting credentials and transport facts from HTTP headers.
+   * @returns An HTTP server configured with admission routes but not yet listening.
+   */
+  admittedListener(
+    options: BrowserHostOptions,
+    activeAuth: Set<AbortController>,
+    draining: () => boolean,
+    unary: UnaryGateway,
+    subscriptions: SubscriptionGateway,
+    requests: ReturnType<typeof browserServerImplementation.requests>,
+  ): http.Server {
+    const maxActiveAuthRequests = options.maxActiveAuthRequests ?? 64;
+    if (!Number.isSafeInteger(maxActiveAuthRequests) || maxActiveAuthRequests < 1)
+      throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
+    return BrowserServerValues.createListener({
+      options,
+      origins: BrowserServer.origins(options.origins),
+      authRoutes: BrowserServer.authRoutes(options.authRoutes),
+      activeAuth,
+      maxActiveAuthRequests,
+      draining,
+      unary,
+      subscriptions,
+      requests,
+    });
+  },
+
+  /**
+   * Builds one native backend and the admission collaborators before discovery.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param running The local native listener to include in coordinated cleanup, when present.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns The backend, binding, and admission collaborators needed for startup.
+   */
+  prepareBrowser(
+    native: RunningServer | string | readonly string[] | undefined,
+    running: RunningServer | undefined,
+    options: BrowserHostOptions,
+  ) {
+    const fixedNodes = BrowserServerValues.fixedNodes(native, running, options);
+    const dynamic = BrowserServerValues.dynamic(options);
+    const creator = new DynamicSubscriptionCreator(dynamic);
+    const bindings = BrowserServerValues.bindings(options, creator);
+    const { requests, unary, subscriptions } = BrowserServerValues.admission(
+      options,
+      dynamic,
+      creator,
+      bindings,
+    );
+    return { fixedNodes, dynamic, creator, bindings, requests, unary, subscriptions };
+  },
+
+  /**
+   * Returns durable bindings or constructs the local in-memory admission port.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @param creator The native subscription adapter used for creation, recovery, and cancellation.
+   * @returns The supplied binding store or a new process-local store with native cancellation.
+   */
+  bindings(options: BrowserHostOptions, creator: DynamicSubscriptionCreator): SubscriptionBindings {
+    return (
+      options.bindings ??
+      new InMemorySubscriptionBindings({
+        nextId: () => globalThis.crypto.randomUUID(),
+        dispose: (definition, signal) => creator.cancel({ wire: definition }, signal),
+      })
+    );
+  },
+
+  /**
+   * Publishes one assembled listener after startup rollback is established.
+   *
+   * @param input Started browser resources and their coordinated shutdown callbacks.
+   * @returns The published browser endpoint with coordinated resource cleanup.
+   */
+  async finishBrowser(input: BrowserStartedInput): Promise<RunningServer> {
+    const address = await BrowserServerValues.listenStarted(input);
+    return new RunningBrowserServer(
+      input.server,
+      input.running,
+      input.subscriptions,
+      address,
+      input.activeAuth,
+      input.onDrain,
+      input.stopDiscovery,
+      input.dynamic,
+    );
+  },
+
+  /**
+   * Rolls back all started browser resources when listener bind fails.
+   *
+   * @param input Started browser resources and their coordinated shutdown callbacks.
+   * @returns The bound listener address; startup failures trigger resource cleanup.
+   */
+  async listenStarted(input: BrowserStartedInput): Promise<AddressInfo> {
+    try {
+      return await BrowserServer.listen(input.server, input.options.host, input.options.port);
+    } catch (error) {
+      const cleanup = await Promise.allSettled([
+        input.subscriptions.close(),
+        input.stopDiscovery?.(),
+        input.dynamic.close(),
+        BrowserServer.closeListener(input.server),
+        input.running?.close(),
+      ]);
+      const failures = cleanup.flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError([error, ...failures], "Server browser startup rollback failed.");
+      throw error;
+    }
+  },
+
+  /**
+   * Resolves fixed native backends without changing dynamic discovery behavior.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @param running The local native listener to include in coordinated cleanup, when present.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns Configured fixed endpoints represented as application nodes.
+   */
+  fixedNodes(
+    native: RunningServer | string | readonly string[] | undefined,
+    running: RunningServer | undefined,
+    options: BrowserHostOptions,
+  ): readonly ApplicationNode[] {
+    const urls =
+      native === undefined
+        ? options.backend === undefined
+          ? []
+          : BrowserServer.backendUrls(BrowserServerValues.backendUrlsFor(options.backend))
+        : Array.isArray(native)
+          ? BrowserServer.backendUrls(native)
+          : [
+              typeof native === "string"
+                ? native
+                : BrowserServerValues.requiredRunning(running).baseUrl,
+            ];
+    return urls.map(
+      (endpoint, index) => new ApplicationNode({ id: `fixed/${index.toString()}`, endpoint }),
+    );
+  },
+
+  /**
+   * Creates the dynamically reconciled native transport adapter.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns A forwarder that creates native clients as node membership changes.
+   */
+  dynamic(options: BrowserHostOptions): DynamicUnaryForwarder {
+    return new DynamicUnaryForwarder({
+      create: (node) => BrowserServerValues.nativeClient(node, options),
+    });
+  },
+
+  /**
+   * Opens a native client with the configured reader proof producer.
+   *
+   * @param node The application node whose native transport is being configured.
+   * @param options Browser listener, admission, and backend configuration.
+   * @returns Native RPC operations and a callback that aborts their HTTP/2 session manager.
+   */
+  async nativeClient(node: ApplicationNode, options: BrowserHostOptions) {
+    const manager =
+      options.dynamicManagerFactory?.(node) ??
+      new Http2SessionManager(
+        node.endpoint,
+        undefined,
+        node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
+      );
+    const client = new NativeSubscriptionCreator(
+      createGrpcTransport({
+        ...BrowserServer.dynamicTransportOptions(node),
+        sessionManager: manager,
+      }),
+      options.forwardingProof === undefined
+        ? undefined
+        : {
+            issuer: options.forwardingProof,
+            maxBytes: options.readMaxBytes,
+          },
+    );
+    return {
+      forward: client.forward.bind(client),
+      subscribe: client.subscribe.bind(client),
+      activate: client.activate.bind(client),
+      cancel: client.cancel.bind(client),
+      dispose: client.dispose.bind(client),
+      close: async () => {
+        manager.abort();
+      },
+    };
+  },
+
+  /**
+   * Creates unary and subscription admission around one reader-aware backend.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @param dynamic The native forwarder following current application-node membership.
+   * @param creator The native subscription adapter used for creation, recovery, and cancellation.
+   * @param bindings The store retaining browser-to-native subscription bindings.
+   * @returns Request adapters and gateways sharing the configured admission policy.
+   */
+  admission(
+    options: BrowserHostOptions,
+    dynamic: DynamicUnaryForwarder,
+    creator: DynamicSubscriptionCreator,
+    bindings: SubscriptionBindings,
+  ) {
+    const requests = BrowserServer.requests(options);
+    const admission =
+      options.publicAccess === true
+        ? ({ publicAccess: true } as const)
+        : ({ sessions: options.sessions } as const);
+    const unary = new UnaryGateway({
+      ...(options.registry === undefined ? {} : { registry: options.registry }),
+      maxRequestBytes: 1_048_576,
+      ...admission,
+      authorize: options.authorize,
+      contexts: options.contexts,
+      clock: options.clock,
+      forward: dynamic.forward.bind(dynamic),
+    });
+    const subscriptions = new SubscriptionGateway({
+      bindings,
+      ...admission,
+      authorize: options.authorize,
+      contexts: options.contexts,
+      clock: options.clock,
+      creator,
+    });
+    return { requests, unary, subscriptions };
+  },
+
+  /**
+   * Starts discovery and rehydrates only durable subscriptions with reader identity.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @param running The local native listener to include in coordinated cleanup, when present.
+   * @param fixedNodes Backend nodes used when no discovery source is configured.
+   * @param dynamic The native forwarder following current application-node membership.
+   * @param creator The native subscription adapter used for creation, recovery, and cancellation.
+   * @param bindings The store retaining browser-to-native subscription bindings.
+   * @param subscriptions The gateway managing admitted browser subscriptions.
+   * @returns The discovery stop callback, or no callback for fixed membership.
+   */
+  async startMembership(
+    options: BrowserHostOptions,
+    running: RunningServer | undefined,
+    fixedNodes: readonly ApplicationNode[],
+    dynamic: DynamicUnaryForwarder,
+    creator: DynamicSubscriptionCreator,
+    bindings: SubscriptionBindings,
+    subscriptions: SubscriptionGateway,
+  ): Promise<(() => Promise<void>) | undefined> {
+    let stopDiscovery: (() => Promise<void>) | undefined;
+    try {
+      if (options.discovery !== undefined)
+        stopDiscovery = await BrowserServerValues.watch(options.discovery, dynamic);
+      else await dynamic.reconcile(fixedNodes);
+      if (isDurableSubscriptionBindings(bindings))
+        attachDurableSubscriptionCleanup(bindings, (definition, signal) =>
+          creator.cancel({ wire: definition }, signal),
+        );
+      await BrowserServerValues.recoverBindings(options, bindings, creator, subscriptions);
+      return stopDiscovery;
+    } catch (error) {
+      return BrowserServerValues.rollbackMembership(
+        error,
+        running,
+        subscriptions,
+        stopDiscovery,
+        dynamic,
+      );
+    }
+  },
+
+  /**
+   * Closes discovery, admission and native listeners after recovery failure.
+   *
+   * @param error The startup failure to preserve while cleanup is attempted.
+   * @param running The local native listener to include in coordinated cleanup, when present.
+   * @param subscriptions The gateway managing admitted browser subscriptions.
+   * @param stopDiscovery The callback that stops discovery updates, when discovery is configured.
+   * @param dynamic The native forwarder following current application-node membership.
+   * @returns No value; the startup failure is rethrown with any cleanup failures.
+   */
+  async rollbackMembership(
+    error: unknown,
+    running: RunningServer | undefined,
+    subscriptions: SubscriptionGateway,
+    stopDiscovery: (() => Promise<void>) | undefined,
+    dynamic: DynamicUnaryForwarder,
+  ): Promise<never> {
+    const failures = [error];
+    for (const cleanup of [
+      () => subscriptions.close(),
+      () => stopDiscovery?.(),
+      () => dynamic.close(),
+      () => running?.close(),
+    ])
+      try {
+        await cleanup();
+      } catch (cleanupError) {
+        failures.push(cleanupError);
+      }
+    if (failures.length === 1) throw error;
+    throw new AggregateError(failures, "Browser subscription recovery startup rollback failed.");
+  },
+
+  /**
+   * Restores live reader-bound definitions after membership is ready.
+   *
+   * @param options Browser listener, admission, and backend configuration.
+   * @param bindings The store retaining browser-to-native subscription bindings.
+   * @param creator The native subscription adapter used for creation, recovery, and cancellation.
+   * @param subscriptions The gateway managing admitted browser subscriptions.
+   * @returns Completion after retained definitions are rehydrated and expiry is scheduled.
+   */
+  async recoverBindings(
+    options: BrowserHostOptions,
+    bindings: SubscriptionBindings,
+    creator: DynamicSubscriptionCreator,
+    subscriptions: SubscriptionGateway,
+  ): Promise<void> {
+    if (bindings.recoverActive === undefined) return;
+    const now = options.clock.now();
+    const nowMs =
+      Number(now.seconds.toString()) * 1_000 + Math.floor(Number(now.nanos.toString()) / 1_000_000);
+    if (!Number.isSafeInteger(nowMs)) return;
+    await bindings.recoverActive({
+      nowMs,
+      onDefinition: async (definition, whenExpires) => {
+        await creator.rehydrate(definition);
+        subscriptions.scheduleExpiry(whenExpires);
+      },
+    });
+  },
+
+  /**
+   * Binds admitted gateway services to one HTTP listener.
+   *
+   * @param input Gateway services and HTTP routing policy for this listener.
+   * @returns The unbound HTTP server serving the admitted Spine routes.
+   */
+  createListener(input: BrowserListenerInput): http.Server {
+    const services = createNativeGatewayServices({
+      unary: input.unary,
+      subscriptions: input.subscriptions,
+      requests: input.requests,
+    });
+    const handler = connectNodeAdapter({
+      routes: (router: ConnectRouter) => {
+        router.service(AuthenticationService, services.authentication);
+        router.service(CommandService, services.command);
+        router.service(QueryService, services.query);
+        router.service(SubscriptionService, services.subscription);
+      },
+      readMaxBytes: input.options.readMaxBytes,
+      writeMaxBytes: input.options.writeMaxBytes,
+    });
+    const context: BrowserRouteContext = { ...input, handler };
+    return http.createServer((request, response) => {
+      BrowserServerValues.routeRequest(request, response, context);
+    });
+  },
+
+  /**
+   * Applies drain, authentication and RPC routing to one HTTP request.
+   *
+   * @param request The incoming HTTP request.
+   * @param response The HTTP response to complete with the route outcome.
+   * @param context Listener admission policy, active requests, and the RPC routing callback.
+   */
+  routeRequest(
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+    context: BrowserRouteContext,
+  ): void {
+    if (context.draining()) {
+      response.statusCode = 503;
+      response.end();
+      return;
+    }
+    const auth = context.authRoutes.get(request.url ?? "");
+    if (auth !== undefined) {
+      BrowserServerValues.authRequest(request, response, auth, context);
+      return;
+    }
+    BrowserServerValues.rpcRequest(request, response, context);
+  },
+
+  /**
+   * Handles the configured browser authentication route and its preflight.
+   *
+   * @param request The incoming HTTP request.
+   * @param response The HTTP response to complete with the route outcome.
+   * @param auth The authentication route matched by the request path.
+   * @param context Listener admission policy, active requests, and the RPC routing callback.
+   */
+  authRequest(
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+    auth: BrowserAuthRoute,
+    context: BrowserRouteContext,
+  ): void {
+    if (request.method === auth.method) {
+      if (context.activeAuth.size >= context.maxActiveAuthRequests) {
+        response.statusCode = 503;
+        response.end();
+        return;
+      }
+      void BrowserServer.dispatchAuth(
+        request,
+        response,
+        auth,
+        context.activeAuth,
+        context.options.writeMaxBytes,
+      );
+      return;
+    }
+    const origin = request.headers.origin;
+    if (request.method === "OPTIONS" && origin !== undefined && auth.origins.includes(origin)) {
+      response.setHeader("access-control-allow-origin", origin);
+      response.setHeader("access-control-allow-methods", `${auth.method},OPTIONS`);
+      response.statusCode = 204;
+    } else response.statusCode = request.method === "OPTIONS" ? 403 : 405;
+    response.end();
+  },
+
+  /**
+   * Checks browser origin admission before a Connect or gRPC request.
+   *
+   * @param request The incoming HTTP request.
+   * @param response The HTTP response to complete with the route outcome.
+   * @param context Listener admission policy, active requests, and the RPC routing callback.
+   */
+  rpcRequest(
+    request: http.IncomingMessage,
+    response: http.ServerResponse,
+    context: BrowserRouteContext,
+  ): void {
+    const origin = request.headers.origin;
+    if (origin === undefined || !context.origins.has(origin)) {
+      response.statusCode = 403;
+      response.end();
+      return;
+    }
+    response.setHeader("access-control-allow-origin", origin);
+    response.setHeader("access-control-allow-credentials", "true");
+    response.setHeader("access-control-expose-headers", "grpc-status,grpc-message");
+    response.setHeader("vary", "Origin");
+    if (request.method === "OPTIONS") {
+      response.setHeader("access-control-allow-methods", "POST,OPTIONS");
+      response.setHeader(
+        "access-control-allow-headers",
+        "authorization,content-type,connect-protocol-version,x-csrf-token",
+      );
+      response.setHeader("access-control-max-age", "600");
+      response.statusCode = 204;
+      response.end();
+      return;
+    }
+    context.handler(request, response);
+  },
+
+  /**
+   * Subscribes the native forwarder to application-node discovery changes.
+   *
+   * @param source The source of application-node membership changes.
+   * @param forwarder The native forwarder to reconcile when membership changes.
+   * @returns The callback that stops watching node discovery.
+   */
   async watch(
     source: NodeDiscovery,
     forwarder: DynamicUnaryForwarder,
@@ -774,15 +1430,37 @@ const BrowserServerValues = Object.freeze({
       void forwarder.reconcile(nodes);
     });
   },
+
+  /**
+   * Returns the local native listener or rejects an absent backend.
+   *
+   * @param value The possibly absent local native listener.
+   * @returns The supplied listener, or throws when it is absent.
+   */
   requiredRunning(value: RunningServer | undefined): RunningServer {
     if (value === undefined) throw new Error("Browser server local backend is absent.");
     return value;
   },
+
+  /**
+   * Checks IPv4 loopback addresses and the supported IPv6 loopback forms.
+   *
+   * @param host The address to test for local loopback membership.
+   * @returns Whether the address denotes a supported loopback interface.
+   */
   isLoopback(host: string): boolean {
     if (host === "::1" || host === "::ffff:127.0.0.1") return true;
     const match = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
     return match?.slice(1).every((part) => Number(part) <= 255) === true;
   },
+
+  /**
+   * Calls every supplied startup cleanup and preserves any cleanup failures.
+   *
+   * @param error The startup failure to preserve while cleanup is attempted.
+   * @param cleanups Startup cleanup callbacks to attempt in the supplied order.
+   * @returns No value; the original failure or an aggregate of startup and cleanup failures is thrown.
+   */
   async rollback(error: unknown, cleanups: readonly (() => Promise<void>)[]): Promise<never> {
     const failures = [error];
     for (const cleanup of cleanups)
@@ -794,11 +1472,25 @@ const BrowserServerValues = Object.freeze({
     if (failures.length === 1) throw error;
     throw new AggregateError(failures, "Browser server startup rollback failed.");
   },
+
+  /**
+   * Returns the first native subscription client or rejects an empty configuration.
+   *
+   * @param values Native subscription clients in configured order.
+   * @returns The first configured client, or throws when none exists.
+   */
   firstCreator(values: readonly NativeSubscriptionCreator[]): NativeSubscriptionCreator {
     const creator = values[0];
     if (creator === undefined) throw new Error("Browser server backend is absent.");
     return creator;
   },
+
+  /**
+   * Returns an already running native listener from the backend configuration.
+   *
+   * @param native The native backend to expose through this browser host.
+   * @returns The supplied running listener, or undefined for URL-based or absent backends.
+   */
   running(
     native: RunningServer | string | readonly string[] | undefined,
   ): RunningServer | undefined {
@@ -806,6 +1498,13 @@ const BrowserServerValues = Object.freeze({
       ? undefined
       : (native as RunningServer);
   },
+
+  /**
+   * Reads exactly one of the singular or plural backend URL options.
+   *
+   * @param backend The singular or plural backend URL configuration to inspect.
+   * @returns The configured backend origins without applying URL validation.
+   */
   backendUrlsFor(backend: NonNullable<BrowserServerOptions["backend"]>): readonly string[] {
     const source = backend as { readonly baseUrl?: unknown; readonly baseUrls?: unknown };
     if (typeof source.baseUrl === "string" && source.baseUrls === undefined)
@@ -820,25 +1519,56 @@ const BrowserServerValues = Object.freeze({
   },
 });
 
+/**
+ * Closes the browser listener, discovery, admission and native backend together.
+ */
 class RunningBrowserServer implements RunningServer {
   readonly #server: http.Server;
+
   readonly #subscriptions: SubscriptionGateway;
+
   readonly #native: RunningServer | undefined;
+
   readonly #activeAuth: Set<AbortController>;
+
   readonly #onDrain: () => void;
+
   readonly #stopDiscovery: (() => Promise<void>) | undefined;
+
   readonly #dynamic: DynamicUnaryForwarder | undefined;
+
   readonly host: string;
+
   readonly port: number;
+
   readonly baseUrl: string;
+
   #closed: Promise<void> | undefined;
+
   #listenerClose: Promise<void> | undefined;
+
   #listenerClosed = false;
+
   #subscriptionsClosed = false;
+
   #discoveryStopped = false;
+
   #dynamicClosed = false;
+
   #nativeClosed = false;
 
+  /**
+   * Stores the running browser resources and exposes their bound address.
+   *
+   * @param server The HTTP listener being started or stopped.
+   * @param native The native backend to expose through this browser host.
+   * @param subscriptions The gateway managing admitted browser subscriptions.
+   * @param address The actual address returned when the browser listener bound successfully.
+   * @param activeAuth Controllers tracked for cancellation during browser-host shutdown.
+   * @param onDrain Stops admission of new browser requests before resources are closed.
+   * @param stopDiscovery The callback that stops discovery updates, when discovery is configured.
+   * @param dynamic The native forwarder following current application-node membership.
+   */
   constructor(
     server: http.Server,
     native: RunningServer | undefined,
@@ -863,6 +1593,11 @@ class RunningBrowserServer implements RunningServer {
     this.baseUrl = `http://${host}:${this.port.toString()}`;
   }
 
+  /**
+   * Returns a shared promise for concurrent shutdown attempts and permits retry after a failed attempt.
+   *
+   * @returns The shared shutdown attempt, which rejects if any cleanup phase fails.
+   */
   close(): Promise<void> {
     this.#closed ??= this.#closeOnce().catch((error: unknown) => {
       this.#closed = undefined;
@@ -871,6 +1606,11 @@ class RunningBrowserServer implements RunningServer {
     return this.#closed;
   }
 
+  /**
+   * Stops admission and attempts each unfinished shutdown phase.
+   *
+   * @returns Completion after all unfinished phases are attempted; rejects with collected failures.
+   */
   async #closeOnce(): Promise<void> {
     this.#onDrain();
     for (const controller of this.#activeAuth) controller.abort();
@@ -919,6 +1659,15 @@ class RunningBrowserServer implements RunningServer {
       throw primary;
     }
   }
+
+  /**
+   * Marks successful shutdown work and collects failures without stopping later phases.
+   *
+   * @param operation An unfinished shutdown operation, or undefined when there is nothing to await.
+   * @param onSuccess Records completion so a later shutdown retry skips this phase.
+   * @param failures The shared collection receiving failures from shutdown phases.
+   * @returns Completion after success is recorded or the failure is collected.
+   */
   async #phase(
     operation: Promise<void> | undefined,
     onSuccess: () => void,
@@ -933,6 +1682,11 @@ class RunningBrowserServer implements RunningServer {
     }
   }
 
+  /**
+   * Returns the in-flight listener shutdown and resets it after settlement.
+   *
+   * @returns The current listener-close attempt or a newly started attempt.
+   */
   #closeListenerPhase(): Promise<void> {
     const current = this.#listenerClose;
     if (current !== undefined) return current;

@@ -14,6 +14,7 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
+import type { AuthorityFact } from "@spine-event-engine/core/spi/trusted-reader";
 import type {
   ActorContext,
   Command,
@@ -402,6 +403,12 @@ export interface AuthorizedRequestContext {
    * Identifies the actor's resolved language for Query and subscription contexts.
    */
   readonly language?: Language;
+
+  /**
+   * Application-resolved authority facts for the admitted invocation.
+   * These facts are independent of provider credentials and may be absent.
+   */
+  readonly authorityFacts?: Readonly<Record<string, AuthorityFact>>;
 }
 
 /**

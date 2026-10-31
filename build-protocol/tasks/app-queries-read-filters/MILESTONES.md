@@ -3,8 +3,8 @@
 The [approved proposal](PROPOSAL.md) and [requirements ledger](TASK.md) remain
 binding. Shared validation, Command/Event admission, read-service status mapping,
 unknown-subscription activation, and passive local metadata migration are
-implemented, including dependency discovery and App Query generation. Trusted
-reader context is next; the remaining implementation follows below.
+implemented, including dependency discovery, App Query generation, trusted reader
+forwarding, and retained subscription reader binding. Remaining work follows below.
 
 Each slice includes focused behavior tests, affected generated/build checks,
 format/lint/TSDoc checks, coverage inspection and the relevant existing review
@@ -12,31 +12,6 @@ concerns. Use the existing implementation context for corrections and collect
 one review wave before returning a correction batch. Keep detailed evidence
 outside Git. Run the unchanged full release profile and final security review
 after integration converges; a slice checkpoint does not complete this task.
-
-## M08 — Trusted reader context through existing ports
-
-**Depends on:** M03–M04, M07. **Class:** high-risk authentication/context.
-**Paths:** `packages/auth/src/{request,gateway,native,subscriptions}/`,
-`packages/server/src/browser/`, `server/{server,node-coordinator,managed-child-subscription}.ts`,
-service request context plumbing, and existing auth/forwarding tests.
-
-Extend replaceable authentication/forwarding ports to carry verified principal
-and authority facts over the authenticated internal connection for Read,
-Execute, and subscription admission/activation. Public ingress rejects or
-strips forwarded-identity copies. Only a configured trusted forwarding peer can
-supply the internal envelope. Direct native authentication establishes context
-through its configured adapter; public access has no authenticated principal.
-Never forward provider credentials or promote the public-admission marker.
-Bind subscription reader identity/context to admitted records and check the
-verified reader again on activation/reconnect/cancellation where applicable.
-
-**Acceptance/tests:** authenticated gateway and direct native paths, absent
-principal, forged internal metadata/ActorContext/Q claims, changed reader using
-another subscription ID, concurrent users, managed child forwarding, and
-reconnect. Ports are replaceable; provider facts are detached and no provider
-liveness guarantee is implied. Bound forwarded envelope sizes using existing
-transport limits. Gate auth/native/browser/coordinator tests and API/reliability
-review; final dedicated security review remains M14.
 
 ## M09 — Server App Query execution and internal invocation
 

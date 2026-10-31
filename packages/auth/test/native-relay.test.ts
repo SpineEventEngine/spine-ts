@@ -15,6 +15,10 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 import { AckSchema, ErrorSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema } from "@spine-event-engine/proto";
+import { TypeUrls } from "@spine-event-engine/core";
+import { ReaderForwarding } from "@spine-event-engine/core/spi/reader-forwarding";
+import { TaskCreatedSchema } from "../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import {
   CommandService,
   EntityUpdatesSchema,
@@ -29,6 +33,78 @@ import { describe, expect, it } from "vitest";
 import { NativeSubscriptionCreator, SubscriptionUpdateRelay } from "../src/index.js";
 
 describe("SubscriptionUpdateRelay", () => {
+  it("binds Subscribe and Cancel proofs to their distinct native request bytes", async () => {
+    const calls: { method: string; bytes: Uint8Array; headers?: Headers }[] = [];
+    const topic = create(TopicSchema, {
+      id: { value: "task-created-topic" },
+      target: {
+        type: TypeUrls.derive(TaskCreatedSchema),
+        criterion: { case: "includeAll", value: true },
+      },
+      context: create(ActorContextSchema, { actor: { value: "reader-1" } }),
+    });
+    const transport = {
+      unary: (
+        method: { name: string; input: typeof TopicSchema },
+        _signal: AbortSignal,
+        _timeout: unknown,
+        headers: Headers,
+        input: unknown,
+      ) => {
+        calls.push({ method: method.name, bytes: toBinary(method.input, input as never), headers });
+        return Promise.resolve({
+          message: create(SubscriptionSchema, { id: { value: "s-1" }, topic }),
+          header: new Headers(),
+          trailer: new Headers(),
+        });
+      },
+    } as unknown as Transport;
+    const creator = new NativeSubscriptionCreator(transport, {
+      issuer: { issue: () => Promise.resolve("signed") },
+      maxBytes: 4_194_304,
+    });
+    const wire = {
+      kind: "public-subscription" as const,
+      bytes: toBinary(
+        SubscriptionSchema,
+        create(SubscriptionSchema, {
+          id: { value: "s-1" },
+          topic,
+        }),
+      ),
+      reader: { principal: { id: "reader-1" } },
+    };
+    await creator.subscribe(wire, new AbortController().signal);
+    await creator.cancel({ wire }, new AbortController().signal);
+    expect(calls.map((call) => call.method)).toEqual(["Subscribe", "Cancel"]);
+    for (const call of calls) {
+      if (call.headers === undefined) throw new Error("Expected forwarding headers.");
+      await expect(
+        ReaderForwarding.open(
+          call.headers,
+          "spine.client.SubscriptionService",
+          call.method,
+          call.bytes,
+          { verify: (_bytes, proof) => proof === "signed" },
+          {},
+          4_194_304,
+        ),
+      ).resolves.toMatchObject({ principal: { id: "reader-1" } });
+    }
+    const first = calls[0];
+    if (first?.headers === undefined) throw new Error("Expected first forwarded request.");
+    await expect(
+      ReaderForwarding.open(
+        first.headers,
+        "spine.client.SubscriptionService",
+        "Cancel",
+        first.bytes,
+        { verify: () => true },
+        {},
+        4_194_304,
+      ),
+    ).rejects.toThrow("Invalid forwarding proof");
+  });
   it("copies updates and delivers them in FIFO order", async () => {
     const relay = new SubscriptionUpdateRelay({ maxMessages: 2, maxBytes: 100 });
     const first = toBinary(
@@ -156,6 +232,44 @@ describe("SubscriptionUpdateRelay", () => {
 });
 
 describe("NativeSubscriptionCreator", () => {
+  it("attaches an operation-bound proof for an authenticated unary reader", async () => {
+    let headers: Headers | undefined;
+    const transport = {
+      unary: (_method: unknown, _signal: unknown, _timeout: unknown, requestHeaders: Headers) => {
+        headers = requestHeaders;
+        return Promise.resolve({
+          stream: false,
+          header: new Headers(),
+          trailer: new Headers(),
+          message: create(QueryService.method.read.output),
+        });
+      },
+    } as unknown as Transport;
+    const value = toBinary(QueryService.method.read.input, create(QueryService.method.read.input));
+    const native = new NativeSubscriptionCreator(transport, {
+      issuer: { issue: () => "signed" },
+      maxBytes: 4 * 1024 * 1024,
+    });
+    await native.forward({
+      service: "spine.client.QueryService",
+      method: "Read",
+      value,
+      reader: { principal: { id: "reader/one" }, authorityFacts: { roles: ["reader"] } },
+    });
+    const opened = await ReaderForwarding.open(
+      headers ?? new Headers(),
+      "spine.client.QueryService",
+      "Read",
+      value,
+      { verify: (_bytes, proof) => proof === "signed" },
+      {},
+      4 * 1024 * 1024,
+    );
+    expect(opened).toEqual({
+      principal: { id: "reader/one" },
+      authorityFacts: { roles: ["reader"] },
+    });
+  });
   it.each(["activate", "cancel", "dispose"] as const)(
     "retains application metadata on failed subscription %s",
     async (operation) => {

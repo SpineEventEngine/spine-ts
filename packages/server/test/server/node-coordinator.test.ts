@@ -27,6 +27,7 @@ import {
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
+import { ReaderForwarding } from "@spine-event-engine/core/spi/reader-forwarding";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
   ActorContextSchema,
@@ -81,6 +82,106 @@ import {
 type RecordSpec<I, R> = StorageRecordSpec<I, R extends Message ? R : Message>;
 
 describe("NodeCoordinator", () => {
+  it("reissues a verified reader proof for the managed child Read operation", async () => {
+    const observed: string[] = [];
+    const replica = await backend("proved-read", {
+      read: async (context) => {
+        const query = coordinatorQuery();
+        const reader = await ReaderForwarding.open(
+          context.requestHeader,
+          "spine.client.QueryService",
+          "Read",
+          toBinary(QuerySchema, query),
+          { verify: (_bytes, proof) => proof === "coordinator-signed" },
+          context,
+          4_194_304,
+        );
+        observed.push(reader.principal?.id ?? "missing");
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      forwardingProof: { issue: () => "coordinator-signed" },
+    });
+    closeables.push(() => coordinator.close());
+    await createClient(QueryService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).read(
+      coordinatorQuery(),
+    );
+    expect(observed).toEqual(["reader-a"]);
+  });
+  it("reissues distinct Subscribe, Activate and Cancel proofs for managed children", async () => {
+    const observed: string[] = [];
+    const replica = await backend("proved-subscriptions", {
+      holdActivation: true,
+      verifyReader: async (method, bytes, context) => {
+        const reader = await ReaderForwarding.open(
+          context.requestHeader,
+          "spine.client.SubscriptionService",
+          method,
+          bytes,
+          { verify: (_bytes, proof) => proof === "coordinator-signed" },
+          context,
+          4_194_304,
+        );
+        observed.push(`${method}:${reader.principal?.id ?? "missing"}`);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      forwardingProof: { issue: () => "coordinator-signed" },
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    expect(observed).toEqual(["Subscribe:reader-a"]);
+    const updates = client.activate(subscription)[Symbol.asyncIterator]();
+    await updates.next();
+    expect(observed).toEqual(["Subscribe:reader-a", "Activate:reader-a"]);
+    await client.cancel(subscription);
+    await updates.return?.();
+    expect(observed).toEqual(["Subscribe:reader-a", "Activate:reader-a", "Cancel:reader-a"]);
+  });
+  it("keeps a managed pending subscription after a foreign reader cancels", async () => {
+    const replica = await backend("foreign-managed", { holdActivation: true });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: ({ headers }) => ({
+            principal: { id: ReaderForwarding.headerValue(headers, "x-reader") ?? "anonymous" },
+          }),
+        },
+      },
+      forwardingProof: { issue: () => "coordinator-signed" },
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const alice = { headers: { "x-reader": "reader/alice" } };
+    const subscription = await client.subscribe(coordinatorTopic(), alice);
+    await expect(
+      client.cancel(subscription, { headers: { "x-reader": "reader/bob" } }),
+    ).rejects.toMatchObject({ code: Code.PermissionDenied });
+    expect(replica.cancellations()).toBe(0);
+    const updates = client.activate(subscription, alice)[Symbol.asyncIterator]();
+    await expect(updates.next()).resolves.toMatchObject({ done: false });
+    await client.cancel(subscription, alice);
+    await updates.return?.();
+  });
   const closeables: (() => Promise<void>)[] = [];
 
   afterEach(async () => {
@@ -132,7 +233,10 @@ describe("NodeCoordinator", () => {
   it("exposes Execute as unavailable until application handlers can be selected", async () => {
     const coordinator = await NodeCoordinator.open({ members: new TestReadyMembers([]), port: 0 });
     closeables.push(() => coordinator.close());
-    const client = createClient(QueryService, createGrpcTransport({ baseUrl: coordinator.baseUrl }));
+    const client = createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
     await expect(client.execute(create(QueryService.method.execute.input))).rejects.toMatchObject({
       code: Code.Unimplemented,
     });
@@ -164,6 +268,35 @@ describe("NodeCoordinator", () => {
         coordinatorQuery(),
       ),
     ).resolves.toEqual(create(QueryResponseSchema));
+  });
+
+  it("rejects a caller-supplied internal reader assertion before managed forwarding", async () => {
+    let reads = 0;
+    const replica = await backend("forged-reader", {
+      read: () => {
+        reads += 1;
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    await expect(
+      client.read(coordinatorQuery(), {
+        headers: {
+          "spine-internal-reader": "Zm9yZ2Vk",
+          "spine-internal-reader-proof": "forged",
+        },
+      }),
+    ).rejects.toMatchObject({ code: Code.Unauthenticated });
+    expect(reads).toBe(0);
   });
 
   it("rejects malformed read-side requests before forwarding to a replica", async () => {
@@ -428,6 +561,7 @@ describe("NodeCoordinator", () => {
       const definition = await firstBindings.create({
         topic: { kind: "subscription-topic", bytes: trustedTopic() },
         whenExpires: 10_000,
+        reader: { kind: "anonymous" },
       });
       await new DynamicSubscriptionCreator(firstOwner).subscribe(
         definition,
@@ -1333,7 +1467,8 @@ async function backend(
     readonly post?: (context: HandlerContext) => Promise<never> | MessageShape<typeof AckSchema>;
     readonly read?: (
       context: HandlerContext,
-    ) => Promise<never> | MessageShape<typeof QueryResponseSchema>;
+    ) =>
+      Promise<MessageShape<typeof QueryResponseSchema>> | MessageShape<typeof QueryResponseSchema>;
     readonly updates?: number;
     readonly mismatchedActivationAck?: boolean;
     readonly holdActivation?: boolean;
@@ -1344,6 +1479,11 @@ async function backend(
     readonly subscribeGate?: Promise<undefined>;
     readonly subscriptionStarted?: { readonly resolve: (value: undefined) => void };
     readonly activateError?: ConnectError;
+    readonly verifyReader?: (
+      method: string,
+      bytes: Uint8Array,
+      context: HandlerContext,
+    ) => Promise<void>;
   } = {},
 ): Promise<{
   readonly member: ReadyMember;
@@ -1374,11 +1514,17 @@ async function backend(
           },
         });
         router.service(QueryService, {
-          read: (_query, context): MessageShape<typeof QueryResponseSchema> | Promise<never> =>
+          read: (
+            _query,
+            context,
+          ):
+            | MessageShape<typeof QueryResponseSchema>
+            | Promise<MessageShape<typeof QueryResponseSchema>> =>
             options.read?.(context) ?? create(QueryResponseSchema),
         });
         router.service(SubscriptionService, {
-          subscribe: (topic) => {
+          subscribe: async (topic, context) => {
+            await options.verifyReader?.("Subscribe", toBinary(TopicSchema, topic), context);
             value.subscriptions++;
             options.subscriptionStarted?.resolve(undefined);
             const subscription = create(SubscriptionSchema, {
@@ -1388,6 +1534,11 @@ async function backend(
             return options.subscribeGate?.then(() => subscription) ?? subscription;
           },
           activate: async function* (subscription, context) {
+            await options.verifyReader?.(
+              "Activate",
+              toBinary(SubscriptionSchema, subscription),
+              context,
+            );
             value.activations++;
             if (options.activateError !== undefined) throw options.activateError;
             if (options.observeActivationAbort)
@@ -1440,7 +1591,12 @@ async function backend(
                 void options.releaseActivation?.then(resolve);
               });
           },
-          cancel: () => {
+          cancel: async (subscription, context) => {
+            await options.verifyReader?.(
+              "Cancel",
+              toBinary(SubscriptionSchema, subscription),
+              context,
+            );
             value.cancellations++;
             if (value.cancellations <= (options.cancelFailures ?? 0))
               throw new ConnectError("native cancellation failed", Code.Unavailable);

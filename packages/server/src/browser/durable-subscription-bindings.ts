@@ -25,6 +25,7 @@ import {
   type SubscriptionId,
 } from "@spine-event-engine/proto/client";
 import { TenantIdSchema, type ActorContext } from "@spine-event-engine/proto";
+import { ReaderIdentities, type ReaderIdentity } from "@spine-event-engine/core/spi/trusted-reader";
 import type {
   OnSubscriptionDefinition,
   PublicSubscriptionWire,
@@ -40,6 +41,7 @@ import {
   type RecordStorage,
   type StorageFactory,
 } from "@spine-event-engine/storage";
+import { SubscriptionReaderBindings } from "../stand/subscription-reader-binding.js";
 
 const expiryBatchSize = 25;
 interface DurableCleanupState {
@@ -98,22 +100,36 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    * Names the Gateway storage context.
    */
   readonly namespace: string;
+
   readonly #storage: RecordStorage<SubscriptionId, GatewayAuthenticatedSubscription>;
+
   readonly #nextId: () => string;
+
   readonly #pending = new Map<string, Promise<unknown>>();
+
   readonly #active = new Map<string, AbortController>();
+
+  readonly #activeReaders = new Map<string, ReaderIdentity>();
+
   readonly #limits: Required<
     Pick<
       SubscriptionGatewayLimits,
       "pendingOperationLimit" | "operationTimeoutMs" | "shutdownTimeoutMs"
     >
   >;
+
   readonly #queued = new Map<string, number>();
+
   readonly #running = new Set<Promise<unknown>>();
+
   #purgeHorizon: number | undefined;
+
   #activePurgeHorizon: number | undefined;
+
   #purging: Promise<void> | undefined;
+
   #closed = false;
+
   #closing: Promise<void> | undefined;
 
   /**
@@ -160,19 +176,27 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Creates one inactive authenticated subscription from a trusted topic.
+   *
    * @param input Supplies the trusted topic and expiry.
    * @returns The stored public subscription definition.
    */
   create(input: {
     readonly topic: SubscriptionTopicWire;
     readonly whenExpires: number;
+    readonly reader: ReaderIdentity;
   }): Promise<PublicSubscriptionWire> {
     return this.#admit(() => this.#create(input));
   }
 
-  async #create(input: {
+  /**
+   * Persists a new reader-bound subscription definition.
+   *
+   * @param input Durable operation parameters and verified reader state.
+   * @returns The created durable subscription.
+   */ async #create(input: {
     readonly topic: SubscriptionTopicWire;
     readonly whenExpires: number;
+    readonly reader: ReaderIdentity;
   }): Promise<PublicSubscriptionWire> {
     const id = this.#nextId();
     if (id.trim().length === 0) throw new Error("subscription ID must be non-blank");
@@ -187,7 +211,18 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       id: create(SubscriptionIdSchema, { value: id }),
       subscription: clone(SubscriptionSchema, subscription),
       whenExpires: timestampFromMs(input.whenExpires),
+      reader: SubscriptionReaderBindings.write(input.reader),
     });
+    return this.#storeCreated(record);
+  }
+
+  /**
+   * Persists a prepared reader-bound definition with ambiguous-write recovery.
+   *
+   * @param record The durable subscription record.
+   * @returns The stored reader-bound definition.
+   */
+  async #storeCreated(record: GatewayAuthenticatedSubscription): Promise<PublicSubscriptionWire> {
     DurableSubscriptionValues.validate(record);
     const recordId = record.id;
     if (recordId === undefined) throw new Error("Authenticated subscription has no ID.");
@@ -217,6 +252,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   activate(input: {
     readonly id: string;
     readonly context: ActorContext;
+    readonly reader: ReaderIdentity;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
     readonly signal: AbortSignal;
@@ -227,7 +263,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       if (
         record === undefined ||
         this.#expired(record, input.nowMs) ||
-        !DurableSubscriptionValues.owns(record, input.context)
+        !DurableSubscriptionValues.owns(record, input.context, input.reader)
       )
         return { kind: "denied" };
       await this.#callbackForId(
@@ -236,6 +272,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         DurableSubscriptionValues.wire(record),
         input.signal,
         true,
+        input.reader,
       );
       return { kind: "activated" };
     });
@@ -250,16 +287,57 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   cancel(input: {
     readonly id: string;
     readonly context: ActorContext;
+    readonly reader: ReaderIdentity;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
   }): Promise<SubscriptionBindingTransition> {
-    this.#active.get(input.id)?.abort();
-    return this.#forId(input.id, async () => {
+    const activeReader = this.#activeReaders.get(input.id);
+    if (activeReader !== undefined && !ReaderIdentities.matches(activeReader, input.reader))
+      return Promise.resolve({ kind: "denied" });
+    const observed = this.#read(input.id);
+    void observed.then(
+      (record) => {
+        if (
+          record === undefined ||
+          !DurableSubscriptionValues.owns(record, input.context, input.reader)
+        )
+          return;
+        const activeReader = this.#activeReaders.get(input.id);
+        if (activeReader === undefined || ReaderIdentities.matches(activeReader, input.reader))
+          this.#active.get(input.id)?.abort();
+      },
+      () => undefined,
+    );
+    return this.#forId(input.id, () => this.#cancelAdmitted(input, observed));
+  }
+
+  /**
+   * Verifies current identity before aborting an active stream or queuing deletion.
+   *
+   * @param input Authenticated cancellation request.
+   * @returns Denial or completed cleanup.
+   * @param observation Current activation observation.
+   */
+  async #cancelAdmitted(
+    input: {
+      readonly id: string;
+      readonly context: ActorContext;
+      readonly reader: ReaderIdentity;
+      readonly nowMs: number;
+      readonly onDefinition: OnSubscriptionDefinition;
+    },
+    observation: Promise<GatewayAuthenticatedSubscription | undefined>,
+  ): Promise<SubscriptionBindingTransition> {
+    const observed = await observation;
+    if (observed === undefined) return { kind: "closed" };
+    if (!DurableSubscriptionValues.owns(observed, input.context, input.reader))
+      return { kind: "denied" };
+    return (async () => {
       const record = await this.#read(input.id);
       if (record === undefined) return { kind: "closed" };
       if (
         this.#expired(record, input.nowMs) ||
-        !DurableSubscriptionValues.owns(record, input.context)
+        !DurableSubscriptionValues.owns(record, input.context, input.reader)
       )
         return { kind: "denied" };
       await this.#callbackForId(
@@ -273,7 +351,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       return (await this.#storage.read(recordId)) === undefined
         ? { kind: "closed" }
         : { kind: "denied" };
-    });
+    })();
   }
 
   /**
@@ -311,7 +389,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     return task;
   }
 
-  async #drainPurges(): Promise<void> {
+  /**
+   * Serializes queued expiry purges through the storage boundary.
+   *
+   * @returns Completion after the operation settles.
+   */ async #drainPurges(): Promise<void> {
     while (this.#purgeHorizon !== undefined) {
       const horizon = this.#purgeHorizon;
       this.#purgeHorizon = undefined;
@@ -324,7 +406,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     }
   }
 
-  async #purgeExpired(nowMs: number): Promise<void> {
+  /**
+   * Deletes expired durable subscriptions from storage.
+   *
+   * @param nowMs The current time in milliseconds.
+   * @returns Completion after the operation settles.
+   */ async #purgeExpired(nowMs: number): Promise<void> {
     const records = await this.#storage.queryEntries({
       sort: [{ field: "when_expires" }, { field: "id" }],
       limit: expiryBatchSize,
@@ -354,7 +441,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     return this.#admit(() => this.#recoverActive(input));
   }
 
-  async #recoverActive(input: {
+  /**
+   * Reloads active durable definitions and resumes their callbacks.
+   *
+   * @param input Durable operation parameters and verified reader state.
+   * @returns Completion after the operation settles.
+   */ async #recoverActive(input: {
     readonly nowMs: number;
     readonly onDefinition: (
       definition: PublicSubscriptionWire,
@@ -374,27 +466,47 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         ...(after === undefined ? {} : { after }),
       });
       if (page.length === 0) return;
-      for (const { id: slotId, record } of page) {
-        DurableSubscriptionValues.validate(record, slotId);
-        const id = slotId.value;
-        await this.#forId(
-          id,
-          async () => {
-            if (this.#expired(record, input.nowMs)) await this.#removeExpired(record);
-            else
-              await input.onDefinition(
-                DurableSubscriptionValues.wire(record),
-                DurableSubscriptionValues.expiryMs(record.whenExpires),
-              );
-          },
-          true,
-        );
-      }
+      for (const { id: slotId, record } of page) await this.#recoverRecord(slotId, record, input);
       const last = page.at(-1);
       if (last === undefined)
         throw new Error("Authenticated subscription recovery page is invalid.");
       after = { id: last.id, values: [{ field: "id", value: last.id }] };
     }
+  }
+
+  /**
+   * Rehydrates a verified durable reader record under its ID serialization.
+   *
+   * @param slotId Subscription slot ID.
+   * @param record The durable subscription record.
+   * @param input Durable operation parameters and verified reader state.
+   * @returns Completion after the operation settles.
+   */
+  async #recoverRecord(
+    slotId: SubscriptionId,
+    record: GatewayAuthenticatedSubscription,
+    input: {
+      readonly nowMs: number;
+      readonly onDefinition: (
+        definition: PublicSubscriptionWire,
+        whenExpires: number,
+      ) => Promise<void>;
+    },
+  ): Promise<void> {
+    DurableSubscriptionValues.validate(record, slotId);
+    if (SubscriptionReaderBindings.read(record.reader) === undefined) return;
+    await this.#forId(
+      slotId.value,
+      async () => {
+        if (this.#expired(record, input.nowMs)) await this.#removeExpired(record);
+        else
+          await input.onDefinition(
+            DurableSubscriptionValues.wire(record),
+            DurableSubscriptionValues.expiryMs(record.whenExpires),
+          );
+      },
+      true,
+    );
   }
 
   /**
@@ -407,7 +519,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     return this.#closing;
   }
 
-  async #close(): Promise<void> {
+  /**
+   * Stops accepting work and drains the active lifecycle.
+   *
+   * @returns Completion after the operation settles.
+   */ async #close(): Promise<void> {
     this.#closed = true;
     for (const controller of this.#active.values()) controller.abort();
     const joined = Promise.allSettled([...this.#running]);
@@ -426,7 +542,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     }
   }
 
-  async #removeExpired(record: GatewayAuthenticatedSubscription): Promise<void> {
+  /**
+   * Removes one expired durable record without claiming another reader.
+   *
+   * @param record The durable subscription record.
+   * @returns Completion after the operation settles.
+   */ async #removeExpired(record: GatewayAuthenticatedSubscription): Promise<void> {
     try {
       const id = record.id?.value;
       if (id === undefined) throw new Error("Authenticated subscription has no ID.");
@@ -441,7 +562,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     if (record.id !== undefined) await this.#storage.compareAndSet(record.id, record, undefined);
   }
 
-  async #read(id: string): Promise<GatewayAuthenticatedSubscription | undefined> {
+  /**
+   * Routes a validated read request to its registered Entity state source.
+   *
+   * @param id The stable identifier for this record.
+   * @returns The read response.
+   */ async #read(id: string): Promise<GatewayAuthenticatedSubscription | undefined> {
     if (id.length === 0) return undefined;
     const record = await this.#storage.read(create(SubscriptionIdSchema, { value: id }));
     if (record !== undefined)
@@ -449,12 +575,26 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     return record;
   }
 
-  #expired(record: GatewayAuthenticatedSubscription, nowMs: number): boolean {
+  /**
+   * Checks whether a durable record has passed its stored expiry.
+   *
+   * @param record The durable subscription record.
+   * @param nowMs The current time in milliseconds.
+   * @returns Whether the record has expired.
+   */ #expired(record: GatewayAuthenticatedSubscription, nowMs: number): boolean {
     DurableSubscriptionValues.validate(record);
     return DurableSubscriptionValues.expiryMs(record.whenExpires) <= nowMs;
   }
 
-  async #forId<T>(id: string, operation: () => Promise<T>, admitted = false): Promise<T> {
+  /**
+   * Runs a serialized durable operation for one subscription ID.
+   *
+   * @param id The stable identifier for this record.
+   * @param operation Accepted asynchronous operation.
+   * @param admitted Verified reader and request state.
+   * @returns The operation result for that ID.
+   * @typeParam T Result type of the admitted operation.
+   */ async #forId<T>(id: string, operation: () => Promise<T>, admitted = false): Promise<T> {
     if (!admitted) this.#open();
     const previous = this.#pending.get(id) ?? Promise.resolve();
     const queued = this.#queued.get(id) ?? 0;
@@ -479,7 +619,13 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     }
   }
 
-  #admit<T>(operation: () => Promise<T>): Promise<T> {
+  /**
+   * Rejects new durable work after close and tracks accepted operations.
+   *
+   * @param operation Asynchronous storage operation to admit.
+   * @returns Tracked operation result.
+   * @typeParam T Result of the admitted storage operation.
+   */ #admit<T>(operation: () => Promise<T>): Promise<T> {
     try {
       this.#open();
     } catch {
@@ -490,7 +636,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     return task;
   }
 
-  #track(task: Promise<unknown>): void {
+  /**
+   * Keeps an accepted storage operation visible to close until settled.
+   *
+   * @param task Accepted operation promise.
+   */ #track(task: Promise<unknown>): void {
     this.#running.add(task);
     void task.then(
       () => {
@@ -502,11 +652,20 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     );
   }
 
-  #open(): void {
+  /**
+   * Requires the durable store to remain open for new operations.
+   */ #open(): void {
     if (this.#closed) throw new Error("authenticated subscription store is closed");
   }
 
-  async #callback(
+  /**
+   * Invokes a retained subscription callback after reader admission.
+   *
+   * @param callback Definition or lifecycle callback.
+   * @param wire Canonical serialized subscription bytes.
+   * @param controller Abort controller for the active operation.
+   * @returns Completion after the operation settles.
+   */ async #callback(
     callback: OnSubscriptionDefinition,
     wire: PublicSubscriptionWire,
     controller: AbortController,
@@ -526,12 +685,23 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     }
   }
 
-  async #callbackForId(
+  /**
+   * Finds the retained definition and invokes its callback by ID.
+   *
+   * @param id The stable identifier for this record.
+   * @param callback Definition or lifecycle callback.
+   * @param wire Canonical serialized subscription bytes.
+   * @param signal The cancellation signal for this operation.
+   * @param active Active retained binding state.
+   * @param reader The verified reader facts for this operation.
+   * @returns Completion after the operation settles.
+   */ async #callbackForId(
     id: string,
     callback: OnSubscriptionDefinition,
     wire: PublicSubscriptionWire,
     signal?: AbortSignal,
     active = false,
+    reader?: ReaderIdentity,
   ): Promise<void> {
     const controller = new AbortController();
     const abort = () => {
@@ -540,16 +710,25 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) controller.abort();
     this.#active.set(id, controller);
+    if (reader !== undefined) this.#activeReaders.set(id, reader);
     try {
       if (active) await this.#runActiveCallback(callback, wire, controller);
       else await this.#callback(callback, wire, controller);
     } finally {
       signal?.removeEventListener("abort", abort);
       if (this.#active.get(id) === controller) this.#active.delete(id);
+      if (this.#activeReaders.get(id) === reader) this.#activeReaders.delete(id);
     }
   }
 
-  async #runActiveCallback(
+  /**
+   * Invokes an active durable definition callback with cancellation tracking.
+   *
+   * @param callback Definition or lifecycle callback.
+   * @param wire Canonical serialized subscription bytes.
+   * @param controller Abort controller for the active operation.
+   * @returns Completion after the operation settles.
+   */ async #runActiveCallback(
     callback: OnSubscriptionDefinition,
     wire: PublicSubscriptionWire,
     controller: AbortController,
@@ -603,7 +782,12 @@ export function attachDurableSubscriptionCleanup(
   state.backend = cleanup;
 }
 
-function durableCleanupFor(bindings: DurableSubscriptionBindings): OnSubscriptionDefinition {
+/**
+ * Returns the cleanup state associated with a durable binding instance.
+ *
+ * @param bindings The durable subscription binding port.
+ * @returns The durable cleanup state.
+ */ function durableCleanupFor(bindings: DurableSubscriptionBindings): OnSubscriptionDefinition {
   const state = durableCleanupStates.get(bindings);
   if (state === undefined)
     throw new Error("Authenticated subscription cleanup state is unavailable.");
@@ -614,7 +798,12 @@ function durableCleanupFor(bindings: DurableSubscriptionBindings): OnSubscriptio
 }
 
 const DurableSubscriptionValues = Object.freeze({
-  expiryMs(timestamp: Timestamp | undefined): number {
+  /**
+   * Converts a Proto expiry timestamp to milliseconds.
+   *
+   * @param timestamp Stored Proto timestamp.
+   * @returns The expiry time in milliseconds.
+   */ expiryMs(timestamp: Timestamp | undefined): number {
     if (timestamp === undefined) return Number.NEGATIVE_INFINITY;
     const seconds = Number(timestamp.seconds);
     const nanos = timestamp.nanos;
@@ -627,15 +816,37 @@ const DurableSubscriptionValues = Object.freeze({
       ? milliseconds
       : Number.NEGATIVE_INFINITY;
   },
-  wire(record: GatewayAuthenticatedSubscription): PublicSubscriptionWire {
+
+  /**
+   * Serializes a retained subscription to canonical wire bytes.
+   *
+   * @param record The durable subscription record.
+   * @returns The serialized subscription bytes.
+   */ wire(record: GatewayAuthenticatedSubscription): PublicSubscriptionWire {
     if (record.subscription === undefined)
       throw new Error("Authenticated subscription has no definition.");
+    const binding = SubscriptionReaderBindings.read(record.reader);
     return {
       kind: "public-subscription",
       bytes: toBinary(SubscriptionSchema, record.subscription),
+      ...(binding === undefined
+        ? {}
+        : {
+            reader: binding.kind === "anonymous" ? {} : { principal: { id: binding.id } },
+          }),
     };
   },
-  same(left: GatewayAuthenticatedSubscription, right: GatewayAuthenticatedSubscription): boolean {
+
+  /**
+   * Compares retained subscription records including reader binding.
+   *
+   * @param left First value being compared.
+   * @param right Second value being compared.
+   * @returns Whether the records match.
+   */ same(
+    left: GatewayAuthenticatedSubscription,
+    right: GatewayAuthenticatedSubscription,
+  ): boolean {
     const first = toBinary(GatewayAuthenticatedSubscriptionSchema, left);
     const second = toBinary(GatewayAuthenticatedSubscriptionSchema, right);
     return (
@@ -643,15 +854,35 @@ const DurableSubscriptionValues = Object.freeze({
       first.every((value, index) => value === second[index])
     );
   },
-  owns(record: GatewayAuthenticatedSubscription, context: ActorContext): boolean {
+
+  /**
+   * Checks whether a durable record matches the admitted reader.
+   *
+   * @param record The durable subscription record.
+   * @param context The trusted context for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @returns Whether the reader matches the stored binding.
+   */ owns(
+    record: GatewayAuthenticatedSubscription,
+    context: ActorContext,
+    reader: ReaderIdentity,
+  ): boolean {
     const retained = record.subscription?.topic?.context;
     return (
       retained !== undefined &&
+      ReaderIdentities.matches(SubscriptionReaderBindings.read(record.reader), reader) &&
       retained.actor?.value === context.actor?.value &&
       DurableSubscriptionValues.tenantsEqual(retained.tenantId, context.tenantId)
     );
   },
-  tenantsEqual(left: ActorContext["tenantId"], right: ActorContext["tenantId"]): boolean {
+
+  /**
+   * Compares two optional tenant identifiers.
+   *
+   * @param left First value being compared.
+   * @param right Second value being compared.
+   * @returns Whether the tenant identifiers match.
+   */ tenantsEqual(left: ActorContext["tenantId"], right: ActorContext["tenantId"]): boolean {
     if (left === undefined || right === undefined) return left === right;
     const first = toBinary(TenantIdSchema, left);
     const second = toBinary(TenantIdSchema, right);
@@ -660,11 +891,18 @@ const DurableSubscriptionValues = Object.freeze({
       first.every((value, index) => value === second[index])
     );
   },
-  validate(record: GatewayAuthenticatedSubscription, slotId?: SubscriptionId): void {
+
+  /**
+   * Checks a retained subscription record before use.
+   *
+   * @param record The durable subscription record.
+   * @param slotId Subscription slot ID.
+   */ validate(record: GatewayAuthenticatedSubscription, slotId?: SubscriptionId): void {
     const id = record.id?.value;
     const nestedId = record.subscription?.id?.value;
     const context = record.subscription?.topic?.context;
     const expires = record.whenExpires;
+    SubscriptionReaderBindings.read(record.reader);
     if (
       id === undefined ||
       id.length === 0 ||

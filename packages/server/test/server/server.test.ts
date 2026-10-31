@@ -974,6 +974,7 @@ describe("Server", () => {
     const server = await openStandalone({
       port: 0,
       ...browserGateway(),
+      forwardingProof: { issue: async () => "path-probe-peer-proof" },
       backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
       bindings: inMemoryBindings(),
       sessions: {
@@ -1027,6 +1028,7 @@ describe("Server", () => {
     const server = await openStandalone({
       port: 0,
       ...browserGateway(),
+      forwardingProof: { issue: async () => "path-probe-peer-proof" },
       backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
       bindings: inMemoryBindings(),
       sessions: {
@@ -1142,6 +1144,7 @@ describe("Server", () => {
       const server = await openStandalone({
         port: 0,
         ...browserGateway(),
+        forwardingProof: { issue: async () => "path-probe-peer-proof" },
         backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
         bindings: inMemoryBindings(),
         sessions: {

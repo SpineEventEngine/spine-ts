@@ -328,7 +328,11 @@ export class Server {
     closeables: readonly unknown[],
     cleanup: FailedStartCleanup,
   ): Promise<RunningHttp2Server> {
-    const services = new SpineServices({ contexts, ...this.#services });
+    const services = new SpineServices({
+      contexts,
+      readMaxBytes: this.#readMaxBytes,
+      ...this.#services,
+    });
     cleanup.services = services;
     spineServicesAccess.installLogger(
       services,

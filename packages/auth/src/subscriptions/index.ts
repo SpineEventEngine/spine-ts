@@ -14,6 +14,12 @@
 
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
+import {
+  ReaderIdentities,
+  snapshotTrustedReader,
+  type ReaderIdentity,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
 import { ActorContextSchema, TenantIdSchema, type ActorContext } from "@spine-event-engine/proto";
 import {
   SubscriptionSchema,
@@ -22,6 +28,7 @@ import {
 } from "@spine-event-engine/proto/client";
 import type { ILogLayer } from "loglayer";
 import type {
+  AuthorizedRequestContext,
   AuthorizationPolicy,
   Clock,
   ContextResolver,
@@ -39,6 +46,7 @@ type BindingState = "inactive" | "active" | "cancelling" | "closed";
 interface Binding {
   readonly definition: Uint8Array;
   readonly context: ActorContext;
+  readonly reader: ReaderIdentity;
   readonly expiresAtMs: number | undefined;
   state: BindingState;
   controller: AbortController;
@@ -82,6 +90,11 @@ export interface PublicSubscriptionWire {
    * Carries the owned serialized subscription.
    */
   readonly bytes: Uint8Array;
+
+  /**
+   * Verified invocation reader, attached only by trusted gateway infrastructure.
+   */
+  readonly reader?: TrustedReaderContext;
 }
 
 /**
@@ -124,6 +137,11 @@ export interface BackendSubscriptionEnvelope {
    * Carries the owned serialized backend envelope.
    */
   readonly bytes: Uint8Array;
+
+  /**
+   * Verified reader for the native child, retained only by trusted infrastructure.
+   */
+  readonly reader?: TrustedReaderContext;
 }
 
 /**
@@ -158,6 +176,7 @@ type SubscriptionOperation = "subscribe" | "activate" | "cancel";
 interface PreparedOperation {
   readonly source: Extract<IncomingRequest, { readonly kind: SubscriptionOperation }>;
   readonly context: ActorContext;
+  readonly reader: TrustedReaderContext;
   readonly expiresAtMs: number | undefined;
   readonly nowMs: number;
 }
@@ -210,22 +229,26 @@ export interface SubscriptionBindings {
 
   /**
    * Creates and retains an inactive canonical subscription from a trusted topic.
+   *
    * @param input Supplies the rewritten trusted topic and expiry.
    * @returns Returns the retained public subscription wire.
    */
   create(input: {
     readonly topic: SubscriptionTopicWire;
     readonly whenExpires?: number;
+    readonly reader: ReaderIdentity;
   }): Promise<PublicSubscriptionWire>;
 
   /**
    * Activates an owned logical binding.
+   *
    * @param input Supplies trusted context and the definition callback.
    * @returns Returns the ownership transition outcome.
    */
   activate(input: {
     readonly id: string;
     readonly context: ActorContext;
+    readonly reader: ReaderIdentity;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
 
@@ -237,18 +260,21 @@ export interface SubscriptionBindings {
 
   /**
    * Cancels an owned logical binding.
+   *
    * @param input Supplies ownership facts and the definition callback.
    * @returns Returns the ownership transition outcome.
    */
   cancel(input: {
     readonly id: string;
     readonly context: ActorContext;
+    readonly reader: ReaderIdentity;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
   }): Promise<SubscriptionBindingTransition>;
 
   /**
    * Removes bindings expired at the supplied time.
+   *
    * @param nowMs Supplies the current time in milliseconds.
    * @returns Completes after expired bindings are removed.
    */
@@ -256,7 +282,6 @@ export interface SubscriptionBindings {
 
   /**
    * Restores active durable definitions after a Gateway restart when supported.
-   *
    * Implementations without durable storage may omit this operation.
    *
    * @param input Supplies the restart time and logical-definition callback.
@@ -280,6 +305,7 @@ export interface SubscriptionBindings {
 
   /**
    * Closes all retained bindings.
+   *
    * @returns Completes after retained bindings close.
    */
   close(): Promise<void>;
@@ -301,6 +327,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Creates the in-memory binding store.
+   *
    * @param options Supplies identifiers, process limits, and disposal behavior.
    */
   constructor(options: {
@@ -315,6 +342,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Returns the number of retained private bindings for lifecycle observability.
+   *
    * @returns Returns the retained binding count.
    */
   get size(): number {
@@ -323,6 +351,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Removes already-expired logical bindings without a background timer.
+   *
    * @param nowMs Supplies the current time in milliseconds.
    * @returns Completes after expired envelopes are removed.
    */
@@ -335,14 +364,13 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Closes the store by aborting work and waiting for bounded cleanup.
-   *
    * Cooperative callbacks allow cleanup to complete before this method resolves.
    * Non-cooperative raw callbacks cause an `AggregateError` after
    * `shutdownTimeoutMs`; their exactly-once disposal remains queued until they
    * settle.
+   * `AggregateError` when cleanup exceeds its shutdown limit.
    *
    * @returns Completes after bounded cooperative cleanup, or rejects with an
-   * `AggregateError` when cleanup exceeds its shutdown limit.
    */
   async close(): Promise<void> {
     this.#closed = true;
@@ -360,12 +388,14 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Creates an inactive binding from a trusted rewritten topic.
+   *
    * @param input Supplies the topic and expiry.
    * @returns Returns the retained public subscription wire.
    */
   create(input: {
     readonly topic: SubscriptionTopicWire;
     readonly whenExpires?: number;
+    readonly reader: ReaderIdentity;
   }): Promise<PublicSubscriptionWire> {
     try {
       if (this.#closed) throw new Error("subscription bindings are closed");
@@ -379,6 +409,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       this.#bindings.set(id, {
         definition: wire.wire.bytes.slice(),
         context: clone(ActorContextSchema, topic.context),
+        reader: input.reader,
         expiresAtMs: input.whenExpires,
         state: "inactive",
         controller: new AbortController(),
@@ -398,12 +429,14 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Activates only an owned inactive binding and restores retry state after callback failure.
+   *
    * @param input Supplies ownership facts and the backend callback.
    * @returns Returns the ownership transition outcome.
    */
   async activate(input: {
     readonly id: string;
     readonly context: ActorContext;
+    readonly reader: ReaderIdentity;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
     readonly signal: AbortSignal;
@@ -434,12 +467,14 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Cancels an owned binding and retains retry state after failed cleanup.
+   *
    * @param input Supplies ownership facts and the backend callback.
    * @returns Returns the ownership transition outcome.
    */
   async cancel(input: {
     readonly id: string;
     readonly context: ActorContext;
+    readonly reader: ReaderIdentity;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
   }): Promise<SubscriptionBindingTransition> {
@@ -463,9 +498,15 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     });
   }
 
-  #owned(input: {
+  /**
+   * Checks whether the retained binding still matches its current ID slot.
+   *
+   * @param input Retained binding and current lifecycle state.
+   * @returns Whether this binding is still current.
+   */ #owned(input: {
     readonly id: string;
     readonly context: ActorContext;
+    readonly reader: ReaderIdentity;
     readonly nowMs: number;
   }): Promise<Binding | undefined> {
     const binding = this.#bindings.get(input.id);
@@ -474,19 +515,30 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       this.#expire(input.id, binding);
       return Promise.resolve(undefined);
     }
-    return SubscriptionGatewayValues.contextsEqual(binding.context, input.context)
+    return SubscriptionGatewayValues.contextsEqual(binding.context, input.context) &&
+      ReaderIdentities.matches(binding.reader, input.reader)
       ? Promise.resolve(binding)
       : Promise.resolve(undefined);
   }
 
-  #precheck(input: {
+  /**
+   * Checks retained binding state before an asynchronous effect.
+   *
+   * @param input Retained binding and current lifecycle state.
+   * @returns Whether the effect may proceed.
+   */ #precheck(input: {
     readonly id: string;
     readonly context: ActorContext;
+    readonly reader: ReaderIdentity;
     readonly nowMs: number;
   }): "owned" | "absent" | "denied" {
     const binding = this.#bindings.get(input.id);
     if (binding === undefined) return "absent";
-    if (!SubscriptionGatewayValues.contextsEqual(binding.context, input.context)) return "denied";
+    if (
+      !SubscriptionGatewayValues.contextsEqual(binding.context, input.context) ||
+      !ReaderIdentities.matches(binding.reader, input.reader)
+    )
+      return "denied";
     if (
       binding.expiring ||
       (binding.expiresAtMs !== undefined && binding.expiresAtMs <= input.nowMs)
@@ -497,7 +549,12 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     return "owned";
   }
 
-  #expire(id: string, binding: Binding): void {
+  /**
+   * Expires one retained binding only if it is still current.
+   *
+   * @param id The stable identifier for this record.
+   * @param binding Retained subscription binding.
+   */ #expire(id: string, binding: Binding): void {
     if (binding.expiring || this.#bindings.get(id) !== binding) return;
     binding.expiring = true;
     binding.controller.abort();
@@ -505,13 +562,24 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     void this.#disposeAfterWork(id, binding).catch(() => undefined);
   }
 
-  #dispose(id: string, binding: Binding): void {
+  /**
+   * Clears retained definition bytes and releases binding state.
+   *
+   * @param id The stable identifier for this record.
+   * @param binding Retained subscription binding.
+   */ #dispose(id: string, binding: Binding): void {
     binding.definition.fill(0);
     binding.state = "closed";
     this.#bindings.delete(id);
   }
 
-  async #runEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
+  /**
+   * Starts one retained definition effect and tracks its completion.
+   *
+   * @param binding Retained subscription binding.
+   * @param callback Definition or lifecycle callback.
+   * @returns Completion after the operation settles.
+   */ async #runEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
     const effect = this.#startEffect(binding, callback);
     await SubscriptionGatewayValues.withTimeout(
       effect,
@@ -520,7 +588,13 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     );
   }
 
-  async #runActiveEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
+  /**
+   * Runs a retained binding effect while observing cancellation.
+   *
+   * @param binding Retained subscription binding.
+   * @param callback Definition or lifecycle callback.
+   * @returns Completion after the operation settles.
+   */ async #runActiveEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
     let observeAbort = () => undefined;
     const aborted = new Promise<"aborted">((resolve) => {
       observeAbort = () => {
@@ -539,7 +613,13 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     throw new Error("subscription operation aborted");
   }
 
-  #startEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
+  /**
+   * Builds the public definition callback effect for a retained binding.
+   *
+   * @param binding Retained subscription binding.
+   * @param callback Definition or lifecycle callback.
+   * @returns Completion after the operation settles.
+   */ #startEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
     const definition = SubscriptionGatewayValues.copyPublic({
       kind: "public-subscription",
       bytes: binding.definition,
@@ -564,7 +644,13 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     return effect;
   }
 
-  #disposeAfterWork(id: string, binding: Binding): Promise<void> {
+  /**
+   * Waits for active callback work before clearing a binding.
+   *
+   * @param id The stable identifier for this record.
+   * @param binding Retained subscription binding.
+   * @returns Completion after the operation settles.
+   */ #disposeAfterWork(id: string, binding: Binding): Promise<void> {
     const cleanup = binding.tail
       .then(() => binding.effectTail)
       .then(() => this.#disposeWithCallback(id, binding));
@@ -575,7 +661,12 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     return cleanup;
   }
 
-  #waitForShutdown(cleanup: Promise<void>): Promise<void> {
+  /**
+   * Waits for accepted binding effects before disposal.
+   *
+   * @param cleanup Resource cleanup operation.
+   * @returns Completion after the operation settles.
+   */ #waitForShutdown(cleanup: Promise<void>): Promise<void> {
     return SubscriptionGatewayValues.withTimeout(
       cleanup,
       this.#limits.shutdownTimeoutMs,
@@ -583,7 +674,13 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     );
   }
 
-  async #disposeWithCallback(id: string, binding: Binding): Promise<void> {
+  /**
+   * Detaches a retained binding and invokes its cleanup callback.
+   *
+   * @param id The stable identifier for this record.
+   * @param binding Retained subscription binding.
+   * @returns Completion after the operation settles.
+   */ async #disposeWithCallback(id: string, binding: Binding): Promise<void> {
     if (this.#bindings.get(id) !== binding) return;
     const definition = SubscriptionGatewayValues.copyPublic({
       kind: "public-subscription",
@@ -683,6 +780,7 @@ export interface SubscriptionCreator {
 
   /**
    * Creates one per-node native subscription.
+   *
    * @param request Supplies the copied canonical subscription definition.
    * @param signal Cancels the backend operation.
    * @returns Returns the trusted backend envelope.
@@ -696,6 +794,7 @@ export interface SubscriptionCreator {
    * Activates a backend subscription and validates relayed updates.
    * A custom creator checks every forwarded update's subscription ID and Topic
    * against the Subscription accepted by its backend. The envelope remains opaque.
+   *
    * @param request Supplies the copied private backend envelope and update sink.
    * @param signal Cancels the backend operation.
    * @returns Completes after activation ends.
@@ -710,6 +809,7 @@ export interface SubscriptionCreator {
 
   /**
    * Cancels a backend subscription.
+   *
    * @param request Supplies copied canonical subscription bytes.
    * @param signal Cancels the backend operation.
    * @returns Completes after cancellation ends.
@@ -721,6 +821,7 @@ export interface SubscriptionCreator {
 
   /**
    * Removes one per-node native subscription.
+   *
    * @param envelope Supplies the copied backend envelope.
    * @param signal Cancels the backend operation.
    * @returns Completes after disposal ends.
@@ -896,13 +997,14 @@ export class SubscriptionGateway {
 
   readonly #cancellations = new Map<
     string,
-    { context: ActorContext; promise: Promise<SubscriptionGatewayResult> }[]
+    { context: ActorContext; reader: ReaderIdentity; promise: Promise<SubscriptionGatewayResult> }[]
   >();
 
   #closed = false;
 
   /**
    * Creates the subscription gateway.
+   *
    * @param options Supplies admission, authorization, binding, and backend collaborators.
    */
   constructor(options: SubscriptionGatewayOptions) {
@@ -914,6 +1016,7 @@ export class SubscriptionGateway {
 
   /**
    * Handles one admitted subscription RPC request.
+   *
    * @param request Supplies the copied request admission facts.
    * @returns Returns the opaque operation result.
    */
@@ -930,6 +1033,7 @@ export class SubscriptionGateway {
 
   /**
    * Closes admission and closes retained bindings.
+   *
    * @returns Completes after retained bindings close.
    */
   async close(): Promise<void> {
@@ -943,6 +1047,7 @@ export class SubscriptionGateway {
 
   /**
    * Schedules finite local expiry cleanup for a recovered durable definition.
+   *
    * @param whenExpires Supplies the retained expiry in epoch milliseconds.
    */
   scheduleExpiry(whenExpires: number): void {
@@ -959,7 +1064,14 @@ export class SubscriptionGateway {
     this.#expiryTimers.add(timer);
   }
 
-  async #handleOperation(request: SubscriptionGatewayRequest): Promise<SubscriptionGatewayResult> {
+  /**
+   * Rejects stale or malformed gateway operations before binding mutations.
+   *
+   * @param request The request being processed.
+   * @returns Authorized result or a structured rejection.
+   */ async #handleOperation(
+    request: SubscriptionGatewayRequest,
+  ): Promise<SubscriptionGatewayResult> {
     const kind = SubscriptionGatewayValues.operationFor(request);
     if (kind === undefined) return SubscriptionGatewayValues.rejected("unknown-operation");
     const nowMs = this.#nowMs();
@@ -976,7 +1088,13 @@ export class SubscriptionGateway {
     return this.#perform(prepared, request.updates, request.signal);
   }
 
-  async #prepareSecurity(
+  /**
+   * Resolves the session and policy decision for one subscription operation.
+   *
+   * @param kind Requested subscription operation.
+   * @param request The request being processed.
+   * @returns Prepared operation or an authentication/policy rejection.
+   */ async #prepareSecurity(
     kind: SubscriptionOperation,
     request: SubscriptionGatewayRequest,
   ): Promise<PreparedOperation | SubscriptionGatewayResult> {
@@ -1002,7 +1120,15 @@ export class SubscriptionGateway {
     return this.#resolveTrusted(kind, request, source, session);
   }
 
-  async #resolveTrusted(
+  /**
+   * Builds detached trusted reader and actor facts after policy admission.
+   *
+   * @param kind Requested subscription operation.
+   * @param request The request being processed.
+   * @param source Decoded incoming subscription request.
+   * @param session Resolved gateway session or explicit public principal.
+   * @returns Prepared operation or a structured context rejection.
+   */ async #resolveTrusted(
     kind: SubscriptionOperation,
     request: SubscriptionGatewayRequest,
     source: Extract<IncomingRequest, { readonly kind: SubscriptionOperation }>,
@@ -1018,59 +1144,227 @@ export class SubscriptionGateway {
     );
     if (contextRequest === undefined)
       return SubscriptionGatewayValues.rejected("malformed-request");
-    const context = SubscriptionGatewayValues.trustedContext(
-      await this.#options.contexts.resolve(session.principal, contextRequest, this.#options.clock),
+    const resolved = await this.#options.contexts.resolve(
+      session.principal,
+      contextRequest,
+      this.#options.clock,
     );
+    const context = SubscriptionGatewayValues.trustedContext(resolved);
+    const reader = this.#trustedReader(session.principal, resolved);
     const nowMs = this.#nowMs();
-    const expiresAtMs =
-      session.expiresAt === undefined
-        ? undefined
-        : SubscriptionGatewayValues.timestampMs(session.expiresAt.seconds, session.expiresAt.nanos);
-    if (
-      nowMs === undefined ||
-      (this.#options.publicAccess !== true && expiresAtMs === undefined) ||
-      (expiresAtMs !== undefined && expiresAtMs <= nowMs) ||
-      !SubscriptionGatewayValues.matches(source.requestedContext, context)
-    )
+    const expiresAtMs = this.#expiresAtMs(session.expiresAt);
+    if (nowMs === undefined || !this.#validContext(source, context, nowMs, expiresAtMs))
       return SubscriptionGatewayValues.rejected("denied");
     return {
       source,
       context,
+      reader,
       expiresAtMs,
       nowMs,
     };
   }
 
-  #nowMs(): number | undefined {
+  /**
+   * Converts a verified session expiry into the gateway clock's millisecond unit.
+   *
+   * @param value Verified session expiry timestamp, if present.
+   * @returns The expiry in epoch milliseconds.
+   */
+  #expiresAtMs(value: { readonly seconds: bigint; readonly nanos: number } | undefined) {
+    return value === undefined
+      ? undefined
+      : SubscriptionGatewayValues.timestampMs(value.seconds, value.nanos);
+  }
+
+  /**
+   * Detaches the verified principal and current authority facts from the resolver.
+   *
+   * @param principal Verified principal from session resolution.
+   * @param resolved Resolved context and authority facts.
+   * @returns The detached verified reader facts.
+   */
+  #trustedReader(
+    principal: Parameters<AuthorizationPolicy["authorize"]>[0],
+    resolved: AuthorizedRequestContext,
+  ): TrustedReaderContext {
+    return snapshotTrustedReader({
+      ...(this.#options.publicAccess === true ? {} : { principal }),
+      ...(this.#options.publicAccess === true || resolved.authorityFacts === undefined
+        ? {}
+        : { authorityFacts: resolved.authorityFacts }),
+    });
+  }
+
+  /**
+   * Checks session time and the resolver's trusted actor/tenant against the request.
+   *
+   * @param source Decoded incoming subscription request.
+   * @param context The trusted context for this operation.
+   * @param nowMs The current time in milliseconds.
+   * @param expiresAtMs The session expiry in milliseconds, when present.
+   * @returns The validated actor context.
+   */
+  #validContext(
+    source: PreparedOperation["source"],
+    context: ActorContext,
+    nowMs: number,
+    expiresAtMs: number | undefined,
+  ): boolean {
+    return (
+      (this.#options.publicAccess === true || expiresAtMs !== undefined) &&
+      (expiresAtMs === undefined || expiresAtMs > nowMs) &&
+      SubscriptionGatewayValues.matches(source.requestedContext, context)
+    );
+  }
+
+  /**
+   * Reads the configured clock as finite epoch milliseconds.
+   *
+   * @returns Current epoch milliseconds, if valid.
+   */ #nowMs(): number | undefined {
     const now = this.#options.clock.now();
     return SubscriptionGatewayValues.timestampMs(now.seconds, now.nanos);
   }
 
-  async #perform(
+  /**
+   * Runs the prepared subscription operation after security checks.
+   *
+   * @param prepared Policy-admitted subscription operation.
+   * @param updates The admitted subscription update sink.
+   * @param signal The cancellation signal for this operation.
+   * @returns The admitted subscription outcome.
+   */ async #perform(
     prepared: PreparedOperation,
     updates: SubscriptionUpdateSink | undefined,
     signal: AbortSignal | undefined,
   ): Promise<SubscriptionGatewayResult> {
-    const { source, context, expiresAtMs, nowMs } = prepared;
+    const { source, context, reader, expiresAtMs, nowMs } = prepared;
     const rewritten = SubscriptionGatewayValues.rewrite(source, context);
-    if (source.kind === "subscribe") return this.#subscribe(rewritten, context, expiresAtMs);
+    if (source.kind === "subscribe")
+      return this.#subscribe(rewritten, context, reader, expiresAtMs);
     const id = source.subscription.id?.value;
     if (id === undefined || id.length === 0) return SubscriptionGatewayValues.rejected("denied");
     return source.kind === "activate"
       ? this.#activate(
           id,
           context,
+          reader,
           nowMs,
           expiresAtMs,
           updates ?? SubscriptionGatewayValues.discardUpdate,
           signal,
         )
-      : this.#cancel(id, context, nowMs);
+      : this.#cancel(id, context, nowMs, reader);
   }
 
-  async #activate(
+  /**
+   * Verifies membership and activates a retained subscription.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @param nowMs The current time in milliseconds.
+   * @param expiresAtMs The session expiry in milliseconds, when present.
+   * @param updates The admitted subscription update sink.
+   * @param signal The cancellation signal for this operation.
+   * @returns The update stream after admission.
+   */ async #activate(
     id: string,
     context: ActorContext,
+    reader: TrustedReaderContext,
+    nowMs: number,
+    expiresAtMs: number | undefined,
+    updates: SubscriptionUpdateSink,
+    signal: AbortSignal | undefined,
+  ): Promise<SubscriptionGatewayResult> {
+    if (signal?.aborted) return SubscriptionGatewayValues.rejected("denied");
+    if (this.#options.publicAccess === true) this.#clearPublicPending(id);
+    let activationFailure: Error | undefined;
+    let outcome: SubscriptionGatewayResult = SubscriptionGatewayValues.rejected("denied");
+    try {
+      outcome = await this.#activationEffect(
+        id,
+        context,
+        reader,
+        nowMs,
+        expiresAtMs,
+        updates,
+        signal,
+      );
+    } catch (error) {
+      activationFailure = this.#activationError(error);
+    }
+    if (this.#options.publicAccess === true)
+      await this.#publicActivationCleanup(id, context, reader, nowMs, activationFailure);
+    if (activationFailure !== undefined) throw activationFailure;
+    return outcome;
+  }
+
+  /**
+   * Preserves a non-Error activation failure as a throwable cause.
+   *
+   * @param error The failure being classified or propagated.
+   * @returns The structured activation error.
+   */
+  #activationError(error: unknown): Error {
+    return error instanceof Error
+      ? error
+      : new Error("Public subscription activation failed with a non-Error value.", {
+          cause: error,
+        });
+  }
+
+  /**
+   * Releases a public definition while retaining both activation and cleanup failures.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @param nowMs The current time in milliseconds.
+   * @param activationFailure Failure raised while activating the subscription.
+   * @returns Completion after the operation settles.
+   */
+  async #publicActivationCleanup(
+    id: string,
+    context: ActorContext,
+    reader: TrustedReaderContext,
+    nowMs: number,
+    activationFailure: Error | undefined,
+  ): Promise<void> {
+    try {
+      await this.#cancel(id, context, this.#nowMs() ?? nowMs, reader);
+    } catch (error) {
+      const cleanupFailure =
+        error instanceof Error
+          ? error
+          : new Error("Public subscription cleanup failed with a non-Error value.", {
+              cause: error,
+            });
+      if (activationFailure !== undefined)
+        throw new AggregateError(
+          [activationFailure, cleanupFailure],
+          "public subscription cleanup failed",
+        );
+      throw cleanupFailure;
+    }
+  }
+
+  /**
+   * Runs one reader-bound binding activation under cancellation and session expiry.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @param nowMs The current time in milliseconds.
+   * @param expiresAtMs The session expiry in milliseconds, when present.
+   * @param updates The admitted subscription update sink.
+   * @param signal The cancellation signal for this operation.
+   * @returns The tracked activation effect.
+   */
+  async #activationEffect(
+    id: string,
+    context: ActorContext,
+    reader: TrustedReaderContext,
     nowMs: number,
     expiresAtMs: number | undefined,
     updates: SubscriptionUpdateSink,
@@ -1081,79 +1375,100 @@ export class SubscriptionGateway {
     const abort = () => {
       activeController.abort();
     };
-    if (signal?.aborted) return SubscriptionGatewayValues.rejected("denied");
-    if (this.#options.publicAccess === true) this.#clearPublicPending(id);
     signal?.addEventListener("abort", abort, { once: true });
-    const expiry =
-      expiresAtMs === undefined
-        ? undefined
-        : setTimeout(
-            () => {
-              activeController.abort();
-            },
-            Math.max(0, expiresAtMs - nowMs),
-          );
-    let activationFailure: Error | undefined;
-    let outcome: SubscriptionGatewayResult = SubscriptionGatewayValues.rejected("denied");
+    const expiry = this.#activationExpiry(expiresAtMs, nowMs, activeController);
     try {
-      const result = await this.#options.bindings.activate({
-        id,
-        context,
-        nowMs,
-        signal: active,
-        onDefinition: (definition, effectSignal) =>
-          this.#forwardActivate(definition, updates, effectSignal),
-      });
-      outcome =
-        result.kind === "activated"
-          ? { kind: "activated" }
-          : SubscriptionGatewayValues.rejected("denied");
+      const result = await this.#activateBinding(id, context, reader, nowMs, active, updates);
+      return result.kind === "activated"
+        ? { kind: "activated" }
+        : SubscriptionGatewayValues.rejected("denied");
     } catch (error) {
       if (error instanceof Error && error.message === "binding-busy")
-        outcome = SubscriptionGatewayValues.rejected("binding-busy");
-      else
-        activationFailure =
-          error instanceof Error
-            ? error
-            : new Error("Public subscription activation failed with a non-Error value.", {
-                cause: error,
-              });
+        return SubscriptionGatewayValues.rejected("binding-busy");
+      throw error;
     } finally {
       if (expiry !== undefined) clearTimeout(expiry);
       signal?.removeEventListener("abort", abort);
     }
-    let cleanupFailure: Error | undefined;
-    if (this.#options.publicAccess === true)
-      try {
-        await this.#cancel(id, context, this.#nowMs() ?? nowMs);
-      } catch (error) {
-        cleanupFailure =
-          error instanceof Error
-            ? error
-            : new Error("Public subscription cleanup failed with a non-Error value.", {
-                cause: error,
-              });
-      }
-    if (activationFailure !== undefined) {
-      if (cleanupFailure !== undefined)
-        throw new AggregateError(
-          [activationFailure, cleanupFailure],
-          "public subscription cleanup failed",
-        );
-      throw activationFailure;
-    }
-    if (cleanupFailure !== undefined) throw cleanupFailure;
-    return outcome;
   }
 
-  #cancel(id: string, context: ActorContext, nowMs: number): Promise<SubscriptionGatewayResult> {
+  /**
+   * Cancels activation when the admitted reader session reaches its expiry.
+   *
+   * @param expiresAtMs The session expiry in milliseconds, when present.
+   * @param nowMs The current time in milliseconds.
+   * @param controller Abort controller for the active operation.
+   * @returns The pending activation expiry.
+   */
+  #activationExpiry(
+    expiresAtMs: number | undefined,
+    nowMs: number,
+    controller: AbortController,
+  ): unknown {
+    return expiresAtMs === undefined
+      ? undefined
+      : setTimeout(
+          () => {
+            controller.abort();
+          },
+          Math.max(0, expiresAtMs - nowMs),
+        );
+  }
+
+  /**
+   * Sends one reader-bound activation to the durable binding port.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @param nowMs The current time in milliseconds.
+   * @param signal The cancellation signal for this operation.
+   * @param updates The admitted subscription update sink.
+   * @returns The activated reader-bound definition.
+   */
+  #activateBinding(
+    id: string,
+    context: ActorContext,
+    reader: TrustedReaderContext,
+    nowMs: number,
+    signal: AbortSignal,
+    updates: SubscriptionUpdateSink,
+  ) {
+    return this.#options.bindings.activate({
+      id,
+      context,
+      reader: ReaderIdentities.from(reader),
+      nowMs,
+      signal,
+      onDefinition: (definition, effectSignal) =>
+        this.#forwardActivate({ ...definition, reader }, updates, effectSignal),
+    });
+  }
+
+  /**
+   * Verifies reader membership and removes a retained subscription.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   * @param nowMs The current time in milliseconds.
+   * @param reader The verified reader facts for this operation.
+   * @returns The cancellation acknowledgment.
+   */ #cancel(
+    id: string,
+    context: ActorContext,
+    nowMs: number,
+    reader: TrustedReaderContext = {},
+  ): Promise<SubscriptionGatewayResult> {
+    const identity = ReaderIdentities.from(reader);
     const active = this.#cancellations.get(id) ?? [];
-    const matching = active.find((entry) =>
-      SubscriptionGatewayValues.contextsEqual(entry.context, context),
+    const matching = active.find(
+      (entry) =>
+        SubscriptionGatewayValues.contextsEqual(entry.context, context) &&
+        ReaderIdentities.matches(entry.reader, identity),
     );
     if (matching !== undefined) return matching.promise;
-    const promise = this.#cancelOnce(id, context, nowMs);
-    const entry = { context: clone(ActorContextSchema, context), promise };
+    const promise = this.#cancelOnce(id, context, nowMs, reader);
+    const entry = { context: clone(ActorContextSchema, context), reader: identity, promise };
     active.push(entry);
     this.#cancellations.set(id, active);
     // spine-log-boundary: auth.subscription_cancel_finally_observer
@@ -1169,17 +1484,28 @@ export class SubscriptionGateway {
     return promise;
   }
 
-  async #cancelOnce(
+  /**
+   * Serializes one cancellation against concurrent work for its ID.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   * @param nowMs The current time in milliseconds.
+   * @param reader The verified reader facts for this operation.
+   * @returns The cancellation outcome.
+   */ async #cancelOnce(
     id: string,
     context: ActorContext,
     nowMs: number,
+    reader: TrustedReaderContext,
   ): Promise<SubscriptionGatewayResult> {
     try {
       const result = await this.#options.bindings.cancel({
         id,
         context,
+        reader: ReaderIdentities.from(reader),
         nowMs,
-        onDefinition: (definition, effectSignal) => this.#forwardCancel(definition, effectSignal),
+        onDefinition: (definition, effectSignal) =>
+          this.#forwardCancel({ ...definition, reader }, effectSignal),
       });
       if (result.kind === "denied") return SubscriptionGatewayValues.rejected("denied");
       this.#clearPublicPending(id);
@@ -1191,43 +1517,42 @@ export class SubscriptionGateway {
     }
   }
 
-  async #subscribe(
+  /**
+   * Validates and retains a reader-bound subscription definition.
+   *
+   * @param bytes The serialized message bytes.
+   * @param context The trusted context for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @param expiresAtMs The session expiry in milliseconds, when present.
+   * @returns The new subscription definition.
+   */ async #subscribe(
     bytes: Uint8Array,
     context: ActorContext,
+    reader: TrustedReaderContext,
     expiresAtMs: number | undefined,
   ): Promise<SubscriptionGatewayResult> {
     const wire = await this.#options.bindings.create({
       topic: { kind: "subscription-topic", bytes: bytes.slice() },
+      reader: ReaderIdentities.from(reader),
       ...(expiresAtMs === undefined ? {} : { whenExpires: expiresAtMs }),
     });
+    const admittedWire = { ...wire, reader };
     const id = fromBinary(SubscriptionSchema, wire.bytes).id?.value;
     if (id === undefined || id.length === 0) throw new Error("retained subscription has no ID");
     const controller = new AbortController();
     try {
-      await this.#receiveBackend(wire, controller);
-      const nowMs = this.#nowMs();
-      if (nowMs === undefined || (expiresAtMs !== undefined && expiresAtMs <= nowMs)) {
-        await this.#compensateDefinition(wire, controller);
-        await this.#options.bindings.cancel({
-          id,
-          context,
-          nowMs: nowMs ?? expiresAtMs ?? 0,
-          onDefinition: () => Promise.resolve(),
-        });
-        return SubscriptionGatewayValues.rejected("denied");
-      }
-      if (expiresAtMs !== undefined) this.scheduleExpiry(expiresAtMs);
-      if (this.#options.publicAccess === true) this.#schedulePublicPending(id, context);
-      return { kind: "subscribed", wire: SubscriptionGatewayValues.copyPublic(wire) };
+      await this.#receiveBackend(admittedWire, controller);
+      return await this.#confirmCreated(id, context, reader, expiresAtMs, admittedWire, controller);
     } catch (error) {
       try {
-        await this.#compensateDefinition(wire, controller);
-        await this.#options.bindings.cancel({
+        await this.#discardCreated(
           id,
           context,
-          nowMs: this.#nowMs() ?? expiresAtMs ?? 0,
-          onDefinition: () => Promise.resolve(),
-        });
+          reader,
+          this.#nowMs() ?? expiresAtMs ?? 0,
+          admittedWire,
+          controller,
+        );
         // spine-log-boundary: auth.subscription_recovered_cleanup
       } catch {
         // Retain the row: a later request can retry backend cleanup.
@@ -1236,7 +1561,73 @@ export class SubscriptionGateway {
     }
   }
 
-  #schedulePublicPending(id: string, context: ActorContext): void {
+  /**
+   * Returns an admitted public definition only while its reader session remains valid.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @param expiresAtMs The session expiry in milliseconds, when present.
+   * @param wire Canonical serialized subscription bytes.
+   * @param controller Abort controller for the active operation.
+   * @returns The confirmed retained definition.
+   */
+  async #confirmCreated(
+    id: string,
+    context: ActorContext,
+    reader: TrustedReaderContext,
+    expiresAtMs: number | undefined,
+    wire: PublicSubscriptionWire,
+    controller: AbortController,
+  ): Promise<SubscriptionGatewayResult> {
+    const nowMs = this.#nowMs();
+    if (nowMs === undefined || (expiresAtMs !== undefined && expiresAtMs <= nowMs)) {
+      await this.#discardCreated(id, context, reader, nowMs ?? expiresAtMs ?? 0, wire, controller);
+      return SubscriptionGatewayValues.rejected("denied");
+    }
+    if (expiresAtMs !== undefined) this.scheduleExpiry(expiresAtMs);
+    if (this.#options.publicAccess === true) this.#schedulePublicPending(id, context);
+    return {
+      kind: "subscribed",
+      wire: { kind: "public-subscription", bytes: wire.bytes.slice() },
+    };
+  }
+
+  /**
+   * Compensates a created definition before it can escape admission.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @param nowMs The current time in milliseconds.
+   * @param wire Canonical serialized subscription bytes.
+   * @param controller Abort controller for the active operation.
+   * @returns Completion after the operation settles.
+   */
+  async #discardCreated(
+    id: string,
+    context: ActorContext,
+    reader: TrustedReaderContext,
+    nowMs: number,
+    wire: PublicSubscriptionWire,
+    controller: AbortController,
+  ): Promise<void> {
+    await this.#compensateDefinition(wire, controller);
+    await this.#options.bindings.cancel({
+      id,
+      context,
+      reader: ReaderIdentities.from(reader),
+      nowMs,
+      onDefinition: () => Promise.resolve(),
+    });
+  }
+
+  /**
+   * Schedules activation retry for a public subscription.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   */ #schedulePublicPending(id: string, context: ActorContext): void {
     this.#clearPublicPending(id);
     const timer = setTimeout(() => {
       if (this.#publicPendingTimers.get(id) !== timer) return;
@@ -1254,18 +1645,36 @@ export class SubscriptionGateway {
     this.#publicPendingTimers.set(id, timer);
   }
 
-  #retryPublicPending(id: string, context: ActorContext): void {
+  /**
+   * Retries pending public activation after backend availability changes.
+   *
+   * @param id The stable identifier for this record.
+   * @param context The trusted context for this operation.
+   */ #retryPublicPending(id: string, context: ActorContext): void {
     if (!this.#closed && !this.#publicPendingTimers.has(id))
       this.#schedulePublicPending(id, context);
   }
 
-  #clearPublicPending(id: string): void {
+  /**
+   * Clears the pending public activation timer for an ID.
+   *
+   * @param id The stable identifier for this record.
+   */ #clearPublicPending(id: string): void {
     const timer = this.#publicPendingTimers.get(id);
     if (timer !== undefined) clearTimeout(timer);
     this.#publicPendingTimers.delete(id);
   }
 
-  async #receiveBackend(wire: PublicSubscriptionWire, controller: AbortController): Promise<void> {
+  /**
+   * Attaches the native backend subscription after admission.
+   *
+   * @param wire Canonical serialized subscription bytes.
+   * @param controller Abort controller for the active operation.
+   * @returns Completion after the operation settles.
+   */ async #receiveBackend(
+    wire: PublicSubscriptionWire,
+    controller: AbortController,
+  ): Promise<void> {
     return SubscriptionGatewayValues.withTimeout(
       this.#options.creator.subscribe(
         SubscriptionGatewayValues.copyPublic(wire),
@@ -1277,7 +1686,13 @@ export class SubscriptionGateway {
     );
   }
 
-  async #compensateDefinition(
+  /**
+   * Removes a definition after a failed backend subscription step.
+   *
+   * @param wire Canonical serialized subscription bytes.
+   * @param controller Abort controller for the active operation.
+   * @returns Completion after the operation settles.
+   */ async #compensateDefinition(
     wire: PublicSubscriptionWire,
     controller: AbortController,
   ): Promise<void> {
@@ -1288,7 +1703,14 @@ export class SubscriptionGateway {
     );
   }
 
-  async #forwardActivate(
+  /**
+   * Forwards activation with the verified reader assertion.
+   *
+   * @param definition The serialized subscription definition.
+   * @param updates The admitted subscription update sink.
+   * @param signal The cancellation signal for this operation.
+   * @returns Completion after the operation settles.
+   */ async #forwardActivate(
     definition: PublicSubscriptionWire,
     updates: SubscriptionUpdateSink,
     signal: SubscriptionAbortSignal,
@@ -1319,7 +1741,13 @@ export class SubscriptionGateway {
     }
   }
 
-  async #forwardCancel(
+  /**
+   * Forwards cancellation with the verified reader assertion.
+   *
+   * @param definition The serialized subscription definition.
+   * @param signal The cancellation signal for this operation.
+   * @returns Completion after the operation settles.
+   */ async #forwardCancel(
     definition: PublicSubscriptionWire,
     signal: SubscriptionAbortSignal,
   ): Promise<void> {
@@ -1356,7 +1784,11 @@ const SubscriptionGatewayValues = Object.freeze({
    * @returns Copied public subscription bytes.
    */
   copyPublic(wire: PublicSubscriptionWire): PublicSubscriptionWire {
-    return { kind: wire.kind, bytes: wire.bytes.slice() };
+    return {
+      kind: wire.kind,
+      bytes: wire.bytes.slice(),
+      ...(wire.reader === undefined ? {} : { reader: snapshotTrustedReader(wire.reader) }),
+    };
   },
 
   /**

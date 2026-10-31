@@ -42,6 +42,7 @@ async function exercise(factory: StorageFactory, reopen = true): Promise<void> {
   const wire = await first.create({
     topic: { kind: "subscription-topic", bytes: topic },
     whenExpires: 1_000,
+    reader: { kind: "anonymous" },
   });
   if (reopen) await first.close();
   const reopened = reopen
@@ -63,7 +64,13 @@ async function exercise(factory: StorageFactory, reopen = true): Promise<void> {
     });
   const id = fromBinary(SubscriptionSchema, wire.bytes).id?.value;
   if (id === undefined) throw new Error("created subscription has no ID");
-  await reopened.cancel({ id, context, nowMs: 1, onDefinition: () => Promise.resolve() });
+  await reopened.cancel({
+    id,
+    context,
+    reader: { kind: "anonymous" },
+    nowMs: 1,
+    onDefinition: () => Promise.resolve(),
+  });
   if (reopen) expect(restored).toEqual([wire.bytes]);
   await reopened.close();
 }

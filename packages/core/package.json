@@ -33,6 +33,14 @@
     "./spi/entity-query-plan": {
       "types": "./dist/spi/entity-query-plan.d.ts",
       "default": "./dist/spi/entity-query-plan.js"
+    },
+    "./spi/trusted-reader": {
+      "types": "./dist/spi/trusted-reader.d.ts",
+      "default": "./dist/spi/trusted-reader.js"
+    },
+    "./spi/reader-forwarding": {
+      "types": "./dist/spi/reader-forwarding.d.ts",
+      "default": "./dist/spi/reader-forwarding.js"
     }
   },
   "files": [

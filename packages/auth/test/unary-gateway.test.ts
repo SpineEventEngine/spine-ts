@@ -568,6 +568,90 @@ describe("UnaryGateway", () => {
     expect(forwardedQuery.context).toMatchObject({ timestamp: { seconds: 2n } });
   });
 
+  it("forwards detached verified reader and authority facts without credentials", async () => {
+    const attributes = { organization: "org-1" };
+    const authorityFacts = { role: "reviewer" };
+    let forwarded: unknown;
+    const fixture = setup();
+    const gateway = new UnaryGateway({
+      ...fixture.options,
+      sessions: {
+        resolve: () =>
+          Promise.resolve({
+            principal: { id: "reader-1", attributes },
+            expiresAt: sessionExpiry,
+          }),
+      },
+      contexts: {
+        ...fixture.options.contexts,
+        resolve: async (principal, incoming, clock) => ({
+          ...(await fixture.options.contexts.resolve(principal, incoming, clock)),
+          authorityFacts,
+        }),
+      },
+      forward: (request) => {
+        forwarded = request;
+        return Promise.resolve(new Uint8Array());
+      },
+    });
+    const query = create(QuerySchema, {
+      id: { value: "query-1" },
+      target: { type: "type.example.test/Thing", criterion: { case: "includeAll", value: true } },
+      context: requestedContext,
+    });
+
+    await gateway.handle(
+      request("spine.client.QueryService", "Read", toBinary(QuerySchema, query)),
+    );
+    attributes.organization = "changed";
+    authorityFacts.role = "changed";
+    expect(forwarded).toMatchObject({
+      reader: {
+        principal: {
+          id: "reader-1",
+          attributes: { organization: "org-1" },
+        },
+        authorityFacts: { role: "reviewer" },
+      },
+    });
+    expect(forwarded).not.toHaveProperty("credential");
+  });
+
+  it("does not promote the public admission marker or resolver facts to authenticated identity", async () => {
+    const fixture = setup();
+    let forwarded: unknown;
+    const gateway = new UnaryGateway({
+      authorize: fixture.options.authorize,
+      clock: fixture.options.clock,
+      maxRequestBytes: fixture.options.maxRequestBytes,
+      publicAccess: true,
+      contexts: {
+        ...fixture.options.contexts,
+        resolve: async (principal, incoming, clock) => ({
+          ...(await fixture.options.contexts.resolve(principal, incoming, clock)),
+          authorityFacts: { privileged: true },
+        }),
+      },
+      forward: (request) => {
+        forwarded = request;
+        return Promise.resolve(new Uint8Array());
+      },
+    });
+    const query = create(QuerySchema, {
+      id: { value: "query-1" },
+      target: { type: "type.example.test/Thing", criterion: { case: "includeAll", value: true } },
+      context: requestedContext,
+    });
+
+    await gateway.handle({
+      ...request("spine.client.QueryService", "Read", toBinary(QuerySchema, query)),
+      credential: undefined,
+    });
+    expect(forwarded).toMatchObject({ reader: {} });
+    expect((forwarded as { reader: object }).reader).not.toHaveProperty("principal");
+    expect((forwarded as { reader: object }).reader).not.toHaveProperty("authorityFacts");
+  });
+
   it("uses the canonical route and immutable allowlisted transport facts for policy and forwarding", async () => {
     const command = toBinary(
       CommandSchema,

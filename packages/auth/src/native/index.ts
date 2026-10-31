@@ -35,6 +35,11 @@ import {
 } from "@spine-event-engine/proto/client";
 import { AuthenticationService } from "@spine-event-engine/proto/auth";
 import type { Command } from "@spine-event-engine/proto";
+import {
+  ReaderForwarding,
+  type ReaderProofIssuer,
+} from "@spine-event-engine/core/spi/reader-forwarding";
+import type { TrustedReaderContext } from "@spine-event-engine/core/spi/trusted-reader";
 import type { UnaryForwarder, UnaryGateway, UnaryGatewayResult } from "../gateway/index.js";
 import type { RequestCredential, TransportRequestContext } from "../index.js";
 import type {
@@ -92,6 +97,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
 
   /**
    * Creates a bounded FIFO relay.
+   *
    * @param limits The optional message and byte bounds.
    */
   constructor(limits: SubscriptionRelayLimits = {}) {
@@ -101,6 +107,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
   /**
    * Copies and validates an update before FIFO admission. Count precedes bytes;
    * either bound rejects with `ResourceExhausted`.
+   *
    * @param update The update bytes to admit.
    * @returns Completes after the update is admitted or rejected.
    */
@@ -147,6 +154,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
 
   /**
    * Throws queued and future consumers, purging bytes.
+   *
    * @param reason The terminal failure reason.
    */
   fail(reason: unknown): void {
@@ -155,6 +163,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
 
   /**
    * Returns the public iterator; `return()` cancels it and purges queued bytes, while `throw()` fails it.
+   *
    * @returns The single public update iterator.
    */
   [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
@@ -171,7 +180,11 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
     };
   }
 
-  async #next(): Promise<IteratorResult<SubscriptionUpdate>> {
+  /**
+   * Dequeues the next native update or waits for stream progress.
+   *
+   * @returns The next iterator result.
+   */ async #next(): Promise<IteratorResult<SubscriptionUpdate>> {
     const bytes = this.#queue.shift();
     if (bytes !== undefined) {
       this.#bytes -= bytes.byteLength;
@@ -191,7 +204,13 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
     return new Promise((resolve, reject) => this.#waiters.push({ resolve, reject }));
   }
 
-  #failOverflow(dimension: "message" | "byte", limit: number, observed: number): never {
+  /**
+   * Fails a native update stream after its queue limit is exceeded.
+   *
+   * @param dimension Subscription limit dimension being checked.
+   * @param limit Configured operation bound.
+   * @param observed Observed subscription or lifecycle state.
+   */ #failOverflow(dimension: "message" | "byte", limit: number, observed: number): never {
     const error = new ConnectError(
       `subscription relay ${dimension} limit ${String(limit)} exceeded by ${String(observed)}`,
       Code.ResourceExhausted,
@@ -200,7 +219,11 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
     throw error;
   }
 
-  #finish(reason?: unknown): void {
+  /**
+   * Completes a native update stream and releases queued listeners.
+   *
+   * @param reason Failure reason returned to the caller.
+   */ #finish(reason?: unknown): void {
     if (this.#closed) {
       if (this.#terminal !== undefined || reason === undefined) return;
       this.#terminal = reason;
@@ -244,22 +267,39 @@ const NativeRelayValues = Object.freeze({
 /**
  * Native Connect adapter. Post/Read use their matching Command/Query descriptors;
  * Subscribe/Activate/Cancel/Dispose use the shared Subscription descriptors.
- * Every call receives only an admitted AbortSignal, never browser credentials or facts.
+ * Native requests carry the admitted cancellation signal and, when an issuer is
+ * configured, operation-bound internal headers with detached verified reader
+ * facts. Browser credentials and raw transport facts are not forwarded.
  */
 export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForwarder {
   readonly #transport: Transport;
 
+  readonly #issuer: ReaderProofIssuer | undefined;
+
+  readonly #maxBytes: number;
+
   /**
    * Creates a native adapter over one Connect transport.
+   *
    * @param transport The native Connect transport.
+   * @param forwarding Configured peer proof issuer and existing request-size bound.
    */
-  constructor(transport: Transport) {
+  constructor(
+    transport: Transport,
+    forwarding?: {
+      readonly issuer: ReaderProofIssuer;
+      readonly maxBytes: number;
+    },
+  ) {
     this.#transport = transport;
+    this.#issuer = forwarding?.issuer;
+    this.#maxBytes = forwarding?.maxBytes ?? 4 * 1024 * 1024;
   }
 
   /**
    * Sends an admitted Post or Read envelope through its matching native descriptor.
    * Removes the backend transport's media type from errors before a gateway serializes them.
+   *
    * @param request The admitted unary request envelope.
    * @returns The encoded native response.
    */
@@ -267,15 +307,21 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     readonly service: string;
     readonly method: string;
     readonly value: Uint8Array;
+    readonly reader?: TrustedReaderContext;
     readonly signal?: AbortSignal;
   }): Promise<Uint8Array> {
     try {
+      const headers = request.reader === undefined ? undefined : await this.readerHeaders(request);
+      const options = {
+        ...(request.signal === undefined ? {} : { signal: request.signal }),
+        ...(headers === undefined ? {} : { headers }),
+      };
       if (request.service === "spine.client.CommandService" && request.method === "Post")
         return toBinary(
           CommandService.method.post.output,
           await createClient(CommandService, this.#transport).post(
             fromBinary(CommandService.method.post.input, request.value),
-            ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
+            options,
           ),
         );
       if (request.service === "spine.client.QueryService" && request.method === "Read")
@@ -283,7 +329,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
           QueryService.method.read.output,
           await createClient(QueryService, this.#transport).read(
             fromBinary(QueryService.method.read.input, request.value),
-            ...(request.signal === undefined ? [] : [{ signal: request.signal }]),
+            options,
           ),
         );
       throw new ConnectError("unsupported native unary operation", Code.Unimplemented);
@@ -293,7 +339,36 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   }
 
   /**
+   * Builds peer-authenticated metadata for an admitted unary request.
+   *
+   * @param request Admitted operation and trusted reader facts.
+   * @returns Headers for the configured native forwarding peer.
+   */
+  async readerHeaders(request: {
+    readonly service: string;
+    readonly method: string;
+    readonly value: Uint8Array;
+    readonly reader?: TrustedReaderContext | undefined;
+  }): Promise<Readonly<Record<string, string>> | undefined> {
+    if (request.reader === undefined) return undefined;
+    if (this.#issuer === undefined) {
+      if (request.reader.principal !== undefined || request.reader.authorityFacts !== undefined)
+        throw new Error("Authenticated forwarding requires a configured proof issuer.");
+      return undefined;
+    }
+    return ReaderForwarding.seal(
+      request.service,
+      request.method,
+      request.value,
+      request.reader,
+      this.#issuer,
+      this.#maxBytes,
+    );
+  }
+
+  /**
    * Creates a native subscription with the supplied admitted cancellation signal.
+   *
    * @param request The admitted canonical subscription definition.
    * @param signal The admitted cancellation signal.
    * @returns The private backend subscription envelope.
@@ -303,11 +378,22 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     signal: SubscriptionAbortSignal,
   ): Promise<BackendSubscriptionEnvelope> {
     try {
-      const result = await createClient(SubscriptionService, this.#transport).subscribe(
-        fromBinary(SubscriptionSchema, request.bytes).topic ?? create(TopicSchema),
-        { signal },
-      );
-      return { kind: "backend-subscription-envelope", bytes: toBinary(SubscriptionSchema, result) };
+      const topic = fromBinary(SubscriptionSchema, request.bytes).topic ?? create(TopicSchema);
+      const headers = await this.readerHeaders({
+        service: "spine.client.SubscriptionService",
+        method: "Subscribe",
+        value: toBinary(TopicSchema, topic),
+        reader: request.reader,
+      });
+      const result = await createClient(SubscriptionService, this.#transport).subscribe(topic, {
+        signal,
+        ...(headers === undefined ? {} : { headers }),
+      });
+      return {
+        kind: "backend-subscription-envelope",
+        bytes: toBinary(SubscriptionSchema, result),
+        ...(request.reader === undefined ? {} : { reader: request.reader }),
+      };
     } catch (error) {
       throw NativeGatewayValues.publicError(error);
     }
@@ -315,6 +401,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
 
   /**
    * Streams native Activate updates through the supplied asynchronous public-update sink.
+   *
    * @param request The private native subscription envelope and update sink.
    * @param signal The admitted cancellation signal.
    * @returns Completes after native activation ends.
@@ -328,19 +415,17 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   ): Promise<void> {
     const subscription = fromBinary(SubscriptionSchema, request.wire.bytes);
     try {
+      const headers = await this.readerHeaders({
+        service: "spine.client.SubscriptionService",
+        method: "Activate",
+        value: toBinary(SubscriptionSchema, subscription),
+        reader: request.wire.reader,
+      });
       for await (const update of createClient(SubscriptionService, this.#transport).activate(
         subscription,
-        { signal },
+        { signal, ...(headers === undefined ? {} : { headers }) },
       )) {
-        const topic = subscription.topic;
-        const updateTopic = update.subscription?.topic;
-        if (
-          update.subscription?.id?.value !== subscription.id?.value ||
-          topic === undefined ||
-          updateTopic === undefined ||
-          !equals(TopicSchema, updateTopic, topic)
-        )
-          throw new Error("Backend child update does not match its subscription.");
+        this.checkUpdate(subscription, update);
         await request.updates({
           kind: "subscription-update",
           bytes: toBinary(SubscriptionUpdateSchema, update),
@@ -352,7 +437,26 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   }
 
   /**
+   * Rejects a child update from a different subscription or Topic.
+   *
+   * @param subscription The subscription definition being processed.
+   * @param update Native subscription update.
+   */
+  private checkUpdate(subscription: Subscription, update: SubscriptionUpdate): void {
+    const topic = subscription.topic;
+    const updateTopic = update.subscription?.topic;
+    if (
+      update.subscription?.id?.value !== subscription.id?.value ||
+      topic === undefined ||
+      updateTopic === undefined ||
+      !equals(TopicSchema, updateTopic, topic)
+    )
+      throw new Error("Backend child update does not match its subscription.");
+  }
+
+  /**
    * Cancels the native subscription represented by the canonical definition.
+   *
    * @param request The canonical subscription definition.
    * @param signal The admitted cancellation signal.
    * @returns Completes after native cancellation ends.
@@ -362,10 +466,17 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     signal: SubscriptionAbortSignal,
   ): Promise<void> {
     try {
-      await createClient(SubscriptionService, this.#transport).cancel(
-        fromBinary(SubscriptionSchema, request.wire.bytes),
-        { signal },
-      );
+      const subscription = fromBinary(SubscriptionSchema, request.wire.bytes);
+      const headers = await this.readerHeaders({
+        service: "spine.client.SubscriptionService",
+        method: "Cancel",
+        value: toBinary(SubscriptionSchema, subscription),
+        reader: request.wire.reader,
+      });
+      await createClient(SubscriptionService, this.#transport).cancel(subscription, {
+        signal,
+        ...(headers === undefined ? {} : { headers }),
+      });
     } catch (error) {
       throw NativeGatewayValues.publicError(error);
     }
@@ -373,6 +484,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
 
   /**
    * Performs mandatory native cancellation/disposal compensation for a private envelope.
+   *
    * @param envelope The private backend subscription envelope.
    * @param signal The admitted cancellation signal.
    * @returns Completes after native disposal ends.
@@ -382,10 +494,17 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     signal: SubscriptionAbortSignal,
   ): Promise<void> {
     try {
-      await createClient(SubscriptionService, this.#transport).cancel(
-        fromBinary(SubscriptionSchema, envelope.bytes),
-        { signal },
-      );
+      const subscription = fromBinary(SubscriptionSchema, envelope.bytes);
+      const headers = await this.readerHeaders({
+        service: "spine.client.SubscriptionService",
+        method: "Cancel",
+        value: toBinary(SubscriptionSchema, subscription),
+        reader: envelope.reader,
+      });
+      await createClient(SubscriptionService, this.#transport).cancel(subscription, {
+        signal,
+        ...(headers === undefined ? {} : { headers }),
+      });
     } catch (error) {
       throw NativeGatewayValues.publicError(error);
     }
@@ -400,6 +519,7 @@ export interface NativeGatewayRequestContext {
 
   /**
    * Reads credentials for the gateway only; they are never forwarded to native services.
+   *
    * @param context The incoming Connect handler context.
    * @returns The extracted request credential.
    */
@@ -407,6 +527,7 @@ export interface NativeGatewayRequestContext {
 
   /**
    * Reads the allowlisted authorization and diagnostic transport view for the gateway only.
+   *
    * @param context The incoming Connect handler context.
    * @returns The allowed transport facts.
    */
@@ -469,13 +590,13 @@ export interface NativeGatewayServicesOptions {
 
 /**
  * Creates native handlers without exposing private envelopes.
- *
  * Unauthenticated requests map to `Unauthenticated`; forbidden or denied requests to
  * `PermissionDenied`; request/capacity limits to `ResourceExhausted`; busy bindings to `Aborted`;
  * and unknown operations to `Unimplemented`. Malformed, stale-context, backend-envelope, and other
  * validation rejections map to `InvalidArgument`. Terminal context/iterator paths abort native
  * work. Natural completion drains FIFO updates, whereas failure or iterator cancellation purges
  * them.
+ *
  * @param options The unary, subscription, context, and relay dependencies.
  * @returns The native Connect service implementations.
  */
@@ -548,6 +669,7 @@ const NativeGatewayValues = Object.freeze({
 
   /**
    * Removes backend transport headers before another Connect server serializes the error.
+   *
    * @param error The native RPC failure.
    * @returns The original failure with application metadata and details retained.
    */

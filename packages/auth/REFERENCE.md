@@ -50,9 +50,36 @@ Gateway, its authorization policy admits the public principal, and its
 also require finite request limits, an authorization function,
 `ContextResolver`, clock, and the corresponding forwarding collaborator.
 
-For Post and Read, it bounds and decodes bytes, admits the request through the selected mode, authorizes the decoded request, resolves trusted context, checks requested actor/tenant, and forwards exactly once. In authenticated mode, admission resolves the supplied session. In public mode, it uses the framework-owned public principal and no session. The forwarder receives only service, method, bytes, and optional cancellation signal. It does not receive credentials or extra transport facts. It returns `forwarded`, `resolved`, or a rejection reason: `request-too-large`, `unknown-operation`, `malformed-request`, `unauthenticated`, `forbidden`, or `context-stale`. Mapping a rejection to HTTP or gRPC status is the native transport adapter's job.
+For Post and Read, it bounds and decodes bytes, admits the request through the selected mode, authorizes the decoded request, resolves trusted context, checks requested actor/tenant, and forwards exactly once. In authenticated mode, admission resolves the supplied session. In public mode, it uses the public admission marker and no session. The forwarder receives service, method, bytes, detached `reader` facts, and an optional cancellation signal. It does not receive credentials or extra transport facts. It returns `forwarded`, `resolved`, or a rejection reason: `request-too-large`, `unknown-operation`, `malformed-request`, `unauthenticated`, `forbidden`, or `context-stale`. Mapping a rejection to HTTP or gRPC status is the native transport adapter's job.
 
 ResolveContext returns informational trusted actor and tenant facts in both modes. In authenticated mode, it validates the current session and also returns its expiry. In public mode, it resolves context for the framework-owned public principal and omits `expiresAt` because no session exists. It neither authorizes a business request nor creates a reusable credential. Later requests are independently admitted and authorized.
+
+### Verified reader forwarding
+
+`reader.principal` contains the admitted application principal's ID and string
+attributes. `reader.authorityFacts` comes from `AuthorizedRequestContext.authorityFacts`
+and accepts finite JSON values, including nested objects and arrays. The gateway
+copies these values for the invocation. Public admission omits both fields even
+if a context resolver supplies facts for the public admission marker.
+The existing `ContextResolver` remains the replacement point for obtaining
+application-specific authority information; there is no provider polling or
+promise that its information remains current after resolution.
+
+`NativeSubscriptionCreator(transport, { issuer, maxBytes })` uses the configured
+issuer to forward that reader with each native operation. `BrowserServerOptions.forwardingProof`
+configures the same issuer in browser composition. Its `issue(bytes)` method
+returns a transport-safe proof. The application node's corresponding
+`services.readerAdmission.forwarded.verify(bytes, proof, peer)` verifies the
+forwarding peer and the assertion. The signed bytes bind the service, method,
+canonical request, and reader facts; an Activate proof cannot authorize Cancel.
+Internal metadata received from a caller is not accepted without that verifier.
+
+An authenticated native forwarding call without an issuer fails rather than
+discarding its reader identity. Configure both ends when migrating an existing
+authenticated browser gateway. These are TS forwarding ports; merely sending
+their metadata to a JVM backend does not add verified-reader support there.
+Custom forwarding implementations must establish the equivalent trust at their
+receiving boundary. Credentials and provider tokens are not forwarding fields.
 
 ## Sessions and sign-in
 
@@ -69,10 +96,14 @@ ResolveContext returns informational trusted actor and tenant facts in both mode
 `BackendSubscriptionEnvelope` is opaque to the Gateway. A custom `SubscriptionCreator` or `DynamicUnaryClient` must validate each forwarded update's subscription ID and Topic against the actual Subscription accepted by its backend. The built-in native creator performs this validation; a custom envelope does not imply the backend reused the requested child ID.
 
 `DurableSubscriptionBindings` from `@spine-event-engine/server/browser` retains one approved
-`GatewayAuthenticatedSubscription` per public Subscription. The retained Topic
-includes the trusted Actor and Tenant, so Activate and Cancel compare that pair
-with the newly resolved request context. It is single-Gateway persistence, not
-cross-process quota, reservation, lease, fence, or fingerprint coordination.
+`GatewayAuthenticatedSubscription` per public Subscription. The record includes
+the stable principal ID, while its Topic retains the trusted Actor and Tenant.
+Activate and Cancel check all three against the newly admitted request before
+affecting a stream or record. The same principal may reconnect with changed
+attributes or authority facts; those facts are not persisted as its identity.
+Explicit anonymous admission is distinct from a missing legacy binding. A
+missing binding cannot be claimed by the next caller. This remains single-Gateway
+persistence, not cross-process quota, reservation, lease, or fingerprint coordination.
 
 Public subscription creation has two stages. `Subscribe` stores a process-local
 definition and returns its ID; `Activate` must arrive within the shared
@@ -100,9 +131,10 @@ Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTEN
 
 `DynamicUnaryForwarder` accepts complete current application-node snapshots. It serializes reconciliation, retains only the latest pending snapshot during churn, starts clients in bounded batches, disposes departed clients, and round-robins commands and queries across the resulting set. A dispatched unary request is never retried. Empty membership reports backend unavailability until a later snapshot restores clients.
 
-Dynamic subscriptions use the same reconciliation owner. Durable bindings retain
-the logical subscription definition and trusted Actor/Tenant facts only; native streams are
-ephemeral per-node work. Nodes may be added, removed, or re-added without
+Dynamic subscriptions use the same reconciliation process. Durable bindings retain
+the logical subscription definition, trusted Actor/Tenant facts, and stable reader
+identity; native streams and changing authority facts are per-process data.
+Nodes may be added, removed, or re-added without
 changing a durable definition. Notifications are best effort, may duplicate,
 and browser clients reconnect and re-query authoritative state after loss.
 

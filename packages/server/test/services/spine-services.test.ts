@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { Code, ConnectError, createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
 import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import {
@@ -33,6 +33,7 @@ import {
   TypeUrls,
   AnyPacker,
 } from "@spine-event-engine/core";
+import { ReaderForwarding } from "@spine-event-engine/core/spi/reader-forwarding";
 import {
   ActorContextSchema,
   AckSchema,
@@ -261,6 +262,78 @@ class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregat
 class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema> {}
 
 describe("SpineServices", () => {
+  it("rejects forged reader headers before a query reaches Stand", async () => {
+    let reads = 0;
+    const context = createFakeContext({
+      stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)],
+      queryVersioned: () => {
+        reads += 1;
+        return Promise.resolve([]);
+      },
+    });
+    let read: ((query: Query, context: HandlerContext) => Promise<QueryResponse>) | undefined;
+    new SpineServices({ contexts: [context] }).register({
+      service(schema: unknown, implementation: unknown) {
+        if (schema === QueryService) read = (implementation as { read: typeof read }).read;
+        return this;
+      },
+    } as never);
+    const query = createQuery("task-1");
+    const headers = new Headers(
+      await ReaderForwarding.seal(
+        "spine.client.QueryService",
+        "Read",
+        toBinary(QuerySchema, query),
+        { principal: { id: "reader/alice" } },
+        { issue: () => "forged" },
+        4_194_304,
+      ),
+    );
+    await expect(read?.(query, { requestHeader: headers } as HandlerContext)).rejects.toMatchObject(
+      { code: Code.Unauthenticated },
+    );
+    expect(reads).toBe(0);
+  });
+
+  it("denies a different verified reader before activation or cancellation", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("ReaderBoundSubscription")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const seen: string[] = [];
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: ({ headers }) => {
+            seen.push(
+              headers instanceof Headers ? (headers.get("x-reader") ?? "missing") : "not Headers",
+            );
+            return { principal: { id: seen.at(-1) ?? "" } };
+          },
+        },
+      },
+    });
+    const alice = { requestHeader: new Headers({ "x-reader": "reader/alice" }) } as HandlerContext;
+    const bob = { requestHeader: new Headers({ "x-reader": "reader/bob" }) } as HandlerContext;
+    expect(ReaderForwarding.hasAssertion(alice.requestHeader)).toBe(false);
+    const subscriptionResult = handlers.subscribe(createTopic(), alice);
+    await Promise.resolve(subscriptionResult).catch(() => undefined);
+    expect(seen).toEqual(["reader/alice"]);
+    const subscription = await subscriptionResult;
+    await expect(
+      handlers.activate(subscription, bob)[Symbol.asyncIterator]().next(),
+    ).rejects.toMatchObject({ code: Code.PermissionDenied });
+    await expect(handlers.cancel(subscription, bob)).rejects.toMatchObject({
+      code: Code.PermissionDenied,
+    });
+    expect(await registry.get(subscription.id ?? create(SubscriptionIdSchema))).toBeDefined();
+    await expect(handlers.cancel(subscription, alice)).resolves.toMatchObject({
+      status: { status: { case: "ok" } },
+    });
+    expect(await registry.get(subscription.id ?? create(SubscriptionIdSchema))).toBeUndefined();
+    await context.close();
+  });
   it("rejects foreign package-private logger access", () => {
     const foreign = {} as SpineServices;
 
@@ -605,9 +678,11 @@ describe("SpineServices", () => {
 
       const response = await client.read(createQuery("task-1"));
 
-      await expect(client.execute(create(QueryService.method.execute.input))).rejects.toMatchObject({
-        code: Code.Unimplemented,
-      });
+      await expect(client.execute(create(QueryService.method.execute.input))).rejects.toMatchObject(
+        {
+          code: Code.Unimplemented,
+        },
+      );
 
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
@@ -5931,9 +6006,12 @@ function registeredSubscriptionHandlers(
 ) {
   let handlers:
     | {
-        subscribe(topic: Topic): Subscription | Promise<Subscription>;
-        activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate>;
-        cancel(subscription: Subscription): unknown;
+        subscribe(topic: Topic, context?: HandlerContext): Subscription | Promise<Subscription>;
+        activate(
+          subscription: Subscription,
+          context?: HandlerContext,
+        ): AsyncIterable<SubscriptionUpdate>;
+        cancel(subscription: Subscription, context?: HandlerContext): unknown;
       }
     | undefined;
   const services = new SpineServices({ contexts: [context], ...options });

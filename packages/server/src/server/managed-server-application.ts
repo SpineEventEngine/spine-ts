@@ -19,7 +19,11 @@ import { fileURLToPath } from "node:url";
 import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { runningServerAccess, type RunningServer } from "./server.js";
 import { emitServerWarning } from "./server-log.js";
-import { NodeCoordinator, type ReadyCoordinatorMember } from "./node-coordinator.js";
+import {
+  NodeCoordinator,
+  type NodeCoordinatorOptions,
+  type ReadyCoordinatorMember,
+} from "./node-coordinator.js";
 import { managedDeliveryGate } from "./managed-delivery-gate.js";
 import { managedChildSubscriptionAccess } from "./managed-child-subscription.js";
 import { InMemorySubscriptionRegistry } from "../stand/subscription-registry.js";
@@ -157,6 +161,16 @@ export interface ManagedServerApplicationOptions {
   readonly synchronize?: () => Promise<void>;
 
   /**
+   * Authenticates direct and forwarded requests at the managed Coordinator.
+   */
+  readonly readerAdmission?: NodeCoordinatorOptions["readerAdmission"];
+
+  /**
+   * Issues fresh operation-bound proofs from the Coordinator to children.
+   */
+  readonly forwardingProof?: NodeCoordinatorOptions["forwardingProof"];
+
+  /**
    *
    * Configures bounded private process replacement.
    */
@@ -193,10 +207,8 @@ export const ManagedServerApplication: Readonly<{
   // prettier-ignore
 
   /**
-   *
    * Starts a managed parent and complete-replica children without taking
    * process-signal handling.
-   *
    * The caller closes the returned handle. This is for an embedding host that
    * already handles `SIGINT` and `SIGTERM`.
    *
@@ -206,7 +218,6 @@ export const ManagedServerApplication: Readonly<{
   start(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle>;
 
   /**
-   *
    * Starts a managed parent and complete-replica children with process-signal
    * ownership.
    *
@@ -390,7 +401,6 @@ class ManagedChildLifecycle {
   }
 
   /**
-   *
    * Starts the child and waits for Coordinator activation.
    *
    * @returns A child handle after the private READY notification.
@@ -422,7 +432,6 @@ class ManagedChildLifecycle {
   }
 
   /**
-   *
    * Closes Delivery before closing the child listener and its server.
    *
    * @returns The shared close attempt; a failed attempt may be retried.
@@ -436,7 +445,6 @@ class ManagedChildLifecycle {
   }
 
   /**
-   *
    * Performs child shutdown and observes a failed completion notification.
    *
    * @returns Completion after the child server closes.
@@ -456,7 +464,6 @@ class ManagedChildLifecycle {
   }
 
   /**
-   *
    * Stops new child Delivery work and awaits admitted effects.
    *
    * @returns Completion when admitted work drains.
@@ -471,7 +478,6 @@ class ManagedChildLifecycle {
   }
 
   /**
-   *
    * Waits for parent relay cancellation before closing the child listener.
    *
    * @returns Completion after final server close.
@@ -484,7 +490,6 @@ class ManagedChildLifecycle {
   }
 
   /**
-   *
    * Sends one child lifecycle notification on the private IPC channel.
    *
    * @param type The lifecycle phase to report.
@@ -627,7 +632,6 @@ export interface ManagedServerCoordinatorDependencies {
     // prettier-ignore
 
     /**
-     *
      * Reads the current clock value.
      *
      * @returns The current time in milliseconds.
@@ -635,7 +639,6 @@ export interface ManagedServerCoordinatorDependencies {
     now(): number;
 
     /**
-     *
      * Schedules a timeout callback.
      *
      * @param onTimeout Runs when the requested delay elapses.
@@ -645,7 +648,6 @@ export interface ManagedServerCoordinatorDependencies {
     setTimeout(onTimeout: () => void, delay: number): unknown;
 
     /**
-     *
      * Cancels a scheduled timeout.
      *
      * @param timer Identifies the timer to cancel.
@@ -723,7 +725,6 @@ export class ManagedServerCoordinator {
   #nodeCoordinator: NodeCoordinator | undefined;
 
   /**
-   *
    * Creates a coordinator for one configured replica cohort.
    *
    * @param options Configures complete child application replicas.
@@ -747,7 +748,6 @@ export class ManagedServerCoordinator {
   }
 
   /**
-   *
    * Starts every initial replica and waits until all report READY.
    *
    * @returns The handle for the started managed cohort.
@@ -759,11 +759,39 @@ export class ManagedServerCoordinator {
     if (this.#options.manageProcessSignals !== false) this.#installSignalHandlers();
     for (const slot of this.#slots) this.#start(slot);
     await this.#ready;
+    await this.#openCoordinator();
+    const isReady = () => this.#slots.some((slot) => slot.replica?.readyAt !== undefined);
+    const handle: ManagedServerApplicationHandle = {
+      /**
+       * Checks whether a managed application has reached the ready state.
+       *
+       * @returns Whether the application is ready.
+       */ get ready() {
+        return isReady();
+      },
+      close: () => this.close(),
+    };
+    handleMembers.set(handle, this);
+    return handle;
+  }
+
+  /**
+   * Opens the reader-aware Coordinator after the first replica is ready.
+   *
+   * @returns Completion after the operation settles.
+   */
+  async #openCoordinator(): Promise<void> {
     try {
       const openCoordinator = this.#dependencies.openCoordinator;
       if (openCoordinator !== undefined)
         this.#nodeCoordinator = await openCoordinator({
           members: this,
+          ...(this.#options.readerAdmission === undefined
+            ? {}
+            : { readerAdmission: this.#options.readerAdmission }),
+          ...(this.#options.forwardingProof === undefined
+            ? {}
+            : { forwardingProof: this.#options.forwardingProof }),
           ...(this.#options.host === undefined ? {} : { host: this.#options.host }),
           ...(this.#options.port === undefined ? {} : { port: this.#options.port }),
         });
@@ -778,15 +806,6 @@ export class ManagedServerCoordinator {
       }
       throw error;
     }
-    const isReady = () => this.#slots.some((slot) => slot.replica?.readyAt !== undefined);
-    const handle: ManagedServerApplicationHandle = {
-      get ready() {
-        return isReady();
-      },
-      close: () => this.close(),
-    };
-    handleMembers.set(handle, this);
-    return handle;
   }
 
   /**
@@ -1068,7 +1087,6 @@ export class ManagedServerCoordinator {
 
   /**
    * Fills available concurrent-start capacity with unscheduled empty slots.
-   *
    */
   #drainStarts(): void {
     for (const slot of this.#slots) {
@@ -1078,7 +1096,6 @@ export class ManagedServerCoordinator {
   }
 
   /**
-   *
    * Stops managed children and prevents later replacement starts.
    *
    * @returns Completion after child and retired-child cleanup succeeds.
@@ -1096,6 +1113,8 @@ export class ManagedServerCoordinator {
 
   /**
    * Stops replacement starts and awaits all cleanup phases.
+   *
+   * @returns Completion after the operation settles.
    */
   async #closeGracefully(): Promise<void> {
     this.#closing = true;
@@ -1132,9 +1151,11 @@ export class ManagedServerCoordinator {
 
   /**
    * Cancels relays, releases children, and closes the Coordinator after a drain attempt.
+   *
    * @param replicas The active children being closed.
    * @param children The already-running bounded child close attempts.
    * @param failures Errors collected from the drain phase.
+   * @returns Completion after the operation settles.
    */
   async #finishClose(
     replicas: readonly ReplicaRecord[],
@@ -1270,7 +1291,6 @@ export class ManagedServerCoordinator {
   }
 
   /**
-   *
    * Returns ready child facts to the next Coordinator slice.
    *
    * @returns The ready child topology facts.
@@ -1432,7 +1452,6 @@ export class ManagedServerCoordinator {
 
   /**
    * Calls listeners after the available child membership changes.
-   *
    */
   #notifyReadyMembers(): void {
     for (const listener of this.#memberListeners) listener();
@@ -1440,7 +1459,6 @@ export class ManagedServerCoordinator {
 
   /**
    * Registers managed shutdown handlers for SIGINT and SIGTERM once.
-   *
    */
   #installSignalHandlers(): void {
     if (this.#onSignal !== undefined) return;
@@ -1463,7 +1481,6 @@ export class ManagedServerCoordinator {
 
   /**
    * Unregisters managed shutdown handlers when the coordinator closes.
-   *
    */
   #removeSignalHandlers(): void {
     if (this.#onSignal === undefined) return;
@@ -1992,7 +2009,12 @@ const ManagedServerCoordinatorValues = Object.freeze({
   },
 });
 
-function canonicalLoopbackEndpoint(value: string): string | undefined {
+/**
+ * Accepts only a canonical local endpoint for a managed child.
+ *
+ * @param value Candidate managed-child endpoint URL.
+ * @returns The canonical endpoint, or undefined if invalid.
+ */ function canonicalLoopbackEndpoint(value: string): string | undefined {
   if (Buffer.byteLength(value, "utf8") > endpointMaximumBytes) return undefined;
   try {
     const endpoint = new URL(value);

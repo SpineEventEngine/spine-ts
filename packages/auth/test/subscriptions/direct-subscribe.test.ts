@@ -26,6 +26,8 @@ import {
   TransportFacts,
 } from "../../src/index.js";
 
+const anonymousReader = { kind: "anonymous" as const };
+
 const service = "spine.client.SubscriptionService";
 const context = create(ActorContextSchema, {
   actor: create(UserIdSchema, { value: "actor" }),
@@ -41,6 +43,7 @@ describe("direct subscription creation", () => {
     });
 
     const wire = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic },
       whenExpires: 1_000,
     });
@@ -152,6 +155,7 @@ describe("direct subscription creation", () => {
       dispose: async () => undefined,
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic },
       whenExpires: 1_000,
     });

@@ -13,6 +13,7 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
+import { ReaderIdentities, type ReaderIdentity } from "@spine-event-engine/core/spi/trusted-reader";
 import { clone, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
@@ -68,6 +69,11 @@ interface StandSubscriptionEntryBase {
    * Provides the subscription definition.
    */
   readonly subscription: Subscription;
+
+  /**
+   * Stable verified reader binding, absent only in legacy records.
+   */
+  readonly reader?: ReaderIdentity;
 
   /**
    * Records when the definition was created, in milliseconds since Unix epoch.
@@ -159,12 +165,18 @@ export type StandActivateResult =
        * Identifies an absent or expired definition.
        */
       kind: "missing" | "expired";
+    }>
+  | Readonly<{
+      /**
+       * The current record is bound to a different or unverifiable reader.
+       */
+      kind: "denied";
     }>;
 
 /**
  * Identifies the outcome of deleting a durable subscription definition.
  */
-export type StandDeleteResult = "deleted" | "missing";
+export type StandDeleteResult = "deleted" | "missing" | "denied";
 
 /**
  * Describes one finite cleanup pass.
@@ -221,24 +233,27 @@ export interface StandSubscriptionRegistry {
    *
    * @param subscription Provides the definition to create.
    * @returns Resolves to the creation outcome.
+   * @param reader The verified reader facts for this operation.
    */
-  create(subscription: Subscription): Promise<StandCreateResult>;
+  create(subscription: Subscription, reader?: ReaderIdentity): Promise<StandCreateResult>;
 
   /**
    * Activates the definition identified by an explicit subscription ID.
    *
    * @param id Identifies the definition to activate.
    * @returns Resolves to the activation outcome.
+   * @param reader The verified reader facts for this operation.
    */
-  activate(id: SubscriptionId): Promise<StandActivateResult>;
+  activate(id: SubscriptionId, reader?: ReaderIdentity): Promise<StandActivateResult>;
 
   /**
    * Deletes the definition identified by an explicit subscription ID.
    *
    * @param id Identifies the definition to delete.
    * @returns Resolves to the deletion outcome.
+   * @param reader The verified reader facts for this operation.
    */
-  delete(id: SubscriptionId): Promise<StandDeleteResult>;
+  delete(id: SubscriptionId, reader?: ReaderIdentity): Promise<StandDeleteResult>;
 
   /**
    * Gets an isolated current definition, when it exists.
@@ -290,14 +305,19 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
    *
    * @param subscription Provides the definition to create.
    * @returns Resolves to the creation outcome.
+   * @param reader The verified reader facts for this operation.
    */
-  async create(subscription: Subscription): Promise<StandCreateResult> {
+  async create(subscription: Subscription, reader?: ReaderIdentity): Promise<StandCreateResult> {
     await Promise.resolve();
     this.#open();
     const id = subscriptionId(subscription);
     const existing = this.#entries.get(id);
     if (existing !== undefined) {
-      if (!sameSubscription(existing.subscription, subscription)) throw new StandConflictError(id);
+      if (
+        !sameSubscription(existing.subscription, subscription) ||
+        !ReaderIdentities.same(existing.reader, reader)
+      )
+        throw new StandConflictError(id);
       return Promise.resolve({ kind: "existing", entry: copy(existing) });
     }
     const createdAt = Time.currentTimeMillis();
@@ -306,6 +326,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
       phase: "pending" as const,
       createdAt,
       pendingUntil: createdAt + SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS,
+      ...(reader === undefined ? {} : { reader }),
     });
     this.#entries.set(id, entry);
     return Promise.resolve({ kind: "created", entry: copy(entry) });
@@ -316,13 +337,16 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
    *
    * @param value Identifies the definition to activate.
    * @returns Resolves to the activation outcome.
+   * @param reader The verified reader facts for this operation.
    */
-  async activate(value: SubscriptionId): Promise<StandActivateResult> {
+  async activate(value: SubscriptionId, reader?: ReaderIdentity): Promise<StandActivateResult> {
     await Promise.resolve();
     this.#open();
     const id = idValue(value);
     const entry = this.#entries.get(id);
     if (entry === undefined) return Promise.resolve({ kind: "missing" });
+    if (reader !== undefined && !ReaderIdentities.matches(entry.reader, reader))
+      return { kind: "denied" };
     if (entry.phase === "active") return Promise.resolve({ kind: "active", entry: copy(entry) });
     if (expiresAt(entry) <= Time.currentTimeMillis()) {
       this.#entries.delete(id);
@@ -332,6 +356,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
       subscription: entry.subscription,
       phase: "active" as const,
       createdAt: entry.createdAt,
+      ...(entry.reader === undefined ? {} : { reader: entry.reader }),
     });
     this.#entries.set(id, active);
     return Promise.resolve({ kind: "activated", entry: copy(active) });
@@ -342,11 +367,17 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
    *
    * @param value Identifies the definition to delete.
    * @returns Resolves to the deletion outcome.
+   * @param reader The verified reader facts for this operation.
    */
-  async delete(value: SubscriptionId): Promise<StandDeleteResult> {
+  async delete(value: SubscriptionId, reader?: ReaderIdentity): Promise<StandDeleteResult> {
     await Promise.resolve();
     this.#open();
-    return Promise.resolve(this.#entries.delete(idValue(value)) ? "deleted" : "missing");
+    const id = idValue(value);
+    const entry = this.#entries.get(id);
+    if (entry === undefined) return "missing";
+    if (reader !== undefined && !ReaderIdentities.matches(entry.reader, reader)) return "denied";
+    this.#entries.delete(id);
+    return "deleted";
   }
 
   /**
@@ -418,7 +449,9 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     return Promise.resolve();
   }
 
-  #open(): void {
+  /**
+   * Opens the configured boundary after lifecycle preflight.
+   */ #open(): void {
     if (this.#closed) throw new Error("Stand subscription registry is closed.");
   }
 }
@@ -457,8 +490,9 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    *
    * @param subscription Provides the definition to create.
    * @returns Resolves to the creation outcome.
+   * @param reader The verified reader facts for this operation.
    */
-  async create(subscription: Subscription): Promise<StandCreateResult> {
+  async create(subscription: Subscription, reader?: ReaderIdentity): Promise<StandCreateResult> {
     this.#open();
     const value = subscriptionId(subscription);
     const recordId = subscription.id;
@@ -467,7 +501,10 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       const current = await this.#storage.read(recordId);
       if (current !== undefined) {
         const entry = StandSubscriptionRecords.read(current, value);
-        if (!sameSubscription(entry.subscription, subscription))
+        if (
+          !sameSubscription(entry.subscription, subscription) ||
+          !ReaderIdentities.same(entry.reader, reader)
+        )
           throw new StandConflictError(value);
         return { kind: "existing", entry: copy(entry) };
       }
@@ -477,21 +514,45 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         phase: "pending" as const,
         createdAt,
         pendingUntil: createdAt + SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS,
+        ...(reader === undefined ? {} : { reader }),
       });
       const next = StandSubscriptionRecords.write(entry);
       try {
         if (await this.#storage.compareAndSet(recordId, undefined, next))
           return { kind: "created", entry: copy(entry) };
       } catch (error) {
-        const observed = await this.#storage.read(recordId);
-        if (observed !== undefined) {
-          const observedEntry = StandSubscriptionRecords.read(observed, value);
-          if (sameSubscription(observedEntry.subscription, subscription))
-            return { kind: "created", entry: copy(observedEntry) };
-        }
-        throw error;
+        return this.#recoverCreate(recordId, value, subscription, reader, error);
       }
     }
+  }
+
+  /**
+   * Distinguishes a committed ambiguous write from a failed record write.
+   *
+   * @param recordId The durable record identifier.
+   * @param value Serialized record bytes returned by storage.
+   * @param subscription The subscription definition being processed.
+   * @param reader The verified reader facts for this operation.
+   * @param error The failure being classified or propagated.
+   * @returns The recovered created definition.
+   */
+  async #recoverCreate(
+    recordId: SubscriptionId,
+    value: string,
+    subscription: Subscription,
+    reader: ReaderIdentity | undefined,
+    error: unknown,
+  ): Promise<StandCreateResult> {
+    const observed = await this.#storage.read(recordId);
+    if (observed !== undefined) {
+      const observedEntry = StandSubscriptionRecords.read(observed, value);
+      if (
+        sameSubscription(observedEntry.subscription, subscription) &&
+        ReaderIdentities.same(observedEntry.reader, reader)
+      )
+        return { kind: "created", entry: copy(observedEntry) };
+    }
+    throw error;
   }
 
   /**
@@ -499,14 +560,17 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    *
    * @param value Identifies the definition to activate.
    * @returns Resolves to the activation outcome.
+   * @param reader The verified reader facts for this operation.
    */
-  async activate(value: SubscriptionId): Promise<StandActivateResult> {
+  async activate(value: SubscriptionId, reader?: ReaderIdentity): Promise<StandActivateResult> {
     this.#open();
     const id = idValue(value);
     for (;;) {
       const current = await this.#storage.read(value);
       if (current === undefined) return { kind: "missing" };
       const entry = StandSubscriptionRecords.read(current, id);
+      if (reader !== undefined && !ReaderIdentities.matches(entry.reader, reader))
+        return { kind: "denied" };
       if (entry.phase === "active") return { kind: "active", entry: copy(entry) };
       if (expiresAt(entry) <= Time.currentTimeMillis()) {
         if (await this.#storage.compareAndSet(value, current, undefined))
@@ -517,6 +581,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         subscription: entry.subscription,
         phase: "active" as const,
         createdAt: entry.createdAt,
+        ...(entry.reader === undefined ? {} : { reader: entry.reader }),
       });
       if (await this.#storage.compareAndSet(value, current, StandSubscriptionRecords.write(active)))
         return { kind: "activated", entry: copy(active) };
@@ -528,12 +593,21 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    *
    * @param value Identifies the definition to delete.
    * @returns Resolves to the deletion outcome.
+   * @param reader The verified reader facts for this operation.
    */
-  async delete(value: SubscriptionId): Promise<StandDeleteResult> {
+  async delete(value: SubscriptionId, reader?: ReaderIdentity): Promise<StandDeleteResult> {
     this.#open();
     for (;;) {
       const current = await this.#storage.read(value);
       if (current === undefined) return "missing";
+      if (
+        reader !== undefined &&
+        !ReaderIdentities.matches(
+          StandSubscriptionRecords.read(current, idValue(value)).reader,
+          reader,
+        )
+      )
+        return "denied";
       if (await this.#storage.compareAndSet(value, current, undefined)) return "deleted";
     }
   }
@@ -605,38 +679,71 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     }
   }
 
-  #open(): void {
+  /**
+   * Opens the configured boundary after lifecycle preflight.
+   */ #open(): void {
     if (this.#closed) throw new Error("Stand subscription registry is closed.");
   }
 }
 
-function idValue(id: SubscriptionId): string {
+/**
+ * Reads a nonblank subscription ID from a Proto identifier.
+ *
+ * @param id The stable identifier for this record.
+ * @returns The validated subscription ID.
+ */ function idValue(id: SubscriptionId): string {
   if (typeof id.value !== "string" || id.value.trim() === "")
     throw new TypeError("Stand subscription ID must be non-blank.");
   return id.value;
 }
 
-function subscriptionId(subscription: Subscription): string {
+/**
+ * Reads the validated opaque ID from a subscription definition.
+ *
+ * @param subscription The subscription definition being processed.
+ * @returns The subscription ID.
+ */ function subscriptionId(subscription: Subscription): string {
   const topicId = subscription.topic?.id?.value;
   if (subscription.id === undefined || typeof topicId !== "string" || topicId.trim() === "")
     throw new TypeError("Stand subscription ID and topic ID must be non-blank.");
   return idValue(subscription.id);
 }
 
-function expiresAt(entry: StandSubscriptionEntry): number {
+/**
+ * Reads the expiry timestamp from a pending subscription record.
+ *
+ * @param entry Retained subscription entry.
+ * @returns The stored expiry timestamp.
+ */ function expiresAt(entry: StandSubscriptionEntry): number {
   if (entry.phase !== "pending") throw new Error("Stand subscription record is invalid.");
   return entry.pendingUntil;
 }
 
-function copy(entry: StandSubscriptionEntry): StandSubscriptionEntry {
+/**
+ * Clones a retained subscription entry before returning it.
+ *
+ * @param entry Retained subscription entry.
+ * @returns The detached subscription entry.
+ */ function copy(entry: StandSubscriptionEntry): StandSubscriptionEntry {
   return freeze({ ...entry, subscription: clone(SubscriptionSchema, entry.subscription) });
 }
 
-function freeze(entry: StandSubscriptionEntry): StandSubscriptionEntry {
+/**
+ * Prevents mutation of a returned subscription entry.
+ *
+ * @param entry Retained subscription entry.
+ * @returns The frozen entry.
+ */ function freeze(entry: StandSubscriptionEntry): StandSubscriptionEntry {
   return Object.freeze(entry);
 }
 
-function sameSubscription(left: Subscription, right: Subscription): boolean {
+/**
+ * Compares canonical bytes of two subscription definitions.
+ *
+ * @param left First value being compared.
+ * @param right Second value being compared.
+ * @returns Whether the definitions are equal.
+ */ function sameSubscription(left: Subscription, right: Subscription): boolean {
   const leftBytes = toBinary(SubscriptionSchema, left);
   const rightBytes = toBinary(SubscriptionSchema, right);
   return (
@@ -645,10 +752,19 @@ function sameSubscription(left: Subscription, right: Subscription): boolean {
   );
 }
 
-function time(value: { readonly seconds: bigint; readonly nanos: number }): number {
+/**
+ * Converts a Proto timestamp to epoch milliseconds.
+ *
+ * @param value Stored Proto timestamp.
+ * @returns The timestamp in milliseconds.
+ */ function time(value: { readonly seconds: bigint; readonly nanos: number }): number {
   return Number(value.seconds) * 1000 + Math.floor(value.nanos / 1_000_000);
 }
 
-function fail(message: string): never {
+/**
+ * Raises an invalid-record error with the supplied reason.
+ *
+ * @param message Public validation or error message.
+ */ function fail(message: string): never {
   throw new Error(message);
 }
