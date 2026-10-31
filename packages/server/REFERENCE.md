@@ -938,8 +938,10 @@ to `new Server(...)` to apply policies to Entity Query and App Query results
 leaving that Server over gRPC. The same instance can be installed in both
 places; each boundary invokes it once. Direct `Server.query()` runs BC source
 policies but does not cross the Server output boundary. An Entity root returned
-as `null` is omitted without another storage read; an App Query result returned
-as `null` produces an OK response with no message. History removals retain the
+as `null` is omitted without another storage read; an App Query root returned
+as `null` produces OK with zero outer `AppQueryResponse.message` entries. A
+non-null response whose child field is absent remains one response entry.
+History removals retain the
 original continuation. Retained storage, hydration, and replay remain raw.
 Direct Stand and retained-history callbacks identify the producing Bounded
 Context. Protected history called from a handler carries its current signal

@@ -82,10 +82,13 @@ tsc -b
 ```
 
 `compose` follows declared model dependencies transitively. `handlers` creates
-the generated handler registry for decorated application classes. Its emitted
+passive `generated/spine-metadata.ts`, the static application bootstrap, and
+portable dependency adapters for decorated application classes. Its emitted
 source imports the Server handler-registry contract as a type from
 `@spine-event-engine/server/spi/handler-registry`; the CLI itself has no Server
-runtime dependency. Run both after the related model or handler changes.
+runtime dependency. Import the generated bootstrap once before application
+assembly. Run generation after model or handler changes and after the effective
+installed dependency graph or TypeScript output configuration changes.
 The handler analyzer records `@Throws(...)` declarations as rejection outcomes;
 the generated rejection companion supplies the schema used by that metadata.
 Handler results can use native message unions, flat arrays, fixed tuples with
@@ -102,7 +105,7 @@ code should import generated model modules instead.
 
 Run this tooling after changing Proto files or decorated handlers. Generated
 files are outputs, not source: never edit them by hand. Application runtime code
-imports the generated model module and registry; it does not invoke the CLI.
+imports its generated bootstrap and model modules; it does not invoke the CLI.
 
 Keep model-package dependencies explicit in both `package.json` and
 `spine-proto.json`. `compose` follows declared model dependencies transitively;

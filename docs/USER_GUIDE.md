@@ -63,9 +63,10 @@ pnpm install --frozen-lockfile
 pnpm typecheck:build
 ```
 
-The build generates Protobuf-ES schemas and the handler registry used by
-bare-decorated application classes. Generated directories are build output; do
-not hand-edit or commit them.
+The build generates Protobuf-ES schemas, passive `spine-metadata.ts`, and an
+application `spine-bootstrap.ts` import for bare-decorated classes. Import the
+bootstrap before Bounded Context or Server assembly. Generated directories are
+build output; do not hand-edit or commit them.
 
 Your application assembles a `BoundedContext`, selects storage, and starts a
 `Server`. For a process managed by Spine TS, use `run()`; an embedded
@@ -91,11 +92,12 @@ commands, events, and entity state there. A command says what a caller wants;
 an event records a fact that happened; entity state is the current readable
 form of an Aggregate, Projection, Process Manager, or Agent.
 
-Keep each Bounded Context's domain language in its model package. The server
-application combines the Bounded Contexts' Proto modules into one `TypeRegistry`.
-A client imports only the published model modules it needs. Register these
-modules explicitly when setting up the application; Spine does not discover
-them by scanning installed packages.
+Keep each Bounded Context's domain language in its model package. The normal
+generation pipeline discovers declared runtime package dependencies, and the
+application bootstrap registers their passive metadata before assembly. A
+client imports the published model module it needs for ordinary type lookup;
+browser model imports do not load Server handlers. No runtime package scan or
+per-context registry root is required.
 
 Keep the identifier as the first field of a command and the entity state. That
 is the implicit default target ID for Spine TS: it needs no extra routing
@@ -340,6 +342,19 @@ ordinary successive updates. The UI uses an authoritative query for initial
 state, a reconnect, a possible best-effort gap, malformed data, or recovery
 after posting while disconnected; those recovery paths do not make ordinary
 stream termination acceptable.
+
+An application query declares nested `Query` and `Response` messages in its
+model Proto. Normal generation emits grouped aliases and the response pairing.
+Register a concrete `AppQueryHandler<Q, R>` instance with `Server`, then use
+`client.query(generatedQ)` for a typed decoded result or `server.query(generatedQ,
+executionContext)` from trusted in-process code. The
+[composed Message Board](../examples/message-board/composed-app/README.md) runs
+both paths and applies Bounded Context and Server read policies. A successful
+empty Entity Query has no result messages; an application query may return its
+paired Response with an absent domain field. Invalid Query inputs now fail the
+RPC with `INVALID_ARGUMENT` and structured Spine details instead of returning
+an error inside `QueryResponse`. Unexpected read faults fail with sanitized
+`INTERNAL`.
 
 ### Observe a Command's outcomes
 

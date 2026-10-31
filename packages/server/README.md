@@ -14,7 +14,8 @@ pnpm add @spine-event-engine/server@snapshot
 ```
 
 Use Node.js in ESM mode. Before adding entities, generate your application
-model and handler registry with `@spine-event-engine/proto-tools`. The small
+model and handler metadata with `@spine-event-engine/proto-tools`, then import
+`generated/spine-bootstrap.js` before assembly. The small
 example below has no entity handlers, so it is useful for proving that native
 assembly, listener startup, and cleanup work locally.
 
@@ -324,7 +325,7 @@ class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateS
 Configure the registry outside the Entity. The Bounded Context requires persisted System
 Events, and the Agent registration supplies its permitted capabilities. The
 [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
-assembles these settings with the generated handler registry. Supply the registry
+assembles these settings with generated passive handler metadata. Supply the AI registry
 through `ServerEnvironment.when(type).use({ ai: registry })` as a default, or
 `BoundedContextBuilder.withAi(registry)` for one Bounded Context.
 

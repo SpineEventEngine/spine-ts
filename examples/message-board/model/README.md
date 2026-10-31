@@ -2,7 +2,11 @@
 
 This package contains the vocabulary shared by the Message Board server and
 browser: user, board, and message IDs; commands that request posting; events
-that record postings; visible query-side state; and domain rejections.
+that record postings; visible query-side state; the paired
+`ReadBoardMessage.Query` / `.Response` application messages; and domain
+rejections. Normal generation emits the grouped App Query companion and the
+query-to-response type association. A browser imports this model without
+loading the application Server or handlers.
 
 ## 💡 Why is the model separate?
 
@@ -32,6 +36,8 @@ application reads the resulting structured error response.
 
 - [`app`](../app/README.md) imports schemas and generated handler types.
 - [`web`](../web/README.md) imports the same commands and Projection schemas.
+- [`composed-app`](../composed-app/README.md) registers the generated App Query
+  pair with an explicit Server handler and applies read policies.
 
 The package has no server, UI, storage, or process lifecycle.
 

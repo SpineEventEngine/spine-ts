@@ -272,9 +272,11 @@ that run the workflow.
 ## Server Entity Metadata
 
 `@spine-event-engine/server` provides descriptor-derived entity metadata,
-explicit handler metadata, a handler registry supplied by the caller, a
-standard decorator adapter, and built-in set-once transition validation. It
-also provides Aggregate, Projection, Process Manager, and Agent base classes with
+passive generated handler metadata registered by the application's bootstrap,
+a standard decorator adapter, and built-in set-once transition validation. The
+application selects concrete classes for each Bounded Context and App Query
+handler instances for its Server. The package also provides Aggregate,
+Projection, Process Manager, and Agent base classes with
 transactional state and family-specific helpers. The package consumes curated
 option exports from `@spine-event-engine/proto` and delegates transition result shaping
 to `@spine-event-engine/core`.

@@ -7,10 +7,14 @@ should start with the [Message Board README](README.md).
 
 - `model` contains authored Message Board Proto sources, the single `UserId` definition,
   generated Protobuf-ES code, typed rejections, and its `ProtoModule`.
-- `app` contains the bounded context, Aggregate, Projection, generated application
-  registry and handler registry, public-demo admission, and executable server.
+- `app` contains the bounded context, Aggregate, Projection, generated model
+  registry and passive handler metadata, public-demo admission, and executable server.
 - `web` contains the React view, request scope, query,
   subscription, and visible retry behavior.
+- `command-handlers`, `view-handlers`, and `composed-app` form the separate
+  [multi-package example](composed-app/README.md): one Bounded Context spans the
+  two handler packages, and the app registers its App Query handler and typed
+  Bounded Context/Server read filters.
 
 Nothing in the family is published. Generated Proto, handler output, and
 `dist/` are ignored outputs and must not be edited.

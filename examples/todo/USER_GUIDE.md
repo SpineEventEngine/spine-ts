@@ -80,7 +80,7 @@ handler does not build an Event envelope or choose Event IDs itself.
 
 The runnable [black-box tests](test/black-box.test.ts) exercise both choices,
 both tuple lengths, Event order, and the old and new assignee read models through
-the generated handler registry. Generate and build the example first, then run
+generated passive handler metadata. Generate and build the example first, then run
 the two focused journeys from the repository root:
 
 ```bash
@@ -506,7 +506,7 @@ pnpm vitest run examples/todo/test/startup-contract.test.ts
 
 The black-box test starts a real loopback server and proves public generated
 clients, acknowledgement handling, eventual projection reads, subscriptions,
-validation/rejections, generated-registry recovery, and listener/session cleanup.
+validation/rejections, generated-metadata startup, and listener/session cleanup.
 
 The startup-contract test verifies structural commands, public exports, settings,
 and documentation contracts. Behavioral launcher coverage and the documented

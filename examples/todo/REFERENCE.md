@@ -6,7 +6,7 @@ with the [To-Do README](README.md) and [walkthrough](USER_GUIDE.md).
 ## Responsibilities
 
 The package contains the To-Do Proto model, generated model module, Aggregate and
-Projection handlers, generated handler registry, local server entry point, and
+Projection handlers, generated passive metadata and bootstrap, local server entry point, and
 smoke client. Generated Proto and registry output is ignored build output;
 regenerate it through package/workspace scripts rather than editing it.
 The same normal generation run emits `TaskListQuery` with automatic column

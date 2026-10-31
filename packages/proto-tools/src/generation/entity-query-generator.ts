@@ -24,7 +24,10 @@ import {
 import { createEcmaScriptPlugin, runNodeJs, type Schema } from "@bufbuild/protoplugin";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { AppQueryGenerator } from "./app-query-generator.js";
+const appQueryExtension = import.meta.url.endsWith(".ts") ? "ts" : "js";
+const { AppQueryGenerator } = (await import(
+  `./app-query-generator.${appQueryExtension}`
+)) as typeof import("./app-query-generator.js");
 
 type QueryOutput = ReturnType<Schema["generateFile"]>;
 type Imported = ReturnType<QueryOutput["import"]>;

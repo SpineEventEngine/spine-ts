@@ -118,3 +118,12 @@ activation-race, cancellation, transport and client recovery checks. Independent
 API, reliability, style and documentation review is complete, including a
 regression preventing delivery after cancellation between policy settlement
 and output. Direct Stand filtering remains pending the admission decision.
+
+The maintained multi-package Message Board example and current migration guides
+now cover generated handler metadata, App Query Q/R calls, Bounded Context and
+Server read policies, trusted-reader facts, and native Entity/Event delivery.
+Focused example, installed-consumer, bundled-discovery, generation, source
+quality, and documentation checks passed independent API, reliability, style,
+and documentation review. Direct Stand filtering still awaits its admission
+decision. Integrated security review, image rebuild, version alignment, and
+the full release verification remain pending.

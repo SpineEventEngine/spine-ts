@@ -1,0 +1,33 @@
+{
+  "name": "@spine-event-engine/example-message-board-command-handlers",
+  "version": "2.0.0-snapshot.25",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "handlers:generate": "spine-proto handlers",
+    "prepack": "pnpm handlers:generate && tsc -b"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./spine": {
+      "types": "./dist/generated/spine-metadata.d.ts",
+      "default": "./dist/generated/spine-metadata.js"
+    }
+  },
+  "files": [
+    "dist",
+    "spine-proto.json"
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@spine-event-engine/example-message-board-model": "2.0.0-snapshot.25",
+    "@spine-event-engine/proto": "2.0.0-snapshot.25",
+    "@spine-event-engine/server": "2.0.0-snapshot.25"
+  },
+  "devDependencies": {
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.25"
+  }
+}

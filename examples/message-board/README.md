@@ -12,6 +12,7 @@ context, and a query-side view fit together.
 - ✅ Why browser traffic goes through a public-demo gateway while native
   gRPC remains private.
 - ✅ How normal complete subscription payloads update rows locally and when to recover by query.
+- ✅ How a separate application assembles handlers from packages and applies App Query read policies.
 
 ## Posting and continuing updates
 
@@ -33,12 +34,20 @@ subscriptions, and the local single-process UI needs no shared Delivery server.
 message-board/
 ├── model/    # Message Board messages, commands, events, and rejections
 ├── app/      # Bounded context, domain handlers, policy, and server
+├── command-handlers/ # Separate Aggregate package for composed assembly
+├── view-handlers/    # Separate Projection package for composed assembly
+├── composed-app/     # App Query, typed read policies, and cross-package BCs
 ├── web/      # React UI and browser client
 └── README.md # You are here
 ```
 
 These are private workspace packages. Generated model and handler files are
 build outputs, so build them once before starting local processes.
+
+The existing `app` and `web` packages remain the runnable UI. The
+[composed-app example](composed-app/README.md) separately demonstrates an
+application whose Bounded Context spans handler packages, with an App Query,
+typed read filters, and native Entity/Event subscriptions.
 
 ## 🚀 Start locally
 
