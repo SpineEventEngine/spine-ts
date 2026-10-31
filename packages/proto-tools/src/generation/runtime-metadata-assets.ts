@@ -70,7 +70,7 @@ export const RuntimeMetadataAssets: Readonly<{
   ): MetadataAssets;
 }> = Object.freeze({
   /**
-   * Renders source and compiler-output adapters using the published source location.
+   * Renders source and emitted adapters with public direct imports and resolved nested paths.
    *
    * @param project Application TypeScript project path.
    * @param publishedBootstrap Final bootstrap source path.
@@ -90,9 +90,10 @@ export const RuntimeMetadataAssets: Readonly<{
   ): MetadataAssets {
     const appRoot = dirname(project);
     const outputs = MetadataOutput.paths(project, publishedBootstrap);
-    const source = writer.renderDependencies(dependencies, dirname(publishedBootstrap), format);
-    const runtime = writer.renderDependencies(dependencies, dirname(outputs.runtime), format);
-    const declarations = writer.renderDependencies(dependencies, dirname(outputs.declarations));
+    const imports = MetadataOutput.imports(appRoot, dependencies);
+    const source = writer.renderDependencies(imports, dirname(publishedBootstrap), format);
+    const runtime = writer.renderDependencies(imports, dirname(outputs.runtime), format);
+    const declarations = writer.renderDependencies(imports, dirname(outputs.declarations));
     const sourceFiles = MetadataOutput.pair(dirname(sourceBootstrap), source);
     const runtimeFiles = [
       { file: outputs.runtime, source: runtime.runtime },
@@ -113,6 +114,25 @@ export const RuntimeMetadataAssets: Readonly<{
  * Calculates compiler output and confines restoration payloads.
  */
 const MetadataOutput = {
+  /**
+   * Maps direct edges to declared package aliases and nested edges to selected files.
+   *
+   * @param appRoot Application package directory.
+   * @param dependencies Resolved metadata participants and runtime edges.
+   * @returns Metadata imports for the current installation.
+   */
+  imports(appRoot: string, dependencies: RuntimeMetadataDiscovery) {
+    const canonicalRoot = realpathSync(appRoot);
+    return dependencies.map((dependency) => {
+      const direct = dependencies.edges.find(
+        (edge) => edge.requester === canonicalRoot && edge.resolved === dependency.root,
+      );
+      return direct === undefined
+        ? dependency
+        : { ...dependency, moduleSpecifier: `${direct.name}/spine` };
+    });
+  },
+
   /**
    * Lists the effective project and inherited configs that control emitted paths.
    *

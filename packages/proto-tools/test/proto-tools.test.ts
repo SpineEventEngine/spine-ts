@@ -404,6 +404,10 @@ function packedHandlerTarballs(): string[] {
   return readdirSync(destination).map((name) => join(destination, name));
 }
 
+const frameworkVersion = JSON.parse(
+  readFileSync(join(process.cwd(), "packages/proto/package.json"), "utf8"),
+) as { version: string };
+
 function packedConditionalMetadata(): string {
   const directory = packageDirectory("@acme/conditional-metadata");
   writeJson(directory, "package.json", {
@@ -429,11 +433,11 @@ function packedConditionalMetadata(): string {
   );
   writeFileSync(
     join(directory, "dist/metadata.d.mts"),
-    "export declare const spineMetadata: { readonly receivers: readonly [] };\n",
+    'export declare const spineMetadata: { readonly receivers: readonly []; readonly branch: "import" };\n',
   );
   writeFileSync(
     join(directory, "dist/metadata.d.cts"),
-    "export declare const spineMetadata: { readonly receivers: readonly [] };\n",
+    'export declare const spineMetadata: { readonly receivers: readonly []; readonly branch: "require" };\n',
   );
   const destination = mkdtempSync(join(tmpdir(), "spine-conditional-pack-"));
   execFileSync("npm", ["pack", "--ignore-scripts", "--pack-destination", destination], {
@@ -494,8 +498,8 @@ function createHandlerModelTarball(destination: string): void {
     version: "1.0.0",
     type: "module",
     dependencies: {
-      "@spine-event-engine/proto": "2.0.0-snapshot.25",
-      "@spine-event-engine/core": "2.0.0-snapshot.25",
+      "@spine-event-engine/proto": frameworkVersion.version,
+      "@spine-event-engine/core": frameworkVersion.version,
     },
     files: ["dist"],
     exports: {
@@ -599,7 +603,7 @@ function createPackedHandlerPackage(
     files: ["dist"],
     dependencies: {
       "@acme/handler-model": "1.0.0",
-      "@spine-event-engine/server": "2.0.0-snapshot.25",
+      "@spine-event-engine/server": frameworkVersion.version,
     },
     exports: {
       ".": { types: "./dist/src/handler.d.ts", default: "./dist/src/handler.js" },
@@ -1020,6 +1024,66 @@ describe("spine proto model tooling", () => {
     execFileSync(process.execPath, [join(app, "model-client.mjs")], { cwd: app, timeout: 30_000 });
   }, 120_000);
 
+  it("loads a workspace-linked model after independently packing the application", () => {
+    const tarballs = packedHandlerTarballs();
+    const app = packageDirectory("@acme/portable-app");
+    installTarballs(app, tarballs);
+    const modelLink = join(app, "node_modules/@spine-event-engine/example-message-board-model");
+    rmSync(modelLink, { recursive: true });
+    symlinkSync(join(process.cwd(), "examples/message-board/model"), modelLink);
+    writeJson(app, "package.json", {
+      name: "@acme/portable-app",
+      version: "1.0.0",
+      type: "module",
+      files: ["dist"],
+      dependencies: { "@spine-event-engine/example-message-board-model": frameworkVersion.version },
+      exports: { "./bootstrap": "./dist/generated/spine-bootstrap.js" },
+    });
+    writeJson(app, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: ["@spine-event-engine/example-message-board-model"],
+      registryOutput: "src/model-registry.ts",
+    });
+    writeJson(app, "tsconfig.json", {
+      compilerOptions: {
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        target: "ES2024",
+        rootDir: ".",
+        outDir: "dist",
+        skipLibCheck: true,
+      },
+      include: ["src/**/*.ts", "generated/**/*.ts"],
+    });
+    mkdirSync(join(app, "src"), { recursive: true });
+    writeFileSync(join(app, "src/main.ts"), "export {};\n");
+    HandlerGeneration.generate(app);
+    expect(readFileSync(join(app, "generated/spine-dependencies.js"), "utf8")).toContain(
+      'from "@spine-event-engine/example-message-board-model/spine"',
+    );
+    execFileSync(
+      process.execPath,
+      [join(app, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+      {
+        cwd: app,
+        timeout: 30_000,
+      },
+    );
+    const destination = mkdtempSync(join(tmpdir(), "spine-portable-pack-"));
+    execFileSync("npm", ["pack", "--ignore-scripts", "--pack-destination", destination], {
+      cwd: app,
+      timeout: 30_000,
+    });
+    const consumer = packageDirectory("@acme/portable-consumer");
+    installTarballs(consumer, [...tarballs, join(destination, readdirSync(destination)[0] ?? "")]);
+    execFileSync(
+      process.execPath,
+      ["--input-type=module", "-e", 'import("@acme/portable-app/bootstrap")'],
+      { cwd: consumer, timeout: 30_000 },
+    );
+  }, 120_000);
+
   it("builds one context from handlers supplied by two packed dependency packages", () => {
     const tarballs = packedHandlerTarballs();
     const packages = [
@@ -1154,6 +1218,52 @@ describe("spine proto model tooling", () => {
       timeout: 30_000,
     });
     execFileSync(process.execPath, [join(moved, "bundle.mjs")], { cwd: moved, timeout: 30_000 });
+    const packed = mkdtempSync(join(tmpdir(), "spine-nested-repack-"));
+    for (const directory of [moved, join(moved, "node_modules/@acme/handler-bridge")])
+      execFileSync("npm", ["pack", "--ignore-scripts", "--pack-destination", packed], {
+        cwd: directory,
+        timeout: 30_000,
+      });
+    const consumer = packageDirectory("@acme/nested-reinstalled-consumer");
+    installTarballs(consumer, [
+      ...tarballs,
+      ...readdirSync(packed).map((name) => join(packed, name)),
+    ]);
+    const aggregate = join(consumer, "node_modules/@acme/chat-aggregate");
+    const nestedAggregate = join(
+      consumer,
+      "node_modules/@acme/handler-bridge/node_modules/@acme/chat-aggregate",
+    );
+    mkdirSync(dirname(nestedAggregate), { recursive: true });
+    renameSync(aggregate, nestedAggregate);
+    const installedApp = join(consumer, "node_modules/@acme/handlers-consumer");
+    const appModel = join(installedApp, "node_modules/@acme/handler-model");
+    mkdirSync(dirname(appModel), { recursive: true });
+    symlinkSync(join(consumer, "node_modules/@acme/handler-model"), appModel);
+    HandlerGeneration.generate(installedApp);
+    execFileSync(
+      process.execPath,
+      [join(consumer, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+      { cwd: installedApp, timeout: 30_000 },
+    );
+    execFileSync(process.execPath, [join(installedApp, "dist/src/main.js")], {
+      cwd: consumer,
+      timeout: 30_000,
+    });
+    const repackedBundle = join(consumer, "reinstalled-bundle.mjs");
+    execFileSync(
+      join(process.cwd(), "packages/ai-vercel-ax/node_modules/esbuild/bin/esbuild"),
+      [
+        join(installedApp, "dist/src/main.js"),
+        "--bundle",
+        "--platform=node",
+        "--format=esm",
+        "--tree-shaking=true",
+        `--outfile=${repackedBundle}`,
+      ],
+      { cwd: consumer, timeout: 30_000 },
+    );
+    execFileSync(process.execPath, [repackedBundle], { cwd: consumer, timeout: 30_000 });
   }, 120_000);
 
   it.each(["module", "commonjs"])(
@@ -1188,11 +1298,18 @@ describe("spine proto model tooling", () => {
         include: ["src/**/*.ts", "generated/**/*.ts"],
       });
       mkdirSync(join(app, "src"), { recursive: true });
-      writeFileSync(join(app, "src/main.ts"), "export {};\n");
+      const expected = format === "module" ? "import" : "require";
+      writeFileSync(
+        join(app, "src/main.ts"),
+        [
+          'import type { dependencyMetadata0 } from "../generated/spine-dependencies.js";',
+          `const selected: typeof dependencyMetadata0.branch = "${expected}";`,
+          "void selected;",
+        ].join("\n"),
+      );
       HandlerGeneration.generate(app);
-      const extension = format === "module" ? "mts" : "cts";
       expect(readFileSync(join(app, "generated/spine-dependencies.d.ts"), "utf8")).toContain(
-        `metadata.d.${extension}`,
+        '"@acme/conditional-metadata/spine"',
       );
       execFileSync(
         process.execPath,
@@ -1203,7 +1320,6 @@ describe("spine proto model tooling", () => {
         format === "module"
           ? 'await import("./dist/generated/spine-bootstrap.js")'
           : 'require("./dist/generated/spine-bootstrap.js")';
-      const expected = format === "module" ? "import" : "require";
       const check = [
         load,
         `if (globalThis.__spineCondition !== "${expected}") throw new Error("wrong metadata branch")`,

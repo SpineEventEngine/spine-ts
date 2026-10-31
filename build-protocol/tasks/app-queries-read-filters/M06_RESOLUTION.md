@@ -20,8 +20,9 @@ arbitrarily different dependency topology without rebuilding.
 A metadata participant may be installed only below a nonparticipating package.
 Its package name then cannot be resolved from the application, even though
 build-time discovery finds it. A static adapter imports the actual public
-metadata export selected from that installed dependency. The source bootstrap
-and compiled bootstrap need separately calculated relative paths.
+metadata export selected from that installed dependency. Direct declared
+dependencies use their public package alias and `/spine` export. Nested-only
+dependencies use separately calculated paths for source and compiled output.
 
 ## Generated artifact contract
 
@@ -36,8 +37,8 @@ its package label. The adapter only re-exports passive metadata values; it does
 not register, instantiate, or activate anything. One adapter is sufficient for
 all discovered participants; no per-package proxy tree is necessary.
 
-For an application with `generated/` and `dist/generated/`, the source adapter
-contains a static re-export such as:
+For an application with `generated/` and `dist/generated/`, a nested-only
+participant's source adapter contains a static re-export such as:
 
 ```js
 export { spineMetadata as dependencyMetadata0 } from "../node_modules/bridge/node_modules/participant/dist/generated/spine-metadata.js";
@@ -49,15 +50,18 @@ The runtime adapter contains the independently calculated equivalent:
 export { spineMetadata as dependencyMetadata0 } from "../../node_modules/bridge/node_modules/participant/dist/generated/spine-metadata.js";
 ```
 
-These are illustrative paths. Select the real runtime target of the
-participant's `./spine` export from the resolved dependency edge. Never assume
+These are illustrative nested paths. A direct declared edge instead imports
+`<declared-alias>/spine` in both adapters and their declarations, so a workspace
+build can move into an ordinary installation under that public package name.
+Select the real runtime target of a nested participant's `./spine` export from
+the resolved dependency edge. Never assume
 that target is `dist/generated/spine-metadata.js`, construct a bare
 `bridge/node_modules/...` subpath, or assume a pnpm package is physically beneath
 its requesting package. Deduplicate using canonical package identity, while
 calculating import paths to actual selected files. Preserve exact constructor
 identity with normal application imports; do not copy dependency modules.
 
-The filesystem imports intentionally bypass bare-specifier lookup _after_
+Nested filesystem imports intentionally bypass bare-specifier lookup _after_
 build-time resolution has selected a public export. They must never select an
 unexported file as a fallback. Package exports constrain package specifiers;
 they do not prevent importing a resolved filesystem path. Conditional export
@@ -132,8 +136,10 @@ only the repository's default `dist/generated` fixture.
 
 ## Portability boundary and exclusions
 
-Relative adapters survive relocation of the entire resolved dependency closure
-with its internal layout preserved. pnpm workspace links or external stores
+Direct public package imports survive ordinary independent packing and
+installation under their declared aliases. Nested relative adapters survive
+relocation of the entire resolved dependency closure with its internal layout
+preserved. pnpm workspace links or external stores
 must be included in that closure or replaced by an ordinary installed/deployed
 tree before final application generation. Merely copying a workspace app's
 `dist` while leaving referenced packages behind is not a portable deployment.
