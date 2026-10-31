@@ -9,6 +9,7 @@ import type { Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { EntityQueryDescription } from "@spine-event-engine/core/codegen";
 import type { ActorContext } from "@spine-event-engine/proto";
+import type { TrustedReaderContext } from "@spine-event-engine/core/spi/trusted-reader";
 
 /**
  * Trusted execution scope supplied to an application query handler.
@@ -18,6 +19,21 @@ export interface AppQueryContext {
    * Effective actor and tenant context bound by the receiving Server, including public access.
    */
   readonly actorContext: Readonly<ActorContext>;
+
+  /**
+   * Principal verified for this invocation, absent for admitted public readers.
+   */
+  readonly principal?: TrustedReaderContext["principal"];
+
+  /**
+   * Detached application authority facts from the current trusted port.
+   */
+  readonly authorityFacts?: TrustedReaderContext["authorityFacts"];
+
+  /**
+   * Cancellation of the current framework invocation, when supplied.
+   */
+  readonly signal?: AbortSignal;
 
   /**
    * Binds an existing typed Entity query to this request's read scope.

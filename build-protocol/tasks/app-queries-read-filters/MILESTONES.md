@@ -4,7 +4,8 @@ The [approved proposal](PROPOSAL.md) and [requirements ledger](TASK.md) remain
 binding. Shared validation, Command/Event admission, read-service status mapping,
 unknown-subscription activation, and passive local metadata migration are
 implemented, including dependency discovery, App Query generation, trusted reader
-forwarding, and retained subscription reader binding. Remaining work follows below.
+forwarding, retained subscription reader binding, and Server App Query execution.
+Remaining work follows below.
 
 Each slice includes focused behavior tests, affected generated/build checks,
 format/lint/TSDoc checks, coverage inspection and the relevant existing review
@@ -12,33 +13,6 @@ concerns. Use the existing implementation context for corrections and collect
 one review wave before returning a correction batch. Keep detailed evidence
 outside Git. Run the unchanged full release profile and final security review
 after integration converges; a slice checkpoint does not complete this task.
-
-## M09 — Server App Query execution and internal invocation
-
-**Depends on:** M01, M03, M07–M08. **Class:** high-risk dispatch/domain contract.
-**Paths:** server App Query handler/context modules, `server/server.ts`,
-`services/{spine-services,registered-targets,query-reader}.ts`, and existing
-Entity/Agent query-capability binding seams only where required.
-
-Server accepts explicit handler instances, resolves class metadata before
-listening, and creates a Server-local Q type URL dispatch table. Duplicate Q on one
-Server fails; distinct Servers can choose different classes. Both Execute and
-`server.query(query, executionContext)` capture a detached request, validate
-envelope/root Q and declared nested constraints, check support/tenant/authority,
-then call the handler once. Expose `context.select(description).read()` through
-existing normalized Entity reads bound to trusted actor/tenant. Supply the
-capability to Entity/Agent code by explicit Server-bound injection using current
-execution context, never ServerEnvironment lookup.
-
-**Acceptance/tests:** wrong/missing class metadata fails before listener open;
-passive unregistered classes are not callable; invalid/undecodable/unsupported
-Q invokes no handler or read; caller mutation during awaits cannot replace the
-validated request. One R is type/serialization checked and returned; wrong R
-and technical faults are failures, not empty success. Internal errors are
-structured local failures; cancellation and recognized tenant/auth errors
-preserve meaning. Handler source reads use existing target limits and routes.
-No active App Query registrations in BC or ServerEnvironment. Gate direct
-execution and Server lifecycle tests plus API/style/reliability review.
 
 ## M10 — Execute transport and typed client closure
 

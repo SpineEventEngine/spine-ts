@@ -14,6 +14,13 @@
 
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
+import { clone, type Message } from "@bufbuild/protobuf";
+import { ActorContextSchema, type ActorContext } from "@spine-event-engine/proto";
+import type { AppQueryResponseFor } from "@spine-event-engine/core";
+import {
+  snapshotTrustedReader,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
@@ -30,6 +37,8 @@ import {
   type SpineServicesOptions,
 } from "../services/spine-services.js";
 import { RegisteredTargets } from "../services/registered-targets.js";
+import { AppQueryExecution } from "../services/app-query-execution.js";
+import type { AppQueryHandler } from "../handler/app-query-handler.js";
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
@@ -41,6 +50,21 @@ const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
 type EnvironmentOwnership = "caller" | "server";
+
+/**
+ * Trusted framework input for a direct application query call.
+ */
+export interface ServerQueryExecutionContext extends TrustedReaderContext {
+  /**
+   * Effective actor and tenant captured from the current invocation.
+   */
+  readonly actorContext: ActorContext;
+
+  /**
+   * Cancellation of the current invocation, when available.
+   */
+  readonly signal?: AbortSignal;
+}
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
 const serverHosts = new WeakMap<Server, string>();
 const assemblingStands = new WeakMap<Stand, object>();
@@ -88,6 +112,8 @@ export class Server {
 
   readonly #listenerLifecycles: ListenerLifecycle[] = [];
 
+  readonly #appQueries: readonly AppQueryHandler<never, Message>[];
+
   readonly #services: Omit<SpineServicesOptions, "contexts">;
 
   readonly #environment: ServerEnvironment;
@@ -97,6 +123,8 @@ export class Server {
   #startingOwnership: EnvironmentOwnership | undefined;
 
   #run: Promise<RunningServer> | undefined;
+
+  #active: RunningHttp2Server | undefined;
 
   #failedStartCleanup: FailedStartCleanup | undefined;
 
@@ -121,6 +149,7 @@ export class Server {
       "writeMaxBytes",
     );
     this.#contexts.push(...(options.contexts ?? []));
+    this.#appQueries = Object.freeze([...(options.appQueries ?? [])]);
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
     this.#environment = ServerEnvironment.instance();
@@ -151,6 +180,28 @@ export class Server {
   add(context: BoundedContext | BoundedContextBuilder): this {
     this.#contexts.push(context);
     return this;
+  }
+
+  /**
+   * Executes a generated application request through this Server's active handler table.
+   *
+   * @typeParam Q Generated request with a declared paired response.
+   * @param query Generated application request, captured before any await.
+   * @param executionContext Effective actor and verified facts from framework execution.
+   * @returns The paired generated application result.
+   */
+  async query<Q extends Message>(
+    query: Q & (AppQueryResponseFor<Q> extends never ? never : unknown),
+    executionContext: ServerQueryExecutionContext,
+  ): Promise<AppQueryResponseFor<Q>> {
+    const detached = structuredClone(query);
+    const actor = clone(ActorContextSchema, executionContext.actorContext);
+    const reader = snapshotTrustedReader(executionContext);
+    const signal = executionContext.signal;
+    const running = this.#starting === undefined ? this.#active : await this.#starting;
+    if (!(running instanceof RunningHttp2Server))
+      throw new Error("Server App Query execution requires a running Server.");
+    return running.queryTyped(detached, actor, reader, signal);
   }
 
   /**
@@ -283,6 +334,7 @@ export class Server {
     const routes = await this.#installContexts(contexts, admission);
     const running = await this.#openListener(contexts, routes);
     await this.#startLifecycles(running);
+    this.#active = running;
     return running;
   }
 
@@ -328,12 +380,14 @@ export class Server {
     closeables: readonly unknown[],
     cleanup: FailedStartCleanup,
   ): Promise<RunningHttp2Server> {
+    const queries = new AppQueryExecution(this.#appQueries, routes);
     const services = new SpineServices({
       contexts,
       readMaxBytes: this.#readMaxBytes,
       ...this.#services,
     });
     cleanup.services = services;
+    spineServicesAccess.installAppQueries(services, queries);
     spineServicesAccess.installLogger(
       services,
       serverEnvironmentAccess.loggerFor(this.#environment),
@@ -347,6 +401,7 @@ export class Server {
       sessions,
       environment: this.#environment,
       routes,
+      queries,
       services,
       host,
       port: address.port,
@@ -684,6 +739,11 @@ export interface ServerOptions {
   readonly contexts?: readonly (BoundedContext | BoundedContextBuilder)[];
 
   /**
+   * Handler instances selected explicitly for this Server's App Query routes.
+   */
+  readonly appQueries?: readonly AppQueryHandler<never, Message>[];
+
+  /**
    * Service-level options for Command, Query, and Subscription routes.
    */
   readonly services?: Omit<SpineServicesOptions, "contexts">;
@@ -796,6 +856,8 @@ class RunningHttp2Server implements RunningServer {
 
   readonly #services: SpineServices;
 
+  readonly #queries: AppQueryExecution;
+
   readonly host: string;
 
   readonly port: number;
@@ -822,6 +884,7 @@ class RunningHttp2Server implements RunningServer {
     this.#environment = options.environment;
     this.#routes = options.routes;
     this.#services = options.services;
+    this.#queries = options.queries;
     this.host = options.host;
     this.port = options.port;
     this.baseUrl = `http://${ServerValues.formatHostForUrl(options.host)}:${options.port.toString()}`;
@@ -832,11 +895,33 @@ class RunningHttp2Server implements RunningServer {
   }
 
   /**
+   * Dispatches a generated request only while this listener remains active.
+   *
+   * @typeParam Q Generated application request with a paired response.
+   * @param query Captured generated request.
+   * @param actor Current effective actor and tenant.
+   * @param reader Verified current invocation facts.
+   * @param signal Current invocation cancellation, when available.
+   * @returns The paired generated application result.
+   */
+  queryTyped<Q extends Message>(
+    query: Q,
+    actor: ActorContext,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
+  ): Promise<AppQueryResponseFor<Q>> {
+    if (this.#closed !== undefined)
+      return Promise.reject(new Error("Server App Query execution is closed."));
+    return this.#queries.executeTyped(query, actor, reader, signal);
+  }
+
+  /**
    * Closes this listener once, preserving a failed close for retry.
    *
    * @returns Completion after resources close.
    */
   close(): Promise<void> {
+    this.#queries.beginClose();
     this.#closed ??= this.#closeOnce().catch((error: unknown) => {
       this.#closed = undefined;
       throw error;
@@ -938,6 +1023,7 @@ class RunningHttp2Server implements RunningServer {
    * @returns Completion after all context work drains.
    */
   async #drainContexts(): Promise<void> {
+    await this.#queries.drain();
     for (const context of this.#contexts) boundedContextAccess.beginClose(context);
     const drained = await Promise.allSettled(
       this.#contexts.map((context) => boundedContextAccess.drainWork(context)),
@@ -963,6 +1049,7 @@ interface RunningHttp2ServerOptions {
   readonly environment: ServerEnvironment;
   readonly routes: RegisteredTargets;
   readonly services: SpineServices;
+  readonly queries: AppQueryExecution;
   readonly host: string;
   readonly port: number;
 }

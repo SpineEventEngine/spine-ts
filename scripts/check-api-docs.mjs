@@ -755,6 +755,7 @@ const expectedServerExports = [
   "ServerEnvironmentDelivery",
   "ServerEnvironmentSettings",
   "ServerOptions",
+  "ServerQueryExecutionContext",
   "ServerRuntimeLifecycle",
   "ServerRuntimeRejectedState",
   "StateUpdateRoute",

@@ -902,6 +902,89 @@ work to stop using dependencies, then closes contexts. Caller-managed `start()`
 does not close global process facilities; close `ServerEnvironment.instance()`
 separately when used. The final run-managed `run()` close closes its environment.
 
+`ServerOptions.appQueries` selects concrete generated `AppQueryHandler<Q, R>`
+instances by exact constructor metadata before listening. Duplicate Q routes
+or missing metadata fail startup. On direct app-node ingress,
+`QueryService.Execute` validates a complete AppQuery envelope and Q, then
+returns one packed paired R. Gateway forwarding and `ClientRequest.query` are
+not available yet.
+The internal
+`Server.query(generatedQ, executionContext)` accepts a generated Q and returns
+its paired generated R, using a detached request and the effective actor,
+verified reader facts, and cancellation signal supplied by the current
+framework invocation. `ProcessManager.currentActorContext` and
+`Agent.currentActorContext` expose only the current signal's detached actor and
+tenant during a handler; neither establishes a verified principal. Constructor
+injection can bind the query function to a Server. Scoped Entity reads require
+query/full visibility and destination tenant membership. Direct calls do not
+cross the Server's gRPC output-filter boundary.
+
+The repository `onCreate` callback can inject `(q, context) => server.query(q, context)`
+into a Process Manager or Agent. Within an active handler, pass a generated Q
+with `{ actorContext: this.currentActorContext }`; the actor/tenant snapshot
+does not supply verified principal or provider facts. The
+[scoped integration test](test/entity/process-manager-querying.test.ts) includes
+the full callback and handler invocation.
+
+This example uses the generated Project query and the current Process Manager
+scope; pass `scopedOnCreate(server)` as the repository's `onCreate` callback.
+Ordinary generation and bootstrap register the decorated handler description:
+
+<!-- docs-snippet-path: packages/server/test/entity/process-manager-querying.test.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import {
+  Assign,
+  ProcessManager,
+  type EntityOptions,
+  type Server,
+  type ServerQueryExecutionContext,
+} from "@spine-event-engine/server";
+import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+import {
+  type ProjectCreated as ProjectionEvent,
+  ProjectCreatedSchema as ProjectionEventSchema,
+} from "../../test-fixtures/generated/repository-routing/project_events_pb.js";
+import { type CreateReviewProject } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
+import {
+  type GetProjectOverview_Query,
+  type GetProjectOverview_Response,
+} from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { GetProjectOverview } from "../../test-fixtures/generated/repository-routing/project_queries_app_query.js";
+
+class ScopedAppQueryManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  constructor(
+    options: EntityOptions<string, typeof ProcessManagerStateSchema>,
+    private readonly ask: (
+      query: GetProjectOverview_Query,
+      context: ServerQueryExecutionContext,
+    ) => Promise<GetProjectOverview_Response>,
+  ) {
+    super(options);
+  }
+
+  @Assign
+  async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
+    const result = await this.ask(
+      create(GetProjectOverview.querySchema, {
+        project: create(ProjectIdSchema, { value: command.id }),
+      }),
+      { actorContext: this.currentActorContext },
+    );
+    return create(ProjectionEventSchema, {
+      id: command.id,
+      name: result.project?.name ?? "",
+    });
+  }
+}
+
+export const scopedOnCreate =
+  (server: Server) => (options: EntityOptions<string, typeof ProcessManagerStateSchema>) =>
+    new ScopedAppQueryManager(options, (q, context) => server.query(q, context));
+```
+
 `Stand` registers entity state for point/list reads, updates current state, and
 offers in-process subscriptions. The legacy-named local reset/replay helper
 `catchUpReadSide(options?)` clears every registered Projection state and replays

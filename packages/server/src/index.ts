@@ -70,6 +70,7 @@ export {
   type ListenerLifecycle,
   type RunningServer,
   type ServerOptions,
+  type ServerQueryExecutionContext,
 } from "./server/server.js";
 export {
   ManagedServerApplication,

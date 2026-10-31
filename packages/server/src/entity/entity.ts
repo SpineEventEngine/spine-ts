@@ -202,6 +202,20 @@ export const processManagerQueryAccess: Readonly<{
     actorContext: ActorContext,
   ): () => void;
   require(entity: object): ProcessManagerQueryCapability;
+
+  /**
+   * Binds a typed Entity read builder to one active invocation.
+   *
+   * @typeParam Schema Generated state schema of the target Entity.
+   * @typeParam Id Identifier type used by the Entity query description.
+   * @param scope Active invocation to use for reads.
+   * @param query Registered description of the target Entity.
+   * @returns A typed builder using that invocation's actor and tenant.
+   */
+  select<Schema extends DescriptorMessageSchema, Id>(
+    scope: object,
+    query: EntityQueryDescription<Schema, Id>,
+  ): Readonly<EntityQueryRead<Schema>>;
 }> = Object.freeze({
   /**
    * Enables read-side queries for the duration of one handler invocation.
@@ -226,6 +240,22 @@ export const processManagerQueryAccess: Readonly<{
       capability.active = false;
       processManagerQueries.delete(entity);
     };
+  },
+
+  /**
+   * Reuses the active Entity read facade for a separately bound query scope.
+   *
+   * @typeParam Schema Generated state schema selected by the query.
+   * @typeParam Id Identifier type of the selected state.
+   * @param scope Active Entity or application query invocation.
+   * @param query Detached typed Entity query description.
+   * @returns A read facade with the existing plan and limit checks.
+   */
+  select<Schema extends DescriptorMessageSchema, Id>(
+    scope: object,
+    query: EntityQueryDescription<Schema, Id>,
+  ): Readonly<EntityQueryRead<Schema>> {
+    return EntityQueryReads.select(scope, query);
   },
 
   /**
@@ -1332,6 +1362,17 @@ export abstract class ProcessManager<
   }
 
   /**
+   * Captures the current signal's actor and tenant during a handler invocation.
+   *
+   * This metadata does not establish an authenticated principal or authority facts.
+   *
+   * @returns Detached actor metadata from the active repository query scope.
+   */
+  protected get currentActorContext(): ActorContext {
+    return clone(ActorContextSchema, processManagerQueryAccess.require(this).actorContext);
+  }
+
+  /**
    * Reads retained diagnostic events when this repository enabled Process Manager event history.
    *
    * @param depth Maximum number of retained events to read.
@@ -1451,6 +1492,17 @@ export abstract class Agent<Id, Schema extends DescriptorMessageSchema> extends 
   constructor(options: EntityOptions<Id, Schema>) {
     super(options);
     EntityFamilies.mark(this, "agent");
+  }
+
+  /**
+   * Captures the current signal's actor and tenant during a handler invocation.
+   *
+   * This metadata does not establish an authenticated principal or authority facts.
+   *
+   * @returns Detached actor metadata from the active repository query scope.
+   */
+  protected get currentActorContext(): ActorContext {
+    return clone(ActorContextSchema, processManagerQueryAccess.require(this).actorContext);
   }
 
   /**

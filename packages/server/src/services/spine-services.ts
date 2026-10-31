@@ -110,6 +110,7 @@ import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import { type StandReadResult } from "../stand/stand.js";
 import { QueryReader } from "./query-reader.js";
+import { AppQueryExecution } from "./app-query-execution.js";
 import { ReadRequestStatus } from "./read-request-status.js";
 import { TrustedReaderIngress, type DirectReaderAuthenticator } from "./trusted-reader-ingress.js";
 import { RegisteredTargets } from "./registered-targets.js";
@@ -119,8 +120,17 @@ import { type StandSubscriptionRegistry } from "../stand/subscription-registry.j
 
 const serviceLoggers = new WeakMap<SpineServices, ILogLayer>();
 const serviceInstances = new WeakSet<SpineServices>();
+const serviceAppQueries = new WeakMap<SpineServices, AppQueryExecution>();
 
 interface SpineServicesAccess {
+  /**
+   * Attaches the Server-selected App Query capability before listener binding.
+   *
+   * @param services Adapter created for this Server.
+   * @param queries Exact-class handler table prepared by the Server.
+   */
+  installAppQueries(services: SpineServices, queries: AppQueryExecution): void;
+
   /**
    * Sets the server logger for service diagnostics.
    *
@@ -308,15 +318,37 @@ export class SpineServices {
         return this.#read(query);
       },
       execute: async (query, context) => {
-        await this.#admit(
+        const detached = clone(QueryService.method.execute.input, query);
+        const reader = await this.#admit(
           "spine.client.QueryService",
           "Execute",
-          toBinary(QueryService.method.execute.input, query),
+          toBinary(QueryService.method.execute.input, detached),
           context,
         );
-        throw new ConnectError("App Query execution is unavailable.", Code.Unimplemented);
+        return this.#executeAppQuery(detached, reader, context.signal);
       },
     });
+  }
+
+  /**
+   * Executes a detached App Query with facts established by a trusted admission port.
+   *
+   * @param query Captured application query envelope.
+   * @param reader Verified current invocation facts.
+   * @param signal Current invocation cancellation, when available.
+   * @returns One paired response from the Server-selected handler.
+   */
+  #executeAppQuery(
+    query: import("@spine-event-engine/proto/client").AppQuery,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
+  ): Promise<import("@spine-event-engine/proto/client").AppQueryResponse> {
+    const queries = serviceAppQueries.get(this);
+    if (queries === undefined)
+      return Promise.reject(
+        new ConnectError("App Query execution is unavailable.", Code.Unimplemented),
+      );
+    return queries.execute(query, reader, signal);
   }
 
   /**
@@ -1074,6 +1106,17 @@ export class SpineServices {
  * @internal
  */
 export const spineServicesAccess: SpineServicesAccess = Object.freeze({
+  /**
+   * Attaches this Server's prepared handler table without exposing registration options.
+   *
+   * @param services Adapter receiving its internal App Query capability.
+   * @param queries Selected handler table from Server preparation.
+   */
+  installAppQueries(services: SpineServices, queries: AppQueryExecution): void {
+    if (!serviceInstances.has(services)) throw new TypeError("Expected SpineServices instance.");
+    serviceAppQueries.set(services, queries);
+  },
+
   /**
    * Clears the logger installed for a closed service adapter.
    *
@@ -2525,22 +2568,7 @@ const TenantStatuses = Object.freeze({
    * @returns Connect failure preserving its stable Spine error type.
    */
   unknown(error: TenantUnknownError): ConnectError {
-    return new ConnectError(
-      error.message,
-      Code.NotFound,
-      undefined,
-      [
-        {
-          desc: ErrorSchema,
-          value: create(ErrorSchema, {
-            type: error.type,
-            code: Code.NotFound,
-            message: error.message,
-          }),
-        },
-      ],
-      error,
-    );
+    return ReadRequestStatus.unknownTenant(error);
   },
 });
 

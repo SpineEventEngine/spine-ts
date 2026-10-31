@@ -160,7 +160,12 @@ describe("NodeCoordinator", () => {
       readerAdmission: {
         direct: {
           authenticate: ({ headers }) => ({
-            principal: { id: ReaderForwarding.headerValue(headers, "x-reader") ?? "anonymous" },
+            principal: {
+              id:
+                ("get" in headers && typeof headers.get === "function"
+                  ? headers.get("x-reader")
+                  : (headers as Readonly<Record<string, string>>)["x-reader"]) ?? "anonymous",
+            },
           }),
         },
       },

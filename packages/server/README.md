@@ -204,6 +204,27 @@ Bounded Contexts causes a startup error.
 The [Orders example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/orders/README.md#cross-context-order-review)
 shows this in an Event handler and includes a runnable integration test.
 
+Application queries use generated `_queries.proto` request/response companions.
+Pass concrete `AppQueryHandler<Q, R>` instances in `ServerOptions.appQueries`;
+generated metadata alone never enables a route. On direct app-node ingress,
+`QueryService.Execute` validates the wire envelope and Q before dispatch.
+Gateway forwarding and `ClientRequest.query` are not available yet. Application code calls
+`server.query(generatedQ, executionContext)` and receives the paired generated R.
+The trusted execution context supplies the current `actorContext`, optional
+verified principal and authority facts, and an optional cancellation signal.
+For a Process Manager or Agent, inject a Server-bound query function through the
+repository's `onCreate` callback and use `currentActorContext` only inside an
+active handler. That actor metadata does not prove authentication. Source reads
+from an application query use registered query-visible Entity routes and enforce
+the destination's tenant membership; a handler that performs no source read has
+no destination tenant to check. Direct calls do not run Server output filters.
+
+The [typed callback example](REFERENCE.md#services-reads-and-lifecycle) shows
+the repository `onCreate` injection and active handler call. The actor/tenant
+snapshot supplies no verified principal or provider facts; the
+[scoped integration test](test/entity/process-manager-querying.test.ts) shows
+the complete repository setup.
+
 Queries preserve the handler's actor and effective tenant; there is no tenant
 override. Single-tenant execution uses `SINGLE_TENANT`, even when the request
 omits a tenant field. A named tenant cannot query a single-tenant context: that

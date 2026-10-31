@@ -53,9 +53,23 @@ import {
   EventRouting,
   HandlerRegistryIngestor,
   Server,
+  type ServerQueryExecutionContext,
+  AppQueryHandler,
+  type AppQueryContext,
   SingleProcessServerRuntime,
 } from "../../src/index.js";
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
+import {
+  registerSpineMetadata,
+  spineMetadataTestAccess,
+} from "../../src/handler/spine-metadata-inventory.js";
+import {
+  GetProjectOverview_ResponseSchema,
+  type GetProjectOverview_Query,
+  type GetProjectOverview_Response,
+} from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+import { GetProjectOverview } from "../../test-fixtures/generated/repository-routing/project_queries_app_query.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { QueryReader } from "../../src/services/query-reader.js";
 import { RegisteredTargets } from "../../src/services/registered-targets.js";
@@ -364,6 +378,56 @@ class ProjectLookup extends ProcessManager<string, typeof ProcessManagerStateSch
   }
 }
 
+class ScopedAppQueryHandler extends AppQueryHandler<
+  GetProjectOverview_Query,
+  GetProjectOverview_Response
+> {
+  static contexts: AppQueryContext[] = [];
+
+  execute(query: GetProjectOverview_Query, context: AppQueryContext): GetProjectOverview_Response {
+    ScopedAppQueryHandler.contexts.push(context);
+    return create(GetProjectOverview_ResponseSchema, {
+      project: { id: query.project?.value ?? "", name: "From App Query" },
+    });
+  }
+}
+
+class ScopedAppQueryManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  static instance: ScopedAppQueryManager | undefined;
+  static result: GetProjectOverview_Response | undefined;
+  static failure: unknown;
+
+  constructor(
+    options: EntityOptions<string, typeof ProcessManagerStateSchema>,
+    private readonly ask: (
+      query: GetProjectOverview_Query,
+      context: ServerQueryExecutionContext,
+    ) => Promise<GetProjectOverview_Response>,
+  ) {
+    super(options);
+    ScopedAppQueryManager.instance = this;
+  }
+
+  async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
+    try {
+      ScopedAppQueryManager.result = await this.ask(
+        create(GetProjectOverview.querySchema, {
+          project: create(ProjectIdSchema, { value: command.id }),
+        }),
+        { actorContext: this.currentActorContext },
+      );
+    } catch (error) {
+      ScopedAppQueryManager.failure = error;
+      throw error;
+    }
+    return create(ProjectionEventSchema, { id: command.id, name: "queried" });
+  }
+
+  afterHandler(): unknown {
+    return this.currentActorContext;
+  }
+}
+
 abstract class QueryTypeFixture extends ProcessManager<string, typeof ProcessManagerStateSchema> {
   protected verifySelectedColumn(): void {
     const query = this.select(ProjectOverviewStateSchema, selectedProjectionColumns);
@@ -575,6 +639,82 @@ function reviewRejectionEvent(id: string) {
 }
 
 describe("Process Manager querying", () => {
+  it("injects a Server App Query into a real scoped handler without inventing principal facts", async () => {
+    ScopedAppQueryHandler.contexts = [];
+    ScopedAppQueryManager.instance = undefined;
+    ScopedAppQueryManager.result = undefined;
+    ScopedAppQueryManager.failure = undefined;
+    registerSpineMetadata(
+      {
+        receivers: [],
+        appQueries: [
+          {
+            handlerType: ScopedAppQueryHandler,
+            queryTypeName: GetProjectOverview.querySchema.typeName,
+            querySchema: GetProjectOverview.querySchema,
+            responseSchema: GetProjectOverview.responseSchema,
+          },
+        ],
+      },
+      "test:scoped-app-query",
+    );
+    const server = new Server({ appQueries: [new ScopedAppQueryHandler()] });
+    const workflows = await BoundedContext.multitenant("ScopedAppQueryWorkflows")
+      .add(
+        new Repository({
+          entityType: ScopedAppQueryManager,
+          schema: ProcessManagerStateSchema,
+          handlers: HandlerMetadataValues.defineArity(
+            ScopedAppQueryManager,
+            ProcessManagerStateSchema,
+            (builder) => [builder.assign(CreateReviewProjectSchema, "assign")],
+            [
+              {
+                kind: "command-assignment",
+                methodName: "assign",
+                parameterCount: 1,
+                origin: "domestic",
+                outcomes: { returned: [ProjectionEventSchema], thrown: [] },
+              },
+            ],
+          ),
+          events: [ProjectionEventSchema],
+          onCreate: (options) =>
+            new ScopedAppQueryManager(options, (q, context) => server.query(q, context)),
+        }),
+      )
+      .build();
+    server.add(workflows);
+    const running = await server.start();
+    try {
+      const command = queryCommand("project-1", "scoped", "tenant-a");
+      if (command.context?.actorContext === undefined)
+        throw new Error("Expected complete command actor fixture.");
+      command.context.actorContext.timestamp = create(TimestampSchema, { seconds: 1n });
+      await workflows.commandBus().post(command);
+      await vi.waitFor(() => {
+        expect(ScopedAppQueryManager.result?.project?.name ?? ScopedAppQueryManager.failure).toBe(
+          "From App Query",
+        );
+      });
+      const context = ScopedAppQueryHandler.contexts[0];
+      expect(context?.actorContext.actor?.value).toBe("query-user");
+      expect(context?.actorContext.tenantId?.kind).toMatchObject({
+        case: "value",
+        value: "tenant-a",
+      });
+      expect(context?.principal).toBeUndefined();
+      expect(context?.authorityFacts).toBeUndefined();
+      expect(() => ScopedAppQueryManager.instance?.afterHandler()).toThrow(/only during/u);
+      expect(() =>
+        context?.select(ProjectOverviewStateQuery.create().byId("project-1").build()),
+      ).toThrow(/only during/u);
+    } finally {
+      await running.close();
+      spineMetadataTestAccess.clear();
+    }
+  });
+
   it("copies a generated message ID from the canonical first field", () => {
     const id = create(ProjectOverviewIdSchema, { value: "portfolio-1" });
     const query = ProjectPortfolioStateQuery.create().byId(id).build();

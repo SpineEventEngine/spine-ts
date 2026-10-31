@@ -7095,3 +7095,15 @@ current verified authority facts after stable-ID matching. The
 [reader-binding decision](tasks/app-queries-read-filters/READER_BINDING.md) gives
 the storage, compatibility and failure rules. No sidecar, new transaction API,
 or frozen JVM descriptor change is needed.
+
+### App Query tenant admission (M09)
+
+An App Query has no implicit source Bounded Context. Validate its envelope and
+ActorContext after configured authentication, before invoking its handler.
+Existing tenant membership belongs to each Bounded Context's tenant index, so
+check that membership when a handler reads a destination Bounded Context, using
+its existing tenancy rules. An App Query that performs no such read has no
+destination membership to check. Do not infer a source Bounded Context from
+Q/R types, scan unrelated Bounded Context indexes, or introduce a Server-wide
+tenant directory. Application-specific access checks remain in the configured
+authentication/authorization ports and application code.

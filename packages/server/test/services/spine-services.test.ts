@@ -680,7 +680,7 @@ describe("SpineServices", () => {
 
       await expect(client.execute(create(QueryService.method.execute.input))).rejects.toMatchObject(
         {
-          code: Code.Unimplemented,
+          code: Code.InvalidArgument,
         },
       );
 

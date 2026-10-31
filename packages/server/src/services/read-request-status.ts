@@ -23,6 +23,7 @@ import {
   type Subscription,
   TopicValidationError,
 } from "@spine-event-engine/proto/client";
+import type { TenantUnknownError } from "../context/tenant-unknown-error.js";
 
 /**
  * Public read-side requests with distinct Spine validation enums.
@@ -33,6 +34,30 @@ export type ReadRequestKind = "query" | "topic" | "subscription";
  * Maps read-side validation to native Spine Error trailers and Connect details.
  */
 export const ReadRequestStatus = {
+  /**
+   * Creates a structured NotFound for a receiving context's missing membership.
+   *
+   * @param error Confirmed missing tenant from the target context.
+   * @returns Native and Connect status carrying the stable tenant type.
+   */
+  unknownTenant(error: TenantUnknownError): ConnectError {
+    const value = create(ErrorSchema, {
+      type: error.type,
+      code: Code.NotFound,
+      message: error.message,
+    });
+    const metadata = new Headers({
+      "spine-error-bin": Buffer.from(toBinary(ErrorSchema, value)).toString("base64"),
+    });
+    return new ConnectError(
+      error.message,
+      Code.NotFound,
+      metadata,
+      [{ desc: ErrorSchema, value }],
+      error,
+    );
+  },
+
   /**
    * Creates the status for a well-formed activation without a registry record.
    *

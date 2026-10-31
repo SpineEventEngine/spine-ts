@@ -486,8 +486,14 @@ routes. Application query declarations in a `_queries.proto` file generate group
 generated model companion augments `AppQueryResponseFor<Query>` through the ordinary
 core type map; both messages also enter the ordinary Proto module, Any, validation,
 and stringifier registries. `AppQueryHandler<Query, Response>` describes a concrete
-server implementation, but `QueryService.Execute` remains unavailable until server
-registration is added. `QueryService.Read` supports ID-filter reads for any registered state
+server implementation. `ServerOptions.appQueries` selects concrete instances by
+exact class metadata before listening; passive metadata never activates a route.
+On direct app-node ingress, `QueryService.Execute` validates the AppQuery
+envelope and generated Q, then returns one packed paired R. Gateway forwarding
+and `ClientRequest.query` are not available yet. Internal `Server.query(generatedQ, executionContext)`
+uses the same selected handler and returns the generated R directly. Source
+Entity reads use registered query-visible routes and target-specific tenant
+admission. `QueryService.Read` supports ID-filter reads for any registered state
 route and projection-state `Target.include_all = true` reads, packing
 `EntityStateWithVersion` replies from
 `Stand.queryVersioned()`. Column filters support `EQUAL`, `GREATER_THAN`,
