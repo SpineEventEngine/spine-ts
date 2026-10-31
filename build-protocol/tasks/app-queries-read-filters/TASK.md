@@ -86,9 +86,10 @@ implemented, including typed browser/Node clients and Execute forwarding through
 gateways and Coordinators. Server accepts explicit App Query handlers and
 supports direct app-node Execute and typed internal calls. The typed filter
 engine is implemented with detached callback inputs, exact type matching, and
-nested-message traversal. Filter installation at read and
-subscription boundaries and integrated release verification remain, as listed
-in MILESTONES.md.
+nested-message traversal. Bounded Context filters now apply to outward Entity
+reads and retained Entity/Agent histories; Server filters apply to Entity Query
+and App Query gRPC results. Subscription filtering and integrated release
+verification remain, as listed in MILESTONES.md.
 
 The App Query preflight passed generated/source compatibility checks, builds,
 focused tests, documentation and independent review. Installed model and handler
@@ -104,3 +105,8 @@ and final security review remain due after implementation.
 The filter engine passed focused root/nested traversal, container removal, byte
 isolation, deep traversal, and readonly-context checks. Independent review
 confirmed the corrections for shared bytes and unnecessary parent-tree copies.
+
+Read-boundary integration passed focused boundary, history, cancellation, actor
+context, sanitized-status and data-isolation checks, followed by independent
+API, reliability, style and documentation review. The remaining direct
+subscription admission decision is recorded in MILESTONES.md.

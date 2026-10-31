@@ -17,6 +17,10 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { ActorContext, TenantId } from "@spine-event-engine/proto";
 import type { AppQuery, Query, Subscription, Topic } from "@spine-event-engine/proto/client";
 import type { TrustedReaderContext } from "@spine-event-engine/core/spi/trusted-reader";
+import type { NormalizedQueryPlan, RecordQuery } from "@spine-event-engine/storage";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { HistoryRead } from "@spine-event-engine/ai";
+import type { AgentHistoryView } from "@spine-event-engine/storage/provider";
 import type { BoundedContext } from "../context/bounded-context.js";
 
 type ReadonlyBytes = Readonly<Pick<Uint8Array, "length" | "at" | "slice"> & Record<number, number>>;
@@ -78,15 +82,110 @@ export type ReadSideOperation =
     }>
   | Readonly<{
       /**
-       * Direct read; boundary-specific call details are supplied at integration.
+       * Direct Stand read with its actual requested state and identifier.
        */
       kind: "direct";
+
+      /**
+       * Requested state schema URL and typed Entity ID.
+       */
+      read: Readonly<{
+        /**
+         * Requested state schema URL.
+         */
+        typeUrl: string;
+
+        /**
+         * Typed Entity ID supplied to Stand.
+         */
+        id: unknown;
+      }>;
     }>
   | Readonly<{
       /**
-       * History read; boundary-specific call details are supplied at integration.
+       * Direct Stand query with its caller-supplied record query.
+       */
+      kind: "direct";
+
+      /**
+       * Detached caller-supplied record query.
+       */
+      query: Readonly<RecordQuery<unknown>>;
+    }>
+  | Readonly<{
+      /**
+       * Direct Stand query with its normalized storage plan.
+       */
+      kind: "direct";
+
+      /**
+       * Detached normalized storage plan.
+       */
+      plan: Readonly<NormalizedQueryPlan<unknown>>;
+    }>
+  | Readonly<{
+      /**
+       * Retained history read with its actual ID, page, or time input.
        */
       kind: "history";
+
+      /**
+       * Captured retained-history request for the actual source.
+       */
+      history:
+        | Readonly<{
+            /**
+             * State-at read of an Entity's retained snapshots.
+             */
+            source: "entity-state-at";
+
+            /**
+             * Entity ID used for the retained read.
+             */
+            entityId: unknown;
+
+            /**
+             * Latest permitted state timestamp.
+             */
+            time: ReadonlyMessage<Timestamp>;
+          }>
+        | Readonly<{
+            /**
+             * State or Event retained-history category.
+             */
+            source: "entity-states" | "entity-events";
+
+            /**
+             * Entity ID used for the retained read.
+             */
+            entityId: unknown;
+
+            /**
+             * Requested number of records.
+             */
+            depth: number;
+          }>
+        | Readonly<{
+            /**
+             * Indexed Agent history category.
+             */
+            source: "agent";
+
+            /**
+             * Agent ID used for the retained read.
+             */
+            entityId: unknown;
+
+            /**
+             * Selected Agent history view.
+             */
+            view: ReadonlyMessage<AgentHistoryView>;
+
+            /**
+             * Captured page size and continuation.
+             */
+            request: ReadonlyMessage<HistoryRead>;
+          }>;
     }>;
 
 /**

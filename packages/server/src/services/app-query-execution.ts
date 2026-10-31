@@ -26,6 +26,7 @@ import {
   ResponseSchema,
   StatusSchema,
   type ActorContext,
+  type TenantId,
 } from "@spine-event-engine/proto";
 import {
   AppQuerySchema,
@@ -52,6 +53,8 @@ import { QueryReader } from "./query-reader.js";
 import { EffectiveTenants } from "../context/effective-tenant.js";
 import { TenantAdmissions, TenantUnknownError } from "../context/tenant-unknown-error.js";
 import { boundedContextAccess } from "../context/bounded-context.js";
+import { ReadSideFilterEngine } from "../stand/read-side-filter-engine.js";
+import type { ReadSideContext } from "../stand/read-side-filter.js";
 
 /**
  * One explicitly selected application query implementation.
@@ -75,6 +78,8 @@ export class AppQueryExecution {
 
   readonly #targets: RegisteredTargets;
 
+  readonly #serverFilters: ReadSideFilterEngine | undefined;
+
   readonly #readStatuses = new WeakSet<ConnectError>();
 
   /**
@@ -82,9 +87,15 @@ export class AppQueryExecution {
    *
    * @param handlers Explicit handler instances selected by this Server.
    * @param targets Entity state routes installed in this Server.
+   * @param serverFilters Policies applied only when the result crosses gRPC.
    */
-  constructor(handlers: readonly AppQueryHandler<never, Message>[], targets: RegisteredTargets) {
+  constructor(
+    handlers: readonly AppQueryHandler<never, Message>[],
+    targets: RegisteredTargets,
+    serverFilters?: ReadSideFilterEngine,
+  ) {
     this.#targets = targets;
+    this.#serverFilters = serverFilters;
     const descriptions = SpineMetadataInventory.selectQueries(
       handlers.map((handler) => handler.constructor as AppQueryDescription["handlerType"]),
     );
@@ -113,9 +124,27 @@ export class AppQueryExecution {
     reader: TrustedReaderContext,
     signal?: AbortSignal,
   ): Promise<AppQueryResponse> {
+    return this.#execute(input, reader, signal, true);
+  }
+
+  /**
+   * Tracks one accepted handler call while selecting its outward boundary.
+   *
+   * @param input Captured application request.
+   * @param reader Verified caller facts.
+   * @param signal Current cancellation.
+   * @param outward Whether the result leaves this Server over gRPC.
+   * @returns Paired result and successful envelope.
+   */
+  #execute(
+    input: AppQuery,
+    reader: TrustedReaderContext,
+    signal: AbortSignal | undefined,
+    outward: boolean,
+  ): Promise<AppQueryResponse> {
     if (this.#closing)
       return Promise.reject(new ConnectError("App Query execution is closed.", Code.Unavailable));
-    const work = this.#run(input, reader, signal);
+    const work = this.#run(input, reader, signal, outward);
     this.#active.add(work);
     void work.then(
       () => this.#active.delete(work),
@@ -146,12 +175,14 @@ export class AppQueryExecution {
    * @param input Captured application query envelope.
    * @param reader Verified current invocation facts.
    * @param signal Current invocation cancellation, when available.
+   * @param outward Whether the final result crosses gRPC.
    * @returns One paired result in a successful response envelope.
    */
   async #run(
     input: AppQuery,
     reader: TrustedReaderContext,
     signal?: AbortSignal,
+    outward = true,
   ): Promise<AppQueryResponse> {
     this.#checkCanceled(signal);
     const { query, route, request } = this.#validated(input);
@@ -159,7 +190,7 @@ export class AppQueryExecution {
     try {
       const result = await this.#invoke(route, request, context);
       this.#checkCanceled(signal);
-      return this.#response(route, result);
+      return await this.#response(route, result, query, reader, signal, outward);
     } finally {
       release();
     }
@@ -196,7 +227,7 @@ export class AppQueryExecution {
       context: clone(ActorContextSchema, actor),
       message,
     });
-    const response = await this.execute(envelope, reader, signal);
+    const response = await this.#execute(envelope, reader, signal, false);
     const packed = response.message[0];
     if (packed === undefined)
       throw new ConnectError("App Query response is missing.", Code.Internal);
@@ -240,7 +271,7 @@ export class AppQueryExecution {
     const context = this.#context(scope, actor, reader, signal);
     const release = processManagerQueryAccess.bind(
       scope,
-      (plan, schema, wire) => this.#read(plan, schema, wire, signal),
+      (plan, schema, wire) => this.#read(plan, schema, wire, query, reader, signal),
       actor,
     );
     return { context, release };
@@ -298,14 +329,7 @@ export class AppQueryExecution {
     } catch (error) {
       this.#checkCanceled(context.signal);
       if (error instanceof ConnectError && this.#readStatuses.has(error)) throw error;
-      if (
-        error instanceof ConnectError &&
-        [Code.Canceled, Code.Unauthenticated, Code.PermissionDenied, Code.Unavailable].includes(
-          error.code,
-        )
-      )
-        throw new ConnectError("App Query execution failed.", error.code);
-      throw new ConnectError("App Query execution failed.", Code.Internal);
+      throw ReadRequestStatus.technical(error, "App Query execution failed.");
     }
   }
 
@@ -314,20 +338,67 @@ export class AppQueryExecution {
    *
    * @param route Selected handler's generated response schema.
    * @param result Handler-produced result message.
-   * @returns Transport response with exactly one packed R.
+   * @param query Original validated application envelope.
+   * @param reader Verified current reader facts.
+   * @param signal Current cancellation, when supplied.
+   * @param outward Whether the response crosses gRPC.
+   * @returns Transport response with zero or one packed R.
    */
-  #response(route: QueryRoute, result: Message): AppQueryResponse {
+  async #response(
+    route: QueryRoute,
+    result: Message,
+    query: AppQuery,
+    reader: TrustedReaderContext,
+    signal: AbortSignal | undefined,
+    outward: boolean,
+  ): Promise<AppQueryResponse> {
     if ((result as Message | undefined)?.$typeName !== route.description.responseSchema.typeName)
       throw new ConnectError("App Query response type is invalid.", Code.Internal);
+    const visible = await this.#visibleResponse(route, result, query, reader, signal, outward);
     try {
       return create(AppQueryResponseSchema, {
         response: create(ResponseSchema, {
           status: create(StatusSchema, { status: { case: "ok", value: {} } }),
         }),
-        message: [AnyPacker.pack(route.description.responseSchema, result)],
+        message:
+          visible === null ? [] : [AnyPacker.pack(route.description.responseSchema, visible)],
       });
     } catch {
       throw new ConnectError("App Query response is invalid.", Code.Internal);
+    }
+  }
+
+  /**
+   * Applies Server egress policy and maps policy faults to safe transport statuses.
+   * @param route Selected Q/R pairing.
+   * @param result Handler-produced response.
+   * @param query Validated application query.
+   * @param reader Verified invocation facts.
+   * @param signal Current cancellation.
+   * @param outward Whether this result crosses gRPC.
+   * @returns Visible response or null when removed.
+   */
+  async #visibleResponse(
+    route: QueryRoute,
+    result: Message,
+    query: AppQuery,
+    reader: TrustedReaderContext,
+    signal: AbortSignal | undefined,
+    outward: boolean,
+  ): Promise<Message | null> {
+    if (!outward || this.#serverFilters === undefined) return result;
+    try {
+      return await this.#serverFilters.apply(route.description.responseSchema, result, {
+        operation: { kind: "app-query", appQuery: query },
+        ...(query.context === undefined ? {} : { actorContext: query.context }),
+        ...(query.context?.tenantId === undefined
+          ? {}
+          : { effectiveTenant: query.context.tenantId }),
+        ...reader,
+        ...(signal === undefined ? {} : { signal }),
+      });
+    } catch (error) {
+      throw ReadRequestStatus.technical(error, "App Query execution failed.");
     }
   }
 
@@ -338,6 +409,8 @@ export class AppQueryExecution {
    * @param plan Existing Entity query predicates and ordering.
    * @param schema Generated target state schema.
    * @param wire Query with the current trusted actor and tenant context.
+   * @param enclosing Original application query using this child read.
+   * @param reader Verified current reader facts.
    * @param signal Current invocation cancellation, checked before and after the read.
    * @returns Detached matching state snapshots.
    */
@@ -345,6 +418,8 @@ export class AppQueryExecution {
     plan: EntityQueryPlan,
     schema: Schema,
     wire: Query,
+    enclosing: AppQuery,
+    reader: TrustedReaderContext,
     signal?: AbortSignal,
   ): Promise<readonly MessageShape<Schema>[]> {
     this.#checkCanceled(signal);
@@ -368,9 +443,40 @@ export class AppQueryExecution {
       destination,
       1_000,
       wire,
+      this.#childReadContext(wire, enclosing, target, reader, destination, signal),
     );
     this.#checkCanceled(signal);
     return Object.freeze(result.map((entry) => entry.state));
+  }
+
+  /**
+   * Describes one handler-scoped Entity read with its actual target and reader.
+   *
+   * @param wire Current child Query.
+   * @param enclosing Application Query using this read.
+   * @param target Registered producing Entity route.
+   * @param reader Verified invocation facts.
+   * @param tenant Admitted destination tenant, if multitenant.
+   * @param signal Current cancellation signal.
+   * @returns Detached policy context for the producing Bounded Context.
+   */
+  #childReadContext(
+    wire: Query,
+    enclosing: AppQuery,
+    target: RegisteredTarget,
+    reader: TrustedReaderContext,
+    tenant: TenantId | undefined,
+    signal?: AbortSignal,
+  ): ReadSideContext {
+    return {
+      operation: { kind: "query", query: wire },
+      enclosingAppQuery: enclosing,
+      ...(wire.context === undefined ? {} : { actorContext: wire.context }),
+      ...(tenant === undefined ? {} : { effectiveTenant: tenant }),
+      producingContext: target.context,
+      ...reader,
+      ...(signal === undefined ? {} : { signal }),
+    };
   }
 
   /**

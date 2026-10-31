@@ -117,12 +117,23 @@ import { RegisteredTargets } from "./registered-targets.js";
 import { emitServerError, emitServerWarning } from "../server/server-log.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
 import { type StandSubscriptionRegistry } from "../stand/subscription-registry.js";
+import { ReadSideFilterEngine } from "../stand/read-side-filter-engine.js";
+import type { ReadSideContext } from "../stand/read-side-filter.js";
 
 const serviceLoggers = new WeakMap<SpineServices, ILogLayer>();
 const serviceInstances = new WeakSet<SpineServices>();
 const serviceAppQueries = new WeakMap<SpineServices, AppQueryExecution>();
+const serviceReadFilters = new WeakMap<SpineServices, ReadSideFilterEngine>();
 
 interface SpineServicesAccess {
+  /**
+   * Attaches one Server's gRPC read policy before accepting requests.
+   *
+   * @param services Prepared service adapter.
+   * @param filters Registered policy engine.
+   */
+  installReadFilters(services: SpineServices, filters: ReadSideFilterEngine): void;
+
   /**
    * Attaches the Server-selected App Query capability before listener binding.
    *
@@ -309,13 +320,14 @@ export class SpineServices {
     });
     router.service(QueryService, {
       read: async (query, context) => {
-        await this.#admit(
+        const detached = clone(QuerySchema, query);
+        const reader = await this.#admit(
           "spine.client.QueryService",
           "Read",
-          toBinary(QuerySchema, query),
+          toBinary(QuerySchema, detached),
           context,
         );
-        return this.#read(query);
+        return this.#read(detached, reader, (context as typeof context | undefined)?.signal);
       },
       execute: async (query, context) => {
         const detached = clone(QueryService.method.execute.input, query);
@@ -573,10 +585,16 @@ export class SpineServices {
    * Validates a public state query before reading its registered Stand.
    *
    * @param query Public query request.
+   * @param reader Verified facts from current admission.
+   * @param signal Current request cancellation.
    * @returns States for an admitted Query.
    * @throws ConnectError for invalid input or a sanitized read failure.
    */
-  async #read(query: Query): Promise<QueryResponse> {
+  async #read(
+    query: Query,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
+  ): Promise<QueryResponse> {
     ReadRequestStatus.check("query", () => Validate.check(QuerySchema, query));
     const target = query.target;
     const route = this.#readRoute(target);
@@ -587,7 +605,7 @@ export class SpineServices {
     if (queryError !== undefined) {
       throw ReadRequestStatus.invalid("query", false, queryError.message);
     }
-    return this.#readValidated(query, target, route);
+    return this.#readValidated(query, target, route, reader, signal);
   }
 
   /**
@@ -596,9 +614,17 @@ export class SpineServices {
    * @param query Validated public query.
    * @param target Registered query target.
    * @param route Route containing the target Stand and schema.
+   * @param reader Verified current invocation facts.
+   * @param signal Current request cancellation.
    * @returns States when tenant admission and storage read succeed.
    */
-  async #readValidated(query: Query, target: Target, route: StateRoute): Promise<QueryResponse> {
+  async #readValidated(
+    query: Query,
+    target: Target,
+    route: StateRoute,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
+  ): Promise<QueryResponse> {
     const tenantId = ServiceValues.tenantValue(query.context?.tenantId);
     const tenantError = ServiceValues.tenantMismatch(
       route.context.isMultitenant,
@@ -616,10 +642,13 @@ export class SpineServices {
         route,
         ServiceValues.createReadPlan(target, query, route),
         destination,
+        query,
+        reader,
+        signal,
       );
     } catch (error) {
       if (error instanceof TenantUnknownError) throw TenantStatuses.unknown(error);
-      throw new ConnectError("Query read failed.", Code.Internal);
+      throw ReadRequestStatus.technical(error, "Query read failed.");
     }
   }
 
@@ -638,24 +667,64 @@ export class SpineServices {
    * @param route Registered target route with schema and tenancy.
    * @param plan Validated Entity read plan.
    * @param tenantId Declared Proto tenant identifier.
+   * @param query Validated public query with effective actor data.
+   * @param reader Verified current invocation facts.
+   * @param signal Current request cancellation.
    * @returns The Entity query response.
    */ async #query(
     route: StateRoute,
     plan: NormalizedQueryPlan<unknown>,
     tenantId: TenantId | undefined,
+    query: Query,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
   ): Promise<QueryResponse> {
+    const facts: ReadSideContext = {
+      operation: { kind: "query", query },
+      ...(query.context === undefined ? {} : { actorContext: query.context }),
+      ...(tenantId === undefined ? {} : { effectiveTenant: tenantId }),
+      producingContext: route.context,
+      ...reader,
+      ...(signal === undefined ? {} : { signal }),
+    };
     const results = await QueryReader.read(
       route.context.stand(),
       route.schema,
       plan,
       tenantId,
       ServiceValues.queryResultLimit,
+      query,
+      facts,
     );
+    const visible = await this.#visibleStates(route, results, facts);
 
     return create(QueryResponseSchema, {
       response: ServiceValues.okResponse(),
-      message: results.map((result) => ServiceValues.packVersionedState(route.schema, result)),
+      message: visible.map((result) => ServiceValues.packVersionedState(route.schema, result)),
     });
+  }
+
+  /**
+   * Applies this Server's outward policy after BC source policy and storage work.
+   *
+   * @param route Registered Entity result schema.
+   * @param results States returned by the producing context.
+   * @param facts Verified current Query facts.
+   * @returns Surviving states without replenishing removed records.
+   */
+  async #visibleStates(
+    route: StateRoute,
+    results: readonly StandReadResult[],
+    facts: ReadSideContext,
+  ): Promise<readonly StandReadResult[]> {
+    const filters = serviceReadFilters.get(this);
+    if (filters === undefined) return results;
+    const visible: StandReadResult[] = [];
+    for (const result of results) {
+      const state = await filters.apply(route.schema, result.state, facts);
+      if (state !== null) visible.push({ ...result, state });
+    }
+    return visible;
   }
 
   /**
@@ -1106,6 +1175,17 @@ export class SpineServices {
  * @internal
  */
 export const spineServicesAccess: SpineServicesAccess = Object.freeze({
+  /**
+   * Attaches Server-only outward read policies to its service adapter.
+   *
+   * @param services Prepared service adapter.
+   * @param filters Registered policy engine.
+   */
+  installReadFilters(services: SpineServices, filters: ReadSideFilterEngine): void {
+    if (!serviceInstances.has(services)) throw new TypeError("Expected SpineServices instance.");
+    serviceReadFilters.set(services, filters);
+  },
+
   /**
    * Attaches this Server's prepared handler table without exposing registration options.
    *

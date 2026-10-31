@@ -39,6 +39,10 @@ import {
 import { RegisteredTargets } from "../services/registered-targets.js";
 import { AppQueryExecution } from "../services/app-query-execution.js";
 import type { AppQueryHandler } from "../handler/app-query-handler.js";
+import { ReadSideFilter } from "../stand/read-side-filter.js";
+import { ReadSideFilterEngine } from "../stand/read-side-filter-engine.js";
+import { TypeRegistry } from "@spine-event-engine/core";
+import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
@@ -114,6 +118,10 @@ export class Server {
 
   readonly #appQueries: readonly AppQueryHandler<never, Message>[];
 
+  readonly #readFilters: readonly ReadSideFilter<
+    import("@spine-event-engine/core").MessageSchema
+  >[];
+
   readonly #services: Omit<SpineServicesOptions, "contexts">;
 
   readonly #environment: ServerEnvironment;
@@ -150,6 +158,7 @@ export class Server {
     );
     this.#contexts.push(...(options.contexts ?? []));
     this.#appQueries = Object.freeze([...(options.appQueries ?? [])]);
+    this.#readFilters = Object.freeze([...new Set(options.readSideFilters ?? [])]);
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
     this.#environment = ServerEnvironment.instance();
@@ -380,18 +389,7 @@ export class Server {
     closeables: readonly unknown[],
     cleanup: FailedStartCleanup,
   ): Promise<RunningHttp2Server> {
-    const queries = new AppQueryExecution(this.#appQueries, routes);
-    const services = new SpineServices({
-      contexts,
-      readMaxBytes: this.#readMaxBytes,
-      ...this.#services,
-    });
-    cleanup.services = services;
-    spineServicesAccess.installAppQueries(services, queries);
-    spineServicesAccess.installLogger(
-      services,
-      serverEnvironmentAccess.loggerFor(this.#environment),
-    );
+    const { queries, services } = this.#createReadServices(contexts, routes, cleanup);
     const { httpServer, sessions } = this.#createHttpListener(services);
     cleanup.network = { server: httpServer, sessions };
     const address = await ServerValues.listen(httpServer, this.#host, this.#port);
@@ -408,6 +406,42 @@ export class Server {
       contexts,
       closeables,
     });
+  }
+
+  /**
+   * Installs Server result policies and query execution into one listener's services.
+   *
+   * @param contexts Exposed Bounded Contexts.
+   * @param routes Validated Entity state routes.
+   * @param cleanup Retained failure cleanup state.
+   * @returns Listener services and App Query execution lifetime.
+   */
+  #createReadServices(
+    contexts: readonly BoundedContext[],
+    routes: RegisteredTargets,
+    cleanup: FailedStartCleanup,
+  ): { queries: AppQueryExecution; services: SpineServices } {
+    const filters =
+      this.#readFilters.length === 0
+        ? undefined
+        : new ReadSideFilterEngine(
+            this.#readFilters,
+            TypeRegistry.from(...registeredProtoModules()),
+          );
+    const queries = new AppQueryExecution(this.#appQueries, routes, filters);
+    const services = new SpineServices({
+      contexts,
+      readMaxBytes: this.#readMaxBytes,
+      ...this.#services,
+    });
+    cleanup.services = services;
+    spineServicesAccess.installAppQueries(services, queries);
+    if (filters !== undefined) spineServicesAccess.installReadFilters(services, filters);
+    spineServicesAccess.installLogger(
+      services,
+      serverEnvironmentAccess.loggerFor(this.#environment),
+    );
+    return { queries, services };
   }
 
   /**
@@ -742,6 +776,13 @@ export interface ServerOptions {
    * Handler instances selected explicitly for this Server's App Query routes.
    */
   readonly appQueries?: readonly AppQueryHandler<never, Message>[];
+
+  /**
+   * Domain policies applied once to this Server's gRPC read results.
+   */
+  readonly readSideFilters?: readonly ReadSideFilter<
+    import("@spine-event-engine/core").MessageSchema
+  >[];
 
   /**
    * Service-level options for Command, Query, and Subscription routes.

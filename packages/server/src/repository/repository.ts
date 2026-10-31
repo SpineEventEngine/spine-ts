@@ -28,6 +28,7 @@ import {
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
+  TimestampSchema,
   type Any,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
@@ -110,7 +111,9 @@ import {
   ModelPreferenceSchema,
   type AgentHistoryEntry,
   type ConversationRecord,
+  ConversationRecordSchema,
   ConversationIdSchema,
+  AgentHistoryCursorSchema,
 } from "@spine-event-engine/proto/agent";
 import type {
   AiControl,
@@ -142,13 +145,23 @@ import {
   type StateUpdateRouting,
 } from "./state-update-routing.js";
 import { RoutingDeclarations, type RoutingDeclarationSnapshot } from "./routing-declarations.js";
+import {
+  snapshotTrustedReader,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
+import { Code, ConnectError } from "@connectrpc/connect";
+import type { ReadSideContext } from "../stand/read-side-filter.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
 import type { Delivery } from "../delivery/delivery.js";
 import { receptionObservation } from "../delivery/reception-observation.js";
 import { commitFenced, withDeliveryCommitFence } from "./commit-fence.js";
-import { AgentHistoryReads, type AgentHistoryScope } from "../agent/agent-history.js";
+import {
+  AgentHistoryReads,
+  type AgentHistoryBinding,
+  type AgentHistoryScope,
+} from "../agent/agent-history.js";
 import { AgentLiveAiRuntime } from "../agent/agent-live-ai-runtime.js";
 import { AgentLiveAudit } from "../agent/agent-live-audit.js";
 import { AgentLiveBudget } from "../agent/agent-live-budget.js";
@@ -279,6 +292,21 @@ export interface AgentReadScope {
    * Required for a multitenant Bounded Context; omitted for a single-tenant Bounded Context.
    */
   readonly tenantId?: TenantId;
+
+  /**
+   * Actor and tenant metadata supplied by this trusted in-process caller.
+   */
+  readonly actorContext?: ActorContext;
+
+  /**
+   * Verified reader facts supplied by the trusted in-process caller.
+   */
+  readonly reader?: TrustedReaderContext;
+
+  /**
+   * Cancellation of this read.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -1029,6 +1057,10 @@ interface CapturedAgentRead {
   readonly runtime: RepositoryRuntime;
   readonly context: StorageContext;
   readonly id: unknown;
+  readonly readSide: Pick<
+    ReadSideContext,
+    "actorContext" | "principal" | "authorityFacts" | "signal"
+  >;
 }
 
 const RepositoryAgentReads = {
@@ -1057,7 +1089,14 @@ const RepositoryAgentReads = {
     const tenant =
       scope.tenantId === undefined ? undefined : RepositoryTenants.require(scope.tenantId);
     const context = RepositoryTenants.storageContextForTenant(runtime.context, tenant);
-    return { runtime, context, id: copiedId };
+    const readSide = {
+      ...(scope.actorContext === undefined
+        ? {}
+        : { actorContext: clone(ActorContextSchema, scope.actorContext) }),
+      ...(scope.reader === undefined ? {} : snapshotTrustedReader(scope.reader)),
+      ...(scope.signal === undefined ? {} : { signal: scope.signal }),
+    };
+    return { runtime, context, id: copiedId, readSide };
   },
 
   /**
@@ -1069,7 +1108,9 @@ const RepositoryAgentReads = {
   request(request: HistoryRead): HistoryRead {
     return {
       pageSize: request.pageSize,
-      ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+      ...(request.cursor === undefined
+        ? {}
+        : { cursor: clone(AgentHistoryCursorSchema, request.cursor) }),
     };
   },
 
@@ -1125,30 +1166,138 @@ const RepositoryAgentReads = {
     view: AgentHistoryView,
     request: HistoryRead,
   ): Promise<HistoryPage<AgentHistoryEntry>> {
+    this.checkCanceled(captured.readSide.signal);
     if (repositoryRuntimes.get(repository) !== captured.runtime)
       throw new Error("Agent read requires an active repository.");
     await captured.runtime.onAdmit(captured.context.tenantId);
-    return RepositoryStorage.track(repository, async () => {
-      const input = RepositoryStorage.entityStorageInput(repository, captured.context);
-      const history = RepositoryStorage.openRepositoryAgentHistory(
-        repository,
-        captured.runtime.storageFactory,
-        input,
+    this.checkCanceled(captured.readSide.signal);
+    const page = await RepositoryStorage.track(repository, () =>
+      this.loadHistoryPage(repository, captured, view, request),
+    );
+    this.checkCanceled(captured.readSide.signal);
+    return page;
+  },
+
+  /**
+   * Rejects canceled public history reads even when no policy callback runs.
+   * @param signal Current caller cancellation, if supplied.
+   */
+  checkCanceled(signal?: AbortSignal): void {
+    if (signal?.aborted) throw new ConnectError("Read canceled.", Code.Canceled);
+  },
+
+  /**
+   * Reads a retained Agent page and transforms only its outward domain values.
+   *
+   * @param repository Registered Agent repository.
+   * @param captured Stable Entity, tenant, and reader facts.
+   * @param view Indexed history category.
+   * @param request Detached page request.
+   * @returns Visible entries and original continuation.
+   */
+  async loadHistoryPage(
+    repository: RepositoryView,
+    captured: CapturedAgentRead,
+    view: AgentHistoryView,
+    request: HistoryRead,
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
+    const input = RepositoryStorage.entityStorageInput(repository, captured.context);
+    const history = RepositoryStorage.openRepositoryAgentHistory(
+      repository,
+      captured.runtime.storageFactory,
+      input,
+    );
+    const page = await AgentHistoryReads.readBound(
+      {
+        storage: history,
+        entityId: captured.id,
+        scope: repositoryAccess.agentHistoryScope(captured.context, input, captured.id),
+      },
+      view,
+      request,
+    );
+    return this.visibleHistory(
+      captured.runtime.stand,
+      page,
+      captured.id,
+      view,
+      request,
+      captured.context.tenantId,
+      captured.readSide,
+    );
+  },
+
+  /**
+   * Transforms returned Agent domain roots while retaining the original page cursor.
+   *
+   * @param stand Producing context's read policy.
+   * @param page Captured history page before outward transformation.
+   * @param entityId Agent identifier used for this call.
+   * @param view Requested history category.
+   * @param request Original page request.
+   * @param tenantId Effective tenant of this Agent.
+   * @param readSide Trusted in-process caller facts captured with the reader.
+   * @returns Visible entries with the provider's original continuation.
+   */
+  async visibleHistory(
+    stand: Stand,
+    page: HistoryPage<AgentHistoryEntry>,
+    entityId: unknown,
+    view: AgentHistoryView,
+    request: HistoryRead,
+    tenantId?: TenantId,
+    readSide: Pick<
+      ReadSideContext,
+      "actorContext" | "principal" | "authorityFacts" | "signal"
+    > = {},
+  ): Promise<HistoryPage<AgentHistoryEntry>> {
+    const facts = {
+      operation: { kind: "history", history: { source: "agent", entityId, view, request } },
+      ...(tenantId === undefined ? {} : { effectiveTenant: tenantId }),
+      ...readSide,
+    } as const;
+    const items: AgentHistoryEntry[] = [];
+    for (const entry of page.items) {
+      const visible = await this.visibleEntry(stand, entry, facts);
+      if (visible !== undefined) items.push(visible);
+    }
+    return { items, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) };
+  },
+
+  /**
+   * Transforms one retained Agent entry without changing its wrapper or cursor.
+   *
+   * @param stand Producing context's outward read policy.
+   * @param entry Captured indexed history entry.
+   * @param facts Actual read operation and trusted invocation facts.
+   * @returns Visible entry, or undefined when policy removed its root.
+   */
+  async visibleEntry(
+    stand: Stand,
+    entry: AgentHistoryEntry,
+    facts: ReadSideContext,
+  ): Promise<AgentHistoryEntry | undefined> {
+    const item = entry.item;
+    let visible: AgentHistoryEntry["item"] | undefined;
+    if (item.case === "conversationRecord") {
+      const value = await standAccess.filterState(
+        stand,
+        ConversationRecordSchema,
+        item.value,
+        facts,
       );
-      const page = await AgentHistoryReads.readBound(
-        {
-          storage: history,
-          entityId: captured.id,
-          scope: repositoryAccess.agentHistoryScope(captured.context, input, captured.id),
-        },
-        view,
-        request,
-      );
-      return {
-        items: page.items,
-        ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
-      };
-    });
+      if (value !== null) visible = { case: "conversationRecord", value };
+    } else if (item.case === "systemEvent" || item.case === "domainEvent") {
+      const value = await standAccess.filterEvent(stand, item.value, facts);
+      if (value !== null)
+        visible =
+          item.case === "systemEvent"
+            ? { case: "systemEvent", value }
+            : { case: "domainEvent", value };
+    }
+    return visible === undefined
+      ? undefined
+      : create(AgentHistoryEntrySchema, { ...entry, item: visible });
   },
 
   /**
@@ -1928,7 +2077,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
   },
 
   /**
-   * Computes the opaque cursor scope for a registered Agent history read.
+   * Returns the opaque cursor scope for a registered Agent history read.
    */
   agentHistoryScope(
     context: StorageContext,
@@ -3046,6 +3195,7 @@ class AggregateCommandExecution {
         intake.assignee.handler,
         intake.message,
         EntityInvocation.commandHandlerContext(this.#command),
+        this.#command.context?.actorContext,
       );
     } catch (error) {
       return this.#postAssigneeRejection(intake, error);
@@ -3140,6 +3290,7 @@ class AggregateCommandExecution {
    * @param handler Assignee declaration to invoke.
    * @param message Decoded Command message.
    * @param context Copied Command context for the handler.
+   * @param actorContext Actor metadata of the Command signal.
    * @returns The handler's raw result after a successful commit.
    */
   async #invokeAssignee(
@@ -3147,34 +3298,56 @@ class AggregateCommandExecution {
     handler: RepositoryCommandAssignee["handler"],
     message: unknown,
     context: unknown,
+    actorContext: ActorContext | undefined,
   ): Promise<unknown> {
-    transactionalEntityAccess.start(entity);
+    const releaseActor = entityHistoryAccess.bindActor(entity, actorContext);
+    let started = false;
     try {
-      const produced = await EntityInvocation.invokeEntityMethod(
-        entity,
-        handler.methodName,
-        message,
-        handler.parameterCount,
-        context,
-      );
-      const signals = this.#support.normalizeProducedSignals(produced);
-      if (signals.length === 0)
-        throw receptionObservation.recordPostHandlerFailure(
-          new Error("Repository aggregate command handlers must return at least one event."),
-        );
-      RepositoryHandlers.requireDeclaredOutputs(handler, signals);
-      const commit = await commitFenced(entity, (current) =>
-        transactionalEntityAccess.commit(current, true),
-      );
-      if (commit.status === "rejected") {
-        throw EntityInvocation.rejectedTransition(commit.validation.error);
-      }
-
-      return produced;
+      transactionalEntityAccess.start(entity);
+      started = true;
+      return await this.#invokeAndCommitAssignee(entity, handler, message, context);
     } catch (error) {
-      transactionalEntityAccess.rollback(entity);
+      if (started) transactionalEntityAccess.rollback(entity);
       throw error;
+    } finally {
+      releaseActor();
     }
+  }
+
+  /**
+   * Checks a declared Aggregate result and commits its accepted transition.
+   *
+   * @param entity Current Aggregate draft.
+   * @param handler Declared Command handler.
+   * @param message Decoded domain Command.
+   * @param context Detached signal context supplied to the handler.
+   * @returns Raw handler result after commit.
+   */
+  async #invokeAndCommitAssignee(
+    entity: object,
+    handler: RepositoryCommandAssignee["handler"],
+    message: unknown,
+    context: unknown,
+  ): Promise<unknown> {
+    const produced = await EntityInvocation.invokeEntityMethod(
+      entity,
+      handler.methodName,
+      message,
+      handler.parameterCount,
+      context,
+    );
+    const signals = this.#support.normalizeProducedSignals(produced);
+    if (signals.length === 0)
+      throw receptionObservation.recordPostHandlerFailure(
+        new Error("Repository aggregate command handlers must return at least one event."),
+      );
+    RepositoryHandlers.requireDeclaredOutputs(handler, signals);
+    const commit = await commitFenced(entity, (current) =>
+      transactionalEntityAccess.commit(current, true),
+    );
+    if (commit.status === "rejected")
+      throw EntityInvocation.rejectedTransition(commit.validation.error);
+    return produced;
   }
 
   /**
@@ -3445,15 +3618,22 @@ class AggregateEventExecution {
   ): Promise<readonly Event[]> {
     const eventContext = EntityInvocation.eventHandlerContext(this.#event);
     const events: Event[] = [];
-
-    transactionalEntityAccess.start(loaded.entity);
+    const releaseActor = entityHistoryAccess.bindActor(
+      loaded.entity,
+      this.#runtime.signalMetadata.originFromEvent(this.#event).actorContext,
+    );
+    let started = false;
     try {
+      transactionalEntityAccess.start(loaded.entity);
+      started = true;
       await this.#invokeReactors(entityId, loaded, intake, eventContext, events);
       await this.#commitEntity(loaded.entity, events.length > 0);
       return Object.freeze(events);
     } catch (error) {
-      transactionalEntityAccess.rollback(loaded.entity);
+      if (started) transactionalEntityAccess.rollback(loaded.entity);
       throw error;
+    } finally {
+      releaseActor();
     }
   }
 
@@ -3916,20 +4096,27 @@ class ProjectionEventExecution {
     subscribers: RepositoryEventSubscribers,
     packedMessage: NonNullable<Event["message"]>,
   ): Promise<void> {
-    transactionalEntityAccess.start(entity);
+    const releaseActor = entityHistoryAccess.bindActor(
+      entity,
+      this.#runtime.signalMetadata.originFromEvent(this.#event).actorContext,
+    );
+    let started = false;
     try {
+      transactionalEntityAccess.start(entity);
+      started = true;
       for (const subscriber of subscribers) {
         await this.#invokeSubscriber(entity, subscriber, packedMessage);
       }
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current),
       );
-      if (commit.status === "rejected") {
+      if (commit.status === "rejected")
         throw EntityInvocation.rejectedTransition(commit.validation.error);
-      }
     } catch (error) {
-      transactionalEntityAccess.rollback(entity);
+      if (started) transactionalEntityAccess.rollback(entity);
       throw error;
+    } finally {
+      releaseActor();
     }
   }
 
@@ -3980,32 +4167,56 @@ class ProjectionEventExecution {
     subscribers: RepositoryStateSubscribers,
     state: Message,
   ): Promise<void> {
-    transactionalEntityAccess.start(entity);
+    const releaseActor = entityHistoryAccess.bindActor(
+      entity,
+      this.#runtime.signalMetadata.originFromEvent(this.#event).actorContext,
+    );
+    let started = false;
     try {
-      for (const subscriber of subscribers) {
-        const context = EntityInvocation.eventHandlerContext(this.#event);
-        const result = await EntityInvocation.invokeEntityMethod(
-          entity,
-          subscriber.handler.methodName,
-          state,
-          subscriber.handler.parameterCount,
-          context,
-        );
-        if (result !== undefined)
-          throw receptionObservation.recordPostHandlerFailure(
-            new Error(
-              `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
-            ),
-          );
-      }
+      transactionalEntityAccess.start(entity);
+      started = true;
+      await this.#runStateSubscribers(entity, subscribers, state);
       const commit = await commitFenced(entity, (current) =>
         transactionalEntityAccess.commit(current),
       );
       if (commit.status === "rejected")
         throw EntityInvocation.rejectedTransition(commit.validation.error);
     } catch (error) {
-      transactionalEntityAccess.rollback(entity);
+      if (started) transactionalEntityAccess.rollback(entity);
       throw error;
+    } finally {
+      releaseActor();
+    }
+  }
+
+  /**
+   * Delivers one state update to each declared Projection subscriber.
+   *
+   * @param entity Projection currently in its transaction.
+   * @param subscribers Subscribers selected for the source state.
+   * @param state Decoded source Entity state.
+   * @returns Completion after all subscribers accept the state.
+   */
+  async #runStateSubscribers(
+    entity: object,
+    subscribers: RepositoryStateSubscribers,
+    state: Message,
+  ): Promise<void> {
+    for (const subscriber of subscribers) {
+      const context = EntityInvocation.eventHandlerContext(this.#event);
+      const result = await EntityInvocation.invokeEntityMethod(
+        entity,
+        subscriber.handler.methodName,
+        state,
+        subscriber.handler.parameterCount,
+        context,
+      );
+      if (result !== undefined)
+        throw receptionObservation.recordPostHandlerFailure(
+          new Error(
+            `Projection subscriber "${subscriber.handler.methodName}" must not return signals.`,
+          ),
+        );
     }
   }
 
@@ -4172,6 +4383,11 @@ const ProcessManagerQueries = Object.freeze({
       destination,
       10_000,
       query,
+      {
+        operation: { kind: "query", query },
+        ...(query.context === undefined ? {} : { actorContext: query.context }),
+        ...(destination === undefined ? {} : { effectiveTenant: destination }),
+      },
     );
     return Object.freeze(results.map((result) => clone(schema, result.state as never)));
   },
@@ -5046,7 +5262,8 @@ class AgentLiveRunner {
   ): () => void {
     const history = AgentHistoryReads.withReadInterceptor(
       entity,
-      (scope, request, live, maxBytes) => reads.history(scope, request, live, maxBytes),
+      (scope, request, live, maxBytes, present) =>
+        reads.history(scope, request, live, maxBytes, present),
     );
     let query: (() => void) | undefined;
     try {
@@ -6049,17 +6266,16 @@ class ProcessManagerEventExecution {
       this.#runtime.signalMetadata.originFromEvent(this.#event).actorContext,
       tenantId,
     );
-
-    transactionalEntityAccess.start(entity);
+    let started = false;
     try {
+      transactionalEntityAccess.start(entity);
+      started = true;
       await this.#invokeEventHandlers(entityId, entity, intake, eventContext, events, commands);
       await this.#commitEntity(entity, events.length > 0);
-      return Object.freeze({
-        commands: Object.freeze(commands),
-        events: Object.freeze(events),
-      });
+      const emitted = { commands: Object.freeze(commands), events: Object.freeze(events) };
+      return Object.freeze(emitted);
     } catch (error) {
-      transactionalEntityAccess.rollback(entity);
+      if (started) transactionalEntityAccess.rollback(entity);
       throw error;
     } finally {
       releaseQuery();
@@ -6891,22 +7107,74 @@ const RepositoryEntities = {
     if (history === undefined) throw new Error("Agent history storage is required.");
     const lifetime = RepositoryStorage.lifetime(repository);
     const runtime = repositoryRuntimes.get(repository);
-    AgentHistoryReads.bind(entity, {
+    if (runtime === undefined) throw new Error("Agent history requires its active runtime.");
+    AgentHistoryReads.bind(
+      entity,
+      this.agentHistoryBinding(repository, entity, entityId, input, history, runtime, lifetime),
+    );
+  },
+
+  /**
+   * Captures retained Agent history admission and outward filtering in one binding.
+   *
+   * @param repository Repository tracking the active runtime.
+   * @param entity Restored Agent instance.
+   * @param entityId Typed Agent identifier.
+   * @param input Retained storage scope.
+   * @param history Indexed Agent history handle.
+   * @param runtime Current context services.
+   * @param lifetime Repository storage lifetime.
+   * @returns History binding with an invocation-time actor snapshot.
+   */
+  agentHistoryBinding(
+    repository: RepositoryView,
+    entity: object,
+    entityId: unknown,
+    input: EntityStorageInput<unknown, Message>,
+    history: AgentHistoryStorage<unknown>,
+    runtime: RepositoryRuntime,
+    lifetime: RepositoryStorageLifetime,
+  ): AgentHistoryBinding<unknown> {
+    return {
       storage: history,
       entityId,
       onAdmit: async (onRead) => {
-        if (runtime === undefined || repositoryRuntimes.get(repository) !== runtime)
+        if (repositoryRuntimes.get(repository) !== runtime)
           throw new Error("Agent history requires its active runtime.");
         await runtime.onAdmit(input.context.tenantId);
         return RepositoryStorage.track(repository, onRead, lifetime);
       },
-      scope: {
-        context: input.context.name,
-        tenant: JSON.stringify(input.context.tenantId ?? null),
-        repository: input.sourceType.typeName,
-        entity: input.id.key(entityId),
-      },
-    });
+      captureActor: () => entityHistoryAccess.currentActor(entity),
+      filterPage: (page, view, request, actorContext) =>
+        RepositoryAgentReads.visibleHistory(
+          runtime.stand,
+          page,
+          entityId,
+          view,
+          request,
+          input.context.tenantId,
+          actorContext === undefined ? {} : { actorContext },
+        ),
+      scope: this.agentHistoryScope(input, entityId),
+    };
+  },
+
+  /**
+   * Returns the exact retained Agent repository and typed ID for cursor validation.
+   * @param input Captured Agent storage scope.
+   * @param entityId Typed Agent identifier.
+   * @returns Stable scope encoded in history cursors.
+   */
+  agentHistoryScope(
+    input: EntityStorageInput<unknown, Message>,
+    entityId: unknown,
+  ): AgentHistoryScope {
+    return {
+      context: input.context.name,
+      tenant: JSON.stringify(input.context.tenantId ?? null),
+      repository: input.sourceType.typeName,
+      entity: input.id.key(entityId),
+    };
   },
 
   /**
@@ -10312,8 +10580,22 @@ const RepositoryStorage = {
 };
 Object.freeze(RepositoryStorage);
 
+interface BoundHistoryReadScope {
+  readonly repository: RepositoryView;
+  readonly lifetime: RepositoryStorageLifetime;
+  readonly stand: Stand;
+  readonly storage: Pick<RepositoryReadEntityPort, "states" | "events">;
+  readonly schema: DescriptorMessageSchema;
+  readonly entityId: unknown;
+  readonly tenantId: TenantId | undefined;
+  readonly entity: object;
+  readonly onAdmit: () => Promise<void>;
+  readonly stateCache: { readonly read: (depth: number) => Promise<readonly EntityRecord[]> };
+  readonly eventCache: { readonly read: (depth: number) => Promise<readonly Event[]> };
+}
+
 /**
- * Internal repository history internals operations.
+ * Provides internal repository history operations.
  */
 const RepositoryHistoryInternals = {
   /**
@@ -10336,29 +10618,128 @@ const RepositoryHistoryInternals = {
   ): void {
     const lifetime = RepositoryStorage.lifetime(repository);
     const runtime = repositoryRuntimes.get(repository);
-    const onAdmit = async (): Promise<void> => {
-      if (runtime === undefined || repositoryRuntimes.get(repository) !== runtime)
-        throw new Error("Repository history requires its active runtime.");
-      await runtime.onAdmit(tenantId);
-    };
+    if (runtime === undefined) throw new Error("Repository history requires its active runtime.");
+    const onAdmit = () => this.admitHistory(repository, runtime, tenantId);
     const { stateCache, eventCache } = this.boundHistoryCaches(storage, entityId, schema);
     entityStateHistoryCaches.set(entity, stateCache);
     entityHistoryAccess.bind(entity, {
-      stateAt: async (time) => {
-        await onAdmit();
-        return this.readBoundStateAt(repository, lifetime, storage, entityId, time);
-      },
-      states: async (depth) => {
-        await onAdmit();
-        return this.readBoundStates(repository, lifetime, schema, stateCache, depth);
-      },
-      events: async (depth) => {
-        await onAdmit();
-        return this.readBoundEvents(repository, lifetime, eventCache, depth);
-      },
+      ...this.historyReaders({
+        repository,
+        lifetime,
+        stand: runtime.stand,
+        storage,
+        schema,
+        entityId,
+        tenantId,
+        entity,
+        onAdmit,
+        stateCache,
+        eventCache,
+      }),
       stateMaintenance: this.boundStateMaintenance(repository, lifetime, storage.states, onAdmit),
       eventMaintenance: this.boundEventMaintenance(repository, lifetime, storage.events, onAdmit),
     });
+  },
+
+  /**
+   * Admits retained history provider work only while repository membership remains current.
+   *
+   * @param repository Repository whose runtime must remain current.
+   * @param runtime Captured context runtime.
+   * @param tenantId Bound tenant when multitenant.
+   * @returns Completion after membership admission.
+   */
+  async admitHistory(
+    repository: RepositoryView,
+    runtime: RepositoryRuntime,
+    tenantId?: TenantId,
+  ): Promise<void> {
+    if (repositoryRuntimes.get(repository) !== runtime)
+      throw new Error("Repository history requires its active runtime.");
+    await runtime.onAdmit(tenantId);
+  },
+
+  /**
+   * Captures each protected history call's actor and request before admission awaits.
+   *
+   * @param scope Bound repository, caches, and admission work.
+   * @returns State and Event read callbacks for the Entity.
+   */
+  historyReaders(scope: BoundHistoryReadScope) {
+    return {
+      stateAt: (time: Timestamp) => this.historyStateAt(scope, time),
+      states: (depth: number) => this.historyStates(scope, depth),
+      events: (depth: number) => this.historyEvents(scope, depth),
+    };
+  },
+
+  /**
+   * Captures an Entity's state-at request and actor before membership awaits.
+   * @param scope Bound history resources.
+   * @param time Caller-selected historical time.
+   * @returns Historical state, if retained and visible.
+   */
+  async historyStateAt(
+    scope: BoundHistoryReadScope,
+    time: Timestamp,
+  ): Promise<Message | undefined> {
+    const actor = entityHistoryAccess.currentActor(scope.entity);
+    const captured = clone(TimestampSchema, time);
+    await scope.onAdmit();
+    return this.readBoundStateAt(
+      scope.repository,
+      scope.lifetime,
+      scope.stand,
+      scope.storage,
+      scope.schema,
+      scope.entityId,
+      captured,
+      scope.tenantId,
+      actor,
+    );
+  },
+
+  /**
+   * Captures an Entity state-history depth and actor before membership awaits.
+   * @param scope Bound history resources.
+   * @param depth Number of prior states requested.
+   * @returns Visible historical states in retained order.
+   */
+  async historyStates(scope: BoundHistoryReadScope, depth: number): Promise<readonly Message[]> {
+    const actor = entityHistoryAccess.currentActor(scope.entity);
+    await scope.onAdmit();
+    return this.readBoundStates(
+      scope.repository,
+      scope.lifetime,
+      scope.stand,
+      scope.schema,
+      scope.stateCache,
+      scope.entityId,
+      depth,
+      scope.tenantId,
+      actor,
+    );
+  },
+
+  /**
+   * Captures an Entity Event-history depth and actor before membership awaits.
+   * @param scope Bound history resources.
+   * @param depth Number of prior Events requested.
+   * @returns Visible retained Event envelopes.
+   */
+  async historyEvents(scope: BoundHistoryReadScope, depth: number): Promise<readonly Event[]> {
+    const actor = entityHistoryAccess.currentActor(scope.entity);
+    await scope.onAdmit();
+    return this.readBoundEvents(
+      scope.repository,
+      scope.lifetime,
+      scope.stand,
+      scope.eventCache,
+      scope.entityId,
+      depth,
+      scope.tenantId,
+      actor,
+    );
   },
 
   /**
@@ -10442,21 +10823,38 @@ const RepositoryHistoryInternals = {
    *
    * @param repository Registered repository.
    * @param lifetime Captured repository storage lifetime.
+   * @param stand Producing context's outward read policy.
    * @param storage Retained Entity read port.
+   * @param schema Historical state schema.
    * @param entityId Captured Entity identifier.
    * @param time Historical instant.
+   * @param tenantId Effective tenant of the bound Entity.
+   * @param actorContext Actor metadata of an active handler, when present.
    * @returns Historical state, if present.
    */
   readBoundStateAt(
     repository: RepositoryView,
     lifetime: RepositoryStorageLifetime,
+    stand: Stand,
     storage: Pick<RepositoryReadEntityPort, "states">,
+    schema: DescriptorMessageSchema,
     entityId: unknown,
     time: Timestamp,
+    tenantId?: TenantId,
+    actorContext?: ActorContext,
   ): Promise<Message | undefined> {
     return RepositoryStorage.track(
       repository,
-      async () => this.cloneHistoryState(await storage.states.stateAt(entityId, time)),
+      async () => {
+        const state = this.cloneHistoryState(await storage.states.stateAt(entityId, time));
+        if (state === undefined) return undefined;
+        const visible = await standAccess.filterState(stand, schema, state, {
+          operation: { kind: "history", history: { source: "entity-state-at", entityId, time } },
+          ...(tenantId === undefined ? {} : { effectiveTenant: tenantId }),
+          ...(actorContext === undefined ? {} : { actorContext }),
+        });
+        return visible ?? undefined;
+      },
       lifetime,
     );
   },
@@ -10466,24 +10864,43 @@ const RepositoryHistoryInternals = {
    *
    * @param repository Registered repository.
    * @param lifetime Captured repository storage lifetime.
+   * @param stand Producing context's outward read policy.
    * @param schema State schema used to unpack rows.
    * @param cache Bound state-history cache.
+   * @param entityId Captured Entity identifier.
    * @param depth Requested history depth.
+   * @param tenantId Effective tenant of the bound Entity.
+   * @param actorContext Actor metadata of an active handler, when present.
    * @returns Frozen historical states.
    */
   readBoundStates(
     repository: RepositoryView,
     lifetime: RepositoryStorageLifetime,
+    stand: Stand,
     schema: DescriptorMessageSchema,
     cache: { readonly read: (depth: number) => Promise<readonly EntityRecord[]> },
+    entityId: unknown,
     depth: number,
+    tenantId?: TenantId,
+    actorContext?: ActorContext,
   ): Promise<readonly Message[]> {
     return RepositoryStorage.track(
       repository,
-      async () =>
-        this.freezeHistoryStates(
+      async () => {
+        const states = this.freezeHistoryStates(
           (await cache.read(depth)).map((record) => EntityRecords.unpack(schema, record).state),
-        ),
+        );
+        const visible: Message[] = [];
+        for (const state of states) {
+          const next = await standAccess.filterState(stand, schema, state, {
+            operation: { kind: "history", history: { source: "entity-states", entityId, depth } },
+            ...(tenantId === undefined ? {} : { effectiveTenant: tenantId }),
+            ...(actorContext === undefined ? {} : { actorContext }),
+          });
+          if (next !== null) visible.push(Object.freeze(next));
+        }
+        return Object.freeze(visible);
+      },
       lifetime,
     );
   },
@@ -10493,19 +10910,39 @@ const RepositoryHistoryInternals = {
    *
    * @param repository Registered repository.
    * @param lifetime Captured repository storage lifetime.
+   * @param stand Producing context's outward read policy.
    * @param cache Bound Event-history cache.
+   * @param entityId Captured Entity identifier.
    * @param depth Requested history depth.
+   * @param tenantId Effective tenant of the bound Entity.
+   * @param actorContext Actor metadata of an active handler, when present.
    * @returns Frozen historical Events.
    */
   readBoundEvents(
     repository: RepositoryView,
     lifetime: RepositoryStorageLifetime,
+    stand: Stand,
     cache: { readonly read: (depth: number) => Promise<readonly Event[]> },
+    entityId: unknown,
     depth: number,
+    tenantId?: TenantId,
+    actorContext?: ActorContext,
   ): Promise<readonly Event[]> {
     return RepositoryStorage.track(
       repository,
-      async () => this.freezeHistoryEvents(await cache.read(depth)),
+      async () => {
+        const events = this.freezeHistoryEvents(await cache.read(depth));
+        const visible: Event[] = [];
+        for (const event of events) {
+          const next = await standAccess.filterEvent(stand, event, {
+            operation: { kind: "history", history: { source: "entity-events", entityId, depth } },
+            ...(tenantId === undefined ? {} : { effectiveTenant: tenantId }),
+            ...(actorContext === undefined ? {} : { actorContext }),
+          });
+          if (next !== null) visible.push(Object.freeze(next));
+        }
+        return Object.freeze(visible);
+      },
       lifetime,
     );
   },

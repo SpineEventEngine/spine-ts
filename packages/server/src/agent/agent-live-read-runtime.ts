@@ -14,9 +14,9 @@
 
 import { toBinary, type MessageShape } from "@bufbuild/protobuf";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
-import type { HistoryRead } from "@spine-event-engine/ai";
+import type { HistoryPage, HistoryRead } from "@spine-event-engine/ai";
 import type { Query } from "@spine-event-engine/proto/client";
-import { AgentHistoryEntrySchema } from "@spine-event-engine/proto/agent";
+import { AgentHistoryEntrySchema, type AgentHistoryEntry } from "@spine-event-engine/proto/agent";
 import type { AgentHistoryPage } from "@spine-event-engine/storage/provider";
 import type { AgentHistoryScope } from "./agent-history.js";
 import { AgentLiveBudget } from "./agent-live-budget.js";
@@ -57,7 +57,41 @@ export class AgentLiveReadRuntime {
     request: HistoryRead,
     live: () => Promise<AgentHistoryPage>,
     maxBytes: number | undefined,
-  ): Promise<AgentHistoryPage> {
+  ): Promise<AgentHistoryPage>;
+
+  /**
+   * Reads and presents a page within the same sequenced read lifetime.
+   * @param scope Exact repository and Agent identity.
+   * @param request Public page request.
+   * @param live Complete provider page callback.
+   * @param maxBytes Optional effective response byte ceiling.
+   * @param present Outward transformation after original byte accounting.
+   * @returns The presented page and original continuation.
+   */
+  history(
+    scope: AgentHistoryScope,
+    request: HistoryRead,
+    live: () => Promise<AgentHistoryPage>,
+    maxBytes: number | undefined,
+    present: (page: AgentHistoryPage) => Promise<HistoryPage<AgentHistoryEntry>>,
+  ): Promise<HistoryPage<AgentHistoryEntry>>;
+
+  /**
+   * Processes provider and optional policy work under one Agent read admission.
+   * @param scope Exact repository and Agent identity.
+   * @param request Public page request.
+   * @param live Complete provider page callback.
+   * @param maxBytes Optional effective response byte ceiling.
+   * @param present Optional outward transformation after original byte accounting.
+   * @returns Provider or presented page after all work settles.
+   */
+  history(
+    scope: AgentHistoryScope,
+    request: HistoryRead,
+    live: () => Promise<AgentHistoryPage>,
+    maxBytes: number | undefined,
+    present?: (page: AgentHistoryPage) => Promise<HistoryPage<AgentHistoryEntry>>,
+  ): Promise<AgentHistoryPage | HistoryPage<AgentHistoryEntry>> {
     return this.sequence(async () => {
       this.checkScope(scope);
       if (!Number.isSafeInteger(request.pageSize) || request.pageSize <= 0)
@@ -73,7 +107,7 @@ export class AgentLiveReadRuntime {
       );
       if (maxBytes !== undefined && bytes > maxBytes)
         throw new RangeError("Agent history page exceeds maxBytes.");
-      return page;
+      return present === undefined ? page : present(page);
     });
   }
 

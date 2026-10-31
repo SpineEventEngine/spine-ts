@@ -72,6 +72,9 @@ import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routin
 import { GetProjectOverview } from "../../test-fixtures/generated/repository-routing/project_queries_app_query.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { QueryReader } from "../../src/services/query-reader.js";
+import { ReadSideFilter, type ReadSideContext } from "../../src/stand/read-side-filter.js";
+import { serverTestFixturesProtoModule } from "../../test-fixtures/generated/proto-module.js";
+void serverTestFixturesProtoModule;
 import { RegisteredTargets } from "../../src/services/registered-targets.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import {
@@ -776,8 +779,19 @@ describe("Process Manager querying", () => {
 
   it("finds a registered Entity in another context of the same server", async () => {
     ProjectLookup.reset();
+    const observed: ReadSideContext[] = [];
+    class ObserveRead extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState, context: ReadSideContext): ProjectOverviewState {
+        observed.push(context);
+        return state;
+      }
+    }
     const projects = await BoundedContext.singleTenant("Projects")
       .add(projectionRepository())
+      .addReadSideFilter(new ObserveRead())
       .build();
     const workflows = await BoundedContext.singleTenant("Workflows")
       .add(processManagerRepository())
@@ -798,6 +812,10 @@ describe("Process Manager querying", () => {
           create(ProjectOverviewStateSchema, { id: "project-1", name: "ready", priority: 1 }),
         ]);
       });
+      expect(observed[0]?.operation.kind).toBe("query");
+      expect(observed[0]?.actorContext?.actor?.value).toBe("query-user");
+      expect(observed[0]?.principal).toBeUndefined();
+      expect(observed[0]?.producingContext).toBe(projects);
       await workflows.commandBus().post(queryCommand("missing", "ready"));
       await vi.waitFor(() => {
         expect(ProjectLookup.results).toEqual([]);

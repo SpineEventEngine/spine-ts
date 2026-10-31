@@ -13,6 +13,7 @@
  */
 
 import {
+  clone,
   fromBinary,
   toBinary,
   type DescField,
@@ -114,6 +115,26 @@ export class ReadSideFilterEngine {
       if (work.kind === "finish") work.commit();
       else await this.#visit(work, pending);
     }
+    return result;
+  }
+
+  /**
+   * Transforms the domain payload of a retained Event without changing its type URL.
+   *
+   * @param packed Original packed domain message.
+   * @param context Actual history call and current trusted facts.
+   * @returns Repacked visible payload, or null when policy removes it.
+   */
+  async applyPacked(packed: Any, context: ReadSideContext): Promise<Any | null> {
+    if (!this.#nested && !this.#filters.has(packed.typeUrl)) return clone(AnySchema, packed);
+    const metadata = this.#registry.findByTypeUrl(packed.typeUrl);
+    if (metadata === undefined)
+      throw new TypeError(`Read-side payload ${packed.typeUrl} is not registered.`);
+    const original = fromBinary(metadata.schema, packed.value);
+    const visible = await this.apply(metadata.schema, original, context);
+    if (visible === null) return null;
+    const result = clone(AnySchema, packed);
+    result.value = toBinary(metadata.schema, visible);
     return result;
   }
 

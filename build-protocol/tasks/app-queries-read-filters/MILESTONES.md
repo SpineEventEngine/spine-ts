@@ -5,7 +5,8 @@ binding. Shared validation, Command/Event admission, read-service status mapping
 unknown-subscription activation, and passive local metadata migration are
 implemented, including dependency discovery, App Query generation, trusted reader
 forwarding, retained subscription reader binding, Server App Query execution,
-typed clients, and Execute transport support. Remaining work follows below.
+typed clients, Execute transport support, and filter installation on outward
+Entity/App Query reads and retained histories. Remaining work follows below.
 
 Each slice includes focused behavior tests, affected generated/build checks,
 format/lint/TSDoc checks, coverage inspection and the relevant existing review
@@ -13,31 +14,6 @@ concerns. Use the existing implementation context for corrections and collect
 one review wave before returning a correction batch. Keep detailed evidence
 outside Git. Run the unchanged full release profile and final security review
 after integration converges; a slice checkpoint does not complete this task.
-
-## M12 — Filter read boundaries and retained history
-
-**Depends on:** M09–M11. **Class:** high-risk read/persistence separation.
-**Paths:** BC builder and Stand, `services/{query-reader,spine-services}.ts`,
-server App Query output path, `entity/entity.ts`, `repository/repository.ts`,
-`agent/agent-history.ts`, and existing Stand/Entity/Agent history tests.
-
-Install BC filters before BC readiness and Server filters before listening.
-Apply BC filters once at each public/internal BC read boundary and Server
-filters once when Entity or App Query domain output leaves its gRPC services.
-Carry child read and enclosing AppQuery together. Do not infer a BC for final
-R or rerun BC policies on a Server replacement. Audit all read façades, including
-direct Stand reads and retained Entity/Agent state/Event history. Filter history
-items without changing original cursor/continuation; do not filter internal
-hydration/restoration/replay or persistence maintenance.
-
-**Acceptance/tests:** BC-only, Server-only, both, repeated same-instance
-installation, two BCs and two Servers; App Query source reads versus final R;
-direct server.query excludes Server filters; Entity null removes a result,
-whole R null yields zero entries, empty R remains one. Public history pages may
-be empty with an unchanged continuation. Stored state, Event history used by
-runtime, hydration, and caller-retained objects stay unchanged. Test async
-concurrent contexts and failures. Gate read/history suites and
-API/style/reliability review.
 
 ## M13 — Filter Entity and Event subscription deliveries
 
@@ -52,9 +28,17 @@ state; root null emits existing `no_longer_matching`, and prior removal notices
 pass through. Filter Event domain payloads as roots, repack into the original
 envelope, retain ID/delivery metadata, suppress only that consumer's null
 Events, and omit all-removed data batches without losing control signals.
-Preserve each grouped Event child's BC/context. Use existing bounded queues
-with serialized per-consumer async filter work; cancellation prevents later
-delivery, and filter errors terminate the affected stream.
+Preserve each grouped Event child's BC/context. Admit original matched RPC
+updates to the existing native queue before asynchronous filtering, then process
+BC and Server filters in order. Cancellation prevents later delivery, and filter
+errors terminate the affected stream without failing the producing write.
+
+Direct Stand subscriptions have no existing delivery queue or removal/error
+contract. Their asynchronous admission policy needs a human decision under the
+repository's prohibition on new artificial limits. The proposed per-consumer
+queue of 100 waiting updates plus one active update is not approved. The
+alternative changes producer completion and backpressure. Do not introduce the
+new capacity without approval; RPC integration can proceed independently.
 
 **Acceptance/tests:** two consumers with fresh distinct Topics receive isolated
 views; ID edits still remove original identity; nested edits deliver state;
@@ -131,9 +115,9 @@ reportable with that limitation.
   scan, client global cache, delivered-ID ledger, Event replay, automatic
   masking/redaction convention, output-state validation, or provider polling.
 
-No product or architectural blocker was demonstrated during this decomposition.
-The dependency integration and forwarding changes are implementation risks with
-specific proofs above, not reasons to pause the approved work.
+The direct-subscription admission decision above is the remaining product
+question. It does not block RPC subscription filtering or other independent
+implementation and verification work.
 
 ### Pinned Proto source gate
 

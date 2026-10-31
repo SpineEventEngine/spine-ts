@@ -848,6 +848,11 @@ The scope is explicit: pass `{}` in a single-tenant Bounded Context or
 `{ tenantId }` in a multitenant Bounded Context. Reads use indexed storage
 without restoring an Agent. The application bridge must authorize access;
 actor metadata does not grant read permission.
+For a trusted in-process caller, the scope can also include detached
+`actorContext`, a verified `reader` with principal and authority facts, and a
+`signal`. Read-side filters receive those facts for that history call; omitting
+`reader` leaves principal and authority facts absent. The bridge supplies
+verified facts explicitly and cannot derive them from `actorContext`.
 
 If a selected model's `authorizeUse` callback explicitly returns `false`
 before the handler, the turn records one `AgentInvocationTerminated` System
@@ -927,8 +932,60 @@ separates actor metadata from verified reader facts and identifies the current
 operation, plus a detached containing message and field for nested calls.
 Read-only packed bytes remain available to Buf decoding through a detached
 `value.slice()` passed to `fromBinary`.
-Registration on read-producing boundaries is not available yet, so declaring a
-filter alone does not change Server output.
+Call `addReadSideFilter(filter)` on a `BoundedContextBuilder` before `build()` to apply it to that
+Bounded Context's outward Entity reads and retained histories. Pass `readSideFilters`
+to `new Server(...)` to apply policies to Entity Query and App Query results
+leaving that Server over gRPC. The same instance can be installed in both
+places; each boundary invokes it once. Direct `Server.query()` runs BC source
+policies but does not cross the Server output boundary. An Entity root returned
+as `null` is omitted without another storage read; an App Query result returned
+as `null` produces an OK response with no message. History removals retain the
+original continuation. Retained storage, hydration, and replay remain raw.
+Direct Stand and retained-history callbacks identify the producing Bounded
+Context. Protected history called from a handler carries its current signal
+actor; an out-of-handler diagnostic read has no actor or authenticated reader.
+
+The operation describes the call that produced the value. `query` includes the
+actual Query and, during an App Query child read, the enclosing AppQuery. `app-query`
+identifies the final application result. `direct` identifies either a typed
+Stand state read by type URL and Entity ID, a caller-supplied RecordQuery, or a
+normalized query plan. `history` distinguishes an Entity state-at timestamp,
+Entity state/Event history depth, and an Agent view with its page request and
+optional cursor. Direct callers supply actor metadata, verified reader facts,
+and cancellation separately; they cannot override the operation.
+
+This filter uses the generated Project state and can be installed on the Bounded
+Context builder that contains its Repository:
+
+<!-- docs-snippet-path: packages/server/test/server/app-query-execution.test.ts -->
+
+```ts
+import {
+  type BoundedContextBuilder,
+  ReadSideFilter,
+  type ReadSideContext,
+} from "@spine-event-engine/server";
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+} from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
+
+class PublicProjectName extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+  constructor() {
+    super(ProjectOverviewStateSchema);
+  }
+
+  filter(state: ProjectOverviewState, context: ReadSideContext): ProjectOverviewState {
+    if (context.operation.kind === "query") state.name = "Public project";
+    return state;
+  }
+}
+
+const projectPolicy = new PublicProjectName();
+function installProjectPolicy(builder: BoundedContextBuilder): BoundedContextBuilder {
+  return builder.addReadSideFilter(projectPolicy);
+}
+```
 
 The repository `onCreate` callback can inject `(q, context) => server.query(q, context)`
 into a Process Manager or Agent. Within an active handler, pass a generated Q

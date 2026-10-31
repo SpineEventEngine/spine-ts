@@ -43,7 +43,12 @@ import { ReadSideFilterEngine } from "../../src/stand/read-side-filter-engine.js
 import { ReadSideMessages } from "../../src/stand/read-side-message.js";
 
 const registry = TypeRegistry.from(serverTestFixturesProtoModule);
-const context: ReadSideContext = { operation: { kind: "direct" } };
+const context: ReadSideContext = {
+  operation: {
+    kind: "direct",
+    read: { typeUrl: TypeUrls.derive(ProjectIssueViewSchema), id: "issue-1" },
+  },
+};
 
 const readonlyContextContract = (current: ReadSideContext): void => {
   if (current.operation.kind === "query" && current.operation.query.id) {
@@ -54,10 +59,46 @@ const readonlyContextContract = (current: ReadSideContext): void => {
     // @ts-expect-error Packed request bytes are read-only inside a filter.
     current.operation.appQuery.message.value[0] = 0;
   }
+  if (current.operation.kind === "history" && current.operation.history.source === "agent") {
+    const { view, request } = current.operation.history;
+    if (view.kind === "conversation") {
+      // @ts-expect-error Nested conversation ID cannot be rewritten by a filter.
+      view.conversation.value = "another-conversation";
+    }
+    if (request.cursor) {
+      const cursorCopy = request.cursor.value.slice();
+      void cursorCopy;
+      // @ts-expect-error Nested cursor bytes cannot be rewritten by a filter.
+      request.cursor.value[0] = 0;
+    }
+  }
 };
 void readonlyContextContract;
 
 describe("ReadSideFilter", () => {
+  it("preserves an uninspected unknown Event payload but rejects it when nested inspection is requested", async () => {
+    class StateOnly extends ReadSideFilter<typeof ProjectIssueViewSchema> {
+      constructor(nested: boolean) {
+        super(ProjectIssueViewSchema, { nested });
+      }
+      filter(issue: ProjectIssueView): ProjectIssueView {
+        return issue;
+      }
+    }
+    const unknown = create(AnySchema, {
+      typeUrl: "type.spine.io/example.UnknownEvent",
+      value: new Uint8Array([8, 1]),
+    });
+    const retained = await new ReadSideFilterEngine([new StateOnly(false)], registry).applyPacked(
+      unknown,
+      context,
+    );
+    expect(retained).toEqual(unknown);
+    expect(retained).not.toBe(unknown);
+    await expect(
+      new ReadSideFilterEngine([new StateOnly(true)], registry).applyPacked(unknown, context),
+    ).rejects.toThrow("not registered");
+  });
   it("passes a typed detached root through registered filters in order", async () => {
     const calls: string[] = [];
     class Rename extends ReadSideFilter<typeof ProjectIssueViewSchema> {
@@ -555,7 +596,14 @@ describe("ReadSideFilter", () => {
     const pending = new ReadSideFilterEngine([new Inspect()], registry).apply(
       ProjectIssueViewSchema,
       create(ProjectIssueViewSchema, { id: "issue-context" }),
-      { operation: { kind: "direct" }, principal: { id: "reader-1" }, authorityFacts: facts },
+      {
+        operation: {
+          kind: "direct",
+          read: { typeUrl: TypeUrls.derive(ProjectIssueViewSchema), id: "issue-1" },
+        },
+        principal: { id: "reader-1" },
+        authorityFacts: facts,
+      },
     );
     facts.policy.roles.push("admin");
     release();

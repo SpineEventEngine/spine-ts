@@ -730,8 +730,26 @@ interface BoundEntityHistory {
 }
 
 const boundEntityHistories = new WeakMap<object, BoundEntityHistory>();
+const activeHistoryActors = new WeakMap<object, ActorContext>();
 
 interface EntityHistoryAccess {
+  /**
+   * Binds signal actor metadata to one active Aggregate handler.
+   *
+   * @param entity Active Aggregate instance.
+   * @param actorContext Signal actor metadata, when supplied.
+   * @returns Callback clearing the binding after invocation.
+   */
+  bindActor(entity: object, actorContext: ActorContext | undefined): () => void;
+
+  /**
+   * Copies signal actor metadata available to the current protected read.
+   *
+   * @param entity Entity making the protected read.
+   * @returns Detached actor metadata, if active.
+   */
+  currentActor(entity: object): ActorContext | undefined;
+
   /**
    * Attaches repository history access to an Entity instance.
    *
@@ -790,6 +808,34 @@ interface EntityHistoryAccess {
  * @internal
  */
 export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
+  /**
+   * Binds an Aggregate signal's actor for the duration of its handler.
+   *
+   * @param entity Invoked Aggregate.
+   * @param actorContext Signal metadata, when supplied.
+   * @returns Release callback for this invocation.
+   */
+  bindActor(entity: object, actorContext: ActorContext | undefined): () => void {
+    if (actorContext === undefined) return () => undefined;
+    const snapshot = clone(ActorContextSchema, actorContext);
+    activeHistoryActors.set(entity, snapshot);
+    return () => {
+      activeHistoryActors.delete(entity);
+    };
+  },
+
+  /**
+   * Captures current signal metadata without creating authentication facts.
+   *
+   * @param entity Entity making a protected history read.
+   * @returns Detached actor metadata while a handler is active.
+   */
+  currentActor(entity: object): ActorContext | undefined {
+    const query = processManagerQueries.get(entity);
+    const actor = query?.active === true ? query.actorContext : activeHistoryActors.get(entity);
+    return actor === undefined ? undefined : clone(ActorContextSchema, actor);
+  },
+
   /**
    * Associates an Entity instance with its repository history operations.
    *

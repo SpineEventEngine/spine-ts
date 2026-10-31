@@ -14,11 +14,17 @@
 
 import { create } from "@bufbuild/protobuf";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { AnyPacker } from "@spine-event-engine/core";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
-import { QueryService } from "@spine-event-engine/proto/client";
+import {
+  QueryIdSchema,
+  QuerySchema,
+  QueryService,
+  TargetFiltersSchema,
+  TargetSchema,
+} from "@spine-event-engine/proto/client";
 import {
   ActorContextSchema,
   ErrorSchema,
@@ -52,12 +58,17 @@ import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routin
 import {
   ProjectOverviewStateSchema,
   ProjectQueueStateSchema,
+  type ProjectOverviewState,
 } from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
 import {
   ProjectOverviewStateQuery,
   ProjectQueueStateQuery,
 } from "../../test-fixtures/generated/repository-routing/project_states_query.js";
 import { GetProjectOverview } from "../../test-fixtures/generated/repository-routing/project_queries_app_query.js";
+import { serverTestFixturesProtoModule } from "../../test-fixtures/generated/proto-module.js";
+import { ReadSideFilter, type ReadSideContext } from "../../src/stand/read-side-filter.js";
+
+void serverTestFixturesProtoModule;
 
 class ProjectOverviewHandler extends AppQueryHandler<
   GetProjectOverview_Query,
@@ -165,6 +176,24 @@ function appQuery(project = "project-1"): AppQuery {
   });
 }
 
+function entityQuery(project: string) {
+  return create(QuerySchema, {
+    id: create(QueryIdSchema, { value: "q-public" }),
+    context: actorContext(),
+    target: create(TargetSchema, {
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          idFilter: {
+            id: [AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: project }))],
+          },
+        }),
+      },
+    }),
+  });
+}
+
 function directQuery(
   server: Server,
   input: AppQuery,
@@ -198,6 +227,470 @@ afterEach(async () => {
 });
 
 describe("Server App Query execution", () => {
+  it("keeps BC read policies separate for two registered state families", async () => {
+    class Label extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor(private readonly label: string) {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState): ProjectOverviewState {
+        state.name = this.label;
+        return state;
+      }
+    }
+    class QueueLabel extends ReadSideFilter<typeof ProjectQueueStateSchema> {
+      constructor() {
+        super(ProjectQueueStateSchema);
+      }
+      filter(
+        state: import("../../test-fixtures/generated/repository-routing/project_states_pb.js").ProjectQueueState,
+      ) {
+        state.queue = "SecondProjects";
+        return state;
+      }
+    }
+    const first = await BoundedContext.singleTenant("FirstProjects")
+      .add(
+        new Repository({
+          entityType: OverviewProjection,
+          schema: ProjectOverviewStateSchema,
+          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
+        }),
+      )
+      .addReadSideFilter(new Label("FirstProjects"))
+      .build();
+    try {
+      const second = await BoundedContext.singleTenant("SecondProjects")
+        .add(
+          new Repository({
+            entityType: HiddenProjectQueue,
+            schema: ProjectQueueStateSchema,
+            handlers: EntityHandlers.define(HiddenProjectQueue, ProjectQueueStateSchema, () => []),
+          }),
+        )
+        .addReadSideFilter(new QueueLabel())
+        .build();
+      try {
+        await first.stand().update(
+          ProjectOverviewStateSchema,
+          create(ProjectOverviewStateSchema, {
+            id: "project-1",
+            name: "Stored",
+            priority: 1,
+          }),
+        );
+        await second.stand().update(
+          ProjectQueueStateSchema,
+          create(ProjectQueueStateSchema, {
+            id: "queue-1",
+            queue: "Private",
+          }),
+        );
+        expect((await first.stand().read(ProjectOverviewStateSchema, "project-1"))?.name).toBe(
+          "FirstProjects",
+        );
+        expect((await second.stand().read(ProjectQueueStateSchema, "queue-1"))?.queue).toBe(
+          "SecondProjects",
+        );
+      } finally {
+        await second.close();
+      }
+    } finally {
+      await first.close();
+    }
+  });
+
+  it("isolates Server policy selection between two listeners", async () => {
+    class Label extends ReadSideFilter<typeof GetProjectOverview_ResponseSchema> {
+      constructor(private readonly label: string) {
+        super(GetProjectOverview_ResponseSchema);
+      }
+      filter(result: GetProjectOverview_Response): GetProjectOverview_Response {
+        if (result.project !== undefined) result.project.name = this.label;
+        return result;
+      }
+    }
+    registerOverview(ProjectOverviewHandler);
+    const first = new Server({
+      appQueries: [new ProjectOverviewHandler()],
+      readSideFilters: [new Label("First")],
+    });
+    const second = new Server({
+      appQueries: [new ProjectOverviewHandler()],
+      readSideFilters: [new Label("Second")],
+    });
+    const left = await first.start();
+    const right = await second.start();
+    try {
+      const output = await Promise.all([
+        executeEnvelope(left.baseUrl, appQuery()),
+        executeEnvelope(right.baseUrl, appQuery()),
+      ]);
+      const packed = output.map((response) => response.message[0]);
+      if (packed.some((value) => value === undefined))
+        throw new Error("Expected both paired responses.");
+      expect(
+        packed.map((value) => {
+          if (value === undefined) throw new Error("Expected a paired response.");
+          return AnyPacker.unpack(value, GetProjectOverview_ResponseSchema).project?.name;
+        }),
+      ).toEqual(["First", "Second"]);
+    } finally {
+      await right.close();
+      await left.close();
+    }
+  });
+
+  it("invokes one filter instance once at each installed BC and Server boundary", async () => {
+    const calls: string[] = [];
+    class Mark extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState, context: ReadSideContext): ProjectOverviewState {
+        calls.push(context.operation.kind);
+        state.name += " visible";
+        return state;
+      }
+    }
+    const policy = new Mark();
+    const projects = await BoundedContext.singleTenant("TwoBoundaries")
+      .add(
+        new Repository({
+          entityType: OverviewProjection,
+          schema: ProjectOverviewStateSchema,
+          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
+        }),
+      )
+      .addReadSideFilter(policy)
+      .addReadSideFilter(policy)
+      .build();
+    await projects.stand().update(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
+        id: "project-1",
+        name: "Stored",
+        priority: 1,
+      }),
+    );
+    const server = new Server({ contexts: [projects], readSideFilters: [policy, policy] });
+    const running = await server.start();
+    try {
+      const client = createClient(
+        QueryService,
+        createConnectTransport({ baseUrl: running.baseUrl, httpVersion: "2" }),
+      );
+      const result = await client.read(entityQuery("project-1"));
+      const packed = result.message[0]?.state;
+      if (packed === undefined) throw new Error("Expected Entity result.");
+      expect(AnyPacker.unpack(packed, ProjectOverviewStateSchema).name).toBe(
+        "Stored visible visible",
+      );
+      expect(calls).toEqual(["query", "query"]);
+      expect((await projects.stand().read(ProjectOverviewStateSchema, "project-1"))?.name).toBe(
+        "Stored visible",
+      );
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("fails a Server policy fault without exposing private details or returning raw R", async () => {
+    class Fault extends ReadSideFilter<typeof GetProjectOverview_ResponseSchema> {
+      constructor() {
+        super(GetProjectOverview_ResponseSchema);
+      }
+      filter(): never {
+        throw new Error("private policy secret");
+      }
+    }
+    registerOverview(ProjectOverviewHandler);
+    const server = new Server({
+      appQueries: [new ProjectOverviewHandler()],
+      readSideFilters: [new Fault()],
+    });
+    const running = await server.start();
+    try {
+      const error = await executeEnvelope(running.baseUrl, appQuery()).catch(
+        (failure: unknown) => failure,
+      );
+      expect(error).toBeInstanceOf(ConnectError);
+      expect((error as ConnectError).code).toBe(Code.Internal);
+      expect((error as ConnectError).message).not.toContain("private policy secret");
+    } finally {
+      await running.close();
+    }
+  });
+
+  it.each([
+    [Code.Canceled, Code.Canceled],
+    [Code.Unauthenticated, Code.Unauthenticated],
+    [Code.PermissionDenied, Code.PermissionDenied],
+    [Code.Unavailable, Code.Unavailable],
+    [Code.InvalidArgument, Code.Internal],
+  ])("sanitizes App Query policy status %s as %s", async (raised, expected) => {
+    class Fault extends ReadSideFilter<typeof GetProjectOverview_ResponseSchema> {
+      constructor() {
+        super(GetProjectOverview_ResponseSchema);
+      }
+      filter(): never {
+        throw new ConnectError("private policy secret", raised);
+      }
+    }
+    registerOverview(ProjectOverviewHandler);
+    const running = await new Server({
+      appQueries: [new ProjectOverviewHandler()],
+      readSideFilters: [new Fault()],
+    }).start();
+    try {
+      const error = await executeEnvelope(running.baseUrl, appQuery()).catch(
+        (failure: unknown) => failure,
+      );
+      expect(error).toBeInstanceOf(ConnectError);
+      expect((error as ConnectError).code).toBe(expected);
+      expect((error as ConnectError).message).not.toContain("private policy secret");
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("preserves a sanitized child-read authorization status during App Query execution", async () => {
+    class DenySource extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(): never {
+        throw new ConnectError("private child policy detail", Code.PermissionDenied);
+      }
+    }
+    registerOverview(ReadOverviewHandler);
+    const projects = await BoundedContext.singleTenant("DeniedProjectSource")
+      .add(
+        new Repository({
+          entityType: OverviewProjection,
+          schema: ProjectOverviewStateSchema,
+          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
+        }),
+      )
+      .addReadSideFilter(new DenySource())
+      .build();
+    await projects.stand().update(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
+        id: "project-1",
+        name: "Stored private",
+        priority: 3,
+      }),
+    );
+    const running = await new Server({
+      contexts: [projects],
+      appQueries: [new ReadOverviewHandler()],
+    }).start();
+    try {
+      const error = await executeEnvelope(running.baseUrl, appQuery()).catch(
+        (failure: unknown) => failure,
+      );
+      expect(error).toBeInstanceOf(ConnectError);
+      expect((error as ConnectError).code).toBe(Code.PermissionDenied);
+      expect((error as ConnectError).message).not.toContain("private child policy detail");
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("returns OK with no App Query message when a Server policy removes R", async () => {
+    class RemoveResult extends ReadSideFilter<typeof GetProjectOverview_ResponseSchema> {
+      constructor() {
+        super(GetProjectOverview_ResponseSchema);
+      }
+      filter(): null {
+        return null;
+      }
+    }
+    registerOverview(ProjectOverviewHandler);
+    const server = new Server({
+      appQueries: [new ProjectOverviewHandler()],
+      readSideFilters: [new RemoveResult()],
+    });
+    const running = await server.start();
+    try {
+      expect((await directQuery(server, appQuery())).project?.name).toBe("Overview");
+      const response = await executeEnvelope(running.baseUrl, appQuery());
+      expect(response.response?.status?.status.case).toBe("ok");
+      expect(response.message).toEqual([]);
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("filters public Entity Query output at the Server boundary without changing stored state", async () => {
+    class EgressPolicy extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState, context: ReadSideContext): ProjectOverviewState {
+        expect(context.operation.kind).toBe("query");
+        state.name = "Server visible";
+        return state;
+      }
+    }
+    const projects = await BoundedContext.singleTenant("PublicProjects")
+      .add(
+        new Repository({
+          entityType: OverviewProjection,
+          schema: ProjectOverviewStateSchema,
+          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
+        }),
+      )
+      .build();
+    await projects.stand().update(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
+        id: "project-1",
+        name: "Stored private",
+        priority: 3,
+      }),
+    );
+    const server = new Server({ contexts: [projects], readSideFilters: [new EgressPolicy()] });
+    const running = await server.start();
+    try {
+      const client = createClient(
+        QueryService,
+        createConnectTransport({ baseUrl: running.baseUrl, httpVersion: "2" }),
+      );
+      const response = await client.read(entityQuery("project-1"));
+      expect(response.message).toHaveLength(1);
+      const packed = response.message[0]?.state;
+      if (packed === undefined) throw new Error("Expected Entity state result.");
+      expect(AnyPacker.unpack(packed, ProjectOverviewStateSchema).name).toBe("Server visible");
+      expect((await projects.stand().read(ProjectOverviewStateSchema, "project-1"))?.name).toBe(
+        "Stored private",
+      );
+    } finally {
+      await running.close();
+    }
+  });
+
+  it.each([
+    [Code.Canceled, Code.Canceled],
+    [Code.Unauthenticated, Code.Unauthenticated],
+    [Code.Unavailable, Code.Unavailable],
+    [Code.InvalidArgument, Code.Internal],
+  ])("sanitizes Entity Query policy status %s as %s", async (raised, expected) => {
+    class Fault extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(): never {
+        throw new ConnectError("private Entity policy detail", raised);
+      }
+    }
+    const projects = await BoundedContext.singleTenant("FaultedProjectReads")
+      .add(
+        new Repository({
+          entityType: OverviewProjection,
+          schema: ProjectOverviewStateSchema,
+          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
+        }),
+      )
+      .build();
+    await projects.stand().update(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
+        id: "project-1",
+        name: "Stored private",
+        priority: 3,
+      }),
+    );
+    const running = await new Server({
+      contexts: [projects],
+      readSideFilters: [new Fault()],
+    }).start();
+    try {
+      const client = createClient(
+        QueryService,
+        createConnectTransport({ baseUrl: running.baseUrl, httpVersion: "2" }),
+      );
+      const error = await client
+        .read(entityQuery("project-1"))
+        .catch((failure: unknown) => failure);
+      expect(error).toBeInstanceOf(ConnectError);
+      expect((error as ConnectError).code).toBe(expected);
+      expect((error as ConnectError).message).not.toContain("private Entity policy detail");
+    } finally {
+      await running.close();
+    }
+  });
+  it("applies BC source policy before handler execution and Server result policy only at RPC egress", async () => {
+    const seen: ReadSideContext[] = [];
+    class SourcePolicy extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+      constructor() {
+        super(ProjectOverviewStateSchema);
+      }
+      filter(state: ProjectOverviewState, context: ReadSideContext): ProjectOverviewState {
+        seen.push(context);
+        state.name = "BC visible";
+        return state;
+      }
+    }
+    class EgressPolicy extends ReadSideFilter<typeof GetProjectOverview_ResponseSchema> {
+      constructor() {
+        super(GetProjectOverview_ResponseSchema);
+      }
+      filter(
+        result: GetProjectOverview_Response,
+        context: ReadSideContext,
+      ): GetProjectOverview_Response {
+        seen.push(context);
+        if (result.project !== undefined) result.project.name = "Server visible";
+        return result;
+      }
+    }
+    registerOverview(ReadOverviewHandler);
+    const projects = await BoundedContext.singleTenant("FilteredProjects")
+      .add(
+        new Repository({
+          entityType: OverviewProjection,
+          schema: ProjectOverviewStateSchema,
+          handlers: EntityHandlers.define(OverviewProjection, ProjectOverviewStateSchema, () => []),
+        }),
+      )
+      .addReadSideFilter(new SourcePolicy())
+      .build();
+    await projects.stand().update(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, {
+        id: "project-1",
+        name: "Stored private",
+        priority: 3,
+      }),
+    );
+    const server = new Server({
+      contexts: [projects],
+      appQueries: [new ReadOverviewHandler()],
+      readSideFilters: [new EgressPolicy()],
+    });
+    const running = await server.start();
+    try {
+      const local = await directQuery(server, appQuery());
+      expect(local.project?.name).toBe("BC visible");
+      const remote = await executeEnvelope(running.baseUrl, appQuery());
+      const packed = remote.message[0];
+      if (packed === undefined) throw new Error("Expected paired response.");
+      expect(AnyPacker.unpack(packed, GetProjectOverview_ResponseSchema).project?.name).toBe(
+        "Server visible",
+      );
+      expect(seen.map((context) => context.operation.kind)).toEqual([
+        "query",
+        "query",
+        "app-query",
+      ]);
+      expect(seen[0]?.enclosingAppQuery?.id?.value).toBeTruthy();
+      expect(seen[1]?.enclosingAppQuery?.id?.value).toBe("q-1");
+      expect(seen[2]?.producingContext).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
   it("accepts generated Q directly and returns its paired R to application code", async () => {
     registerOverview(ProjectOverviewHandler);
     const server = new Server({ appQueries: [new ProjectOverviewHandler()] });

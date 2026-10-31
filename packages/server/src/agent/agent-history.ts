@@ -12,13 +12,14 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { ConversationHistoryRead, HistoryPage, HistoryRead } from "@spine-event-engine/ai";
-import type { Event } from "@spine-event-engine/proto";
+import type { ActorContext, Event } from "@spine-event-engine/proto";
 import {
   AgentHistoryCursorSchema,
   AgentHistoryEntrySchema,
+  ConversationIdSchema,
   type AgentHistoryEntry,
   type ConversationRecord,
 } from "@spine-event-engine/proto/agent";
@@ -62,6 +63,7 @@ export interface AgentHistoryScope {
  * @param request Public read request.
  * @param live Loads the current provider page only when needed.
  * @param maxBytes Optional response-byte ceiling for this read.
+ * @param present Applies outward policy after accounting for provider bytes.
  * @returns The current complete provider page.
  */
 export type AgentHistoryReadInterceptor = (
@@ -69,7 +71,8 @@ export type AgentHistoryReadInterceptor = (
   request: HistoryRead,
   live: () => Promise<AgentHistoryPage>,
   maxBytes: number | undefined,
-) => Promise<AgentHistoryPage>;
+  present: (page: AgentHistoryPage) => Promise<HistoryPage<AgentHistoryEntry>>,
+) => Promise<HistoryPage<AgentHistoryEntry>>;
 
 /**
  * Repository binding for an Agent's mandatory indexed history.
@@ -109,6 +112,27 @@ export interface AgentHistoryBinding<Id> {
    */
   readonly onAdmit?: (
     onRead: () => Promise<HistoryPage<AgentHistoryEntry>>,
+  ) => Promise<HistoryPage<AgentHistoryEntry>>;
+
+  /**
+   * Captures active signal metadata before the protected read can await.
+   * @returns Detached actor context when a handler supplies one.
+   */
+  readonly captureActor?: () => ActorContext | undefined;
+
+  /**
+   * Transforms outward domain records after provider read and before read completion.
+   * @param page Retained provider entries and original continuation.
+   * @param view Requested history category.
+   * @param request Captured page request.
+   * @param actorContext Actor metadata from the active handler, when present.
+   * @returns Visible entries with the original continuation.
+   */
+  readonly filterPage?: (
+    page: HistoryPage<AgentHistoryEntry>,
+    view: AgentHistoryView,
+    request: HistoryRead,
+    actorContext?: ActorContext,
   ) => Promise<HistoryPage<AgentHistoryEntry>>;
 }
 
@@ -196,12 +220,14 @@ export interface AgentHistoryReadAccess {
    * @param binding Exact Agent repository and tenant storage scope.
    * @param view Indexed history view.
    * @param request Public page request.
+   * @param actorContext Actor metadata captured at invocation.
    * @returns Retained entries and opaque continuation.
    */
   readBound<Id>(
     binding: AgentHistoryBinding<Id>,
     view: AgentHistoryView,
     request: HistoryRead,
+    actorContext?: ActorContext,
   ): Promise<HistoryPage<AgentHistoryEntry>>;
 
   /**
@@ -361,7 +387,7 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
     const binding = bindings.get(entity);
     if (binding === undefined)
       throw new Error("Agent history is available only from repository execution.");
-    return this.readBound(binding, view, request);
+    return this.readBound(binding, view, request, binding.captureActor?.());
   },
 
   /**
@@ -371,14 +397,30 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
    * @param binding Repository storage, identity and optional live read interceptor.
    * @param view Indexed category and optional conversation filter.
    * @param request Page size and opaque continuation from a previous page.
+   * @param actorContext Signal metadata captured before provider work.
    * @returns Retained entries with the next cursor when older entries remain.
    */
   async readBound<Id>(
     binding: AgentHistoryBinding<Id>,
     view: AgentHistoryView,
     request: HistoryRead,
+    actorContext?: ActorContext,
   ): Promise<HistoryPage<AgentHistoryEntry>> {
-    const onRead = () => AgentHistoryPages.readBound(binding, view, request);
+    const capturedRequest = {
+      pageSize: request.pageSize,
+      ...(request.cursor === undefined
+        ? {}
+        : { cursor: clone(AgentHistoryCursorSchema, request.cursor) }),
+    };
+    const capturedView =
+      view.kind === "conversation"
+        ? {
+            kind: "conversation" as const,
+            conversation: clone(ConversationIdSchema, view.conversation),
+          }
+        : view;
+    const onRead = () =>
+      AgentHistoryPages.readBound(binding, capturedView, capturedRequest, actorContext);
     return binding.onAdmit === undefined ? onRead() : binding.onAdmit(onRead);
   },
 });
@@ -393,12 +435,14 @@ const AgentHistoryPages = Object.freeze({
    * @param binding Captured Agent history binding.
    * @param view Indexed history category.
    * @param request Requested page and continuation.
+   * @param actorContext Signal metadata captured when protected read began.
    * @returns Complete protected page.
    */
   async readBound<Id>(
     binding: AgentHistoryBinding<Id>,
     view: AgentHistoryView,
     request: HistoryRead,
+    actorContext?: ActorContext,
   ): Promise<HistoryPage<AgentHistoryEntry>> {
     if (!Number.isSafeInteger(request.pageSize) || request.pageSize <= 0)
       throw new RangeError("Agent history pageSize must be a positive safe integer.");
@@ -411,11 +455,15 @@ const AgentHistoryPages = Object.freeze({
     );
     const live = (): Promise<AgentHistoryPage> =>
       this.load(binding, view, request, after, maxBytes);
-    const page =
-      binding.interceptRead === undefined
-        ? await live()
-        : await binding.interceptRead(binding.scope, request, live, maxBytes);
-    return this.present(binding.scope, view, page);
+    const present = (page: AgentHistoryPage): Promise<HistoryPage<AgentHistoryEntry>> => {
+      const result = this.present(binding.scope, view, page);
+      return binding.filterPage === undefined
+        ? Promise.resolve(result)
+        : binding.filterPage(result, view, request, actorContext);
+    };
+    return binding.interceptRead === undefined
+      ? present(await live())
+      : binding.interceptRead(binding.scope, request, live, maxBytes, present);
   },
 
   /**

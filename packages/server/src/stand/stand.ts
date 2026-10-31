@@ -12,12 +12,17 @@
  * the License.
  */
 
-import { clone, type Message, type MessageShape } from "@bufbuild/protobuf";
-import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
+import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { type MessageSchema, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
+import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import {
+  ActorContextSchema,
+  EventSchema,
   TenantIdSchema,
   VersionSchema,
   type TenantId,
+  type ActorContext,
+  type Event,
   type Version,
 } from "@spine-event-engine/proto";
 import {
@@ -40,6 +45,14 @@ import type { EntityMetadata } from "../entity/entity-metadata.js";
 import { SubscriptionObservers, type StandObservedState } from "./subscription-observer.js";
 import type { EventBus, EventSubscription } from "../bus/event-bus.js";
 import type { Subscription, SubscriptionUpdate } from "@spine-event-engine/proto/client";
+import { ReadSideFilterEngine } from "./read-side-filter-engine.js";
+import { ReadSideMessages } from "./read-side-message.js";
+import type { ReadSideContext, ReadSideFilter, ReadSideOperation } from "./read-side-filter.js";
+import type { BoundedContext } from "../context/bounded-context.js";
+import {
+  snapshotTrustedReader,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
 
 const HANDLE_CLOSE_ERROR_LIMIT = 16;
 
@@ -104,6 +117,25 @@ export interface StandReadOptions {
    * Tenant slice for multitenant stands.
    */
   readonly tenantId?: TenantId;
+
+  /**
+   * Actor and tenant metadata supplied by a trusted in-process caller.
+   */
+  readonly actorContext?: ActorContext;
+
+  /**
+   * Verified reader and authority facts supplied by a trusted in-process caller.
+   */
+  readonly reader?: TrustedReaderContext;
+
+  /**
+   * Cancellation of this read.
+   */
+  readonly signal?: AbortSignal;
+}
+
+interface CapturedStandRead extends StandReadOptions {
+  readonly readSide?: ReadSideContext;
 }
 
 /**
@@ -303,6 +335,9 @@ export class Stand {
       this.#deferUpdate(schema, state, updateOptions, metadata),
     );
     currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
+    routedQueryPlans.set(this, (schema, plan, readOptions, readSide) =>
+      this.#queryPlanVersioned(schema, plan, readOptions, readSide),
+    );
   }
 
   /**
@@ -402,22 +437,51 @@ export class Stand {
     options: StandReadOptions = {},
   ): Promise<StandReadResult<Schema> | undefined> {
     const finish = this.#beginPublicOperation();
-
     try {
+      const captured = Stand.#snapshotRead(options);
+      const copiedId = ReadSideMessages.copy(id);
       const registration = this.#registration(schema, "read");
-      const tenantId = await this.#checkedTenantId(options.tenantId);
-      const storage = this.#leaseCurrent(registration, tenantId);
-      try {
-        const stored = await storage.current.read(id);
-        if (stored === undefined || EntityRecords.unpack(registration.schema, stored).deleted) {
-          return undefined;
-        }
-        return this.#currentResult(registration, stored);
-      } finally {
-        storage.release();
-      }
+      const tenantId = await this.#checkedTenantId(captured.tenantId);
+      const result = await this.#readStored(registration, copiedId, tenantId);
+      return await this.#filteredResult(
+        registration.schema,
+        result,
+        {
+          ...captured,
+          ...(tenantId === undefined ? {} : { tenantId }),
+        },
+        {
+          kind: "direct",
+          read: { typeUrl: registration.typeUrl, id: copiedId },
+        },
+      );
     } finally {
       finish();
+    }
+  }
+
+  /**
+   * Captures a current record and releases its provider lease before policy awaits.
+   *
+   * @typeParam Schema Registered state schema.
+   * @param registration State metadata and storage descriptor.
+   * @param id Detached Entity identifier.
+   * @param tenantId Admitted tenant, if multitenant.
+   * @returns Detached live state and version, or undefined.
+   */
+  async #readStored<Schema extends MessageSchema>(
+    registration: Registration<Schema>,
+    id: unknown,
+    tenantId: TenantId | undefined,
+  ): Promise<StandReadResult<Schema> | undefined> {
+    const storage = this.#leaseCurrent(registration, tenantId);
+    try {
+      const stored = await storage.current.read(id);
+      if (stored === undefined || EntityRecords.unpack(registration.schema, stored).deleted)
+        return undefined;
+      return this.#currentResult(registration, stored);
+    } finally {
+      storage.release();
     }
   }
 
@@ -451,18 +515,30 @@ export class Stand {
     options: StandReadOptions = {},
   ): Promise<readonly StandReadResult<Schema>[]> {
     const finish = this.#beginPublicOperation();
-
     try {
+      const captured = Stand.#snapshotRead(options);
+      const copiedQuery = ReadSideMessages.copy(query);
       const registration = this.#registration(schema, "read");
-      const tenantId = await this.#checkedTenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(captured.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
+      let results: StandReadResult<Schema>[];
       try {
-        const stored = await storage.current.query(Stand.#legacyPlan(query));
-        const results = stored.map((entry) => this.#entryResult(registration, entry.record));
-        return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
+        const stored = await storage.current.query(Stand.#legacyPlan(copiedQuery));
+        results = stored
+          .map((entry) => this.#entryResult(registration, entry.record))
+          .filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.release();
       }
+      return await this.#filteredResults(
+        registration.schema,
+        results,
+        {
+          ...captured,
+          ...(tenantId === undefined ? {} : { tenantId }),
+        },
+        { kind: "direct", query: copiedQuery },
+      );
     } finally {
       finish();
     }
@@ -482,21 +558,134 @@ export class Stand {
     plan: NormalizedQueryPlan<unknown>,
     options: StandReadOptions = {},
   ): Promise<readonly StandReadResult<Schema>[]> {
+    return this.#queryPlanVersioned(schema, plan, options);
+  }
+
+  /**
+   * Reads stored rows and applies the context's outward policy in one operation lifetime.
+   * @typeParam Schema Registered state schema.
+   * @param schema Registered Entity state schema.
+   * @param plan Normalized storage query plan.
+   * @param options Trusted read facts and tenant.
+   * @param readSide Actual routed Query context, if supplied internally.
+   * @returns Surviving versioned state records.
+   */
+  async #queryPlanVersioned<Schema extends MessageSchema>(
+    schema: Schema,
+    plan: NormalizedQueryPlan<unknown>,
+    options: StandReadOptions,
+    readSide?: ReadSideContext,
+  ): Promise<readonly StandReadResult<Schema>[]> {
     const finish = this.#beginPublicOperation();
     try {
+      const captured = Stand.#snapshotRead(options, readSide);
+      const copiedPlan = ReadSideMessages.copy(plan);
       const registration = this.#registration(schema, "read");
-      const tenantId = await this.#checkedTenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(captured.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
+      let results: StandReadResult<Schema>[];
       try {
-        const stored = await storage.current.query(plan);
-        const results = stored.map((entry) => this.#entryResult(registration, entry.record));
-        return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
+        const stored = await storage.current.query(copiedPlan);
+        results = stored
+          .map((entry) => this.#entryResult(registration, entry.record))
+          .filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.release();
       }
+      return await this.#filteredResults(
+        registration.schema,
+        results,
+        {
+          ...captured,
+          ...(tenantId === undefined ? {} : { tenantId }),
+        },
+        { kind: "direct", plan: copiedPlan },
+      );
     } finally {
       finish();
     }
+  }
+
+  /**
+   * Detaches mutable caller facts before storage admission can await.
+   *
+   * @param options Direct or service read options.
+   * @returns Stable tenant and invocation facts, retaining the live cancellation signal.
+   */
+  static #snapshotRead(options: StandReadOptions, side?: ReadSideContext): CapturedStandRead {
+    const { signal, producingContext, effectiveTenant, parent, field, ...facts } = side ?? {};
+    void producingContext;
+    void effectiveTenant;
+    void parent;
+    void field;
+    return {
+      ...(options.tenantId === undefined
+        ? {}
+        : { tenantId: clone(TenantIdSchema, options.tenantId) }),
+      readSide: {
+        ...(side === undefined ? {} : ReadSideMessages.copy(facts)),
+        ...(options.actorContext === undefined
+          ? {}
+          : { actorContext: clone(ActorContextSchema, options.actorContext) }),
+        ...(options.reader === undefined ? {} : snapshotTrustedReader(options.reader)),
+        ...((signal ?? options.signal) === undefined ? {} : { signal: signal ?? options.signal }),
+      } as ReadSideContext,
+    };
+  }
+
+  /**
+   * Applies this context's outward read policy after storage has been released.
+   *
+   * @typeParam Schema Registered state schema.
+   * @param schema State schema selected by the read.
+   * @param result Captured state and durable version.
+   * @param options Tenant and service read facts.
+   * @param operation Actual direct operation when no service request is present.
+   * @returns Detached visible state with its unchanged version, or no state.
+   */
+  async #filteredResult<Schema extends MessageSchema>(
+    schema: Schema,
+    result: StandReadResult<Schema> | undefined,
+    options: CapturedStandRead,
+    operation: ReadSideOperation,
+  ): Promise<StandReadResult<Schema> | undefined> {
+    if (result === undefined) return undefined;
+    const filters = standReadFilters.get(this);
+    if (filters === undefined) return result;
+    const producer = standProducingContexts.get(this);
+    const context: ReadSideContext = {
+      ...(options.readSide ?? {}),
+      operation: options.readSide?.operation ?? operation,
+      ...(producer === undefined ? {} : { producingContext: producer }),
+      ...(options.tenantId === undefined ? {} : { effectiveTenant: options.tenantId }),
+    };
+    const state = await filters.apply(schema, result.state, context);
+    return state === null ? undefined : { ...result, state };
+  }
+
+  /**
+   * Applies outward policy in stored query order without replenishing removed records.
+   *
+   * @typeParam Schema Registered state schema.
+   * @param schema State schema selected by the read.
+   * @param results Captured stored states and durable versions.
+   * @param options Tenant and service read facts.
+   * @param operation Actual direct query when no service request is present.
+   * @returns Surviving visible records in their original order.
+   */
+  async #filteredResults<Schema extends MessageSchema>(
+    schema: Schema,
+    results: readonly StandReadResult<Schema>[],
+    options: CapturedStandRead,
+    operation: ReadSideOperation,
+  ): Promise<readonly StandReadResult<Schema>[]> {
+    if (!standReadFilters.has(this)) return results;
+    const visible: StandReadResult<Schema>[] = [];
+    for (const result of results) {
+      const next = await this.#filteredResult(schema, result, options, operation);
+      if (next !== undefined) visible.push(next);
+    }
+    return visible;
   }
 
   /**
@@ -1289,6 +1478,67 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
  */
 interface StandAccess {
   /**
+   * Reads a framework-routed Query with its actual operation metadata.
+   * @typeParam Schema Registered state schema.
+   * @param stand Producing context's Stand.
+   * @param schema Registered state schema.
+   * @param plan Normalized routed query plan.
+   * @param options Admitted tenant and trusted facts.
+   * @param readSide Actual service or handler Query context.
+   * @returns Surviving versioned states.
+   */
+  queryPlanVersioned<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    plan: NormalizedQueryPlan<unknown>,
+    options: StandReadOptions,
+    readSide: ReadSideContext,
+  ): Promise<readonly StandReadResult<Schema>[]>;
+
+  /**
+   * Binds the Bounded Context that built this outward Stand.
+   *
+   * @param stand Outward read facade.
+   * @param context Actual producing Bounded Context.
+   */
+  bindProducingContext(stand: Stand, context: BoundedContext): void;
+
+  /**
+   * Applies this context's outward policy to a retained domain state.
+   *
+   * @typeParam Schema Declared domain state schema.
+   * @param stand Context whose policies apply.
+   * @param schema Registered state schema.
+   * @param state Detached state returned by history storage.
+   * @param context Actual history request and trusted invocation facts.
+   * @returns Visible state or null when removed.
+   */
+  filterState<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    state: MessageShape<Schema>,
+    context: ReadSideContext,
+  ): Promise<MessageShape<Schema> | null>;
+
+  /**
+   * Applies this context's outward policy to a retained Event's domain payload.
+   *
+   * @param stand Context whose policies apply.
+   * @param event Retained framework envelope.
+   * @param context Actual history request and trusted invocation facts.
+   * @returns Envelope with visible payload, or null when removed.
+   */
+  filterEvent(stand: Stand, event: Event, context: ReadSideContext): Promise<Event | null>;
+
+  /**
+   * Attaches this context's ordered read policies before public reads begin.
+   *
+   * @param stand Context read facade.
+   * @param filters Application policies selected by its builder.
+   */
+  installReadFilters(stand: Stand, filters: readonly ReadSideFilter<MessageSchema>[]): void;
+
+  /**
    * Sets the immediate external read admission check.
    *
    * @param stand Context Stand.
@@ -1374,6 +1624,100 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
+  /**
+   * Forwards trusted routed Query context to the private Stand read path.
+   * @typeParam Schema Registered state schema.
+   * @param stand Producing context's Stand.
+   * @param schema Registered state schema.
+   * @param plan Normalized routed query plan.
+   * @param options Admitted tenant and trusted facts.
+   * @param readSide Actual service or handler Query context.
+   * @returns Surviving versioned states.
+   */
+  queryPlanVersioned<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    plan: NormalizedQueryPlan<unknown>,
+    options: StandReadOptions,
+    readSide: ReadSideContext,
+  ): Promise<readonly StandReadResult<Schema>[]> {
+    const read = routedQueryPlans.get(stand);
+    if (read === undefined) throw new Error("Stand routed read is unavailable.");
+    return read(schema, plan, options, readSide);
+  },
+
+  /**
+   * Associates actual context identity with direct and historical outward reads.
+   *
+   * @param stand Context Stand.
+   * @param context Built Bounded Context.
+   */
+  bindProducingContext(stand: Stand, context: BoundedContext): void {
+    standProducingContexts.set(stand, context);
+  },
+
+  /**
+   * Applies a history state policy after the physical history read.
+   *
+   * @typeParam Schema Registered domain schema.
+   * @param stand Context read facade.
+   * @param schema Historical state schema.
+   * @param state Captured state.
+   * @param context Actual history call.
+   * @returns Filtered state or null.
+   */
+  filterState<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    state: MessageShape<Schema>,
+    context: ReadSideContext,
+  ): Promise<MessageShape<Schema> | null> {
+    const filters = standReadFilters.get(stand);
+    const producer = standProducingContexts.get(stand);
+    return filters === undefined
+      ? Promise.resolve(state)
+      : filters.apply(schema, state, {
+          ...context,
+          ...(producer === undefined ? {} : { producingContext: producer }),
+        });
+  },
+
+  /**
+   * Filters a retained Event payload while retaining envelope identity and metadata.
+   *
+   * @param stand Context read facade.
+   * @param event Retained Event envelope.
+   * @param context Actual history call.
+   * @returns Event with filtered payload, or null when removed.
+   */
+  async filterEvent(stand: Stand, event: Event, context: ReadSideContext): Promise<Event | null> {
+    const filters = standReadFilters.get(stand);
+    if (filters === undefined) return event;
+    if (event.message === undefined) throw new TypeError("Retained Event payload is missing.");
+    const producer = standProducingContexts.get(stand);
+    const message = await filters.applyPacked(event.message, {
+      ...context,
+      ...(producer === undefined ? {} : { producingContext: producer }),
+    });
+    return message === null ? null : create(EventSchema, { ...clone(EventSchema, event), message });
+  },
+
+  /**
+   * Attaches registered policies to this Stand without changing persistence reads.
+   *
+   * @param stand Context read facade.
+   * @param filters Policies in registration order.
+   */
+  installReadFilters(stand: Stand, filters: readonly ReadSideFilter<MessageSchema>[]): void {
+    if (!(stand instanceof Stand)) throw new TypeError("Read filters require a Stand instance.");
+    if (standReadFilters.has(stand))
+      throw new TypeError("Stand read filters are already installed.");
+    standReadFilters.set(
+      stand,
+      new ReadSideFilterEngine(filters, TypeRegistry.from(...registeredProtoModules())),
+    );
+  },
+
   /**
    * Sets the immediate external read admission check.
    *
@@ -1512,9 +1856,24 @@ type CurrentReadCall = <Schema extends MessageSchema>(
   options: StandReadOptions,
 ) => Promise<StandCurrentRecord<Schema> | undefined>;
 
+/**
+ * Invokes one internally attributed Query without accepting caller operation overrides.
+ *
+ * @typeParam Schema Registered state schema.
+ */
+type RoutedQueryPlanCall = <Schema extends MessageSchema>(
+  schema: Schema,
+  plan: NormalizedQueryPlan<unknown>,
+  options: StandReadOptions,
+  readSide: ReadSideContext,
+) => Promise<readonly StandReadResult<Schema>[]>;
+
 const deferredUpdates = new WeakMap<Stand, DeferredUpdateCall>();
 
 const standAdmissions = new WeakMap<Stand, (tenantId: TenantId | undefined) => Promise<void>>();
 const standPublicAdmissions = new WeakMap<Stand, () => void>();
+const standReadFilters = new WeakMap<Stand, ReadSideFilterEngine>();
+const standProducingContexts = new WeakMap<Stand, BoundedContext>();
 
 const currentReads = new WeakMap<Stand, CurrentReadCall>();
+const routedQueryPlans = new WeakMap<Stand, RoutedQueryPlanCall>();

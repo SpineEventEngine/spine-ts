@@ -35,6 +35,25 @@ export type ReadRequestKind = "query" | "topic" | "subscription";
  */
 export const ReadRequestStatus = {
   /**
+   * Maps policy failures to sanitized transport codes without exposing private messages.
+   * @param error Policy, handler, or storage failure.
+   * @param message Public boundary failure message.
+   * @returns Sanitized recognized status or an internal error.
+   */
+  technical(error: unknown, message: string): ConnectError {
+    const recognized = [
+      Code.Canceled,
+      Code.Unauthenticated,
+      Code.PermissionDenied,
+      Code.Unavailable,
+    ];
+    return new ConnectError(
+      message,
+      error instanceof ConnectError && recognized.includes(error.code) ? error.code : Code.Internal,
+    );
+  },
+
+  /**
    * Creates a structured NotFound for a receiving context's missing membership.
    *
    * @param error Confirmed missing tenant from the target context.

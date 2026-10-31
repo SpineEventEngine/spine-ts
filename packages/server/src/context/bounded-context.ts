@@ -107,6 +107,7 @@ import {
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { runtimeAccess } from "../runtime/runtime.js";
 import { Stand, standAccess } from "../stand/stand.js";
+import { ReadSideFilter } from "../stand/read-side-filter.js";
 import { SubscriptionRuntime, subscriptionRuntimeAccess } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
@@ -2305,6 +2306,8 @@ export class BoundedContextBuilder {
 
   readonly #entityTypes = new Set<RepositoryEntityType>();
 
+  readonly #readFilters = new Set<ReadSideFilter<DescriptorMessageSchema>>();
+
   readonly #generatedRepositoryOptions = new Map<RepositoryEntityType, object>();
 
   #aiRegistry: AiRegistry | undefined;
@@ -2376,10 +2379,19 @@ export class BoundedContextBuilder {
   }
 
   /**
+   * Adds an outward read policy to this Bounded Context.
+   * @param filter Policy applied before Server-level outward policies.
+   * @returns This builder for further configuration.
+   */
+  addReadSideFilter(filter: ReadSideFilter<DescriptorMessageSchema>): this {
+    this.#readFilters.add(filter);
+    return this;
+  }
+
+  /**
    * Adds an explicitly assembled repository.
-   *
    * @typeParam EntityType Concrete Entity class represented by the repository.
-   * @param entry The repository to register.
+   * @param entry Repository to register.
    * @returns This builder for further configuration.
    */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
@@ -2917,6 +2929,7 @@ export class BoundedContextBuilder {
       context: ContextParts.createStorageMode(this.#specSnapshot),
       storageFactory,
     });
+    if (this.#readFilters.size > 0) standAccess.installReadFilters(stand, [...this.#readFilters]);
     standAccess.setAdmission(stand, (tenantId) =>
       TenantAdmissions.require(
         tenantIndex,
@@ -3345,7 +3358,7 @@ const ContextParts = Object.freeze({
     ai?: AiRegistry,
     tenantIndex?: TenantIndex,
   ): BoundedContext {
-    return constructBoundedContext({
+    const context = constructBoundedContext({
       snapshot: ContextParts.snapshotFor(specSnapshot),
       commandBus: buses.commandBus,
       eventBus: buses.eventBus,
@@ -3362,6 +3375,8 @@ const ContextParts = Object.freeze({
       ...(ai === undefined ? {} : { ai }),
       token: frameworkConstructionToken,
     });
+    standAccess.bindProducingContext(running.stand, context);
+    return context;
   },
 
   /**
