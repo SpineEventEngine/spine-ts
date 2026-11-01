@@ -77,6 +77,7 @@ describe("verify-task", () => {
     for (const path of [
       "packages/testing/test/black-box.node.test.mjs",
       "scripts/check-log-containment.test.mjs",
+      "scripts/dependency-compatibility.test.mjs",
       "compatibility-tests/jvm/wire-compatibility.test.mjs",
     ]) {
       expect(() => parseTaskVerificationArgs(["--no-coverage", path])).toThrow(

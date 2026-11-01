@@ -9,6 +9,9 @@ packageExtensions:
     dependencies:
       "@mobrowser/cli": 2.18.0
 overrides:
+  # Patched releases; minimatch's legacy callable/default consumers are bridged by the pinned package patch.
+  minimatch: 11.0.1
+  glob: 14.0.2
   # MōBrowser CLI's ^0.5 range excludes the release fixing ZIP resource exhaustion and extraction advisories.
   "@mobrowser/cli>adm-zip": 0.6.1
   brace-expansion@1.1.18: 1.1.21
@@ -43,3 +46,6 @@ allowBuilds:
   "@mobrowser/sdk-darwin-x64": true
   esbuild: false
   protobufjs: false
+patchedDependencies:
+  minimatch@11.0.1: patches/minimatch@11.0.1.patch
+  typedoc@0.28.19: patches/typedoc@0.28.19.patch

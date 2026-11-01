@@ -101,7 +101,9 @@ passed for the packaging work before the direct Stand changes. Workspace version
 are aligned at `2.0.0-snapshot.26`, with the required version-only commit separate
 from dependency and lockfile updates.
 
-Final integrated security review and the full release verification remain pending.
+Final integrated source security review is complete with no actionable findings.
+The dependency audit correction and its compatibility and security reviews are
+complete. The full release verification remains pending.
 The standalone performance investigation found that the existing one-Event,
 1,000-Process-Manager workload exceeded its one-second target even without a
 subscriber. The queue change does not establish that throughput target.

@@ -22,7 +22,7 @@
     "test:generated": "pnpm typecheck:build:generated && vitest run --passWithNoTests",
     "test:coverage": "pnpm proto:generate && pnpm test:coverage:generated",
     "test:coverage:generated": "pnpm typecheck:build:generated && vitest run --coverage --passWithNoTests",
-    "test:node:generated": "node --test packages/testing/test/black-box.node.test.mjs packages/testing/test/black-box.lifecycle.node.test.mjs scripts/check-log-containment.test.mjs compatibility-tests/jvm/wire-compatibility.test.mjs",
+    "test:node:generated": "node --test packages/testing/test/black-box.node.test.mjs packages/testing/test/black-box.lifecycle.node.test.mjs scripts/check-log-containment.test.mjs scripts/dependency-compatibility.test.mjs compatibility-tests/jvm/wire-compatibility.test.mjs",
     "images:build:local": "node examples/message-board/deploy/container/build-local-images.mjs",
     "test:images:local": "node --test examples/message-board/deploy/container/build-context-cleanup.test.mjs examples/message-board/deploy/container/image-contract.test.mjs",
     "test:compatibility:jvm": "pnpm check:node && pnpm exec vitest run compatibility-tests/jvm/fixture.test.mjs && node --test compatibility-tests/jvm/wire-compatibility.test.mjs",

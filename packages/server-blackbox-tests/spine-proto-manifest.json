@@ -1,6 +1,6 @@
 {
   "formatVersion": 2,
-  "generationId": "1d9b4d72-d914-47bc-a760-dc895582b82f",
+  "generationId": "ecd282af-168e-4348-853a-31b0bb7346a1",
   "packageName": "@spine-event-engine/server-blackbox-tests",
   "packageVersion": "2.0.0-snapshot.26",
   "protoFiles": [

@@ -43,6 +43,13 @@ const expectedInfrastructureFiles = [
 ];
 
 describe("stable CI test inventory", () => {
+  it("runs dependency compatibility in the native Node suite only", () => {
+    const nativeTest = "scripts/dependency-compatibility.test.mjs";
+    const rootPackage = JSON.parse(readFileSync(join(root, "package.json")));
+    expect(rootPackage.scripts["test:node:generated"]).toContain(nativeTest);
+    expect(ordinaryConfig.test?.exclude).toContain(nativeTest);
+  });
+
   it("keeps the exact external-provider files outside the ordinary Vitest suite", () => {
     expect(infrastructureTestFiles).toEqual(expectedInfrastructureFiles);
     expect(new Set(infrastructureTestFiles).size).toBe(infrastructureTestFiles.length);

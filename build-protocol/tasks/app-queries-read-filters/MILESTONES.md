@@ -77,16 +77,17 @@ The maintained multi-package example, migration guides, installed/bundled
 consumer checks, and actual image build/runtime checks are complete. Workspace
 versions are aligned at `2.0.0-snapshot.26`; the version-only commit is separate
 from dependency pins, lockfile, and generated metadata updates. Direct Stand filtering and its migration guidance are implemented and reviewed.
-Remaining work is final security review and the full release gate. The authorized orchestrator promptly pushes
+Integrated source security review is complete with no actionable findings.
+The dependency audit correction and its focused compatibility and security
+reviews are complete. Remaining work is the full release gate. The authorized orchestrator promptly pushes
 feature commits to official origin, including checkpoints/corrections; no PR,
 master write, merge, force push, or shared-ref deletion is authorized.
 
-`.github/workflows/build.yml` currently triggers only on pull requests to
-master. A branch push alone cannot produce that Build/trial-publication result.
-Record final-SHA CI results that actually exist and this explicit operational
-limitation; do not create a PR, alter workflow triggers, or claim Build CI passed
-to remove it. Local completion evidence and remote branch readiness remain
-reportable with that limitation.
+The existing [pull request](https://github.com/SpineEventEngine/spine-ts/pull/21)
+now supplies Build and trial-publication checks for feature-branch pushes.
+Verify those checks at the final commit as well as the local release gate.
+Do not create, edit or merge the pull request, change workflow triggers, or
+manually rerun workflows without explicit human direction.
 
 ## Cross-slice risks and exclusions
 
