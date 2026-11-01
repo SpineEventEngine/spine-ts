@@ -1546,6 +1546,7 @@ class SubscriptionDelivery {
     work: Promise<SubscriptionUpdate | null>,
   ): Promise<SubscriptionUpdate | null | undefined> {
     if (this.#closed) {
+      // spine-log-boundary: server.subscription_closed_policy_rejection
       void work.catch(() => undefined);
       return undefined;
     }

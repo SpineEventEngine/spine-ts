@@ -18,6 +18,8 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { RuntimeMetadataGraph } from "../src/generation/runtime-metadata-graph.js";
+import { RuntimeMetadataAssets } from "../src/generation/runtime-metadata-assets.js";
+import { GeneratedRegistryWriter } from "../src/generation/generated-registry-writer.js";
 
 describe("runtime metadata graph", () => {
   it("deduplicates a diamond and traverses a nonparticipating bridge", () => {
@@ -244,6 +246,66 @@ describe("runtime metadata graph", () => {
         ({ name }) => name,
       ),
     ).toEqual(["model"]);
+  });
+
+  it("fingerprints staged metadata source consistently across an emitted build", () => {
+    const app = realpathSync(graphRoot());
+    packageAt(app, "app", { model: "1.0.0" });
+    const model = join(app, "node_modules/model");
+    packageAt(model, "model", {}, true);
+    writeFileSync(
+      join(app, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          outDir: "dist",
+          rootDir: ".",
+        },
+        include: ["src/**/*.ts"],
+      }),
+    );
+    mkdirSync(join(app, "src"));
+    writeFileSync(join(app, "src/index.ts"), "export {};\n");
+    const stage = join(app, ".generated-model");
+    mkdirSync(stage);
+    writeFileSync(
+      join(stage, "spine-metadata.ts"),
+      "export const spineMetadata = { receivers: [] };\n",
+    );
+    const project = join(app, "tsconfig.json");
+    const bootstrap = join(app, "generated/spine-bootstrap.ts");
+    const writer = new GeneratedRegistryWriter();
+    const assets = () =>
+      RuntimeMetadataAssets.render(
+        project,
+        bootstrap,
+        bootstrap,
+        RuntimeMetadataGraph.resolve(app, [{ packageName: "model", staged: stage }]),
+        writer,
+      );
+    const before = JSON.parse(assets().record.source) as { inputs: { path: string }[] };
+    expect(before.inputs.map(({ path }) => path)).toContain(
+      "node_modules/model/generated/spine-metadata.ts",
+    );
+    writeFileSync(
+      join(model, "dist/generated/spine-metadata.js"),
+      "export const spineMetadata = { receivers: [1] };\n",
+    );
+    writeFileSync(
+      join(model, "dist/generated/spine-metadata.d.ts"),
+      "export declare const spineMetadata: { receivers: number[] };\n",
+    );
+    expect(assets().record.source).toBe(JSON.stringify(before, null, 2) + "\n");
+    expect(
+      RuntimeMetadataAssets.render(
+        project,
+        bootstrap,
+        bootstrap,
+        RuntimeMetadataGraph.resolve(app),
+        writer,
+      ).record.source,
+    ).not.toBe(assets().record.source);
   });
 
   it("rejects two installations of one package instead of selecting a version", () => {

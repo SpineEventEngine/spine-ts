@@ -985,6 +985,7 @@ describe("proto-workflow", () => {
   it("loads handler-registry descriptor dependencies from the application boundary", () => {
     const script = fileURLToPath(new URL("./generate-handler-registry.mjs", import.meta.url));
     const repoRoot = dirname(dirname(script));
+    const serverSource = join(repoRoot, "packages/server/src");
     const fixture = stagedHandlerRegistryFixture();
     const protobufEntry = createRequire(join(repoRoot, "examples/todo/package.json")).resolve(
       "@bufbuild/protobuf",
@@ -1027,6 +1028,12 @@ describe("proto-workflow", () => {
               staged: fixture.stagedRoot,
               packageName: "@example/model",
               moduleRoot: fixture.stagedRoot,
+            },
+            {
+              source: serverSource,
+              staged: serverSource,
+              packageName: "@spine-event-engine/server",
+              moduleRoot: serverSource,
             },
           ]),
         ],
@@ -1213,6 +1220,9 @@ describe("proto-workflow", () => {
       "examples/release-notes/generated",
       "examples/message-board/model/generated",
       "examples/message-board/app/generated",
+      "examples/message-board/command-handlers/generated",
+      "examples/message-board/view-handlers/generated",
+      "examples/message-board/composed-app/generated",
     ]);
   });
 
@@ -1294,6 +1304,46 @@ describe("proto-workflow", () => {
       handlerGeneratedPath: "examples/message-board/app/generated",
       handlerProjectPath: "examples/message-board/app/tsconfig.json",
     });
+  });
+
+  it("includes every maintained MessageBoard handler package in atomic generation", () => {
+    const paths = atomicGeneratedTargets.map((target) => target.displayPath);
+    for (const name of ["command-handlers", "view-handlers", "composed-app"]) {
+      expect(paths).toContain(`examples/message-board/${name}/generated`);
+    }
+  });
+
+  it("keeps live generated roots when a maintained handler-only post-step fails", () => {
+    const model = modelAtomicTargets.find(
+      (target) => target.packagePath === "examples/message-board/model",
+    );
+    const root = applicationModelTransactionFixture(model);
+    const handler = join(root, "examples/message-board/composed-app");
+    mkdirSync(join(handler, "generated"), { recursive: true });
+    writeFileSync(join(handler, "package.json"), '{"name":"@example/composed-app"}\n');
+    writeFileSync(join(handler, "spine-proto.json"), "{}\n");
+    writeFileSync(join(handler, "generated/previous.txt"), "previous handler output\n");
+
+    try {
+      expect(
+        generateTargets({
+          repoRoot: root,
+          runCommand: rootStageCommand,
+          runModelCommand: applicationModelStageCommand(
+            "MessageBoard composed-app handler registry post-step",
+          ),
+        }),
+      ).toBe(1);
+      expect(readFileSync(join(handler, "generated/previous.txt"), "utf8")).toBe(
+        "previous handler output\n",
+      );
+      expect(readFileSync(join(root, model.displayPath, "previous.txt"), "utf8")).toBe(
+        "previous model output\n",
+      );
+      expect(readdirSync(handler).some((name) => name.startsWith(".generated-"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("redirects MessageBoard handler analysis from live schemas to the staged model schemas", () => {
@@ -1438,7 +1488,7 @@ describe("proto-workflow", () => {
         'from "./spine-dependencies.js"',
       );
       expect(readFileSync(join(generatedRoot, "spine-dependencies.js"), "utf8")).toContain(
-        "packages/model/dist/generated/spine-metadata.js",
+        'require("@example/model/spine")',
       );
     } finally {
       rmSync(fixture.root, { recursive: true, force: true });

@@ -223,8 +223,8 @@ describe("check-generated-clean", () => {
   it("compares every atomic model output by default", () => {
     expect(generatedTargetsForCheck().map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
-      "packages/server-blackbox-tests/generated",
       "packages/server/test-fixtures/generated",
+      "packages/server-blackbox-tests/generated",
       "packages/core/test-fixtures/generated",
       "packages/testing/test-fixtures/generated",
       "examples/todo/generated",
@@ -234,6 +234,9 @@ describe("check-generated-clean", () => {
       "examples/release-notes/generated",
       "examples/message-board/model/generated",
       "examples/message-board/app/generated",
+      "examples/message-board/command-handlers/generated",
+      "examples/message-board/view-handlers/generated",
+      "examples/message-board/composed-app/generated",
     ]);
   });
 

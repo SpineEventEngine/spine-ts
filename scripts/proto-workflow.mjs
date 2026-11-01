@@ -108,12 +108,25 @@ export const modelAtomicTargets = [
 ];
 
 /**
+ * Lists handler packages without local Proto sources that still publish generated metadata.
+ */
+export const handlerOnlyTargets = ["command-handlers", "view-handlers", "composed-app"].map(
+  (name) => ({
+    displayPath: `examples/message-board/${name}/generated`,
+    packagePath: `examples/message-board/${name}`,
+    handlerProjectPath: `examples/message-board/${name}/tsconfig.json`,
+    moduleName: `MessageBoard ${name}`,
+  }),
+);
+
+/**
  * Combines every generated directory that publication and cleanliness checks treat atomically.
  */
 export const atomicGeneratedTargets = [
   ...generatedTargets,
   ...modelAtomicTargets,
   { displayPath: "examples/message-board/app/generated" },
+  ...handlerOnlyTargets,
 ];
 
 /**
@@ -724,7 +737,7 @@ function validatePublicationJournal(root, journal) {
     join(root, "examples/message-board/app/src/model-registry.ts"),
   ]);
   const adapterTarget = (path) =>
-    modelAtomicTargets.some((target) => {
+    [...modelAtomicTargets, ...handlerOnlyTargets].some((target) => {
       if (target.handlerProjectPath === undefined) return false;
       const application = join(root, dirname(target.handlerProjectPath));
       const within = relative(application, path).split(sep);
@@ -1241,6 +1254,10 @@ export function stageGeneratedTargets(options = {}) {
       if (modelStage.handlerStagedTarget !== undefined)
         stagedTargets.push(modelStage.handlerStagedTarget);
     }
+    for (const target of handlerOnlyTargets) {
+      const handlerStage = stageHandlerOnly(target, root, options, stagedTargets);
+      if (handlerStage !== undefined) stagedTargets.push(handlerStage);
+    }
 
     return {
       stagedTargets,
@@ -1401,6 +1418,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
               moduleRoot: output,
             },
           ]),
+      ...workspaceServerSource(root),
     ];
     const handlerStatus =
       target.handlerProjectPath === undefined
@@ -1532,7 +1550,7 @@ export function normalizeGeneratedTypeScriptTree(root, packageSources = []) {
   }
 }
 
-function createHandlerStage(displayPath, root) {
+function createHandlerStage(displayPath, root, target = { displayPath }) {
   if (!assertGeneratedPathSafe(root, displayPath)) throw new Error("unsafe handler generated path");
   const generatedRoot = join(root, displayPath);
   const stageRoot = mkdtempSync(join(dirname(generatedRoot), ".generated-"));
@@ -1542,8 +1560,106 @@ function createHandlerStage(displayPath, root) {
     generatedRoot,
     stagedOutputRoot,
     stageRoot,
-    target: { displayPath },
+    target,
   };
+}
+
+/**
+ * Resolves earlier staged package outputs for handler analysis without publishing them.
+ *
+ * @param root Repository root containing the maintained packages.
+ * @param application Handler package receiving the generated metadata.
+ * @param stagedTargets Earlier staged outputs in the same publication transaction.
+ * @returns Explicit paths and package identities for source analysis.
+ */
+function handlerRedirects(root, application, stagedTargets) {
+  return [
+    ...stagedTargets.flatMap((candidate) => {
+      const packagePath =
+        candidate.target.packagePath ??
+        (candidate.target.displayPath === "packages/proto/generated"
+          ? "packages/proto"
+          : undefined);
+      if (packagePath === undefined) return [];
+      const packageName = packageNameAt(join(root, packagePath));
+      const shared = {
+        packageName,
+        moduleRoot: candidate.stagedOutputRoot,
+      };
+      return [
+        { source: join(root, packagePath, "dist"), staged: candidate.stageRoot, ...shared },
+        {
+          source: join(root, packagePath, "generated"),
+          staged: candidate.stagedOutputRoot,
+          ...shared,
+        },
+        {
+          source: join(application, "node_modules", packageName, "dist"),
+          staged: candidate.stageRoot,
+          ...shared,
+        },
+      ];
+    }),
+    ...workspaceServerSource(root),
+  ];
+}
+
+/**
+ * Uses the official Server source only when its emitted declaration is absent.
+ *
+ * @param root Repository root containing the official Server sources.
+ * @returns Exact source redirect or an empty list when emitted declarations exist.
+ */
+function workspaceServerSource(root) {
+  const source = join(root, "packages/server/src");
+  if (existsSync(join(root, "packages/server/dist/index.d.ts"))) return [];
+  return [
+    { source, staged: source, packageName: "@spine-event-engine/server", moduleRoot: source },
+  ];
+}
+
+/**
+ * Stages one maintained application package through the existing handler procedure.
+ *
+ * @param target Maintained package target and its handler project.
+ * @param root Repository root for the staged publication transaction.
+ * @param options Optional runner seam used by generator tests.
+ * @param stagedTargets Earlier staged package outputs for source resolution.
+ * @returns Staged handler output, or absent when the package is not in the test fixture.
+ */
+function stageHandlerOnly(target, root, options, stagedTargets) {
+  const application = join(root, target.packagePath);
+  if (!existsSync(join(application, "spine-proto.json"))) return undefined;
+  const stage = createHandlerStage(target.displayPath, root, target);
+  try {
+    const redirects = handlerRedirects(root, application, [...stagedTargets, stage]);
+    const output = join(stage.stagedOutputRoot, "spine-metadata.ts");
+    const run = options.runModelCommand ?? runCommandIn;
+    const status = run(
+      `${target.moduleName} handler registry post-step`,
+      process.execPath,
+      [
+        join(root, "scripts/generate-handler-registry.mjs"),
+        "--project",
+        join(root, target.handlerProjectPath),
+        "--generated-root",
+        stage.stagedOutputRoot,
+        "--source-generated-redirects",
+        JSON.stringify(redirects),
+        "--out",
+        output,
+        "--published-out",
+        join(application, "generated/spine-metadata.ts"),
+      ],
+      root,
+    );
+    if (status !== 0) throw new Error(`${target.moduleName} handler registry post-step failed`);
+    stage.files = stageRuntimeAdapters(application, stage.stagedOutputRoot, root);
+    return stage;
+  } catch (error) {
+    removeStagedTargets([stage]);
+    throw error;
+  }
 }
 
 /**

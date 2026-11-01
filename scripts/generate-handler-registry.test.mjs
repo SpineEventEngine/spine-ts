@@ -1,12 +1,73 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { HandlerFilePublication, main } from "./generate-handler-registry.mjs";
+import {
+  HandlerFilePublication,
+  main,
+  publishedAppQuerySchemas,
+} from "./generate-handler-registry.mjs";
 
 describe("handler output publication", () => {
+  it("publishes staged App Query schemas through declared package exports", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-staged-query-export-"));
+    const packageRoot = join(root, "model");
+    const stage = join(packageRoot, ".generated-stage/generated");
+    const sourceFile = join(root, "handler/src/query.ts");
+    const source = join(packageRoot, "dist");
+    const packageName = "@example/model";
+    const stem = "spine/example/board_queries_pb";
+    const schemaPath = join(stage, `${stem}.js`);
+    const manifest = join(packageRoot, "package.json");
+    const analysis = {
+      appQueries: [
+        {
+          sourceFile,
+          querySchema: {
+            moduleSpecifier: relative(dirname(sourceFile), schemaPath),
+            exportName: "ReadBoardSchema",
+          },
+          responseSchema: {
+            moduleSpecifier: relative(dirname(sourceFile), schemaPath),
+            exportName: "ReadBoardResponseSchema",
+          },
+        },
+      ],
+    };
+    const redirect = { source, staged: dirname(stage), moduleRoot: stage, packageName };
+    try {
+      mkdirSync(stage, { recursive: true });
+      writeFileSync(
+        manifest,
+        JSON.stringify({
+          name: packageName,
+          exports: {
+            "./generated/*.js": {
+              types: "./dist/generated/*.d.ts",
+              default: "./dist/generated/*.js",
+            },
+          },
+        }),
+      );
+      const published = publishedAppQuerySchemas(analysis, [redirect]);
+      expect(published.appQueries[0].querySchema.moduleSpecifier).toBe(
+        `${packageName}/generated/${stem}.js`,
+      );
+      expect(published.appQueries[0].responseSchema.moduleSpecifier).toBe(
+        `${packageName}/generated/${stem}.js`,
+      );
+      expect(JSON.stringify(published)).not.toContain(".generated-stage");
+
+      writeFileSync(manifest, JSON.stringify({ name: packageName, exports: {} }));
+      expect(() => publishedAppQuerySchemas(analysis, [redirect])).toThrow(
+        "lacks a matching public generated export",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("rejects a symlinked adapter before touching an outside sentinel", async () => {
     const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
     const app = mkdtempSync(join(repo, "packages/.handler-publication-"));

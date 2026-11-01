@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -118,6 +118,73 @@ describe("cleanBuildOutputs", () => {
     expect(
       readFileSync(resolve(root, "examples/todo/dist/generated/spine-dependencies.d.ts"), "utf8"),
     ).toBe("export {};\n");
+  });
+
+  it("restores handler-only adapters after clean output removal", () => {
+    const root = mkdtempSync(resolve(tmpdir(), "spine-handler-adapter-"));
+    for (const name of ["command-handlers", "view-handlers", "composed-app"]) {
+      const app = resolve(root, "examples/message-board", name);
+      const generated = resolve(app, "generated");
+      const output = resolve(app, "dist/generated");
+      mkdirSync(generated, { recursive: true });
+      mkdirSync(output, { recursive: true });
+      writeFileSync(
+        resolve(generated, "spine-dependencies.json"),
+        JSON.stringify({
+          formatVersion: 2,
+          edges: [],
+          inputs: [],
+          runtime: [
+            { path: "dist/generated/spine-dependencies.js", source: `${name}-js\n` },
+            { path: "dist/generated/spine-dependencies.d.ts", source: `${name}-types\n` },
+          ],
+        }),
+      );
+      writeFileSync(resolve(output, "spine-dependencies.js"), "stale\n");
+      writeFileSync(resolve(output, "spine-dependencies.d.ts"), "stale\n");
+    }
+
+    for (const name of ["command-handlers", "view-handlers", "composed-app"]) {
+      const output = resolve(root, "examples/message-board", name, "dist");
+      rmSync(output, { recursive: true });
+    }
+    restoreMetadataAdapters(root);
+    for (const name of ["command-handlers", "view-handlers", "composed-app"]) {
+      const output = resolve(root, "examples/message-board", name, "dist/generated");
+      expect(readFileSync(resolve(output, "spine-dependencies.js"), "utf8")).toBe(`${name}-js\n`);
+      expect(readFileSync(resolve(output, "spine-dependencies.d.ts"), "utf8")).toBe(
+        `${name}-types\n`,
+      );
+    }
+  });
+
+  it("rejects changed handler-only dependency metadata before adapter publication", () => {
+    const root = mkdtempSync(resolve(tmpdir(), "spine-handler-stale-"));
+    const app = resolve(root, "examples/message-board/composed-app");
+    const generated = resolve(app, "generated");
+    const dependency = resolve(root, "examples/message-board/command-handlers/generated");
+    mkdirSync(generated, { recursive: true });
+    mkdirSync(dependency, { recursive: true });
+    writeFileSync(resolve(dependency, "spine-metadata.ts"), "changed\n");
+    writeFileSync(
+      resolve(generated, "spine-dependencies.json"),
+      JSON.stringify({
+        formatVersion: 2,
+        edges: [],
+        inputs: [
+          {
+            path: "../command-handlers/generated/spine-metadata.ts",
+            hash: createHash("sha256").update("prior\n").digest("hex"),
+          },
+        ],
+        runtime: [{ path: "dist/generated/spine-dependencies.js", source: "new\n" }],
+      }),
+    );
+
+    expect(() => restoreMetadataAdapters(root)).toThrow(
+      /regenerate handlers.*command-handlers\/generated\/spine-metadata.ts/u,
+    );
+    expect(() => readFileSync(resolve(app, "dist/generated/spine-dependencies.js"))).toThrow();
   });
 
   it("requires regeneration when an adapter input changes", () => {

@@ -45,6 +45,16 @@ export interface RuntimeMetadataPackage {
    * Declaration target imported by the generated dependency adapter.
    */
   readonly typesFile: string;
+
+  /**
+   * Metadata source generated in the current transaction, when present.
+   */
+  readonly stagedSourceFile?: string;
+
+  /**
+   * Stable path published for the staged metadata source.
+   */
+  readonly publishedSourceFile?: string;
 }
 
 /**
@@ -343,7 +353,13 @@ const RuntimePackage = {
     const stagedRoot = candidate?.moduleRoot ?? candidate?.staged;
     if (stagedRoot !== undefined && existsSync(join(stagedRoot, "spine-metadata.ts"))) {
       RuntimePackage.assertMetadataExport(item, join(stagedRoot, "spine-metadata.ts"));
-      result.push({ ...item, typesFile: artifacts[0] ?? "", runtimeFile: artifacts[1] ?? "" });
+      result.push({
+        ...item,
+        typesFile: artifacts[0] ?? "",
+        runtimeFile: artifacts[1] ?? "",
+        stagedSourceFile: join(stagedRoot, "spine-metadata.ts"),
+        publishedSourceFile: join(item.root, "generated/spine-metadata.ts"),
+      });
       return;
     }
     for (const [index, file] of artifacts.entries())

@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { modelAtomicTargets } from "./proto-workflow.mjs";
+import { handlerOnlyTargets, modelAtomicTargets } from "./proto-workflow.mjs";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -52,6 +52,7 @@ export const buildOutputPaths = Object.freeze([
   "examples/support/dist",
   "examples/release-notes/dist",
   "examples/message-board/model/dist",
+  ...handlerOnlyTargets.map((target) => `${target.packagePath}/dist`),
   "examples/message-board/app/dist",
   "examples/message-board/web/dist",
 ]);
@@ -103,7 +104,7 @@ export function cleanBuildOutputs(fileSystem = defaultFileSystem) {
  */
 export function restoreMetadataAdapters(root, operations = { rename: renameSync }) {
   const assets = [];
-  for (const target of modelAtomicTargets) {
+  for (const target of [...modelAtomicTargets, ...handlerOnlyTargets]) {
     if (target.handlerProjectPath === undefined) continue;
     const app = join(root, dirname(target.handlerProjectPath));
     const generated = join(root, target.handlerGeneratedPath ?? target.displayPath);

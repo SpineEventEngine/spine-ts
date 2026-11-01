@@ -233,13 +233,9 @@ const MetadataOutput = {
     dependencies: RuntimeMetadataDiscovery,
   ): MetadataAsset {
     const canonicalRoot = realpathSync(appRoot);
-    const inputs = MetadataOutput.inputFiles(appRoot, project, dependencies);
     const payload = {
       formatVersion: 2,
-      inputs: inputs.filter(existsSync).map((file) => ({
-        path: relative(appRoot, file),
-        hash: MetadataOutput.hash(readFileSync(file)),
-      })),
+      inputs: MetadataOutput.fingerprintInputs(appRoot, project, dependencies),
       edges: dependencies.edges.map(({ requester, name, resolved }) => ({
         requester: relative(canonicalRoot, requester) || ".",
         name,
@@ -251,6 +247,31 @@ const MetadataOutput = {
       file: join(sourceDirectory, "spine-dependencies.json"),
       source: `${JSON.stringify(payload, null, 2)}\n`,
     };
+  },
+
+  /**
+   * Records staged-source fingerprints at published paths and installed-export fingerprints at emitted paths.
+   *
+   * @param appRoot Application package root used for stable relative paths.
+   * @param project Effective TypeScript project configuration.
+   * @param dependencies Selected metadata packages and their staged sources.
+   * @returns Paths and hashes that invalidate the restoration record when inputs change.
+   */
+  fingerprintInputs(appRoot: string, project: string, dependencies: RuntimeMetadataDiscovery) {
+    const staged = new Map(
+      dependencies.flatMap(({ publishedSourceFile, stagedSourceFile }) =>
+        publishedSourceFile !== undefined && stagedSourceFile !== undefined
+          ? [[publishedSourceFile, stagedSourceFile] as const]
+          : [],
+      ),
+    );
+    return MetadataOutput.inputFiles(appRoot, project, dependencies)
+      .map((file) => ({ file, source: staged.get(file) ?? file }))
+      .filter(({ source }) => existsSync(source))
+      .map(({ file, source }) => ({
+        path: relative(appRoot, file),
+        hash: MetadataOutput.hash(readFileSync(source)),
+      }));
   },
 
   /**
@@ -272,11 +293,11 @@ const MetadataOutput = {
       ...dependencies.edges.flatMap((edge) =>
         edge.resolved === null ? [] : [join(edge.resolved, "package.json")],
       ),
-      ...dependencies.flatMap(({ root, runtimeFile, typesFile }) => [
-        join(root, "package.json"),
-        runtimeFile,
-        typesFile,
-      ]),
+      ...dependencies.flatMap(({ root, runtimeFile, typesFile, publishedSourceFile }) =>
+        publishedSourceFile === undefined
+          ? [join(root, "package.json"), runtimeFile, typesFile]
+          : [join(root, "package.json"), publishedSourceFile],
+      ),
     ];
   },
 

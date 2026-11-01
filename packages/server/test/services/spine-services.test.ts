@@ -3623,6 +3623,7 @@ describe("SpineServices", () => {
   });
 
   it("cancels a blocked filter, discards its late failure, and removes the retained record", async () => {
+    await import("../../test-fixtures/generated/proto-module.js");
     let enter!: () => void;
     const entered = new Promise<void>((resolve) => {
       enter = resolve;

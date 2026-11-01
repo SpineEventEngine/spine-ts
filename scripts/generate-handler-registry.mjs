@@ -81,7 +81,7 @@ export async function main(argv = process.argv.slice(2)) {
     ];
     writer.validateDestinations(options.repoRoot, paths);
     HandlerFilePublication.publish(paths, () => {
-      writer.write(analysis, {
+      writer.write(publishedAppQuerySchemas(analysis, options.sourceGeneratedRedirects ?? []), {
         repoRoot: options.repoRoot,
         generatedRoot: options.generatedRoot,
         outputFile: options.outputFile,
@@ -106,6 +106,72 @@ export async function main(argv = process.argv.slice(2)) {
     return 1;
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Maps verified staged App Query schema references to public package exports.
+ *
+ * @param analysis Analyzed handlers and their paired query schema references.
+ * @param redirects Explicit staged package roots supplied by generation.
+ * @returns Analysis with importable public schema references.
+ */
+export function publishedAppQuerySchemas(analysis, redirects) {
+  return {
+    ...analysis,
+    appQueries: (analysis.appQueries ?? []).map((query) => ({
+      ...query,
+      querySchema: publishedSchema(query, query.querySchema, redirects),
+      responseSchema: publishedSchema(query, query.responseSchema, redirects),
+    })),
+  };
+}
+
+/**
+ * Resolves a schema through an explicitly declared staged package root.
+ *
+ * @param query Handler analysis containing the source file of the schema reference.
+ * @param schema Query or response schema import to publish.
+ * @param redirects Explicit staged package roots supplied by generation.
+ * @returns Original or public schema import, preserving its schema export.
+ */
+function publishedSchema(query, schema, redirects) {
+  if (!schema.moduleSpecifier.startsWith(".")) return schema;
+  const resolved = resolve(dirname(query.sourceFile), schema.moduleSpecifier);
+  for (const redirect of redirects) {
+    if (redirect.packageName === undefined || redirect.moduleRoot === undefined) continue;
+    const suffix = relative(redirect.moduleRoot, resolved);
+    if (suffix.startsWith("..") || isAbsolute(suffix) || !suffix.endsWith(".js")) continue;
+    assertPublishedSchemaExport(redirect, suffix);
+    return {
+      ...schema,
+      moduleSpecifier: `${redirect.packageName}/generated/${suffix.split(sep).join("/")}`,
+    };
+  }
+  return schema;
+}
+
+/**
+ * Rejects a generated import unless the package publishes matching JS and types.
+ *
+ * @param redirect Staged package metadata including its package root and name.
+ * @param suffix Generated JavaScript path relative to the staged package root.
+ */
+function assertPublishedSchemaExport(redirect, suffix) {
+  const packageRoot = dirname(redirect.source);
+  const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+  const entry = manifest.exports?.["./generated/*.js"];
+  const stem = suffix.slice(0, -3).split(sep).join("/");
+  if (
+    manifest.name !== redirect.packageName ||
+    typeof entry?.types !== "string" ||
+    typeof entry?.default !== "string" ||
+    entry?.types?.replace("*", stem) !== `./dist/generated/${stem}.d.ts` ||
+    entry?.default?.replace("*", stem) !== `./dist/generated/${stem}.js`
+  ) {
+    throw new Error(
+      `Staged App Query schema lacks a matching public generated export: ${redirect.packageName}`,
+    );
   }
 }
 
@@ -328,6 +394,18 @@ function createGeneratedRootRedirectHost(options, redirects) {
   ) =>
     moduleLiterals.map((literal) => {
       for (const [packageName, moduleRoot] of moduleRoots) {
+        if (literal.text === packageName) {
+          const source = join(moduleRoot, "index.ts");
+          if (host.fileExists(source)) {
+            return {
+              resolvedModule: {
+                resolvedFileName: source,
+                extension: ts.Extension.Ts,
+                isExternalLibraryImport: false,
+              },
+            };
+          }
+        }
         const prefix = `${packageName}/generated/`;
         if (literal.text.startsWith(prefix) && literal.text.endsWith(".js")) {
           const source = join(moduleRoot, `${literal.text.slice(prefix.length, -".js".length)}.ts`);
