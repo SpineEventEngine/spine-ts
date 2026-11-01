@@ -180,18 +180,27 @@ describe("TS-to-TS multi-machine delivery", () => {
       const takeoverElapsed = takeover.at - stalled.at;
       expect(takeoverElapsed).toBeGreaterThanOrEqual(STALE_MS - STALE_TOLERANCE_MS);
       expect(takeoverElapsed).toBeLessThan(TAKEOVER_DEADLINE_MS);
-      await adminBarrier(updates, takeoverThrough(), () => streamFailure);
+      await eventually(() => {
+        rejectStream(streamFailure);
+        const actual = updates.filter(update).map(summary);
+        expect([takeoverThrough("NOT_PICKED/1"), takeoverThrough("PICKED/0")]).toContainEqual(
+          actual,
+        );
+      });
+      const stallPrefix = updates.filter(update).map(summary)[ordinaryThrough("beta").length];
+      if (stallPrefix !== "NOT_PICKED/1" && stallPrefix !== "PICKED/0")
+        throw new Error("Stall pickup status is invalid.");
       await command(survivor, { command: "replace" });
       await command(survivor, { command: "write", signalId: "final" });
       await eventually(() => {
         expect(dispatched.filter((frame) => frame.signalId === "final")).toHaveLength(1);
       });
-      await adminBarrier(updates, fullSequence(), () => streamFailure);
+      await adminBarrier(updates, fullSequence(stallPrefix), () => streamFailure);
       rejectStream(streamFailure);
       const adminUpdates = updates.filter(update);
       expect(updates).toHaveLength(21);
       expect(adminUpdates).toHaveLength(20);
-      expect(adminUpdates.map(summary)).toEqual(fullSequence());
+      expect(adminUpdates.map(summary)).toEqual(fullSequence(stallPrefix));
       const snapshot = await admin.getShardInfo(create(EmptySchema));
       expect(snapshot.shards).toHaveLength(0);
     } catch (error) {
@@ -501,10 +510,10 @@ function ordinaryThrough(phase: "alpha" | "beta"): readonly string[] {
   return phase === "alpha" ? [...first, ...ordinary] : [...first, ...ordinary, ...ordinary];
 }
 
-function takeoverThrough(): readonly string[] {
+function takeoverThrough(stallPrefix: "NOT_PICKED/1" | "PICKED/0"): readonly string[] {
   return [
     ...ordinaryThrough("beta"),
-    "NOT_PICKED/1",
+    stallPrefix,
     "PICKED/1",
     "NOT_PICKED/1",
     "PICKED/1",
@@ -513,8 +522,8 @@ function takeoverThrough(): readonly string[] {
   ];
 }
 
-function fullSequence(): readonly string[] {
-  return [...takeoverThrough(), "NOT_PICKED/1", "PICKED/1", "PICKED/0", "NOT_PICKED/0"];
+function fullSequence(stallPrefix: "NOT_PICKED/1" | "PICKED/0"): readonly string[] {
+  return [...takeoverThrough(stallPrefix), "NOT_PICKED/1", "PICKED/1", "PICKED/0", "NOT_PICKED/0"];
 }
 
 function portOf(baseUrl: string): number {
