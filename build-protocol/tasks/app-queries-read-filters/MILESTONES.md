@@ -29,14 +29,14 @@ surviving envelopes and control messages preserved. Activation carries the
 verified reader and actual subscription/Bounded Context. Cancellation, source
 replacement/removal, overflow and policy faults invalidate pending delivery.
 
-Direct Stand subscriptions have no existing delivery queue or removal/error
-contract. Their asynchronous admission policy needs a human decision under the
-repository's prohibition on new artificial limits. The proposed per-consumer
-queue of 100 waiting updates plus one active update is not approved. The
-alternative changes producer completion and backpressure. Do not introduce the
-new capacity without approval. Other independent work can continue.
+The human approved independent per-consumer delivery queues with a default of
+100 waiting updates, configurable by the application, plus one active update.
+Both filtering and delivery are sequential within each subscription. Overflow
+terminates only that subscription with an explicit error, clears pending updates
+and invalidates its active result. Writes and other subscriptions continue.
+No producer-completion/backpressure redesign is needed.
 
-After that decision, provide filtered state/removal delivery with original
+Provide filtered state/removal delivery with original
 identity/version/tenant, separately filtered previous state, a terminal error
 channel and cancellation. Keep raw repository notifications private. Filters
 apply to outward data, without changing persistence or domain Event dispatch.
@@ -112,9 +112,8 @@ reportable with that limitation.
   scan, client global cache, delivered-ID ledger, Event replay, automatic
   masking/redaction convention, output-state validation, or provider polling.
 
-The direct-subscription admission decision above is the remaining product
-question. It does not block RPC subscription filtering or other independent
-implementation and verification work.
+The direct-subscription admission policy above is approved. Implement it without
+adding other capacity, timeout, retry, or concurrency policies.
 
 ### Pinned Proto source gate
 
