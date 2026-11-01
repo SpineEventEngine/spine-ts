@@ -12,14 +12,15 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/auth";
 import {
   SubscriptionReaderBindingSchema,
+  SubscriptionIdSchema,
   SubscriptionSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import { EmptySchema, timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { ActorContextSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import { TypeUrls } from "@spine-event-engine/core";
 import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
@@ -743,6 +744,127 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
     expect(restored).toEqual([created.bytes]);
+  });
+
+  it("does not recover a row canceled after its page was read", async () => {
+    const backing = new InMemoryStorageFactory();
+    const pageRead = Promise.withResolvers<undefined>();
+    const releasePage = Promise.withResolvers<undefined>();
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
+    const factory: StorageFactory = {
+      createRecordStorage: ((
+        storageContext: StorageContext,
+        spec: RecordSpec<unknown, unknown>,
+      ) => {
+        const storage = backing.createRecordStorage(storageContext, spec);
+        const queryEntries = storage.queryEntries.bind(storage);
+        storage.queryEntries = async (query) => {
+          const page = await queryEntries(query);
+          if (page.length > 0) {
+            pageRead.resolve(undefined);
+            await releasePage.promise;
+          }
+          return page;
+        };
+        return storage;
+      }) as never,
+    };
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: factory,
+      namespace: "cancel-during-recovery",
+      nextId: () => "s-one",
+      cleanup: () => Promise.resolve(),
+    });
+    await bindings.create({
+      reader: anonymousReader,
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 2_000,
+    });
+    const restored: string[] = [];
+    const recovery = bindings.recoverActive({
+      nowMs: 1,
+      onDefinition: (wire) => {
+        restored.push(subscriptionId(wire.bytes));
+        return Promise.resolve();
+      },
+    });
+    await pageRead.promise;
+    await expect(
+      bindings.cancel({
+        id: "s-one",
+        context,
+        reader: anonymousReader,
+        nowMs: 1,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    releasePage.resolve(undefined);
+    await recovery;
+    expect(restored).toEqual([]);
+  });
+
+  it("does not clean up a refreshed row from an expired page snapshot", async () => {
+    const backing = new InMemoryStorageFactory();
+    const pageRead = Promise.withResolvers<undefined>();
+    const releasePage = Promise.withResolvers<undefined>();
+    let refresh: (() => Promise<void>) | undefined;
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
+    const factory: StorageFactory = {
+      createRecordStorage: ((
+        storageContext: StorageContext,
+        spec: RecordSpec<unknown, unknown>,
+      ) => {
+        const storage = backing.createRecordStorage(storageContext, spec);
+        const queryEntries = storage.queryEntries.bind(storage);
+        storage.queryEntries = async (query) => {
+          const page = await queryEntries(query);
+          if (page.length > 0) {
+            pageRead.resolve(undefined);
+            await releasePage.promise;
+          }
+          return page;
+        };
+        refresh = async () => {
+          const id = create(SubscriptionIdSchema, { value: "s-one" });
+          const current = await storage.read(id);
+          if (current === undefined) throw new Error("Expected retained row.");
+          const updated = clone(GatewayAuthenticatedSubscriptionSchema, current);
+          updated.whenExpires = timestampFromMs(3_000);
+          if (!(await storage.compareAndSet(id, current, updated)))
+            throw new Error("Expected refreshed row to replace expired row.");
+        };
+        return storage;
+      }) as never,
+    };
+    let cleanups = 0;
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: factory,
+      namespace: "refresh-during-recovery",
+      nextId: () => "s-one",
+      cleanup: () => {
+        cleanups++;
+        return Promise.resolve();
+      },
+    });
+    await bindings.create({
+      reader: anonymousReader,
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 1_000,
+    });
+    const recovered: number[] = [];
+    const recovery = bindings.recoverActive({
+      nowMs: 1_500,
+      onDefinition: (_wire, whenExpires) => {
+        recovered.push(whenExpires);
+        return Promise.resolve();
+      },
+    });
+    await pageRead.promise;
+    await refresh?.();
+    releasePage.resolve(undefined);
+    await recovery;
+    expect(cleanups).toBe(0);
+    expect(recovered).toEqual([3_000]);
   });
 
   it("fails recovery without deletion when a stored record is malformed", async () => {

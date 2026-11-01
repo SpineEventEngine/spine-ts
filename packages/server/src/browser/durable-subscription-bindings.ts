@@ -478,7 +478,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    * Rehydrates a verified durable reader record under its ID serialization.
    *
    * @param slotId Subscription slot ID.
-   * @param record The durable subscription record.
+   * @param record The paged durable subscription record used for slot validation.
    * @param input Durable operation parameters and verified reader state.
    * @returns Completion after the operation settles.
    */
@@ -494,15 +494,17 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     },
   ): Promise<void> {
     DurableSubscriptionValues.validate(record, slotId);
-    if (SubscriptionReaderBindings.read(record.reader) === undefined) return;
     await this.#forId(
       slotId.value,
       async () => {
-        if (this.#expired(record, input.nowMs)) await this.#removeExpired(record);
+        const current = await this.#read(slotId.value);
+        if (current === undefined) return;
+        if (SubscriptionReaderBindings.read(current.reader) === undefined) return;
+        if (this.#expired(current, input.nowMs)) await this.#removeExpired(current);
         else
           await input.onDefinition(
-            DurableSubscriptionValues.wire(record),
-            DurableSubscriptionValues.expiryMs(record.whenExpires),
+            DurableSubscriptionValues.wire(current),
+            DurableSubscriptionValues.expiryMs(current.whenExpires),
           );
       },
       true,

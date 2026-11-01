@@ -32,6 +32,7 @@ import {
   type NormalizedQueryPlan,
   type StorageContext,
 } from "@spine-event-engine/storage";
+import type { EntityRecordStorage } from "@spine-event-engine/storage/provider";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -809,6 +810,153 @@ describe("Stand", () => {
     await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toEqual(
       createState("task-1", "Second"),
     );
+  });
+
+  it("orders overlapping writes for one ID without holding other IDs or tenants", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    class DelayedWriteFactory extends InMemoryStorageFactory {
+      override createEntityStorage(input: unknown): unknown {
+        const handle = super.createEntityStorage(input) as {
+          readonly current: EntityRecordStorage<unknown>;
+          close(): void;
+        };
+        const current = handle.current;
+        return {
+          current: {
+            read: current.read.bind(current),
+            query: current.query.bind(current),
+            write: async (record: Parameters<typeof current.write>[0]) => {
+              if (
+                EntityRecords.unpack(ProjectOverviewStateSchema, record).state.name === "Second"
+              ) {
+                entered.resolve(undefined);
+                await release.promise;
+              }
+              await current.write(record);
+            },
+          },
+          close: () => {
+            handle.close();
+          },
+        };
+      }
+    }
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: true },
+      storageFactory: new DelayedWriteFactory(),
+    });
+    stand.register(ProjectOverviewStateSchema);
+    const updates: { readonly name: string; readonly previous?: string }[] = [];
+    for (const tenantId of [tenant("tenant-a"), tenant("tenant-b")])
+      stand.subscribe(
+        ProjectOverviewStateSchema,
+        {
+          next: (update) => {
+            if (update.kind === "state")
+              updates.push({
+                name: update.state.name,
+                ...(update.previousState === undefined
+                  ? {}
+                  : { previous: update.previousState.name }),
+              });
+          },
+          error: () => undefined,
+        },
+        { tenantId },
+      );
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"), {
+      tenantId: tenant("tenant-a"),
+    });
+
+    const second = stand.update(ProjectOverviewStateSchema, createState("task-1", "Second"), {
+      tenantId: tenant("tenant-a"),
+    });
+    await entered.promise;
+    const third = stand.update(ProjectOverviewStateSchema, createState("task-1", "Third"), {
+      tenantId: tenant("tenant-a"),
+    });
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Other tenant"), {
+      tenantId: tenant("tenant-b"),
+    });
+    await stand.update(ProjectOverviewStateSchema, createState("task-2", "Other ID"), {
+      tenantId: tenant("tenant-a"),
+    });
+    expect(updates.map((update) => update.name)).toEqual(["First", "Other tenant", "Other ID"]);
+    release.resolve(undefined);
+    await Promise.all([second, third]);
+
+    const latest = updates.find((update) => update.name === "Third");
+    expect(latest?.previous).toBe("Second");
+    await stand.close();
+  });
+
+  it("releases a deferred update lane when repository work is canceled", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectOverviewStateSchema);
+    const updates: string[] = [];
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: (update) => {
+        if (update.kind === "state") updates.push(update.state.name);
+      },
+      error: () => undefined,
+    });
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
+    const canceled = await standAccess.deferUpdate(
+      stand,
+      ProjectOverviewStateSchema,
+      createState("task-1", "Canceled"),
+      {},
+    );
+    const successor = stand.update(ProjectOverviewStateSchema, createState("task-1", "Second"));
+    await stand.update(ProjectOverviewStateSchema, createState("task-2", "Independent"));
+    expect(updates).toEqual(["First", "Independent"]);
+    canceled.cancel();
+    await successor;
+    expect(updates).toEqual(["First", "Independent", "Second"]);
+    await stand.close();
+  });
+
+  it("releases an update lane after a current-record write fails", async () => {
+    class FailingWriteFactory extends InMemoryStorageFactory {
+      override createEntityStorage(input: unknown): unknown {
+        const handle = super.createEntityStorage(input) as {
+          readonly current: EntityRecordStorage<unknown>;
+          close(): void;
+        };
+        const current = handle.current;
+        return {
+          current: {
+            read: current.read.bind(current),
+            query: current.query.bind(current),
+            write: (record: Parameters<typeof current.write>[0]) =>
+              EntityRecords.unpack(ProjectOverviewStateSchema, record).state.name === "Rejected"
+                ? Promise.reject(new Error("write failed"))
+                : current.write(record),
+          },
+          close: () => {
+            handle.close();
+          },
+        };
+      }
+    }
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FailingWriteFactory(),
+    });
+    stand.register(ProjectOverviewStateSchema);
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
+    await expect(
+      stand.update(ProjectOverviewStateSchema, createState("task-1", "Rejected")),
+    ).rejects.toThrow("write failed");
+    await stand.update(ProjectOverviewStateSchema, createState("task-1", "Second"));
+    await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toEqual(
+      createState("task-1", "Second"),
+    );
+    await stand.close();
   });
 
   it("reads previous state on update only when same-tenant subscribers can observe it", async () => {

@@ -12,7 +12,8 @@
  * the License.
  */
 
-import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { type MessageSchema, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import {
@@ -38,6 +39,7 @@ import type { StorageFactory } from "@spine-event-engine/storage";
 import type { EntityRecordStorage, EntityStorageInput } from "@spine-event-engine/storage/provider";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
+  EntityIds,
   EntityRecords,
   standEntityStorageDescriptor,
 } from "../entity/entity-storage-descriptor.js";
@@ -289,6 +291,8 @@ export class Stand {
   #omittedHandleCloseErrors = 0;
 
   readonly #inFlight = new Set<Promise<void>>();
+
+  readonly #pendingUpdates = new Map<string, Promise<void>>();
 
   #closing = false;
 
@@ -766,6 +770,7 @@ export class Stand {
   ): Promise<PreparedStandUpdate> {
     const finish = this.#beginOperation();
     let storage: CurrentStorageLease | undefined;
+    let releaseUpdate: (() => void) | undefined;
     try {
       const registration = this.#registration(schema, "update");
       if (metadata !== undefined && metadata.schema !== registration.schema)
@@ -774,6 +779,7 @@ export class Stand {
       const stateCopy = clone(schema, state);
       const tenantId = await this.#checkedTenantId(options.tenantId);
       const id = Stand.#readStateId(stateCopy, registration);
+      releaseUpdate = await this.#reserveUpdate(registration, tenantId, id, metadata);
       storage = this.#leaseCurrent(registration, tenantId);
       const previousState = await this.#previousUpdateState(registration, tenantId, id, storage);
       return this.#preparedUpdate(
@@ -782,13 +788,51 @@ export class Stand {
         snapshot,
         metadata,
         storage,
-        finish,
+        () => {
+          releaseUpdate?.();
+          finish();
+        },
       );
     } catch (error) {
       storage?.release();
+      releaseUpdate?.();
       finish();
       throw error;
     }
+  }
+
+  /**
+   * Keeps one Entity's previous-state read and commit in notification order.
+   *
+   * @param registration State metadata.
+   * @param tenantId Tenant for the state.
+   * @param id Entity identifier.
+   * @param metadata Repository-validated identifier metadata, when available.
+   * @returns A release action for notification or cancellation.
+   */
+  async #reserveUpdate(
+    registration: Registration,
+    tenantId: TenantId | undefined,
+    id: unknown,
+    metadata?: EntityMetadata,
+  ): Promise<() => void> {
+    const packed =
+      metadata === undefined
+        ? EntityIds.pack(registration.schema, id)
+        : EntityIds.packField(metadata.idField.descriptor, id);
+    const key = JSON.stringify([
+      registration.typeUrl,
+      this.#tenantKey(tenantId),
+      Buffer.from(toBinary(AnySchema, packed)).toString("base64"),
+    ]);
+    const previous = this.#pendingUpdates.get(key);
+    const settled = Promise.withResolvers<undefined>();
+    this.#pendingUpdates.set(key, settled.promise);
+    await previous;
+    return () => {
+      if (this.#pendingUpdates.get(key) === settled.promise) this.#pendingUpdates.delete(key);
+      settled.resolve(undefined);
+    };
   }
 
   /**
