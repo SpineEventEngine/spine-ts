@@ -418,7 +418,7 @@ describe("MessageBoard Projection backend", () => {
       );
       expect(outcome).toMatchObject({
         kind: "error",
-        error: { type: "COMMAND_VALIDATION_ERROR" },
+        error: { type: "spine.core.CommandValidationError" },
       });
       if (outcome.kind !== "error") throw new Error("Expected a validation error.");
       if (outcome.error.$typeName !== ErrorSchema.typeName)

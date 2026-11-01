@@ -17,7 +17,7 @@ import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { TypeUrls, AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
-import { UserIdSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
 import { QueryIdSchema, QuerySchema } from "@spine-event-engine/proto/client";
@@ -56,8 +56,9 @@ describe("project-management load example", () => {
     };
     const context = await createProjectManagementContext(weights);
     const taskId = "weighted-task";
-    const actorContext = metadata.actorContext({
-      actor: create(UserIdSchema, { value: "weighted-user" }),
+    const actorContext = create(ActorContextSchema, {
+      ...metadata.actorContext({ actor: create(UserIdSchema, { value: "weighted-user" }) }),
+      timestamp: metadata.timestamp(),
     });
 
     try {
@@ -197,8 +198,9 @@ describe("project-management load example", () => {
     const queries = createClient(QueryService, transport);
     const subscriptions = createClient(SubscriptionService, transport);
     const id = "project-grpc";
-    const actorContext = metadata.actorContext({
-      actor: create(UserIdSchema, { value: "load-user" }),
+    const actorContext = create(ActorContextSchema, {
+      ...metadata.actorContext({ actor: create(UserIdSchema, { value: "load-user" }) }),
+      timestamp: metadata.timestamp(),
     });
     const subscription = await subscriptions.subscribe(createTopic(id, actorContext));
     const controller = new AbortController();

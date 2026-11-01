@@ -175,7 +175,7 @@ describe("@spine-event-engine/server package exports", () => {
     expectTypeOf<ForbiddenHandlerRegistrySpiTypes>().toEqualTypeOf<ForbiddenHandlerRegistrySpiTypes>();
 
     const registry = await import("@spine-event-engine/server/spi/handler-registry");
-    expect(Object.keys(registry)).toEqual([]);
+    expect(Object.keys(registry)).toEqual(["registerSpineMetadata"]);
   });
 
   it("restores local defaults after testing reset from a production-profile process", () => {

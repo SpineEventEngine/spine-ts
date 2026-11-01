@@ -81,29 +81,32 @@ export const RegistryValidation = {
    * @returns A read-only descriptor-aware validation view.
    */
   view(schema: DescMessage, message: Message): Message {
-    return new Proxy(message, {
-      get(target, property, receiver) {
-        const field = schema.fields.find((candidate) => candidate.localName === property);
-        if (field === undefined) return Reflect.get(target, property, receiver) as unknown;
-        const value = RegistryValidation.value(target, field);
-        if (!getOption(field, validate)) return value;
-        const nested = RegistryValidation.messageSchema(field);
-        if (nested === undefined) return value;
-        const wrap = (entry: Message | null | undefined): Message | null | undefined => {
-          if (entry === undefined || entry === null) return entry;
-          return nested.typeName === AnySchema.typeName
-            ? RegistryValidation.opaque(entry as Any)
-            : RegistryValidation.view(nested, entry);
-        };
-        if (field.fieldKind === "list" && Array.isArray(value))
-          return value.map((entry: Message) => wrap(entry));
-        if (field.fieldKind === "map" && value && typeof value === "object")
-          return Object.fromEntries(
-            Object.entries(value).map(([key, entry]) => [key, wrap(entry as Message)]),
-          );
-        return value && typeof value === "object" ? wrap(value as Message) : value;
+    return new Proxy(
+      { ...message },
+      {
+        get(target, property, receiver) {
+          const field = schema.fields.find((candidate) => candidate.localName === property);
+          if (field === undefined) return Reflect.get(target, property, receiver) as unknown;
+          const value = RegistryValidation.value(target, field);
+          if (!getOption(field, validate)) return value;
+          const nested = RegistryValidation.messageSchema(field);
+          if (nested === undefined) return value;
+          const wrap = (entry: Message | null | undefined): Message | null | undefined => {
+            if (entry === undefined || entry === null) return entry;
+            return nested.typeName === AnySchema.typeName
+              ? RegistryValidation.opaque(entry as Any)
+              : RegistryValidation.view(nested, entry);
+          };
+          if (field.fieldKind === "list" && Array.isArray(value))
+            return value.map((entry: Message) => wrap(entry));
+          if (field.fieldKind === "map" && value && typeof value === "object")
+            return Object.fromEntries(
+              Object.entries(value).map(([key, entry]) => [key, wrap(entry as Message)]),
+            );
+          return value && typeof value === "object" ? wrap(value as Message) : value;
+        },
       },
-    });
+    );
   },
 
   /**
@@ -113,13 +116,16 @@ export const RegistryValidation = {
    * @returns A read-only view that upstream cannot unpack by type URL.
    */
   opaque(packed: Any): Any {
-    return new Proxy(packed, {
-      get(target, property, receiver) {
-        return property === "typeUrl" && target.typeUrl
-          ? "type.spine.io/!validation-opaque"
-          : (Reflect.get(target, property, receiver) as unknown);
+    return new Proxy(
+      { ...packed },
+      {
+        get(target, property, receiver) {
+          return property === "typeUrl" && target.typeUrl
+            ? "type.spine.io/!validation-opaque"
+            : (Reflect.get(target, property, receiver) as unknown);
+        },
       },
-    });
+    );
   },
 
   /**

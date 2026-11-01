@@ -30,7 +30,7 @@ import {
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
 import { SignalMetadata } from "@spine-event-engine/server";
-import { UserIdSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
   SubscriptionService,
@@ -373,7 +373,10 @@ function projectOverviewTopic() {
       type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: { case: "includeAll", value: true },
     }),
-    context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) }),
+    context: create(ActorContextSchema, {
+      ...metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) }),
+      timestamp: metadata.timestamp(),
+    }),
   });
 }
 function createProjectCommand(_commandId = "t0209-create", projectId = "t0209-project") {

@@ -22,6 +22,7 @@ import { TypeUrls, AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ErrorSchema,
   CommandIdSchema,
+  ActorContextSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
@@ -543,7 +544,7 @@ describe("@spine-event-engine/example-todo", () => {
         "task state after complete refusal fence",
       );
 
-      expect(errorType(invalidRename.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+      expect(errorType(invalidRename.status?.status)).toBe("spine.core.CommandValidationError");
       expect(
         validationDetails(invalidRename.status?.status)?.constraintViolation.length,
       ).toBeGreaterThan(0);
@@ -1217,7 +1218,7 @@ describe("@spine-event-engine/example-todo", () => {
     const invalidRename = await scope.post(RenameTaskSchema, renameTask("task-invalid", ""));
     expect(invalidRename).toMatchObject({
       kind: "error",
-      error: { type: "COMMAND_VALIDATION_ERROR" },
+      error: { type: "spine.core.CommandValidationError" },
     });
     if (invalidRename.kind !== "error") throw new Error("Expected a validation error.");
     if (invalidRename.error.$typeName !== ErrorSchema.typeName)
@@ -2197,8 +2198,9 @@ function createTaskRejectionTopic(
 }
 
 function createActorContext() {
-  return signalMetadata.actorContext({
-    actor: create(UserIdSchema, { value: "todo-user" }),
+  return create(ActorContextSchema, {
+    ...signalMetadata.actorContext({ actor: create(UserIdSchema, { value: "todo-user" }) }),
+    timestamp: signalMetadata.timestamp(),
   });
 }
 

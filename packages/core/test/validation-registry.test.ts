@@ -14,6 +14,11 @@
 
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
+import {
+  ModelNameSchema,
+  ModelRefSchema,
+  ModelRevisionSchema,
+} from "@spine-event-engine/proto/agent";
 import { describe, expect, it } from "vitest";
 import {
   ProjectCriteriaDetailSchema,
@@ -35,6 +40,28 @@ import { AnyPacker, TypeRegistry, TypeUrls, Validate } from "../src/index.js";
 const registry = new TypeRegistry([ProjectCriteriaSchema]);
 
 describe("shared validation with application types", () => {
+  it("validates frozen nested messages and annotated Any without changing the source", () => {
+    const name = Object.freeze(create(ModelNameSchema, { value: "studio-plan" }));
+    const revision = Object.freeze(create(ModelRevisionSchema, { value: "client:fixture-model" }));
+    const reference = Object.freeze(create(ModelRefSchema, { name, revision }));
+    const packed = Object.freeze(AnyPacker.pack(ProjectLabelSchema, create(ProjectLabelSchema)));
+    const envelope = Object.freeze(create(ProjectAnyEnvelopeSchema, { requiredCriteria: packed }));
+    const invalid = Object.freeze(
+      create(ModelRefSchema, {
+        name: Object.freeze(create(ModelNameSchema)),
+        revision,
+      }),
+    );
+
+    expect(Validate.message(ModelRefSchema, reference).valid).toBe(true);
+    expect(Validate.message(ProjectAnyEnvelopeSchema, envelope).valid).toBe(true);
+    expect(
+      Validate.message(ModelRefSchema, invalid).violations.map((item) => item.fieldPath?.fieldName),
+    ).toContainEqual(["name"]);
+    expect(reference.revision?.value).toBe("client:fixture-model");
+    expect(envelope.requiredCriteria?.typeUrl).toBe(packed.typeUrl);
+  });
+
   it("validates an application type in an annotated Any using the registry", () => {
     const query = create(FindProjectsSchema, {
       criteria: AnyPacker.pack(ProjectCriteriaSchema, create(ProjectCriteriaSchema, {})),

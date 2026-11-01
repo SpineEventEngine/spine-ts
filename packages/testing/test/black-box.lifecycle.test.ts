@@ -15,11 +15,8 @@
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { Client as NodeClient } from "@spine-event-engine/client-node";
-import { AppQueryHandler, Server, ServerEnvironment } from "../../server/src/index.js";
-import {
-  registerSpineMetadata,
-  spineMetadataTestAccess,
-} from "../../server/src/handler/spine-metadata-inventory.js";
+import { AppQueryHandler, Server, ServerEnvironment } from "@spine-event-engine/server";
+import { registerSpineMetadata } from "@spine-event-engine/server/spi/handler-registry";
 import "../../server/test-fixtures/generated/proto-module.js";
 // prettier-ignore
 import {
@@ -75,7 +72,6 @@ describe("BlackBox lifecycle seams", () => {
       expect(result.message[0]?.project?.name).toBe("Scoped overview");
     } finally {
       await blackBox.close();
-      spineMetadataTestAccess.clear();
     }
     expect(() => scope.query(request)).toThrow("closed");
   });

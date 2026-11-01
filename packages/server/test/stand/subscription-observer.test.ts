@@ -21,6 +21,7 @@ import {
   Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
+  TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
@@ -48,6 +49,7 @@ import {
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
 } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import { ReviewTaskAssignedSchema } from "../../test-fixtures/generated/handler-registry/events_pb.js";
 let eventSequence = 0;
 
 describe("SubscriptionObservers", () => {
@@ -419,6 +421,7 @@ describe("SubscriptionObservers", () => {
     await bus.post(
       create(EventSchema, {
         id: { value: "archived" },
+        context: eventContext(),
         message: AnyPacker.pack(
           EntityLog.EntityArchivedSchema,
           create(EntityLog.EntityArchivedSchema, {
@@ -441,6 +444,7 @@ describe("SubscriptionObservers", () => {
     await bus.post(
       create(EventSchema, {
         id: { value: "deleted" },
+        context: eventContext(),
         message: AnyPacker.pack(
           EntityLog.EntityDeletedSchema,
           create(EntityLog.EntityDeletedSchema, {
@@ -492,6 +496,7 @@ describe("SubscriptionObservers", () => {
       await bus.post(
         create(EventSchema, {
           id: { value: id },
+          context: eventContext(),
           message: AnyPacker.pack(
             schema,
             create(schema, {
@@ -574,6 +579,7 @@ describe("SubscriptionObservers", () => {
     await bus.post(
       create(EventSchema, {
         id: { value: "archive-filter" },
+        context: eventContext(),
         message: AnyPacker.pack(
           EntityLog.EntityArchivedSchema,
           create(EntityLog.EntityArchivedSchema, {
@@ -614,6 +620,7 @@ describe("SubscriptionObservers", () => {
       await bus.post(
         create(EventSchema, {
           id: { value: `${id}-${schema.typeName}` },
+          context: eventContext(),
           message: AnyPacker.pack(
             schema,
             create(schema, {
@@ -644,7 +651,7 @@ describe("SubscriptionObservers", () => {
         topic: {
           context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
           target: {
-            type: TypeUrls.derive(ProjectOverviewStateSchema),
+            type: TypeUrls.derive(ReviewTaskAssignedSchema),
             criterion: { case: "includeAll", value: true },
           },
         },
@@ -655,7 +662,10 @@ describe("SubscriptionObservers", () => {
     );
     const source = create(EventSchema, {
       id: { value: "rejected-event" },
-      message: AnyPacker.pack(ProjectOverviewStateSchema, createState("task-1", "Event", 1)),
+      message: AnyPacker.pack(
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id: "task-1", name: "Event" }),
+      ),
       context: create(EventContextSchema, {
         ...tenantContext("tenant-a"),
         rejection: create(RejectionEventContextSchema, {
@@ -670,8 +680,8 @@ describe("SubscriptionObservers", () => {
       create(EventSchema, {
         id: { value: "wrong-tenant-event" },
         message: AnyPacker.pack(
-          ProjectOverviewStateSchema,
-          createState("task-1", "Wrong tenant", 1),
+          ReviewTaskAssignedSchema,
+          create(ReviewTaskAssignedSchema, { id: "task-1", name: "Wrong tenant" }),
         ),
         context: tenantContext("tenant-b"),
       }),
@@ -702,7 +712,7 @@ describe("SubscriptionObservers", () => {
         topic: {
           context: { tenantId: domain },
           target: {
-            type: TypeUrls.derive(ProjectOverviewStateSchema),
+            type: TypeUrls.derive(ReviewTaskAssignedSchema),
             criterion: { case: "includeAll", value: true },
           },
         },
@@ -736,7 +746,7 @@ describe("SubscriptionObservers", () => {
         origin: { case: "pastMessage", value: { actorContext: { tenantId: domain } } },
       }),
     );
-    await postProjectionEvent(bus, "default-origin", create(EventContextSchema));
+    await postProjectionEvent(bus, "default-origin", eventContext());
 
     expect(received).toHaveLength(2);
     observer?.unsubscribe();
@@ -775,7 +785,11 @@ function createSystemBus(): EventBus {
 function createBus(schemas: readonly MessageSchema[] = []): EventBus {
   const storage = new InMemoryStorageFactory();
   const bus = new EventBus(new EventStore({ name: "Observer", multitenant: false }, storage));
-  eventBusAccess.registerSchemas(bus, [ProjectOverviewStateSchema, ...schemas]);
+  eventBusAccess.registerSchemas(bus, [
+    ProjectOverviewStateSchema,
+    ReviewTaskAssignedSchema,
+    ...schemas,
+  ]);
   return bus;
 }
 
@@ -814,11 +828,16 @@ function packString(value: string) {
 
 function tenantContext(tenantId: string) {
   return create(EventContextSchema, {
+    timestamp: create(TimestampSchema, { seconds: 1n }),
     origin: {
       case: "importContext",
       value: { tenantId: { kind: { case: "value", value: tenantId } } },
     },
   });
+}
+
+function eventContext() {
+  return create(EventContextSchema, { timestamp: create(TimestampSchema, { seconds: 1n }) });
 }
 
 function entityUpdateId(update: SubscriptionUpdate | undefined) {
@@ -836,8 +855,14 @@ async function postProjectionEvent(
   await bus.post(
     create(EventSchema, {
       id: { value: id },
-      message: AnyPacker.pack(ProjectOverviewStateSchema, createState(id, "Event", 1)),
-      context,
+      message: AnyPacker.pack(
+        ReviewTaskAssignedSchema,
+        create(ReviewTaskAssignedSchema, { id, name: "Event" }),
+      ),
+      context: create(EventContextSchema, {
+        ...context,
+        timestamp: create(TimestampSchema, { seconds: 1n }),
+      }),
     }),
   );
 }
@@ -864,6 +889,7 @@ async function postObservedStateChange(
           ],
         }),
       ),
+      context: eventContext(),
     }),
   );
 }
@@ -898,7 +924,7 @@ async function postStateChange(
               }),
         }),
       ),
-      ...(tenantId === undefined ? {} : { context: tenantContext(tenantId) }),
+      context: tenantId === undefined ? eventContext() : tenantContext(tenantId),
     }),
   );
 }

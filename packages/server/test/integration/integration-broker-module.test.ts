@@ -13,7 +13,7 @@
  */
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
@@ -462,7 +462,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "rolled-back" }),
-        context: create(EventContextSchema),
+        context: validEventContext(),
         message: AnyPacker.pack(
           ReviewStartedSchema,
           create(ReviewStartedSchema, { id: "rolled-back" }),
@@ -521,7 +521,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "new" }),
-        context: create(EventContextSchema),
+        context: validEventContext(),
         message: AnyPacker.pack(ReviewStartedSchema, create(ReviewStartedSchema, { id: "new" })),
       }),
     );
@@ -601,7 +601,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "ignored" }),
-        context: create(EventContextSchema),
+        context: validEventContext(),
         message: AnyPacker.pack(
           ReviewStartedSchema,
           create(ReviewStartedSchema, { id: "ignored" }),
@@ -659,7 +659,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       create(EventSchema, {
         id: create(EventIdSchema, { value: "external" }),
-        context: create(EventContextSchema, { external: true }),
+        context: validEventContext(true),
         message: AnyPacker.pack(
           ReviewTaskAssignedSchema,
           create(ReviewTaskAssignedSchema, { id: "external", name: "external" }),
@@ -726,12 +726,12 @@ describe("IntegrationBroker module", () => {
     await broker.open();
     const unknown = create(EventSchema, {
       id: create(EventIdSchema, { value: "unknown-schema" }),
-      context: create(EventContextSchema),
+      context: validEventContext(),
       message: { typeUrl: "type.example/Unknown", value: new Uint8Array() },
     });
     const undecodable = create(EventSchema, {
       id: create(EventIdSchema, { value: "undecodable-payload" }),
-      context: create(EventContextSchema),
+      context: validEventContext(),
       message: { typeUrl: TypeUrls.derive(ReviewTaskAssignedSchema), value: new Uint8Array([255]) },
     });
 
@@ -1044,11 +1044,18 @@ describe("IntegrationBroker module", () => {
 function event(id: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
-    context: create(EventContextSchema),
+    context: validEventContext(),
     message: AnyPacker.pack(
       ReviewTaskAssignedSchema,
       create(ReviewTaskAssignedSchema, { id, name: id }),
     ),
+  });
+}
+
+function validEventContext(external = false) {
+  return create(EventContextSchema, {
+    timestamp: create(TimestampSchema, { seconds: 1n }),
+    external,
   });
 }
 async function publishExternal(

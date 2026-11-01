@@ -27,7 +27,7 @@ describe("Message Board public-demo trust policy", () => {
   it("uses framework publicAccess with request-derived actor context and no example admission fixture", () => {
     const sources = [
       "examples/message-board/app/src/deployment-config.ts",
-      "examples/message-board/app/src/index.ts",
+      "examples/message-board/app/src/message-board-domain.ts",
       "examples/message-board/app/src/gateway-server.ts",
       "examples/message-board/app/src/combined-server.ts",
       "examples/message-board/web/src/browser-app.tsx",
@@ -49,7 +49,7 @@ describe("Message Board public-demo trust policy", () => {
       existsSync(join(repositoryRoot, "examples/message-board/app/src/local-session.ts")),
     ).toBe(false);
     for (const source of [
-      "examples/message-board/app/src/index.ts",
+      "examples/message-board/app/src/message-board-domain.ts",
       "examples/message-board/app/src/gateway-server.ts",
     ])
       expect(readFileSync(join(repositoryRoot, source), "utf8"), source).toContain(
