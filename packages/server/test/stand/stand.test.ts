@@ -828,7 +828,10 @@ describe("Stand", () => {
             query: current.query.bind(current),
             write: async (record: Parameters<typeof current.write>[0]) => {
               if (
-                EntityRecords.unpack(ProjectOverviewStateSchema, record).state.name === "Second"
+                (
+                  EntityRecords.unpack(ProjectOverviewStateSchema, record)
+                    .state as ProjectOverviewState
+                ).name === "Second"
               ) {
                 entered.resolve(undefined);
                 await release.promise;
@@ -933,7 +936,10 @@ describe("Stand", () => {
             read: current.read.bind(current),
             query: current.query.bind(current),
             write: (record: Parameters<typeof current.write>[0]) =>
-              EntityRecords.unpack(ProjectOverviewStateSchema, record).state.name === "Rejected"
+              (
+                EntityRecords.unpack(ProjectOverviewStateSchema, record)
+                  .state as ProjectOverviewState
+              ).name === "Rejected"
                 ? Promise.reject(new Error("write failed"))
                 : current.write(record),
           },

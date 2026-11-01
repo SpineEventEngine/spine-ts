@@ -13,12 +13,16 @@
  */
 
 import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/auth";
+import {
+  GatewayAuthenticatedSubscriptionSchema,
+  type GatewayAuthenticatedSubscription,
+} from "@spine-event-engine/proto/auth";
 import {
   SubscriptionReaderBindingSchema,
   SubscriptionIdSchema,
   SubscriptionSchema,
   TopicSchema,
+  type SubscriptionId,
 } from "@spine-event-engine/proto/client";
 import { EmptySchema, timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { ActorContextSchema, TenantIdSchema } from "@spine-event-engine/proto";
@@ -812,7 +816,7 @@ describe("DurableSubscriptionBindings", () => {
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
-        spec: RecordSpec<unknown, unknown>,
+        spec: RecordSpec<SubscriptionId, GatewayAuthenticatedSubscription>,
       ) => {
         const storage = backing.createRecordStorage(storageContext, spec);
         const queryEntries = storage.queryEntries.bind(storage);
