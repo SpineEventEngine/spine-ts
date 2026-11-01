@@ -50,6 +50,10 @@ replace or narrow that proposal.
 - Entity removal uses existing no_longer_matching with original identity; no
   delivered-ID ledger or global client-cache mutation. Per-consumer Topics.
   Event null suppresses delivery, not persistence/replay or a past delivery.
+- Within each subscription, filter execution and result delivery are sequential.
+  Filtering the next update must not begin before filtering the previous update
+  finishes; parallel filtering followed by ordered delivery is not permitted.
+  This requirement does not approve a new queue capacity or overflow policy.
 - Trusted principal/authority information must reach app-node execution through
   replaceable authentication/forwarding ports. Reject forged forwarded context.
   Public access can lack a principal; no provider-liveness promise.
