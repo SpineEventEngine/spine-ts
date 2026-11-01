@@ -3890,8 +3890,11 @@ describe("BoundedContext assembly", () => {
     });
     const context = await BoundedContext.singleTenant("Tasks").add(repository).build();
     const deliveries: string[] = [];
-    context.stand().subscribe(ProjectOverviewStateSchema, (update) => {
-      deliveries.push(update.state.name);
+    context.stand().subscribe(ProjectOverviewStateSchema, {
+      next: (update) => {
+        if (update.kind === "state") deliveries.push(update.state.name);
+      },
+      error: () => undefined,
     });
 
     const update = context.stand().update(

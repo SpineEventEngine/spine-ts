@@ -103,6 +103,22 @@ export type ReadSideOperation =
     }>
   | Readonly<{
       /**
+       * Direct in-process Stand subscription delivery.
+       */
+      kind: "direct";
+
+      /**
+       * Registered state type selected when the observer subscribed.
+       */
+      subscription: Readonly<{
+        /**
+         * State schema URL registered for this direct subscription.
+         */
+        typeUrl: string;
+      }>;
+    }>
+  | Readonly<{
+      /**
        * Direct Stand query with its caller-supplied record query.
        */
       kind: "direct";

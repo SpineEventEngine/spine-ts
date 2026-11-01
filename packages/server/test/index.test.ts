@@ -56,6 +56,8 @@ import {
   type StandReadResult,
   StandStateTypeError,
   type StandSubscription,
+  type StandObserver,
+  StandSubscriptionCapacityError,
   type StandUpdate,
   Aggregate,
   AbstractAssignee,
@@ -170,6 +172,7 @@ describe("@spine-event-engine/server", () => {
         "Agent",
         "Aggregate",
         "AlreadyPickedUp",
+        "AppQueryHandler",
         "Assign",
         "BoundedContext",
         "BoundedContextBuilder",
@@ -212,6 +215,7 @@ describe("@spine-event-engine/server", () => {
         "ManagedServerApplication",
         "ProcessManager",
         "Projection",
+        "ReadSideFilter",
         "Repository",
         "RepositoryIdentityError",
         "Server",
@@ -227,6 +231,7 @@ describe("@spine-event-engine/server", () => {
         "Stand",
         "StandConflictError",
         "StandStateTypeError",
+        "StandSubscriptionCapacityError",
         "StorageSubscriptionRegistry",
         "StateUpdateRouting",
         "ThirdPartyContext",
@@ -258,6 +263,9 @@ describe("@spine-event-engine/server", () => {
     expectTypeOf<StandReadResult>().toExtend<{ readonly state: Message }>();
     expectTypeOf<StandSubscription>().toExtend<{ readonly closed: boolean }>();
     expectTypeOf<StandUpdate>().toExtend<{ readonly typeUrl: string; readonly id: unknown }>();
+    expectTypeOf<StandUpdate["kind"]>().toEqualTypeOf<"state" | "removal">();
+    expectTypeOf<StandObserver<typeof ProjectOverviewStateSchema>["next"]>().toBeFunction();
+    expect(StandSubscriptionCapacityError).toBeTypeOf("function");
     expectTypeOf<InboxMessage>().not.toHaveProperty("claim");
     expectTypeOf<InboxMessageInput["whenReceived"]>().toEqualTypeOf<Timestamp>();
     expectTypeOf<InboxReadContinuation["whenReceived"]>().toEqualTypeOf<Timestamp>();

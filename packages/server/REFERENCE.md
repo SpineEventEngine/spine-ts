@@ -964,6 +964,9 @@ normalized query plan. `history` distinguishes an Entity state-at timestamp,
 Entity state/Event history depth, and an Agent view with its page request and
 optional cursor. Direct callers supply actor metadata, verified reader facts,
 and cancellation separately; they cannot override the operation.
+Direct subscription delivery uses `kind: "direct"` with
+`operation.subscription.typeUrl`, distinct from a one-off Stand read's
+`operation.read`.
 
 This filter uses the generated Project state and can be installed on the Bounded
 Context builder that contains its Repository:
@@ -1097,9 +1100,55 @@ callback failures are isolated from post-commit observation and other
 consumers. Native subscription updates enter the existing bounded delivery
 queue before asynchronous read policies run; a full queue closes that stream.
 For a surviving Event, policy replaces only its domain payload and retains the original envelope.
-Direct Stand subscriptions do not apply this RPC filter path. The package does
-not guarantee cluster-complete observations,
-subscription replay, event-gap repair, or exactly-once effects.
+Direct `Stand.subscribe(schema, { next, error }, options)` applies only its
+producing Bounded Context's read policies, independently for each local
+subscriber. `next` receives either `{ kind: "state", state, previousState? }`
+or `{ kind: "removal", noLongerMatching: true }`; both retain the original type
+URL, Entity ID, version, and tenant metadata. A removed prior state is omitted
+from a surviving current state. `error` receives one terminal local policy,
+callback, or capacity fault. There is no raw callback overload. Options accept
+trusted `reader` facts, `actorContext` metadata, tenant, and cancellation;
+`queueLimit` defaults to 100 waiting updates in addition to one active update.
+The application may override that waiting count per subscription. Filter calls
+and `next` completion are sequential per subscriber. Overflow closes only that
+subscriber, clears waiting updates, invalidates the active result, and reports
+`StandSubscriptionCapacityError`; committed writes and other subscribers
+continue. Unsubscribe, cancellation, and Stand close invalidate outstanding
+results without waiting for a nonsettling policy. A producer does not await
+asynchronous policy or observer completion, although CPU-heavy synchronous
+policy work still runs on the producer's Node event loop.
+Direct subscribers do not cross a Server output-filter boundary. The package
+does not guarantee cluster-complete observations, subscription replay,
+event-gap repair, or exactly-once effects.
+
+This typed local observer handles visible states, removals, and terminal faults.
+The override allows 250 waiting updates in addition to the active one:
+
+<!-- docs-snippet-path: packages/server/test/stand/stand-direct-subscription.test.ts -->
+
+```ts
+import { type Stand, type StandSubscription } from "@spine-event-engine/server";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
+
+export function observeProjects(
+  stand: Stand,
+  onState: (name: string) => void,
+  onRemoval: (id: unknown) => void,
+  onError: (error: Error) => void,
+): StandSubscription {
+  return stand.subscribe(
+    ProjectOverviewStateSchema,
+    {
+      next(update) {
+        if (update.kind === "state") onState(update.state.name);
+        else onRemoval(update.id);
+      },
+      error: onError,
+    },
+    { queueLimit: 250 },
+  );
+}
+```
 
 ### Native and managed hosting
 

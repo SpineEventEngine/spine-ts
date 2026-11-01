@@ -48,6 +48,8 @@ export {
   type StandRegisterOptions,
   type StandSubscribeOptions,
   type StandSubscription,
+  type StandObserver,
+  StandSubscriptionCapacityError,
   StandStateTypeError,
   type StandUpdate,
   type StandUpdateOptions,

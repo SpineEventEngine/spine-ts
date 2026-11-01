@@ -7,7 +7,8 @@ implemented, including dependency discovery, App Query generation, trusted reade
 forwarding, retained subscription reader binding, Server App Query execution,
 typed clients, Execute transport support, and filter installation on outward
 Entity/App Query reads, retained histories, and native Entity/Event subscription
-deliveries. Remaining work follows below.
+deliveries. Direct Stand delivery is now implemented and reviewed as described
+below; the final integrated gates remain.
 
 Each slice includes focused behavior tests, affected generated/build checks,
 format/lint/TSDoc checks, coverage inspection and the relevant existing review
@@ -16,7 +17,7 @@ one review wave before returning a correction batch. Keep detailed evidence
 outside Git. Run the unchanged full release profile and final security review
 after integration converges; a slice checkpoint does not complete this task.
 
-## M13 — Complete direct Stand subscription filtering
+## M13 — Direct Stand subscription filtering
 
 **Depends on:** M04, M08, M11–M12. **Class:** high-risk concurrency/lifecycle.
 **Paths:** direct Stand subscription delivery and its repository notification
@@ -36,14 +37,15 @@ terminates only that subscription with an explicit error, clears pending updates
 and invalidates its active result. Writes and other subscriptions continue.
 No producer-completion/backpressure redesign is needed.
 
-Provide filtered state/removal delivery with original
+Implemented filtered state/removal delivery with original
 identity/version/tenant, separately filtered previous state, a terminal error
 channel and cancellation. Keep raw repository notifications private. Filters
 apply to outward data, without changing persistence or domain Event dispatch.
-Test independent consumers, FIFO processing, cancellation and late settlements,
-first-update removal, previous-state suppression, fault isolation and the chosen
-admission policy. Update affected examples and direct subscription migration
-instructions. Complete API/style/reliability review of this remaining contract.
+Focused tests cover independent consumers, sequential processing, cancellation
+and late settlements, first-update removal, previous-state suppression, fault
+isolation and the configured admission boundary. Direct subscription migration
+instructions and a typed example are included. API, style, reliability and
+documentation review are complete; final integrated gates remain below.
 
 ## M14 — Consumer examples, migration, and release readiness
 
@@ -74,9 +76,8 @@ verification disposition.
 The maintained multi-package example, migration guides, installed/bundled
 consumer checks, and actual image build/runtime checks are complete. Workspace
 versions are aligned at `2.0.0-snapshot.26`; the version-only commit is separate
-from dependency pins, lockfile, and generated metadata updates. Remaining work
-is direct Stand filtering and its migration guidance, followed by final security
-review and the full release gate. The authorized orchestrator promptly pushes
+from dependency pins, lockfile, and generated metadata updates. Direct Stand filtering and its migration guidance are implemented and reviewed.
+Remaining work is final security review and the full release gate. The authorized orchestrator promptly pushes
 feature commits to official origin, including checkpoints/corrections; no PR,
 master write, merge, force push, or shared-ref deletion is authorized.
 

@@ -48,6 +48,11 @@ import type { Subscription, SubscriptionUpdate } from "@spine-event-engine/proto
 import { ReadSideFilterEngine } from "./read-side-filter-engine.js";
 import { SubscriptionReadFilters } from "./subscription-read-filters.js";
 import { ReadSideMessages } from "./read-side-message.js";
+import {
+  StandDirectDelivery,
+  type StandObserver,
+  type StandSourceUpdate,
+} from "./stand-direct-delivery.js";
 import type { ReadSideContext, ReadSideFilter, ReadSideOperation } from "./read-side-filter.js";
 import type { BoundedContext } from "../context/bounded-context.js";
 import {
@@ -56,6 +61,9 @@ import {
 } from "@spine-event-engine/core/spi/trusted-reader";
 
 const HANDLE_CLOSE_ERROR_LIMIT = 16;
+
+export { StandSubscriptionCapacityError } from "./stand-direct-delivery.js";
+export type { StandObserver, StandUpdate } from "./stand-direct-delivery.js";
 
 /**
  * Options for constructing a direct read-side Stand.
@@ -161,55 +169,18 @@ export interface StandReadResult<Schema extends MessageSchema = MessageSchema> {
 /**
  * Tenant metadata accepted when subscribing to entity updates.
  */
-export interface StandSubscribeOptions {
+export interface StandSubscribeOptions extends StandReadOptions {
   // prettier-ignore
 
   /**
    * Tenant slice for multitenant stands.
    */
   readonly tenantId?: TenantId;
-}
-
-/**
- * Direct in-process entity state update delivered by the Stand.
- *
- * @typeParam Schema The updated state message schema.
- */
-export interface StandUpdate<Schema extends MessageSchema = MessageSchema> {
-  // prettier-ignore
 
   /**
-   * Type URL of the entity state schema.
+   * Maximum waiting updates in addition to one active delivery; defaults to 100.
    */
-  readonly typeUrl: string;
-
-  /**
-   * Entity ID extracted from the state.
-   */
-  readonly id: unknown;
-
-  /**
-   * Cloned snapshot of the stored state before this update.
-   *
-   * Omitted when no previous state existed. Safe for subscribers to retain or
-   * mutate after delivery.
-   */
-  readonly previousState?: MessageShape<Schema>;
-
-  /**
-   * Updated entity state.
-   */
-  readonly state: MessageShape<Schema>;
-
-  /**
-   * Version associated with the updated state when supplied.
-   */
-  readonly version?: Version;
-
-  /**
-   * Tenant slice for multitenant stands.
-   */
-  readonly tenantId?: TenantId;
+  readonly queueLimit?: number;
 }
 
 /**
@@ -219,7 +190,8 @@ export interface StandSubscription {
   // prettier-ignore
 
   /**
-   * Whether this subscription has already been unsubscribed.
+   * Whether this subscription has closed by unsubscribe, cancellation, overflow,
+   * policy or callback fault, or Stand close.
    */
   readonly closed: boolean;
 
@@ -267,7 +239,7 @@ export class StandStateTypeError extends Error {
  */
 interface Subscriber<Schema extends MessageSchema = MessageSchema> {
   readonly tenantKey: string;
-  readonly callback: (update: StandUpdate<Schema>) => void;
+  readonly delivery: StandDirectDelivery<Schema>;
 }
 
 /**
@@ -957,33 +929,101 @@ export class Stand {
    *
    * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
-   * @param callback The function receiving matching state updates.
-   * @param options The tenant slice to subscribe to.
-   * @returns A handle that stops future callback delivery.
+   * @param observer Receives serial visible updates and one terminal local fault.
+   * @param options Tenant, trusted facts, cancellation, and waiting capacity.
+   * @returns A handle that invalidates pending and active delivery.
    */
   subscribe<Schema extends MessageSchema>(
     schema: Schema,
-    callback: (update: StandUpdate<Schema>) => void,
+    observer: StandObserver<Schema>,
     options: StandSubscribeOptions = {},
   ): StandSubscription {
     this.#requireOpen();
+    Stand.#requireObserver(observer);
     const registration = this.#registration(schema, "subscribe");
     const tenantKey = this.#tenantKey(options.tenantId);
-    const subscriber: Subscriber<Schema> = Object.freeze({ tenantKey, callback });
-    let closed = false;
-    registration.subscribers.add(subscriber);
+    const queueLimit = options.queueLimit ?? 100;
+    if (!Number.isSafeInteger(queueLimit) || queueLimit < 0)
+      throw new RangeError("Stand subscription queueLimit must be a nonnegative integer.");
+    const delivery = this.#subscribeDelivery(
+      schema,
+      observer,
+      options,
+      registration,
+      tenantKey,
+      queueLimit,
+    );
 
     return Object.freeze({
       get closed() {
-        return closed;
+        return delivery.closed;
       },
       unsubscribe() {
-        if (!closed) {
-          closed = true;
-          registration.subscribers.delete(subscriber);
-        }
+        delivery.close();
       },
     });
+  }
+
+  /**
+   * Rejects a raw callback or malformed JavaScript observer before registration.
+   *
+   * @param observer The runtime value supplied for direct delivery.
+   */
+  static #requireObserver(observer: unknown): void {
+    if (
+      typeof observer !== "object" ||
+      observer === null ||
+      !("next" in observer) ||
+      typeof observer.next !== "function" ||
+      !("error" in observer) ||
+      typeof observer.error !== "function"
+    )
+      throw new TypeError("Stand.subscribe requires an observer with next and error callbacks.");
+  }
+
+  /**
+   * Captures the subscriber's read facts and attaches its independent delivery queue.
+   *
+   * @typeParam Schema The registered state schema.
+   * @param schema The state schema selected by the caller.
+   * @param observer Receives visible updates or one terminal local fault.
+   * @param options Trusted reader, tenant, and cancellation at subscribe time.
+   * @param registration The Stand registration for this state schema.
+   * @param tenantKey The normalized tenant slice for delivery.
+   * @param queueLimit Maximum waiting updates after the active update.
+   * @returns The subscriber's serial delivery queue.
+   */
+  #subscribeDelivery<Schema extends MessageSchema>(
+    schema: Schema,
+    observer: StandObserver<Schema>,
+    options: StandSubscribeOptions,
+    registration: Registration<Schema>,
+    tenantKey: string,
+    queueLimit: number,
+  ): StandDirectDelivery<Schema> {
+    const captured = Stand.#snapshotRead(options);
+    const producingContext = standProducingContexts.get(this);
+    const attachment: { subscriber?: Subscriber<Schema> } = {};
+    const delivery = new StandDirectDelivery(
+      schema,
+      observer,
+      standReadFilters.get(this),
+      {
+        ...captured.readSide,
+        operation: { kind: "direct", subscription: { typeUrl: registration.typeUrl } },
+        ...(captured.tenantId === undefined ? {} : { effectiveTenant: captured.tenantId }),
+        ...(producingContext === undefined ? {} : { producingContext }),
+      },
+      queueLimit,
+      () => {
+        if (attachment.subscriber !== undefined)
+          registration.subscribers.delete(attachment.subscriber);
+      },
+      options.signal,
+    );
+    attachment.subscriber = Object.freeze({ tenantKey, delivery });
+    if (!delivery.closed) registration.subscribers.add(attachment.subscriber);
+    return delivery;
   }
 
   /**
@@ -1005,6 +1045,7 @@ export class Stand {
     this.#closing = true;
     await Promise.all([...this.#inFlight]);
     for (const registration of this.#registrations.values()) {
+      for (const subscriber of registration.subscribers) subscriber.delivery.close();
       registration.subscribers.clear();
     }
     const errors: unknown[] = this.#handleCloseErrors.splice(0);
@@ -1161,23 +1202,11 @@ export class Stand {
     },
     captured?: readonly Subscriber<Schema>[],
   ): void {
-    const errors: unknown[] = [];
     const tenantKey = this.#tenantKey(input.tenantId);
     const subscribers = captured ?? this.#tenantSubscribers(registration, tenantKey);
 
     for (const subscriber of subscribers) {
-      try {
-        subscriber.callback(Stand.#createUpdate(registration, input));
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-
-    if (errors.length === 1) {
-      throw errors[0];
-    }
-    if (errors.length > 1) {
-      throw new AggregateError(errors, "Stand subscriber delivery failed.");
+      subscriber.delivery.admit(Stand.#createUpdate(registration, input));
     }
   }
 
@@ -1302,7 +1331,7 @@ export class Stand {
       readonly tenantId: TenantId | undefined;
       readonly version: Version | undefined;
     },
-  ): StandUpdate<Schema> {
+  ): StandSourceUpdate<Schema> {
     const version = input.version === undefined ? undefined : clone(VersionSchema, input.version);
     return Object.freeze({
       typeUrl: registration.typeUrl,

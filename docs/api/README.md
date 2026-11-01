@@ -462,7 +462,8 @@ caches, catch-up, or transport startup. Built bounded contexts use repository
 metadata to register known state types with their direct read-side `Stand`.
 `Stand`, `StandOptions`, `StandRegisterOptions`, `StandReadOptions`,
 `StandReadResult`, `StandUpdateOptions`, `StandSubscribeOptions`,
-`StandUpdate`, `StandSubscription`, and `StandStateTypeError` form the
+`StandUpdate`, `StandObserver`, `StandSubscription`,
+`StandSubscriptionCapacityError`, and `StandStateTypeError` form the
 direct read-side entity-state API. A stand registers known generated state
 schemas, rejects unknown state types on read/update/subscribe, stores latest
 states through `StorageFactory`/`RecordStorage`, reads latest state by schema
@@ -470,15 +471,22 @@ and entity ID, can return the stored Spine `Version` through
 `readVersioned()`, can return storage-backed query results through
 `queryVersioned()`, can return storage-order list results through
 `readAllVersioned()`, can clear one registered state type through
-`clear(schema, options?)`, and delivers direct in-process update notifications.
+`clear(schema, options?)`, and delivers direct in-process filtered updates.
 `Stand` reads durable version and lifecycle metadata from the authoritative
 current entity record alongside the latest state.
-Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
+`subscribe(schema, { next, error }, options)` runs read policies and observer
+delivery sequentially per subscriber. It accepts up to 100 waiting updates
+beyond one active update by default; `queueLimit` overrides that waiting count.
+Overflow reports `StandSubscriptionCapacityError` only to the affected observer
+and closes that subscription without undoing a committed write. A policy may
+remove the current state, yielding a removal update with original identity;
+it may independently remove the previous state, omitting that field from a
+surviving state update. Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
 require a `tenantId` on point reads, list reads, updates, and subscriptions
 while single-tenant stands reject tenant options.
-`StandUpdate.previousState` is a copy-safe cloned snapshot of the stored state
-before the update, omitted when no prior state existed, so subscribers may
-retain or mutate it after delivery.
+`StandUpdate.previousState` is a detached, filtered prior state, omitted when
+there was no prior state or a policy removed it. Subscribers may retain or
+mutate a delivered prior state without changing storage.
 `SpineServices` adapts built-context command buses and stands to the real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. Application query declarations in a `_queries.proto` file generate grouped
@@ -489,9 +497,11 @@ and stringifier registries. `AppQueryHandler<Query, Response>` describes a concr
 server implementation. `ServerOptions.appQueries` selects concrete instances by
 exact class metadata before listening; passive metadata never activates a route.
 On direct app-node ingress, `QueryService.Execute` validates the AppQuery
-envelope and generated Q, then returns one packed paired R. Gateway forwarding
-and `ClientRequest.query` are not available yet. Internal `Server.query(generatedQ, executionContext)`
-uses the same selected handler and returns the generated R directly. Source
+envelope and generated Q, then returns one packed paired R. Browser gateways
+and coordinators forward Execute with verified reader context;
+`ClientRequest.query(generatedQ)` decodes the paired R as a typed result.
+Internal `Server.query(generatedQ, executionContext)` uses the same selected
+handler and returns the generated R directly. Source
 Entity reads use registered query-visible routes and target-specific tenant
 admission. `QueryService.Read` supports ID-filter reads for any registered state
 route and projection-state `Target.include_all = true` reads, packing

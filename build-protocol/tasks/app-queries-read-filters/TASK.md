@@ -86,54 +86,22 @@ is recorded in MILESTONES.md. Detailed execution and review records remain outsi
 
 ## Current work
 
-Shared validation, read-side RPC status mapping, unknown-subscription activation,
-metadata discovery, App Query declarations and generation, trusted reader
-forwarding, subscription reader binding, and Server App Query execution are
-implemented, including typed browser/Node clients and Execute forwarding through
-gateways and Coordinators. Server accepts explicit App Query handlers and
-supports direct app-node Execute and typed internal calls. The typed filter
-engine is implemented with detached callback inputs, exact type matching, and
-nested-message traversal. Bounded Context filters now apply to outward Entity
-reads and retained Entity/Agent histories; Server filters apply to Entity Query
-and App Query gRPC results. Native Entity and Event subscriptions now apply
-Bounded Context and Server filters after original matching and queue admission.
-Direct Stand subscription delivery and integrated release verification remain,
-as listed in MILESTONES.md.
+App Query generation, discovery, registration, validation, trusted reader
+forwarding, app-node execution and typed clients are implemented. Entity and App
+Query results, retained histories, native Entity/Event subscriptions, and direct
+Stand subscriptions now apply their installed read-side filters at the specified
+boundaries. Direct Stand subscribers use the approved independent configurable
+queue and sequential observer delivery, including removals and terminal errors.
 
-The App Query preflight passed generated/source compatibility checks, builds,
-focused tests, documentation and independent review. Installed model and handler
-packages were checked through generation, compilation and relocation. Trusted
-reader forwarding and retained identity passed focused transport, lifecycle,
-restart, and isolation checks and independent review. Server dispatch and scoped
-internal calls passed focused validation, isolation, cancellation, shutdown, and
-review checks. Typed clients passed installed browser/Node consumer checks;
-Execute passed browser, native, Coordinator, and real managed-child checks,
-including trusted reader forwarding and invalid input. Full release coverage
-and final security review remain due after implementation.
+Focused behavior, type, documentation and generated-output checks passed with
+independent API, reliability, maintainability and documentation review. The
+maintained multi-package example and installed/bundled consumer checks cover
+metadata discovery and App Query usage. Actual container build/runtime checks
+passed for the packaging work before the direct Stand changes. Workspace versions
+are aligned at `2.0.0-snapshot.26`, with the required version-only commit separate
+from dependency and lockfile updates.
 
-The filter engine passed focused root/nested traversal, container removal, byte
-isolation, deep traversal, and readonly-context checks. Independent review
-confirmed the corrections for shared bytes and unnecessary parent-tree copies.
-
-Read-boundary integration passed focused boundary, history, cancellation, actor
-context, sanitized-status and data-isolation checks, followed by independent
-API, reliability, style and documentation review. The remaining direct
-subscription admission decision is recorded in MILESTONES.md.
-
-Native subscription filtering passed focused Entity/Event, reader isolation,
-activation-race, cancellation, transport and client recovery checks. Independent
-API, reliability, style and documentation review is complete, including a
-regression preventing delivery after cancellation between policy settlement
-and output. Direct Stand filtering remains pending the admission decision.
-
-The maintained multi-package Message Board example and current migration guides
-now cover generated handler metadata, App Query Q/R calls, Bounded Context and
-Server read policies, trusted-reader facts, and native Entity/Event delivery.
-Focused example, installed-consumer, bundled-discovery, generation, source
-quality, and documentation checks passed independent API, reliability, style,
-and documentation review. All workspace versions are aligned at
-`2.0.0-snapshot.26`, with the required version-only commit and separate dependency
-updates. Actual container build and runtime checks passed, including installed
-metadata imports, application/gateway startup, browser subscriptions, and clean
-shutdown. Direct Stand filtering still awaits its admission decision. Final
-security review and the full release verification remain pending.
+Final integrated security review and the full release verification remain pending.
+The standalone performance investigation found that the existing one-Event,
+1,000-Process-Manager workload exceeded its one-second target even without a
+subscriber. The queue change does not establish that throughput target.

@@ -3718,9 +3718,12 @@ describe("repository signal routing", () => {
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     let attempts = 0;
-    context.stand().subscribe(ProjectStateSchema, () => {
-      attempts += 1;
-      throw new Error("subscriber failure");
+    context.stand().subscribe(ProjectStateSchema, {
+      next: () => {
+        attempts += 1;
+        throw new Error("subscriber failure");
+      },
+      error: () => undefined,
     });
 
     try {
@@ -3752,9 +3755,15 @@ describe("repository signal routing", () => {
       .add(createProcessManagerAssignRepository())
       .build();
     let notifications = 0;
-    context.stand().subscribe(ProjectQueueStateSchema, () => {
-      notifications++;
-      throw new Error("process-manager command subscriber failed");
+    const subscriberErrors: Error[] = [];
+    context.stand().subscribe(ProjectQueueStateSchema, {
+      next: () => {
+        notifications++;
+        throw new Error("process-manager command subscriber failed");
+      },
+      error: (error) => {
+        subscriberErrors.push(error);
+      },
     });
 
     try {
@@ -3770,7 +3779,9 @@ describe("repository signal routing", () => {
       ).resolves.toBeUndefined();
 
       expect(RoutingProcessManager.commandCalls).toBe(2);
-      expect(notifications).toBe(2);
+      expect(notifications).toBe(1);
+      expect(subscriberErrors).toHaveLength(1);
+      expect(subscriberErrors[0]?.message).toBe("process-manager command subscriber failed");
       await expect(context.stand().read(ProjectQueueStateSchema, "pm-subscriber")).resolves.toEqual(
         create(ProjectQueueStateSchema, {
           id: "pm-subscriber",
@@ -3791,13 +3802,19 @@ describe("repository signal routing", () => {
       .build();
     let original = 0;
     let late = 0;
-    context.stand().subscribe(ProjectStateSchema, () => {
-      original += 1;
+    context.stand().subscribe(ProjectStateSchema, {
+      next: () => {
+        original += 1;
+      },
+      error: () => undefined,
     });
     const command = context.commandBus().post(createAggregateCommand("command-late", "late-id"));
     await factory.reached;
-    context.stand().subscribe(ProjectStateSchema, () => {
-      late += 1;
+    context.stand().subscribe(ProjectStateSchema, {
+      next: () => {
+        late += 1;
+      },
+      error: () => undefined,
     });
     factory.release();
     try {
@@ -7030,8 +7047,11 @@ describe("repository signal routing", () => {
     const version = create(VersionSchema, { number: 4 });
     const lifecycle = { archived: true, deleted: false };
     const observed: ProjectOverviewState[] = [];
-    stand.subscribe(ProjectOverviewStateSchema, (update) => {
-      observed.push(update.state);
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: (update) => {
+        if (update.kind === "state") observed.push(update.state);
+      },
+      error: () => undefined,
     });
     factory.enableGate = true;
     try {
@@ -10360,9 +10380,15 @@ describe("repository signal routing", () => {
       .add(createProcessManagerReactRepository())
       .build();
     let notifications = 0;
-    context.stand().subscribe(ProjectQueueStateSchema, () => {
-      notifications++;
-      throw new Error("process-manager event subscriber failed");
+    const subscriberErrors: Error[] = [];
+    context.stand().subscribe(ProjectQueueStateSchema, {
+      next: () => {
+        notifications++;
+        throw new Error("process-manager event subscriber failed");
+      },
+      error: (error) => {
+        subscriberErrors.push(error);
+      },
     });
 
     try {
@@ -10378,7 +10404,9 @@ describe("repository signal routing", () => {
       ).resolves.toBeUndefined();
 
       expect(RoutingProcessManager.eventCalls).toBe(2);
-      expect(notifications).toBe(2);
+      expect(notifications).toBe(1);
+      expect(subscriberErrors).toHaveLength(1);
+      expect(subscriberErrors[0]?.message).toBe("process-manager event subscriber failed");
       await expect(context.stand().read(ProjectQueueStateSchema, "pm-subscriber")).resolves.toEqual(
         create(ProjectQueueStateSchema, {
           id: "pm-subscriber",
@@ -12967,8 +12995,11 @@ describe("repository signal routing", () => {
       .add(createExecutingProjectionRepository())
       .build();
     const updates: ProjectOverviewState[] = [];
-    context.stand().subscribe(ProjectOverviewStateSchema, (update) => {
-      updates.push(update.state);
+    context.stand().subscribe(ProjectOverviewStateSchema, {
+      next: (update) => {
+        if (update.kind === "state") updates.push(update.state);
+      },
+      error: () => undefined,
     });
 
     await context.eventBus().post(createProjectCreated("event-subscribed", "task-subscribed"));
@@ -13492,8 +13523,11 @@ describe("repository signal routing", () => {
     const updates: ProjectOverviewState[] = [];
     context.stand().subscribe(
       ProjectOverviewStateSchema,
-      (update) => {
-        updates.push(update.state);
+      {
+        next: (update) => {
+          if (update.kind === "state") updates.push(update.state);
+        },
+        error: () => undefined,
       },
       { tenantId: createTenantId("tenant-a") },
     );

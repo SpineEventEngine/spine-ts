@@ -14,9 +14,14 @@
 
 import { clone, create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
-import { EventSchema, VersionSchema } from "@spine-event-engine/proto";
+import {
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
+  VersionSchema,
+} from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
   ColumnTypes,
@@ -58,6 +63,8 @@ import {
 } from "../../src/bus/event-bus.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { tenant } from "../tenant-fixture.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+import { ProjectCreatedSchema } from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
 
 const observedEventBusSubscriptions = vi.hoisted(
   () => [] as { readonly closed: boolean; unsubscribe(): void }[],
@@ -657,14 +664,14 @@ describe("Stand", () => {
     const secondBus = new EventBus(
       new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
     );
-    eventBusAccess.registerSchemas(firstBus, [ProjectOverviewStateSchema]);
-    eventBusAccess.registerSchemas(secondBus, [ProjectOverviewStateSchema]);
+    eventBusAccess.registerSchemas(firstBus, [ProjectCreatedSchema]);
+    eventBusAccess.registerSchemas(secondBus, [ProjectCreatedSchema]);
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "shared-events" }),
       topic: {
         id: { value: "events" },
         target: {
-          type: TypeUrls.derive(ProjectOverviewStateSchema),
+          type: TypeUrls.derive(ProjectCreatedSchema),
           criterion: { case: "includeAll", value: true },
         },
       },
@@ -706,7 +713,12 @@ describe("Stand", () => {
 
     expect(stand.stateTypes()).toEqual([TypeUrls.derive(ProjectOverviewStateSchema)]);
     await expect(stand.read(ProjectStateSchema, "task-1")).rejects.toThrow(StandStateTypeError);
-    expect(() => stand.subscribe(ProjectStateSchema, () => undefined)).toThrow(StandStateTypeError);
+    expect(() =>
+      stand.subscribe(ProjectStateSchema, {
+        next: () => undefined,
+        error: () => undefined,
+      }),
+    ).toThrow(StandStateTypeError);
   });
 
   it("rejects registration when a schema has no inferred ID field", () => {
@@ -727,8 +739,11 @@ describe("Stand", () => {
     });
     const updates: StandUpdate<typeof ProjectOverviewStateSchema>[] = [];
     stand.register(ProjectOverviewStateSchema);
-    const subscription = stand.subscribe(ProjectOverviewStateSchema, (update) => {
-      updates.push(update);
+    const subscription = stand.subscribe(ProjectOverviewStateSchema, {
+      next: (update) => {
+        updates.push(update);
+      },
+      error: () => undefined,
     });
     const state = create(ProjectOverviewStateSchema, {
       id: "task-1",
@@ -756,8 +771,9 @@ describe("Stand", () => {
     expect(updates[0]?.id).toBe("task-1");
     expect(updates[0]?.typeUrl).toBe(TypeUrls.derive(ProjectOverviewStateSchema));
     expect(updates[0]?.version).toEqual(create(VersionSchema, { number: 3 }));
-    expect(updates[0]?.state).toEqual(stored);
-    expect(updates[0]?.state).not.toBe(stored);
+    expect(updates[0]).toMatchObject({ kind: "state", state: stored });
+    if (updates[0]?.kind !== "state") throw new Error("Expected state delivery.");
+    expect(updates[0].state).not.toBe(stored);
   });
 
   it("surfaces copy-safe previous state to direct subscribers", async () => {
@@ -767,8 +783,11 @@ describe("Stand", () => {
     });
     const updates: StandUpdate<typeof ProjectOverviewStateSchema>[] = [];
     stand.register(ProjectOverviewStateSchema);
-    stand.subscribe(ProjectOverviewStateSchema, (update) => {
-      updates.push(update);
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: (update) => {
+        updates.push(update);
+      },
+      error: () => undefined,
     });
 
     await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
@@ -776,9 +795,10 @@ describe("Stand", () => {
     const current = await stand.read(ProjectOverviewStateSchema, "task-1");
 
     expect(updates).toHaveLength(2);
-    expect(updates[0]?.previousState).toBeUndefined();
+    if (updates[0]?.kind !== "state") throw new Error("Expected first state delivery.");
+    expect(updates[0].previousState).toBeUndefined();
     const second = updates[1];
-    if (second?.previousState === undefined) {
+    if (second?.kind !== "state" || second.previousState === undefined) {
       throw new Error("Expected second Stand update with previous state.");
     }
     expect(second.previousState).toEqual(createState("task-1", "First"));
@@ -798,7 +818,14 @@ describe("Stand", () => {
       storageFactory,
     });
     stand.register(ProjectOverviewStateSchema);
-    stand.subscribe(ProjectOverviewStateSchema, () => undefined, { tenantId: tenant("tenant-b") });
+    stand.subscribe(
+      ProjectOverviewStateSchema,
+      {
+        next: () => undefined,
+        error: () => undefined,
+      },
+      { tenantId: tenant("tenant-b") },
+    );
 
     await stand.update(ProjectOverviewStateSchema, createState("task-1", "Tenant A first"), {
       tenantId: tenant("tenant-a"),
@@ -809,7 +836,14 @@ describe("Stand", () => {
 
     expect(storageFactory.readCount).toBe(0);
 
-    stand.subscribe(ProjectOverviewStateSchema, () => undefined, { tenantId: tenant("tenant-a") });
+    stand.subscribe(
+      ProjectOverviewStateSchema,
+      {
+        next: () => undefined,
+        error: () => undefined,
+      },
+      { tenantId: tenant("tenant-a") },
+    );
     await stand.update(ProjectOverviewStateSchema, createState("task-1", "Tenant A third"), {
       tenantId: tenant("tenant-a"),
     });
@@ -1102,8 +1136,11 @@ describe("Stand", () => {
     });
     let deliveries = 0;
     stand.register(ProjectOverviewStateSchema);
-    const subscription = stand.subscribe(ProjectOverviewStateSchema, () => {
-      deliveries += 1;
+    const subscription = stand.subscribe(ProjectOverviewStateSchema, {
+      next: () => {
+        deliveries += 1;
+      },
+      error: () => undefined,
     });
 
     await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
@@ -1129,11 +1166,17 @@ describe("Stand", () => {
     let secondDeliveries = 0;
     firstStand.register(ProjectOverviewStateSchema);
     secondStand.register(ProjectOverviewStateSchema);
-    firstStand.subscribe(ProjectOverviewStateSchema, () => {
-      firstDeliveries += 1;
+    firstStand.subscribe(ProjectOverviewStateSchema, {
+      next: () => {
+        firstDeliveries += 1;
+      },
+      error: () => undefined,
     });
-    secondStand.subscribe(ProjectOverviewStateSchema, () => {
-      secondDeliveries += 1;
+    secondStand.subscribe(ProjectOverviewStateSchema, {
+      next: () => {
+        secondDeliveries += 1;
+      },
+      error: () => undefined,
     });
 
     await firstStand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
@@ -1198,7 +1241,7 @@ describe("Stand", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("delivers to a snapshot when subscribers mutate subscriptions during delivery", async () => {
+  it("cancels a captured subscriber and defers a newly attached subscriber", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -1207,24 +1250,33 @@ describe("Stand", () => {
     const subscriptions: StandSubscription[] = [];
     let lateSubscribed = false;
     stand.register(ProjectOverviewStateSchema);
-    stand.subscribe(ProjectOverviewStateSchema, () => {
-      deliveries.push("first");
-      subscriptions[0]?.unsubscribe();
-      if (!lateSubscribed) {
-        lateSubscribed = true;
-        stand.subscribe(ProjectOverviewStateSchema, () => {
-          deliveries.push("late");
-        });
-      }
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: () => {
+        deliveries.push("first");
+        subscriptions[0]?.unsubscribe();
+        if (!lateSubscribed) {
+          lateSubscribed = true;
+          stand.subscribe(ProjectOverviewStateSchema, {
+            next: () => {
+              deliveries.push("late");
+            },
+            error: () => undefined,
+          });
+        }
+      },
+      error: () => undefined,
     });
     subscriptions.push(
-      stand.subscribe(ProjectOverviewStateSchema, () => {
-        deliveries.push("second");
+      stand.subscribe(ProjectOverviewStateSchema, {
+        next: () => {
+          deliveries.push("second");
+        },
+        error: () => undefined,
       }),
     );
 
     await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
-    expect(deliveries).toEqual(["first", "second"]);
+    expect(deliveries).toEqual(["first"]);
 
     deliveries.length = 0;
     await stand.update(ProjectOverviewStateSchema, createState("task-1", "Second"));
@@ -1364,15 +1416,21 @@ describe("Stand", () => {
     stand.register(ProjectOverviewStateSchema);
     stand.subscribe(
       ProjectOverviewStateSchema,
-      (update) => {
-        tenantAUpdates.push(update.state.name);
+      {
+        next: (update) => {
+          if (update.kind === "state") tenantAUpdates.push(update.state.name);
+        },
+        error: () => undefined,
       },
       { tenantId: tenant("tenant-a") },
     );
     stand.subscribe(
       ProjectOverviewStateSchema,
-      (update) => {
-        tenantBUpdates.push(update.state.name);
+      {
+        next: (update) => {
+          if (update.kind === "state") tenantBUpdates.push(update.state.name);
+        },
+        error: () => undefined,
       },
       { tenantId: tenant("tenant-b") },
     );
@@ -1413,9 +1471,13 @@ describe("Stand", () => {
       stand.read(ProjectOverviewStateSchema, "task-1", { tenantId: tenant("tenant-a") }),
     ).rejects.toThrow(/single-tenant/i);
     expect(() =>
-      stand.subscribe(ProjectOverviewStateSchema, () => undefined, {
-        tenantId: tenant("tenant-a"),
-      }),
+      stand.subscribe(
+        ProjectOverviewStateSchema,
+        { next: () => undefined, error: () => undefined },
+        {
+          tenantId: tenant("tenant-a"),
+        },
+      ),
     ).toThrow(/single-tenant/i);
   });
 
@@ -1427,63 +1489,97 @@ describe("Stand", () => {
     let firstUpdate: StandUpdate<typeof ProjectOverviewStateSchema> | undefined;
     let secondUpdate: StandUpdate<typeof ProjectOverviewStateSchema> | undefined;
     stand.register(ProjectOverviewStateSchema);
-    stand.subscribe(ProjectOverviewStateSchema, (update) => {
-      firstUpdate = update;
-      update.state.name = "changed by first subscriber";
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: (update) => {
+        if (update.kind !== "state") throw new Error("Expected state delivery.");
+        firstUpdate = update;
+        update.state.name = "changed by first subscriber";
+      },
+      error: () => undefined,
     });
-    stand.subscribe(ProjectOverviewStateSchema, (update) => {
-      secondUpdate = update;
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: (update) => {
+        secondUpdate = update;
+      },
+      error: () => undefined,
     });
 
     await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"));
 
-    expect(firstUpdate?.state.name).toBe("changed by first subscriber");
-    expect(secondUpdate?.state.name).toBe("First");
-    expect(secondUpdate?.state).not.toBe(firstUpdate?.state);
+    expect(firstUpdate).toMatchObject({
+      kind: "state",
+      state: { name: "changed by first subscriber" },
+    });
+    expect(secondUpdate).toMatchObject({ kind: "state", state: { name: "First" } });
+    if (firstUpdate?.kind !== "state" || secondUpdate?.kind !== "state")
+      throw new Error("Expected two state deliveries.");
+    expect(secondUpdate.state).not.toBe(firstUpdate.state);
     await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toMatchObject({
       name: "First",
     });
   });
 
-  it("continues delivery when subscribers throw and reports delivery failures", async () => {
+  it("contains a callback fault to its subscription after the state commits", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     let delivered = 0;
+    const errors: Error[] = [];
     stand.register(ProjectOverviewStateSchema);
-    stand.subscribe(ProjectOverviewStateSchema, () => {
-      throw new Error("first subscriber failed");
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: () => {
+        throw new Error("first subscriber failed");
+      },
+      error: (error) => {
+        errors.push(error);
+      },
     });
-    stand.subscribe(ProjectOverviewStateSchema, () => {
-      delivered += 1;
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: () => {
+        delivered += 1;
+      },
+      error: () => undefined,
     });
 
     await expect(
       stand.update(ProjectOverviewStateSchema, createState("task-1", "First")),
-    ).rejects.toThrow("first subscriber failed");
+    ).resolves.toBeUndefined();
     expect(delivered).toBe(1);
+    expect(errors.map((error) => error.message)).toEqual(["first subscriber failed"]);
     await expect(stand.read(ProjectOverviewStateSchema, "task-1")).resolves.toMatchObject({
       name: "First",
     });
   });
 
-  it("aggregates multiple subscriber delivery failures", async () => {
+  it("reports peer callback faults independently without rejecting the writer", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
     stand.register(ProjectOverviewStateSchema);
-    stand.subscribe(ProjectOverviewStateSchema, () => {
-      throw new Error("first subscriber failed");
+    const errors: string[] = [];
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: () => {
+        throw new Error("first subscriber failed");
+      },
+      error: (error) => {
+        errors.push(error.message);
+      },
     });
-    stand.subscribe(ProjectOverviewStateSchema, () => {
-      throw new Error("second subscriber failed");
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: () => {
+        throw new Error("second subscriber failed");
+      },
+      error: (error) => {
+        errors.push(error.message);
+      },
     });
 
     await expect(
       stand.update(ProjectOverviewStateSchema, createState("task-1", "First")),
-    ).rejects.toThrow(AggregateError);
+    ).resolves.toBeUndefined();
+    expect(errors).toEqual(["first subscriber failed", "second subscriber failed"]);
   });
 
   it("uses generated clone APIs for state and version payloads", async () => {
@@ -1495,8 +1591,11 @@ describe("Stand", () => {
     const expectedVersion = clone(VersionSchema, version);
     let observed: StandUpdate<typeof ProjectOverviewStateSchema> | undefined;
     stand.register(ProjectOverviewStateSchema);
-    stand.subscribe(ProjectOverviewStateSchema, (update) => {
-      observed = update;
+    stand.subscribe(ProjectOverviewStateSchema, {
+      next: (update) => {
+        observed = update;
+      },
+      error: () => undefined,
     });
 
     await stand.update(ProjectOverviewStateSchema, createState("task-1", "First"), { version });
@@ -1537,7 +1636,15 @@ function createState(id: string, name: string): ProjectOverviewState {
 function createSubscriptionEvent(id: string) {
   return create(EventSchema, {
     id: { value: id },
-    message: AnyPacker.pack(ProjectOverviewStateSchema, createState(id, "Event payload")),
+    context: create(EventContextSchema, {
+      producerId: AnyPacker.pack(ProjectIdSchema, create(ProjectIdSchema, { value: id })),
+      timestamp: create(TimestampSchema, { seconds: 1n }),
+      version: create(VersionSchema, { number: 1 }),
+    }),
+    message: AnyPacker.pack(
+      ProjectCreatedSchema,
+      create(ProjectCreatedSchema, { id, name: "Event payload" }),
+    ),
   });
 }
 
@@ -1549,13 +1656,21 @@ async function postStateChange(
   await eventBus.post(
     create(EventSchema, {
       id: { value: `state-change-${String((state as { id?: unknown }).id)}` },
+      context: create(EventContextSchema, {
+        producerId: AnyPacker.pack(
+          ProjectIdSchema,
+          create(ProjectIdSchema, { value: String((state as { id?: unknown }).id) }),
+        ),
+        timestamp: create(TimestampSchema, { seconds: 1n }),
+        version: create(VersionSchema, { number: 1 }),
+      }),
       message: AnyPacker.pack(
         EntityLog.EntityStateChangedSchema,
         create(EntityLog.EntityStateChangedSchema, {
           entity: {
             id: AnyPacker.pack(
-              StringValueSchema,
-              create(StringValueSchema, { value: String((state as { id?: unknown }).id) }),
+              ProjectIdSchema,
+              create(ProjectIdSchema, { value: String((state as { id?: unknown }).id) }),
             ),
             typeUrl: TypeUrls.derive(schema),
           },
@@ -1563,10 +1678,12 @@ async function postStateChange(
           signalId: [
             {
               id: AnyPacker.pack(
-                StringValueSchema,
-                create(StringValueSchema, { value: "test-signal" }),
+                EventIdSchema,
+                create(EventIdSchema, {
+                  value: `state-change-${String((state as { id?: unknown }).id)}`,
+                }),
               ),
-              typeUrl: TypeUrls.derive(StringValueSchema),
+              typeUrl: TypeUrls.derive(EventIdSchema),
             },
           ],
         }),

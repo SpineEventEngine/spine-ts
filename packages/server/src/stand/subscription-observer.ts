@@ -54,7 +54,7 @@ import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/ser
 
 import { eventBusAccess, type EventBus, type EventSubscription } from "../bus/event-bus.js";
 import { EventOriginFilters } from "./event-origin-filter.js";
-import type { StandUpdate } from "./stand.js";
+import type { StandSourceUpdate as StandUpdate } from "./stand-direct-delivery.js";
 
 /* eslint-disable @typescript-eslint/no-extraneous-class */
 
