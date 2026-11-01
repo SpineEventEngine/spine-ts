@@ -107,7 +107,7 @@ export const RegistryValidation = {
   },
 
   /**
-   * Masks annotated packed payload types from upstream validation without changing presence.
+   * Returns a validation view that hides packed payload types without changing presence.
    *
    * @param packed Original packed value.
    * @returns A view whose type URL prevents upstream unpacking.
