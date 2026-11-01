@@ -78,54 +78,67 @@ export const RegistryValidation = {
    *
    * @param schema Descriptor of the generated message.
    * @param message Generated message with Protobuf-ES oneof cases.
-   * @returns A read-only descriptor-aware validation view.
+   * @returns A descriptor-aware view for this validation call.
    */
   view(schema: DescMessage, message: Message): Message {
-    return new Proxy(
-      { ...message },
-      {
-        get(target, property, receiver) {
-          const field = schema.fields.find((candidate) => candidate.localName === property);
-          if (field === undefined) return Reflect.get(target, property, receiver) as unknown;
-          const value = RegistryValidation.value(target, field);
-          if (!getOption(field, validate)) return value;
-          const nested = RegistryValidation.messageSchema(field);
-          if (nested === undefined) return value;
-          const wrap = (entry: Message | null | undefined): Message | null | undefined => {
-            if (entry === undefined || entry === null) return entry;
-            return nested.typeName === AnySchema.typeName
-              ? RegistryValidation.opaque(entry as Any)
-              : RegistryValidation.view(nested, entry);
-          };
-          if (field.fieldKind === "list" && Array.isArray(value))
-            return value.map((entry: Message) => wrap(entry));
-          if (field.fieldKind === "map" && value && typeof value === "object")
-            return Object.fromEntries(
-              Object.entries(value).map(([key, entry]) => [key, wrap(entry as Message)]),
-            );
-          return value && typeof value === "object" ? wrap(value as Message) : value;
-        },
+    return new Proxy(RegistryValidation.target(schema, message), {
+      get(_target, property) {
+        const field = schema.fields.find((candidate) => candidate.localName === property);
+        if (field === undefined) return Reflect.get(message, property) as unknown;
+        const value = RegistryValidation.value(message, field);
+        if (!getOption(field, validate)) return value;
+        const nested = RegistryValidation.messageSchema(field);
+        if (nested === undefined) return value;
+        const wrap = (entry: Message | null | undefined): Message | null | undefined => {
+          if (entry === undefined || entry === null) return entry;
+          return nested.typeName === AnySchema.typeName
+            ? RegistryValidation.opaque(entry as Any)
+            : RegistryValidation.view(nested, entry);
+        };
+        if (field.fieldKind === "list" && Array.isArray(value))
+          return value.map((entry: Message) => wrap(entry));
+        if (field.fieldKind === "map" && value && typeof value === "object")
+          return Object.fromEntries(
+            Object.entries(value).map(([key, entry]) => [key, wrap(entry as Message)]),
+          );
+        return value && typeof value === "object" ? wrap(value as Message) : value;
       },
-    );
+    });
   },
 
   /**
-   * Returns an opaque read view of annotated packed payloads without changing presence.
+   * Masks annotated packed payload types from upstream validation without changing presence.
    *
    * @param packed Original packed value.
-   * @returns A read-only view that upstream cannot unpack by type URL.
+   * @returns A view whose type URL prevents upstream unpacking.
    */
   opaque(packed: Any): Any {
-    return new Proxy(
-      { ...packed },
-      {
-        get(target, property, receiver) {
-          return property === "typeUrl" && target.typeUrl
-            ? "type.spine.io/!validation-opaque"
-            : (Reflect.get(target, property, receiver) as unknown);
-        },
+    return new Proxy(create(AnySchema, { typeUrl: packed.typeUrl, value: packed.value }), {
+      get(_target, property) {
+        return property === "typeUrl" && packed.typeUrl
+          ? "type.spine.io/!validation-opaque"
+          : (Reflect.get(packed, property) as unknown);
       },
-    );
+    });
+  },
+
+  /**
+   * Copies descriptor-named fields without reflecting source property descriptors.
+   * @param schema Descriptor governing the validation view.
+   * @param message Input whose field values must remain visible to Buf presence checks.
+   * @returns A writable target with the input's actual field presence and oneof cases.
+   */
+  target(schema: DescMessage, message: Message): Message {
+    const target = create(schema) as Message & Record<string, unknown>;
+    const source = message as Message & Record<string, unknown>;
+    for (const field of schema.fields) {
+      if (field.oneof) {
+        target[field.oneof.localName] = source[field.oneof.localName];
+      } else if (source[field.localName] !== undefined) {
+        target[field.localName] = source[field.localName];
+      }
+    }
+    return target;
   },
 
   /**

@@ -1,4 +1,4 @@
-# Remaining App Query and read-side filter work
+# App Query and read-side filter milestones
 
 The [approved proposal](PROPOSAL.md) and [requirements ledger](TASK.md) remain
 binding. Shared validation, Command/Event admission, read-service status mapping,
@@ -7,8 +7,8 @@ implemented, including dependency discovery, App Query generation, trusted reade
 forwarding, retained subscription reader binding, Server App Query execution,
 typed clients, Execute transport support, and filter installation on outward
 Entity/App Query reads, retained histories, and native Entity/Event subscription
-deliveries. Direct Stand delivery is now implemented and reviewed as described
-below; the final integrated gates remain.
+deliveries. Direct Stand delivery is implemented and reviewed as described below. Release
+acceptance requires the integrated gates for the final branch commit.
 
 Each slice includes focused behavior tests, affected generated/build checks,
 format/lint/TSDoc checks, coverage inspection and the relevant existing review
@@ -79,7 +79,9 @@ versions are aligned at `2.0.0-snapshot.26`; the version-only commit is separate
 from dependency pins, lockfile, and generated metadata updates. Direct Stand filtering and its migration guidance are implemented and reviewed.
 Integrated source security review is complete with no actionable findings.
 The dependency audit correction and its focused compatibility and security
-reviews are complete. Remaining work is the full release gate. The authorized orchestrator promptly pushes
+reviews are complete. The final validator correction passed focused API, reliability and security
+review. Release acceptance requires the unchanged full release gate and final-commit
+CI. The authorized orchestrator promptly pushes
 feature commits to official origin, including checkpoints/corrections; no PR,
 master write, merge, force push, or shared-ref deletion is authorized.
 

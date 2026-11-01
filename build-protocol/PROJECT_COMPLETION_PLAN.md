@@ -3,7 +3,9 @@
 Current human-authorized implementation: [App Queries and read-side filtering](tasks/app-queries-read-filters/TASK.md).
 The approved proposal includes automatic metadata discovery, validation/status
 corrections, trusted reader context, and Entity/Event read-side filters. This
-feature branch starts from official master3135caaa2; implementation is active.
+feature branch starts from official master3135caaa2. Implementation and specialist
+reviews are complete; release acceptance requires the local release gate and CI
+for the final branch commit.
 
 ## Current Repository Workflow
 

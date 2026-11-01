@@ -1,6 +1,7 @@
 # App Queries and read-side filtering
 
-Status: active implementation.
+Status: implementation and specialist reviews complete. Release acceptance requires
+the local release gate and CI to pass for the final branch commit.
 
 Branch: `app-queries-read-filters`. Baseline: official `origin/master`
 `3135caaa202cdc2de71d249f2859cc4c4329b8c3`.
@@ -103,7 +104,9 @@ from dependency and lockfile updates.
 
 Final integrated source security review is complete with no actionable findings.
 The dependency audit correction and its compatibility and security reviews are
-complete. The full release verification remains pending.
+complete. The final shared-validator correction also passed focused API, reliability
+and security review. Final acceptance requires the unchanged full release profile
+and the branch commit’s Build and trial-publication checks to pass.
 The standalone performance investigation found that the existing one-Event,
 1,000-Process-Manager workload exceeded its one-second target even without a
 subscriber. The queue change does not establish that throughput target.
