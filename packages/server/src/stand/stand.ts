@@ -768,13 +768,12 @@ export class Stand {
     options: StandUpdateOptions,
     metadata?: EntityMetadata,
   ): Promise<PreparedStandUpdate> {
-    const finish = this.#beginOperation();
+    const onFinish = this.#beginOperation();
     let storage: CurrentStorageLease | undefined;
     let releaseUpdate: (() => void) | undefined;
     try {
       const registration = this.#registration(schema, "update");
-      if (metadata !== undefined && metadata.schema !== registration.schema)
-        throw new Error("Repository metadata does not match the Entity state schema.");
+      Stand.#requireUpdateMetadata(registration, metadata);
       const snapshot = Stand.#snapshotUpdateOptions(options);
       const stateCopy = clone(schema, state);
       const tenantId = await this.#checkedTenantId(options.tenantId);
@@ -789,16 +788,36 @@ export class Stand {
         metadata,
         storage,
         () => {
-          releaseUpdate?.();
-          finish();
+          Stand.#finishUpdate(releaseUpdate, onFinish);
         },
       );
     } catch (error) {
       storage?.release();
-      releaseUpdate?.();
-      finish();
+      Stand.#finishUpdate(releaseUpdate, onFinish);
       throw error;
     }
+  }
+
+  /**
+   * Checks repository metadata before preparing the state update.
+   *
+   * @param registration Registered state metadata.
+   * @param metadata Repository metadata, when supplied.
+   */
+  static #requireUpdateMetadata(registration: Registration, metadata?: EntityMetadata): void {
+    if (metadata !== undefined && metadata.schema !== registration.schema)
+      throw new Error("Repository metadata does not match the Entity state schema.");
+  }
+
+  /**
+   * Releases the update reservation and completes its tracked Stand operation.
+   *
+   * @param onReleaseUpdate Per-Entity reservation release, when acquired.
+   * @param onFinish Completes the tracked Stand operation.
+   */
+  static #finishUpdate(onReleaseUpdate: (() => void) | undefined, onFinish: () => void): void {
+    onReleaseUpdate?.();
+    onFinish();
   }
 
   /**
