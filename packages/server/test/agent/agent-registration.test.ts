@@ -42,6 +42,7 @@ import {
   EventSchema,
   MessageIdSchema,
   TenantIdSchema,
+  type Event,
 } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
@@ -107,8 +108,8 @@ class WaitingSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReply
     return create(SupportReplyDraftedSchema, { agent: this.id, reply: "Ready" });
   }
 
-  readBoundHistory(): Promise<HistoryPage<unknown>> {
-    return this.fullHistory({ pageSize: 1 });
+  readBoundHistory(): Promise<HistoryPage<Event>> {
+    return this.domainEventHistory({ pageSize: 1 });
   }
 }
 
@@ -348,12 +349,9 @@ describe("Agent registration readiness", () => {
     factory.release();
     const page = await admitted;
     expect(page.items).toHaveLength(1);
-    const entry = page.items[0] as
-      import("@spine-event-engine/proto/agent").AgentHistoryEntry | undefined;
-    expect(entry?.item.case).toBe("domainEvent");
-    if (entry?.item.case !== "domainEvent" || entry.item.value.message === undefined)
-      throw new Error("Expected a retained domain Event.");
-    expect(AnyPacker.unpack(entry.item.value.message, SupportReplyDraftedSchema).reply).toBe(
+    const entry = page.items[0];
+    if (entry?.message === undefined) throw new Error("Expected a retained domain Event.");
+    expect(AnyPacker.unpack(entry.message, SupportReplyDraftedSchema).reply).toBe(
       "Protected visible",
     );
     expect(observed[0]?.producingContext).toBe(context);
