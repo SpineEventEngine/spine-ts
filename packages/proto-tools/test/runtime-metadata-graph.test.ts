@@ -228,6 +228,62 @@ describe("runtime metadata graph", () => {
     );
   });
 
+  it("rejects malformed required dependency declarations before selecting metadata", () => {
+    const app = graphRoot();
+    packageAt(app, "app", { model: "1.0.0" });
+    const model = join(app, "node_modules/model");
+    packageAt(model, "model", {}, true);
+    writeFileSync(
+      join(model, "package.json"),
+      JSON.stringify({ name: "model", version: "1.0.0", dependencies: { child: 42 } }),
+    );
+
+    expect(() => RuntimeMetadataGraph.resolve(app)).toThrow(
+      /invalid runtime dependencies .*node_modules\/model\/package\.json/u,
+    );
+  });
+
+  it("reports a missing declared runtime package instead of treating it as optional", () => {
+    const app = graphRoot();
+    packageAt(app, "app", { missing: "1.0.0" });
+
+    expect(() => RuntimeMetadataGraph.resolve(app)).toThrow(/missing/u);
+  });
+
+  it("rejects installed packages without a usable manifest identity", () => {
+    const app = graphRoot();
+    packageAt(app, "app", { model: "1.0.0" });
+    const model = join(app, "node_modules/model");
+    packageAt(model, "model", {}, true);
+    const manifest = join(model, "package.json");
+    writeFileSync(manifest, JSON.stringify([]));
+    expect(() => RuntimeMetadataGraph.resolve(app)).toThrow(/invalid package manifest/u);
+    writeFileSync(manifest, JSON.stringify({ version: "1.0.0" }));
+    expect(() => RuntimeMetadataGraph.resolve(app)).toThrow(/invalid package identity/u);
+  });
+
+  it("rejects stale and malformed published Proto claims before combining packages", () => {
+    const app = graphRoot();
+    packageAt(app, "app", { model: "1.0.0" });
+    const model = join(app, "node_modules/model");
+    packageAt(model, "model", {}, true);
+    const claim = join(model, "spine-proto-manifest.json");
+    writeFileSync(
+      claim,
+      JSON.stringify({ packageName: "other", packageVersion: "1.0.0", protoFiles: [] }),
+    );
+    expect(() => RuntimeMetadataGraph.resolve(app)).toThrow(/model has stale Proto manifest/u);
+
+    writeFileSync(
+      claim,
+      JSON.stringify({ packageName: "model", packageVersion: "1.0.0", protoFiles: [42] }),
+    );
+    expect(() => RuntimeMetadataGraph.resolve(app)).toThrow(/model has stale Proto manifest/u);
+
+    writeFileSync(claim, JSON.stringify(["domain/shared.proto"]));
+    expect(() => RuntimeMetadataGraph.resolve(app)).toThrow(/model has malformed Proto manifest/u);
+  });
+
   it("uses the staged metadata for a dependency generated in the same transaction", () => {
     const app = graphRoot();
     packageAt(app, "app", { model: "1.0.0" });
@@ -306,6 +362,60 @@ describe("runtime metadata graph", () => {
         writer,
       ).record.source,
     ).not.toBe(assets().record.source);
+  });
+
+  it("rejects invalid compiler configuration and output paths before publishing adapters", () => {
+    const app = graphRoot();
+    packageAt(app, "app", {});
+    const project = join(app, "tsconfig.json");
+    const bootstrap = join(app, "generated/spine-bootstrap.ts");
+    const render = () =>
+      RuntimeMetadataAssets.render(
+        project,
+        bootstrap,
+        bootstrap,
+        RuntimeMetadataGraph.resolve(app),
+        new GeneratedRegistryWriter(),
+      );
+    writeFileSync(project, JSON.stringify({ extends: [42], compilerOptions: { outDir: "dist" } }));
+    expect(render).toThrow(/Invalid adapter project:/u);
+
+    writeFileSync(
+      project,
+      JSON.stringify({ compilerOptions: { rootDir: "src", outDir: "../outside" } }),
+    );
+    expect(render).toThrow(/Generated adapter output escapes application/u);
+  });
+
+  it("records an absent optional package without adding a missing adapter input", () => {
+    const app = graphRoot();
+    packageAt(app, "app", {});
+    const manifest = join(app, "package.json");
+    const packageJson = JSON.parse(readFileSync(manifest, "utf8")) as Record<string, unknown>;
+    writeFileSync(
+      manifest,
+      JSON.stringify({ ...packageJson, optionalDependencies: { optionalModel: "1.0.0" } }),
+    );
+    const project = join(app, "tsconfig.json");
+    writeFileSync(project, JSON.stringify({ compilerOptions: { outDir: "dist" } }));
+    const bootstrap = join(app, "generated/spine-bootstrap.ts");
+    const discovered = RuntimeMetadataGraph.resolve(app);
+    const assets = RuntimeMetadataAssets.render(
+      project,
+      bootstrap,
+      bootstrap,
+      discovered,
+      new GeneratedRegistryWriter(),
+    );
+    const record = JSON.parse(assets.record.source) as {
+      edges: { name: string; resolved: string | null }[];
+      inputs: { path: string }[];
+    };
+
+    expect(record.edges).toEqual([{ requester: ".", name: "optionalModel", resolved: null }]);
+    expect(record.inputs.map(({ path }) => path)).not.toContain(
+      "node_modules/optionalModel/package.json",
+    );
   });
 
   it("rejects two installations of one package instead of selecting a version", () => {

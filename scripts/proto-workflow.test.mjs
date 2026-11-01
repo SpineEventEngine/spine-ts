@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -139,9 +140,9 @@ describe("internal fixture Buf boundary", () => {
 });
 
 describe("clean proto-tools bootstrap", () => {
-  it("generates through the bootstrap when the compiled proto-tools output is absent", () => {
+  it("generates a real model fixture when the compiled proto-tools output is absent", () => {
     const root = process.cwd();
-    const isolated = mkdtempSync(join(tmpdir(), "spine-clean-bootstrap-"));
+    const isolated = realpathSync(mkdtempSync(join(tmpdir(), "spine-clean-bootstrap-")));
     const clone = join(isolated, "repo");
     const worktree = spawnSync("git", ["worktree", "add", "--detach", clone, "HEAD"], {
       cwd: root,
@@ -155,9 +156,30 @@ describe("clean proto-tools bootstrap", () => {
       });
       if (install.status !== 0) throw new Error(`${install.stdout}${install.stderr}`);
       rmSync(join(clone, "packages/proto-tools/dist"), { recursive: true, force: true });
-      const result = spawnSync("pnpm", ["proto:generate"], { cwd: clone, encoding: "utf8" });
-      if (result.status !== 0) throw new Error(`${result.stdout}${result.stderr}`);
-      expect(result.status).toBe(0);
+      const fixture = join(clone, "packages/testing/test-fixtures");
+      const executable = prepareProtoToolsBootstrap(clone);
+      try {
+        const result = spawnSync(process.execPath, [executable, "generate"], {
+          cwd: fixture,
+          encoding: "utf8",
+        });
+        if (result.status !== 0) throw new Error(`${result.stdout}${result.stderr}`);
+        const states = readFileSync(join(fixture, "generated/project_states_pb.ts"), "utf8");
+        const query = readFileSync(join(fixture, "generated/project_states_query.ts"), "utf8");
+        const module = readFileSync(join(fixture, "generated/proto-module.ts"), "utf8");
+        const manifest = JSON.parse(
+          readFileSync(join(fixture, "spine-proto-manifest.json"), "utf8"),
+        );
+        expect(states).toContain("export const ProjectOverviewSchema");
+        expect(query).toContain("export const ProjectOverviewQuery");
+        expect(query).toContain('"priority": { field: ProjectOverviewSchema.field["priority"]');
+        expect(module).toContain("testingTestFixturesProtoModule");
+        expect(manifest.generatedExports["project_states.proto"]).toBe(
+          "generated/project_states_pb.js",
+        );
+      } finally {
+        releaseProtoToolsBootstrap(clone);
+      }
       expect(
         readdirSync(join(clone, "packages/proto-tools/node_modules/.cache")),
       ).not.toContainEqual(expect.stringMatching(/^spine-proto-tools-bootstrap-/u));

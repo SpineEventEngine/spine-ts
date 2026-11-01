@@ -40,6 +40,7 @@ import {
 } from "@spine-event-engine/proto";
 import {
   QueryResponseSchema,
+  type AppQuery,
   AppQueryResponseSchema,
   EntityStateWithVersionSchema,
   QueryIdSchema,
@@ -107,6 +108,82 @@ vi.mock("@connectrpc/connect-web", () => ({
 }));
 
 describe("Client", () => {
+  it("rejects unusable Event selections and first-update deadlines before transport", async () => {
+    let calls = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport(() => {
+        calls++;
+        return create(ResponseSchema);
+      }),
+    });
+    const command = create(CreateProjectSchema, { id: "selection-1", name: "Selection" });
+    await expect(
+      client.asGuest().postAndSubscribe(CreateProjectSchema, command, {}),
+    ).rejects.toThrow("At least one Event or rejection schema is required.");
+    await expect(
+      client.asGuest().postAndSubscribe(CreateProjectSchema, command, {
+        events: [ProjectCreatedSchema],
+        firstUpdateTimeoutMs: 0,
+        onFirstUpdateTimeout: () => undefined,
+      }),
+    ).rejects.toThrow(
+      "Client subscription first update timeout must be 1..2147483647 milliseconds.",
+    );
+    await expect(
+      client.asGuest().postAndSubscribe(CreateProjectSchema, command, {
+        events: [ProjectCreatedSchema],
+        firstUpdateTimeoutMs: 1,
+      }),
+    ).rejects.toThrow("Subscription first update timeout requires onFirstUpdateTimeout.");
+    await expect(
+      client.asGuest().postAndSubscribe(CreateProjectSchema, command, {
+        events: [ProjectCreatedSchema],
+        activationTimeoutMs: 0,
+      }),
+    ).rejects.toThrow("Client subscription activation timeout must be 1..2147483647 milliseconds.");
+    await expect(
+      client.asGuest().createSubscription([ProjectCreatedSchema], {
+        kind: "entity",
+        authoritativeQuery: () =>
+          create(QuerySchema, {
+            id: create(QueryIdSchema, { value: "entity-recovery" }),
+            target: create(TargetSchema, {
+              type: TypeUrls.derive(ProjectOverviewStateSchema),
+              criterion: { case: "includeAll", value: true },
+            }),
+            context: create(ActorContextSchema),
+          }),
+      } as never),
+    ).rejects.toThrow("Grouped subscriptions require kind: 'event'.");
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "client-options-topic" }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ProjectCreatedSchema),
+        criterion: { case: "includeAll", value: true },
+      }),
+    });
+    await expect(
+      client.asGuest().createSubscription(topic, {
+        kind: "event",
+        firstUpdateTimeoutMs: "soon",
+      } as never),
+    ).rejects.toThrow("Subscription first update timeout must be a number.");
+    expect(calls).toBe(0);
+    await client.close();
+  });
+
+  it("does not activate a cancelled Event group", async () => {
+    const calls: string[] = [];
+    const client = Client.usingTransport({ transport: groupedTransport(calls, []) });
+    const group = await client
+      .asGuest()
+      .createSubscription([ProjectCreatedSchema, ProjectRegisteredSchema], { kind: "event" });
+    await group.cancel();
+    await expect(group.activate()).rejects.toThrow("cancelled");
+    expect(calls).toEqual([]);
+    await client.close();
+  });
+
   it("activates each distinct selected Event type before one Command post", async () => {
     const calls: string[] = [];
     const topics: Topic[] = [];
@@ -4320,6 +4397,51 @@ describe("Client", () => {
     expect(result.message[0]?.project?.name).toBe("Ready");
     expect(result.response).toBeDefined();
     await client.close();
+  });
+
+  it("keeps concurrent App Query envelopes separate while the caller reuses one request", async () => {
+    const pending = Promise.withResolvers<Message>();
+    const inputs: AppQuery[] = [];
+    const transport = unaryTransport((method, input) => {
+      if (method.name !== "Execute") return create(QueryResponseSchema);
+      inputs.push(input as AppQuery);
+      return pending.promise;
+    });
+    const first = Client.usingTransport({ transport });
+    const second = Client.usingTransport({ transport });
+    const request = create(GetProjectOverview.querySchema, {
+      project: create(ProjectIdSchema, { value: "project-shared" }),
+    });
+    const results = [
+      first.onBehalfOf("reader-a").query(request),
+      second.onBehalfOf("reader-b").query(request),
+    ];
+    await vi.waitFor(() => {
+      expect(inputs).toHaveLength(2);
+    });
+    request.project = create(ProjectIdSchema, { value: "project-changed" });
+    expect(inputs.map((input) => input.context?.actor?.value)).toEqual(["reader-a", "reader-b"]);
+    expect(inputs[0]?.id?.value).not.toBe(inputs[1]?.id?.value);
+    for (const input of inputs) {
+      if (input.message === undefined) throw new Error("Expected packed App Query.");
+      expect(AnyPacker.unpack(input.message, GetProjectOverview_QuerySchema).project?.value).toBe(
+        "project-shared",
+      );
+    }
+    pending.resolve(
+      create(AppQueryResponseSchema, {
+        response: create(ResponseSchema),
+        message: [
+          AnyPacker.pack(
+            GetProjectOverview_ResponseSchema,
+            create(GetProjectOverview_ResponseSchema),
+          ),
+        ],
+      }),
+    );
+    expect((await Promise.all(results)).map((result) => result.message)).toHaveLength(2);
+    await first.close();
+    await second.close();
   });
 
   it("accepts an empty App Query result and rejects extra, wrong, or undecodable results", async () => {

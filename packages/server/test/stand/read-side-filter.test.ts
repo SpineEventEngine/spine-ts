@@ -672,6 +672,74 @@ describe("ReadSideFilter", () => {
     await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
   });
 
+  it("rejects malformed replacement containers without changing the source view", async () => {
+    const source = create(ProjectIssuesViewSchema, {
+      projectId: "project-4",
+      issues: [create(ProjectIssueViewSchema, { id: "issue-4" })],
+      issueByKey: { main: create(ProjectIssueViewSchema, { id: "issue-4" }) },
+    });
+    class MalformedContainer extends ReadSideFilter<typeof ProjectIssuesViewSchema> {
+      constructor(private readonly field: "issues" | "issueByKey" | "primary") {
+        super(ProjectIssuesViewSchema, { nested: true });
+      }
+      filter(value: ProjectIssuesView): ProjectIssuesView {
+        (value as unknown as Record<string, unknown>)[this.field] =
+          this.field === "issues" ? {} : this.field === "issueByKey" ? [] : 42;
+        return value;
+      }
+    }
+    for (const [field, diagnostic] of [
+      ["issues", "Invalid repeated field"],
+      ["issueByKey", "Invalid message map"],
+      ["primary", "Invalid nested message"],
+    ] as const) {
+      await expect(
+        new ReadSideFilterEngine([new MalformedContainer(field)], registry).apply(
+          ProjectIssuesViewSchema,
+          source,
+          context,
+        ),
+      ).rejects.toThrow(diagnostic);
+    }
+    expect(source.issues[0]?.id).toBe("issue-4");
+    expect(source.issueByKey.main?.id).toBe("issue-4");
+    expect(source.primary).toBeUndefined();
+  });
+
+  it("rejects accessor and special-object source fields before invoking a policy", async () => {
+    let getterCalls = 0;
+    let policyCalls = 0;
+    class Inspect extends ReadSideFilter<typeof ProjectIssueViewSchema> {
+      constructor() {
+        super(ProjectIssueViewSchema);
+      }
+      filter(value: ProjectIssueView): ProjectIssueView {
+        policyCalls++;
+        return value;
+      }
+    }
+    const accessor = create(ProjectIssueViewSchema, { id: "issue-accessor" });
+    Object.defineProperty(accessor, "title", {
+      enumerable: true,
+      get() {
+        getterCalls++;
+        return "private";
+      },
+    });
+    const special = create(ProjectIssueViewSchema, { id: "issue-special" });
+    (special as unknown as { title: unknown }).title = new Date();
+    const engine = new ReadSideFilterEngine([new Inspect()], registry);
+
+    await expect(engine.apply(ProjectIssueViewSchema, accessor, context)).rejects.toThrow(
+      "accessor property",
+    );
+    await expect(engine.apply(ProjectIssueViewSchema, special, context)).rejects.toThrow(
+      "unsupported object",
+    );
+    expect(getterCalls).toBe(0);
+    expect(policyCalls).toBe(0);
+  });
+
   it("traverses a deep valid chain without call-stack recursion", async () => {
     const first = create(ProjectIssueViewSchema, { id: "start" });
     let current = first;

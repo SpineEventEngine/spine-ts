@@ -3016,6 +3016,109 @@ describe("repository signal routing", () => {
     await context.close();
   });
 
+  it("omits policy-hidden retained state and Event history without erasing the source", async () => {
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    class HideHistoryState extends ReadSideFilter<typeof ProjectStateSchema> {
+      constructor() {
+        super(ProjectStateSchema);
+      }
+      filter(state: ProjectState, context: ReadSideContext): ProjectState | null {
+        return context.operation.kind === "history" ? null : state;
+      }
+    }
+    class HideHistoryEvent extends ReadSideFilter<typeof ProjectCreatedSchema> {
+      constructor() {
+        super(ProjectCreatedSchema);
+      }
+      filter(event: ProjectCreated, context: ReadSideContext): ProjectCreated | null {
+        return context.operation.kind === "history" ? null : event;
+      }
+    }
+    const repository = createExecutingRepository();
+    repository.setStateHistoryEnabled(true);
+    const context = await BoundedContext.singleTenant("HiddenHistory")
+      .add(repository)
+      .addReadSideFilter(new HideHistoryState())
+      .addReadSideFilter(new HideHistoryEvent())
+      .build();
+    try {
+      await context.commandBus().post(createAggregateCommand("hidden-history", "hidden-entity"));
+      const entity = ExecutingProjectAggregate.latest;
+      if (entity === undefined) throw new Error("Expected restored Aggregate.");
+      expect(await entity.readStateHistory(1)).toEqual([]);
+      expect(await entity.readEventHistory(1)).toEqual([]);
+      expect(
+        await entity.readStateAt(create(TimestampSchema, { seconds: 4_000_000_000n })),
+      ).toBeUndefined();
+      const raw = new CurrentRecordTestStorage({
+        context: { name: "HiddenHistory", multitenant: false },
+        storageFactory: factory,
+        stateSchema: ProjectStateSchema,
+        stateHistory: true,
+        eventHistory: true,
+      });
+      expect(await raw.readStates("hidden-entity")).toHaveLength(1);
+      expect(await raw.readEvents("hidden-entity")).toHaveLength(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("passes the admitted tenant to each protected retained-history policy", async () => {
+    const observed: ReadSideContext[] = [];
+    class TenantState extends ReadSideFilter<typeof ProjectStateSchema> {
+      constructor() {
+        super(ProjectStateSchema);
+      }
+      filter(state: ProjectState, context: ReadSideContext): ProjectState {
+        observed.push(context);
+        return state;
+      }
+    }
+    class TenantEvent extends ReadSideFilter<typeof ProjectCreatedSchema> {
+      constructor() {
+        super(ProjectCreatedSchema);
+      }
+      filter(event: ProjectCreated, context: ReadSideContext): ProjectCreated {
+        observed.push(context);
+        return event;
+      }
+    }
+    const index = TenantIndexes.fromFactory(new InMemoryStorageFactory());
+    const repository = createExecutingRepository();
+    repository.setStateHistoryEnabled(true);
+    const context = await BoundedContext.multitenant("TenantHistoryPolicies")
+      .withTenantIndex(index)
+      .add(repository)
+      .addReadSideFilter(new TenantState())
+      .addReadSideFilter(new TenantEvent())
+      .build();
+    try {
+      await index.keep(createTenantId("history-tenant"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("tenant-history", "tenant-entity", "Task", "history-tenant"));
+      const entity = ExecutingProjectAggregate.latest;
+      if (entity === undefined) throw new Error("Expected restored Aggregate.");
+      await entity.readStateAt(create(TimestampSchema, { seconds: 4_000_000_000n }));
+      await entity.readStateHistory(1);
+      await entity.readEventHistory(1);
+      expect(observed.map(({ operation }) => operation.kind)).toEqual([
+        "history",
+        "history",
+        "history",
+      ]);
+      expect(observed.map(({ effectiveTenant }) => effectiveTenant)).toEqual([
+        createTenantId("history-tenant"),
+        createTenantId("history-tenant"),
+        createTenantId("history-tenant"),
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("passes current handler actor metadata to protected history without inventing a principal", async () => {
     const observed: ReadSideContext[] = [];
     class StatePolicy extends ReadSideFilter<typeof ProjectStateSchema> {

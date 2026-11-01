@@ -620,6 +620,16 @@ describe("@spine-event-engine/core type registry", () => {
     );
   });
 
+  it("rejects a same-name module that silently drops a declared dependency", () => {
+    const shared = module("example.shared", [FieldPathSchema]);
+    const complete = module("example.application", [UserIdSchema], [shared]);
+    const missingDependency = module("example.application", [UserIdSchema]);
+
+    expect(() => TypeRegistry.from(complete, missingDependency)).toThrow(
+      'Proto module conflict for "example.application".',
+    );
+  });
+
   it("dynamically unpacks only exact registered type URLs", () => {
     const registry = TypeRegistry.from(module("example.application", [UserIdSchema]));
     const message = create(UserIdSchema, { value: "user-1" });

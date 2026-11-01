@@ -366,6 +366,38 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
     ).toThrow("finite number");
   });
 
+  it("rejects noncanonical or wrong-type values across query column scalar families", () => {
+    for (const [field, value, expected] of [
+      [FieldValuesSchema.field.text, 7, "must be a string"],
+      [FieldValuesSchema.field.enabled, "true", "must be a boolean"],
+      [FieldValuesSchema.field.bytesValue, "AQI=", "must be a byte array"],
+      [FieldValuesSchema.field.floatValue, "1", "must be a finite number"],
+      [FieldValuesSchema.field.uint64Value, -1n, "uint64 range"],
+      [FieldValuesSchema.field.int32Value, 2 ** 31, "declared integer range"],
+    ] as const)
+      expect(() => Stringifiers.forField(field).toString(value)).toThrow(expected);
+
+    expect(() =>
+      Stringifiers.forField(FieldValuesSchema.field.doubleValue).fromString("1.0"),
+    ).toThrow("canonical number");
+    expect(() =>
+      Stringifiers.forField(FieldValuesSchema.field.floatValue).fromString("0.10000000149011612"),
+    ).toThrow("canonical float32 number");
+    expect(() =>
+      Stringifiers.forField(FieldValuesSchema.field.bytesValue).fromString("AQI"),
+    ).toThrow("canonical base64");
+    const boolean = Stringifiers.forField(FieldValuesSchema.field.enabled);
+    expect(boolean.toString(false)).toBe("false");
+    expect(boolean.fromString("false")).toBe(false);
+    const float = Stringifiers.forField(FieldValuesSchema.field.floatValue);
+    expect(float.toString(0)).toBe("0");
+    expect(float.fromString("0")).toBe(0);
+    expect(() => float.fromString("Infinity")).toThrow("finite number");
+    expect(
+      Stringifiers.forField(FieldValuesSchema.field.uint64Value).toString(2n ** 64n - 1n),
+    ).toBe("18446744073709551615");
+  });
+
   it("preserves signed zero for float and double fields", () => {
     for (const field of [FieldValuesSchema.field.floatValue, FieldValuesSchema.field.doubleValue]) {
       const stringifier = Stringifiers.forField(field);

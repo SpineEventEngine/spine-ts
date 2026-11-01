@@ -120,6 +120,58 @@ describe("NodeCoordinator", () => {
     );
     expect(observed).toEqual(["reader-a"]);
   });
+  it("rejects authenticated managed reads and subscriptions without a proof issuer", async () => {
+    let reads = 0;
+    const replica = await backend("missing-reader-issuer", {
+      read: () => {
+        reads++;
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+    });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
+
+    await expect(
+      createClient(QueryService, transport).read(coordinatorQuery()),
+    ).rejects.toMatchObject({
+      code: Code.Internal,
+    });
+    await expect(
+      createClient(SubscriptionService, transport).subscribe(coordinatorTopic()),
+    ).rejects.toMatchObject({ code: Code.Internal });
+    expect(reads).toBe(0);
+    expect(replica.subscriptions()).toBe(0);
+  });
+  it("forwards explicitly public managed reads and subscriptions without a proof issuer", async () => {
+    let reads = 0;
+    const replica = await backend("public-without-issuer", {
+      read: () => {
+        reads++;
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({}) } },
+    });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
+    await createClient(QueryService, transport).read(coordinatorQuery());
+    const subscription = await createClient(SubscriptionService, transport).subscribe(
+      coordinatorTopic(),
+    );
+    expect(subscription.id?.value).toBeTruthy();
+    expect(reads).toBe(1);
+    expect(replica.subscriptions()).toBe(1);
+  });
   it("reissues distinct Subscribe, Activate and Cancel proofs for managed children", async () => {
     const observed: string[] = [];
     const replica = await backend("proved-subscriptions", {
@@ -831,6 +883,67 @@ describe("NodeCoordinator", () => {
     expect((failure as ConnectError).code).toBe(Code.NotFound);
     expect((failure as ConnectError).findDetails(ErrorSchema)).toEqual([detail]);
     expect(replica.activations()).toBe(1);
+  });
+
+  it("keeps unknown Cancel idempotent but reports unknown Activate before child work", async () => {
+    const replica = await backend("unknown-logical");
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const unknown = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "unknown-logical" }),
+      topic: coordinatorTopic(),
+    });
+
+    await expect(client.cancel(unknown)).resolves.toBeDefined();
+    const failure = await client
+      .activate(unknown)
+      [Symbol.asyncIterator]()
+      .next()
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(failure).toMatchObject({ code: Code.NotFound });
+    expect((failure as ConnectError).findDetails(ErrorSchema)).toMatchObject([
+      {
+        type: "spine.client.SubscriptionValidationError",
+        code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+      },
+    ]);
+    expect(replica.cancellations()).toBe(0);
+    expect(replica.activations()).toBe(0);
+  });
+
+  it("retries failed child cleanup before an explicit Cancel", async () => {
+    const replica = await backend("activation-cleanup-retry", {
+      activateError: new ConnectError("native activation unavailable", Code.Unavailable),
+      cancelFailures: 1,
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    await expect(client.activate(subscription)[Symbol.asyncIterator]().next()).rejects.toThrow();
+    expect(replica.activations()).toBe(1);
+    expect(replica.cancellations()).toBe(2);
+
+    await expect(client.cancel(subscription)).resolves.toBeDefined();
+    expect(replica.cancellations()).toBe(2);
   });
 
   it("cancels active native streams when the public subscription stream aborts", async () => {

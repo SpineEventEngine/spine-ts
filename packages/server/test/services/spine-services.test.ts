@@ -17,14 +17,18 @@ import { compressionGzip, createGrpcTransport } from "@connectrpc/connect-node";
 import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
+  BytesValueSchema,
   AnySchema,
   DoubleValueSchema,
+  FloatValueSchema,
+  Int64ValueSchema,
   EmptySchema,
   FieldMaskSchema,
   Int32ValueSchema,
   StringValueSchema,
   TimestampSchema,
   UInt32ValueSchema,
+  UInt64ValueSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
 import {
@@ -142,6 +146,12 @@ import {
 } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
+  ProjectLeadSchema,
+  ProjectOverviewStateSchema as CoreProjectOverviewStateSchema,
+  ProjectOverviewWithMetricsStateSchema,
+  ProjectStatus,
+} from "../../../../packages/core/test-fixtures/generated/project_states_pb.js";
+import {
   type ProjectOverviewState,
   ProjectOverviewStateSchema,
   ProjectEnvelopeStateSchema,
@@ -208,6 +218,10 @@ class TaskProjection extends Projection<string, typeof ProjectOverviewStateSchem
 }
 
 class EnvelopeProjection extends Projection<Any, typeof ProjectEnvelopeStateSchema> {}
+
+class MetricsProjection extends Projection<string, typeof ProjectOverviewWithMetricsStateSchema> {}
+
+class ColumnTypeProjection extends Projection<string, typeof CoreProjectOverviewStateSchema> {}
 
 class RejectingTaskAggregate extends Aggregate<string, typeof ProjectStateSchema> {
   assignTask(): never {
@@ -782,6 +796,220 @@ describe("SpineServices", () => {
       expect(responseErrorMessage(invalidResponse)).toBe(
         'QueryService.Read column filter "priority" has the wrong value type.',
       );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("selects typed numeric columns with both strict and inclusive upper bounds", async () => {
+    const context = await BoundedContext.singleTenant("UpperBoundQueries")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    for (const [id, priority] of [
+      ["low", 1],
+      ["middle", 2],
+      ["high", 3],
+    ] as const)
+      await context.stand().update(ProjectOverviewStateSchema, createState(id, id, priority));
+    const server = await startServices(context);
+    try {
+      const client = createClient(QueryService, createGrpcTransport({ baseUrl: server.baseUrl }));
+      const strict = await client.read(
+        createColumnFilterQuery("priority", packInt32(2), {
+          operator: Filter_Operator.LESS_THAN,
+        }),
+      );
+      const inclusive = await client.read(
+        createColumnFilterQuery("priority", packInt32(2), {
+          operator: Filter_Operator.LESS_OR_EQUAL,
+        }),
+      );
+      expect(strict.response?.status?.status.case).toBe("ok");
+      expect(
+        strict.message.map((item) => unpackProjectOverviewState(item.state ?? packMissing())?.id),
+      ).toEqual(["low"]);
+      expect(
+        inclusive.message.map(
+          (item) => unpackProjectOverviewState(item.state ?? packMissing())?.id,
+        ),
+      ).toEqual(["low", "middle"]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("selects a real metrics projection through each declared numeric column type", async () => {
+    const context = await BoundedContext.singleTenant("NumericMetricQueries")
+      .add(
+        new Repository({
+          entityType: MetricsProjection,
+          schema: ProjectOverviewWithMetricsStateSchema,
+        }),
+      )
+      .build();
+    const selected = create(ProjectOverviewWithMetricsStateSchema, {
+      id: "metrics-1",
+      doubleValue: 1.5,
+      floatValue: 1.25,
+      uint64Value: 7n,
+      fixed64Value: 11n,
+      uint32Value: 13,
+      fixed32Value: 17,
+      sfixed64Value: -19n,
+      sint64Value: -23n,
+    });
+    await context.stand().update(ProjectOverviewWithMetricsStateSchema, selected);
+    await context
+      .stand()
+      .update(
+        ProjectOverviewWithMetricsStateSchema,
+        create(ProjectOverviewWithMetricsStateSchema, { id: "metrics-other" }),
+      );
+    const server = await startServices(context);
+    try {
+      const client = createClient(QueryService, createGrpcTransport({ baseUrl: server.baseUrl }));
+      const checks = [
+        [
+          "double_value",
+          AnyPacker.pack(DoubleValueSchema, create(DoubleValueSchema, { value: 1.5 })),
+        ],
+        [
+          "float_value",
+          AnyPacker.pack(FloatValueSchema, create(FloatValueSchema, { value: 1.25 })),
+        ],
+        [
+          "uint64_value",
+          AnyPacker.pack(UInt64ValueSchema, create(UInt64ValueSchema, { value: 7n })),
+        ],
+        [
+          "fixed64_value",
+          AnyPacker.pack(UInt64ValueSchema, create(UInt64ValueSchema, { value: 11n })),
+        ],
+        [
+          "uint32_value",
+          AnyPacker.pack(UInt32ValueSchema, create(UInt32ValueSchema, { value: 13 })),
+        ],
+        [
+          "fixed32_value",
+          AnyPacker.pack(UInt32ValueSchema, create(UInt32ValueSchema, { value: 17 })),
+        ],
+        [
+          "sfixed64_value",
+          AnyPacker.pack(Int64ValueSchema, create(Int64ValueSchema, { value: -19n })),
+        ],
+        [
+          "sint64_value",
+          AnyPacker.pack(Int64ValueSchema, create(Int64ValueSchema, { value: -23n })),
+        ],
+      ] as const;
+      for (const [column, packed] of checks) {
+        const query = createColumnFilterQuery(column, packed);
+        if (query.target === undefined) throw new Error("Expected metrics target.");
+        query.target.type = TypeUrls.derive(ProjectOverviewWithMetricsStateSchema);
+        const response = await client.read(query);
+        expect(response.response?.status?.status.case).toBe("ok");
+        expect(
+          response.message.map(
+            (item) =>
+              AnyPacker.unpack(item.state ?? packMissing(), ProjectOverviewWithMetricsStateSchema)
+                .id,
+          ),
+        ).toEqual(["metrics-1"]);
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("selects a real projection through enum, message, bytes, bool, time, and int64 columns", async () => {
+    const context = await BoundedContext.singleTenant("TypedColumnQueries")
+      .add(
+        new Repository({
+          entityType: ColumnTypeProjection,
+          schema: CoreProjectOverviewStateSchema,
+        }),
+      )
+      .build();
+    await context.stand().update(
+      CoreProjectOverviewStateSchema,
+      create(CoreProjectOverviewStateSchema, {
+        id: "typed-1",
+        title: "Open review",
+        status: ProjectStatus.OPEN,
+        dueAt: create(TimestampSchema, { seconds: 100n }),
+        owner: create(ProjectLeadSchema, { value: "reviewer-a" }),
+        fingerprint: new Uint8Array([1, 2]),
+        active: true,
+        sequence: 7n,
+      }),
+    );
+    await context
+      .stand()
+      .update(
+        CoreProjectOverviewStateSchema,
+        create(CoreProjectOverviewStateSchema, { id: "typed-other", title: "Other review" }),
+      );
+    const server = await startServices(context);
+    try {
+      const client = createClient(QueryService, createGrpcTransport({ baseUrl: server.baseUrl }));
+      const checks = [
+        [
+          "status",
+          AnyPacker.pack(Int32ValueSchema, create(Int32ValueSchema, { value: ProjectStatus.OPEN })),
+        ],
+        ["due_at", AnyPacker.pack(TimestampSchema, create(TimestampSchema, { seconds: 100n }))],
+        [
+          "owner",
+          AnyPacker.pack(ProjectLeadSchema, create(ProjectLeadSchema, { value: "reviewer-a" })),
+        ],
+        [
+          "fingerprint",
+          AnyPacker.pack(
+            BytesValueSchema,
+            create(BytesValueSchema, { value: new Uint8Array([1, 2]) }),
+          ),
+        ],
+        ["active", AnyPacker.pack(BoolValueSchema, create(BoolValueSchema, { value: true }))],
+        ["sequence", AnyPacker.pack(Int64ValueSchema, create(Int64ValueSchema, { value: 7n }))],
+      ] as const;
+      for (const [column, packed] of checks) {
+        const query = createColumnFilterQuery(column, packed);
+        if (query.target === undefined) throw new Error("Expected typed column target.");
+        query.target.type = TypeUrls.derive(CoreProjectOverviewStateSchema);
+        const response = await client.read(query);
+        expect(response.response?.status?.status.case).toBe("ok");
+        expect(
+          response.message.map(
+            (item) =>
+              AnyPacker.unpack(item.state ?? packMissing(), CoreProjectOverviewStateSchema).id,
+          ),
+        ).toEqual(["typed-1"]);
+      }
+      const dateRange = createColumnFilterQuery(
+        "due_at",
+        AnyPacker.pack(TimestampSchema, create(TimestampSchema, { seconds: 99n })),
+        { operator: Filter_Operator.GREATER_THAN },
+      );
+      if (dateRange.target === undefined) throw new Error("Expected date target.");
+      dateRange.target.type = TypeUrls.derive(CoreProjectOverviewStateSchema);
+      const dated = await client.read(dateRange);
+      expect(dated.message).toHaveLength(1);
+      expect(
+        AnyPacker.unpack(dated.message[0]?.state ?? packMissing(), CoreProjectOverviewStateSchema)
+          .id,
+      ).toBe("typed-1");
+      for (const [column, packed] of checks.filter(
+        ([name]) => name === "fingerprint" || name === "active",
+      )) {
+        const unsupported = createColumnFilterQuery(column, packed, {
+          operator: Filter_Operator.GREATER_THAN,
+        });
+        if (unsupported.target === undefined) throw new Error("Expected typed column target.");
+        unsupported.target.type = TypeUrls.derive(CoreProjectOverviewStateSchema);
+        const failure = await queryFailure(client.read(unsupported));
+        expect(failure.code).toBe(Code.InvalidArgument);
+        expect(responseErrorMessage(failure)).toContain("does not support range comparison");
+      }
     } finally {
       await server.close();
     }

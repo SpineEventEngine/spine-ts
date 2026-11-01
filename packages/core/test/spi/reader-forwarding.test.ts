@@ -38,6 +38,53 @@ describe("verified reader forwarding", () => {
     );
   });
 
+  it("rejects forged public authority and invalid principal facts at the port boundary", () => {
+    const malformed = [
+      { authorityFacts: { permission: "projects.read" } },
+      { principal: { id: "  " } },
+      { principal: { id: "reader-1", attributes: { trusted: true } } },
+    ];
+    for (const reader of malformed)
+      expect(() => snapshotTrustedReader(reader as unknown as TrustedReaderContext)).toThrow();
+  });
+
+  it("rejects non-JSON authority trees while accepting shared acyclic facts", () => {
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    const shared = { roles: ["editor"] };
+    const principal = { id: "reader-1" };
+    for (const authorityFacts of [
+      { count: Number.POSITIVE_INFINITY },
+      { date: new Date() },
+      { cycle },
+    ]) {
+      expect(() =>
+        snapshotTrustedReader({ principal, authorityFacts } as unknown as TrustedReaderContext),
+      ).toThrow("Authority facts must be");
+    }
+    expect(
+      snapshotTrustedReader({ principal, authorityFacts: { left: shared, right: shared } })
+        .authorityFacts,
+    ).toEqual({ left: { roles: ["editor"] }, right: { roles: ["editor"] } });
+  });
+
+  it("accepts finite nested facts with null-prototype maps and rejects non-string identities", () => {
+    const grants = Object.assign(Object.create(null) as Record<string, unknown>, {
+      weights: [0, 1.5, true, null],
+    });
+    const facts = Object.assign(Object.create(null) as Record<string, unknown>, { grants });
+    const snapshot = snapshotTrustedReader({
+      principal: { id: "reader-2" },
+      authorityFacts: facts as NonNullable<TrustedReaderContext["authorityFacts"]>,
+    });
+    expect(snapshot.authorityFacts).toEqual({ grants: { weights: [0, 1.5, true, null] } });
+    expect(Object.isFrozen(snapshot.authorityFacts)).toBe(true);
+    for (const id of [0, null, undefined])
+      expect(() =>
+        snapshotTrustedReader({ principal: { id } } as unknown as TrustedReaderContext),
+      ).toThrow("Trusted reader principal ID must be non-blank.");
+  });
+
   it("binds verified facts to service, method and canonical bytes", async () => {
     const headers = await ReaderForwarding.seal(
       "QueryService",
