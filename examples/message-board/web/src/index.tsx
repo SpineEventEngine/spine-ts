@@ -82,7 +82,10 @@ const Board = function Board({
   const synchronized = useBoardSync(board, request);
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:py-12">
-      <BoardHeader lifecycle={synchronized.lifecycle} />
+      <header className="flex items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Message Board</h1>
+        <SubscriptionBadge lifecycle={synchronized.lifecycle} />
+      </header>
 
       <BoardStatisticsPanel
         value={statistics.value}
@@ -103,14 +106,10 @@ const Board = function Board({
   );
 };
 
-const BoardHeader = ({ lifecycle }: { readonly lifecycle: SubscriptionLifecycle | undefined }): ReactElement => (
-  <header className="flex items-center justify-between gap-4">
-    <div><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Message Board</h1></div>
-    <SubscriptionBadge lifecycle={lifecycle} />
-  </header>
-);
-
-const AnnouncementPanel = ({ value, error }: {
+const AnnouncementPanel = ({
+  value,
+  error,
+}: {
   readonly value: AnnouncementBoardView | undefined;
   readonly error: boolean;
 }): ReactElement => (

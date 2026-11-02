@@ -48,13 +48,9 @@ export class ReadBoardMessageHandler extends AppQueryHandler<
     query: ReadBoardMessage.Query,
     context: AppQueryContext,
   ): Promise<ReadBoardMessage.Response> {
-    // Server validation enforces the required Proto field before this handler runs.
     const states = await context
-      .select(
-        BoardMessageViewQuery.create()
-          .byId(query.message as NonNullable<ReadBoardMessage.Query["message"]>)
-          .build(),
-      )
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Server validates the required field before dispatch.
+      .select(BoardMessageViewQuery.create().byId(query.message!).build())
       .read();
     return create(ReadBoardMessage.responseSchema, { message: states[0] });
   }
@@ -78,7 +74,8 @@ export class ReadBoardStatsHandler extends AppQueryHandler<
     query: ReadBoardStats.Query,
     context: AppQueryContext,
   ): Promise<ReadBoardStats.Response> {
-    const board = query.board as NonNullable<ReadBoardStats.Query["board"]>;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Server validates the required field before dispatch.
+    const board = query.board!;
     const [messages, announcements] = await Promise.all([
       context.select(BoardStatisticsViewQuery.create().byId(board).build()).read(),
       context
@@ -90,29 +87,24 @@ export class ReadBoardStatsHandler extends AppQueryHandler<
         .read(),
     ]);
     return create(ReadBoardStats.responseSchema, {
-      ...(messages[0] === undefined
-        ? {}
-        : { board: BoardStatisticsResponses.fromView(messages[0]) }),
-      ...(announcements[0] === undefined
-        ? {}
-        : { announcements: BoardStatisticsResponses.fromView(announcements[0]) }),
+      board: boardStatisticsFromView(messages[0]),
+      announcements: boardStatisticsFromView(announcements[0]),
     });
   }
 }
 
-const BoardStatisticsResponses = Object.freeze({
-  /**
-   * Copies public lifetime totals without contributor identifiers.
-   *
-   * @param view Supplies one cumulative Projection state.
-   * @returns The public statistics response value.
-   */
-  fromView(view: BoardStatisticsView | AnnouncementBoardView) {
-    return create(BoardStatisticsSchema, {
-      board: view.id,
-      messageCount: view.messageCount,
-      authorCount: view.authorCount,
-      firstPostedAt: view.firstPostedAt,
-    });
-  },
-});
+/**
+ * Copies public lifetime totals without contributor identifiers.
+ *
+ * @param view Supplies one cumulative Projection state when present.
+ * @returns The public statistics response value, or undefined when no view exists.
+ */
+const boardStatisticsFromView = (view: BoardStatisticsView | AnnouncementBoardView | undefined) =>
+  view === undefined
+    ? undefined
+    : create(BoardStatisticsSchema, {
+        board: view.id,
+        messageCount: view.messageCount,
+        authorCount: view.authorCount,
+        firstPostedAt: view.firstPostedAt,
+      });

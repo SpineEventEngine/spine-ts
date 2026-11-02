@@ -140,24 +140,29 @@ const useAnnouncementState = (request: ClientRequest, onChanged: () => void) => 
   const updateGeneration = useRef(0);
   const controller = useRef<AbortController | undefined>(undefined);
   const mounted = useRef(false);
-  useAnnouncementScope(
-    request,
-    mounted,
-    generation,
-    controller,
-    setApplied,
-    setHasApplied,
-    setError,
-  );
-  const apply = useAnnouncementApply(
-    value,
-    generation,
-    updateGeneration,
-    controller,
-    setApplied,
-    setHasApplied,
-    setError,
-    onChanged,
+  useEffect(() => {
+    mounted.current = true;
+    setApplied(undefined);
+    setHasApplied(false);
+    setError(false);
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+      controller.current?.abort();
+    };
+  }, [request]);
+  const apply = useCallback(
+    (next: AnnouncementBoardView | undefined) => {
+      updateGeneration.current += 1;
+      generation.current += 1;
+      controller.current?.abort();
+      value.current = next;
+      setApplied(next);
+      setHasApplied(true);
+      setError(false);
+      onChanged();
+    },
+    [onChanged],
   );
   // prettier-ignore
   return { applied, hasApplied, error, setError, value, generation,
@@ -165,52 +170,6 @@ const useAnnouncementState = (request: ClientRequest, onChanged: () => void) => 
 };
 
 type AnnouncementState = ReturnType<typeof useAnnouncementState>;
-
-const useAnnouncementScope = (
-  request: ClientRequest,
-  mounted: React.RefObject<boolean>,
-  generation: React.RefObject<number>,
-  controller: React.RefObject<AbortController | undefined>,
-  onApplied: (value: AnnouncementBoardView | undefined) => void,
-  onHasApplied: (value: boolean) => void,
-  onError: (value: boolean) => void,
-) => {
-  useEffect(() => {
-    mounted.current = true;
-    onApplied(undefined);
-    onHasApplied(false);
-    onError(false);
-    return () => {
-      mounted.current = false;
-      generation.current += 1;
-      controller.current?.abort();
-    };
-  }, [request]);
-};
-
-const useAnnouncementApply = (
-  value: React.RefObject<AnnouncementBoardView | undefined>,
-  generation: React.RefObject<number>,
-  updateGeneration: React.RefObject<number>,
-  controller: React.RefObject<AbortController | undefined>,
-  onApplied: (value: AnnouncementBoardView | undefined) => void,
-  onHasApplied: (value: boolean) => void,
-  onError: (value: boolean) => void,
-  onChanged: () => void,
-) =>
-  useCallback(
-    (next: AnnouncementBoardView | undefined) => {
-      updateGeneration.current += 1;
-      generation.current += 1;
-      controller.current?.abort();
-      value.current = next;
-      onApplied(next);
-      onHasApplied(true);
-      onError(false);
-      onChanged();
-    },
-    [value, generation, updateGeneration, controller, onApplied, onHasApplied, onError, onChanged],
-  );
 
 const AnnouncementRecoveries = Object.freeze({
   /**
