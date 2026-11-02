@@ -9240,6 +9240,7 @@ describe("repository signal routing", () => {
   });
 
   it("sends the bounded remote Process Manager batch and preserves earlier rows on failure", async () => {
+    SplitRouteProcessManager.reset();
     const ids = Array.from({ length: 1_001 }, (_, index) => `remote-${String(index)}`);
     const routing = EventRouting.create<string>().route(ProjectCreatedSchema, () => ids);
     const repository = createSplitPmRepo(routing);
@@ -9248,6 +9249,15 @@ describe("repository signal routing", () => {
     const remote = new Delivery({
       context: { name: "TransferredBatch", multitenant: false },
       storageFactory: remoteFactory,
+    });
+    const heldRegistry = new Proxy(remote.shards, {
+      get(target, property) {
+        if (property === "pickUp") return () => Promise.resolve(undefined);
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function"
+          ? (...args: unknown[]): unknown => Reflect.apply(value, target, args) as unknown
+          : value;
+      },
     });
     let writes = 0;
     const remotePort = new Proxy(remote.inbox, {
@@ -9268,7 +9278,14 @@ describe("repository signal routing", () => {
       open: () => undefined,
       close: () => remote.close(),
       inbox: remotePort,
-      workRegistry: remote.shards,
+      workRegistry: heldRegistry,
+      source: {
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => ({
+          [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => undefined) }),
+        }),
+        releaseExpired: () => Promise.resolve([]),
+      },
     };
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: localFactory,
@@ -9293,6 +9310,8 @@ describe("repository signal routing", () => {
         limit: 1_000,
       });
       expect(remoteRows).toHaveLength(999);
+      expect(remoteRows.every((row) => row.status === "TO_DELIVER")).toBe(true);
+      expect(SplitRouteProcessManager.startedIds).toEqual([]);
     } finally {
       Time.setProvider(previousTime);
       warning.mockRestore();
