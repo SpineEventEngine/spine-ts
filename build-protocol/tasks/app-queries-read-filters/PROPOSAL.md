@@ -95,9 +95,9 @@ Reject mismatched Q/R declarations during generation. Reject missing or inconsis
 
 ## How generated metadata and automatic discovery work
 
-Today, `generated/handler/generated-handler-registry.ts` describes classes and their handler methods. The Bounded Context builder loads its compiled file using `withGeneratedRegistryRoot(...)`. It does not automatically collect the corresponding files from dependency packages. When assembling classes that require this metadata, omitting the root is an error; there is no framework default that finds every package.
+`generated/spine-metadata.ts` describes classes and their handler methods. The generated bootstrap discovers metadata from dependency packages. Bounded Context assembly checks that every supplied domain class has a matching description.
 
-Rename and broaden that generated file to **`generated/spine-metadata.ts`**, compiled as `generated/spine-metadata.js`. The broader name matters because an App Query declaration is a Proto request/result pair, not a handler.
+The generated file compiles as `generated/spine-metadata.js`. Its scope includes App Query declarations, which are Proto request/result pairs rather than handlers.
 
 The file contains separate kinds of information:
 
@@ -227,11 +227,11 @@ Both descriptions come from the generated bootstrap. Normal BC consistency check
 
 The current Orders cross-context example constructs multiple BCs from classes in one package, so it is not sufficient proof of this last case. Add a multi-package example with the builders in app and handler classes in dependencies, including a BC assembled from more than one dependency.
 
-### Migrate the current generated file
+### Generate the current metadata files
 
-Update the generator, metadata types, loader, package exports, generated-source checks, build/container outputs, examples, and tests together. Remove the old generated-handler-registry output when regenerating, so stale files cannot become a second source of metadata.
+Update the generator, metadata types, loader, package exports, generated-source checks, build/container outputs, examples, and tests together. The generated metadata and bootstrap files are the current output format.
 
-The intended API uses bootstrap discovery instead of withGeneratedRegistryRoot. Treat removal of that method and the generated-file rename as a documented migration: update existing examples and consumers in the same change. Do not introduce a new Server generatedRegistryRoot setting. Keep unrelated, still-useful explicit registry construction APIs; this change concerns locating and composing generated application metadata.
+The API uses bootstrap discovery. Examples and consumers use the generated metadata and bootstrap files directly. Do not introduce a Server generatedRegistryRoot setting. Keep unrelated, still-useful explicit registry construction APIs; this change concerns locating and composing generated application metadata.
 
 ## Write the handler
 
@@ -632,7 +632,7 @@ Technical Command failures need separate treatment too: JVM's bus can acknowledg
 | Nested validation                               | Required presence and recursive validation are separate declared constraints.                                                                                                             | **Done in the validation library:** nested messages, repeated messages, map values, and oneof rules are supported. **Not done at all service boundaries:** Query, Topic, and Subscription must actually invoke the shared validator.                        |
 | Application types inside annotated `Any` fields | Validation must be able to inspect known application message types where recursive validation is declared.                                                                                | **Not done generally.** The pinned TS validator uses a schema's descriptor dependencies, not the application's full registry. Extend the shared integration/library to use the existing application registry. Do not write an App Query-specific validator. |
 | Malformed bytes in a known nested `Any`         | A known payload that cannot be decoded must not silently bypass its required validation.                                                                                                  | **Not done.** The pinned validator skips failed Any unpacking. Distinguish unknown types allowed by the model from malformed known payloads; reject the latter.                                                                                             |
-| Existing bundled constraint options             | Declared constraints must execute, including the either/or rule for TargetFilters.                                                                                                        | **Not done completely.** TS's bundled TargetFilters uses deprecated `required_field`, ignored by its validator. Existing Query/Subscribe checks compensate. Migrate that declaration to the supported equivalent and keep semantic checks.                  |
+| Existing bundled constraint options             | Declared constraints must execute, including the either/or rule for TargetFilters.                                                                                                        | **Not done completely.** TS's bundled TargetFilters uses deprecated `required_field`, ignored by its validator. Existing Query/Subscribe checks compensate. Update that declaration to the supported equivalent and keep semantic checks.                   |
 | Required collections                            | The bundled rule documentation also excludes missing-valued elements/values.                                                                                                              | **Not done completely.** The dependency only checks that the collection is nonempty. Correct the shared rule and test it; current route-specific ID checks already reject some such cases.                                                                  |
 | Validation engine/configuration failure         | This is a server failure, not proof that the client's fields violate a constraint.                                                                                                        | **Not done.** TS currently turns every validator exception into a synthetic constraint violation. Keep rejection, but report technical failure through the operation's technical-error channel.                                                             |
 | Structured Query validation failure             | JVM sends a `spine.base.Error` with enum-qualified type, numeric code, diagnostic message, and a packed `ValidationError` in `Error.details`. It serializes Error into `spine-error-bin`. | **Not done for Query validation.** Add this error mapping and native trailer, retain Connect typed details, and preserve both through gateway/coordinator/client forwarding.                                                                                |

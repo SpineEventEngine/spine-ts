@@ -356,9 +356,7 @@ const DeploymentValues = Object.freeze({
    * @returns Nonempty backend endpoint list.
    */
   backendUrls(environment: NodeJS.ProcessEnv): readonly [string, ...string[]] {
-    const configured = environment.BACKEND_URLS;
-    if (configured === undefined || configured.length === 0)
-      return [DeploymentValues.required(environment, "BACKEND_URL")];
+    const configured = DeploymentValues.required(environment, "BACKEND_URLS");
     const values = configured.split(",").map((value) => value.trim());
     if (values.some((value) => value.length === 0))
       throw new Error("Invalid required configuration: BACKEND_URLS.");

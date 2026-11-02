@@ -408,15 +408,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/handler/handler-decorators.ts",
     "kind": "function-declaration",
-    "identity": "materializeDecoratedEntityHandlers()#1",
-    "name": "materializeDecoratedEntityHandlers",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration materializeDecoratedEntityHandlers()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/handler/handler-decorators.ts",
-    "kind": "function-declaration",
     "identity": "React()#1",
     "name": "React",
     "disposition": "migration-debt",

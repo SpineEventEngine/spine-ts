@@ -12,8 +12,7 @@
  * the License.
  */
 
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import {
   createCompilerHost,
@@ -21,41 +20,17 @@ import {
   createSourceFile,
   flattenDiagnosticMessageText,
   getPreEmitDiagnostics,
-  ModuleKind,
   parseJsonConfigFileContent,
   readConfigFile,
-  ScriptTarget,
   sys,
-  transpileModule,
   type CompilerOptions,
   type Diagnostic,
 } from "typescript";
 import { describe, expect, it } from "vitest";
 
-import {
-  Assign,
-  Command,
-  HandlerMetadataRegistry,
-  HandlerMetadataRegistryError,
-  React,
-  Subscribe,
-  Throws,
-  Where,
-  EntityHandlers,
-  materializeDecoratedEntityHandlers,
-} from "../../src/index.js";
-import {
-  type CreateProject,
-  CreateProjectSchema,
-} from "../../test-fixtures/generated/entity-metadata/project_commands_pb.js";
-import {
-  type ProjectCreated,
-  ProjectCreatedSchema,
-} from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
-import {
-  ProjectOverviewStateSchema,
-  ProjectStateSchema,
-} from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import { Assign, Command, React, Subscribe, Throws, Where } from "../../src/index.js";
+import { CreateProjectSchema } from "../../test-fixtures/generated/entity-metadata/project_commands_pb.js";
+import { ProjectCreatedSchema } from "../../test-fixtures/generated/entity-metadata/project_events_pb.js";
 
 it("creates a public Where method decorator", () => {
   const decorator = Where({ eventField: "board", equals: '{"value":"announcements"}' });
@@ -72,190 +47,6 @@ it("rejects a declaration without a generated message schema", () => {
     "@Throws accepts only generated rejection declarations.",
   );
 });
-
-interface DecoratedClassFactoryInput {
-  readonly Assign: typeof Assign;
-  readonly Command: typeof Command;
-  readonly Subscribe: typeof Subscribe;
-  readonly React: typeof React;
-  readonly CreateProjectSchema: typeof CreateProjectSchema;
-  readonly ProjectCreatedSchema: typeof ProjectCreatedSchema;
-}
-
-interface DecoratedClassFactoryOutput {
-  readonly DecoratedProjection: new () => object;
-  readonly DecoratedAggregate: new () => object;
-  readonly DecoratedFallbackProjection: new () => object;
-  readonly FirstDecoratedProjection: new () => object;
-  readonly SecondDecoratedProjection: new () => object;
-  readonly SourceCopiedProjection: new () => object;
-  readonly BorrowingProjection: new () => object;
-  readonly DecoratedBaseProjection: new () => object;
-  readonly UndecoratedOverrideProjection: new () => object;
-  readonly BareDecoratedProjection: new () => object;
-}
-
-async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
-  const source = `
-    export function defineDecoratedClasses({
-      Assign,
-      Command,
-      Subscribe,
-      React,
-      CreateProjectSchema,
-      ProjectCreatedSchema,
-    }) {
-      class DecoratedProjection {
-        @Assign(CreateProjectSchema)
-        assignCreate(command) {
-          void command;
-        }
-
-        @Command(CreateProjectSchema)
-        commandFromCommand(command) {
-          void command;
-        }
-
-        @Subscribe(ProjectCreatedSchema)
-        subscribeCreated(event) {
-          void event;
-        }
-
-        @React(ProjectCreatedSchema)
-        reactToCreated(event) {
-          void event;
-        }
-
-        @Subscribe(ProjectCreatedSchema)
-        observeCreated(event) {
-          void event;
-        }
-      }
-
-      class DecoratedAggregate {
-        @Assign(CreateProjectSchema)
-        assignCreate(command) {
-          void command;
-        }
-
-        @Subscribe(ProjectCreatedSchema)
-        observeCreated(event) {
-          void event;
-        }
-      }
-
-      class DecoratedFallbackProjection {
-        @Assign(CreateProjectSchema)
-        assignCreate(command) {
-          void command;
-        }
-
-        @Subscribe(ProjectCreatedSchema)
-        observeCreated(event) {
-          void event;
-        }
-      }
-
-      class FirstDecoratedProjection {
-        @Assign(CreateProjectSchema)
-        assignCreate(command) {
-          void command;
-        }
-      }
-
-      class SecondDecoratedProjection {
-        @Subscribe(ProjectCreatedSchema)
-        observeCreated(event) {
-          void event;
-        }
-      }
-
-      class SourceCopiedProjection {
-        @Assign(CreateProjectSchema)
-        assignCreate(command) {
-          void command;
-        }
-      }
-
-      class BorrowingProjection {}
-
-      Object.defineProperty(
-        BorrowingProjection.prototype,
-        "assignCreate",
-        Object.getOwnPropertyDescriptor(SourceCopiedProjection.prototype, "assignCreate"),
-      );
-
-      class DecoratedBaseProjection {
-        @Assign(CreateProjectSchema)
-        assignCreate(command) {
-          void command;
-        }
-      }
-
-      class UndecoratedOverrideProjection extends DecoratedBaseProjection {
-        assignCreate(command) {
-          void command;
-        }
-      }
-
-      class BareDecoratedProjection {
-        @Assign
-        assignCreate(command) {
-          void command;
-        }
-
-        @Command
-        commandFromCommand(command) {
-          void command;
-        }
-
-        @Subscribe
-        subscribeCreated(event) {
-          void event;
-        }
-
-        @React
-        reactToCreated(event) {
-          void event;
-        }
-      }
-
-      return {
-        DecoratedProjection,
-        DecoratedAggregate,
-        DecoratedFallbackProjection,
-        FirstDecoratedProjection,
-        SecondDecoratedProjection,
-        SourceCopiedProjection,
-        BorrowingProjection,
-        DecoratedBaseProjection,
-        UndecoratedOverrideProjection,
-        BareDecoratedProjection,
-      };
-    }
-  `;
-  const compiled = transpileModule(source, {
-    compilerOptions: {
-      module: ModuleKind.ESNext,
-      target: ScriptTarget.ES2024,
-    },
-  });
-  const directory = mkdtempSync(join(tmpdir(), "spine-handler-decorators-"));
-  const modulePath = join(directory, "decorated-classes.mjs");
-  writeFileSync(modulePath, compiled.outputText, "utf8");
-  const module = (await import(modulePath)) as {
-    defineDecoratedClasses(input: DecoratedClassFactoryInput): DecoratedClassFactoryOutput;
-  };
-
-  return module.defineDecoratedClasses({
-    Assign,
-    Command,
-    Subscribe,
-    React,
-    CreateProjectSchema,
-    ProjectCreatedSchema,
-  });
-}
 
 function createFixtureCompilerOptions(): CompilerOptions {
   const configPath = join(process.cwd(), "tsconfig.base.json");
@@ -353,23 +144,32 @@ describe("handler decorators", () => {
     );
   }, 15_000);
 
-  it("rejects schema-less @Command decorator materialization", async () => {
-    const { DecoratedProjection } = await createDecoratedClasses();
-
-    expect(() =>
-      materializeDecoratedEntityHandlers(DecoratedProjection, ProjectOverviewStateSchema),
-    ).toThrow(/generated registry metadata with emitted schemas/);
+  it("rejects schema-bearing decorator calls at runtime", () => {
+    for (const [decorator, schema] of [
+      [Assign, CreateProjectSchema],
+      [Command, CreateProjectSchema],
+      [Subscribe, ProjectCreatedSchema],
+      [React, ProjectCreatedSchema],
+    ] as const) {
+      expect(() => (decorator as (...args: unknown[]) => unknown)(schema)).toThrow(
+        "Spine handler decorators require a standard method decorator context.",
+      );
+    }
   });
 
-  it("keeps bare decorators for framework-owned registry generation only", async () => {
-    const { BareDecoratedProjection } = await createDecoratedClasses();
+  it("accepts bare handler decorators without runtime metadata", () => {
+    let calls = 0;
+    const method = function handler(): void {
+      calls += 1;
+    };
 
-    expect(() =>
-      materializeDecoratedEntityHandlers(BareDecoratedProjection, ProjectOverviewStateSchema),
-    ).toThrow(
-      'Decorated handler "assignCreate" was declared without a schema; use generated registry ' +
-        "metadata or explicit EntityHandlers.define() registration.",
-    );
+    for (const decorator of [Assign, Command, Subscribe, React]) {
+      expect(() => {
+        decorator(method, decoratorContext({ metadata: undefined }));
+      }).not.toThrow();
+    }
+    method();
+    expect(calls).toBe(1);
   });
 
   it("rejects invalid standard decorator contexts", () => {
@@ -386,140 +186,6 @@ describe("handler decorators", () => {
     expect(() => {
       Assign(method, decoratorContext({ name: Symbol("handler") }));
     }).toThrow("string-named methods");
-    expect(() => {
-      Assign(method, decoratorContext({ metadata: undefined }));
-    }).toThrow("metadata support");
-  });
-
-  it("registers materialized decorator metadata through the caller-owned registry", async () => {
-    const { DecoratedAggregate } = await createDecoratedClasses();
-
-    const metadata = materializeDecoratedEntityHandlers(DecoratedAggregate, ProjectStateSchema);
-    const registry = new HandlerMetadataRegistry([metadata]);
-
-    expect(registry.findCommandAssignment(CreateProjectSchema.typeName)?.entityType).toBe(
-      DecoratedAggregate,
-    );
-    expect(registry.findCommandAssignment(CreateProjectSchema.typeName)?.handler.methodName).toBe(
-      "assignCreate",
-    );
-    expect(
-      registry.findHandlersByKind("event-subscription").map((entry) => entry.handler),
-    ).toContain(metadata.eventSubscriptions[0]);
-  });
-
-  it("keeps decorator metadata class-owned and isolated between classes", async () => {
-    const { FirstDecoratedProjection, SecondDecoratedProjection } = await createDecoratedClasses();
-
-    const first = materializeDecoratedEntityHandlers(
-      FirstDecoratedProjection,
-      ProjectOverviewStateSchema,
-    );
-    const second = materializeDecoratedEntityHandlers(
-      SecondDecoratedProjection,
-      ProjectOverviewStateSchema,
-    );
-
-    expect(first.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
-    expect(second.handlers.map((handler) => handler.methodName)).toEqual(["observeCreated"]);
-    expect(new HandlerMetadataRegistry().listHandlers()).toEqual([]);
-  });
-
-  it("does not borrow decorator metadata from a copied method function", async () => {
-    const { BorrowingProjection, SourceCopiedProjection } = await createDecoratedClasses();
-
-    const source = materializeDecoratedEntityHandlers(
-      SourceCopiedProjection,
-      ProjectOverviewStateSchema,
-    );
-    const borrowing = materializeDecoratedEntityHandlers(
-      BorrowingProjection,
-      ProjectOverviewStateSchema,
-    );
-
-    expect(source.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
-    expect(borrowing.handlers).toEqual([]);
-  });
-
-  it("does not borrow decorator metadata from an undecorated subclass override", async () => {
-    const { DecoratedBaseProjection, UndecoratedOverrideProjection } =
-      await createDecoratedClasses();
-
-    const base = materializeDecoratedEntityHandlers(
-      DecoratedBaseProjection,
-      ProjectOverviewStateSchema,
-    );
-    const subclass = materializeDecoratedEntityHandlers(
-      UndecoratedOverrideProjection,
-      ProjectOverviewStateSchema,
-    );
-
-    expect(base.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
-    expect(subclass.handlers).toEqual([]);
-  });
-
-  it("uses the same duplicate policy as explicit handler metadata", async () => {
-    const { FirstDecoratedProjection } = await createDecoratedClasses();
-    class ExplicitProjection {
-      assignCreate(command: CreateProject): void {
-        void command;
-      }
-    }
-
-    const decorated = materializeDecoratedEntityHandlers(
-      FirstDecoratedProjection,
-      ProjectOverviewStateSchema,
-    );
-    const explicit = EntityHandlers.define(ExplicitProjection, ProjectStateSchema, (builder) => [
-      builder.assign(CreateProjectSchema, "assignCreate"),
-    ]);
-
-    expect(() => new HandlerMetadataRegistry([decorated, explicit])).toThrow(
-      HandlerMetadataRegistryError,
-    );
-    expect(() => new HandlerMetadataRegistry([decorated, explicit])).toThrow(
-      new RegExp(`Duplicate command assignment for "${CreateProjectSchema.typeName}"`),
-    );
-  });
-
-  it("materializes the same handler contract as the explicit fallback", async () => {
-    const { DecoratedFallbackProjection } = await createDecoratedClasses();
-    class ExplicitProjection {
-      assignCreate(command: CreateProject): void {
-        void command;
-      }
-
-      observeCreated(event: ProjectCreated): void {
-        void event;
-      }
-    }
-
-    const decorated = materializeDecoratedEntityHandlers(
-      DecoratedFallbackProjection,
-      ProjectOverviewStateSchema,
-    );
-    const explicit = EntityHandlers.define(
-      ExplicitProjection,
-      ProjectOverviewStateSchema,
-      (builder) => [
-        builder.assign(CreateProjectSchema, "assignCreate"),
-        builder.subscribe(ProjectCreatedSchema, "observeCreated"),
-      ],
-    );
-
-    expect(
-      decorated.handlers.map((handler) => ({
-        kind: handler.kind,
-        messageFullTypeName: handler.messageFullTypeName,
-        methodName: handler.methodName,
-      })),
-    ).toEqual(
-      explicit.handlers.map((handler) => ({
-        kind: handler.kind,
-        messageFullTypeName: handler.messageFullTypeName,
-        methodName: handler.methodName,
-      })),
-    );
   });
 });
 

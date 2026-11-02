@@ -105,7 +105,7 @@ Prebuilt production commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`,
 require `BROWSER_ORIGIN`, while the
 standalone gateway uses `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`
 in Kubernetes; local Compose alone uses comma-separated `BACKEND_URLS` as an
-explicit static fixture and accepts legacy `BACKEND_URL`. Application data uses
+explicit static fixture. Application data uses
 application Datastore storage. Public browser subscription state is local to the
 Gateway process, so a Gateway restart makes the browser reconnect, query the
 current board, and resume live updates.

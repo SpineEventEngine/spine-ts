@@ -419,7 +419,6 @@ a `TypeRegistry` when compact Proto JSON must expand `Any` values.
 | MySQL tenancy     | Select a configured database per tenant.                                                   |
 | Datastore tenancy | Select a native namespace per tenant.                                                      |
 | Physical layout   | Configure provider record families; a Bounded Context name is diagnostic, not a partition. |
-| Migration         | Plan it with the provider; Spine TS does not migrate layouts automatically.                |
 
 Normalized provider plans are capability-gated execution contracts. MySQL
 pushes every admitted filter, order, and finite bound into parameterized SQL in

@@ -17,6 +17,9 @@ The full approved proposal is binding, including its examples, status matrix,
 and acceptance section. This ledger indexes the requirements; it does not
 replace or narrow that proposal.
 
+- No migrations or migration guidance are provided. Remove migration-specific
+  paths and instructions; maintain only the current contract. This supersedes
+  earlier proposal text requesting migration deliverables.
 - AppQueryHandler<Q, R> uses generated message types, with nested Query/Response
   declarations discovered by `_queries.proto`. No marker option, decorators,
   AppQueryDefinition, separate generation procedure, or query-only type registry.

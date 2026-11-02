@@ -97,5 +97,5 @@ Do not edit it. Regenerate with `pnpm proto:generate`.
 | Reassign or unassign with no assignee        | `TaskNotAssigned`     |
 | Reassign to the current assignee             | `TaskAlreadyAssigned` |
 
-`TaskList.id` moved to field 4 and field 1 is reserved. Snapshots reset; there
-is no automatic migration or ID inference.
+`TaskList.id` is a typed `TaskListId` in field 4; field 1 is reserved. A task-list
+ID is supplied by the TaskList command rather than inferred from a task ID.

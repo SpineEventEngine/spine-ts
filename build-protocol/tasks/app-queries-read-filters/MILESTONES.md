@@ -2,7 +2,7 @@
 
 The [approved proposal](PROPOSAL.md) and [requirements ledger](TASK.md) remain
 binding. Shared validation, Command/Event admission, read-service status mapping,
-unknown-subscription activation, and passive local metadata migration are
+unknown-subscription activation, and passive local metadata discovery are
 implemented, including dependency discovery, App Query generation, trusted reader
 forwarding, retained subscription reader binding, Server App Query execution,
 typed clients, Execute transport support, and filter installation on outward
@@ -21,7 +21,7 @@ after integration converges; a slice checkpoint does not complete this task.
 
 **Depends on:** M04, M08, M11–M12. **Class:** high-risk concurrency/lifecycle.
 **Paths:** direct Stand subscription delivery and its repository notification
-callers, affected declaration/behavior tests and migration documentation.
+callers, affected declaration/behavior tests and API documentation.
 
 Native RPC subscriptions now admit original matched updates to their existing
 queue before BC and Server filtering. Entity null uses the original ID in
@@ -43,11 +43,11 @@ channel and cancellation. Keep raw repository notifications private. Filters
 apply to outward data, without changing persistence or domain Event dispatch.
 Focused tests cover independent consumers, sequential processing, cancellation
 and late settlements, first-update removal, previous-state suppression, fault
-isolation and the configured admission boundary. Direct subscription migration
+isolation and the configured admission boundary. Direct subscription usage
 instructions and a typed example are included. API, style, reliability and
 documentation review are complete; final integrated gates remain below.
 
-## M14 — Consumer examples, migration, and release readiness
+## M14 — Consumer examples and release readiness
 
 **Depends on:** all prior slices. **Class:** high-risk integrated release.
 **Paths:** current example startup and model package manifests (including
@@ -57,7 +57,7 @@ example guides, `build-protocol/{TECHNICAL_SPEC,DEVELOPER_API}.md`, API snippets
 package/build/container checks, and existing task records.
 
 Demonstrate the approved handler/filter APIs, internal execution, trusted
-context, and migration from registry roots and in-response Query errors.
+context, generated bootstrap assembly, and structured Query errors.
 Compile single-package, split model/app, dependency-handler/app-builder, and
 one-BC/multiple-package arrangements. Include generated Q/R browser-only imports
 and a packed/bundled app proof. Update current governing claims without
@@ -73,10 +73,10 @@ prepared build/generation evidence instead of duplicate full runs. Any new
 behavior change after this gate requires its focused checks and risk-based
 verification disposition.
 
-The maintained multi-package example, migration guides, installed/bundled
+The maintained multi-package example, consumer guides, installed/bundled
 consumer checks, and actual image build/runtime checks are complete. Workspace
 versions are aligned at `2.0.0-snapshot.26`; the version-only commit is separate
-from dependency pins, lockfile, and generated metadata updates. Direct Stand filtering and its migration guidance are implemented and reviewed.
+from dependency pins, lockfile, and generated metadata updates. Direct Stand filtering and its usage guidance are implemented and reviewed.
 Integrated source security review is complete with no actionable findings.
 The dependency audit correction and its focused compatibility and security
 reviews are complete. The final validator correction passed focused API, reliability and security
@@ -141,4 +141,4 @@ account for these approved TS extensions, and retain detection of unrelated
 descriptor changes. New `app_query.proto` has local-source provenance.
 An equivalent shared-adapter treatment of the legacy constraint can support an
 intermediate checkpoint if necessary, but must be recorded as such; it does not
-silently replace the approved final declaration migration.
+silently replace the approved final declaration adaptation.

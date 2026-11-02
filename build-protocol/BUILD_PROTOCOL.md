@@ -5,6 +5,14 @@ Navigation: [README](README.md) | Related: [Code Quality](CODE_QUALITY.md)
 This protocol governs future autonomous development of the TypeScript framework
 in Codex on macOS with sub-agents and worktrees available.
 
+## No Migrations
+
+We do not provide migrations for anyone. This rule remains in force until the
+human explicitly changes it. Do not add or retain migration implementations,
+migration tools, migration guides, or compatibility paths whose sole purpose is
+moving users or their data from an older framework API or format. Implement the
+current contract directly and update maintained code and examples directly.
+
 ## Human Review Reset
 
 On `2026-07-01`, human review rejected the current implementation direction as
@@ -209,7 +217,7 @@ Speed comes from smaller review surfaces and eliminating repeated mechanical
 work, never from weakening correctness or review requirements.
 
 1. Split broad requests into independently closable milestones when they mix
-   runtime behavior, example migration, broad documentation, generated output,
+   runtime behavior, example updates, broad documentation, generated output,
    or otherwise independent contracts. Preserve autonomous execution by running
    the resulting milestones in sequence without asking for routine approval.
 2. Before the full gate, run one mandatory cheap preflight over the affected
@@ -727,8 +735,7 @@ Additional end-user API gates:
 - end-user `@Subscribe` handlers must declare explicit `void` or `Promise<void>`
   return types;
 - end-user application code must not use schema-bearing decorators such as
-  `@Assign(SomeSchema)` unless a task records a temporary legacy/testing
-  exception;
+  `@Assign(SomeSchema)`;
 - aggregates must update state directly in framework-controlled transactions;
 - end-user application code must not call transaction-control methods such as
   `startTransaction()` or `commitTransaction()`;

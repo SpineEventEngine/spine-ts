@@ -117,7 +117,7 @@ export function generateHandlerRegistry(
 ): void {
   const appRoot = HandlerFiles.directory(resolve(options.appRoot), "Application root");
   const project = HandlerFiles.file(appRoot, join(appRoot, "tsconfig.json"), "Project");
-  const { outputFile, bootstrapFile, oldOutput } = HandlerFiles.outputPaths(appRoot);
+  const { outputFile, bootstrapFile } = HandlerFiles.outputPaths(appRoot);
   const { program, sources } = HandlerFiles.program(appRoot, project);
   const analysis = BuildHandlerAnalyzer.analyze(program, sources);
   if (analysis.diagnostics.length > 0)
@@ -143,7 +143,7 @@ export function generateHandlerRegistry(
     ...assets.runtime,
     assets.record,
   ];
-  HandlerFiles.writePair(appRoot, files, oldOutput, operations);
+  HandlerFiles.writePair(appRoot, files, operations);
 }
 
 const HandlerFiles = Object.freeze({
@@ -151,9 +151,9 @@ const HandlerFiles = Object.freeze({
    * Validates all generated handler paths before any output is published.
    *
    * @param appRoot Confined application package root.
-   * @returns Metadata, bootstrap, and retired output paths.
+   * @returns Metadata and bootstrap output paths.
    */
-  outputPaths(appRoot: string): { outputFile: string; bootstrapFile: string; oldOutput: string } {
+  outputPaths(appRoot: string): { outputFile: string; bootstrapFile: string } {
     const root = HandlerFiles.path(appRoot, join(appRoot, "generated"), "Generated root");
     return {
       outputFile: HandlerFiles.path(root, join(root, "spine-metadata.ts"), "Generated output"),
@@ -161,11 +161,6 @@ const HandlerFiles = Object.freeze({
         root,
         join(root, "spine-bootstrap.ts"),
         "Generated bootstrap",
-      ),
-      oldOutput: HandlerFiles.path(
-        root,
-        join(root, "handler/generated-handler-registry.ts"),
-        "Superseded output",
       ),
     };
   },
@@ -452,13 +447,11 @@ const HandlerFiles = Object.freeze({
    *
    * @param appRoot Confined application package root.
    * @param files Published files and their generated content.
-   * @param retiredFile Superseded generated output removed after both files publish.
    * @param operations Filesystem hooks for publication.
    */
   writePair(
     appRoot: string,
     files: readonly { readonly file: string; readonly source: string }[],
-    retiredFile: string,
     operations: Partial<HandlerCodegenOperations>,
   ): void {
     for (const { file } of files) HandlerFiles.path(appRoot, file, "Generated adapter");
@@ -478,7 +471,6 @@ const HandlerFiles = Object.freeze({
         fileOperations.rename(stages[index] ?? "", file);
         published.push({ file, previous });
       }
-      fileOperations.remove(retiredFile);
     } catch (primary) {
       HandlerFiles.restorePair(primary, published, stages, fileOperations);
     }

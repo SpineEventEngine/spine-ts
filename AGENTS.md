@@ -217,3 +217,11 @@ not a task-completion invariant in the shared organization repository.
 
 Do not pause for routine implementation choices. Stop only for the blockers
 listed in `build-protocol/BUILD_PROTOCOL.md` and the completion plan.
+
+## No Migrations
+
+We do not provide migrations for anyone. This rule remains in force until the
+human explicitly changes it. Do not add or retain migration implementations,
+migration tools, migration guides, or compatibility paths whose sole purpose is
+moving users or their data from an older framework API or format. Implement the
+current contract directly and update maintained code and examples directly.

@@ -62,10 +62,8 @@ one-byte binary collation, such as `latin1_bin`, and can store only IDs
 representable in that character set. An `utf8mb4` ID of that declared width
 cannot be converted to MyISAM.
 
-The optional `inventory:legacy` command remains available for operators
-examining older layouts. Factory build and `checkConnection()` do not scan
-unrelated tables or perform an upgrade-layout inventory. Requested record
-families are checked when normal storage operations first use them.
+Factory build and `checkConnection()` do not scan unrelated tables. Requested
+record families are checked when normal storage operations first use them.
 
 ## Lifecycle and tenancy
 

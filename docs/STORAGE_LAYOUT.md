@@ -5226,7 +5226,6 @@ import {
 declare class TicketAggregate extends Aggregate<TicketId, typeof TicketSchema> {}
 declare class TicketListProjection extends Projection<TicketListId, typeof TicketListSchema> {}
 declare class ReplyAssistantAgent extends Agent<ReplyAssistantId, typeof ReplyAssistantSchema> {}
-declare const generatedRegistryRoot: URL;
 declare const factory: StorageFactory;
 declare const ai: AiRegistry;
 declare const agentAi: NonNullable<GeneratedRepositoryOptions<typeof ReplyAssistantAgent>["ai"]>;

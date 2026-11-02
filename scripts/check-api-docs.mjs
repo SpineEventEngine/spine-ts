@@ -886,7 +886,6 @@ const expectedServerExports = [
   "failSignalIntake",
   "isEntitySchema",
   "describeEntityMetadata",
-  "materializeDecoratedEntityHandlers",
   "validateEntityStateTransition",
 ];
 const expectedBrowserServerExports = [

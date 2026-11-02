@@ -389,7 +389,7 @@ field. Event routing uses a compatible producer ID when available and otherwise
 uses the Event's declared first field. State-update routing selects the first
 state field compatible with the Entity ID.
 
-## Browser gateway migration
+## Browser gateway setup
 
 The server root has no browser options and does not load auth. To host a
 browser-facing Gateway, install the optional auth peer and import the browser

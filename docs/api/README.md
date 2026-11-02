@@ -792,19 +792,16 @@ reaction, event subscription, state subscription, and event reaction,
 canonical arity metadata, and `HandlerMetadataError` for registration-time
 structural failures. Handler names must refer to prototype data methods
 declared with normal class method syntax. `EntityHandlers.define()` remains
-public for framework tests, generated-registry ingestion, and legacy
-non-decorator migration tooling; ordinary application code should use bare
+public for framework tests and generated-registry ingestion; ordinary application code should use bare
 decorators plus generated registry assembly instead. Decorator adapter exports
 include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Throws`,
-framework-only `materializeDecoratedEntityHandlers()`,
 `HandlerMethodDecorator`, `HandlerMethodValue`, and `RejectionDeclaration`.
 Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the primary public
 handler decorators. A command-accepting handler uses `@Throws` below its primary
 decorator to declare generated domain rejections. Generated handler registries
-perform ordinary schema inference. Schema-bearing handler metadata is internal/tooling input for
-generated registry assembly and framework materialization; it is not a
-public decorator form. `materializeDecoratedEntityHandlers()` remains a
-framework-only helper; application code must not call it.
+perform ordinary schema inference from source. Bare decorators validate public
+instance method placement at runtime; generated registry metadata supplies the
+message schemas and handler records.
 Ordinary generated assembly imports `generated/spine-bootstrap.js` once at the
 application entry, then uses
 `await BoundedContext.singleTenant(name).add(EntityClass).build()`.

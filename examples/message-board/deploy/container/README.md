@@ -38,7 +38,7 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | ------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | Managed application node | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `PROCESS_COUNT`, `DELIVERY_SHARD_COUNT`          |
 | Combined                 | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `BROWSER_ORIGIN`                                 |
-| Gateway (local)          | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `BACKEND_URLS` or `BACKEND_URL`                       |
+| Gateway (local)          | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `BACKEND_URLS`                                        |
 | Gateway (GKE)            | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `BACKEND_DISCOVERY_SERVICE`, `BACKEND_DISCOVERY_PORT` |
 | Delivery server          | `HOST`, `PORT`                                                                                                  |
 
@@ -59,8 +59,7 @@ Datastore for Message Board data. The standalone Gateway creates process-local
 public browser subscription bindings; it does not need a separate subscription
 store. Infrastructure passes these values; it does not choose a storage provider.
 
-`BACKEND_URLS` is the comma-separated local Compose fixture and `BACKEND_URL`
-remains its legacy single-backend form. Production Kubernetes gateways use
+`BACKEND_URLS` is the comma-separated local Compose fixture. Production Kubernetes gateways use
 `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT` for GKE service DNS;
 they do not configure a fixed backend list.
 

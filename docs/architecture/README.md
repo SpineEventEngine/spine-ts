@@ -309,8 +309,7 @@ unsupported here, matching the JVM generation boundary; they fail
 closed with field-specific violations and no raw previous/next value leakage.
 
 `EntityHandlers.define()` is the low-level explicit metadata constructor that
-remains public for framework tests, generated-registry ingestion, and legacy
-non-decorator migration tooling. Ordinary application code should use bare
+remains public for framework tests and generated-registry ingestion. Ordinary application code should use bare
 decorators plus generated registry assembly instead. The explicit constructor
 accepts an entity class, a state schema, and a builder callback whose methods
 record command assignment, command substitution, command reaction, event
@@ -335,18 +334,14 @@ type. Command reactions, event subscriptions, and event
 reactions intentionally allow multiple handlers for the same message type so
 runtime fan-out remains possible.
 
-The standard decorator adapter is metadata-only syntax over the same explicit
-contract. Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the
-ordinary application syntax collected from public instance methods into
-standard per-class decorator metadata. They are the only public decorator
-signatures. Schema-bearing handler metadata is generated/internal tooling input
-and framework materialization state, not an application decorator form.
-`materializeDecoratedEntityHandlers()` remains a framework-only helper.
-Generated registry tooling performs ordinary schema inference from
-handler parameter and return types, keeps decorated classes compatible with
+The standard decorator adapter validates public instance method placement.
+Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the ordinary
+application syntax and the only public handler decorator signatures. Generated
+registry tooling discovers these declarations from TypeScript source and infers
+schema metadata from handler parameter and return types. It keeps decorated classes compatible with
 `HandlerMetadataRegistry`, and leaves `EntityHandlers.define()` available only
-for framework tests, generated-registry ingestion, and legacy non-decorator
-migration tooling. The adapter does not use legacy `emitDecoratorMetadata`,
+for framework tests and generated-registry ingestion. The adapter does not use
+`Symbol.metadata`, `emitDecoratorMetadata`,
 `reflect-metadata`, parameter decorators, or a process-wide handler registry.
 
 `validateEntityStateTransition()` is the high-level server validation API

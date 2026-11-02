@@ -248,7 +248,6 @@ describe("@spine-event-engine/server", () => {
         "createEntityTransaction",
         "failSignalIntake",
         "isEntitySchema",
-        "materializeDecoratedEntityHandlers",
         "validateEntityStateTransition",
       ].sort(),
     );

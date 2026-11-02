@@ -75,8 +75,8 @@ canonical request, and reader facts; an Activate proof cannot authorize Cancel.
 Internal metadata received from a caller is not accepted without that verifier.
 
 An authenticated native forwarding call without an issuer fails rather than
-discarding its reader identity. Configure both ends when migrating an existing
-authenticated browser gateway. These are TS forwarding ports; merely sending
+discarding its reader identity. Configure both issuer and verifier for authenticated
+browser forwarding. These are TS forwarding ports; merely sending
 their metadata to a JVM backend does not add verified-reader support there.
 Custom forwarding implementations must establish the equivalent trust at their
 receiving boundary. Credentials and provider tokens are not forwarding fields.

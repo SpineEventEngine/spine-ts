@@ -293,7 +293,6 @@ export {
   Where,
   type RejectionDeclaration,
   type WhereOptions,
-  materializeDecoratedEntityHandlers,
 } from "./handler/handler-decorators.js";
 
 export type { External } from "./handler/external.js";

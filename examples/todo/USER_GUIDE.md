@@ -321,12 +321,8 @@ change that acknowledgement and may leave no observed outcome.
 Rejected commands preserve aggregate state and produce no normal event route
 targets. The rejection event has its own declared TaskList route where needed.
 
-### Snapshot boundary
-
-`TaskList` now stores its typed `TaskListId` in field 4; field 1 is reserved.
-Existing snapshots are reset for this change. The example provides no automatic
-migration and does not infer a task-list ID from a task ID, so start local
-example data fresh after updating.
+`TaskList` stores its typed `TaskListId` in field 4; field 1 is reserved. A task-list
+ID comes from the TaskList command and is not inferred from an individual task ID.
 
 ## Query task lists
 

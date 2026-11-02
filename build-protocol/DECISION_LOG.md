@@ -7107,3 +7107,13 @@ destination membership to check. Do not infer a source Bounded Context from
 Q/R types, scan unrelated Bounded Context indexes, or introduce a Server-wide
 tenant directory. Application-specific access checks remain in the configured
 authentication/authorization ports and application code.
+
+## No migrations (2026-11-02)
+
+The human requires: “we do not provide any migration for anyone.” This is a
+standing rule until explicitly changed by the human. Remove migration
+implementations, migration tools and migration instructions. Maintained
+application code and examples use the current contract directly. Earlier
+requirements to deliver migrations are superseded. Current protocol
+interoperability, ordinary recovery, and invalid-format rejection do not migrate
+user data and are evaluated by their actual purpose.

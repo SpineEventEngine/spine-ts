@@ -97,18 +97,14 @@ describe("handler codegen", () => {
       "../node_modules/bridge/node_modules/model/dist/generated/spine-metadata.d.ts",
     );
   });
-  it("emits local bootstrap and removes the superseded handler file", () => {
+  it("emits local bootstrap", () => {
     const app = application();
-    const oldOutput = join(app, "generated/handler/generated-handler-registry.ts");
-    mkdirSync(join(app, "generated/handler"), { recursive: true });
-    writeFileSync(oldOutput, "stale\n");
 
     generateHandlerRegistry({ appRoot: app });
 
     expect(readFileSync(join(app, "generated/spine-bootstrap.ts"), "utf8")).toContain(
       "registerSpineMetadata",
     );
-    expect(() => readFileSync(oldOutput, "utf8")).toThrow();
   });
 
   it("places emitted adapters in inherited JavaScript and declaration directories", () => {
@@ -213,50 +209,6 @@ describe("handler codegen", () => {
     expect(readFileSync(metadata, "utf8")).toBe("live metadata\n");
     expect(readFileSync(bootstrap, "utf8")).toBe("live bootstrap\n");
     expect(readdirSync(join(app, "generated")).some((name) => name.endsWith(".tmp"))).toBe(false);
-  });
-
-  it("rejects a symlinked retired output before changing either live file", () => {
-    const app = application();
-    const metadata = liveOutput(app);
-    const bootstrap = join(app, "generated/spine-bootstrap.ts");
-    const retired = join(app, "generated/handler/generated-handler-registry.ts");
-    const external = join(mkdtempSync(join(tmpdir(), "spine-retired-output-")), "external.ts");
-    writeFileSync(metadata, "live metadata\n");
-    writeFileSync(bootstrap, "live bootstrap\n");
-    writeFileSync(external, "external\n");
-    symlinkSync(external, retired);
-
-    expect(() => {
-      generateHandlerRegistry({ appRoot: app });
-    }).toThrow("Superseded output must not use a symlink path");
-    expect(readFileSync(metadata, "utf8")).toBe("live metadata\n");
-    expect(readFileSync(bootstrap, "utf8")).toBe("live bootstrap\n");
-    expect(readFileSync(external, "utf8")).toBe("external\n");
-  });
-
-  it("restores both live files when retired-output removal fails", () => {
-    const app = application();
-    const metadata = liveOutput(app);
-    const bootstrap = join(app, "generated/spine-bootstrap.ts");
-    const retired = join(app, "generated/handler/generated-handler-registry.ts");
-    writeFileSync(metadata, "live metadata\n");
-    writeFileSync(bootstrap, "live bootstrap\n");
-    writeFileSync(retired, "retired\n");
-
-    expect(() => {
-      generateHandlerRegistry(
-        { appRoot: app },
-        {
-          remove: (path) => {
-            if (path === retired) throw new Error("retired removal failed");
-            rmSync(path, { force: true });
-          },
-        },
-      );
-    }).toThrow("retired removal failed");
-    expect(readFileSync(metadata, "utf8")).toBe("live metadata\n");
-    expect(readFileSync(bootstrap, "utf8")).toBe("live bootstrap\n");
-    expect(readFileSync(retired, "utf8")).toBe("retired\n");
   });
 
   it("reports primary and cleanup failures in order", () => {

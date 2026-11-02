@@ -618,8 +618,9 @@ Do not create tasks for these unless a new human decision changes scope:
 - production persistence, authentication, deployment, tracing, or health checks
   in the to-do example.
 
-Existing public compatibility symbols may remain only with their already
-accepted narrow framework/testing/legacy descriptions. Do not expand them.
+Framework and testing APIs remain only where current execution or tests need
+them. Do not retain APIs, tools, or instructions solely to migrate callers or
+data from a previous framework contract.
 
 ## Definition Of Done
 
@@ -1194,7 +1195,7 @@ transport,testing}/README.md`; `docs/api/README.md`; public TSDoc; TypeDoc.
   lifecycle access, endpoint, or storage implementation detail leaks;
 - lifecycle docs state only observable `Server`, `RunningServer`, and
   `ServerEnvironment` behavior;
-- legacy compatibility symbols retain narrow accepted wording;
+- no migration-only compatibility symbols or migration instructions remain;
 - package limitations agree with accepted exclusions;
 - links and command snippets are valid.
 

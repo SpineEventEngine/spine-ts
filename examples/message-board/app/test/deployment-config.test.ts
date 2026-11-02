@@ -23,7 +23,7 @@ const completeEnvironment: NodeJS.ProcessEnv = {
   PORT: "8080",
   DATASTORE_PROJECT_ID: "message-board-test",
   BROWSER_ORIGIN: "https://board.example.com",
-  BACKEND_URL: "http://application:8081",
+  BACKEND_URLS: "http://application:8081",
   DELIVERY_SERVER_URL: "http://delivery:8484",
 };
 const client = {} as Datastore;
@@ -118,13 +118,23 @@ describe("MessageBoard deployment configuration", () => {
     },
   );
 
-  it("prefers the ordered fixed BACKEND_URLS topology over the legacy backend URL", () => {
+  it("uses the ordered fixed BACKEND_URLS topology", () => {
     expect(
       MessageBoardDeployment.gateway({
         ...completeEnvironment,
         BACKEND_URLS: "http://application-a:8081,http://application-b:8081",
       }).backendUrls,
     ).toEqual(["http://application-a:8081", "http://application-b:8081"]);
+  });
+
+  it("rejects the retired singular backend URL without BACKEND_URLS", () => {
+    expect(() =>
+      MessageBoardDeployment.gateway({
+        ...completeEnvironment,
+        BACKEND_URLS: undefined,
+        BACKEND_URL: "http://application:8081",
+      }),
+    ).toThrow("Missing required configuration: BACKEND_URLS.");
   });
 
   it("uses GKE discovery instead of a fixed backend list when configured", () => {
@@ -152,7 +162,7 @@ describe("MessageBoard deployment configuration", () => {
     ["HOST", undefined],
     ["DATASTORE_PROJECT_ID", ""],
     ["BROWSER_ORIGIN", undefined],
-    ["BACKEND_URL", undefined],
+    ["BACKEND_URLS", undefined],
   ])("rejects missing required %s", (name, value) => {
     expect(() => MessageBoardDeployment.gateway({ ...completeEnvironment, [name]: value })).toThrow(
       `Missing required configuration: ${name}.`,
