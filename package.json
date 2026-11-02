@@ -42,6 +42,7 @@
     "gen:desktop": "pnpm --filter @spine-event-engine/example-release-notes gen:desktop",
     "proto:check-generated": "node scripts/check-generated-clean.mjs",
     "proto:check-generated:current": "node scripts/check-generated-clean.mjs --current-output",
+    "proto:check-fixtures": "vitest run scripts/check-generated-clean.test.mjs scripts/generate-handler-registry.test.mjs scripts/clean-build-outputs.test.mjs",
     "check:release-readiness": "node scripts/check-release-readiness.mjs",
     "verify": "pnpm verify:release",
     "verify:task": "pnpm check:node && node scripts/verify-task.mjs",
@@ -55,7 +56,7 @@
     "release:publish-new-package": "node scripts/publish-new-package.mjs",
     "verify:generated-gates": "pnpm typecheck:build:generated && pnpm typecheck:tooling && eslint . && pnpm lint:cleanup && pnpm lint:tsdoc && pnpm lint:copyright && pnpm check:time-reads && pnpm format:check && pnpm docs:check:generated && pnpm proto:lint:generated && pnpm proto:check-generated:current && pnpm check:logging-containment && pnpm check:production-dependencies && pnpm check:release-readiness",
     "verify:release": "pnpm check:node && pnpm proto:generate && pnpm verify:release:generated",
-    "verify:release:generated": "pnpm verify:generated-gates && vitest run --coverage --passWithNoTests --testTimeout=15000 && pnpm test:node:generated",
+    "verify:release:generated": "pnpm proto:check-fixtures && pnpm verify:generated-gates && vitest run --coverage --passWithNoTests --testTimeout=15000 && pnpm test:node:generated",
     "verify:publish": "pnpm verify:release && pnpm audit:release",
     "verify:generated": "pnpm verify:release:generated",
     "lint:copyright": "node scripts/check-copyright.mjs"

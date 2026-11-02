@@ -90,7 +90,7 @@ export function classifyTaskChanges(paths) {
  */
 export function taskGateCommands(classification) {
   return [
-    ...(classification.proto ? ["proto:generate"] : []),
+    ...(classification.proto ? ["proto:check-fixtures", "proto:generate"] : []),
     "typecheck:build:generated",
     "typecheck:tooling",
     "eslint",

@@ -224,7 +224,12 @@ work, never from weakening correctness or review requirements.
    scope: changed-file formatting, `git diff --check`, tooling and affected-
    package typechecks, focused tests, deterministic documentation checks, and
    changed-production-file coverage inspection. Begin the full gate only after
-   this preflight is clean.
+   this preflight is clean. For generator, staging, or build-output changes,
+   `proto:check-fixtures` is an automatic early gate in `verify:release` and
+   non-Markdown `verify:task`. It checks authored fixture setup, target order,
+   bootstrap expectations, and build-output roots before the full TypeScript
+   build or repository test suite. It validates expected behavior; it never
+   rewrites assertions or generated output.
 3. Identify required local capabilities before verification. Tests that bind
    loopback HTTP, HTTP/2, gRPC, or ZeroMQ endpoints must run with the necessary
    permission on their first attempt; a restricted sandbox is not a useful
@@ -235,6 +240,10 @@ work, never from weakening correctness or review requirements.
    build TypeScript once, run tests once with coverage, generate TypeDoc once,
    and perform each Proto generation/checksum check once. Downstream checks
    must reuse those outputs rather than rebuilding or regenerating them.
+   The small generation-fixture contract suites also run at the start of
+   verification, then again as part of the ordinary full Vitest suite so
+   ordinary test commands and coverage selection remain unchanged. This is
+   the only intentional early-test repeat.
 6. Treat coverage as an implementation-time requirement. Inspect changed
    production branches and add focused behavior tests before review instead of
    discovering a coverage shortage in the final repository-wide gate.
