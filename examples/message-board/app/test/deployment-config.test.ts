@@ -12,11 +12,13 @@
  * the License.
  */
 
+import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import type { Datastore } from "@google-cloud/datastore";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MessageBoardDeployment } from "../src/deployment-config.js";
+import { typeRegistry } from "../src/model-registry.js";
 
 const completeEnvironment: NodeJS.ProcessEnv = {
   HOST: "127.0.0.1",
@@ -30,9 +32,21 @@ const client = {} as Datastore;
 
 afterEach(async () => {
   await resetServerEnvironmentForTest();
+  vi.unstubAllEnvs();
 });
 
 describe("MessageBoard deployment configuration", () => {
+  it("configures the production Coordinator before shared environment resolution", () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    MessageBoardDeployment.configureManagedCoordinator();
+
+    const environment = ServerEnvironment.instance();
+    expect(environment.environment.type).toBe(EnvironmentType.Production);
+    expect(environment.typeRegistry).toBe(typeRegistry);
+    expect(environment.subscriptionQueueCapacity).toBe(100);
+  });
+
   it("requires shared Delivery for a managed replica", () => {
     expect(() =>
       MessageBoardDeployment.configureManagedServer(

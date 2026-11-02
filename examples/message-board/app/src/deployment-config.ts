@@ -150,6 +150,11 @@ interface DeploymentContract {
     environment: NodeJS.ProcessEnv,
     logger?: ILogLayer,
   ): ManagedServerFacilities;
+
+  /**
+   * Sets the production model registry for the managed Coordinator process.
+   */
+  configureManagedCoordinator(): void;
 }
 
 /**
@@ -326,6 +331,13 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
       delivery,
     });
     return { storageFactory, delivery };
+  },
+
+  /**
+   * Sets the production model registry before the Coordinator opens its listener.
+   */
+  configureManagedCoordinator(): void {
+    ServerEnvironment.when(EnvironmentType.Production).use({ typeRegistry });
   },
 });
 
