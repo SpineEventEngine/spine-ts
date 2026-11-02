@@ -117,6 +117,7 @@ import { ReadRequestStatus } from "./read-request-status.js";
 import { TrustedReaderIngress, type DirectReaderAuthenticator } from "./trusted-reader-ingress.js";
 import { RegisteredTargets } from "./registered-targets.js";
 import { emitServerError, emitServerWarning } from "../server/server-log.js";
+import { ServerEnvironment } from "../server/server-environment.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
 import {
   type StandSubscriptionEntry,
@@ -223,7 +224,7 @@ export class SpineServices {
 
   readonly #unknownRemovals = new Set<string>();
 
-  readonly #queueLimit: number;
+  readonly #queueCapacity: number;
 
   readonly #subscriptionLimit: number;
 
@@ -239,9 +240,7 @@ export class SpineServices {
   constructor(options: SpineServicesOptions) {
     serviceInstances.add(this);
     this.#contexts = Object.freeze([...options.contexts]);
-    this.#queueLimit = ServiceValues.positiveInteger(
-      options.queueLimit ?? ServiceValues.defaultQueueLimit,
-    );
+    this.#queueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
     this.#subscriptionLimit = ServiceValues.subscriptionLimit(
       options.subscriptionLimit ?? ServiceValues.defaultSubscriptionLimit,
     );
@@ -826,6 +825,7 @@ export class SpineServices {
           if (record.delivery.signal.aborted) return;
           yield update;
         }
+        record.delivery.advance();
       }
     } catch (error) {
       record.delivery.close();
@@ -1262,7 +1262,7 @@ export class SpineServices {
         subscription: clone(SubscriptionSchema, subscription),
         shape: ServiceValues.createSubscriptionShape(canonicalTopic, route),
         tenantId,
-        queueLimit: this.#queueLimit,
+        queueCapacity: this.#queueCapacity,
         ...(entry.reader === undefined ? {} : { reader: entry.reader }),
       });
     }
@@ -1360,13 +1360,6 @@ export interface SpineServicesOptions {
   }>;
 
   /**
-   * Maximum queued updates per active subscription before delivery is closed.
-   *
-   * Defaults to 100. Non-positive or non-finite values are coerced to 1.
-   */
-  readonly queueLimit?: number;
-
-  /**
    * Maximum concurrent unknown-ID cancellation operations for this
    * `SpineServices` instance.
    *
@@ -1447,13 +1440,15 @@ type SubscriptionShape =
  * Buffers subscription updates and wakes active stream readers.
  */
 class SubscriptionDelivery {
+  #active: SubscriptionReadWork | undefined;
+
   readonly #queue: SubscriptionReadWork[] = [];
 
   readonly #waiters: ((update: SubscriptionReadWork | undefined) => void)[] = [];
 
   readonly #controller = new AbortController();
 
-  readonly #queueLimit: number;
+  readonly #queueCapacity: number;
 
   #activationSignal: AbortSignal | undefined;
 
@@ -1468,10 +1463,10 @@ class SubscriptionDelivery {
   /**
    * Sets the bounded update queue capacity.
    *
-   * @param queueLimit Maximum pending updates before closure.
+   * @param queueCapacity Maximum waiting updates beyond the active update.
    */
-  constructor(queueLimit: number) {
-    this.#queueLimit = queueLimit;
+  constructor(queueCapacity: number) {
+    this.#queueCapacity = queueCapacity;
   }
 
   /**
@@ -1588,16 +1583,16 @@ class SubscriptionDelivery {
       return;
     }
 
-    const waiter = this.#waiters.shift();
-    if (waiter === undefined) {
-      if (this.#queue.length >= this.#queueLimit) {
-        this.close();
-        return;
-      }
-      this.#queue.push(update);
-    } else {
-      waiter(update);
+    if (this.#active === undefined) {
+      this.#active = update;
+      this.#waiters.shift()?.(update);
+      return;
     }
+    if (this.#queue.length >= this.#queueCapacity) {
+      this.close();
+      return;
+    }
+    this.#queue.push(update);
   }
 
   /**
@@ -1606,12 +1601,18 @@ class SubscriptionDelivery {
    * @returns Next update, or `undefined` after closure.
    */
   next(): Promise<SubscriptionReadWork | undefined> {
-    const update = this.#queue.shift();
-    if (update !== undefined || this.#closed) {
-      return Promise.resolve(update);
-    }
-
+    if (this.#closed) return Promise.resolve(undefined);
+    if (this.#active !== undefined) return Promise.resolve(this.#active);
     return new Promise((resolve) => this.#waiters.push(resolve));
+  }
+
+  /**
+   * Removes the consumed active update and promotes the next waiting update.
+   */
+  advance(): void {
+    if (this.#closed) return;
+    this.#active = this.#queue.shift();
+    if (this.#active !== undefined) this.#waiters.shift()?.(this.#active);
   }
 
   /**
@@ -1627,6 +1628,7 @@ class SubscriptionDelivery {
     if (this.#activationSignal !== undefined && this.#onActivationAbort !== undefined)
       this.#activationSignal.removeEventListener("abort", this.#onActivationAbort);
     this.#queue.length = 0;
+    this.#active = undefined;
     this.#subscription?.unsubscribe();
     this.#subscription = undefined;
 
@@ -2224,7 +2226,6 @@ function createReadPlan(
   };
 }
 
-const DEFAULT_QUEUE_LIMIT = 100;
 const DEFAULT_SUBSCRIPTION_LIMIT = 100;
 
 /**
@@ -2251,15 +2252,6 @@ const SubscriptionLimits = Object.freeze({
 });
 
 /**
- * Normalizes a configured positive integer to a safe fallback.
- *
- * @param value Configured numeric value.
- * @returns The positive integer setting.
- */ function positiveInteger(value: number): number {
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
-}
-
-/**
  * Validates the configured maximum concurrent subscriptions.
  *
  * @param value Configured maximum concurrent subscriptions.
@@ -2282,7 +2274,7 @@ const SubscriptionLimits = Object.freeze({
   readonly subscription: Subscription;
   readonly shape: SubscriptionShape;
   readonly tenantId: TenantId | undefined;
-  readonly queueLimit: number;
+  readonly queueCapacity: number;
   readonly reader?: ReaderIdentity;
 }): SubscriptionRecord {
   return {
@@ -2290,7 +2282,7 @@ const SubscriptionLimits = Object.freeze({
     subscription: clone(SubscriptionSchema, input.subscription),
     ...(input.reader === undefined ? {} : { reader: input.reader }),
     tenantId: input.tenantId === undefined ? undefined : clone(TenantIdSchema, input.tenantId),
-    delivery: new SubscriptionDelivery(input.queueLimit),
+    delivery: new SubscriptionDelivery(input.queueCapacity),
     ...input.shape,
   };
 }
@@ -3181,12 +3173,10 @@ const ServiceValues = Object.freeze({
   createSubscriptionRecord,
   createSubscriptionRemoval,
   createSubscriptionShape,
-  defaultQueueLimit: DEFAULT_QUEUE_LIMIT,
   defaultSubscriptionLimit: DEFAULT_SUBSCRIPTION_LIMIT,
   errorStatus,
   okResponse,
   okStatus,
-  positiveInteger,
   packVersionedState,
   queryResultLimit: QueryLimits.resultCount,
   stateRouteIdField,

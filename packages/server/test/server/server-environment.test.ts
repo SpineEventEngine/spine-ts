@@ -71,6 +71,32 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("resolves the default subscription waiting capacity", () => {
+    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(100);
+  });
+
+  it("captures a configured subscription capacity from a settings factory once and resets it", async () => {
+    const settings = vi.fn(() => ({ subscriptionQueueCapacity: 0 }));
+    ServerEnvironment.when(EnvironmentType.Local).use(settings);
+    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(0);
+    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(0);
+    expect(settings).toHaveBeenCalledOnce();
+    await resetServerEnvironmentForTest();
+    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(100);
+  });
+
+  it.each([-1, 0.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, null, "2"])(
+    "rejects invalid subscription capacity %s before constructing facilities",
+    (capacity) => {
+      ServerEnvironment.when(EnvironmentType.Local).use({
+        subscriptionQueueCapacity: capacity as number,
+      });
+      expect(() => ServerEnvironment.instance()).toThrow(RangeError);
+      ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: 0 });
+      expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(0);
+    },
+  );
+
   it("accepts an inline remote Delivery facility", async () => {
     const ports = new CoreDelivery({
       context: { name: "InlineRemote", multitenant: false },

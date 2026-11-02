@@ -1,7 +1,7 @@
 # App Queries and read-side filtering
 
-Status: implementation and specialist reviews complete. Release acceptance requires
-the local release gate and CI to pass for the final branch commit.
+Status: extending the implementation with shared environment subscription capacity
+and lifetime Message Board statistics using App Queries and read-side filters.
 
 Branch: `app-queries-read-filters`. Baseline: official `origin/master`
 `3135caaa202cdc2de71d249f2859cc4c4329b8c3`.
@@ -57,13 +57,35 @@ replace or narrow that proposal.
 - Within each subscription, filter execution and result delivery are sequential.
   Filtering the next update must not begin before filtering the previous update
   finishes; parallel filtering followed by ordered delivery is not permitted.
-  Direct subscriptions use independent queues with a configurable default of
-  100 waiting updates, plus one update being processed. Overflow terminates only
+  All Server-served and direct Stand subscriptions use the single
+  ServerEnvironment.subscriptionQueueCapacity setting: 100 waiting updates by
+  default, plus one update being processed. No Server, service, Bounded Context,
+  or subscription override is permitted. A Stand needs no Server to obtain it.
+  Zero permits active processing without waiting; invalid values are rejected.
+  Subscriptions retain separate queues. This supersedes any earlier per-consumer
+  configuration. Overflow terminates only
   that subscription with an explicit error; writes and other subscribers continue.
   Clear waiting updates and suppress late results when the subscription closes.
 - Trusted principal/authority information must reach app-node execution through
   replaceable authentication/forwarding ports. Reject forged forwarded context.
   Public access can lack a principal; no provider-liveness promise.
+- The Message Board App Query returns statistics since board creation, including
+  total messages and distinct participating users. Maintain cumulative statistics;
+  do not label a limited result set or the latest announcement as lifetime totals.
+  Combine statistics from the separate supplying Bounded Contexts. Keep the
+  message and announcement lists. Its browser page uses Entity
+  updates and permitted MessagePosted notifications. Public readers see public
+  content with author names hidden; authenticated readers see public authors;
+  verified authority grants permit restricted content. Access filters belong to
+  supplying Bounded Contexts; Server filters redact returned author information,
+  including nested results and domain Event payloads. Real authentication ports
+  supply the principal and authority facts; Actor IDs never grant access.
+- Deliver two separate chat Markdown pieces: complete explanatory story and PR
+  description, both rewritten from the implemented result. Explain concrete
+  authenticated-principal configuration and receipt. Use “the framework” in
+  prose and four-space PR code indentation. The PR description omits verification,
+  test counts, coverage, audit results, and agent-review records. Do not publish
+  the PR text to GitHub. No documentation-writing skills or popup questions.
 - Follow BUILD_PROTOCOL, CODE_QUALITY, TECHNICAL_SPEC, DEVELOPER_API, and accepted
   decisions except where this newly approved contract explicitly supersedes them.
   Use meaningful domain Proto fixtures, no optional authored Proto, generated

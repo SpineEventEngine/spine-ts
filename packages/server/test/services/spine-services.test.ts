@@ -192,6 +192,15 @@ async function configureStorage(storageFactory: InMemoryStorageFactory): Promise
   await ServerEnvironment.instance().completeSetup();
 }
 
+async function configureSubscriptionCapacity(capacity: number): Promise<void> {
+  const { ServerEnvironment, ServerEnvironmentLifecycle } =
+    await import("../../src/server/server-environment.js");
+  const { EnvironmentType } = await import("../../src/server/environment.js");
+  await ServerEnvironmentLifecycle.resetForTest();
+  ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: capacity });
+  await ServerEnvironment.instance().completeSetup();
+}
+
 const GeneratedTaskIdSchema = TaskIdSchema;
 let stateChangeSequence = 0;
 
@@ -3900,21 +3909,25 @@ describe("SpineServices", () => {
   });
 
   it("keeps native queue admission bounded while an asynchronous filter is blocked", async () => {
+    await configureSubscriptionCapacity(1);
     await import("../../test-fixtures/generated/proto-module.js");
     let enter!: () => void;
     const entered = new Promise<void>((resolve) => {
       enter = resolve;
     });
-    const pending = new Promise<ProjectOverviewState>(() => undefined);
+    const pending = Promise.withResolvers<ProjectOverviewState | null>();
     let filterSignal: AbortSignal | undefined;
     class BlockedState extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
       constructor() {
         super(ProjectOverviewStateSchema);
       }
-      filter(_state: ProjectOverviewState, facts: ReadSideContext): Promise<ProjectOverviewState> {
+      filter(
+        _state: ProjectOverviewState,
+        facts: ReadSideContext,
+      ): Promise<ProjectOverviewState | null> {
         filterSignal = facts.signal;
         enter();
-        return pending;
+        return pending.promise;
       }
     }
     const registry = new InMemorySubscriptionRegistry();
@@ -3924,7 +3937,7 @@ describe("SpineServices", () => {
       .addReadSideFilter(new BlockedState())
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
-    const handlers = registeredSubscriptionHandlers(context, { queueLimit: 1 });
+    const handlers = registeredSubscriptionHandlers(context);
     const subscription = await handlers.subscribe(createTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     await expectActivationAcknowledgement(iterator, subscription);
@@ -3949,6 +3962,9 @@ describe("SpineServices", () => {
     await expect(withTimeout(next, "overflowed filtered stream")).resolves.toMatchObject({
       done: true,
     });
+    pending.resolve(null);
+    await Promise.resolve();
+    expect(await iterator.next()).toMatchObject({ done: true });
     expect(filterSignal?.aborted).toBe(true);
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
     expect(await registry.get(subscription.id)).toBeUndefined();
@@ -4210,11 +4226,12 @@ describe("SpineServices", () => {
   });
 
   it("keeps a closed event subscription detached when best-effort cleanup rejects", async () => {
+    await configureSubscriptionCapacity(1);
     const context = await BoundedContext.singleTenant("EventCleanup")
       .withSubscriptionRegistry(new RejectingDeleteRegistry())
       .addEventDispatcher(createDomainEventDispatcher(TaskCreatedSchema))
       .build();
-    const services = new SpineServices({ contexts: [context], queueLimit: 1 });
+    const services = new SpineServices({ contexts: [context] });
     let handlers:
       | {
           subscribe(topic: Topic): Promise<Subscription>;
@@ -4969,16 +4986,6 @@ describe("SpineServices", () => {
     }
   });
 
-  it("coerces a non-positive subscription queue limit", async () => {
-    const context = await buildStateSubscriptionContext("NormalizedSubscriptionQueue");
-    try {
-      const handlers = registeredSubscriptionHandlers(context, { queueLimit: 0 });
-      await expect(handlers.subscribe(createTopic())).resolves.toBeDefined();
-    } finally {
-      await context.close();
-    }
-  });
-
   it("rejects missing subscription IDs before lifecycle lookup", async () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({ stateTypes: [TypeUrls.derive(ProjectOverviewStateSchema)] }),
@@ -5616,6 +5623,7 @@ describe("SpineServices", () => {
   });
 
   it("warns once when detached closed-stream cleanup rejects without changing the stream outcome", async () => {
+    await configureSubscriptionCapacity(1);
     const registry = new RejectingDeleteRegistry();
     const context = await BoundedContext.singleTenant("CleanupWarning")
       .withSubscriptionRegistry(registry)
@@ -5624,7 +5632,7 @@ describe("SpineServices", () => {
       .build();
     const warn = vi.fn(() => Promise.reject(new Error("logger rejection")));
     const withMetadata = vi.fn(() => ({ warn }));
-    const services = new SpineServices({ contexts: [context], queueLimit: 1 });
+    const services = new SpineServices({ contexts: [context] });
     spineServicesAccess.installLogger(services, { withMetadata } as unknown as ILogLayer);
     let handlers:
       | {
@@ -5673,7 +5681,70 @@ describe("SpineServices", () => {
     await context.close();
   });
 
+  it("reserves an active update while activation is paused after its ACK", async () => {
+    await configureSubscriptionCapacity(1);
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("ActivationAckCapacity")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createTopic());
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      await expectActivationAcknowledgement(iterator, subscription);
+      await awaitSubscriptionAttachment(context, subscription);
+      for (const name of ["active", "waiting"]) {
+        await postEntityStateChanged(context, ProjectOverviewStateSchema, createState(name, name));
+      }
+      if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+      expect(await registry.get(subscription.id)).toBeDefined();
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("overflow", "Overflow"),
+      );
+      expect(await withTimeout(iterator.next(), "closed activation queue")).toMatchObject({
+        done: true,
+      });
+      expect(await registry.get(subscription.id)).toBeUndefined();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("keeps a yielded update active until the stream advances", async () => {
+    await configureSubscriptionCapacity(0);
+    const context = await buildStateSubscriptionContext("YieldedCapacity");
+    try {
+      const handlers = registeredSubscriptionHandlers(context);
+      const subscription = await handlers.subscribe(createTopic());
+      const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+      await expectActivationAcknowledgement(iterator, subscription);
+      const first = iterator.next();
+      await awaitSubscriptionAttachment(context, subscription);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("active", "Active"),
+      );
+      expect((await withTimeout(first, "first active update")).done).toBe(false);
+      await postEntityStateChanged(
+        context,
+        ProjectOverviewStateSchema,
+        createState("overflow", "Overflow"),
+      );
+      expect(await withTimeout(iterator.next(), "closed yielded queue")).toMatchObject({
+        done: true,
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
   it("closes slow subscription consumers when the update queue limit is exceeded", async () => {
+    await configureSubscriptionCapacity(1);
     const registry = new InMemorySubscriptionRegistry();
     const context = await BoundedContext.singleTenant("SlowSubscriptionQueue")
       .withSubscriptionRegistry(registry)
@@ -5682,7 +5753,6 @@ describe("SpineServices", () => {
       .build();
     try {
       const handlers = registeredSubscriptionHandlers(context, {
-        queueLimit: 1,
         subscriptionLimit: 1,
       });
       const subscription = await handlers.subscribe(createTopic());

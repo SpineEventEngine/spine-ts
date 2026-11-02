@@ -40,6 +40,7 @@ import {
   EnvironmentType,
   ServerEnvironment,
   type ServerEnvironmentSettings,
+  type SpineServicesOptions,
   type ServerEnvironmentCloseable,
   type ServerEnvironmentDelivery,
   type DeliveryWorkRegistry,
@@ -56,6 +57,7 @@ import {
   type StandReadResult,
   StandStateTypeError,
   type StandSubscription,
+  type StandSubscribeOptions,
   type StandObserver,
   StandSubscriptionCapacityError,
   type StandUpdate,
@@ -276,6 +278,12 @@ describe("@spine-event-engine/server", () => {
     expectTypeOf<ServerEnvironmentSettings["delivery"]>().toEqualTypeOf<
       ServerEnvironmentCloseable | ServerEnvironmentDelivery | undefined
     >();
+    expectTypeOf<ServerEnvironmentSettings["subscriptionQueueCapacity"]>().toEqualTypeOf<
+      number | undefined
+    >();
+    expectTypeOf<ServerEnvironment["subscriptionQueueCapacity"]>().toEqualTypeOf<number>();
+    expectTypeOf<StandSubscribeOptions>().not.toHaveProperty("queueLimit");
+    expectTypeOf<SpineServicesOptions>().not.toHaveProperty("queueLimit");
     expectTypeOf<{
       delivery: {
         open(): unknown;

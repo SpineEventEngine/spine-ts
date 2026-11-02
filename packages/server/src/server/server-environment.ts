@@ -87,6 +87,11 @@ export interface ServerEnvironmentSettings {
   // prettier-ignore
 
   /**
+   * Waiting updates per subscription beyond one active update; defaults to 100.
+   */
+  readonly subscriptionQueueCapacity?: number;
+
+  /**
    * Live default membership index for Bounded Contexts.
    */
   readonly tenantIndex?: TenantIndex;
@@ -170,6 +175,11 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    * Storage facility selected for server assembly, including server-added context builders.
    */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Waiting updates per subscription beyond one active update.
+   */
+  readonly subscriptionQueueCapacity: number;
 
   /**
    * Live default tenant membership index.
@@ -257,6 +267,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.environment = environment;
     this.nodeId = crypto.randomUUID();
     this.storageFactory = settings.storageFactory;
+    this.subscriptionQueueCapacity = settings.subscriptionQueueCapacity;
     this.tenantIndex = settings.tenantIndex ?? TenantIndexes.fromFactory(settings.storageFactory);
     this.ai = settings.ai;
     this.integrationChannelFactory = settings.integrationChannelFactory;
@@ -712,6 +723,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
+  readonly subscriptionQueueCapacity: number;
   readonly tenantIndex: TenantIndex | undefined;
   readonly ai: AiRegistry | undefined;
   readonly integrationChannelFactory: TransportFactory;
@@ -1333,24 +1345,19 @@ const ServerEnvironmentValues = Object.freeze({
     type: EnvironmentType,
     settings: ServerEnvironmentSettings,
   ): RequiredFacilities {
-    if (type === EnvironmentType.Production) {
-      if (settings.typeRegistry === undefined) {
-        throw new Error("Production ServerEnvironment requires typeRegistry.");
-      }
-      return {
-        storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
-        tenantIndex: settings.tenantIndex,
-        ai: settings.ai,
-        integrationChannelFactory:
-          settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
-        typeRegistry: settings.typeRegistry,
-        delivery: settings.delivery,
-        deliveryStrategy: settings.deliveryStrategy,
-        tracerFactory: settings.tracerFactory,
-        logger: ServerEnvironmentValues.logger(settings.logger),
-      };
-    }
+    const configuredCapacity = settings.subscriptionQueueCapacity;
+    if (
+      configuredCapacity !== undefined &&
+      (!Number.isSafeInteger(configuredCapacity) || configuredCapacity < 0)
+    )
+      throw new RangeError(
+        "ServerEnvironment subscriptionQueueCapacity must be a nonnegative safe integer.",
+      );
+    const capacity = configuredCapacity ?? 100;
+    if (type === EnvironmentType.Production && settings.typeRegistry === undefined)
+      throw new Error("Production ServerEnvironment requires typeRegistry.");
     return {
+      subscriptionQueueCapacity: capacity,
       storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
       tenantIndex: settings.tenantIndex,
       ai: settings.ai,

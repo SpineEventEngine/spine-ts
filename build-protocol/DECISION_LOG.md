@@ -7117,3 +7117,22 @@ application code and examples use the current contract directly. Earlier
 requirements to deliver migrations are superseded. Current protocol
 interoperability, ordinary recovery, and invalid-format rejection do not migrate
 user data and are evaluated by their actual purpose.
+
+## Shared subscription capacity and Message Board overview (2026-11-02)
+
+Subscription waiting capacity is a single ServerEnvironment setting named
+subscriptionQueueCapacity, defaulting to 100 waiting updates in each subscription
+plus its active update. Both Server-served and direct Stand subscription delivery
+use this setting. No per-Server, service, Bounded Context, or per-subscription
+override remains. Invalid values fail configuration; zero means no waiting.
+Strict delivery order, independent writes, and subscription-local overflow remain.
+
+The Message Board example uses an App Query for statistics since board creation,
+including total messages and distinct participating users. Cumulative statistics
+from separate Bounded Contexts must reflect retained domain history rather than
+the size of a query page or the latest announcement. The message and announcement
+lists remain. Typed access filters apply before
+composition, Server filters redact author names for public readers, and matching
+Event filters prevent notification leaks. Verified principal and authority facts
+come from the configured authentication ports. The example and guides must show
+that complete flow, including Entity updates and Event notifications.

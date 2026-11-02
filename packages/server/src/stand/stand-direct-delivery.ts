@@ -173,7 +173,7 @@ export class StandDirectDelivery<Schema extends MessageSchema> {
    * @param observer Local observer receiving visible values or one terminal fault.
    * @param filters Producing Bounded Context read policies, if installed.
    * @param facts Detached actor, tenant, and verified reader facts.
-   * @param queueLimit Maximum waiting updates beyond the active update.
+   * @param queueCapacity Maximum waiting updates beyond the active update.
    * @param onClose Removes this observer from its Stand registration.
    * @param externalSignal Caller cancellation signal, if provided.
    */
@@ -182,7 +182,7 @@ export class StandDirectDelivery<Schema extends MessageSchema> {
     readonly observer: StandObserver<Schema>,
     readonly filters: ReadSideFilterEngine | undefined,
     readonly facts: ReadSideContext,
-    readonly queueLimit: number,
+    readonly queueCapacity: number,
     readonly onClose: () => void,
     readonly externalSignal: AbortSignal | undefined,
   ) {
@@ -211,8 +211,8 @@ export class StandDirectDelivery<Schema extends MessageSchema> {
       void this.#run(update);
       return;
     }
-    if (this.#pending.length >= this.queueLimit) {
-      this.#fail(new StandSubscriptionCapacityError(this.queueLimit));
+    if (this.#pending.length >= this.queueCapacity) {
+      this.#fail(new StandSubscriptionCapacityError(this.queueCapacity));
       return;
     }
     this.#pending.push(update);

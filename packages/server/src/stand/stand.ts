@@ -57,6 +57,7 @@ import {
 } from "./stand-direct-delivery.js";
 import type { ReadSideContext, ReadSideFilter, ReadSideOperation } from "./read-side-filter.js";
 import type { BoundedContext } from "../context/bounded-context.js";
+import { ServerEnvironment } from "../server/server-environment.js";
 import {
   snapshotTrustedReader,
   type TrustedReaderContext,
@@ -178,11 +179,6 @@ export interface StandSubscribeOptions extends StandReadOptions {
    * Tenant slice for multitenant stands.
    */
   readonly tenantId?: TenantId;
-
-  /**
-   * Maximum waiting updates in addition to one active delivery; defaults to 100.
-   */
-  readonly queueLimit?: number;
 }
 
 /**
@@ -277,6 +273,8 @@ interface Registration<Schema extends MessageSchema = MessageSchema> {
 export class Stand {
   readonly #context: StorageMode;
 
+  readonly #subscriptionQueueCapacity: number;
+
   readonly #storageFactory: StorageFactory;
 
   readonly #registrations = new Map<string, Registration>();
@@ -306,6 +304,7 @@ export class Stand {
    * @param options The storage context and factory used for state records.
    */
   constructor(options: StandOptions) {
+    this.#subscriptionQueueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
     this.#context = Stand.#cloneContext(options.context);
     this.#storageFactory = options.storageFactory;
     deferredUpdates.set(this, (schema, state, updateOptions, metadata) =>
@@ -993,7 +992,7 @@ export class Stand {
    * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
    * @param observer Receives serial visible updates and one terminal local fault.
-   * @param options Tenant, trusted facts, cancellation, and waiting capacity.
+   * @param options Tenant, trusted facts, and cancellation.
    * @returns A handle that invalidates pending and active delivery.
    */
   subscribe<Schema extends MessageSchema>(
@@ -1005,17 +1004,7 @@ export class Stand {
     Stand.#requireObserver(observer);
     const registration = this.#registration(schema, "subscribe");
     const tenantKey = this.#tenantKey(options.tenantId);
-    const queueLimit = options.queueLimit ?? 100;
-    if (!Number.isSafeInteger(queueLimit) || queueLimit < 0)
-      throw new RangeError("Stand subscription queueLimit must be a nonnegative integer.");
-    const delivery = this.#subscribeDelivery(
-      schema,
-      observer,
-      options,
-      registration,
-      tenantKey,
-      queueLimit,
-    );
+    const delivery = this.#subscribeDelivery(schema, observer, options, registration, tenantKey);
 
     return Object.freeze({
       get closed() {
@@ -1053,7 +1042,6 @@ export class Stand {
    * @param options Trusted reader, tenant, and cancellation at subscribe time.
    * @param registration The Stand registration for this state schema.
    * @param tenantKey The normalized tenant slice for delivery.
-   * @param queueLimit Maximum waiting updates after the active update.
    * @returns The subscriber's serial delivery queue.
    */
   #subscribeDelivery<Schema extends MessageSchema>(
@@ -1062,7 +1050,6 @@ export class Stand {
     options: StandSubscribeOptions,
     registration: Registration<Schema>,
     tenantKey: string,
-    queueLimit: number,
   ): StandDirectDelivery<Schema> {
     const captured = Stand.#snapshotRead(options);
     const producingContext = standProducingContexts.get(this);
@@ -1077,7 +1064,7 @@ export class Stand {
         ...(captured.tenantId === undefined ? {} : { effectiveTenant: captured.tenantId }),
         ...(producingContext === undefined ? {} : { producingContext }),
       },
-      queueLimit,
+      this.#subscriptionQueueCapacity,
       () => {
         if (attachment.subscriber !== undefined)
           registration.subscribers.delete(attachment.subscriber);

@@ -29,6 +29,7 @@ import {
   ServerEnvironment,
   ServerEnvironmentLifecycle,
 } from "../../src/server/server-environment.js";
+import { EnvironmentType } from "../../src/server/environment.js";
 import "../../test-fixtures/generated/proto-module.js";
 import {
   ProjectOverviewStateSchema,
@@ -60,6 +61,37 @@ const standWithState = () => {
 };
 
 describe("direct Stand subscription filtering", () => {
+  it("uses environment zero capacity without Server setup", async () => {
+    await ServerEnvironmentLifecycle.resetForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: 0 });
+    const stand = standWithState();
+    const entered = deferred();
+    const release = deferred();
+    const errors: Error[] = [];
+    const handle = stand.subscribe(ProjectOverviewStateSchema, {
+      next: async () => {
+        entered.resolve();
+        await release.promise;
+      },
+      error: (error) => {
+        errors.push(error);
+      },
+    });
+    try {
+      await stand.update(ProjectOverviewStateSchema, state("active"));
+      await entered.promise;
+      expect(handle.closed).toBe(false);
+      await stand.update(ProjectOverviewStateSchema, state("overflow"));
+      expect(handle.closed).toBe(true);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toBeInstanceOf(StandSubscriptionCapacityError);
+    } finally {
+      release.resolve();
+      await stand.close();
+      await ServerEnvironmentLifecycle.resetForTest();
+    }
+  });
+
   it("runs one filter and delivery at a time, with 100 waiting updates plus one active", async () => {
     const stand = standWithState();
     const gate = deferred();
@@ -165,6 +197,8 @@ describe("direct Stand subscription filtering", () => {
   });
 
   it("lets a peer continue when a configured one-waiting subscriber overflows", async () => {
+    await ServerEnvironmentLifecycle.resetForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: 1 });
     const stand = standWithState();
     const entered = deferred();
     const gate = deferred();
@@ -199,7 +233,7 @@ describe("direct Stand subscription filtering", () => {
           slowErrors.push(error);
         },
       },
-      { queueLimit: 1, reader: { principal: { id: "slow" }, authorityFacts: { role: "viewer" } } },
+      { reader: { principal: { id: "slow" }, authorityFacts: { role: "viewer" } } },
     );
     stand.subscribe(
       ProjectOverviewStateSchema,
@@ -229,6 +263,7 @@ describe("direct Stand subscription filtering", () => {
     expect(principals).toContain("slow");
     expect(principals).toContain("fast");
     await stand.close();
+    await ServerEnvironmentLifecycle.resetForTest();
   });
 
   it("awaits asynchronous next delivery before starting the following update", async () => {
@@ -528,25 +563,6 @@ describe("direct Stand subscription filtering", () => {
     expect(subscription.closed).toBe(true);
     expect(delivered).toEqual(["First"]);
     expect(errors).toEqual([]);
-  });
-
-  it("rejects malformed capacity before installing a subscriber", async () => {
-    const stand = standWithState();
-    const signal = new AbortController();
-    const listener = vi.spyOn(signal.signal, "addEventListener");
-    expect(() =>
-      stand.subscribe(
-        ProjectOverviewStateSchema,
-        {
-          next: () => undefined,
-          error: () => undefined,
-        },
-        { queueLimit: -1, signal: signal.signal },
-      ),
-    ).toThrow(RangeError);
-    expect(listener).not.toHaveBeenCalled();
-    await expect(stand.update(ProjectOverviewStateSchema, state("First"))).resolves.toBeUndefined();
-    await stand.close();
   });
 
   it("rejects the removed raw callback overload at subscription time", async () => {

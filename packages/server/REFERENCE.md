@@ -1108,8 +1108,10 @@ URL, Entity ID, version, and tenant metadata. A removed prior state is omitted
 from a surviving current state. `error` receives one terminal local policy,
 callback, or capacity fault. There is no raw callback overload. Options accept
 trusted `reader` facts, `actorContext` metadata, tenant, and cancellation;
-`queueLimit` defaults to 100 waiting updates in addition to one active update.
-The application may override that waiting count per subscription. Filter calls
+`ServerEnvironmentSettings.subscriptionQueueCapacity` sets the waiting count
+for direct and server-served subscriptions. Configure it before constructing
+the Stand or Bounded Context. It defaults to 100 waiting updates in addition to
+one active update; zero allows the active update with no waiting updates. Filter calls
 and `next` completion are sequential per subscriber. Overflow closes only that
 subscriber, clears waiting updates, invalidates the active result, and reports
 `StandSubscriptionCapacityError`; committed writes and other subscribers
@@ -1122,7 +1124,8 @@ does not guarantee cluster-complete observations, subscription replay,
 event-gap repair, or exactly-once effects.
 
 This typed local observer handles visible states, removals, and terminal faults.
-The override allows 250 waiting updates in addition to the active one:
+Configure `subscriptionQueueCapacity: 250` through `ServerEnvironment.when(...).use(...)`
+before creating the Stand to allow 250 waiting updates beyond the active one:
 
 <!-- docs-snippet-path: packages/server/test/stand/stand-direct-subscription.test.ts -->
 
@@ -1136,17 +1139,13 @@ export function observeProjects(
   onRemoval: (id: unknown) => void,
   onError: (error: Error) => void,
 ): StandSubscription {
-  return stand.subscribe(
-    ProjectOverviewStateSchema,
-    {
-      next(update) {
-        if (update.kind === "state") onState(update.state.name);
-        else onRemoval(update.id);
-      },
-      error: onError,
+  return stand.subscribe(ProjectOverviewStateSchema, {
+    next(update) {
+      if (update.kind === "state") onState(update.state.name);
+      else onRemoval(update.id);
     },
-    { queueLimit: 250 },
-  );
+    error: onError,
+  });
 }
 ```
 

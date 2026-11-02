@@ -475,8 +475,10 @@ and entity ID, can return the stored Spine `Version` through
 `Stand` reads durable version and lifecycle metadata from the authoritative
 current entity record alongside the latest state.
 `subscribe(schema, { next, error }, options)` runs read policies and observer
-delivery sequentially per subscriber. It accepts up to 100 waiting updates
-beyond one active update by default; `queueLimit` overrides that waiting count.
+delivery sequentially per subscriber. `ServerEnvironmentSettings.subscriptionQueueCapacity`
+sets the waiting count for direct and server-served subscriptions before their
+Stand or service adapter is constructed. The default is 100 waiting updates
+beyond one active update; zero permits only the active update.
 Overflow reports `StandSubscriptionCapacityError` only to the affected observer
 and closes that subscription without undoing a committed write. A policy may
 remove the current state, yielding a removal update with original identity;
@@ -554,8 +556,9 @@ definitions have no framework TTL. Application or ingress admission must bound
 acceptable use. Separately,
 `SpineServices.subscriptionLimit` defaults to 100 per service instance and
 bounds concurrent unknown-ID cancellation work; it is not a registry or
-distributed quota. `SpineServices.queueLimit` defaults to 100 queued updates
-per active local stream and closes slow delivery when exhausted.
+distributed quota. The environment's `subscriptionQueueCapacity` defaults to
+100 waiting updates beyond one active update per local stream and closes slow
+delivery when exhausted.
 `Subscribe` accepts registered state targets and event targets exposed by
 built-context event dispatchers. It rejects unknown/private targets, invalid
 criteria, unsupported comparison operators, event filters,
