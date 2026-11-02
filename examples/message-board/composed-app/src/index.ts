@@ -26,7 +26,7 @@ import {
   EventRouting,
   Server,
   type StandSubscriptionRegistry,
-  type ServerOptions,
+  type SpineServicesOptions,
 } from "@spine-event-engine/server";
 import {
   BoardIdSchema,
@@ -99,9 +99,7 @@ export class ComposedBoardApplication {
    *
    * @param readerAdmission A host-supplied verifier for direct native readers.
    */
-  constructor(
-    private readonly readerAdmission?: NonNullable<ServerOptions["services"]>["readerAdmission"],
-  ) {}
+  constructor(private readonly readerAdmission?: SpineServicesOptions["readerAdmission"]) {}
 
   /**
    * Builds contexts from dependency handlers and registers the selected query handler.

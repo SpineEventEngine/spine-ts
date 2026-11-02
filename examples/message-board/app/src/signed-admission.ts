@@ -15,7 +15,7 @@
 import { createHmac, createPrivateKey, timingSafeEqual } from "node:crypto";
 import { SignedSessions } from "@spine-event-engine/auth";
 import type { ReaderProofIssuer } from "@spine-event-engine/core/spi/reader-forwarding";
-import type { ServerOptions } from "@spine-event-engine/server";
+import type { SpineServicesOptions } from "@spine-event-engine/server";
 
 /**
  * The native and browser ports built from protected deployment keys.
@@ -34,9 +34,7 @@ export interface SignedBoardAdmission {
   /**
    * Verifies direct and forwarded native readers.
    */
-  readonly readerAdmission: Required<
-    NonNullable<NonNullable<ServerOptions["services"]>["readerAdmission"]>
-  >;
+  readonly readerAdmission: Required<NonNullable<SpineServicesOptions["readerAdmission"]>>;
 }
 
 const required = (environment: NodeJS.ProcessEnv, name: string): string => {
