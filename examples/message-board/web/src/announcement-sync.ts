@@ -132,8 +132,7 @@ const useAnnouncementSource = () => {
 };
 
 const useAnnouncementState = (request: ClientRequest, onChanged: () => void) => {
-  const [applied, setApplied] = useState<AnnouncementBoardView | undefined>();
-  const [hasApplied, setHasApplied] = useState(false);
+  const [applied, setApplied] = useState<{ value: AnnouncementBoardView | undefined }>();
   const [error, setError] = useState(false);
   const value = useRef<AnnouncementBoardView | undefined>(undefined);
   const generation = useRef(0);
@@ -143,7 +142,6 @@ const useAnnouncementState = (request: ClientRequest, onChanged: () => void) => 
   useEffect(() => {
     mounted.current = true;
     setApplied(undefined);
-    setHasApplied(false);
     setError(false);
     return () => {
       mounted.current = false;
@@ -157,15 +155,14 @@ const useAnnouncementState = (request: ClientRequest, onChanged: () => void) => 
       generation.current += 1;
       controller.current?.abort();
       value.current = next;
-      setApplied(next);
-      setHasApplied(true);
+      setApplied({ value: next });
       setError(false);
       onChanged();
     },
     [onChanged],
   );
   // prettier-ignore
-  return { applied, hasApplied, error, setError, value, generation,
+  return { applied: applied?.value, hasApplied: applied !== undefined, error, setError, value, generation,
     updateGeneration, controller, mounted, apply };
 };
 
