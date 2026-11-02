@@ -42,7 +42,7 @@
     "gen:desktop": "pnpm --filter @spine-event-engine/example-release-notes gen:desktop",
     "proto:check-generated": "node scripts/check-generated-clean.mjs",
     "proto:check-generated:current": "node scripts/check-generated-clean.mjs --current-output",
-    "proto:check-fixtures": "vitest run scripts/check-generated-clean.test.mjs scripts/generate-handler-registry.test.mjs scripts/clean-build-outputs.test.mjs",
+    "proto:check-fixtures": "tsc -p packages/proto-tools/tsconfig.bootstrap.json --outDir packages/proto-tools/dist/src && vitest run scripts/check-generated-clean.test.mjs scripts/generate-handler-registry.test.mjs scripts/clean-build-outputs.test.mjs",
     "check:release-readiness": "node scripts/check-release-readiness.mjs",
     "verify": "pnpm verify:release",
     "verify:task": "pnpm check:node && node scripts/verify-task.mjs",

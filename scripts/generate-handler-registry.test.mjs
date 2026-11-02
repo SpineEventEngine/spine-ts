@@ -70,7 +70,9 @@ describe("handler output publication", () => {
   });
   it("rejects a symlinked adapter before touching an outside sentinel", async () => {
     const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-    const app = mkdtempSync(join(repo, "packages/.handler-publication-"));
+    const fixtureParent = join(repo, "node_modules/.cache");
+    mkdirSync(fixtureParent, { recursive: true });
+    const app = mkdtempSync(join(fixtureParent, "handler-publication-"));
     const sentinel = join(mkdtempSync(join(tmpdir(), "spine-adapter-sentinel-")), "sentinel.js");
     try {
       mkdirSync(join(app, "src"));
@@ -114,7 +116,9 @@ describe("handler output publication", () => {
   });
   it("runs the ordinary handler generator with source and emitted adapters", async () => {
     const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-    const app = mkdtempSync(join(repo, "packages/.handler-publication-"));
+    const fixtureParent = join(repo, "node_modules/.cache");
+    mkdirSync(fixtureParent, { recursive: true });
+    const app = mkdtempSync(join(fixtureParent, "handler-publication-"));
     try {
       mkdirSync(join(app, "src"));
       writeFileSync(

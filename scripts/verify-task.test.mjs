@@ -125,7 +125,7 @@ describe("verify-task", () => {
     const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
     const scripts = manifest.scripts;
     expect(scripts["proto:check-fixtures"]).toBe(
-      "vitest run scripts/check-generated-clean.test.mjs scripts/generate-handler-registry.test.mjs scripts/clean-build-outputs.test.mjs",
+      "tsc -p packages/proto-tools/tsconfig.bootstrap.json --outDir packages/proto-tools/dist/src && vitest run scripts/check-generated-clean.test.mjs scripts/generate-handler-registry.test.mjs scripts/clean-build-outputs.test.mjs",
     );
     expect(scripts["verify:release:generated"]).toMatch(
       /^pnpm proto:check-fixtures && pnpm verify:generated-gates/u,
