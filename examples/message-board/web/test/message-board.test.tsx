@@ -17,6 +17,7 @@ import { create, fromBinary, toBinary, type Message, type MessageShape } from "@
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
+  AnnouncementBoardViewSchema,
   BoardMessageViewSchema,
   BoardIdSchema,
   MessageIdSchema,
@@ -46,12 +47,14 @@ import type {
 } from "@spine-event-engine/client-web";
 import {
   EntityStateUpdateSchema,
+  EntityStateWithVersionSchema,
   EntityUpdatesSchema,
   EventUpdatesSchema,
+  QueryResponseSchema,
   SubscriptionUpdateSchema,
   type Query,
 } from "@spine-event-engine/proto/client";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -69,7 +72,7 @@ type FixturePost = (
   options: PostAndSubscribeOptions,
 ) => Promise<PostAndSubscribeResult>;
 type FixtureSubscription = ReturnType<typeof subscriptionFixture> & {
-  readonly kind: "event" | "message" | "other";
+  readonly kind: "event" | "message" | "announcement" | "other";
 };
 
 describe("MessageBoardApp", () => {
@@ -146,21 +149,109 @@ describe("MessageBoardApp", () => {
       ],
     } as never);
     await screen.findByText(/2 messages/);
-    first.statsDeferred.resolve({
-      message: [
-        create(ReadBoardStats.responseSchema, {
-          board: {
-            board: create(BoardIdSchema, { value: "general" }),
-            messageCount: 1n,
-            authorCount: 1n,
-          },
-        }),
-      ],
-    } as never);
-    await Promise.resolve();
+    await act(async () => {
+      first.statsDeferred.resolve({
+        message: [
+          create(ReadBoardStats.responseSchema, {
+            board: {
+              board: create(BoardIdSchema, { value: "general" }),
+              messageCount: 1n,
+              authorCount: 1n,
+            },
+          }),
+        ],
+      } as never);
+      await first.statsDeferred.promise;
+    });
     expect(screen.getByRole("region", { name: "Board statistics" }).textContent).toContain(
       "2 messages",
     );
+  });
+
+  it("recovers a malformed announcement update with an authoritative read", async () => {
+    const request = requestFixture();
+    request.announcementSend.mockResolvedValueOnce(announcementResponse("Current notice"));
+    render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
+    await screen.findByText("Current notice");
+    await waitFor(() => expect(request.announcementSubscription.activate).toHaveBeenCalledOnce());
+    request.announcementSend.mockResolvedValueOnce(announcementResponse("Recovered notice"));
+    request.announcementSubscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await screen.findByText("Recovered notice");
+    expect(request.announcementSend).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a newer announcement when an earlier recovery finishes late", async () => {
+    const request = requestFixture();
+    const pending = Promise.withResolvers<ReturnType<typeof announcementResponse>>();
+    request.announcementSend.mockResolvedValueOnce(announcementResponse("Initial notice"));
+    request.announcementSend.mockImplementationOnce(() => pending.promise as never);
+    render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
+    await screen.findByText("Initial notice");
+    await waitFor(() => expect(request.announcementSubscription.activate).toHaveBeenCalledOnce());
+    request.announcementSubscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.announcementSend).toHaveBeenCalledTimes(2));
+    request.announcementSubscription.emitUpdate(announcementUpdate("Newer notice"));
+    await screen.findByText("Newer notice");
+    await act(async () => {
+      pending.resolve(announcementResponse("Stale notice"));
+      await pending.promise;
+    });
+    expect(screen.queryByText("Stale notice")).toBeNull();
+    expect(screen.getByText("Newer notice")).toBeTruthy();
+  });
+
+  it("reports an announcement recovery failure and clears it on a later update", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const request = requestFixture();
+    request.announcementSend.mockResolvedValueOnce(announcementResponse("Initial notice"));
+    request.announcementSend.mockRejectedValueOnce(new Error("read failed"));
+    render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
+    await screen.findByText("Initial notice");
+    await waitFor(() => expect(request.announcementSubscription.activate).toHaveBeenCalledOnce());
+    request.announcementSubscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await screen.findByText("Announcements are unavailable. Reload to retry.");
+    expect(warn).toHaveBeenCalledWith("Announcement recovery failed.", expect.any(Error));
+    request.announcementSubscription.emitUpdate(announcementUpdate("Later notice"));
+    await screen.findByText("Later notice");
+    expect(screen.queryByText("Announcements are unavailable. Reload to retry.")).toBeNull();
+  });
+
+  it("applies an authoritative announcement resynchronization after an empty state", async () => {
+    const request = requestFixture();
+    request.announcementSend.mockResolvedValueOnce(
+      create(QueryResponseSchema, { message: [create(EntityStateWithVersionSchema)] }),
+    );
+    render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
+    await waitFor(() => expect(request.announcementSend).toHaveBeenCalledOnce());
+    await waitFor(() => expect(request.announcementSubscription.activate).toHaveBeenCalledOnce());
+    request.announcementSubscription.emitRecovery(announcementResponse("Resynchronized notice"));
+    await screen.findByText("Resynchronized notice");
+  });
+
+  it("ignores a failed announcement recovery after the reader changes", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const first = requestFixture();
+    const second = requestFixture();
+    const pending = Promise.withResolvers<ReturnType<typeof announcementResponse>>();
+    first.announcementSend.mockResolvedValueOnce(announcementResponse("First notice"));
+    first.announcementSend.mockImplementationOnce(() => pending.promise as never);
+    second.announcementSend.mockResolvedValueOnce(announcementResponse("Second notice"));
+    const mounted = render(
+      createElement(MessageBoardApp, { actor: "ada", request: first, board: "general" }),
+    );
+    await screen.findByText("First notice");
+    await waitFor(() => expect(first.announcementSubscription.activate).toHaveBeenCalledOnce());
+    first.announcementSubscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(first.announcementSend).toHaveBeenCalledTimes(2));
+    mounted.rerender(
+      createElement(MessageBoardApp, { actor: "reader", request: second, board: "general" }),
+    );
+    await screen.findByText("Second notice");
+    pending.reject(new Error("old reader unavailable"));
+    await pending.promise.catch(() => undefined);
+    expect(screen.getByText("Second notice")).toBeTruthy();
+    expect(screen.queryByText("Announcements are unavailable. Reload to retry.")).toBeNull();
+    expect(warn).not.toHaveBeenCalledWith("Announcement recovery failed.", expect.anything());
   });
 
   it("posts a PostMessage command and renders only the selected board query", async () => {
@@ -227,6 +318,52 @@ describe("MessageBoardApp", () => {
     expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
       "",
     );
+  });
+
+  it("ignores malformed and unrelated post outcomes until the matching Event arrives", async () => {
+    const request = requestFixture({ deferredConfirmation: true });
+    render(createElement(MessageBoardApp, { actor: "ada", request, board: "general" }));
+    await screen.findByText("general message");
+    fillPost("Correlated outcome");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await screen.findByText("Message accepted; waiting for confirmation…");
+    const command = request.postCalls.mock.calls[0]?.[1];
+    if (command?.id === undefined) throw new Error("Expected posted message ID.");
+    request.postSubscription.emitUpdate(create(SubscriptionUpdateSchema));
+    request.postSubscription.emitUpdate(
+      create(SubscriptionUpdateSchema, {
+        update: {
+          case: "eventUpdates",
+          value: create(EventUpdatesSchema, { event: [create(EventSchema)] }),
+        },
+      }),
+    );
+    request.postSubscription.emitUpdate(
+      eventUpdate(
+        MessageAlreadyPostedSchema,
+        create(MessageAlreadyPostedSchema, {
+          id: create(MessageIdSchema, { value: "another-post" }),
+        }),
+      ),
+    );
+    await waitFor(() => expect(request.postSubscription.updatePulls).toHaveBeenCalledTimes(4));
+    expect(screen.getByText("Message accepted; waiting for confirmation…")).toBeTruthy();
+    expect(request.postSubscription.cancel).not.toHaveBeenCalled();
+    request.postSubscription.emitUpdate(
+      eventUpdate(
+        MessagePostedSchema,
+        create(MessagePostedSchema, {
+          id: command.id,
+          board: command.board,
+          author: command.author,
+          username: command.username,
+          text: command.text,
+          postedAt: command.postedAt,
+        }),
+      ),
+    );
+    await waitFor(() => expect(request.postSubscription.cancel).toHaveBeenCalledOnce());
+    expect(screen.queryByText("Message accepted; waiting for confirmation…")).toBeNull();
   });
 
   it("shows a matching MessageAlreadyPosted rejection and cancels only its post stream", async () => {
@@ -1042,8 +1179,10 @@ function requestFixture(
       fixtureOptions.initialRows ?? responseRows("general message", "other board message"),
     );
   });
+  const announcementSend = vi.fn<FixtureSend>(() => Promise.resolve({ message: [] } as never));
   return {
     messageSend,
+    announcementSend,
     postCalls,
     statsDeferred,
     post: vi.fn<ClientRequest["post"]>(() => Promise.resolve({ kind: "ok" })),
@@ -1056,7 +1195,9 @@ function requestFixture(
       const built = "build" in query ? query.build() : query;
       return built.target?.type === TypeUrls.derive(BoardMessageViewSchema)
         ? messageSend(built, options)
-        : Promise.resolve({ message: [] } as never);
+        : built.target?.type === TypeUrls.derive(AnnouncementBoardViewSchema)
+          ? announcementSend(built, options)
+          : Promise.resolve({ message: [] } as never);
     }),
     postAndSubscribe<Schema extends GenMessage<Message>>(
       schema: Schema,
@@ -1076,7 +1217,9 @@ function requestFixture(
         ? "event"
         : topic.target?.type === TypeUrls.derive(BoardMessageViewSchema)
           ? "message"
-          : "other";
+          : topic.target?.type === TypeUrls.derive(AnnouncementBoardViewSchema)
+            ? "announcement"
+            : "other";
       const subscription = Object.assign(
         subscriptionFixture({
           cancelEnds: !(
@@ -1100,6 +1243,9 @@ function requestFixture(
     get eventSubscription() {
       return subscriptions.filter((item) => item.kind === "event").at(-1)!;
     },
+    get announcementSubscription() {
+      return subscriptions.filter((item) => item.kind === "announcement").at(-1)!;
+    },
     get postSubscription() {
       return postSubscriptions.at(-1)!;
     },
@@ -1122,6 +1268,37 @@ function responseRows(...texts: string[]) {
   return {
     message: texts.map((text) => ({ state: AnyPacker.pack(BoardMessageViewSchema, view(text)) })),
   } as never;
+}
+
+function announcementResponse(text: string) {
+  return {
+    message: [{ state: AnyPacker.pack(AnnouncementBoardViewSchema, announcementView(text)) }],
+  } as never;
+}
+
+function announcementView(text: string) {
+  return create(AnnouncementBoardViewSchema, {
+    id: create(BoardIdSchema, { value: "announcements" }),
+    message: create(MessageIdSchema, { value: text }),
+    text,
+  });
+}
+
+function announcementUpdate(text: string) {
+  const view = announcementView(text);
+  return create(SubscriptionUpdateSchema, {
+    update: {
+      case: "entityUpdates",
+      value: create(EntityUpdatesSchema, {
+        update: [
+          create(EntityStateUpdateSchema, {
+            id: AnyPacker.pack(BoardIdSchema, view.id!),
+            kind: { case: "state", value: AnyPacker.pack(AnnouncementBoardViewSchema, view) },
+          }),
+        ],
+      }),
+    },
+  });
 }
 
 function responseViews(rows: readonly ReturnType<typeof view>[]) {
@@ -1196,6 +1373,7 @@ function subscriptionFixture(options: { readonly cancelEnds?: boolean } = {}) {
     }),
     lifecycle: lifecycle.values,
     updates: updates.values,
+    updatePulls: updates.nextRequested,
     authoritativeQuery: undefined as undefined | ReturnType<typeof vi.fn<() => unknown>>,
     emitLifecycle(value: unknown) {
       lifecycle.push(value as never);
@@ -1364,16 +1542,20 @@ function queue<T>() {
   const pending: ((result: IteratorResult<T>) => void)[] = [];
   const values: T[] = [];
   let closed = false;
+  const nextRequested = vi.fn();
   return {
+    nextRequested,
     values: {
       [Symbol.asyncIterator]() {
         return {
-          next: () =>
-            new Promise<IteratorResult<T>>((resolve) => {
+          next: () => {
+            nextRequested();
+            return new Promise<IteratorResult<T>>((resolve) => {
               if (closed) resolve({ done: true, value: undefined as never });
               else if (values.length > 0) resolve({ done: false, value: values.shift()! });
               else pending.push(resolve);
-            }),
+            });
+          },
         };
       },
     } as AsyncIterable<T>,

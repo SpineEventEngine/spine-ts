@@ -74,4 +74,53 @@ describe("signed reader selection", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
     expect(screen.queryByText("Signed in as ada")).toBeNull();
   });
+
+  it("allows a verified retry after a credential without an actor fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(BrowserSession.prototype, "reauthenticate").mockResolvedValue(undefined);
+    vi.spyOn(BrowserSession.prototype, "context", "get")
+      .mockReturnValueOnce(undefined)
+      .mockReturnValue({ actor: "ada" });
+    const forConnect = vi.spyOn(Client, "forConnect").mockReturnValue({
+      onBehalfOf: () => ({}),
+      close: vi.fn(async () => undefined),
+    } as never);
+    render(createElement(SessionBoardApp, { url: "http://127.0.0.1:8090", mode: "signed" }));
+    const input = screen.getByLabelText("Issued bearer credential");
+    fireEvent.change(input, { target: { value: "invalid" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use credential" }));
+    await screen.findByText("Credential is invalid or the session is unavailable.");
+    expect(warn).toHaveBeenCalledWith(
+      "Message Board credential validation failed.",
+      expect.any(Error),
+    );
+    expect(forConnect).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "valid" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use credential" }));
+    await screen.findByText("Signed in as ada");
+    expect(forConnect).toHaveBeenCalledOnce();
+  });
+
+  it("selects a public board and closes its client on unmount", async () => {
+    const close = vi.fn(async () => undefined);
+    const forConnect = vi.spyOn(Client, "forConnect").mockReturnValue({
+      onBehalfOf: () => ({}),
+      close,
+    } as never);
+    const mounted = render(
+      createElement(SessionBoardApp, { url: "http://127.0.0.1:8090", mode: "public" }),
+    );
+    expect(forConnect).toHaveBeenCalledWith("http://127.0.0.1:8090");
+    expect(
+      screen.getByText("Public reader: author names are hidden in board results."),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Board" }), {
+      target: { value: "announcements" },
+    });
+    expect((screen.getByRole("combobox", { name: "Board" }) as HTMLSelectElement).value).toBe(
+      "announcements",
+    );
+    mounted.unmount();
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  });
 });

@@ -436,6 +436,7 @@ describe("runtime metadata graph", () => {
         RuntimeMetadataGraph.resolve(app),
         new GeneratedRegistryWriter(),
       );
+    expect(render).toThrow(/Cannot read adapter project:/u);
     writeFileSync(project, JSON.stringify({ extends: [42], compilerOptions: { outDir: "dist" } }));
     expect(render).toThrow(/Invalid adapter project:/u);
 
@@ -444,6 +445,37 @@ describe("runtime metadata graph", () => {
       JSON.stringify({ compilerOptions: { rootDir: "src", outDir: "../outside" } }),
     );
     expect(render).toThrow(/Generated adapter output escapes application/u);
+  });
+
+  it("fingerprints inherited compiler configuration even when referenced twice", () => {
+    const app = realpathSync(graphRoot());
+    packageAt(app, "app", {});
+    const inherited = join(app, "tsconfig.base.json");
+    writeFileSync(inherited, JSON.stringify({ compilerOptions: { outDir: "dist", rootDir: "." } }));
+    const project = join(app, "tsconfig.json");
+    writeFileSync(
+      project,
+      JSON.stringify({ extends: ["./tsconfig.base.json", "./tsconfig.base.json"] }),
+    );
+    const bootstrap = join(app, "generated/spine-bootstrap.ts");
+    const render = () =>
+      RuntimeMetadataAssets.render(
+        project,
+        bootstrap,
+        bootstrap,
+        RuntimeMetadataGraph.resolve(app),
+        new GeneratedRegistryWriter(),
+      );
+    const firstSource = render().record.source;
+    const first = JSON.parse(firstSource) as { inputs: { path: string }[] };
+    expect(
+      first.inputs.map(({ path }) => path).filter((path) => path === "tsconfig.base.json"),
+    ).toHaveLength(1);
+    writeFileSync(
+      inherited,
+      JSON.stringify({ compilerOptions: { outDir: "dist", rootDir: ".", strict: true } }),
+    );
+    expect(render().record.source).not.toBe(firstSource);
   });
 
   it("records an absent optional package without adding a missing adapter input", () => {
@@ -586,6 +618,56 @@ describe("runtime metadata graph", () => {
     expect(participant?.typesFile).toBe(
       join(realpathSync(model), "dist/generated/spine-metadata.d.ts"),
     );
+  });
+
+  it("selects a Node metadata export after unrelated browser conditions", () => {
+    const app = graphRoot();
+    packageAt(app, "app", { model: "1.0.0" });
+    const model = join(app, "node_modules/model");
+    packageAt(model, "model", {}, true);
+    const manifest = join(model, "package.json");
+    const value = JSON.parse(readFileSync(manifest, "utf8")) as Record<string, unknown>;
+    writeFileSync(
+      manifest,
+      JSON.stringify({
+        ...value,
+        exports: {
+          "./spine": {
+            browser: "./dist/generated/browser.js",
+            node: {
+              types: "./dist/generated/spine-metadata.d.ts",
+              default: "./dist/generated/spine-metadata.js",
+            },
+          },
+        },
+      }),
+    );
+
+    const [participant] = RuntimeMetadataGraph.resolve(app);
+    expect(participant?.runtimeFile).toBe(
+      join(realpathSync(model), "dist/generated/spine-metadata.js"),
+    );
+    expect(participant?.typesFile).toBe(
+      join(realpathSync(model), "dist/generated/spine-metadata.d.ts"),
+    );
+  });
+
+  it("rejects a metadata export with no compatible Node import condition", () => {
+    const app = graphRoot();
+    packageAt(app, "app", { model: "1.0.0" });
+    const model = join(app, "node_modules/model");
+    packageAt(model, "model", {}, true);
+    const manifest = join(model, "package.json");
+    const value = JSON.parse(readFileSync(manifest, "utf8")) as Record<string, unknown>;
+    writeFileSync(
+      manifest,
+      JSON.stringify({
+        ...value,
+        exports: { "./spine": { browser: "./dist/generated/browser.js" } },
+      }),
+    );
+
+    expect(() => RuntimeMetadataGraph.resolve(app)).toThrow(/model\/spine.*published types/u);
   });
 
   it("rejects a require-only spine export rather than choosing an incompatible branch", () => {

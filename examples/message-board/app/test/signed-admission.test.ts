@@ -67,6 +67,15 @@ describe("Message Board signed admission", () => {
         {} as never,
       ),
     ).toBe(false);
+    expect(await admission.readerAdmission.forwarded.verify(bytes, "short", {} as never)).toBe(
+      false,
+    );
+    expect(
+      await admission.readerAdmission.forwarded.verify(bytes, "!".repeat(43), {} as never),
+    ).toBe(false);
+    expect(
+      await admission.readerAdmission.forwarded.verify(bytes, "A".repeat(43), {} as never),
+    ).toBe(false);
     const direct = await admission.readerAdmission.direct.authenticate({
       service: "spine.client.QueryService",
       method: "Execute",
@@ -80,6 +89,53 @@ describe("Message Board signed admission", () => {
         canReadRestricted: true,
       },
     });
+    const directRequest = (headers: Headers | Readonly<Record<string, string>>) => ({
+      service: "spine.client.QueryService",
+      method: "Execute",
+      value: bytes,
+      headers,
+      peer: {} as never,
+    });
+    expect(
+      await admission.readerAdmission.direct.authenticate(
+        directRequest(new Headers({ authorization: `Bearer ${issued.credential.value}` })),
+      ),
+    ).toMatchObject({ principal: { id: "ada" }, authorityFacts: { canReadRestricted: true } });
+    expect(
+      await admission.readerAdmission.direct.authenticate(
+        directRequest({ authorization: "Basic x" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      await admission.readerAdmission.direct.authenticate(
+        directRequest({ authorization: "Bearer invalid" }),
+      ),
+    ).toBeUndefined();
+    await admission.sessions.close();
+  });
+
+  it("requires protected configuration only in signed mode", () => {
+    expect(BoardAdmission.configured({})).toBeUndefined();
+    expect(BoardAdmission.configured({ MESSAGE_BOARD_AUTH_MODE: "public" })).toBeUndefined();
+    expect(() => BoardAdmission.configured({ MESSAGE_BOARD_AUTH_MODE: "unrecognized" })).toThrow(
+      "MESSAGE_BOARD_AUTH_MODE must be public or signed.",
+    );
+    expect(() => BoardAdmission.configured({ MESSAGE_BOARD_AUTH_MODE: "signed" })).toThrow(
+      "Missing required configuration: MESSAGE_BOARD_SESSION_ISSUER.",
+    );
+    const { privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const environment = {
+      MESSAGE_BOARD_SESSION_PRIVATE_KEY_PEM: privateKey
+        .export({ format: "pem", type: "pkcs8" })
+        .toString(),
+      MESSAGE_BOARD_SESSION_KEY_ID: "test-key",
+      MESSAGE_BOARD_SESSION_ISSUER: "message-board-test",
+      MESSAGE_BOARD_SESSION_AUDIENCE: "message-board-browser",
+      MESSAGE_BOARD_READER_PROOF_KEY_BASE64: randomBytes(31).toString("base64"),
+    };
+    expect(() => BoardAdmission.signed(environment)).toThrow(
+      "MESSAGE_BOARD_READER_PROOF_KEY_BASE64 must decode to at least 32 bytes.",
+    );
   });
 
   it("forwards a signed reader to restricted lifetime statistics and hides them from ordinary readers", async () => {

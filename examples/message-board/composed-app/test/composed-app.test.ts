@@ -16,7 +16,7 @@ import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Client } from "@spine-event-engine/client-node";
-import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
 import { ActorContextSchema } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
@@ -100,6 +100,73 @@ describe("multi-package Message Board", () => {
     } finally {
       await client.close();
       await running.close();
+    }
+  });
+
+  it("retains the earliest accepted Event time when announcements arrive out of timestamp order", async () => {
+    const application = await new ComposedBoardApplication().create();
+    const running = await application.server.start();
+    const client = Client.connectTo(running.baseUrl);
+    let seconds = 30n;
+    const previousTime = Time.setProvider({
+      currentTime: () => create(TimestampSchema, { seconds }),
+    });
+    const query = create(ReadBoardStats.querySchema, {
+      board: create(BoardIdSchema, { value: "announcements" }),
+    });
+    const actorContext = create(ActorContextSchema, {
+      actor: { value: "reader" },
+      timestamp: create(TimestampSchema, { seconds: 1n }),
+    });
+    try {
+      for (const [index, [id, author, occurred]] of (
+        [
+          ["later", "writer-1", 30n],
+          ["earlier", "writer-1", 10n],
+          ["last", "writer-2", 20n],
+        ] as const
+      ).entries()) {
+        seconds = occurred;
+        await expect(
+          client.asGuest().post(
+            PostMessageSchema,
+            create(PostMessageSchema, {
+              id: create(MessageIdSchema, { value: id }),
+              board: create(BoardIdSchema, { value: "announcements" }),
+              author: create(UserIdSchema, { value: author }),
+              username: author,
+              text: id,
+              postedAt: create(TimestampSchema, { seconds: 1n }),
+            }),
+          ),
+        ).resolves.toEqual({ kind: "ok" });
+        await vi.waitFor(async () => {
+          const response = await application.server.query(query, { actorContext });
+          expect(response.board?.messageCount).toBe(BigInt(index + 1));
+          expect(response.announcements?.messageCount).toBe(BigInt(index + 1));
+        });
+      }
+      await vi.waitFor(async () => {
+        const response = await application.server.query(query, { actorContext });
+        expect(response.board?.messageCount).toBe(3n);
+        expect(response.board?.authorCount).toBe(2n);
+        expect(response.board?.firstPostedAt?.seconds).toBe(10n);
+        expect(response.announcements?.messageCount).toBe(3n);
+        expect(response.announcements?.authorCount).toBe(2n);
+        expect(response.announcements?.firstPostedAt?.seconds).toBe(10n);
+      });
+      await expect(
+        application.announcements
+          .stand()
+          .read(AnnouncementBoardViewSchema, create(BoardIdSchema, { value: "announcements" })),
+      ).resolves.toMatchObject({ text: "last" });
+    } finally {
+      Time.setProvider(previousTime);
+      try {
+        await client.close();
+      } finally {
+        await running.close();
+      }
     }
   });
 

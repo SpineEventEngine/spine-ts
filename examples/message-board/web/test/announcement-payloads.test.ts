@@ -78,4 +78,65 @@ describe("announcement updates", () => {
     });
     expect(AnnouncementPayloads.reconcile(state, wrongId)).toBe("recover");
   });
+
+  it("requests recovery for an empty or foreign announcement update", () => {
+    const previous = create(AnnouncementBoardViewSchema, {
+      id: create(BoardIdSchema, { value: "announcements" }),
+      text: "Current notice",
+    });
+    expect(AnnouncementPayloads.reconcile(previous, create(SubscriptionUpdateSchema))).toBe(
+      "recover",
+    );
+    const empty = create(SubscriptionUpdateSchema, {
+      update: { case: "entityUpdates", value: create(EntityUpdatesSchema) },
+    });
+    expect(AnnouncementPayloads.reconcile(previous, empty)).toBe("recover");
+    const foreign = create(SubscriptionUpdateSchema, {
+      update: {
+        case: "entityUpdates",
+        value: create(EntityUpdatesSchema, {
+          update: [
+            create(EntityStateUpdateSchema, {
+              id: AnyPacker.pack(BoardIdSchema, create(BoardIdSchema, { value: "general" })),
+              kind: { case: "noLongerMatching", value: true },
+            }),
+          ],
+        }),
+      },
+    });
+    expect(AnnouncementPayloads.reconcile(previous, foreign)).toBe("recover");
+    expect(previous.text).toBe("Current notice");
+  });
+
+  it("rejects an announcement state with a mismatched identity or unsupported change", () => {
+    const id = create(BoardIdSchema, { value: "announcements" });
+    const state = create(AnnouncementBoardViewSchema, {
+      id: create(BoardIdSchema, { value: "general" }),
+      text: "Foreign notice",
+    });
+    const update = (change: ReturnType<typeof create<typeof EntityStateUpdateSchema>>) =>
+      create(SubscriptionUpdateSchema, {
+        update: {
+          case: "entityUpdates",
+          value: create(EntityUpdatesSchema, { update: [change] }),
+        },
+      });
+    expect(
+      AnnouncementPayloads.reconcile(
+        undefined,
+        update(
+          create(EntityStateUpdateSchema, {
+            id: AnyPacker.pack(BoardIdSchema, id),
+            kind: { case: "state", value: AnyPacker.pack(AnnouncementBoardViewSchema, state) },
+          }),
+        ),
+      ),
+    ).toBe("recover");
+    expect(
+      AnnouncementPayloads.reconcile(
+        undefined,
+        update(create(EntityStateUpdateSchema, { id: AnyPacker.pack(BoardIdSchema, id) })),
+      ),
+    ).toBe("recover");
+  });
 });
