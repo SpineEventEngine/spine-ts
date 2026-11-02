@@ -74,6 +74,9 @@ import {
   type ReadyMemberSource,
 } from "../../src/server/node-coordinator.js";
 import { DurableSubscriptionBindings } from "../../src/browser/durable-subscription-bindings.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import {
@@ -1545,17 +1548,157 @@ describe("NodeCoordinator", () => {
     await expect(coordinator.close()).resolves.toBeUndefined();
     await expect(request).rejects.toBeInstanceOf(ConnectError);
   }, 5_000);
+
+  it("rejects invalid queue capacity before binding the managed HTTP2 port", async () => {
+    const probe = http2.createServer();
+    await new Promise<void>((resolve) => {
+      probe.listen(0, "127.0.0.1", resolve);
+    });
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => {
+      probe.close(() => {
+        resolve();
+      });
+    });
+    await resetServerEnvironmentForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: -1 });
+    try {
+      await expect(
+        NodeCoordinator.open({ members: new TestReadyMembers([]), port }),
+      ).rejects.toThrow(/subscriptionQueueCapacity/u);
+      const rebound = http2.createServer();
+      await new Promise<void>((resolve) => {
+        rebound.listen(port, "127.0.0.1", resolve);
+      });
+      await new Promise<void>((resolve) => {
+        rebound.close(() => {
+          resolve();
+        });
+      });
+    } finally {
+      await resetServerEnvironmentForTest();
+    }
+  });
+
+  it.each([0, 1])(
+    "delivers one active and %i waiting managed updates after ACK",
+    async (capacity) => {
+      await resetServerEnvironmentForTest();
+      ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: capacity });
+      const replica = await backend(`capacity-${capacity.toString()}`, {
+        updates: capacity + 1,
+        holdActivation: true,
+        observeActivationAbort: true,
+      });
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+      });
+      closeables.push(() => coordinator.close());
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      );
+      const subscription = await client.subscribe(coordinatorTopic());
+      const abort = new AbortController();
+      const iterator = client
+        .activate(subscription, { signal: abort.signal })
+        [Symbol.asyncIterator]();
+      try {
+        await expect(iterator.next()).resolves.toMatchObject({
+          value: { response: { status: { status: { case: "ok" } } } },
+        });
+        for (let index = 0; index <= capacity; index++) {
+          const delivered = await iterator.next();
+          expect(delivered.value).toMatchObject({ update: { case: "eventUpdates" } });
+        }
+        expect(replica.activationAborts()).toBe(0);
+      } finally {
+        abort.abort();
+        await iterator.return?.();
+        await coordinator.close();
+        await resetServerEnvironmentForTest();
+      }
+    },
+  );
+
+  it.each([0])("overflows after one active plus %i waiting managed updates", async (capacity) => {
+    await resetServerEnvironmentForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: capacity });
+    const replicas = await Promise.all(
+      Array.from({ length: capacity + 1 }, (_value, index) =>
+        backend(`overflow-${capacity.toString()}-${index.toString()}`, {
+          updates: 2,
+          holdActivation: true,
+          observeActivationAbort: true,
+        }),
+      ),
+    );
+    const pushed = vi.spyOn(SubscriptionUpdateQueue.prototype, "push");
+    closeables.push(...replicas.map((replica) => replica.close));
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers(
+        replicas.map((replica, index) => ({ ...replica.member, slot: index })),
+      ),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    const abort = new AbortController();
+    const iterator = client
+      .activate(subscription, { signal: abort.signal })
+      [Symbol.asyncIterator]();
+    try {
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { response: { status: { status: { case: "ok" } } } },
+      });
+      const firstData = await iterator.next();
+      expect(firstData.value).toMatchObject({ update: { case: "eventUpdates" } });
+      await expect.poll(() => pushed.mock.calls.length).toBeGreaterThan(capacity + 1);
+      await expect(iterator.next()).resolves.toMatchObject({ done: true });
+    } finally {
+      pushed.mockRestore();
+      abort.abort();
+      await iterator.return?.();
+      await coordinator.close();
+      await resetServerEnvironmentForTest();
+    }
+  });
 });
 
 describe("SubscriptionUpdateQueue", () => {
+  it.each([0, 1, 100])("reserves one active update plus %i waiting updates", async (capacity) => {
+    let overflowed = 0;
+    const queue = new SubscriptionUpdateQueue(capacity, () => overflowed++);
+    const iterator = queue[Symbol.asyncIterator]();
+    const first = create(SubscriptionUpdateSchema);
+    const firstDelivery = queue.push(first);
+    await expect(iterator.next()).resolves.toEqual({ value: first, done: false });
+    await expect(firstDelivery).resolves.toBeUndefined();
+    expect(overflowed).toBe(0);
+    for (let index = 0; index < capacity; index++)
+      void queue.push(create(SubscriptionUpdateSchema));
+    expect(overflowed).toBe(0);
+    await queue.push(create(SubscriptionUpdateSchema));
+    expect(overflowed).toBe(1);
+    await expect(iterator.next()).resolves.toEqual({ value: undefined, done: true });
+  });
+
   it("closes terminally on overflow, resolves blocked producers, and ignores later updates", async () => {
     let overflowed = false;
     const queue = new SubscriptionUpdateQueue(1, () => {
       overflowed = true;
     });
     const first = queue.push(create(SubscriptionUpdateSchema));
+    const waiting = queue.push(create(SubscriptionUpdateSchema));
     await queue.push(create(SubscriptionUpdateSchema));
     await expect(first).resolves.toBeUndefined();
+    await expect(waiting).resolves.toBeUndefined();
     await expect(queue[Symbol.asyncIterator]().next()).resolves.toEqual({
       value: undefined,
       done: true,

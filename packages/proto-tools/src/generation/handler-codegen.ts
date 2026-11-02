@@ -123,22 +123,16 @@ export function generateHandlerRegistry(
   if (analysis.diagnostics.length > 0)
     throw new Error(HandlerFiles.diagnostics(analysis.diagnostics));
   const writer = new GeneratedRegistryWriter();
-  const source = writer.render(analysis, { ...options, outputFile });
   (operations.mkdir ?? defaultOperations.mkdir)(dirname(outputFile));
-  const format = RuntimeMetadataGraph.format(appRoot);
-  const dependencies = RuntimeMetadataGraph.resolve(appRoot, [], format);
-  const bootstrap = writer.renderBootstrap({ dependencies });
-  const assets = RuntimeMetadataAssets.render(
-    project,
-    bootstrapFile,
-    bootstrapFile,
-    dependencies,
-    writer,
-    format,
-  );
+  const assets = HandlerFiles.metadataAssets(appRoot, project, bootstrapFile, writer);
+  const source = writer.render(analysis, {
+    ...options,
+    outputFile,
+    dependencies: assets.directDependencies,
+  });
   const files = [
     { file: outputFile, source },
-    { file: bootstrapFile, source: bootstrap },
+    { file: bootstrapFile, source: writer.renderBootstrap() },
     ...assets.source,
     ...assets.runtime,
     assets.record,
@@ -147,6 +141,33 @@ export function generateHandlerRegistry(
 }
 
 const HandlerFiles = Object.freeze({
+  /**
+   * Renders passive imports against the application's direct package edges.
+   *
+   * @param appRoot Application package directory.
+   * @param project TypeScript project directory.
+   * @param bootstrapFile Generated bootstrap file.
+   * @param writer Generated registry writer.
+   * @returns Passive metadata assets.
+   */
+  metadataAssets(
+    appRoot: string,
+    project: string,
+    bootstrapFile: string,
+    writer: GeneratedRegistryWriter,
+  ) {
+    const format = RuntimeMetadataGraph.format(appRoot);
+    const dependencies = RuntimeMetadataGraph.resolve(appRoot, [], format);
+    return RuntimeMetadataAssets.render(
+      project,
+      bootstrapFile,
+      bootstrapFile,
+      dependencies,
+      writer,
+      format,
+    );
+  },
+
   /**
    * Validates all generated handler paths before any output is published.
    *

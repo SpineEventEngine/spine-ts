@@ -15,9 +15,11 @@
 import { ReadSideFilter, type ReadSideContext } from "@spine-event-engine/server";
 import {
   AnnouncementBoardViewSchema,
+  BoardMessageSchema,
   BoardMessageViewSchema,
   BoardStatisticsViewSchema,
   type AnnouncementBoardView,
+  type BoardMessage,
   type BoardMessageView,
   type BoardStatisticsView,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
@@ -34,6 +36,29 @@ const visible = (board: string | undefined, context: ReadSideContext): boolean =
     context.authorityFacts?.canReadRestricted === true
   );
 };
+
+/**
+ * Admits aggregate state only when the verified reader can inspect its board.
+ */
+export class AggregateVisibility extends ReadSideFilter<typeof BoardMessageSchema> {
+  /**
+   * Creates the aggregate-state visibility filter.
+   */
+  constructor() {
+    super(BoardMessageSchema);
+  }
+
+  /**
+   * Returns state from boards available to the verified reader.
+   *
+   * @param message Aggregate state to filter.
+   * @param context Verified reader context.
+   * @returns The visible state or null.
+   */
+  filter(message: BoardMessage, context: ReadSideContext): BoardMessage | null {
+    return visible(message.board?.value, context) ? message : null;
+  }
+}
 
 /**
  * Admits message rows at the messages Bounded Context boundary.
@@ -145,6 +170,30 @@ export class MessageAuthorRedaction extends ReadSideFilter<typeof BoardMessageVi
    * @returns The filtered or redacted value.
    */
   filter(message: BoardMessageView, context: ReadSideContext): BoardMessageView {
+    if (context.principal === undefined) message.username = "Anonymous";
+    return message;
+  }
+}
+
+/**
+ * Redacts public author names in direct aggregate-state reads.
+ */
+export class AggregateAuthorRedaction extends ReadSideFilter<typeof BoardMessageSchema> {
+  /**
+   * Creates the public aggregate-state author filter.
+   */
+  constructor() {
+    super(BoardMessageSchema, { nested: true });
+  }
+
+  /**
+   * Replaces the public author's display name.
+   *
+   * @param message Aggregate state to redact.
+   * @param context Verified reader context.
+   * @returns Redacted state for public readers.
+   */
+  filter(message: BoardMessage, context: ReadSideContext): BoardMessage {
     if (context.principal === undefined) message.username = "Anonymous";
     return message;
   }

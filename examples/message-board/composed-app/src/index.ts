@@ -36,6 +36,8 @@ import { MessagePostedSchema } from "@spine-event-engine/example-message-board-m
 
 import { ReadBoardMessageHandler, ReadBoardStatsHandler } from "./board-query-handler.js";
 import {
+  AggregateAuthorRedaction,
+  AggregateVisibility,
   AnnouncementDisclosure,
   AnnouncementVisibility,
   BoardStatisticsDisclosure,
@@ -124,6 +126,7 @@ export class ComposedBoardApplication {
           ? {}
           : { services: { readerAdmission: this.readerAdmission } }),
         readSideFilters: [
+          new AggregateAuthorRedaction(),
           new MessageAuthorRedaction(),
           new EventAuthorRedaction(),
           new BoardStatisticsDisclosure(),
@@ -153,6 +156,7 @@ const BoardContextBuilders = Object.freeze({
       .add(BoardMessageAggregate)
       .add(BoardViewProjection)
       .add(BoardStatisticsProjection, { eventRouting: routing })
+      .addReadSideFilter(new AggregateVisibility())
       .addReadSideFilter(new BoardVisibility())
       .addReadSideFilter(new BoardStatisticsVisibility())
       .addReadSideFilter(new PublishedEventVisibility());

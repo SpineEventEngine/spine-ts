@@ -19,6 +19,8 @@ import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SessionBoardApp } from "../src/session-app.js";
 
+vi.mock("../src/index.js", () => ({ MessageBoardApp: () => null }));
+
 describe("signed reader selection", () => {
   afterEach(() => {
     cleanup();
@@ -44,5 +46,32 @@ describe("signed reader selection", () => {
     deferred.resolve();
     await Promise.resolve();
     expect(forConnect).not.toHaveBeenCalled();
+  });
+
+  it("hides the previous reader while a replacement credential is pending or fails", async () => {
+    const replacement = Promise.withResolvers<void>();
+    const reauthenticate = vi
+      .spyOn(BrowserSession.prototype, "reauthenticate")
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(() => replacement.promise);
+    vi.spyOn(BrowserSession.prototype, "context", "get").mockReturnValue({ actor: "ada" });
+    const clientClose = vi.fn(async () => undefined);
+    vi.spyOn(Client, "forConnect").mockReturnValue({
+      onBehalfOf: () => ({}),
+      close: clientClose,
+    } as never);
+    render(createElement(SessionBoardApp, { url: "http://127.0.0.1:8090", mode: "signed" }));
+    const input = screen.getByLabelText("Issued bearer credential");
+    fireEvent.change(input, { target: { value: "first" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use credential" }));
+    await waitFor(() => expect(screen.getByText("Signed in as ada")).toBeTruthy());
+    fireEvent.change(input, { target: { value: "replacement" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use credential" }));
+    await waitFor(() => expect(reauthenticate).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("Signed in as ada")).toBeNull();
+    await waitFor(() => expect(clientClose).toHaveBeenCalledOnce());
+    replacement.reject(new Error("invalid"));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    expect(screen.queryByText("Signed in as ada")).toBeNull();
   });
 });

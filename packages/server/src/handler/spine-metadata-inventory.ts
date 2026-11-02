@@ -27,8 +27,6 @@ import {
  * Passive model and handler descriptions emitted by one package.
  */
 export interface SpineMetadata extends GeneratedHandlerRegistry {
-  // prettier-ignore
-
   /**
    * Local model module registered through the ordinary Proto inventory.
    */
@@ -38,6 +36,15 @@ export interface SpineMetadata extends GeneratedHandlerRegistry {
    * Passive application query implementations declared in this package.
    */
   readonly appQueries?: readonly AppQueryDescription[];
+
+  /**
+   * Returns metadata from direct participating runtime dependencies.
+   *
+   * The accessor runs only when bootstrap registration traverses and validates the graph.
+   *
+   * @returns Direct passive metadata values for validation.
+   */
+  readonly dependencies?: () => readonly unknown[];
 }
 
 /**
@@ -84,6 +91,39 @@ const queries = new Map<
   { readonly description: AppQueryDescription; readonly moduleId: string }
 >();
 
+const MetadataGraph = Object.freeze({
+  /**
+   * Collects and validates every passive metadata dependency before registration.
+   *
+   * @param root Root passive metadata value.
+   * @returns Validated metadata graph.
+   */
+  collect(root: unknown): readonly SpineMetadata[] {
+    const seen = new Set<SpineMetadata>();
+    const pending: unknown[] = [root];
+    const collected: SpineMetadata[] = [];
+    while (pending.length > 0) {
+      const next = pending.pop();
+      if (typeof next !== "object" || next === null || Array.isArray(next))
+        throw new TypeError("Spine metadata dependency must be an object.");
+      const item = next as SpineMetadata;
+      if (seen.has(item)) continue;
+      seen.add(item);
+      collected.push(item);
+      const accessor = item.dependencies;
+      if (accessor !== undefined) {
+        if (typeof accessor !== "function")
+          throw new TypeError("Spine metadata dependencies must be an accessor.");
+        const dependencies = accessor();
+        if (!Array.isArray(dependencies))
+          throw new TypeError("Spine metadata dependencies must be an array.");
+        for (const dependency of dependencies as readonly unknown[]) pending.push(dependency);
+      }
+    }
+    return collected;
+  },
+});
+
 /**
  * Registers validated passive descriptions without selecting application handlers.
  *
@@ -106,25 +146,28 @@ export const SpineMetadataInventory: Readonly<{
    */
   register(metadata: SpineMetadata, moduleId: string): void {
     if (moduleId.trim().length === 0) throw new TypeError("Spine metadata module ID is required.");
-    new HandlerRegistryIngestor().ingest(metadata);
+    const collected = MetadataGraph.collect(metadata);
     const stagedQueries = new Map<AppQueryDescription["handlerType"], AppQueryDescription>();
-    for (const query of metadata.appQueries ?? []) {
-      SpineMetadataInventory.validateQuery(query);
-      const prior =
-        stagedQueries.get(query.handlerType) ?? queries.get(query.handlerType)?.description;
-      if (prior !== undefined && prior !== query)
-        throw new Error(`Spine App Query metadata for ${query.handlerType.name} conflicts.`);
-      stagedQueries.set(query.handlerType, query);
-    }
     const staged = new Map<ReceiverConstructor, RegisteredReceiver>();
-    for (const receiver of metadata.receivers) {
-      const constructor = receiver.receiverType as ReceiverConstructor;
-      const prior = staged.get(constructor) ?? receivers.get(constructor);
-      if (prior !== undefined && prior.receiver !== receiver)
-        throw new Error(
-          `Spine metadata for ${constructor.name} conflicts between ${prior.moduleId} and ${moduleId}.`,
-        );
-      staged.set(constructor, { receiver, moduleId });
+    for (const item of collected) {
+      new HandlerRegistryIngestor().ingest(item);
+      for (const query of item.appQueries ?? []) {
+        SpineMetadataInventory.validateQuery(query);
+        const prior =
+          stagedQueries.get(query.handlerType) ?? queries.get(query.handlerType)?.description;
+        if (prior !== undefined && prior !== query)
+          throw new Error(`Spine App Query metadata for ${query.handlerType.name} conflicts.`);
+        stagedQueries.set(query.handlerType, query);
+      }
+      for (const receiver of item.receivers) {
+        const constructor = receiver.receiverType as ReceiverConstructor;
+        const prior = staged.get(constructor) ?? receivers.get(constructor);
+        if (prior !== undefined && prior.receiver !== receiver)
+          throw new Error(
+            `Spine metadata for ${constructor.name} conflicts between ${prior.moduleId} and ${moduleId}.`,
+          );
+        staged.set(constructor, { receiver, moduleId });
+      }
     }
     for (const [constructor, entry] of staged) receivers.set(constructor, entry);
     for (const [constructor, description] of stagedQueries)

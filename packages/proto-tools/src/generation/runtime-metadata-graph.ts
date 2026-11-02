@@ -95,6 +95,7 @@ interface RuntimePackageJson {
   readonly dependencies?: Readonly<Record<string, string>>;
   readonly optionalDependencies?: Readonly<Record<string, string>>;
   readonly exports?: Readonly<Record<string, unknown>>;
+  readonly type?: string;
 }
 
 interface StagedMetadata {
@@ -107,6 +108,7 @@ interface RuntimeStep {
   readonly name: string;
   readonly requester: string;
   readonly optional: boolean;
+  readonly format: "import" | "require";
 }
 
 interface RuntimeGraphState {
@@ -155,7 +157,7 @@ export const RuntimeMetadataGraph: Readonly<{
       edges: [],
       staged,
     };
-    const pending = RuntimePackage.steps(root, canonicalRoot);
+    const pending = RuntimePackage.steps(root, canonicalRoot, format);
     while (pending.length > 0) {
       const step = pending.pop();
       if (step !== undefined) RuntimePackage.visit(step, graph, pending);
@@ -205,12 +207,24 @@ const RuntimePackage = {
       root: installedRoot,
     };
     if (manifest.exports?.["./spine"] !== undefined) RuntimePackage.unique(graph.versions, item);
-    if (graph.visited.has(installedRoot)) return;
-    graph.visited.set(installedRoot, item);
-    RuntimePackage.participant(manifest, item, graph.result, graph.staged, graph.format);
+    const visitKey = `${installedRoot}:${step.format}`;
+    if (graph.visited.has(visitKey)) return;
+    graph.visited.set(visitKey, item);
+    RuntimePackage.participant(manifest, item, graph.result, graph.staged, step.format);
     if (manifest.exports?.["./spine"] !== undefined)
       RuntimePackage.claimSchemas(item, graph.schemas);
-    pending.push(...RuntimePackage.steps(manifest, installedRoot));
+    const entry = manifest.exports?.["./spine"];
+    const artifact =
+      entry === undefined ? undefined : RuntimePackage.exportArtifacts(item, entry, step.format)[1];
+    const nextFormat =
+      artifact?.endsWith(".cjs") === true
+        ? "require"
+        : artifact?.endsWith(".mjs") === true
+          ? "import"
+          : manifest.type === "module"
+            ? "import"
+            : "require";
+    pending.push(...RuntimePackage.steps(manifest, installedRoot, nextFormat));
   },
 
   /**
@@ -270,9 +284,14 @@ const RuntimePackage = {
    *
    * @param manifest Installed package dependency declarations.
    * @param requester Package root used for ordinary Node resolution.
+   * @param format Conditional export branch used by this package.
    * @returns Stack-ordered dependency edges.
    */
-  steps(manifest: RuntimePackageJson, requester: string): RuntimeStep[] {
+  steps(
+    manifest: RuntimePackageJson,
+    requester: string,
+    format: "import" | "require",
+  ): RuntimeStep[] {
     const names = new Set([
       ...Object.keys(manifest.dependencies ?? {}),
       ...Object.keys(manifest.optionalDependencies ?? {}),
@@ -284,6 +303,7 @@ const RuntimePackage = {
         name,
         requester,
         optional: manifest.optionalDependencies?.[name] !== undefined,
+        format,
       }));
   },
 

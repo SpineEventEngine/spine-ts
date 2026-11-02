@@ -24,13 +24,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 import { generateHandlerRegistry } from "../src/generation/handler-codegen.js";
 
 describe("handler codegen", () => {
-  it("imports transitive metadata through a nonparticipating runtime dependency", () => {
+  it("diagnoses a hidden transitive participant and imports a public metadata bridge", () => {
     const app = application({
       compilerOptions: {
         module: "NodeNext",
@@ -75,27 +76,51 @@ describe("handler codegen", () => {
     );
     writeFileSync(
       join(model, "dist/generated/spine-metadata.js"),
-      "export const spineMetadata = { receivers: [] };\n",
+      "exports.spineMetadata = { receivers: [] };\n",
     );
     writeFileSync(
       join(model, "dist/generated/spine-metadata.d.ts"),
       "export declare const spineMetadata: object;\n",
     );
 
+    expect(() => {
+      generateHandlerRegistry({ appRoot: app });
+    }).toThrow(/nonparticipating bridge/u);
+    mkdirSync(join(bridge, "dist/generated"), { recursive: true });
+    writeFileSync(
+      join(bridge, "package.json"),
+      JSON.stringify({
+        name: "bridge",
+        version: "1.0.0",
+        dependencies: { model: "1.0.0" },
+        exports: {
+          "./spine": {
+            types: "./dist/generated/spine-metadata.d.ts",
+            default: "./dist/generated/spine-metadata.js",
+          },
+        },
+      }),
+    );
+    writeFileSync(
+      join(bridge, "dist/generated/spine-metadata.js"),
+      'const model = require("model/spine");\n' +
+        "exports.spineMetadata = { receivers: [], dependencies: () => [model.spineMetadata] };\n",
+    );
+    writeFileSync(
+      join(bridge, "dist/generated/spine-metadata.d.ts"),
+      'export declare const spineMetadata: import("@spine-event-engine/server/spi/handler-registry").SpineMetadata;\n',
+    );
     generateHandlerRegistry({ appRoot: app });
-
-    expect(readFileSync(join(app, "generated/spine-bootstrap.ts"), "utf8")).toContain(
-      'from "./spine-dependencies.js"',
-    );
-    expect(readFileSync(join(app, "generated/spine-dependencies.js"), "utf8")).toContain(
-      "../node_modules/bridge/node_modules/model/dist/generated/spine-metadata.js",
-    );
-    expect(readFileSync(join(app, "dist/generated/spine-dependencies.js"), "utf8")).toContain(
-      "../../node_modules/bridge/node_modules/model/dist/generated/spine-metadata.js",
-    );
-    expect(readFileSync(join(app, "generated/spine-dependencies.d.ts"), "utf8")).toContain(
-      "../node_modules/bridge/node_modules/model/dist/generated/spine-metadata.d.ts",
-    );
+    const adapter = readFileSync(join(app, "dist/generated/spine-dependencies.js"), "utf8");
+    expect(adapter).toContain('require("bridge/spine")');
+    expect(adapter).not.toContain("node_modules");
+    expect(adapter).not.toContain("model/spine");
+    const relocated = join(dirname(app), `${basename(app)}-relocated`);
+    renameSync(app, relocated);
+    const imported = createRequire(join(relocated, "entry.cjs"))(
+      join(relocated, "dist/generated/spine-dependencies.js"),
+    ) as { dependencyMetadata0: () => { dependencies: () => readonly object[] } };
+    expect(imported.dependencyMetadata0().dependencies()).toHaveLength(1);
   });
   it("emits local bootstrap", () => {
     const app = application();

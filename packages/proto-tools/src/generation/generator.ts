@@ -36,14 +36,24 @@ import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
 import ts from "typescript";
 
-import { ProtoConfig, ProtoManifest } from "../index.js";
+import { ProtoConfig, ProtoManifest, type ModelConfig } from "../index.js";
 import { generationMarkerFile, reusableGenerationId } from "./generation-reuse.mjs";
 import { readManifestAt } from "../io/manifest-reader.js";
-import { ModelGraph } from "../model/model-graph.js";
+import { ModelGraph, type ResolvedModel, type ResolvedModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
 import { generatedSource, normalizeGeneratedTree } from "./generated-source-policy.js";
 import { assertSourceViewCurrent, modelSourceView, writeViewRecord } from "./source-view.js";
 import type { ModelSourceView } from "./source-view.js";
+
+interface ModelGenerationStage {
+  readonly packageRoot: string;
+  readonly config: ModelConfig;
+  readonly operations: GenerationOperations;
+  readonly graph: ResolvedModelGraph;
+  readonly moduleRoot: string;
+  readonly output: string;
+  readonly sourceView: ReturnType<typeof modelSourceView>;
+}
 
 /**
  * Bounded seams used to test failure handling while retaining real Buf integration.
@@ -119,7 +129,11 @@ export interface GenerationOperations {
     output: string,
     exportName: string,
     packageName: string,
-    dependencies: readonly { readonly name: string; readonly moduleExport: string }[],
+    dependencies: readonly {
+      readonly name: string;
+      readonly moduleExport: string;
+      readonly root?: string;
+    }[],
   ) => void;
 
   /**
@@ -416,6 +430,38 @@ const ProtoGenerationErrors: Readonly<ProtoGenerationFailure> = Object.freeze({
  */
 const protoGeneration = Object.freeze({
   /**
+   * Rejects model metadata hidden behind a nonparticipating package.
+   *
+   * @param models Resolved model dependencies.
+   * @param direct Direct declared model dependencies.
+   */
+  assertMetadataPaths(models: readonly ResolvedModel[], direct: readonly string[]): void {
+    const byName = new Map(models.map((model) => [model.name, model]));
+    const participants = new Set(
+      models.filter(protoGeneration.hasPublicMetadata).map((model) => model.name),
+    );
+    const pending = direct.filter((name) => participants.has(name));
+    const reachable = new Set<string>();
+    while (pending.length > 0) {
+      const name = pending.pop();
+      if (name === undefined || reachable.has(name)) continue;
+      reachable.add(name);
+      const model = byName.get(name);
+      if (model === undefined) continue;
+      const manifest = readManifestAt(model.root, join(model.root, "spine-proto-manifest.json"));
+      pending.push(...manifest.dependencies.filter((dependency) => participants.has(dependency)));
+    }
+    for (const name of participants) {
+      if (!reachable.has(name))
+        ProtoGenerationErrors.fail(
+          name,
+          "/spine is inaccessible through public package-edge metadata; " +
+            "a nonparticipating bridge must expose its own /spine entry",
+        );
+    }
+  },
+
+  /**
    * Checks package tree-shaking metadata against the emitted runtime path.
    *
    * @param packageRoot Package containing generated startup code.
@@ -491,89 +537,7 @@ const protoGeneration = Object.freeze({
     );
     let primaryError: unknown;
     try {
-      let generationId: string = crypto.randomUUID();
-      let manifest = ProtoManifest.create(packageRoot, undefined, generationId);
-      const graph = ModelGraph.resolve(packageRoot, config.dependencies);
-      const target = join(packageRoot, config.generatedRoot);
-      mkdirSync(dirname(target), { recursive: true });
-      const stage = mkdtempSync(join(dirname(target), `.${basename(target)}.stage-`));
-      const moduleRoot = join(stage, "module");
-      const output = join(moduleRoot, "output");
-      try {
-        const sourceView = modelSourceView(
-          operations.livePackageRoot ?? packageRoot,
-          config.generatedRoot,
-          output,
-        );
-        protoGeneration.copyOwnedSources(
-          packageRoot,
-          config.protoRoot,
-          moduleRoot,
-          manifest.protoFiles,
-        );
-        for (const model of graph.models) protoGeneration.copyDependencySources(model, moduleRoot);
-        (operations.runBuf ?? protoGeneration.runBuf)(
-          moduleRoot,
-          output,
-          manifest.protoFiles,
-          config.packageName,
-          operations.runProcess,
-        );
-        const runInterfacePhase =
-          operations.runInterfacePhase ??
-          (operations.runBuf === undefined ? protoGeneration.runInterfacePhase : () => undefined);
-        runInterfacePhase(
-          moduleRoot,
-          output,
-          manifest.protoFiles,
-          config.packageName,
-          sourceView,
-          operations.runProcess,
-        );
-        protoGeneration.assertRejectionRuntimeDependency(packageRoot, config.packageName, output);
-        (operations.rewriteImports ?? protoGeneration.rewriteDependencyImports)(
-          output,
-          graph.protoOwners,
-          config.packageName,
-          new Set(config.dependencies),
-        );
-        (operations.writeModule ?? protoGeneration.writeModule)(
-          output,
-          config.moduleExport,
-          config.packageName,
-          graph.models.filter((model) => config.dependencies.includes(model.name)),
-        );
-        normalizeGeneratedTree(output, manifest.protoFiles);
-        writeFileSync(join(output, generationMarkerFile), `${JSON.stringify({ generationId })}\n`, "utf8");
-        const reusedGenerationId = protoGeneration.reusableGenerationId(
-          packageRoot,
-          target,
-          output,
-          manifest,
-        );
-        if (reusedGenerationId !== undefined) {
-          generationId = reusedGenerationId;
-          manifest = ProtoManifest.create(packageRoot, undefined, generationId);
-          writeFileSync(
-            join(output, generationMarkerFile),
-            `${JSON.stringify({ generationId })}\n`,
-            "utf8",
-          );
-        }
-        assertSourceViewCurrent(sourceView);
-        if (operations.livePackageRoot !== undefined)
-          writeViewRecord(packageRoot, sourceView);
-        protoGeneration.publish(
-          packageRoot,
-          config.generatedRoot,
-          output,
-          manifest,
-          operations.rename,
-          operations.manifestOperations,
-        );
-      } finally {
-        rmSync(stage, { recursive: true, force: true });
-      }
+      protoGeneration.generateUnlocked(packageRoot, config, operations);
     } catch (error) {
       primaryError = error;
     }
@@ -588,6 +552,158 @@ const protoGeneration = Object.freeze({
         cause: primaryError,
       });
     }
+  },
+
+  /**
+   * Creates one model transaction and removes its temporary output after publication or failure.
+   *
+   * @param packageRoot Package being generated.
+   * @param config Model generation configuration.
+   * @param operations Generation process seams.
+   */
+  generateUnlocked(
+    packageRoot: string,
+    config: ModelConfig,
+    operations: GenerationOperations,
+  ): void {
+    const generationId = crypto.randomUUID();
+    const manifest = ProtoManifest.create(packageRoot, undefined, generationId);
+    const graph = ModelGraph.resolve(packageRoot, config.dependencies);
+    const target = join(packageRoot, config.generatedRoot);
+    mkdirSync(dirname(target), { recursive: true });
+    const directory = mkdtempSync(join(dirname(target), `.${basename(target)}.stage-`));
+    const moduleRoot = join(directory, "module");
+    const output = join(moduleRoot, "output");
+    try {
+      const stage: ModelGenerationStage = {
+        packageRoot,
+        config,
+        operations,
+        graph,
+        moduleRoot,
+        output,
+        sourceView: modelSourceView(
+          operations.livePackageRoot ?? packageRoot,
+          config.generatedRoot,
+          output,
+        ),
+      };
+      protoGeneration.emitModel(stage, manifest);
+      protoGeneration.publishModel(stage, manifest, generationId, target);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+
+  /**
+   * Writes schemas, companions, imports, and passive metadata into the stage.
+   *
+   * @param stage Staged generation state.
+   * @param manifest Package manifest.
+   */
+  emitModel(stage: ModelGenerationStage, manifest: ProtoManifest): void {
+    const { packageRoot, config, operations, graph, moduleRoot, output } = stage;
+    protoGeneration.copyOwnedSources(
+      packageRoot,
+      config.protoRoot,
+      moduleRoot,
+      manifest.protoFiles,
+    );
+    for (const model of graph.models) protoGeneration.copyDependencySources(model, moduleRoot);
+    (operations.runBuf ?? protoGeneration.runBuf)(
+      moduleRoot,
+      output,
+      manifest.protoFiles,
+      config.packageName,
+      operations.runProcess,
+    );
+    protoGeneration.emitCompanions(stage, manifest);
+    protoGeneration.assertRejectionRuntimeDependency(packageRoot, config.packageName, output);
+    (operations.rewriteImports ?? protoGeneration.rewriteDependencyImports)(
+      output,
+      graph.protoOwners,
+      config.packageName,
+      new Set(config.dependencies),
+    );
+    protoGeneration.assertMetadataPaths(graph.models, config.dependencies);
+    (operations.writeModule ?? protoGeneration.writeModule)(
+      output,
+      config.moduleExport,
+      config.packageName,
+      graph.models.filter((model) => config.dependencies.includes(model.name)),
+    );
+  },
+
+  /**
+   * Writes interface companions through the configured process seam.
+   *
+   * @param stage Staged generation state.
+   * @param manifest Package manifest.
+   */
+  emitCompanions(stage: ModelGenerationStage, manifest: ProtoManifest): void {
+    const { config, operations, moduleRoot, output, sourceView } = stage;
+    const runInterfacePhase =
+      operations.runInterfacePhase ??
+      (operations.runBuf === undefined ? protoGeneration.runInterfacePhase : () => undefined);
+    runInterfacePhase(
+      moduleRoot,
+      output,
+      manifest.protoFiles,
+      config.packageName,
+      sourceView,
+      operations.runProcess,
+    );
+  },
+
+  /**
+   * Publishes staged model output with a stable generation ID when available.
+   *
+   * @param stage Staged generation state.
+   * @param initialManifest Initial package manifest.
+   * @param initialId Initial generation ID.
+   * @param target Published output directory.
+   */
+  publishModel(
+    stage: ModelGenerationStage,
+    initialManifest: ProtoManifest,
+    initialId: string,
+    target: string,
+  ): void {
+    const { packageRoot, config, operations, output, sourceView } = stage;
+    normalizeGeneratedTree(output, initialManifest.protoFiles);
+    let generationId = initialId;
+    let manifest = initialManifest;
+    protoGeneration.writeGenerationMarker(output, generationId);
+    const reused = protoGeneration.reusableGenerationId(packageRoot, target, output, manifest);
+    if (reused !== undefined) {
+      generationId = reused;
+      manifest = ProtoManifest.create(packageRoot, undefined, generationId);
+      protoGeneration.writeGenerationMarker(output, generationId);
+    }
+    assertSourceViewCurrent(sourceView);
+    if (operations.livePackageRoot !== undefined) writeViewRecord(packageRoot, sourceView);
+    protoGeneration.publish(
+      packageRoot,
+      config.generatedRoot,
+      output,
+      manifest,
+      operations.rename,
+      operations.manifestOperations,
+    );
+  },
+
+  /**
+   * Marks staged output with its chosen stable generation identity.
+   *
+   * @param output Staged output directory.
+   * @param generationId Chosen generation ID.
+   */
+  writeGenerationMarker(output: string, generationId: string): void {
+    writeFileSync(
+      join(output, generationMarkerFile),
+      `${JSON.stringify({ generationId })}\n`,
+      "utf8",
+    );
   },
 
   /**
@@ -1085,16 +1201,13 @@ const protoGeneration = Object.freeze({
     output: string,
     exportName: string,
     packageName: string,
-    dependencies: readonly { readonly name: string; readonly moduleExport: string }[],
+    dependencies: readonly {
+      readonly name: string;
+      readonly moduleExport: string;
+      readonly root?: string;
+    }[],
   ): void {
-    const generated = protoGeneration
-      .files(output)
-      .filter((file) => file.endsWith("_pb.ts"))
-      .sort()
-      .map((file, index) => ({
-        alias: `schemas${String(index)}`,
-        path: `./${relative(output, file).replaceAll("\\", "/").replace(/\.ts$/, ".js")}`,
-      }));
+    const generated = protoGeneration.moduleSchemas(output);
     const dependencyImports = dependencies
       .slice()
       .sort((left, right) => left.name.localeCompare(right.name))
@@ -1113,7 +1226,24 @@ const protoGeneration = Object.freeze({
       generatedSource(lines.join("\n"), sources),
       "utf8",
     );
-    protoGeneration.writePassiveMetadata(output, exportName, sources);
+    protoGeneration.writePassiveMetadata(output, exportName, sources, dependencies);
+  },
+
+  /**
+   * Lists the local generated schema imports for a Proto module.
+   *
+   * @param output Generated output directory.
+   * @returns Ordered schema imports.
+   */
+  moduleSchemas(output: string): readonly { readonly alias: string; readonly path: string }[] {
+    return protoGeneration
+      .files(output)
+      .filter((file) => file.endsWith("_pb.ts"))
+      .sort()
+      .map((file, index) => ({
+        alias: `schemas${String(index)}`,
+        path: `./${relative(output, file).replaceAll("\\", "/").replace(/\.ts$/, ".js")}`,
+      }));
   },
 
   /**
@@ -1122,20 +1252,54 @@ const protoGeneration = Object.freeze({
    * @param output Staged generated-output directory.
    * @param exportName Local Proto module export.
    * @param sources Proto sources recorded in the generated notice.
+   * @param dependencies Direct model dependencies with public metadata exports.
    */
-  writePassiveMetadata(output: string, exportName: string, sources: readonly string[]): void {
+  writePassiveMetadata(
+    output: string,
+    exportName: string,
+    sources: readonly string[],
+    dependencies: readonly { readonly name: string; readonly root?: string }[],
+  ): void {
+    const metadata = dependencies.filter(protoGeneration.hasPublicMetadata);
     const source = [
       'import type { ProtoModule } from "@spine-event-engine/proto";',
       `import { ${exportName} } from "./proto-module.js";`,
+      ...metadata.map(
+        (dependency, index) =>
+          `import * as dependency${String(index)} from ${JSON.stringify(`${dependency.name}/spine`)};`,
+      ),
       "",
       "/** Passive model descriptions for this package. */",
-      "export const spineMetadata: { readonly protoModule: ProtoModule; readonly receivers: readonly [] } = {",
+      "export const spineMetadata: { readonly protoModule: ProtoModule;",
+      "  readonly receivers: readonly [];",
+      "  readonly dependencies?: () => readonly unknown[] } = {",
       `  protoModule: ${exportName},`,
       "  receivers: [],",
+      ...(metadata.length === 0
+        ? []
+        : [
+            `  dependencies: () => [${metadata
+              .map((_dependency, index) => `dependency${String(index)}.spineMetadata`)
+              .join(", ")}],`,
+          ]),
       "};",
       "",
     ].join("\n");
     writeFileSync(join(output, "spine-metadata.ts"), generatedSource(source, sources), "utf8");
+  },
+
+  /**
+   * Checks whether a direct model dependency publishes passive metadata.
+   *
+   * @param dependency Direct model dependency.
+   * @returns Whether the package exposes passive metadata.
+   */
+  hasPublicMetadata(dependency: { readonly root?: string }): boolean {
+    if (dependency.root === undefined) return false;
+    const manifest = JSON.parse(readFileSync(join(dependency.root, "package.json"), "utf8")) as {
+      exports?: Readonly<Record<string, unknown>>;
+    };
+    return manifest.exports?.["./spine"] !== undefined;
   },
 
   /**

@@ -106,6 +106,7 @@ const SessionConnections = Object.freeze({
   async connect(url: string, token: string, state: SessionControls): Promise<void> {
     const attempt = ++state.generation.current;
     void state.pending.current?.close();
+    state.setActive(undefined);
     state.setValidating(true);
     state.setError(undefined);
     let session: BrowserSession | undefined;

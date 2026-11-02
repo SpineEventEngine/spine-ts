@@ -102,20 +102,19 @@ export const modelAtomicTargets = [
     displayPath: "examples/message-board/model/generated",
     packagePath: "examples/message-board/model",
     moduleName: "MessageBoard",
-    handlerProjectPath: "examples/message-board/app/tsconfig.json",
-    handlerGeneratedPath: "examples/message-board/app/generated",
   },
 ];
 
 /**
  * Lists handler packages without local Proto sources that still publish generated metadata.
  */
-export const handlerOnlyTargets = ["command-handlers", "view-handlers", "composed-app"].map(
+export const handlerOnlyTargets = ["command-handlers", "view-handlers", "composed-app", "app"].map(
   (name) => ({
     displayPath: `examples/message-board/${name}/generated`,
     packagePath: `examples/message-board/${name}`,
     handlerProjectPath: `examples/message-board/${name}/tsconfig.json`,
     moduleName: `MessageBoard ${name}`,
+    ...(name === "app" ? { protoModulePackagePath: "examples/message-board/model" } : {}),
   }),
 );
 
@@ -125,7 +124,6 @@ export const handlerOnlyTargets = ["command-handlers", "view-handlers", "compose
 export const atomicGeneratedTargets = [
   ...generatedTargets,
   ...modelAtomicTargets,
-  { displayPath: "examples/message-board/app/generated" },
   ...handlerOnlyTargets,
 ];
 
@@ -1593,11 +1591,15 @@ function handlerRedirects(root, application, stagedTargets) {
           staged: candidate.stagedOutputRoot,
           ...shared,
         },
-        {
-          source: join(application, "node_modules", packageName, "dist"),
-          staged: candidate.stageRoot,
-          ...shared,
-        },
+        ...(packageName === undefined
+          ? []
+          : [
+              {
+                source: join(application, "node_modules", packageName, "dist"),
+                staged: candidate.stageRoot,
+                ...shared,
+              },
+            ]),
       ];
     }),
     ...workspaceServerSource(root),
@@ -1634,6 +1636,16 @@ function stageHandlerOnly(target, root, options, stagedTargets) {
   try {
     const redirects = handlerRedirects(root, application, [...stagedTargets, stage]);
     const output = join(stage.stagedOutputRoot, "spine-metadata.ts");
+    const modelStage =
+      target.protoModulePackagePath === undefined
+        ? undefined
+        : stagedTargets.find(
+            (candidate) => candidate.target.packagePath === target.protoModulePackagePath,
+          );
+    const protoModule =
+      modelStage === undefined
+        ? undefined
+        : JSON.parse(readFileSync(join(modelStage.stageRoot, "spine-proto-manifest.json"), "utf8"));
     const run = options.runModelCommand ?? runCommandIn;
     const status = run(
       `${target.moduleName} handler registry post-step`,
@@ -1650,6 +1662,14 @@ function stageHandlerOnly(target, root, options, stagedTargets) {
         output,
         "--published-out",
         join(application, "generated/spine-metadata.ts"),
+        ...(protoModule === undefined
+          ? []
+          : [
+              "--proto-module-export",
+              protoModule.moduleExport,
+              "--proto-module-specifier",
+              `${protoModule.packageName}/generated/proto-module.js`,
+            ]),
       ],
       root,
     );

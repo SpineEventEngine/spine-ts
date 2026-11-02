@@ -19,7 +19,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import ts from "typescript";
 
 import type { GeneratedRegistryWriter } from "./generated-registry-writer.js";
-import type { RuntimeMetadataDiscovery } from "./runtime-metadata-graph.js";
+import type { RuntimeMetadataDiscovery, RuntimeMetadataPackage } from "./runtime-metadata-graph.js";
 
 /**
  * A generated file and its exact contents.
@@ -40,6 +40,13 @@ export interface MetadataAsset {
  * Source and emitted adapters derived from one compiler configuration.
  */
 export interface MetadataAssets {
+  /**
+   * Direct public package edges referenced by the local metadata.
+   */
+  readonly directDependencies: readonly (RuntimeMetadataPackage & {
+    readonly moduleSpecifier: string;
+  })[];
+
   /**
    * Adapter files beside the authored bootstrap.
    */
@@ -106,7 +113,7 @@ export const RuntimeMetadataAssets: Readonly<{
       runtimeFiles,
       dependencies,
     );
-    return { source: sourceFiles, runtime: runtimeFiles, record };
+    return { source: sourceFiles, runtime: runtimeFiles, record, directDependencies: imports };
   },
 });
 
@@ -115,7 +122,7 @@ export const RuntimeMetadataAssets: Readonly<{
  */
 const MetadataOutput = {
   /**
-   * Maps direct edges to declared package aliases and nested edges to selected files.
+   * Maps reachable direct edges to declared package aliases.
    *
    * @param appRoot Application package directory.
    * @param dependencies Resolved metadata participants and runtime edges.
@@ -123,14 +130,56 @@ const MetadataOutput = {
    */
   imports(appRoot: string, dependencies: RuntimeMetadataDiscovery) {
     const canonicalRoot = realpathSync(appRoot);
-    return dependencies.map((dependency) => {
-      const direct = dependencies.edges.find(
-        (edge) => edge.requester === canonicalRoot && edge.resolved === dependency.root,
-      );
-      return direct === undefined
-        ? dependency
-        : { ...dependency, moduleSpecifier: `${direct.name}/spine` };
+    const participants = new Map(dependencies.map((item) => [item.root, item]));
+    const reachable = MetadataOutput.reachable(canonicalRoot, dependencies, participants);
+    for (const dependency of dependencies) {
+      if (!reachable.has(dependency.root))
+        throw new Error(
+          `spine-proto: ${dependency.name}/spine is inaccessible through public package-edge metadata; ` +
+            "a nonparticipating bridge must expose its own /spine entry",
+        );
+    }
+    return dependencies.edges.flatMap((edge) => {
+      const participant =
+        edge.requester === canonicalRoot && edge.resolved !== null
+          ? participants.get(edge.resolved)
+          : undefined;
+      return participant === undefined
+        ? []
+        : [{ ...participant, moduleSpecifier: `${edge.name}/spine` }];
     });
+  },
+
+  /**
+   * Lists participants reachable solely through public passive metadata edges.
+   *
+   * @param canonicalRoot Canonical root package directory.
+   * @param dependencies Discovered dependency graph.
+   * @param participants Packages exposing passive metadata.
+   * @returns Reachable participant directories.
+   */
+  reachable(
+    canonicalRoot: string,
+    dependencies: RuntimeMetadataDiscovery,
+    participants: ReadonlyMap<string, RuntimeMetadataDiscovery[number]>,
+  ): ReadonlySet<string> {
+    const reachable = new Set<string>([canonicalRoot]);
+    const pending = [canonicalRoot];
+    while (pending.length > 0) {
+      const requester = pending.shift();
+      for (const edge of dependencies.edges) {
+        if (
+          edge.requester !== requester ||
+          edge.resolved === null ||
+          !participants.has(edge.resolved)
+        )
+          continue;
+        if (reachable.has(edge.resolved)) continue;
+        reachable.add(edge.resolved);
+        pending.push(edge.resolved);
+      }
+    }
+    return reachable;
   },
 
   /**

@@ -26,6 +26,7 @@ import {
   registerSpineMetadata,
   SpineMetadataInventory,
   spineMetadataTestAccess,
+  type SpineMetadata,
 } from "../../src/handler/spine-metadata-inventory.js";
 
 class FirstOverview extends AppQueryHandler<GetProjectOverview_Query, GetProjectOverview_Response> {
@@ -93,5 +94,61 @@ describe("passive App Query metadata", () => {
       registerSpineMetadata({ receivers: [], appQueries: [{ ...first }] }, "test:second");
     }).toThrow(/Spine App Query metadata for FirstOverview conflicts/u);
     expect(SpineMetadataInventory.selectQueries([FirstOverview])).toEqual([first]);
+  });
+
+  it("walks passive diamonds and cycles by object identity without activating handlers", () => {
+    let visited = 0;
+    const leaf: SpineMetadata = {
+      receivers: [],
+      appQueries: [first],
+      dependencies: () => {
+        visited++;
+        return [root];
+      },
+    };
+    const left: SpineMetadata = { receivers: [], dependencies: () => [leaf] };
+    const right: SpineMetadata = { receivers: [], dependencies: () => [leaf] };
+    const root: SpineMetadata = { receivers: [], dependencies: () => [left, right] };
+    registerSpineMetadata(root, "test:cycle");
+    expect(SpineMetadataInventory.selectQueries([FirstOverview])).toEqual([first]);
+    expect(visited).toBe(1);
+    spineMetadataTestAccess.clear();
+    registerSpineMetadata(root, "test:cycle-again");
+    expect(visited).toBe(2);
+  });
+
+  it("publishes none of a passive graph when a later dependency conflicts", () => {
+    const good: SpineMetadata = { receivers: [], appQueries: [first] };
+    const bad: SpineMetadata = { receivers: [], appQueries: [{ ...first }] };
+    expect(() => {
+      registerSpineMetadata({ receivers: [], dependencies: () => [bad, good] }, "test:conflict");
+    }).toThrow(/conflicts/u);
+    expect(() => SpineMetadataInventory.selectQueries([FirstOverview])).toThrow(/missing/u);
+  });
+
+  it("rejects an undefined published dependency before registering any sibling", () => {
+    const good: SpineMetadata = { receivers: [], appQueries: [first] };
+    const root: SpineMetadata = { receivers: [], dependencies: () => [good, undefined] };
+    expect(() => {
+      registerSpineMetadata(root, "test:missing-export");
+    }).toThrow(/metadata dependency.*object/u);
+    expect(() => SpineMetadataInventory.selectQueries([FirstOverview])).toThrow(/missing/u);
+  });
+
+  it("rejects a malformed dependency result before registration", () => {
+    const root: SpineMetadata = {
+      receivers: [],
+      dependencies: () => ({ invalid: true }) as unknown as readonly SpineMetadata[],
+    };
+    expect(() => {
+      registerSpineMetadata(root, "test:bad-dependencies");
+    }).toThrow(/metadata dependencies.*array/u);
+    const missing: SpineMetadata = {
+      receivers: [],
+      dependencies: () => undefined as unknown as readonly unknown[],
+    };
+    expect(() => {
+      registerSpineMetadata(missing, "test:missing-dependencies");
+    }).toThrow(/metadata dependencies.*array/u);
   });
 });

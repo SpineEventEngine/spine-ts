@@ -25,19 +25,19 @@ import { MessagePostedSchema } from "@spine-event-engine/example-message-board-m
  * Renders permitted domain Event notifications separately from Entity state readers.
  *
  * @param props Selects the board and reader.
- * @returns Recent notifications and connection state.
+ * @returns The latest permitted notification and connection state.
  */
 export const MessageNotifications = (props: {
   readonly board: string;
   readonly request: ClientRequest;
 }): ReactElement => {
-  const [messages, setMessages] = useState<readonly string[]>([]);
+  const [message, setMessage] = useState<string>();
   const [disconnected, setDisconnected] = useState(false);
   useEffect(() => {
     const state: NotificationState = { active: true };
-    setMessages([]);
+    setMessage(undefined);
     setDisconnected(false);
-    void Notifications.observe(props, state, setMessages, setDisconnected);
+    void Notifications.observe(props, state, setMessage, setDisconnected);
     return () => {
       state.active = false;
       void state.subscription?.cancel().catch(() => undefined);
@@ -45,17 +45,15 @@ export const MessageNotifications = (props: {
   }, [props.board, props.request]);
   return (
     <section aria-label="Notifications">
-      <h2>Recent notifications</h2>
+      <h2>Latest notification</h2>
       {disconnected ? (
         <p role="alert">Live notifications are unavailable. Reload to reconnect.</p>
       ) : null}
-      {messages.length === 0 ? (
+      {message === undefined ? (
         <p>No notifications yet</p>
       ) : (
         <ul>
-          {messages.map((message, index) => (
-            <li key={`${index}-${message}`}>{message}</li>
-          ))}
+          <li>{message}</li>
         </ul>
       )}
     </section>
@@ -73,14 +71,14 @@ const Notifications = Object.freeze({
    *
    * @param props Selects the reader and board.
    * @param state Tracks cancellation and the active subscription.
-   * @param onMessage Appends visible notification text.
+   * @param onMessage Replaces the latest visible notification text.
    * @param onDisconnect Reports a failed or closed stream.
    * @returns Completion of the Event stream.
    */
   async observe(
     props: { readonly board: string; readonly request: ClientRequest },
     state: NotificationState,
-    onMessage: (update: (current: readonly string[]) => readonly string[]) => void,
+    onMessage: (message: string) => void,
     onDisconnect: (value: boolean) => void,
   ): Promise<void> {
     try {
@@ -106,16 +104,16 @@ const Notifications = Object.freeze({
   },
 
   /**
-   * Delivers only Events from the selected board to the notification list.
+   * Delivers only Events from the selected board as the latest notification.
    *
    * @param delivery Carries a streamed Event update.
    * @param board Selects the visible board.
-   * @param onMessage Appends matching Event text.
+   * @param onMessage Replaces the latest matching Event text.
    */
   deliver(
     delivery: SubscriptionDelivery,
     board: string,
-    onMessage: (update: (current: readonly string[]) => readonly string[]) => void,
+    onMessage: (message: string) => void,
   ): void {
     if (delivery.kind !== "update" || delivery.update.update.case !== "eventUpdates") return;
     for (const item of delivery.update.update.value.event) {
@@ -123,7 +121,7 @@ const Notifications = Object.freeze({
         item.message === undefined
           ? undefined
           : AnyPacker.tryUnpack(item.message, MessagePostedSchema);
-      if (event?.board?.value === board) onMessage((current) => [...current, event.text]);
+      if (event?.board?.value === board) onMessage(event.text);
     }
   },
 });

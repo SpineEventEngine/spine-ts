@@ -643,7 +643,12 @@ and the assembled child is closed before READY. Durable logical bindings remain
 Gateway-only. The Coordinator fans each logical definition to ready children,
 merges updates, propagates cancellation, and carries no subscription payload on
 parent/child IPC. A late or replacement child synchronizes retained definitions
-before it is eligible for normal requests. Active definitions attach their
+before it is eligible for normal requests. The Coordinator resolves the same
+`subscriptionQueueCapacity` before binding its HTTP/2 listener. Its activation
+ACK is separate from the update queue, which reserves one active DATA update
+plus the configured waiting count for each logical subscriber. Overflow closes
+that subscriber's relay and aborts its child streams.
+Active definitions attach their
 child streams before admission; subscribed but inactive definitions do not
 block readiness. Each child observes application-configured remote/shared
 Delivery directly. During DRAINING, new unary and shard admission stops while

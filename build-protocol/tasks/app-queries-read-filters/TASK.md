@@ -1,7 +1,8 @@
 # App Queries and read-side filtering
 
-Status: extending the implementation with shared environment subscription capacity
-and lifetime Message Board statistics using App Queries and read-side filters.
+Status: implemented, including shared environment subscription capacity and
+lifetime Message Board statistics. Release readiness requires the final branch
+commit to pass the local release profile and required CI checks.
 
 Branch: `app-queries-read-filters`. Baseline: official `origin/master`
 `3135caaa202cdc2de71d249f2859cc4c4329b8c3`.
@@ -141,10 +142,17 @@ The standalone performance investigation found that the existing one-Event,
 1,000-Process-Manager workload exceeded its one-second target even without a
 subscriber. The queue change does not establish that throughput target.
 
-The current continuation replaces per-service queue settings with the single
-ServerEnvironment setting and brings lifetime statistics and read policies into
-the actual Message Board UI and shared application assembly. It also isolates
-durable subscription registries by an explicit Bounded Context-selected storage
-group. Focused checks are in progress. Independent no-memory review, final
-security review, full release verification, and final-commit CI must cover this
-continuation before it is accepted.
+The shared ServerEnvironment setting supplies subscription waiting capacity to
+Stand, Server services, and managed subscription relays. The actual Message Board
+UI and shared application assembly provide lifetime statistics and reader-specific
+policies for views, Aggregate states, and Events. Durable subscription registries
+use an explicit Bounded Context-selected storage group. Independent no-memory
+reviews and final security review cover this continuation; accepted findings have
+been addressed. Local release verification and final-commit CI remain the
+required acceptance gates for the branch.
+
+The package portability correction composes passive metadata along declared
+package exports. Nonparticipating intermediates that hide required metadata
+produce an explicit build diagnostic; no workspace path or runtime directory
+scan substitutes for a usable package export. Clean generation stages dependency
+metadata before application metadata without requiring previous build output.

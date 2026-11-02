@@ -80,12 +80,12 @@ import {
   TrustedReaderIngress,
   type DirectReaderAuthenticator,
 } from "../services/trusted-reader-ingress.js";
+import { ServerEnvironment } from "./server-environment.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
 const defaultMessageMaxBytes = 4_194_304;
 const gracefulSessionDrainMs = 100;
-const subscriptionQueueLimit = 100;
 
 /**
  * Describes one private managed child available for Coordinator forwarding.
@@ -266,6 +266,8 @@ export class NodeCoordinator {
 
   readonly #readMaxBytes: number;
 
+  readonly #subscriptionQueueCapacity: number;
+
   readonly #unaryKernel: BackendMembershipKernel<
     ReadyCoordinatorMember,
     CoordinatorRequest,
@@ -326,17 +328,20 @@ export class NodeCoordinator {
    * @param server The HTTP/2 server.
    * @param address The listening address.
    * @param sessions Tracked HTTP/2 sessions.
+   * @param subscriptionQueueCapacity Resolved bound for each managed subscriber.
    */
   private constructor(
     options: NodeCoordinatorOptions,
     server: http2.Http2Server,
     address: AddressInfo,
     sessions: Set<http2.ServerHttp2Session>,
+    subscriptionQueueCapacity: number,
   ) {
     this.#members = options.members;
     this.#readerAdmission = options.readerAdmission;
     this.#forwardingProof = options.forwardingProof;
     this.#readMaxBytes = options.readMaxBytes ?? defaultMessageMaxBytes;
+    this.#subscriptionQueueCapacity = subscriptionQueueCapacity;
     this.#unaryKernel = new BackendMembershipKernel(
       NodeCoordinatorValues.unaryKernelOptions(
         undefined,
@@ -399,6 +404,7 @@ export class NodeCoordinator {
    * @returns The running private Coordinator.
    */
   static async open(options: NodeCoordinatorOptions): Promise<NodeCoordinator> {
+    const subscriptionQueueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
     const { host, port, readMaxBytes, writeMaxBytes } = this.#listenerOptions(options);
     // eslint-disable-next-line prefer-const -- routes capture the Coordinator before the listener exists.
     let coordinator: NodeCoordinator;
@@ -414,7 +420,13 @@ export class NodeCoordinator {
     );
     this.#trackSessions(server, sessions);
     const address = await NodeCoordinatorValues.listen(server, host, port);
-    coordinator = new NodeCoordinator(options, server, address, sessions);
+    coordinator = new NodeCoordinator(
+      options,
+      server,
+      address,
+      sessions,
+      subscriptionQueueCapacity,
+    );
     await coordinator.#reconcile();
     return coordinator;
   }
@@ -683,10 +695,13 @@ export class NodeCoordinator {
     };
     context.signal.addEventListener("abort", abort, { once: true });
     if (context.signal.aborted) abort();
-    const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit, abort);
-    const activation = this.#activateChild(definition, subscription, updates, overflow.signal);
+    const updates = new SubscriptionUpdateQueue(this.#subscriptionQueueCapacity, abort);
+    const ack = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const activation = this.#activateChild(definition, subscription, updates, ack, overflow.signal);
     let failure: Error | undefined;
     try {
+      const ready = await ack.promise;
+      if (ready !== undefined) yield ready;
       for await (const update of updates) yield update;
     } catch (error) {
       failure = NodeCoordinatorValues.error(error);
@@ -723,6 +738,7 @@ export class NodeCoordinator {
    * @param definition The validated child subscription bytes.
    * @param subscription The logical subscription exposed to callers.
    * @param updates The bounded caller stream queue.
+   * @param ack The separate activation acknowledgment gate.
    * @param signal Cancels the active child relay.
    * @returns Completion after the backend activation ends.
    */
@@ -730,6 +746,7 @@ export class NodeCoordinator {
     definition: Uint8Array,
     subscription: Subscription,
     updates: SubscriptionUpdateQueue,
+    ack: PromiseWithResolvers<SubscriptionUpdate | undefined>,
     signal: AbortSignal,
   ): Promise<void> {
     return this.#subscriptionKernel
@@ -738,11 +755,16 @@ export class NodeCoordinator {
         async (childUpdate) => {
           const update = fromBinary(SubscriptionUpdateSchema, childUpdate);
           update.subscription = clone(SubscriptionSchema, subscription);
+          if (update.response?.status?.status.case === "ok" && update.update.case === undefined) {
+            ack.resolve(update);
+            return;
+          }
           await updates.push(update);
         },
         signal,
       )
       .finally(() => {
+        ack.resolve(undefined);
         updates.close();
       });
   }
@@ -1049,11 +1071,11 @@ interface PendingActivation {
  * @internal
  */
 export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate> {
-  readonly #updates: SubscriptionUpdate[] = [];
+  #active: { update: SubscriptionUpdate; delivered: boolean; resolve: () => void } | undefined;
+
+  readonly #updates: { update: SubscriptionUpdate; delivered: boolean; resolve: () => void }[] = [];
 
   readonly #waiters: ((value: IteratorResult<SubscriptionUpdate>) => void)[] = [];
-
-  readonly #delivered: (() => void)[] = [];
 
   readonly #limit: number;
 
@@ -1064,7 +1086,7 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
   /**
    * Creates one terminal bounded update queue.
    *
-   * @param limit Limits retained updates before terminal closure.
+   * @param limit Maximum waiting updates beyond one active update.
    * @param onOverflow Aborts the public relay when the queue reaches its bound.
    */
   constructor(limit: number, onOverflow: () => void = () => undefined) {
@@ -1080,18 +1102,19 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
    */
   push(update: SubscriptionUpdate): Promise<void> {
     if (this.#closed) return Promise.resolve();
-    const waiter = this.#waiters.shift();
-    if (waiter !== undefined) {
-      waiter({ value: update, done: false });
-      return Promise.resolve();
-    }
-    if (this.#updates.length >= this.#limit) {
+    if (this.#active !== undefined && this.#updates.length >= this.#limit) {
       this.#onOverflow();
       this.close();
       return Promise.resolve();
     }
-    this.#updates.push(update);
-    return new Promise((resolve) => this.#delivered.push(resolve));
+    return new Promise((resolve) => {
+      const entry = { update, delivered: false, resolve };
+      if (this.#active === undefined) {
+        this.#active = entry;
+        const waiter = this.#waiters.shift();
+        if (waiter !== undefined) waiter(this.#deliver(entry));
+      } else this.#updates.push(entry);
+    });
   }
 
   /**
@@ -1100,9 +1123,20 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
-    this.#updates.length = 0;
+    this.#active?.resolve();
+    this.#active = undefined;
+    for (const update of this.#updates.splice(0)) update.resolve();
     for (const waiter of this.#waiters.splice(0)) waiter({ value: undefined, done: true });
-    for (const delivered of this.#delivered.splice(0)) delivered();
+  }
+
+  #deliver(entry: {
+    update: SubscriptionUpdate;
+    delivered: boolean;
+    resolve: () => void;
+  }): IteratorResult<SubscriptionUpdate> {
+    entry.delivered = true;
+    entry.resolve();
+    return { value: entry.update, done: false };
   }
 
   /**
@@ -1113,12 +1147,9 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
   [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
     return {
       next: (): Promise<IteratorResult<SubscriptionUpdate>> => {
-        const update = this.#updates.shift();
-        if (update !== undefined) {
-          this.#delivered.shift()?.();
-          return Promise.resolve({ value: update, done: false });
-        }
         if (this.#closed) return Promise.resolve({ value: undefined, done: true });
+        if (this.#active?.delivered) this.#active = this.#updates.shift();
+        if (this.#active !== undefined) return Promise.resolve(this.#deliver(this.#active));
         return new Promise((resolve) => this.#waiters.push(resolve));
       },
     };

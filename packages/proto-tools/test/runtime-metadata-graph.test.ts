@@ -146,6 +146,65 @@ describe("runtime metadata graph", () => {
     );
   });
 
+  it("follows a CommonJS metadata edge from an ESM application to a require-only leaf", () => {
+    const app = graphRoot();
+    packageAt(app, "app", { bridge: "1.0.0" });
+    const bridge = join(app, "node_modules/bridge");
+    const leaf = join(bridge, "node_modules/leaf");
+    packageAt(bridge, "bridge", { leaf: "1.0.0" }, true);
+    packageAt(leaf, "leaf", {}, true);
+    writeFileSync(
+      join(bridge, "package.json"),
+      JSON.stringify({
+        name: "bridge",
+        version: "1.0.0",
+        type: "commonjs",
+        dependencies: { leaf: "1.0.0" },
+        exports: {
+          "./spine": {
+            types: "./dist/generated/spine-metadata.d.cts",
+            default: "./dist/generated/spine-metadata.cjs",
+          },
+        },
+      }),
+    );
+    writeFileSync(
+      join(bridge, "dist/generated/spine-metadata.cjs"),
+      "exports.spineMetadata = { receivers: [] };\n",
+    );
+    writeFileSync(
+      join(bridge, "dist/generated/spine-metadata.d.cts"),
+      "export declare const spineMetadata: object;\n",
+    );
+    writeFileSync(
+      join(leaf, "package.json"),
+      JSON.stringify({
+        name: "leaf",
+        version: "1.0.0",
+        type: "commonjs",
+        dependencies: {},
+        exports: {
+          "./spine": {
+            require: {
+              types: "./dist/generated/spine-metadata.d.cts",
+              default: "./dist/generated/spine-metadata.cjs",
+            },
+          },
+        },
+      }),
+    );
+    writeFileSync(
+      join(leaf, "dist/generated/spine-metadata.cjs"),
+      "exports.spineMetadata = { receivers: [] };\n",
+    );
+    writeFileSync(
+      join(leaf, "dist/generated/spine-metadata.d.cts"),
+      "export declare const spineMetadata: object;\n",
+    );
+
+    expect(RuntimeMetadataGraph.resolve(app).map((item) => item.name)).toEqual(["bridge", "leaf"]);
+  });
+
   it.each([
     ["cjs", "cts", "require"],
     ["mjs", "mts", "import"],

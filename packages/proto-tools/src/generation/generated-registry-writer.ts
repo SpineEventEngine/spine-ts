@@ -124,6 +124,11 @@ export interface RegistryRenderOptions {
    * Module specifier for the exported Proto module; local by default.
    */
   readonly protoModuleSpecifier?: string;
+
+  /**
+   * Direct package metadata accessors emitted beside this registry.
+   */
+  readonly dependencies?: readonly { readonly name: string }[];
 }
 
 /**
@@ -174,20 +179,11 @@ export class GeneratedRegistryWriter {
       ? "registerSpineMetadata_2" : "registerSpineMetadata";
     const registrationImport = registrationName === "registerSpineMetadata"
       ? registrationName : `registerSpineMetadata as ${registrationName}`;
-    const dependencies = (options.dependencies ?? []).map((dependency, index) => ({
-      name: dependency.name,
-      binding: `dependencyMetadata${String(index)}`,
-    }));
     return [
       `import { ${registrationImport} } from "@spine-event-engine/server/spi/handler-registry";`,
       `import { ${registryName} } from "./spine-metadata.js";`,
-      dependencies.length === 0
-        ? 'import "./spine-dependencies.js";'
-        : `import { ${dependencies.map(({ binding }) => binding).join(", ")} } from "./spine-dependencies.js";`,
       "",
       `${registrationName}(${registryName}, "./spine-metadata.js");`,
-      ...dependencies.map(({ name, binding }) =>
-        `${registrationName}(${binding}, ${RegistrySource.stringLiteral(`${name}/spine`)});`),
       "",
     ].join("\n");
   }
@@ -214,15 +210,16 @@ export class GeneratedRegistryWriter {
       const path = moduleSpecifier ?? RegistrySource.relativeModule(fromDirectory, runtimeFile);
       const binding = `dependencyMetadata${String(index)}`;
       const specifier = RegistrySource.stringLiteral(path);
+      const member = `dependency${String(index)}.spineMetadata`;
       return format === "import"
-        ? `export { spineMetadata as ${binding} } from ${specifier};`
-        : `exports.${binding} = require(${specifier}).spineMetadata;`;
+        ? `import * as dependency${String(index)} from ${specifier};\nexport const ${binding} = () => ${member};`
+        : `const dependency${String(index)} = require(${specifier});\nexports.${binding} = () => ${member};`;
     });
-    const declarations = dependencies.map(({ typesFile, moduleSpecifier }, index) => {
-      const path = moduleSpecifier ?? RegistrySource.relativeModule(fromDirectory, typesFile);
+    const declarations = dependencies.map(({ runtimeFile, moduleSpecifier }, index) => {
       const binding = `dependencyMetadata${String(index)}`;
-      const specifier = RegistrySource.stringLiteral(path);
-      return `export declare const ${binding}: typeof import(${specifier}).spineMetadata;`;
+      const path = moduleSpecifier ?? RegistrySource.relativeModule(fromDirectory, runtimeFile);
+      const dependency = `typeof import(${RegistrySource.stringLiteral(path)}).spineMetadata`;
+      return `export declare const ${binding}: () => ${dependency};`;
     });
     return {
       runtime: `${header}${runtime.join("\n")}\n${runtime.length === 0 && format === "import" ? "export {};\n" : ""}`,
@@ -286,6 +283,9 @@ export class GeneratedRegistryWriter {
     const lines = [
       `import type { ${registryTypeName} } from ${RegistrySource.stringLiteral(registryModule)};`,
       ...(protoModule === undefined ? [] : [protoModule.importLine]),
+      ...((options.dependencies?.length ?? 0) === 0
+        ? []
+        : ['import * as directMetadata from "./spine-dependencies.js";']),
       ...refs.imports,
       "",
       ...RegistrySource.renderRegistry(
@@ -295,6 +295,7 @@ export class GeneratedRegistryWriter {
         registryName,
         refs,
         protoModule?.localName,
+        options.dependencies?.length ?? 0,
       ),
       "",
     ];
@@ -584,6 +585,7 @@ const RegistrySource = Object.freeze({
    * @param appQueries Analyzed application query implementations.
    * @param refs Allocated import and receiver references.
    * @param registryName Generated metadata export name.
+   * @param dependencyCount Number of direct dependency accessors.
    * @returns Complete passive metadata source.
    */
   renderRegistry(
@@ -593,10 +595,12 @@ const RegistrySource = Object.freeze({
     registryName: string,
     refs: RenderRefs,
     protoModuleExport?: string,
+    dependencyCount = 0,
   ): readonly string[] {
     const lines = [
       `export const ${registryName}: ${registryTypeName} = {`,
       ...(protoModuleExport === undefined ? [] : [`  protoModule: ${protoModuleExport},`]),
+      ...RegistrySource.dependencyLines(dependencyCount),
       "  receivers: [",
     ];
 
@@ -613,6 +617,21 @@ const RegistrySource = Object.freeze({
     lines.push("};");
 
     return lines;
+  },
+
+  /**
+   * Renders the passive direct-dependency accessor, when needed.
+   *
+   * @param count Number of direct dependencies.
+   * @returns The generated dependency lines.
+   */
+  dependencyLines(count: number): readonly string[] {
+    if (count === 0) return [];
+    const entries = Array.from(
+      { length: count },
+      (_value, index) => `directMetadata.dependencyMetadata${String(index)}()`,
+    );
+    return [`  dependencies: () => [${entries.join(", ")}],`];
   },
 
   /**

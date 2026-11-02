@@ -84,6 +84,10 @@ tsc -b
 `compose` follows declared model dependencies transitively. `handlers` creates
 passive `generated/spine-metadata.ts`, the static application bootstrap, and
 portable dependency adapters for decorated application classes. Its emitted
+metadata links each participating package to its direct public `./spine`
+dependencies through lazy accessors, so installed packages can be relocated.
+The build rejects a participating transitive package hidden behind a
+nonparticipating runtime package. Its emitted
 source imports the Server handler-registry contract as a type from
 `@spine-event-engine/server/spi/handler-registry`; the CLI itself has no Server
 runtime dependency. Import the generated bootstrap once before application

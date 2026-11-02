@@ -15,7 +15,7 @@ is down, the UI reports the failure.
 - ✅ A board query followed by complete Projection update payloads.
 - ✅ Local updates for normal payloads and authoritative recovery when needed.
 - ✅ Lifetime board and announcement statistics through typed `ReadBoardStats`, with a recoverable statistics Topic.
-- ✅ Public or signed sessions, board selection, and permitted MessagePosted notifications.
+- ✅ Public or signed sessions, board selection, and the latest permitted MessagePosted notification.
 - ✅ One board-view live-status badge: `Updating live` only for a connected subscription,
   otherwise `No live updates`.
 

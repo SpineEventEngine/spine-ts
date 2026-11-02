@@ -3,9 +3,9 @@
 Current human-authorized implementation: [App Queries and read-side filtering](tasks/app-queries-read-filters/TASK.md).
 The approved proposal includes automatic metadata discovery, validation/status
 corrections, trusted reader context, and Entity/Event read-side filters. This
-feature branch starts from official master3135caaa2. Current work adds one shared
-ServerEnvironment subscription capacity setting and a live Message Board
-statistics view using App Queries, authenticated read-side filters, and subscriptions.
+feature branch starts from official master3135caaa2. It includes one shared
+ServerEnvironment subscription capacity setting and lifetime Message Board
+statistics using App Queries, authenticated read-side filters, and subscriptions.
 Independent review, local release verification, and final-commit CI are required.
 
 ## Current Repository Workflow

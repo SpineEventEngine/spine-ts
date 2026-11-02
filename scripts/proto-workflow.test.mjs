@@ -1241,10 +1241,10 @@ describe("proto-workflow", () => {
       "examples/support/generated",
       "examples/release-notes/generated",
       "examples/message-board/model/generated",
-      "examples/message-board/app/generated",
       "examples/message-board/command-handlers/generated",
       "examples/message-board/view-handlers/generated",
       "examples/message-board/composed-app/generated",
+      "examples/message-board/app/generated",
     ]);
   });
 
@@ -1319,18 +1319,19 @@ describe("proto-workflow", () => {
     expect(existsSync("packages/testing/test-fixtures/generated/project_states_pb.ts")).toBe(true);
   });
 
-  it("stages the MessageBoard handler registry with its model output", () => {
+  it("stages the MessageBoard application metadata after its handler dependencies", () => {
     expect(
       modelAtomicTargets.find((target) => target.packagePath === "examples/message-board/model"),
-    ).toMatchObject({
-      handlerGeneratedPath: "examples/message-board/app/generated",
+    ).not.toHaveProperty("handlerProjectPath");
+    expect(atomicGeneratedTargets.at(-1)).toMatchObject({
       handlerProjectPath: "examples/message-board/app/tsconfig.json",
+      protoModulePackagePath: "examples/message-board/model",
     });
   });
 
   it("includes every maintained MessageBoard handler package in atomic generation", () => {
     const paths = atomicGeneratedTargets.map((target) => target.displayPath);
-    for (const name of ["command-handlers", "view-handlers", "composed-app"]) {
+    for (const name of ["command-handlers", "view-handlers", "composed-app", "app"]) {
       expect(paths).toContain(`examples/message-board/${name}/generated`);
     }
   });
@@ -1373,6 +1374,10 @@ describe("proto-workflow", () => {
       (candidate) => candidate.packagePath === "examples/message-board/model",
     );
     const repoRoot = applicationModelTransactionFixture(target);
+    const app = join(repoRoot, "examples/message-board/app");
+    mkdirSync(app, { recursive: true });
+    writeFileSync(join(app, "package.json"), '{"name":"@example/app","version":"1.0.0"}\n');
+    writeFileSync(join(app, "spine-proto.json"), "{}\n");
     let handlerArguments;
 
     try {
@@ -1385,11 +1390,11 @@ describe("proto-workflow", () => {
             writeFileSync(join(cwd, "generated/model.ts"), "export {};\n");
             writeFileSync(
               join(cwd, "spine-proto-manifest.json"),
-              `${JSON.stringify({ moduleExport: "messageBoardProtoModule" })}\n`,
+              `${JSON.stringify({ moduleExport: "messageBoardProtoModule", packageName: "@example/model" })}\n`,
             );
             return 0;
           }
-          if (label === "MessageBoard handler registry post-step") {
+          if (label === "MessageBoard app handler registry post-step") {
             handlerArguments = args;
             const output = args[args.indexOf("--out") + 1];
             mkdirSync(dirname(output), { recursive: true });
@@ -1507,7 +1512,7 @@ describe("proto-workflow", () => {
       expect(readFileSync(output, "utf8")).toContain("CreateTaskSchema");
       expect(readFileSync(output, "utf8")).toContain("TaskCreatedSchema");
       expect(readFileSync(join(generatedRoot, "spine-bootstrap.ts"), "utf8")).toContain(
-        'from "./spine-dependencies.js"',
+        "registerSpineMetadata(spineMetadata",
       );
       expect(readFileSync(join(generatedRoot, "spine-dependencies.js"), "utf8")).toContain(
         'require("@example/model/spine")',

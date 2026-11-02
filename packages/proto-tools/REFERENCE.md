@@ -82,9 +82,18 @@ or state types change. Compile the generated registry with the application.
 It also inspects declared runtime dependencies transitively. A participating
 package publishes its passive generated metadata through a `./spine` export
 with JavaScript and declaration targets; build dependency packages before
-generating the consumer. The application bootstrap statically registers these
-descriptions, while Bounded Context assembly still selects the handler classes
-explicitly. Regenerate the consumer after changing its installed dependency
+generating the consumer. The application bootstrap registers local metadata;
+lazy `dependencies()` accessors on participating packages expose direct
+`./spine` exports by package name. Bootstrap traversal collects the transitive
+graph once, including cycles and shared dependencies. A nonparticipating
+runtime package cannot hide a participating transitive package. Bounded
+Model-only generation applies the same bridge rule to its declared model
+dependencies. Bootstrap validates every returned metadata value and the
+complete graph before publishing any handler or App Query descriptions.
+Malformed or missing `spineMetadata` exports fail registration.
+Bounded
+Context assembly still selects the handler classes explicitly. Regenerate the
+consumer after changing its installed dependency
 layout, a participant's published metadata, or its effective TypeScript
 configuration. Changes to inherited `outDir` or `declarationDir` settings also
 require regeneration so adapter paths are recalculated.

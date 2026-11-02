@@ -7165,3 +7165,26 @@ advertise HTTP/2 through ALPN. No BrowserServer TLS API or separate proxy
 implementation is introduced. All maintained RPC route lists include
 QueryService.Execute. Multiple tabs retain every Entity and Event stream while
 posting; the temporary single-tab statistics suspension is not retained.
+
+Dependency metadata composes through each participating package's declared
+`./spine` exports. Generated passive descriptions expose their direct dependency
+metadata lazily; bootstrap registration traverses and deduplicates those
+objects. This preserves normal package resolution after an application is
+packed and installed, without embedding workspace-relative paths or performing
+runtime directory discovery. Generation still traverses the complete declared
+graph for conflicts and freshness. If a nonparticipating intermediate package
+hides a metadata dependency that cannot be reached through these public exports,
+generation reports the inaccessible metadata dependency instead of emitting a broken import.
+Packages grouping framework modules participate in the same metadata generation
+and export convention; applications do not repeat every indirect dependency.
+
+Clean generation stages all model outputs first, then handler packages in
+dependency order, then the application metadata. It does not require stale
+compiled outputs from a previous build. External dependency packages must still
+publish their declared metadata artifacts.
+
+Model-only packages remain independent of the Server package. Generated adapters
+retain each public metadata export's actual TypeScript type. Bootstrap treats
+dependency values as unvalidated input, validates the complete metadata graph,
+and publishes its registrations only after all descriptions and conflicts pass.
+A missing or malformed dependency export is an error rather than an omission.

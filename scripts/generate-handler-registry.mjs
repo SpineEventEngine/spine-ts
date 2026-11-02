@@ -88,12 +88,13 @@ export async function main(argv = process.argv.slice(2)) {
         publishedOutputFile: options.publishedOutputFile,
         protoModuleExport: options.protoModuleExport,
         protoModuleSpecifier: options.protoModuleSpecifier,
+        dependencies: assets.directDependencies,
       });
       writer.writeBootstrap({
         repoRoot: options.repoRoot,
         generatedRoot: options.generatedRoot,
         outputFile: sourceBootstrap,
-        dependencies,
+        dependencies: assets.directDependencies,
       });
       for (const asset of [...assets.source, assets.record, ...runtime]) {
         mkdirSync(dirname(asset.file), { recursive: true });

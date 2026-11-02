@@ -37,6 +37,7 @@ import {
 import {
   AnnouncementBoardViewSchema,
   BoardIdSchema,
+  BoardMessageSchema,
   BoardMessageViewSchema,
   BoardStatisticsViewSchema,
   MessageIdSchema,
@@ -183,6 +184,17 @@ describe("multi-package Message Board", () => {
           postedAt: create(TimestampSchema, { seconds: 1n }),
         }),
       );
+      await application.messages.stand().update(
+        BoardMessageSchema,
+        create(BoardMessageSchema, {
+          id,
+          board: create(BoardIdSchema, { value: "general" }),
+          author: create(UserIdSchema, { value: "author-1" }),
+          username: "A writer",
+          text: "Hello",
+          postedAt: create(TimestampSchema, { seconds: 1n }),
+        }),
+      );
       const query = create(ReadBoardMessage.querySchema, { message: id });
       const internal: ReadBoardMessage.Response = await application.server.query(query, {
         actorContext: create(ActorContextSchema, {
@@ -196,6 +208,20 @@ describe("multi-package Message Board", () => {
       const external = await client.asGuest().query(query);
       expect(external.message[0]?.message?.text).toBe("Hello");
       expect(external.message[0]?.message?.username).toBe("Anonymous");
+      const aggregate = await client.asGuest().send(
+        create(QuerySchema, {
+          id: create(QueryIdSchema, { value: "public-aggregate" }),
+          target: create(TargetSchema, {
+            type: TypeUrls.derive(BoardMessageSchema),
+            criterion: { case: "includeAll", value: true },
+          }),
+        }),
+      );
+      expect(aggregate.message).toHaveLength(1);
+      const state = aggregate.message[0]?.state;
+      expect(state).toBeDefined();
+      if (state === undefined) throw new Error("Expected aggregate state.");
+      expect(AnyPacker.unpack(state, BoardMessageSchema).username).toBe("Anonymous");
     } finally {
       await client.close();
       await running.close();
@@ -303,6 +329,17 @@ describe("multi-package Message Board", () => {
           postedAt: create(TimestampSchema, { seconds: 1n }),
         }),
       );
+      await application.messages.stand().update(
+        BoardMessageSchema,
+        create(BoardMessageSchema, {
+          id,
+          board: create(BoardIdSchema, { value: "restricted" }),
+          author: create(UserIdSchema, { value: "author-1" }),
+          username: "A writer",
+          text: "Restricted details",
+          postedAt: create(TimestampSchema, { seconds: 1n }),
+        }),
+      );
       const query = create(ReadBoardMessage.querySchema, { message: id });
       const actorContext = create(ActorContextSchema, {
         actor: { value: "reader-1" },
@@ -329,6 +366,16 @@ describe("multi-package Message Board", () => {
         }),
       );
       expect(entityResult.message).toHaveLength(0);
+      const aggregateResult = await client.asGuest().send(
+        create(QuerySchema, {
+          id: create(QueryIdSchema, { value: "restricted-aggregate" }),
+          target: create(TargetSchema, {
+            type: TypeUrls.derive(BoardMessageSchema),
+            criterion: { case: "includeAll", value: true },
+          }),
+        }),
+      );
+      expect(aggregateResult.message).toHaveLength(0);
     } finally {
       await client.close();
       await running.close();
