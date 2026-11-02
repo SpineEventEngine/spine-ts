@@ -148,9 +148,10 @@ describe("handler output publication", () => {
           output,
         ]),
       ).toBe(0);
-      expect(readFileSync(join(app, "generated/spine-bootstrap.ts"), "utf8")).toContain(
-        'import "./spine-dependencies.js"',
-      );
+      const bootstrap = readFileSync(join(app, "generated/spine-bootstrap.ts"), "utf8");
+      expect(bootstrap).toContain('import { spineMetadata } from "./spine-metadata.js"');
+      expect(bootstrap).toContain("registerSpineMetadata(spineMetadata");
+      expect(bootstrap).not.toContain('import "./spine-dependencies.js"');
       expect(
         JSON.parse(readFileSync(join(app, "generated/spine-dependencies.json"), "utf8")),
       ).toHaveProperty("formatVersion", 2);

@@ -254,9 +254,9 @@ typed bounded-context, service, and resource configuration as
 `ApplicationOptions`.
 Before invoking it in a production Coordinator, configure that process's
 `ServerEnvironment` with the application's Proto model registry. Each child
-configures its own environment inside `createServer`. The maintained
-[To-Do managed entrypoint](../../examples/todo/src/multi-process-app.ts) shows
-the parent configuration using its actual `todoProtoModule`.
+configures its own environment inside `createServer`. The repository's
+`examples/todo/src/multi-process-app.ts` shows the parent configuration using
+its actual `todoProtoModule`.
 
 The ConfigMap in the template exposes matching service and port values as a
 simple convention. Adapt the names or use another configuration loader; Spine
