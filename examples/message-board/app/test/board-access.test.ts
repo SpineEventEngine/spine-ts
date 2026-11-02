@@ -69,7 +69,44 @@ const principal: AuthenticatedPrincipal = {
 };
 
 describe("MessageBoard gateway policy", () => {
-  it("allows only a self-origin PostMessage outcome topic with matching tenant", async () => {
+  it("derives restricted authority only from the verified principal attributes", async () => {
+    const resolver = new BoardContextResolver();
+    const clock: Clock = { now: () => create(TimestampSchema, { seconds: 1n }) };
+    const requestedContext = create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "spoofed" }),
+    });
+    const request = {
+      kind: "query" as const,
+      query: create(QuerySchema),
+      target: create(TargetSchema),
+      requestedContext,
+      transport: { headers: {}, service: "spine.client.QueryService", method: "Read" },
+    };
+    const granted = await resolver.resolve(
+      {
+        id: "verified",
+        attributes: {
+          canReadRestricted: "true",
+        },
+      },
+      request,
+      clock,
+    );
+    expect(granted.actor.value).toBe("verified");
+    expect(granted.authorityFacts?.canReadRestricted).toBe(true);
+    const ordinary = await resolver.resolve(
+      {
+        id: "verified",
+        attributes: {
+          canReadRestricted: "false",
+        },
+      },
+      request,
+      clock,
+    );
+    expect(ordinary.authorityFacts?.canReadRestricted).toBe(false);
+  });
+  it("allows self-origin outcomes and a broad notification topic while rejecting malformed outcomes", async () => {
     const policy = new BoardAccessPolicy();
     const context = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "ada" }),
@@ -136,7 +173,7 @@ describe("MessageBoard gateway policy", () => {
         target,
         topic: create(TopicSchema, { target, context }),
       }),
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
   });
   it("composes publicAccess with request-derived actor context and no session fixture", async () => {
     const policy = new BoardAccessPolicy();
@@ -626,12 +663,14 @@ describe("MessageBoard gateway policy", () => {
       actor: create(UserIdSchema, { value: "ada" }),
       tenant: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
       timestamp: create(TimestampSchema, { seconds: 42n }),
+      authorityFacts: { canReadRestricted: false },
     });
     await expect(
       resolver.resolve(principal, boardRequest("query", "board-a"), clock),
     ).resolves.toEqual({
       actor: create(UserIdSchema, { value: "ada" }),
       timestamp: create(TimestampSchema, { seconds: 42n }),
+      authorityFacts: { canReadRestricted: false },
     });
   });
 });

@@ -6,7 +6,7 @@ for deployment work, not published images.
 
 ## 🚀 Build the images
 
-From the repository root, build the workspace and then create all three images:
+From the repository root, build the workspace and then create all four images:
 
 ```bash
 pnpm typecheck:build
@@ -22,6 +22,7 @@ temporary context after success, failure, `SIGINT`, or `SIGTERM`.
 | `spine-ts/message-board:local`          | Combined browser gateway and application server |
 | `spine-ts/standalone-gateway:local`     | Browser gateway for a separate application      |
 | `spine-ts/simple-delivery-server:local` | The in-memory simple delivery server            |
+| `spine-ts/message-board-web:local`      | Static browser assets and runtime configuration |
 
 The Message Board image also contains application-only and managed entrypoints. A
 deployment can override its command with:
@@ -42,7 +43,7 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | Gateway (GKE)            | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `BACKEND_DISCOVERY_SERVICE`, `BACKEND_DISCOVERY_PORT` |
 | Delivery server          | `HOST`, `PORT`                                                                                                  |
 
-No browser login setup is required for this public demo.
+Public mode requires no browser credential. For signed mode, set `MESSAGE_BOARD_AUTH_MODE=signed` and supply the same protected session issuer, audience, P-256 private key and key ID, and reader proof key to the application and Gateway. The web container receives only the auth mode; it never receives the keys. Issue credentials offline with `pnpm --dir examples/message-board/app session:issue` and the operator-controlled account configuration described in the [app guide](../../app/README.md).
 Each process constructs a Datastore client from
 `DATASTORE_PROJECT_ID` and passes that same client into its storage factory.
 

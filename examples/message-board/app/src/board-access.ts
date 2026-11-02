@@ -31,6 +31,8 @@ import {
 import {
   BoardMessageViewSchema,
   BoardIdSchema,
+  BoardStatisticsViewSchema,
+  AnnouncementBoardViewSchema,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
 import type { CompositeFilter, Filter, Target } from "@spine-event-engine/proto/client";
@@ -44,6 +46,10 @@ import {
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
 import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
+import {
+  ReadBoardMessage,
+  ReadBoardStats,
+} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
 
 const MAX_AUTHORIZATION_COMPOSITE_FILTERS = 8;
 const MAX_AUTHORIZATION_SIMPLE_FILTERS = 16;
@@ -75,10 +81,21 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
           boards.includes(message.board.value),
         );
       }
+      if (request.kind === "app-query") {
+        const message = request.query.message;
+        return Promise.resolve(message !== undefined && (
+          AnyPacker.tryUnpack(message, ReadBoardMessage.querySchema) !== undefined ||
+          AnyPacker.tryUnpack(message, ReadBoardStats.querySchema) !== undefined
+        ));
+      }
       if (request.kind !== "query" && request.kind !== "subscribe") return Promise.resolve(false);
       if (request.kind === "subscribe" && this.authorizesPostOutcome(
         request.target, request.requestedContext, this.actorFor(principal, request),
       )) return Promise.resolve(true);
+      if (request.target.type === TypeUrls.derive(MessagePostedSchema))
+        return Promise.resolve(request.kind === "subscribe" && request.target.criterion.case === "includeAll");
+      if (request.target.type === TypeUrls.derive(AnnouncementBoardViewSchema) ||
+        request.target.type === TypeUrls.derive(BoardStatisticsViewSchema)) return Promise.resolve(true);
       return Promise.resolve(this.authorizesBoard(request.target, boards));
     } catch {
       return Promise.resolve(false);
@@ -117,7 +134,7 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
    */
   private boardNames(principal: AuthenticatedPrincipal): readonly string[] {
     return principal.id === "spine-gateway-public"
-      ? ["general"]
+      ? ["general", "announcements"]
       : (principal.attributes?.boards?.split(",").filter(Boolean) ?? []);
   }
 
@@ -299,6 +316,9 @@ export class BoardContextResolver implements ContextResolver {
         ? {}
         : { tenant: create(TenantIdSchema, { kind: { case: "value", value: tenant } }) }),
       timestamp: clock.now(),
+      authorityFacts: {
+        canReadRestricted: principal.attributes?.canReadRestricted === "true",
+      },
     });
   }
 }

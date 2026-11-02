@@ -14,7 +14,7 @@
 
 import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import { TypeUrls } from "@spine-event-engine/core";
-import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
   SubscriptionIdSchema,
   SubscriptionRecordSchema,
@@ -27,11 +27,12 @@ import {
 } from "@spine-event-engine/proto/client";
 import {
   InMemoryStorageFactory,
+  StorageGroup,
   type RecordSpec,
   type RecordStorage,
   type StorageContext,
-  type StorageGroup,
 } from "@spine-event-engine/storage";
+import { StoragePreparations } from "@spine-event-engine/storage/provider";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   InMemorySubscriptionRegistry,
@@ -175,6 +176,7 @@ describe.each([
       new StorageSubscriptionRegistry(
         { name: "subscriptions", multitenant: false },
         new InMemoryStorageFactory(),
+        new StorageGroup("subscriptions_test"),
       ),
   ],
 ] as const)("%s subscription registry", (_name, make) => {
@@ -339,6 +341,79 @@ describe.each([
   });
 });
 
+describe("storage subscription context boundaries", () => {
+  it("prepares the same tenant context captured when its storage handle was created", async () => {
+    const factory = new InMemoryStorageFactory();
+    const tenantId = create(TenantIdSchema, { kind: { case: "value", value: "first" } });
+    const context = { name: "initial", multitenant: true as const, tenantId };
+    const group = new StorageGroup("subscriptions_first");
+    const registry = new StorageSubscriptionRegistry(context, factory, group);
+    const prepare = vi.spyOn(StoragePreparations.for(factory), "prepareRecord");
+    context.name = "changed";
+    tenantId.kind = { case: "value", value: "second" };
+    try {
+      await registry.prepare("create");
+      expect(prepare).toHaveBeenCalledWith(
+        {
+          name: "initial",
+          multitenant: true,
+          tenantId: create(TenantIdSchema, { kind: { case: "value", value: "first" } }),
+        },
+        expect.anything(),
+        group,
+        "create",
+      );
+    } finally {
+      await registry.close();
+    }
+  });
+  it("prepares an injected registry with its captured factory, context, and group", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "injected:subscriptions", multitenant: false as const };
+    const group = new StorageGroup("injected_subscriptions");
+    const registry = new StorageSubscriptionRegistry(context, factory, group);
+    const prepare = vi.spyOn(StoragePreparations.for(factory), "prepareRecord");
+    try {
+      await registry.prepare("create");
+      expect(prepare).toHaveBeenCalledWith(context, expect.anything(), group, "create");
+    } finally {
+      await registry.close();
+    }
+  });
+  it("keeps equal subscription IDs in distinct Bounded Contexts separate", async () => {
+    const factory = new InMemoryStorageFactory();
+    const messages = new StorageSubscriptionRegistry(
+      { name: "Messages:subscriptions", multitenant: false },
+      factory,
+      new StorageGroup("subscriptions_Messages"),
+    );
+    const announcements = new StorageSubscriptionRegistry(
+      { name: "Announcements:subscriptions", multitenant: false },
+      factory,
+      new StorageGroup("subscriptions_Announcements"),
+    );
+    const first = create(SubscriptionSchema, {
+      id: id("same"),
+      topic: create(TopicSchema, { id: { value: "messages-topic" } }),
+    });
+    const second = create(SubscriptionSchema, {
+      id: id("same"),
+      topic: create(TopicSchema, { id: { value: "announcements-topic" } }),
+    });
+
+    await messages.create(first);
+    await expect(announcements.get(id("same"))).resolves.toBeUndefined();
+    await announcements.create(second);
+    expect((await messages.get(id("same")))?.subscription.topic?.id?.value).toBe("messages-topic");
+    expect((await announcements.get(id("same")))?.subscription.topic?.id?.value).toBe(
+      "announcements-topic",
+    );
+    await messages.close();
+    await announcements.close();
+    await factory.close();
+  });
+});
+
 describe("storage registry compare-and-set retries", () => {
   it("requests and validates one 25-plus-one pending cleanup page", async () => {
     vi.useFakeTimers();
@@ -412,6 +487,7 @@ describe("storage registry compare-and-set retries", () => {
     const registry = new StorageSubscriptionRegistry(
       { name: "races", multitenant: false },
       factory,
+      new StorageGroup("subscriptions_races"),
     );
     await expect(registry.create(subscription("one"))).resolves.toMatchObject({ kind: "created" });
     await expect(registry.activate(id("one"))).resolves.toMatchObject({ kind: "activated" });
@@ -434,7 +510,12 @@ describe("storage registry compare-and-set retries", () => {
     }) as never;
 
     expect(
-      () => new StorageSubscriptionRegistry({ name: "non-atomic", multitenant: false }, factory),
+      () =>
+        new StorageSubscriptionRegistry(
+          { name: "non-atomic", multitenant: false },
+          factory,
+          new StorageGroup("subscriptions_non-atomic"),
+        ),
     ).toThrow("atomic compare-and-set");
   });
 
@@ -552,7 +633,11 @@ function controllableRegistry(
     configure(storage as never);
     return storage;
   }) as never;
-  return new StorageSubscriptionRegistry({ name: "controlled", multitenant: false }, factory);
+  return new StorageSubscriptionRegistry(
+    { name: "controlled", multitenant: false },
+    factory,
+    new StorageGroup("subscriptions_controlled"),
+  );
 }
 
 function cloneSubscription(value: ReturnType<typeof subscription>) {

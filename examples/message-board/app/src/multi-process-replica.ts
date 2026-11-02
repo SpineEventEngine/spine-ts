@@ -50,7 +50,7 @@ export function managedReplicaOptions(
         { host, port },
         facilities.storageFactory,
         UniformAcrossAllShards.forNumber(config.deliveryShardCount),
-        new InMemorySubscriptionRegistry(),
+        () => new InMemorySubscriptionRegistry(),
       );
     },
     synchronize: async () => {

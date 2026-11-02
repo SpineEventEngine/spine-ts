@@ -51,7 +51,12 @@ import {
   TopicSchema,
   type Query,
 } from "@spine-event-engine/proto/client";
-import { BoundedContext, Server } from "@spine-event-engine/server";
+import {
+  BoundedContext,
+  EnvironmentType,
+  Server,
+  ServerEnvironment,
+} from "@spine-event-engine/server";
 import { ServerTests } from "@spine-event-engine/server/testing";
 import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -101,86 +106,37 @@ describe("MessageBoard Projection backend", () => {
     }
   });
 
-  it("assembles every supported application server mode", async () => {
-    const start = vi.fn().mockResolvedValue({
-      host: "127.0.0.1",
-      baseUrl: "http://started",
-      close: () => Promise.resolve(),
+  it("assembles the same message and announcement contexts for the native app", async () => {
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new InMemoryStorageFactory(),
     });
-    const run = vi.fn().mockResolvedValue({ baseUrl: "http://running" });
-    const add = vi.fn(function (this: unknown) {
-      return this;
-    });
-    const atPort = vi.spyOn(Server, "atPort").mockReturnValue({ add, run, start } as never);
-    const created: BoundedContext[] = [];
-    const actualCreateContext = application.createContext.bind(application);
-    const createContext = vi
-      .spyOn(application, "createContext")
-      .mockImplementation(async (...args) => {
-        const context = await actualCreateContext(...args);
-        created.push(context);
-        return context;
-      });
-    const closeCreated = async () => {
-      await created.pop()?.close();
-      await ServerTests.resetEnvironment();
-    };
-    const storage = new InMemoryStorageFactory();
-    const combinedStorage = new InMemoryStorageFactory();
+    const composed = await application.create();
+    const running = await composed.server.start();
     try {
-      browserHost.open.mockResolvedValueOnce({ baseUrl: "http://started" });
-      browserHost.run.mockImplementationOnce(
-        async (native: { run(): Promise<unknown> }) => await native.run(),
-      );
-      browserHost.run.mockImplementationOnce(
-        async (native: { run(): Promise<unknown> }) => await native.run(),
-      );
-      await expect(application.start({ host: "127.0.0.2", port: 1 })).resolves.toEqual({
-        baseUrl: "http://started",
-      });
-      await closeCreated();
-      await expect(application.run()).resolves.toEqual({ baseUrl: "http://running" });
-      await closeCreated();
-      await expect(application.runApplication({ port: 2 }, storage)).resolves.toEqual({
-        baseUrl: "http://running",
-      });
-      await closeCreated();
-      await expect(
-        application.runCombined(
-          { port: 3, webOrigin: "https://board.example.com" },
-          combinedStorage,
-        ),
-      ).resolves.toEqual({ baseUrl: "http://running" });
-      await closeCreated();
-
-      expect(atPort).toHaveBeenCalledTimes(4);
-      expect(start).toHaveBeenCalledOnce();
-      expect(run).toHaveBeenCalledTimes(3);
-      expect(add).toHaveBeenCalledTimes(4);
+      expect(composed.messages.name.value).toBe("ComposedMessages");
+      expect(composed.announcements.name.value).toBe("ComposedAnnouncements");
+      expect(new URL(running.baseUrl).hostname).toBe("127.0.0.1");
     } finally {
-      atPort.mockRestore();
-      createContext.mockRestore();
-      await closeResources([
-        ...created.map((context) => () => context.close()),
-        () => storage.close(),
-        () => combinedStorage.close(),
-      ]);
+      await running.close();
     }
   });
 
   it("persists a message-valued aggregate ID as the event producer ID", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const context = await application.createContext(storageFactory);
-    const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
+    const composed = await createApplication(storageFactory);
+    const server = await composed.server.start();
     const client = Client.connectTo(server.baseUrl);
-    const eventStore = new EventStore({ name: "MessageBoard", multitenant: false }, storageFactory);
+    const eventStore = new EventStore(
+      { name: "ComposedMessages", multitenant: false },
+      storageFactory,
+    );
     try {
       await expect(
         client
           .asGuest()
           .post(
             PostMessageSchema,
-            post("producer-id", "board-a", create(UserIdSchema, { value: "ada" }), "hello"),
+            post("producer-id", "general", create(UserIdSchema, { value: "ada" }), "hello"),
           ),
       ).resolves.toEqual({ kind: "ok" });
       const event = (await waitForStoredEvents(eventStore, 1))[0];
@@ -195,36 +151,38 @@ describe("MessageBoard Projection backend", () => {
   });
 
   it("creates one board-filtered Projection row and subscription update per message", async () => {
-    const context = await application.createContext();
-    const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
+    const composed = await createApplication();
+    const server = await composed.server.start();
     const client = Client.connectTo(server.baseUrl);
     const author = create(UserIdSchema, { value: "ada" });
     let subscription: Subscription | undefined;
     try {
-      subscription = await client.asGuest().createSubscription(createBoardTopic("board-a"), {
+      subscription = await client.asGuest().createSubscription(createBoardTopic("general"), {
         kind: "entity",
-        authoritativeQuery: () => createBoardQuery("board-a"),
+        authoritativeQuery: () => createBoardQuery("general"),
       });
       await subscription.activate();
       const updates = subscription.updates[Symbol.asyncIterator]();
       const update = updates.next();
       await expect(
-        client.asGuest().post(PostMessageSchema, post("message-a", "board-a", author, "hello")),
+        client.asGuest().post(PostMessageSchema, post("message-a", "general", author, "hello")),
       ).resolves.toEqual({ kind: "ok" });
-      const rows = await readRows(() => client.asGuest().send(createBoardQuery("board-a")));
+      const rows = await readRows(() => client.asGuest().send(createBoardQuery("general")));
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({
         id: { value: "message-a" },
-        board: { value: "board-a" },
+        board: { value: "general" },
         text: "hello",
       });
       await expect(nextView(update)).resolves.toMatchObject({
         id: { value: "message-a" },
-        board: { value: "board-a" },
+        board: { value: "general" },
       });
       const foreignRoomUpdate = updates.next();
       await expect(
-        client.asGuest().post(PostMessageSchema, post("message-b", "board-b", author, "private")),
+        client
+          .asGuest()
+          .post(PostMessageSchema, post("message-b", "restricted", author, "private")),
       ).resolves.toEqual({ kind: "ok" });
       await expectNoView(foreignRoomUpdate);
     } finally {
@@ -237,8 +195,8 @@ describe("MessageBoard Projection backend", () => {
   }, 15_000);
 
   it("routes only matching announcements to the board-wide Projection", async () => {
-    const context = await application.createContext();
-    const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
+    const composed = await createApplication();
+    const server = await composed.server.start();
     const client = Client.connectTo(server.baseUrl);
     const author = create(UserIdSchema, { value: "ada" });
     try {
@@ -255,7 +213,10 @@ describe("MessageBoard Projection backend", () => {
       ).resolves.toEqual({ kind: "ok" });
 
       await expect(
-        waitForAnnouncement(context, create(BoardIdSchema, { value: "announcements" })),
+        waitForAnnouncement(
+          composed.announcements,
+          create(BoardIdSchema, { value: "announcements" }),
+        ),
       ).resolves.toMatchObject({
         state: {
           id: { value: "announcements" },
@@ -264,7 +225,7 @@ describe("MessageBoard Projection backend", () => {
         },
       });
       await expect(
-        context
+        composed.announcements
           .stand()
           .readVersioned(AnnouncementBoardViewSchema, create(BoardIdSchema, { value: "general" })),
       ).resolves.toBeUndefined();
@@ -275,35 +236,39 @@ describe("MessageBoard Projection backend", () => {
 
   it("rejects a reused MessageId without overwriting its Projection", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const context = await application.createContext(storageFactory);
-    const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
+    const composed = await createApplication(storageFactory);
+    const context = composed.messages;
+    const server = await composed.server.start();
     const client = Client.connectTo(server.baseUrl);
-    const eventStore = new EventStore({ name: "MessageBoard", multitenant: false }, storageFactory);
+    const eventStore = new EventStore(
+      { name: "ComposedMessages", multitenant: false },
+      storageFactory,
+    );
     const author = create(UserIdSchema, { value: "ada" });
     let subscription: Subscription | undefined;
     try {
-      subscription = await client.asGuest().createSubscription(createBoardTopic("board-a"), {
+      subscription = await client.asGuest().createSubscription(createBoardTopic("general"), {
         kind: "entity",
-        authoritativeQuery: () => createBoardQuery("board-a"),
+        authoritativeQuery: () => createBoardQuery("general"),
       });
       await subscription.activate();
       const updates = subscription.updates[Symbol.asyncIterator]();
       const firstUpdate = updates.next();
       await expect(
-        client.asGuest().post(PostMessageSchema, post("duplicate", "board-a", author, "first")),
+        client.asGuest().post(PostMessageSchema, post("duplicate", "general", author, "first")),
       ).resolves.toEqual({ kind: "ok" });
       await expect(
         context
           .stand()
           .readVersioned(BoardMessageSchema, create(MessageIdSchema, { value: "duplicate" })),
       ).resolves.toMatchObject({
-        state: { board: { value: "board-a" }, text: "first" },
+        state: { board: { value: "general" }, text: "first" },
         version: { number: 1 },
       });
       await expect(nextView(firstUpdate)).resolves.toMatchObject({ id: { value: "duplicate" } });
       const rejectedUpdate = updates.next();
       await expect(
-        client.asGuest().post(PostMessageSchema, post("duplicate", "board-b", author, "second")),
+        client.asGuest().post(PostMessageSchema, post("duplicate", "restricted", author, "second")),
       ).resolves.toEqual({ kind: "ok" });
       const events = await waitForStoredEvents(eventStore, 2);
       const normalEvents = events.filter((event) => event.context?.rejection === undefined);
@@ -327,7 +292,7 @@ describe("MessageBoard Projection backend", () => {
         context
           .stand()
           .readVersioned(BoardMessageSchema, create(MessageIdSchema, { value: "duplicate" })),
-      ).resolves.toMatchObject({ state: { board: { value: "board-a" }, text: "first" } });
+      ).resolves.toMatchObject({ state: { board: { value: "general" }, text: "first" } });
     } finally {
       await closeResources([
         () => eventStore.close(),
@@ -340,23 +305,27 @@ describe("MessageBoard Projection backend", () => {
 
   it("atomically rejects one of two concurrent posts sharing a MessageId", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const context = await application.createContext(storageFactory);
-    const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
+    const composed = await createApplication(storageFactory);
+    const context = composed.messages;
+    const server = await composed.server.start();
     const client = Client.connectTo(server.baseUrl);
-    const eventStore = new EventStore({ name: "MessageBoard", multitenant: false }, storageFactory);
+    const eventStore = new EventStore(
+      { name: "ComposedMessages", multitenant: false },
+      storageFactory,
+    );
     const author = create(UserIdSchema, { value: "ada" });
     let subscription: Subscription | undefined;
     try {
-      subscription = await client.asGuest().createSubscription(createBoardTopic("board-a"), {
+      subscription = await client.asGuest().createSubscription(createBoardTopic("general"), {
         kind: "entity",
-        authoritativeQuery: () => createBoardQuery("board-a"),
+        authoritativeQuery: () => createBoardQuery("general"),
       });
       await subscription.activate();
       const updates = subscription.updates[Symbol.asyncIterator]();
       const firstUpdate = updates.next();
       const results = await Promise.all([
-        client.asGuest().post(PostMessageSchema, post("raced", "board-a", author, "first")),
-        client.asGuest().post(PostMessageSchema, post("raced", "board-a", author, "second")),
+        client.asGuest().post(PostMessageSchema, post("raced", "general", author, "first")),
+        client.asGuest().post(PostMessageSchema, post("raced", "general", author, "second")),
       ]);
       expect(results).toEqual([{ kind: "ok" }, { kind: "ok" }]);
       const events = await waitForStoredEvents(eventStore, 2);
@@ -378,7 +347,7 @@ describe("MessageBoard Projection backend", () => {
           .stand()
           .readVersioned(BoardMessageSchema, create(MessageIdSchema, { value: "raced" })),
       ).resolves.toMatchObject({
-        state: { board: { value: "board-a" }, text: winner?.text },
+        state: { board: { value: "general" }, text: winner?.text },
         version: { number: 1 },
       });
     } finally {
@@ -397,19 +366,20 @@ describe("MessageBoard Projection backend", () => {
     let client: ReturnType<typeof Client.connectTo> | undefined;
     let server: Awaited<ReturnType<Server["start"]>> | undefined;
     try {
-      const context = await application.createContext();
-      server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
+      const composed = await createApplication();
+      const context = composed.messages;
+      server = await composed.server.start();
       client = Client.connectTo(server.baseUrl);
-      subscription = await client.asGuest().createSubscription(createBoardTopic("valid-board"), {
+      subscription = await client.asGuest().createSubscription(createBoardTopic("general"), {
         kind: "entity",
-        authoritativeQuery: () => createBoardQuery("valid-board"),
+        authoritativeQuery: () => createBoardQuery("general"),
       });
       await subscription.activate();
       const rejectedUpdate = subscription.updates[Symbol.asyncIterator]().next();
       const outcome = await client.asGuest().post(
         PostMessageSchema,
         create(PostMessageSchema, {
-          board: create(BoardIdSchema, { value: "valid-board" }),
+          board: create(BoardIdSchema, { value: "general" }),
           author: create(UserIdSchema, { value: "ada" }),
           username: "Ada",
           text: "hello",
@@ -449,6 +419,11 @@ describe("MessageBoard Projection backend", () => {
     }
   });
 });
+
+async function createApplication(storageFactory = new InMemoryStorageFactory()) {
+  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+  return new MessageBoardApplication().create();
+}
 
 function post(
   id: string,

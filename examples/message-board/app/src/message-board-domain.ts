@@ -13,327 +13,198 @@
  */
 
 /**
- * Defines the Message Board domain handlers and reusable application assembly.
- * Local and managed entrypoints both build their complete Bounded Context from this module.
+ * Starts every Message Board mode from the same two-Bounded-Context assembly.
  */
 
-import { clone, create } from "@bufbuild/protobuf";
 import {
-  Aggregate,
-  Assign,
-  BoundedContext,
   EnvironmentType,
-  EventRouting,
-  Projection,
-  Server,
   ServerEnvironment,
-  Subscribe,
-  Throws,
-  Where,
   type DeliveryStrategy,
   type RunningServer,
   type StandSubscriptionRegistry,
 } from "@spine-event-engine/server";
 import { BrowserServer, type BrowserServerOptions } from "@spine-event-engine/server/browser";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import type { StorageFactory } from "@spine-event-engine/storage";
-
+import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
 import {
-  BoardMessageSchema,
-  BoardMessageViewSchema,
-  AnnouncementBoardViewSchema,
-  BoardIdSchema,
-  MessageIdSchema,
-  type AnnouncementBoardView,
-  type BoardId,
-  type BoardMessage,
-  type BoardMessageView,
-  type MessageId,
+  ComposedBoardApplication,
+  type ComposedBoard,
+} from "@spine-event-engine/example-message-board-composed-app";
+import type {
+  AnnouncementBoardView,
+  BoardMessage,
+  BoardMessageView,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
-import { type PostMessage } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
-import {
-  MessagePostedSchema,
-  type MessagePosted,
-} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
-import { MessageAlreadyPosted } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections.js";
 
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
 import { SystemClock } from "./system-clock.js";
 import { typeRegistry } from "./model-registry.js";
+import { BoardAdmission, type SignedBoardAdmission } from "./signed-admission.js";
 
 export { typeRegistry } from "./model-registry.js";
 export { messageBoardProtoModule } from "@spine-event-engine/example-message-board-model";
 export { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
+export { BoardMessageAggregate } from "@spine-event-engine/example-message-board-command-handlers";
 
 /**
- * Applies commands to one message identified by `MessageId`.
- */
-export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSchema> {
-  // prettier-ignore
-
-  /**
-   * Persists one message and publishes its read-side input event.
-   *
-   * @param command The validated command that supplies message fields.
-   * @returns The event that creates the corresponding Projection row.
-   */
-  @Assign
-  @Throws(MessageAlreadyPosted)
-  postMessage(command: PostMessage): MessagePosted {
-    // The aggregate's visible state is the application-level existence fact.
-    if (this.state.board !== undefined) {
-      throw MessageAlreadyPosted.create({ id: this.id });
-    }
-    const id = clone(MessageIdSchema, this.id);
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(BoardMessageSchema, {
-          id,
-          board: command.board,
-          author: command.author,
-          username: command.username,
-          text: command.text,
-          postedAt: command.postedAt,
-        }),
-      ),
-    );
-    return create(MessagePostedSchema, {
-      id,
-      board: command.board,
-      author: command.author,
-      username: command.username,
-      text: command.text,
-      postedAt: command.postedAt,
-    });
-  }
-}
-
-/**
- * Builds the messages displayed on a board.
- */
-export class BoardViewProjection extends Projection<MessageId, typeof BoardMessageViewSchema> {
-  // prettier-ignore
-
-  /**
-   * Updates the Projection row for each posted message.
-   *
-   * @param event The event whose message fields become the row state.
-   */
-  @Subscribe
-  onMessagePosted(event: MessagePosted): void {
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(BoardMessageViewSchema, {
-          id: clone(MessageIdSchema, event.id ?? this.id),
-          board: event.board,
-          author: event.author,
-          username: event.username,
-          text: event.text,
-          postedAt: event.postedAt,
-        }),
-      ),
-    );
-  }
-}
-
-/**
- * Keeps the latest message for the public announcements board.
- */
-export class AnnouncementBoardProjection extends Projection<
-  BoardId,
-  typeof AnnouncementBoardViewSchema
-> {
-  // prettier-ignore
-
-  /**
-   * Updates the board-wide announcement view from matching posted-message Events.
-   *
-   * @param event The announcement selected by generated Event-field metadata.
-   */
-  @Where({ eventField: "board", equals: '{"value":"announcements"}' })
-  @Subscribe
-  onAnnouncement(event: MessagePosted): void {
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(AnnouncementBoardViewSchema, {
-          id: clone(BoardIdSchema, event.board ?? this.id),
-          message: event.id,
-          text: event.text,
-        }),
-      ),
-    );
-  }
-}
-
-/**
- * Configures the MessageBoard server listener and browser origin.
+ * Configures the native listener and browser origin.
  */
 export interface BoardServerOptions {
-  // prettier-ignore
-
   /**
-   * Selects the network interface that receives MessageBoard requests.
+   * Selects the native listener host.
    */
   readonly host?: string;
 
   /**
-   * Selects the TCP port that receives MessageBoard requests.
+   * Selects the native listener port.
    */
   readonly port?: number;
 
   /**
-   * Selects the sole browser origin admitted by the local gateway.
+   * Selects the allowed browser origin.
    */
   readonly webOrigin?: string;
 }
 
 /**
- * Starts the local MessageBoard application.
+ * Reuses the composed Message Board in local, managed, and combined processes.
  */
 export class MessageBoardApplication {
-  // prettier-ignore
+  #signed: SignedBoardAdmission | undefined;
 
   /**
-   * Builds the single-tenant MessageBoard context with in-memory storage by default.
+   * Creates an application from the selected process configuration.
    *
-   * @param storageFactory The storage backend that records MessageBoard state and events.
-   * @param deliveryStrategy Optionally selects Delivery shards for the context.
-   * @param subscriptionRegistry Optionally supplies the context subscription registry.
-   * @returns The assembled MessageBoard bounded context.
+   * @param configuration Protected application configuration.
    */
-  async createContext(
-    storageFactory: StorageFactory = new InMemoryStorageFactory(),
-    deliveryStrategy?: DeliveryStrategy,
-    subscriptionRegistry?: StandSubscriptionRegistry,
-  ): Promise<BoundedContext> {
-    ServerEnvironment.when(EnvironmentType.Local).use({
-      storageFactory,
-      ...(deliveryStrategy === undefined ? {} : { deliveryStrategy }),
-    });
-    await ServerEnvironment.instance().completeSetup();
-    const announcementRouting = EventRouting.create<BoardId>().route(
-      MessagePostedSchema,
-      (event) =>
-        event.board?.value === "announcements" ? [clone(BoardIdSchema, event.board)] : [],
-    );
-    const builder = BoundedContext.singleTenant("MessageBoard")
+  constructor(private readonly configuration: NodeJS.ProcessEnv = process.env) {}
 
-      .add(BoardMessageAggregate)
-      .add(BoardViewProjection)
-      .add(AnnouncementBoardProjection, { eventRouting: announcementRouting });
-    if (subscriptionRegistry !== undefined) builder.withSubscriptionRegistry(subscriptionRegistry);
-    return builder.build();
+  /**
+   * Builds both Bounded Contexts from the already selected environment.
+   *
+   * @param options Listener settings.
+   * @param registryFactory Creates one registry per Bounded Context.
+   * @returns The configured contexts or running Server.
+   */
+  async create(
+    options: BoardServerOptions = {},
+    registryFactory?: () => StandSubscriptionRegistry,
+  ): Promise<ComposedBoard> {
+    await ServerEnvironment.instance().completeSetup();
+    return new ComposedBoardApplication(this.#admission()?.readerAdmission).create({
+      host: options.host ?? "127.0.0.1",
+      port: options.port ?? 0,
+      ...(registryFactory === undefined ? {} : { registryFactory }),
+    });
   }
 
   /**
-   * Starts the MessageBoard server with in-memory storage.
+   * Starts the local combined native and browser server.
    *
-   * @param options Optional loopback host and ephemeral-port overrides.
-   * @returns The running server, which callers must close when finished.
+   * @param options Local listener settings.
+   * @returns The configured contexts or running Server.
    */
   async start(options: BoardServerOptions = {}): Promise<RunningServer> {
-    const native = await this.#server(options, new InMemoryStorageFactory(), true);
+    this.#localEnvironment();
+    const native = (await this.create({ host: "127.0.0.1", port: 0 })).server;
     return BrowserServer.open(await native.start(), this.#browserOptions(options));
   }
 
   /**
-   * Starts the local MessageBoard server with framework-owned process shutdown.
+   * Starts the local combined server with process shutdown hooks.
    *
-   * @param options Optional loopback host and browser-origin overrides.
-   * @returns The running server after the browser listener is ready.
+   * @param options Local listener settings.
+   * @returns The configured contexts or running Server.
    */
   async run(options: BoardServerOptions = {}): Promise<RunningServer> {
-    return BrowserServer.run(
-      await this.#server(options, new InMemoryStorageFactory(), true),
-      this.#browserOptions(options),
-    );
+    this.#localEnvironment();
+    const native = (await this.create({ host: "127.0.0.1", port: 0 })).server;
+    return BrowserServer.run(native, this.#browserOptions(options));
   }
 
   /**
-   * Starts the native MessageBoard application with an application-selected storage factory.
+   * Starts the native application server with deployment-selected storage.
    *
-   * @param options Network listener configuration.
-   * @param storageFactory The MessageBoard storage factory selected by its deployment configuration.
-   * @returns The running native application server.
+   * @param options Native listener settings.
+   * @param storageFactory Deployment-selected storage.
+   * @returns The configured contexts or running Server.
    */
   async runApplication(
     options: BoardServerOptions,
     storageFactory: StorageFactory,
   ): Promise<RunningServer> {
-    return (await this.#server(options, storageFactory, false)).run();
+    this.#environment(storageFactory);
+    return (await this.create(options)).server.run();
   }
 
   /**
-   * Starts one native complete replica without installing process shutdown handlers.
+   * Starts a managed native replica with distinct registries for its Bounded Contexts.
    *
-   * @param options Supplies the child listener configuration.
-   * @param storageFactory Stores the replica state.
-   * @param deliveryStrategy Selects Delivery shards for the replica.
-   * @param subscriptionRegistry Holds volatile child subscription state.
-   * @returns The started native application server.
+   * @param options Native listener settings.
+   * @param storageFactory Deployment-selected storage.
+   * @param deliveryStrategy Shared Delivery configuration.
+   * @param registryFactory Creates one registry per Bounded Context.
+   * @returns The configured contexts or running Server.
    */
   async startManagedApplication(
     options: BoardServerOptions,
     storageFactory: StorageFactory,
     deliveryStrategy: DeliveryStrategy,
-    subscriptionRegistry: StandSubscriptionRegistry,
+    registryFactory: () => StandSubscriptionRegistry,
   ): Promise<RunningServer> {
-    return (
-      await this.#server(options, storageFactory, false, deliveryStrategy, subscriptionRegistry)
-    ).start();
+    this.#environment(storageFactory, deliveryStrategy);
+    return (await this.create(options, registryFactory)).server.start();
   }
 
   /**
-   * Starts the combined MessageBoard browser and native application server.
+   * Starts the combined deployment server with one shared domain assembly.
    *
-   * @param options Network listener and browser configuration.
-   * @param storageFactory The MessageBoard storage factory selected by its deployment configuration.
-   * @returns The running combined server.
+   * @param options Listener and browser settings.
+   * @param storageFactory Deployment-selected storage.
+   * @returns The configured contexts or running Server.
    */
   async runCombined(
     options: BoardServerOptions,
     storageFactory: StorageFactory,
   ): Promise<RunningServer> {
-    return BrowserServer.run(
-      await this.#server(options, storageFactory, true),
-      this.#browserOptions(options),
-    );
+    this.#environment(storageFactory);
+    const native = (await this.create({ host: "127.0.0.1", port: 0 })).server;
+    return BrowserServer.run(native, this.#browserOptions(options));
   }
 
-  async #server(
-    options: BoardServerOptions,
-    storageFactory: StorageFactory,
-    browser: boolean,
-    deliveryStrategy?: DeliveryStrategy,
-    subscriptionRegistry?: StandSubscriptionRegistry,
-  ): Promise<Server> {
-    const context = await this.createContext(
+  #localEnvironment(): void {
+    this.#environment(new InMemoryStorageFactory());
+  }
+
+  #environment(storageFactory: StorageFactory, deliveryStrategy?: DeliveryStrategy): void {
+    ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory,
-      deliveryStrategy,
-      subscriptionRegistry,
-    );
-    const server = Server.atPort(browser ? 0 : (options.port ?? 0), {
-      host: browser ? "127.0.0.1" : (options.host ?? "127.0.0.1"),
-      services: { subscriptionLimit: 1_000 },
+      ...(deliveryStrategy === undefined ? {} : { deliveryStrategy }),
     });
-    return server.add(context);
   }
 
   #browserOptions(options: BoardServerOptions): BrowserServerOptions {
     const policy = new BoardAccessPolicy();
+    const signed = this.#admission();
     return {
       host: options.host ?? "127.0.0.1",
       port: options.port ?? 0,
       origins: [options.webOrigin ?? "http://127.0.0.1:5173"],
       registry: typeRegistry,
-      publicAccess: true,
+      ...(signed === undefined
+        ? { publicAccess: true as const }
+        : {
+            sessions: signed.sessions,
+            forwardingProof: signed.forwardingProof,
+          }),
       authorize: policy.authorize.bind(policy),
       contexts: new BoardContextResolver(),
       clock: new SystemClock(),
     };
+  }
+
+  #admission(): SignedBoardAdmission | undefined {
+    if ((this.configuration.MESSAGE_BOARD_AUTH_MODE ?? "public") === "public") return undefined;
+    return (this.#signed ??= BoardAdmission.configured(this.configuration));
   }
 }
 

@@ -17,31 +17,33 @@ import "../generated/spine-bootstrap.js";
 import { BoardMessageAggregate } from "@spine-event-engine/example-message-board-command-handlers";
 import {
   AnnouncementBoardProjection,
+  BoardStatisticsProjection,
   BoardViewProjection,
 } from "@spine-event-engine/example-message-board-view-handlers";
 import { clone } from "@bufbuild/protobuf";
 import {
   BoundedContext,
-  EnvironmentType,
   EventRouting,
   Server,
-  ServerEnvironment,
+  type StandSubscriptionRegistry,
   type ServerOptions,
 } from "@spine-event-engine/server";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
   BoardIdSchema,
   type BoardId,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 
-import { ReadBoardMessageHandler } from "./board-query-handler.js";
+import { ReadBoardMessageHandler, ReadBoardStatsHandler } from "./board-query-handler.js";
 import {
-  BoardContextLabel,
+  AnnouncementDisclosure,
+  AnnouncementVisibility,
+  BoardStatisticsDisclosure,
+  BoardStatisticsVisibility,
   BoardVisibility,
+  EventAuthorRedaction,
+  MessageAuthorRedaction,
   PublishedEventVisibility,
-  ResultLabel,
-  ServerMessageLabel,
 } from "./read-policies.js";
 
 /**
@@ -65,6 +67,28 @@ export interface ComposedBoard {
 }
 
 /**
+ * Settings supplied by the already configured application startup boundary.
+ */
+export interface ComposedBoardOptions {
+  /**
+   * Selects the native listener host.
+   */
+  readonly host?: string;
+
+  /**
+   * Selects the native listener port.
+   */
+  readonly port?: number;
+
+  /**
+   * Creates separate registries for the two Bounded Contexts.
+   *
+   * @returns A fresh registry for one Bounded Context.
+   */
+  readonly registryFactory?: () => StandSubscriptionRegistry;
+}
+
+/**
  * Builds the two contexts and their application Server from generated metadata.
  */
 export class ComposedBoardApplication {
@@ -80,43 +104,80 @@ export class ComposedBoardApplication {
   /**
    * Builds contexts from dependency handlers and registers the selected query handler.
    *
+   * @param options Context and listener settings.
    * @returns The locally configured contexts and Server.
    */
-  async create(): Promise<ComposedBoard> {
-    ServerEnvironment.when(EnvironmentType.Local).use({
-      storageFactory: new InMemoryStorageFactory(),
-    });
-    await ServerEnvironment.instance().completeSetup();
-    const visibility = new BoardVisibility();
-    const messages = await BoundedContext.singleTenant("ComposedMessages")
-      .add(BoardMessageAggregate)
-      .add(BoardViewProjection)
-      .addReadSideFilter(new BoardContextLabel())
-      .addReadSideFilter(visibility)
-      .build();
-    const announcementRouting = EventRouting.create<BoardId>().route(
-      MessagePostedSchema,
-      (event) =>
-        event.board?.value === "announcements" ? [clone(BoardIdSchema, event.board)] : [],
-    );
-    const announcements = await BoundedContext.singleTenant("ComposedAnnouncements")
-      .add(AnnouncementBoardProjection, { eventRouting: announcementRouting })
-      .build();
-    const server = new Server({
-      contexts: [messages, announcements],
-      appQueries: [new ReadBoardMessageHandler()],
-      ...(this.readerAdmission === undefined
-        ? {}
-        : { services: { readerAdmission: this.readerAdmission } }),
-      readSideFilters: [
-        visibility,
-        new ResultLabel(),
-        new ServerMessageLabel(),
-        new PublishedEventVisibility(),
-      ],
-    });
-    return { messages, announcements, server };
+  async create(options: ComposedBoardOptions = {}): Promise<ComposedBoard> {
+    const messagesBuilder = BoardContextBuilders.messages(options);
+    const announcementsBuilder = BoardContextBuilders.announcements(options);
+    let messages: BoundedContext | undefined;
+    let announcements: BoundedContext | undefined;
+    try {
+      messages = await messagesBuilder.build();
+      announcements = await announcementsBuilder.build();
+      const server = new Server({
+        ...(options.host === undefined ? {} : { host: options.host }),
+        ...(options.port === undefined ? {} : { port: options.port }),
+        contexts: [messages, announcements],
+        appQueries: [new ReadBoardMessageHandler(), new ReadBoardStatsHandler()],
+        ...(this.readerAdmission === undefined
+          ? {}
+          : { services: { readerAdmission: this.readerAdmission } }),
+        readSideFilters: [
+          new MessageAuthorRedaction(),
+          new EventAuthorRedaction(),
+          new BoardStatisticsDisclosure(),
+          new AnnouncementDisclosure(),
+        ],
+      });
+      return { messages, announcements, server };
+    } catch (error) {
+      await Promise.allSettled([announcements?.close(), messages?.close()]);
+      throw error;
+    }
   }
 }
 
-export { ReadBoardMessageHandler } from "./board-query-handler.js";
+const BoardContextBuilders = Object.freeze({
+  /**
+   * Builds the message context with its cumulative board Projection.
+   *
+   * @param options Supplies registry configuration.
+   * @returns The configured messages context builder.
+   */
+  messages(options: ComposedBoardOptions) {
+    const routing = EventRouting.create<BoardId>().route(MessagePostedSchema, (event) =>
+      event.board === undefined ? [] : [clone(BoardIdSchema, event.board)],
+    );
+    const builder = BoundedContext.singleTenant("ComposedMessages")
+      .add(BoardMessageAggregate)
+      .add(BoardViewProjection)
+      .add(BoardStatisticsProjection, { eventRouting: routing })
+      .addReadSideFilter(new BoardVisibility())
+      .addReadSideFilter(new BoardStatisticsVisibility())
+      .addReadSideFilter(new PublishedEventVisibility());
+    if (options.registryFactory !== undefined)
+      builder.withSubscriptionRegistry(options.registryFactory());
+    return builder;
+  },
+
+  /**
+   * Builds the separate announcement Projection context.
+   *
+   * @param options Supplies registry configuration.
+   * @returns The configured announcements context builder.
+   */
+  announcements(options: ComposedBoardOptions) {
+    const routing = EventRouting.create<BoardId>().route(MessagePostedSchema, (event) =>
+      event.board?.value === "announcements" ? [clone(BoardIdSchema, event.board)] : [],
+    );
+    const builder = BoundedContext.singleTenant("ComposedAnnouncements")
+      .add(AnnouncementBoardProjection, { eventRouting: routing })
+      .addReadSideFilter(new AnnouncementVisibility());
+    if (options.registryFactory !== undefined)
+      builder.withSubscriptionRegistry(options.registryFactory());
+    return builder;
+  },
+});
+
+export { ReadBoardMessageHandler, ReadBoardStatsHandler } from "./board-query-handler.js";

@@ -37,9 +37,9 @@ import {
   InMemoryStorageBackend,
   InMemoryStorageFactory,
   InMemoryRecordStorage,
+  StorageGroup,
   type RecordSpec,
   type RecordStorage,
-  type StorageGroup,
   type StorageContext,
   StorageFactory,
 } from "@spine-event-engine/storage";
@@ -3014,6 +3014,7 @@ describe("BoundedContext assembly", () => {
         new StorageSubscriptionRegistry(
           { name: "PageAfterFatal:subscriptions", multitenant: false },
           factory,
+          new StorageGroup("subscriptions_PageAfterFatal"),
         ),
       )
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))

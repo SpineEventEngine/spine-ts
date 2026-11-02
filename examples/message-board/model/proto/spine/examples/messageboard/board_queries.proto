@@ -39,3 +39,24 @@ message ReadBoardMessage {
     BoardMessageView message = 1;
   }
 }
+
+// Reads lifetime activity visible to the current reader.
+message ReadBoardStats {
+  // Selects the message board to summarize.
+  message Query {
+    // The board to summarize.
+    BoardId board = 1 [
+      (required) = true,
+      (validate) = true
+    ];
+  }
+
+  // Returns summaries from the message and announcement Bounded Contexts.
+  message Response {
+    // The visible message board summary, if present.
+    BoardStatistics board = 1;
+
+    // The visible public announcement summary, if present.
+    BoardStatistics announcements = 2;
+  }
+}

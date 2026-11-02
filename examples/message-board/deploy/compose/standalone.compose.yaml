@@ -2,7 +2,10 @@ services:
   web:
     image: spine-ts/message-board-web:${MESSAGE_BOARD_IMAGE_TAG:-local}
     environment:
-      { MESSAGE_BOARD_GATEWAY_URL: "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}" }
+      {
+        MESSAGE_BOARD_GATEWAY_URL: "https://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
+        MESSAGE_BOARD_AUTH_MODE: "${MESSAGE_BOARD_AUTH_MODE:-public}",
+      }
 
   datastore:
     image: google/cloud-sdk:578.0.0-emulators
@@ -48,6 +51,12 @@ services:
       DELIVERY_SERVER_URL: http://delivery:8484
       PROCESS_COUNT: "2"
       DELIVERY_SHARD_COUNT: "2"
+      MESSAGE_BOARD_AUTH_MODE: ${MESSAGE_BOARD_AUTH_MODE:-public}
+      MESSAGE_BOARD_SESSION_ISSUER: ${MESSAGE_BOARD_SESSION_ISSUER:-}
+      MESSAGE_BOARD_SESSION_AUDIENCE: ${MESSAGE_BOARD_SESSION_AUDIENCE:-}
+      MESSAGE_BOARD_SESSION_KEY_ID: ${MESSAGE_BOARD_SESSION_KEY_ID:-}
+      MESSAGE_BOARD_SESSION_PRIVATE_KEY_PEM: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY_PEM:-}
+      MESSAGE_BOARD_READER_PROOF_KEY_BASE64: ${MESSAGE_BOARD_READER_PROOF_KEY_BASE64:-}
     depends_on:
       datastore:
         condition: service_healthy
@@ -60,10 +69,16 @@ services:
       HOST: 0.0.0.0
       PORT: 8080
       NODE_ENV: production
-      BROWSER_ORIGIN: "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}"
+      BROWSER_ORIGIN: "https://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}"
       BACKEND_URLS: http://application-node:8080
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
+      MESSAGE_BOARD_AUTH_MODE: ${MESSAGE_BOARD_AUTH_MODE:-public}
+      MESSAGE_BOARD_SESSION_ISSUER: ${MESSAGE_BOARD_SESSION_ISSUER:-}
+      MESSAGE_BOARD_SESSION_AUDIENCE: ${MESSAGE_BOARD_SESSION_AUDIENCE:-}
+      MESSAGE_BOARD_SESSION_KEY_ID: ${MESSAGE_BOARD_SESSION_KEY_ID:-}
+      MESSAGE_BOARD_SESSION_PRIVATE_KEY_PEM: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY_PEM:-}
+      MESSAGE_BOARD_READER_PROOF_KEY_BASE64: ${MESSAGE_BOARD_READER_PROOF_KEY_BASE64:-}
     networks:
       default:
         aliases:
@@ -81,6 +96,8 @@ services:
       - "127.0.0.1:${MESSAGE_BOARD_PUBLIC_PORT:-18080}:8080"
     volumes:
       - ./standalone-envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ${MESSAGE_BOARD_TLS_CERT_FILE:-../../web/.local/localhost-cert.pem}:/run/tls/tls.crt:ro
+      - ${MESSAGE_BOARD_TLS_KEY_FILE:-../../web/.local/localhost-key.pem}:/run/tls/tls.key:ro
     depends_on:
       - gateway
       - web

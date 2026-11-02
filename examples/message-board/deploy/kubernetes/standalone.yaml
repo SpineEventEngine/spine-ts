@@ -5,6 +5,7 @@ metadata:
 data:
   BROWSER_ORIGIN: https://message-board.example.test
   DELIVERY_SERVER_URL: http://simple-delivery-server:8484
+  MESSAGE_BOARD_AUTH_MODE: public
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -131,7 +132,13 @@ spec:
       containers:
         - name: web
           image: spine-ts/message-board-web:local
-          env: [{ name: MESSAGE_BOARD_GATEWAY_URL, value: https://message-board.example.test:443 }]
+          env:
+            - { name: MESSAGE_BOARD_GATEWAY_URL, value: https://message-board.example.test:443 }
+            - {
+                name: MESSAGE_BOARD_AUTH_MODE,
+                valueFrom:
+                  { configMapKeyRef: { name: message-board-config, key: MESSAGE_BOARD_AUTH_MODE } },
+              }
           startupProbe: { tcpSocket: { port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
           readinessProbe: { tcpSocket: { port: 8080 }, periodSeconds: 2 }
 ---
@@ -201,6 +208,7 @@ data:
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
                   common_tls_context:
+                    alpn_protocols: [h2, http/1.1]
                     tls_certificates:
                       - certificate_chain: { filename: /run/tls/tls.crt }
                         private_key: { filename: /run/tls/tls.key }
@@ -238,6 +246,12 @@ data:
                                 hash_policy:
                                   - header: { header_name: authorization }
                             - match: { path: "/spine.client.QueryService/Read", headers: [{ name: ":method", exact_match: POST }] }
+                              route:
+                                cluster: gateway
+                                timeout: 30s
+                                hash_policy:
+                                  - header: { header_name: authorization }
+                            - match: { path: "/spine.client.QueryService/Execute", headers: [{ name: ":method", exact_match: POST }] }
                               route:
                                 cluster: gateway
                                 timeout: 30s

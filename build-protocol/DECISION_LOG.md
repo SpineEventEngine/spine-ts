@@ -7136,3 +7136,32 @@ composition, Server filters redact author names for public readers, and matching
 Event filters prevent notification leaks. Verified principal and authority facts
 come from the configured authentication ports. The example and guides must show
 that complete flow, including Entity updates and Event notifications.
+
+The current domain establishes a board with its first accepted post. Statistics
+use that Event's occurrence time and count distinct domain UserId values, not
+display names or verified human identities. Dedicated cumulative Projection state
+keeps these totals independent of displayed message lists. Separate board totals
+are not combined into a misleading distinct-user count. A statistics subscription
+refreshes the App Query after that Projection changes. Restricted statistics use
+the same access rules as their messages; contributor identity bookkeeping is
+removed from Server responses for every reader.
+
+Durable subscription records use an explicit StorageGroup selected from the
+logical Bounded Context name. The StorageContext name remains diagnostic-only;
+providers do not derive physical families from it. Registry construction and
+storage preparation use the same captured group, including custom registries.
+This prevents one Bounded Context from activating another's retained Topics.
+
+The Message Board must preserve its separate Entity and Event subscriptions in
+multiple browser tabs. The browser route must support HTTP/2 multiplexing;
+removing subscription functionality or limiting tab counts is not an acceptable
+workaround for HTTP/1.1 connection exhaustion.
+
+The installed Vite HTTPS server supplies HTTP/2 with its existing streaming
+proxy for local development. Proxy only the reserved RPC paths to the private
+HTTP Gateway. Use supplied trusted TLS certificate/key files; launchers do not
+modify local trust stores. Existing deployment Envoy edges terminate TLS and
+advertise HTTP/2 through ALPN. No BrowserServer TLS API or separate proxy
+implementation is introduced. All maintained RPC route lists include
+QueryService.Execute. Multiple tabs retain every Entity and Event stream while
+posting; the temporary single-tab statistics suspension is not retained.

@@ -112,7 +112,7 @@ import { ReadSideFilter } from "../stand/read-side-filter.js";
 import { SubscriptionRuntime, subscriptionRuntimeAccess } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
-  subscriptionRecordSpec,
+  subscriptionRecordGroup,
   type StandSubscriptionRegistry,
   type StandSubscriptionEntry,
 } from "../stand/subscription-registry.js";
@@ -1127,17 +1127,10 @@ export class BoundedContext {
    * @returns Shared preparation completion.
    */
   #prepareShared(mode: StoragePreparationMode): Promise<void> {
-    if (!(this.#subscriptionRuntime.registry() instanceof StorageSubscriptionRegistry))
-      return Promise.resolve();
+    const registry = this.#subscriptionRuntime.registry();
+    if (!(registry instanceof StorageSubscriptionRegistry)) return Promise.resolve();
     if (this.#sharedPreparation !== undefined) return this.#sharedPreparation;
-    const attempt = this.#trackPreparation(() =>
-      StoragePreparations.for(this.#storageFactory).prepareRecord(
-        ContextParts.createSubscriptionStorageContext(this.#snapshot.spec),
-        subscriptionRecordSpec,
-        undefined,
-        mode,
-      ),
-    );
+    const attempt = this.#trackPreparation(() => registry.prepare(mode));
     this.#sharedPreparation = attempt;
     void attempt.catch(() => {
       if (this.#sharedPreparation === attempt) this.#sharedPreparation = undefined;
@@ -2922,6 +2915,7 @@ export class BoundedContextBuilder {
       new StorageSubscriptionRegistry(
         ContextParts.createSubscriptionStorageContext(this.#specSnapshot),
         storageFactory,
+        subscriptionRecordGroup(this.#specSnapshot.name.value),
       );
     resources.registry = registry;
     const runtime = new SubscriptionRuntime(

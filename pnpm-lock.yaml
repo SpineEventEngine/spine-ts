@@ -131,6 +131,12 @@ importers:
       '@spine-event-engine/deployment-gke':
         specifier: 2.0.0-snapshot.26
         version: link:../../../packages/deployment-gke
+      '@spine-event-engine/example-message-board-command-handlers':
+        specifier: 2.0.0-snapshot.26
+        version: link:../command-handlers
+      '@spine-event-engine/example-message-board-composed-app':
+        specifier: 2.0.0-snapshot.26
+        version: link:../composed-app
       '@spine-event-engine/example-message-board-model':
         specifier: 2.0.0-snapshot.26
         version: link:../model
@@ -150,6 +156,9 @@ importers:
         specifier: 9.4.0
         version: 9.4.0
     devDependencies:
+      '@spine-event-engine/client-web':
+        specifier: 2.0.0-snapshot.26
+        version: link:../../../packages/client-web
       '@spine-event-engine/proto-tools':
         specifier: 2.0.0-snapshot.26
         version: link:../../../packages/proto-tools

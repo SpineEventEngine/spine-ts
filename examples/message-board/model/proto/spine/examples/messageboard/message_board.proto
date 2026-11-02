@@ -22,14 +22,12 @@ option (type_url_prefix) = "type.spine.examples.messageboard";
 
 // Identifies a board that contains messages.
 message BoardId {
-
   // The identifier assigned to the board.
   string value = 1 [(required) = true];
 }
 
 // Identifies a message on a board.
 message MessageId {
-
   // The identifier assigned to the message.
   string value = 1 [(required) = true];
 }
@@ -39,13 +37,22 @@ message BoardMessage {
   option (entity).kind = AGGREGATE;
 
   // The identifier assigned to this message.
-  MessageId id = 1 [(validate) = true, (set_once) = true];
+  MessageId id = 1 [
+    (validate) = true,
+    (set_once) = true
+  ];
 
   // The board that contains the message.
-  BoardId board = 2 [(required) = true, (validate) = true];
+  BoardId board = 2 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // The account that posted the message.
-  UserId author = 3 [(required) = true, (validate) = true];
+  UserId author = 3 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // The username shown beside the message.
   string username = 4 [(required) = true];
@@ -63,13 +70,24 @@ message BoardMessageView {
   option (entity).visibility = FULL;
 
   // The identifier assigned to this message.
-  MessageId id = 1 [(validate) = true, (set_once) = true];
+  MessageId id = 1 [
+    (validate) = true,
+    (set_once) = true
+  ];
 
   // The board that contains the message.
-  BoardId board = 2 [(required) = true, (validate) = true, (column) = true];
+  BoardId board = 2 [
+    (required) = true,
+    (validate) = true,
+    (column) = true
+  ];
 
   // The account that posted the message.
-  UserId author = 3 [(required) = true, (validate) = true, (column) = true];
+  UserId author = 3 [
+    (required) = true,
+    (validate) = true,
+    (column) = true
+  ];
 
   // The username shown beside the message.
   string username = 4 [(required) = true];
@@ -78,7 +96,52 @@ message BoardMessageView {
   string text = 5 [(required) = true];
 
   // The time at which the message was posted.
-  google.protobuf.Timestamp posted_at = 6 [(required) = true, (column) = true];
+  google.protobuf.Timestamp posted_at = 6 [
+    (required) = true,
+    (column) = true
+  ];
+}
+
+// Cumulative activity for one message board.
+message BoardStatisticsView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // The board whose accepted posts are counted.
+  BoardId id = 1 [
+    (validate) = true,
+    (set_once) = true
+  ];
+
+  // Number of accepted messages since the first post.
+  uint64 message_count = 2;
+
+  // Number of distinct domain authors.
+  uint64 author_count = 3;
+
+  // Distinct domain identifiers retained for exact counting.
+  repeated UserId authors = 4;
+
+  // Earliest accepted Event occurrence time.
+  google.protobuf.Timestamp first_posted_at = 5;
+}
+
+// Public summary of cumulative activity without author membership.
+message BoardStatistics {
+  // The board whose posts are summarized.
+  BoardId board = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Number of accepted messages since the first post.
+  uint64 message_count = 2;
+
+  // Number of distinct domain authors.
+  uint64 author_count = 3;
+
+  // Earliest accepted Event occurrence time.
+  google.protobuf.Timestamp first_posted_at = 4;
 }
 
 // The most recent message posted to the announcements board.
@@ -87,11 +150,29 @@ message AnnouncementBoardView {
   option (entity).visibility = FULL;
 
   // The board whose latest announcement is displayed.
-  BoardId id = 1 [(validate) = true, (set_once) = true];
+  BoardId id = 1 [
+    (validate) = true,
+    (set_once) = true
+  ];
 
   // The identifier assigned to the latest announcement.
-  MessageId message = 2 [(required) = true, (validate) = true];
+  MessageId message = 2 [
+    (required) = true,
+    (validate) = true
+  ];
 
   // The text of the latest announcement.
   string text = 3 [(required) = true];
+
+  // Number of accepted announcements since the first post.
+  uint64 message_count = 4;
+
+  // Number of distinct domain authors.
+  uint64 author_count = 5;
+
+  // Distinct domain identifiers retained for exact counting.
+  repeated UserId authors = 6;
+
+  // Earliest accepted Event occurrence time.
+  google.protobuf.Timestamp first_posted_at = 7;
 }

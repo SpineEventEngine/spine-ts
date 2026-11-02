@@ -4,6 +4,7 @@ node_modules/
 dist/
 coverage/
 test-results/
+examples/message-board/web/.local/
 examples/release-notes/out/
 playwright-report/
 docs/api/reference/

@@ -35,22 +35,9 @@ The generated TypeScript field remains optional because Proto required-field
 rules are enforced at Server admission; the handler uses a type assertion after
 that boundary. The test confirms a missing `message` never invokes the handler.
 
-[`BoardVisibility`](src/read-policies.ts) selects the actual
-`BoardMessageViewSchema` at the Bounded Context and Server boundaries, with
-`nested: true` for a view inside an App Query result. It removes messages on
-the `restricted` board unless verified authority facts grant access, and masks
-the display name for a public reader. `ResultLabel` independently selects the
-root `ReadBoardMessage.responseSchema` at Server egress. An `ActorContext`
-actor name alone is not authentication. `PublishedEventVisibility` separately filters the
-`MessagePosted` payload of a subscription update; the Event envelope stays
-intact. `ComposedBoardApplication` accepts the Server's native `readerAdmission`
-port. The test's static verifier and direct trusted context are fixtures only.
-A real application must verify native peer credentials and resolve authority
-facts through replaceable application ports; it should not treat
-client-supplied actor metadata or headers as proof. The framework copies facts
-for each invocation; it does not forward credentials or promise provider
-liveness.
+[`BoardVisibility` and `BoardStatisticsVisibility` filter Message Board rows and lifetime statistics in the Message Board Bounded Context. `AnnouncementVisibility` filters the separate announcement Bounded Context. The Server egress policy redacts nested author display names for public readers and prevents contributor arrays from leaving in any mode. Restricted rows, statistics, and Events require verified `canReadRestricted` authority facts; an actor name alone never supplies those facts. `ReadBoardStats` combines the two cumulative views and returns counts by domain `UserId`, plus the first accepted Event timestamp. These counts describe author IDs, not verified people.
 
+The runnable app configures either public admission or `SignedSessions` with a protected P-256 signing key. Its Gateway verifies bearer credentials and forwards operation-bound HMAC proof to the native reader path. Native direct Query and subscription admission verifies credentials; the native endpoint must remain on the trusted internal network. The offline `issue-board-session` command issues administrator-approved credentials.
 The [executable test](test/composed-app.test.ts) exercises internal and native
 RPC App Query calls, a direct Entity Query, public removal versus trusted
 access, and actual Entity and Event RPC subscriptions. An empty paired result

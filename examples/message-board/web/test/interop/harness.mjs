@@ -13,7 +13,8 @@ import {
   connectNodeAdapter,
   createGrpcTransport,
 } from "../../../../../packages/server/node_modules/@connectrpc/connect-node/dist/esm/index.js";
-import { Server } from "../../../../../packages/server/dist/index.js";
+import { EnvironmentType, ServerEnvironment } from "../../../../../packages/server/dist/index.js";
+import { InMemoryStorageFactory } from "../../../../../packages/storage/dist/index.js";
 import { CommandSchema } from "../../../../../packages/proto/dist/src/index.js";
 import {
   QuerySchema,
@@ -54,10 +55,12 @@ export async function startTopology({ lifecycle = {}, authenticated = false } = 
   const application = new MessageBoardApplication();
   const startBackend =
     lifecycle.startBackend ??
-    (async () =>
-      Server.atPort(0, { host: "127.0.0.1" })
-        .add(await application.createContext())
-        .start());
+    (async () => {
+      ServerEnvironment.when(EnvironmentType.Local).use({
+        storageFactory: new InMemoryStorageFactory(),
+      });
+      return (await application.create()).server.start();
+    });
   const createGateway = lifecycle.createGateway;
   const createSubscriptions =
     lifecycle.createSubscriptions ?? ((options) => new SubscriptionGateway(options));

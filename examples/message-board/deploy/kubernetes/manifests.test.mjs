@@ -11,6 +11,7 @@ const browserRoutes = [
   ["/spine.auth.AuthenticationService/ResolveContext", "30s"],
   ["/spine.client.CommandService/Post", "30s"],
   ["/spine.client.QueryService/Read", "30s"],
+  ["/spine.client.QueryService/Execute", "30s"],
   ["/spine.client.SubscriptionService/Subscribe", "30s"],
   ["/spine.client.SubscriptionService/Activate", "0s"],
   ["/spine.client.SubscriptionService/Cancel", "30s"],
@@ -41,6 +42,7 @@ for (const mode of ["combined", "standalone"]) {
     assert.match(document, /match: \{ prefix: "\/" \}[\s\S]*cluster: web/u);
     assert.match(document, /- name: web[\s\S]*message-board-web/u);
     assert.match(document, /secretName: message-board-envoy-tls/u);
+    assert.match(document, /alpn_protocols: \[h2, http\/1\.1\]/u);
     assertEnvoy(document, "https://message-board.example.test");
     assert.doesNotMatch(document, /kind: (Datastore|MySQL|Postgres|Redis|Hazelcast)/u);
     assert.doesNotMatch(document, /helm|operator/iu);

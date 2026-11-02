@@ -630,13 +630,12 @@ registry shapes with an instruction to regenerate.
 Each built context also has one `StandSubscriptionRegistry`. By default the
 builder creates a storage-backed registry from the resolved context
 `StorageFactory` (including the `ServerEnvironment` factory used for a builder
-added to a server). It stores one `spine.client.SubscriptionRecord` under each
+added to a server). Its physical `StorageGroup` derives from the logical Bounded Context name, so two contexts using one factory keep distinct definitions. An injected `StorageSubscriptionRegistry` takes an explicit group as its third constructor argument and prepares its captured factory and context. It stores one `spine.client.SubscriptionRecord` under each
 explicit `SubscriptionId`. A complete custom implementation can instead be
 supplied with `withSubscriptionRegistry(registry)`; responsibility transfers to
 the builder on the first build attempt.
 
-`SubscriptionService` streams are live best-effort notifications, not replay,
-ordering, or completeness contracts. A standalone Server defaults to the
+`SubscriptionService` streams are live notifications. Each subscriber receives its admitted filtered updates in order, but there is no replay, exactly-once, or cluster-wide completeness guarantee. A standalone Server defaults to the
 persistent registry. In a group of managed server replicas, the framework starts
 and closes each child Server and accepts only every context's actual
 `InMemorySubscriptionRegistry`; a persistent or custom registry is rejected

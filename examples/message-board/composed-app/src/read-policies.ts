@@ -14,132 +14,208 @@
 
 import { ReadSideFilter, type ReadSideContext } from "@spine-event-engine/server";
 import {
+  AnnouncementBoardViewSchema,
   BoardMessageViewSchema,
+  BoardStatisticsViewSchema,
+  type AnnouncementBoardView,
   type BoardMessageView,
+  type BoardStatisticsView,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
-import { ReadBoardMessage } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
 import {
   MessagePostedSchema,
   type MessagePosted,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 
+const visible = (board: string | undefined, context: ReadSideContext): boolean => {
+  if (board === "general" || board === "announcements") return true;
+  return (
+    board === "restricted" &&
+    context.principal !== undefined &&
+    context.authorityFacts?.canReadRestricted === true
+  );
+};
+
 /**
- * Applies the same message visibility rule at Bounded Context and Server boundaries.
+ * Admits message rows at the messages Bounded Context boundary.
  */
 export class BoardVisibility extends ReadSideFilter<typeof BoardMessageViewSchema> {
   /**
-   * Initializes inspection of messages nested in application results.
-   */
-  constructor() {
-    super(BoardMessageViewSchema, { nested: true });
-  }
-
-  /**
-   * Removes restricted messages without a verified grant and masks public names.
-   *
-   * @param message The detached domain Projection.
-   * @param context Verified reader facts; ActorContext alone grants no access.
-   * @returns The visible message, or null to remove it.
-   */
-  filter(message: BoardMessageView, context: ReadSideContext): BoardMessageView | null {
-    if (message.board?.value === "restricted" && context.authorityFacts?.canReadRestricted !== true)
-      return null;
-    if (context.principal === undefined) message.username = "Public reader";
-    return message;
-  }
-}
-
-/**
- * Labels every message read through the messages Bounded Context.
- */
-export class BoardContextLabel extends ReadSideFilter<typeof BoardMessageViewSchema> {
-  /**
-   * Initializes filtering against the message Projection schema.
+   * Creates the board message read filter.
    */
   constructor() {
     super(BoardMessageViewSchema);
   }
 
   /**
-   * Marks the detached message as having passed the messages Bounded Context.
+   * Checks message board visibility.
    *
-   * @param message The mutable detached Projection view.
-   * @returns The labeled view.
+   * @param message Message view to inspect.
+   * @param context Verified reader context.
+   * @returns The filtered or redacted value.
    */
-  filter(message: BoardMessageView): BoardMessageView {
-    message.text = `BC: ${message.text}`;
-    return message;
+  filter(message: BoardMessageView, context: ReadSideContext): BoardMessageView | null {
+    return visible(message.board?.value, context) ? message : null;
   }
 }
 
 /**
- * Labels nested message views at the Server egress boundary.
+ * Admits a board's cumulative statistics at its supplying Bounded Context.
  */
-export class ServerMessageLabel extends ReadSideFilter<typeof BoardMessageViewSchema> {
+export class BoardStatisticsVisibility extends ReadSideFilter<typeof BoardStatisticsViewSchema> {
   /**
-   * Initializes nested inspection of messages in application responses.
+   * Creates the board statistics read filter.
    */
   constructor() {
-    super(BoardMessageViewSchema, { nested: true });
+    super(BoardStatisticsViewSchema);
   }
 
   /**
-   * Marks each nested message returned by the Server.
+   * Checks statistics board visibility.
    *
-   * @param message The mutable detached message view.
-   * @returns The Server-labeled message.
+   * @param view Projection view to inspect.
+   * @param context Verified reader context.
+   * @returns The filtered or redacted value.
    */
-  filter(message: BoardMessageView): BoardMessageView {
-    message.text = `Server: ${message.text}`;
-    return message;
+  filter(view: BoardStatisticsView, context: ReadSideContext): BoardStatisticsView | null {
+    return visible(view.id?.value, context) ? view : null;
   }
 }
 
 /**
- * Labels a complete application result at the Server boundary.
+ * Admits only the application's public announcement board.
  */
-export class ResultLabel extends ReadSideFilter<typeof ReadBoardMessage.responseSchema> {
+export class AnnouncementVisibility extends ReadSideFilter<typeof AnnouncementBoardViewSchema> {
   /**
-   * Initializes filtering against the paired application response schema.
+   * Creates the announcement read filter.
    */
   constructor() {
-    super(ReadBoardMessage.responseSchema);
+    super(AnnouncementBoardViewSchema);
   }
 
   /**
-   * Marks a surviving message as part of a complete application result.
+   * Checks announcement board visibility.
    *
-   * @param response The mutable detached application response.
-   * @returns The labeled response.
+   * @param view Projection view to inspect.
+   * @returns The filtered or redacted value.
    */
-  filter(response: ReadBoardMessage.Response): ReadBoardMessage.Response {
-    if (response.message !== undefined) response.message.text = `Result: ${response.message.text}`;
-    return response;
+  filter(view: AnnouncementBoardView): AnnouncementBoardView | null {
+    return view.id?.value === "announcements" ? view : null;
   }
 }
 
 /**
- * Removes restricted Event payloads before delivery to readers without a grant.
+ * Suppresses Events from boards that the verified reader cannot inspect.
  */
 export class PublishedEventVisibility extends ReadSideFilter<typeof MessagePostedSchema> {
   /**
-   * Initializes filtering of the domain payload without changing the Event envelope.
+   * Creates the published Event read filter.
    */
   constructor() {
     super(MessagePostedSchema);
   }
 
   /**
-   * Returns only Event payloads admitted by the current verified reader facts.
+   * Checks published Event visibility.
    *
-   * @param event The detached domain Event payload.
-   * @param context The active reader's verified authority facts.
-   * @returns A visible payload or null for suppression.
+   * @param event Event payload to inspect.
+   * @param context Verified reader context.
+   * @returns The filtered or redacted value.
    */
   filter(event: MessagePosted, context: ReadSideContext): MessagePosted | null {
-    if (event.board?.value === "restricted" && context.authorityFacts?.canReadRestricted !== true)
-      return null;
-    if (context.principal === undefined) event.username = "Public writer";
+    return visible(event.board?.value, context) ? event : null;
+  }
+}
+
+/**
+ * Redacts public-reader names in root and nested message views at Server egress.
+ */
+export class MessageAuthorRedaction extends ReadSideFilter<typeof BoardMessageViewSchema> {
+  /**
+   * Creates the message author read filter.
+   */
+  constructor() {
+    super(BoardMessageViewSchema, { nested: true });
+  }
+
+  /**
+   * Updates public message author names.
+   *
+   * @param message Message view to inspect.
+   * @param context Verified reader context.
+   * @returns The filtered or redacted value.
+   */
+  filter(message: BoardMessageView, context: ReadSideContext): BoardMessageView {
+    if (context.principal === undefined) message.username = "Anonymous";
+    return message;
+  }
+}
+
+/**
+ * Redacts public-reader names in delivered Event payloads.
+ */
+export class EventAuthorRedaction extends ReadSideFilter<typeof MessagePostedSchema> {
+  /**
+   * Creates the Event author read filter.
+   */
+  constructor() {
+    super(MessagePostedSchema);
+  }
+
+  /**
+   * Updates public Event author names.
+   *
+   * @param event Event payload to inspect.
+   * @param context Verified reader context.
+   * @returns The filtered or redacted value.
+   */
+  filter(event: MessagePosted, context: ReadSideContext): MessagePosted {
+    if (context.principal === undefined) event.username = "Anonymous";
     return event;
+  }
+}
+
+/**
+ * Removes internal contributor membership from direct statistics reads.
+ */
+export class BoardStatisticsDisclosure extends ReadSideFilter<typeof BoardStatisticsViewSchema> {
+  /**
+   * Creates the statistics disclosure read filter.
+   */
+  constructor() {
+    super(BoardStatisticsViewSchema);
+  }
+
+  /**
+   * Removes internal statistics contributors.
+   *
+   * @param view Projection view to inspect.
+   * @returns The filtered or redacted value.
+   */
+  filter(view: BoardStatisticsView): BoardStatisticsView {
+    view.authors = [];
+    return view;
+  }
+}
+
+/**
+ * Removes internal contributor membership from direct announcement reads.
+ */
+export class AnnouncementDisclosure extends ReadSideFilter<typeof AnnouncementBoardViewSchema> {
+  /**
+   * Creates the announcement disclosure read filter.
+   */
+  constructor() {
+    super(AnnouncementBoardViewSchema);
+  }
+
+  /**
+   * Removes internal announcement contributors.
+   *
+   * @param view Projection view to inspect.
+   * @returns The filtered or redacted value.
+   */
+  filter(view: AnnouncementBoardView): AnnouncementBoardView {
+    view.authors = [];
+    return view;
   }
 }

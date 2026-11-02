@@ -63,8 +63,9 @@ replace or narrow that proposal.
   or subscription override is permitted. A Stand needs no Server to obtain it.
   Zero permits active processing without waiting; invalid values are rejected.
   Subscriptions retain separate queues. This supersedes any earlier per-consumer
-  configuration. Overflow terminates only
-  that subscription with an explicit error; writes and other subscribers continue.
+  configuration. Overflow terminates only that subscription; direct Stand observers
+  receive a capacity error, while RPC delivery retains its stream-closure behavior.
+  Writes and other subscribers continue.
   Clear waiting updates and suppress late results when the subscription closes.
 - Trusted principal/authority information must reach app-node execution through
   replaceable authentication/forwarding ports. Reject forged forwarded context.
@@ -80,6 +81,10 @@ replace or narrow that proposal.
   supplying Bounded Contexts; Server filters redact returned author information,
   including nested results and domain Event payloads. Real authentication ports
   supply the principal and authority facts; Actor IDs never grant access.
+  Board creation means its first accepted post in the current domain. Count
+  distinct UserId values rather than display names; public posting does not
+  establish verified human identity. Keep statistics live through their own
+  Projection subscription. Remove contributor bookkeeping from Server outputs.
 - Deliver two separate chat Markdown pieces: complete explanatory story and PR
   description, both rewritten from the implemented result. Explain concrete
   authenticated-principal configuration and receipt. Use “the framework” in
@@ -127,11 +132,19 @@ passed for the packaging work before the direct Stand changes. Workspace version
 are aligned at `2.0.0-snapshot.26`, with the required version-only commit separate
 from dependency and lockfile updates.
 
-Final integrated source security review is complete with no actionable findings.
-The dependency audit correction and its compatibility and security reviews are
+The preceding implementation passed integrated source security review with no actionable findings.
+The preceding dependency audit correction and its compatibility and security reviews are
 complete. The final shared-validator correction also passed focused API, reliability
 and security review. Final acceptance requires the unchanged full release profile
 and the branch commit’s Build and trial-publication checks to pass.
 The standalone performance investigation found that the existing one-Event,
 1,000-Process-Manager workload exceeded its one-second target even without a
 subscriber. The queue change does not establish that throughput target.
+
+The current continuation replaces per-service queue settings with the single
+ServerEnvironment setting and brings lifetime statistics and read policies into
+the actual Message Board UI and shared application assembly. It also isolates
+durable subscription registries by an explicit Bounded Context-selected storage
+group. Focused checks are in progress. Independent no-memory review, final
+security review, full release verification, and final-commit CI must cover this
+continuation before it is accepted.

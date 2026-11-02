@@ -25,14 +25,20 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
+import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
 import { ServerTests } from "@spine-event-engine/server/testing";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ReadBoardMessage } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
+import {
+  ReadBoardMessage,
+  ReadBoardStats,
+} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
 import {
   AnnouncementBoardViewSchema,
   BoardIdSchema,
   BoardMessageViewSchema,
+  BoardStatisticsViewSchema,
   MessageIdSchema,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { UserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
@@ -42,7 +48,123 @@ import { ComposedBoardApplication } from "../src/index.js";
 import { ReadBoardMessageHandler } from "../src/board-query-handler.js";
 
 describe("multi-package Message Board", () => {
+  beforeEach(async () => {
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    await ServerEnvironment.instance().completeSetup();
+  });
   afterEach(async () => ServerTests.resetEnvironment());
+
+  it("reports cumulative per-board posts and distinct authors from accepted Events", async () => {
+    const application = await new ComposedBoardApplication().create();
+    const running = await application.server.start();
+    const client = Client.connectTo(running.baseUrl);
+    try {
+      for (const [id, board, author, username] of [
+        ["first", "general", "user-1", "Old name"],
+        ["second", "general", "user-1", "New name"],
+        ["third", "general", "user-2", "Another author"],
+        ["fourth", "announcements", "user-2", "Another author"],
+      ] as const) {
+        await expect(
+          client.asGuest().post(
+            PostMessageSchema,
+            create(PostMessageSchema, {
+              id: create(MessageIdSchema, { value: id }),
+              board: create(BoardIdSchema, { value: board }),
+              author: create(UserIdSchema, { value: author }),
+              username,
+              text: id,
+              postedAt: create(TimestampSchema, { seconds: 1n }),
+            }),
+          ),
+        ).resolves.toEqual({ kind: "ok" });
+      }
+      const query = create(ReadBoardStats.querySchema, {
+        board: create(BoardIdSchema, { value: "general" }),
+      });
+      const actorContext = create(ActorContextSchema, {
+        actor: { value: "reader-1" },
+        timestamp: create(TimestampSchema, { seconds: 1n }),
+      });
+      await vi.waitFor(async () => {
+        const result = await application.server.query(query, { actorContext });
+        expect(result.board?.messageCount).toBe(3n);
+        expect(result.board?.authorCount).toBe(2n);
+        expect(result.announcements?.messageCount).toBe(1n);
+        expect(result.announcements?.authorCount).toBe(1n);
+        expect(result.board?.firstPostedAt?.seconds).toBeGreaterThan(1n);
+      });
+    } finally {
+      await client.close();
+      await running.close();
+    }
+  });
+
+  it("hides restricted totals without a verified grant and strips contributor directories", async () => {
+    const application = await new ComposedBoardApplication().create();
+    const running = await application.server.start();
+    const client = Client.connectTo(running.baseUrl);
+    try {
+      await client.asGuest().post(
+        PostMessageSchema,
+        create(PostMessageSchema, {
+          id: create(MessageIdSchema, { value: "restricted-stat" }),
+          board: create(BoardIdSchema, { value: "restricted" }),
+          author: create(UserIdSchema, { value: "private-writer" }),
+          username: "Private writer",
+          text: "Hidden",
+          postedAt: create(TimestampSchema, { seconds: 1n }),
+        }),
+      );
+      const query = create(ReadBoardStats.querySchema, {
+        board: create(BoardIdSchema, { value: "restricted" }),
+      });
+      const actorContext = create(ActorContextSchema, {
+        actor: { value: "private-writer" },
+        timestamp: create(TimestampSchema, { seconds: 1n }),
+      });
+      await vi.waitFor(async () => {
+        const trusted = await application.server.query(query, {
+          actorContext,
+          principal: { id: "verified-reader" },
+          authorityFacts: { canReadRestricted: true },
+        });
+        expect(trusted.board?.messageCount).toBe(1n);
+        expect(trusted.board?.authorCount).toBe(1n);
+      });
+      await expect(
+        application.server.query(query, {
+          actorContext,
+          authorityFacts: { canReadRestricted: true },
+        }),
+      ).rejects.toThrow("Public reader cannot carry authenticated authority facts");
+      expect(
+        (
+          await application.server.query(query, {
+            actorContext,
+            principal: { id: "verified-reader" },
+          })
+        ).board,
+      ).toBeUndefined();
+      const response = await client.asGuest().query(query);
+      expect(response.message[0]?.board).toBeUndefined();
+      const rows = await client.asGuest().send(
+        create(QuerySchema, {
+          id: create(QueryIdSchema, { value: "statistics-directory" }),
+          target: create(TargetSchema, {
+            type: TypeUrls.derive(BoardStatisticsViewSchema),
+            criterion: { case: "includeAll", value: true },
+          }),
+        }),
+      );
+      expect(rows.message).toHaveLength(0);
+    } finally {
+      await client.close();
+      await running.close();
+    }
+  });
 
   it("assembles handlers from separate packages and applies BC then Server policy to typed App Queries", async () => {
     const application = await new ComposedBoardApplication().create();
@@ -54,7 +176,7 @@ describe("multi-package Message Board", () => {
         BoardMessageViewSchema,
         create(BoardMessageViewSchema, {
           id,
-          board: create(BoardIdSchema, { value: "board-1" }),
+          board: create(BoardIdSchema, { value: "general" }),
           author: create(UserIdSchema, { value: "author-1" }),
           username: "A writer",
           text: "Hello",
@@ -68,12 +190,12 @@ describe("multi-package Message Board", () => {
           timestamp: create(TimestampSchema, { seconds: 1n }),
         }),
       });
-      expect(internal.message?.text).toBe("BC: Hello");
-      expect(internal.message?.username).toBe("Public reader");
+      expect(internal.message?.text).toBe("Hello");
+      expect(internal.message?.username).toBe("A writer");
 
       const external = await client.asGuest().query(query);
-      expect(external.message[0]?.message?.text).toBe("Server: Result: BC: Hello");
-      expect(external.message[0]?.message?.username).toBe("Public reader");
+      expect(external.message[0]?.message?.text).toBe("Hello");
+      expect(external.message[0]?.message?.username).toBe("Anonymous");
     } finally {
       await client.close();
       await running.close();
@@ -133,8 +255,8 @@ describe("multi-package Message Board", () => {
       const state = entityDelivery.value.update.update.value.update[0]?.kind;
       if (state?.case !== "state") throw new Error("Expected the Projection state.");
       expect(AnyPacker.unpack(state.value, BoardMessageViewSchema)).toMatchObject({
-        text: "Server: BC: A real event",
-        username: "Public reader",
+        text: "A real event",
+        username: "Anonymous",
       });
       const eventDelivery = await eventUpdate;
       if (
@@ -147,7 +269,7 @@ describe("multi-package Message Board", () => {
       if (payload === undefined) throw new Error("Expected a posted-message payload.");
       expect(AnyPacker.unpack(payload, MessagePostedSchema)).toMatchObject({
         text: "A real event",
-        username: "Public writer",
+        username: "Anonymous",
       });
       await vi.waitFor(async () => {
         expect(
@@ -192,7 +314,7 @@ describe("multi-package Message Board", () => {
         principal: { id: "reader-1" },
         authorityFacts: { canReadRestricted: true },
       });
-      expect(trusted.message?.text).toBe("BC: Restricted details");
+      expect(trusted.message?.text).toBe("Restricted details");
       expect(trusted.message?.username).toBe("A writer");
       const publicResult = await client.asGuest().query(query);
       expect(publicResult.message).toHaveLength(1);
@@ -320,7 +442,7 @@ describe("multi-package Message Board", () => {
         const result = await client
           .asGuest()
           .query(create(ReadBoardMessage.querySchema, { message: id }));
-        expect(result.message[0]?.message?.text).toBe("Server: Result: BC: For verified readers");
+        expect(result.message[0]?.message?.text).toBe("For verified readers");
       });
       expect(authenticate).toHaveBeenCalledWith(expect.objectContaining({ method: "Execute" }));
     } finally {

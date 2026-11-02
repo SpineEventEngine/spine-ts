@@ -35,6 +35,9 @@ const fullPackages = [
   "packages/storage-datastore",
   "packages/transport",
   "examples/message-board/model",
+  "examples/message-board/command-handlers",
+  "examples/message-board/view-handlers",
+  "examples/message-board/composed-app",
   "examples/message-board/app",
   "examples/message-board/web",
 ];

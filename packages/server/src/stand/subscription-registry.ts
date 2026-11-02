@@ -13,9 +13,11 @@
  */
 
 import { Time } from "@spine-event-engine/core/time";
+import { createHash } from "node:crypto";
 import { ReaderIdentities, type ReaderIdentity } from "@spine-event-engine/core/spi/trusted-reader";
 import { clone, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
+import { TenantIdSchema } from "@spine-event-engine/proto";
 import {
   SubscriptionIdSchema,
   SubscriptionSchema,
@@ -28,14 +30,30 @@ import {
   ColumnTypes,
   RecordColumn,
   RecordSpec,
+  StorageGroup,
   type RecordStorage,
   type StorageContext,
   type StorageFactory,
 } from "@spine-event-engine/storage";
+import {
+  StoragePreparations,
+  type StoragePreparationMode,
+} from "@spine-event-engine/storage/provider";
 
 import { StandSubscriptionRecords } from "./subscription-records.js";
 
 const cleanupPageSize = 25;
+
+/**
+ * Maps a logical Bounded Context name to one provider-safe durable record family.
+ *
+ * @param contextName Logical Bounded Context name.
+ * @returns A stable physical StorageGroup.
+ */
+export const subscriptionRecordGroup = (contextName: string): StorageGroup => {
+  const digest = createHash("sha256").update(contextName, "utf8").digest("hex").slice(0, 40);
+  return new StorageGroup(`sub_${digest}`);
+};
 
 /**
  * Exact durable subscription layout shared by the registry and preparation.
@@ -463,9 +481,18 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   // prettier-ignore
 
   /**
-   * Indicates that the backing storage owns durable definitions.
+   * Indicates that the backing storage retains durable definitions.
    */
   readonly persistent = true;
+
+  /**
+   * Physical record family selected from the logical Bounded Context name.
+   */
+  readonly #storageGroup: StorageGroup;
+
+  readonly #context: StorageContext;
+
+  readonly #storageFactory: StorageFactory;
 
   readonly #storage: RecordStorage<SubscriptionId, SubscriptionRecord>;
 
@@ -474,15 +501,40 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   /**
    * Creates a registry backed by one compare-and-set-capable record handle.
    *
-   * @param context Identifies the storage namespace.
+   * @param context Identifies the storage context.
    * @param storageFactory Creates the registry record handle.
+   * @param storageGroup Selects the physical subscription record family.
    */
-  constructor(context: StorageContext, storageFactory: StorageFactory) {
-    this.#storage = storageFactory.createRecordStorage(context, subscriptionRecordSpec);
+  constructor(context: StorageContext, storageFactory: StorageFactory, storageGroup: StorageGroup) {
+    this.#context = context.multitenant
+      ? { name: context.name, multitenant: true, tenantId: clone(TenantIdSchema, context.tenantId) }
+      : { name: context.name, multitenant: false };
+    this.#storageFactory = storageFactory;
+    this.#storageGroup = storageGroup;
+    this.#storage = storageFactory.createRecordStorage(
+      this.#context,
+      subscriptionRecordSpec,
+      this.#storageGroup,
+    );
     if (!this.#storage.atomicCompareAndSet) {
       this.#storage.close();
       throw new Error("Stand subscription storage must support atomic compare-and-set.");
     }
+  }
+
+  /**
+   * Prepares this registry's captured factory, context, and physical group.
+   *
+   * @param mode Required preparation mode.
+   * @returns Completion of storage preparation.
+   */
+  prepare(mode: StoragePreparationMode): Promise<void> {
+    return StoragePreparations.for(this.#storageFactory).prepareRecord(
+      this.#context,
+      subscriptionRecordSpec,
+      this.#storageGroup,
+      mode,
+    );
   }
 
   /**

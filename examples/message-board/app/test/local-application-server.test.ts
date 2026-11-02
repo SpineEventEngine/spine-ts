@@ -82,7 +82,7 @@ describe("compiled local MessageBoard entrypoint", () => {
     const webPort = 25_173;
     const { child, port } = await CompiledBoardProcess.start(webPort);
     try {
-      const origin = `http://127.0.0.1:${String(webPort)}`;
+      const origin = `https://127.0.0.1:${String(webPort)}`;
       const response = await fetch(
         `http://127.0.0.1:${String(port)}/spine.client.QueryService/Read`,
         {

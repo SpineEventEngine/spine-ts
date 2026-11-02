@@ -26,6 +26,6 @@ if (!/^[1-9][0-9]*$/u.test(configuredWebPort) || !Number.isSafeInteger(webPort) 
   throw new Error("MESSAGE_BOARD_WEB_PORT must be a TCP port between 1 and 65535.");
 const server = await new MessageBoardApplication().run({
   port,
-  webOrigin: `http://127.0.0.1:${String(webPort)}`,
+  webOrigin: `https://127.0.0.1:${String(webPort)}`,
 });
 console.log(`MessageBoard local server ready at ${server.baseUrl}`);

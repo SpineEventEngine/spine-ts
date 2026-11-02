@@ -28,6 +28,7 @@ import {
   EventStore,
   RecordColumn,
   RecordStorage,
+  StorageGroup,
   type RecordSpec,
   type NormalizedQueryPlan,
   type StorageContext,
@@ -557,7 +558,8 @@ describe("Stand", () => {
     observedEventBusSubscriptions.length = 0;
     const storageFactory = new InMemoryStorageFactory();
     const context = { name: "DurableRestart", multitenant: false } as const;
-    const first = new StorageSubscriptionRegistry(context, storageFactory);
+    const group = new StorageGroup("subscriptions_DurableRestart");
+    const first = new StorageSubscriptionRegistry(context, storageFactory, group);
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "restart" }),
       topic: {
@@ -577,13 +579,13 @@ describe("Stand", () => {
     const bus = eventBusAccess.createSystemBus(undefined);
     stand.register(ProjectOverviewStateSchema);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
-    const restarted = new StorageSubscriptionRegistry(context, storageFactory);
+    const restarted = new StorageSubscriptionRegistry(context, storageFactory, group);
     const runtime = pairedRuntime(stand, storageFactory, restarted, bus, bus);
     await runtime.start();
     await runtime.consume("restart", () => undefined);
     expect(observedEventBusSubscriptions.some((observer) => !observer.closed)).toBe(true);
 
-    const remote = new StorageSubscriptionRegistry(context, storageFactory);
+    const remote = new StorageSubscriptionRegistry(context, storageFactory, group);
     await remote.delete(subscription.id);
     await remote.close();
     await vi.advanceTimersByTimeAsync(10_000);

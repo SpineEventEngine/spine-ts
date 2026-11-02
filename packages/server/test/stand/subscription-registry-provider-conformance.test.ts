@@ -23,6 +23,7 @@ import {
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import {
   InMemoryStorageFactory,
+  StorageGroup,
   type RecordSpec,
   type StorageContext,
   type StorageFactory,
@@ -50,6 +51,7 @@ async function exerciseRegistry(factory: StorageFactory): Promise<void> {
   const registry = new StorageSubscriptionRegistry(
     { name: "provider-selection", multitenant: false },
     factory,
+    new StorageGroup("subscriptions_provider-selection"),
   );
   await expect(registry.create(subscription("one"))).resolves.toMatchObject({ kind: "created" });
   await expect(registry.get(id("one"))).resolves.toMatchObject({
@@ -76,7 +78,11 @@ describe("StorageSubscriptionRegistry provider configuration", () => {
       return open(context, spec);
     }) as never;
 
-    new StorageSubscriptionRegistry({ name: "provider-columns", multitenant: false }, factory);
+    new StorageSubscriptionRegistry(
+      { name: "provider-columns", multitenant: false },
+      factory,
+      new StorageGroup("subscriptions_provider-columns"),
+    );
 
     expect(columns).toContain("when_activation_expires");
     expect(columns).not.toContain("whenActivationExpires");
@@ -131,7 +137,11 @@ describe("StorageSubscriptionRegistry provider configuration", () => {
     } as never);
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: "mysql://db.example/provider_selection" })
-      .setTableName(SubscriptionRecordSchema, "stand_subscription_records")
+      .setTableName(
+        SubscriptionRecordSchema,
+        SubscriptionRecordSchema,
+        "stand_subscription_records",
+      )
       .build();
 
     await exerciseRegistry(factory);

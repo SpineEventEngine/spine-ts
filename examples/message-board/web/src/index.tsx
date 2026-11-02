@@ -16,8 +16,12 @@ import { SpineClientProvider } from "@spine-event-engine/client-react";
 import type { ClientRequest, SubscriptionLifecycle } from "@spine-event-engine/client-web";
 import { CircleCheck, WifiOff } from "lucide-react";
 import { type ReactElement } from "react";
+import type { AnnouncementBoardView } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 
 import { useBoardSync } from "./board-sync.js";
+import { BoardStatisticsPanel, useBoardStatistics } from "./board-statistics.js";
+import { useAnnouncementSync } from "./announcement-sync.js";
+import { MessageNotifications } from "./message-notifications.js";
 import { Alert } from "./components/ui/alert.js";
 import { Button } from "./components/ui/button.js";
 import { Card, CardContent, CardHeader } from "./components/ui/card.js";
@@ -73,17 +77,21 @@ const Board = function Board({
   actor,
   createMessageId,
 }: MessageBoardAppProps): ReactElement {
+  const statistics = useBoardStatistics(board, request);
+  const announcement = useAnnouncementSync(request, statistics.refresh);
   const synchronized = useBoardSync(board, request);
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:py-12">
-      <header className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Message Board</h1>
-        </div>
-        <SubscriptionBadge lifecycle={synchronized.lifecycle} />
-      </header>
+      <BoardHeader lifecycle={synchronized.lifecycle} />
 
+      <BoardStatisticsPanel
+        value={statistics.value}
+        status={statistics.status}
+        liveStatus={statistics.liveStatus}
+      />
+      <AnnouncementPanel value={announcement.value} error={announcement.error} />
       <MessageList rows={synchronized.rows} />
+      <MessageNotifications board={board} request={request} />
       <PostForm
         board={board}
         actor={actor}
@@ -94,6 +102,24 @@ const Board = function Board({
     </main>
   );
 };
+
+const BoardHeader = ({ lifecycle }: { readonly lifecycle: SubscriptionLifecycle | undefined }): ReactElement => (
+  <header className="flex items-center justify-between gap-4">
+    <div><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Message Board</h1></div>
+    <SubscriptionBadge lifecycle={lifecycle} />
+  </header>
+);
+
+const AnnouncementPanel = ({ value, error }: {
+  readonly value: AnnouncementBoardView | undefined;
+  readonly error: boolean;
+}): ReactElement => (
+  <section aria-label="Announcements">
+    <h2>Latest announcement</h2>
+    {value === undefined ? <p>No announcements yet</p> : <p>{value.text}</p>}
+    {error ? <p role="alert">Announcements are unavailable. Reload to retry.</p> : null}
+  </section>
+);
 
 const SubscriptionBadge = function SubscriptionBadge({
   lifecycle,

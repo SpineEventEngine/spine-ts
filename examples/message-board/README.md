@@ -2,17 +2,15 @@
 
 Message Board is a small, complete Spine TS application: enter a username and
 message in React, send a real command, and see the saved message on a board.
-It is the repository's best place to learn how a browser client, a bounded
-context, and a query-side view fit together.
+It shows how a browser client, two Bounded Contexts, and query-side views fit together.
 
 ## 💡 What you will learn
 
 - ✅ How one Proto model is shared by the Node application and React UI.
 - ✅ How an Aggregate accepts a write and a Projection builds the read model.
-- ✅ Why browser traffic goes through a public-demo gateway while native
-  gRPC remains private.
+- ✅ Why browser traffic goes through the Gateway while native gRPC remains private.
 - ✅ How normal complete subscription payloads update rows locally and when to recover by query.
-- ✅ How a separate application assembles handlers from packages and applies App Query read policies.
+- ✅ How the running application assembles handlers from packages and applies App Query read policies.
 
 ## Posting and continuing updates
 
@@ -33,7 +31,7 @@ subscriptions, and the local single-process UI needs no shared Delivery server.
 ```text
 message-board/
 ├── model/    # Message Board messages, commands, events, and rejections
-├── app/      # Bounded context, domain handlers, policy, and server
+├── app/      # Bounded Context, domain handlers, policy, and server
 ├── command-handlers/ # Separate Aggregate package for composed assembly
 ├── view-handlers/    # Separate Projection package for composed assembly
 ├── composed-app/     # App Query, typed read policies, and cross-package BCs
@@ -44,17 +42,14 @@ message-board/
 These are private workspace packages. Generated model and handler files are
 build outputs, so build them once before starting local processes.
 
-The existing `app` and `web` packages remain the runnable UI. The
-[composed-app example](composed-app/README.md) separately demonstrates an
-application whose Bounded Context spans handler packages, with an App Query,
-typed read filters, and native Entity/Event subscriptions.
+Every maintained launcher builds the same [composed application](composed-app/README.md): the Message Board and announcements Bounded Contexts, typed App Queries, read filters, and Entity/Event subscriptions.
 
 ## 🚀 Start locally
 
-| Mode                             | Storage            | Delivery      | Gateway/UI route       | Owner    |
+| Mode                             | Storage            | Delivery      | Gateway/UI route       | Launcher |
 | -------------------------------- | ------------------ | ------------- | ---------------------- | -------- |
-| local single-process             | in-memory          | local         | direct UI to Gateway   | launcher |
-| local multi-process              | Datastore emulator | shared server | direct UI to Gateway   | launcher |
+| local single-process             | in-memory          | local         | HTTPS Vite edge        | launcher |
+| local multi-process              | Datastore emulator | shared server | HTTPS Vite edge        | launcher |
 | combined container               | Datastore emulator | shared server | stock UI through Envoy | Compose  |
 | one-node managed container       | Datastore emulator | shared server | stock UI through Envoy | Compose  |
 | distributed multi-node container | shared Datastore   | shared server | stock UI through Envoy | Compose  |
@@ -66,6 +61,17 @@ pnpm install --frozen-lockfile
 pnpm typecheck:build
 ```
 
+Before running a local browser mode, install and trust `mkcert` through your local certificate workflow. Create a certificate for both browser names (the scripts do not change your trust store):
+
+```bash
+mkdir -p examples/message-board/web/.local
+mkcert -key-file examples/message-board/web/.local/localhost-key.pem \
+  -cert-file examples/message-board/web/.local/localhost-cert.pem \
+  localhost 127.0.0.1
+```
+
+The launchers accept `MESSAGE_BOARD_TLS_KEY_FILE` and `MESSAGE_BOARD_TLS_CERT_FILE` for other trusted files. The HTTPS UI proxies only the reserved Spine RPC paths to the private HTTP Gateway; Chromium negotiates HTTP/2 and can keep multiple board, statistics, announcement, and Event streams open across tabs.
+
 For the local single-process mode, use the launcher. It builds the generated
 model, starts the in-memory application and Gateway, then keeps the stock UI
 in the foreground; `Ctrl-C` stops both processes:
@@ -74,7 +80,7 @@ in the foreground; `Ctrl-C` stops both processes:
 examples/message-board/scripts/start-local-single-process.sh
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173), enter a username and a
+Open [https://127.0.0.1:5173](https://127.0.0.1:5173), enter a username and a
 message, and post it to `general`. Command+Enter on macOS, or Control+Enter
 elsewhere, posts; plain Enter adds a line. Stop either process with `Ctrl-C`.
 Set `MESSAGE_BOARD_LOCAL_PORT` and `MESSAGE_BOARD_WEB_PORT` to distinct available
@@ -91,7 +97,7 @@ examples/message-board/scripts/start-local-multi-process.sh
 
 It builds the matching Delivery image, owns a Datastore emulator and one shared
 Delivery server, starts two managed application replicas plus the Gateway and
-stock UI, then prints [http://127.0.0.1:5173](http://127.0.0.1:5173). `Ctrl-C`
+stock UI, then prints [https://127.0.0.1:5173](https://127.0.0.1:5173). `Ctrl-C`
 stops every process and container that this launcher created. Multiple replicas
 share Delivery; the in-memory single-process launcher above is the local-only path.
 
@@ -106,7 +112,7 @@ MESSAGE_BOARD_WEB_PORT=25173 MESSAGE_BOARD_IMAGE_TAG=sqlrel-example \
 examples/message-board/scripts/start-local-multi-process.sh
 ```
 
-The UI is then at `http://127.0.0.1:25173`. The process and shard counts are
+The UI is then at `https://127.0.0.1:25173`. The process and shard counts are
 independent; use ports and an image tag unused by other local runs.
 
 Kubernetes manifests are static deployment references, not a locally runnable
@@ -120,19 +126,22 @@ browser displays the server's structured response instead of duplicating rules.
 
 ```mermaid
 flowchart LR
-  React[React in the browser] -->|gRPC-Web or Connect| Gateway[Public browser gateway]
+  React[React in the browser] -->|HTTPS/HTTP2| Edge[Local Vite edge or Envoy]
+  Edge -->|Connect RPC| Gateway[Public browser gateway]
   Gateway --> Native[Private native gRPC services]
-  Native --> Context[Message Board bounded context]
+  Native --> Context[Message Board Bounded Context]
   Context --> Aggregate[BoardMessageAggregate]
   Aggregate -->|MessagePosted| Projection[BoardViewProjection]
   Aggregate --> Storage[(Application-selected storage)]
   Projection --> Storage
-  React -->|authoritative query| Gateway
+  React -->|authoritative query| Edge
   Native -->|query response| Gateway
-  Gateway -->|query response| React
+  Gateway -->|query response| Edge
+  Edge -->|query response| React
   Projection -->|complete entity payload| Native
   Native -->|best-effort payload fan-in| Gateway
-  Gateway -->|complete payload| React
+  Gateway -->|complete payload| Edge
+  Edge -->|complete payload| React
 ```
 
 The browser never receives the native backend address. For local development,
@@ -140,16 +149,15 @@ The browser never receives the native backend address. For local development,
 native HTTP/2 backend and a public loopback browser gateway on port 8090. The
 public-demo Gateway checks the selected actor and tenant and forwards only
 approved traffic. Commands retain their original context for outcome matching;
-Queries and subscription Topics use the resolved context. The bounded context
-does not read browser credentials. The React client may use either gRPC-Web or
+Queries and subscription Topics use the resolved context. The Bounded Context reads verified principal and authority facts, never browser-supplied role claims. The React client may use either gRPC-Web or
 Connect at that public boundary.
 
 `BoardMessageAggregate` represents one message ID and refuses a duplicate before it
 changes state. This is the `postMessage()` handler excerpt from
-[`BoardMessageAggregate`](app/src/index.ts); imports and unrelated class members
+[`BoardMessageAggregate`](command-handlers/src/index.ts); imports and unrelated class members
 are omitted to focus on the handler. Its return value feeds the read model:
 
-<!-- docs-snippet-path: examples/message-board/app/src/index.ts -->
+<!-- docs-snippet-path: examples/message-board/command-handlers/src/index.ts -->
 
 ```ts
 import { clone, create } from "@bufbuild/protobuf";

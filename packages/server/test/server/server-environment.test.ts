@@ -19,10 +19,10 @@ import { EventContextSchema, VersionSchema, type TenantId } from "@spine-event-e
 import {
   InMemoryStorageFactory,
   StorageFactory,
+  StorageGroup,
   type RecordSpec,
   type RecordStorage,
   type StorageContext,
-  type StorageGroup,
 } from "@spine-event-engine/storage";
 import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 
@@ -820,6 +820,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const registry = new StorageSubscriptionRegistry(
       { name: "PersistentTasks", multitenant: false },
       storageFactory,
+      new StorageGroup("subscriptions_PersistentTasks"),
     );
     const context = await BoundedContext.singleTenant("PersistentTasks")
       .withSubscriptionRegistry(registry)

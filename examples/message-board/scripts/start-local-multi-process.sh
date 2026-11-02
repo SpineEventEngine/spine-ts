@@ -10,6 +10,9 @@ datastore_port=${MESSAGE_BOARD_DATASTORE_PORT:-8081}
 coordinator_port=${MESSAGE_BOARD_COORDINATOR_PORT:-8091}
 gateway_port=${MESSAGE_BOARD_GATEWAY_PORT:-8090}
 web_port=${MESSAGE_BOARD_WEB_PORT:-5173}
+tls_key=${MESSAGE_BOARD_TLS_KEY_FILE:-$root/examples/message-board/web/.local/localhost-key.pem}
+tls_cert=${MESSAGE_BOARD_TLS_CERT_FILE:-$root/examples/message-board/web/.local/localhost-cert.pem}
+[[ -r "$tls_key" && -r "$tls_cert" ]] || { echo "Provide trusted local TLS files via MESSAGE_BOARD_TLS_KEY_FILE and MESSAGE_BOARD_TLS_CERT_FILE (see Message Board README)." >&2; exit 1; }
 process_count=${MESSAGE_BOARD_PROCESS_COUNT:-2}
 shard_count=${MESSAGE_BOARD_DELIVERY_SHARD_COUNT:-2}
 image_tag=${MESSAGE_BOARD_IMAGE_TAG:-local}
@@ -106,7 +109,7 @@ grep -q 'MessageBoard managed coordinator ready' "$coordinator_log" || {
   exit 1
 }
 
-HOST=127.0.0.1 PORT="$gateway_port" BROWSER_ORIGIN="http://127.0.0.1:$web_port" BACKEND_URLS="http://127.0.0.1:$coordinator_port" \
+HOST=127.0.0.1 PORT="$gateway_port" BROWSER_ORIGIN="https://127.0.0.1:$web_port" BACKEND_URLS="http://127.0.0.1:$coordinator_port" \
   DATASTORE_PROJECT_ID="$name" \
   DATASTORE_EMULATOR_HOST="127.0.0.1:$datastore_port" node "$root/examples/message-board/app/dist/src/gateway-server.js" \
   >"$gateway_log" 2>&1 & gateway_pid=$!
@@ -117,14 +120,17 @@ for attempt in $(seq 1 30); do
 done
 grep -q 'MessageBoard gateway ready' "$gateway_log" || { cat "$gateway_log" >&2; exit 1; }
 
-VITE_MESSAGE_BOARD_GATEWAY_URL="http://127.0.0.1:$gateway_port" \
+VITE_MESSAGE_BOARD_GATEWAY_URL="https://127.0.0.1:$web_port" \
+  VITE_MESSAGE_BOARD_AUTH_MODE="${MESSAGE_BOARD_AUTH_MODE:-public}" \
+  MESSAGE_BOARD_INTERNAL_GATEWAY_URL="http://127.0.0.1:$gateway_port" \
+  MESSAGE_BOARD_TLS_KEY_FILE="$tls_key" MESSAGE_BOARD_TLS_CERT_FILE="$tls_cert" \
   node "$root/examples/message-board/web/node_modules/vite/bin/vite.js" "$root/examples/message-board/web" --host 127.0.0.1 --port "$web_port" --strictPort >"$ui_log" 2>&1 & ui_pid=$!
 for attempt in $(seq 1 30); do
-  curl --fail --silent "http://127.0.0.1:$web_port" >/dev/null 2>&1 && break
+  curl --insecure --fail --silent "https://127.0.0.1:$web_port" >/dev/null 2>&1 && break
   kill -0 "$ui_pid" 2>/dev/null || { cat "$ui_log" >&2; exit 1; }
   sleep 1
 done
-curl --fail --silent "http://127.0.0.1:$web_port" >/dev/null 2>&1 || { cat "$ui_log" >&2; exit 1; }
+curl --insecure --fail --silent "https://127.0.0.1:$web_port" >/dev/null 2>&1 || { cat "$ui_log" >&2; exit 1; }
 
-echo "Message Board local multi-process UI: http://127.0.0.1:$web_port"
+echo "Message Board local multi-process UI: https://127.0.0.1:$web_port"
 wait "$ui_pid"

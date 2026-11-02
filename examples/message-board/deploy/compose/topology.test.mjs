@@ -30,11 +30,12 @@ test("declares a combined topology with framework-owned public bindings and one 
   assert.deepEqual(services.envoy.ports, ["127.0.0.1:${MESSAGE_BOARD_PUBLIC_PORT:-18080}:8080"]);
   assert.equal(
     services.combined.environment.BROWSER_ORIGIN,
-    "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
+    "https://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
   );
   assert.doesNotMatch(document, /SUBSCRIPTION_REGISTRY_NAMESPACE/u);
   assert.match(document, /spine-ts\/simple-delivery-server:\$\{MESSAGE_BOARD_IMAGE_TAG:-local\}/u);
-  assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
+  assert.equal(services.web.environment.MESSAGE_BOARD_AUTH_MODE, "${MESSAGE_BOARD_AUTH_MODE:-public}");
+  assert.equal(services.combined.environment.MESSAGE_BOARD_SESSION_KEY_ID, "${MESSAGE_BOARD_SESSION_KEY_ID:-}");
   assert.doesNotMatch(document, /replicas:/u);
   assert.match(document, /MESSAGE_BOARD_IMAGE_TAG/u);
   assert.match(document, /MESSAGE_BOARD_PUBLIC_PORT/u);
@@ -59,11 +60,11 @@ test("declares one local-fixture gateway and one managed complete-replica node",
   assert.deepEqual(services.envoy.ports, ["127.0.0.1:${MESSAGE_BOARD_PUBLIC_PORT:-18080}:8080"]);
   assert.equal(
     services.gateway.environment.BROWSER_ORIGIN,
-    "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
+    "https://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
   );
   assert.equal(
     services.web.environment.MESSAGE_BOARD_GATEWAY_URL,
-    "http://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
+    "https://localhost:${MESSAGE_BOARD_PUBLIC_PORT:-18080}",
   );
   assert.match(document, /BACKEND_URLS: http:\/\/application-node:8080/mu);
   assert.match(document, /PROCESS_COUNT: "2"/u);
@@ -81,7 +82,9 @@ test("declares one local-fixture gateway and one managed complete-replica node",
     document,
     /gateway:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
   );
-  assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
+  assert.equal(services.web.environment.MESSAGE_BOARD_AUTH_MODE, "${MESSAGE_BOARD_AUTH_MODE:-public}");
+  assert.equal(services["application-node"].environment.MESSAGE_BOARD_SESSION_KEY_ID,
+    services.gateway.environment.MESSAGE_BOARD_SESSION_KEY_ID);
   assert.equal(
     (
       document.match(/spine-ts\/simple-delivery-server:\$\{MESSAGE_BOARD_IMAGE_TAG:-local\}/gu) ??
@@ -93,13 +96,15 @@ test("declares one local-fixture gateway and one managed complete-replica node",
   assert.match(document, /MESSAGE_BOARD_PUBLIC_PORT/u);
   assert.match(
     document,
-    /MESSAGE_BOARD_GATEWAY_URL: "http:\/\/localhost:\$\{MESSAGE_BOARD_PUBLIC_PORT:-18080\}"/u,
+    /MESSAGE_BOARD_GATEWAY_URL: "https:\/\/localhost:\$\{MESSAGE_BOARD_PUBLIC_PORT:-18080\}"/u,
   );
 });
 
 for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
   test(`${envoy.split("/").at(-1)} serves the stock UI and admits browser RPCs`, () => {
     const configuration = parseDocument(readFileSync(envoy, "utf8")).toJSON();
+    assert.deepEqual(configuration.static_resources.listeners[0].filter_chains[0]
+      .transport_socket.typed_config.common_tls_context.alpn_protocols, ["h2", "http/1.1"]);
     const httpConnectionManager = httpConnectionManagers(configuration).at(0);
     assert.notEqual(httpConnectionManager, undefined, "missing HTTP connection manager");
     assert.equal(httpConnectionManager.stream_idle_timeout, "0s");
@@ -107,7 +112,7 @@ for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
       httpConnectionManager.route_config.virtual_hosts[0].typed_per_filter_config[
         "envoy.filters.http.cors"
       ].allow_origin_string_match,
-      [{ safe_regex: { regex: "^http://localhost:[0-9]+$" } }],
+      [{ safe_regex: { regex: "^https://localhost:[0-9]+$" } }],
     );
     assert.deepEqual(routes(httpConnectionManager), [
       ...browserRoutes,
@@ -119,13 +124,14 @@ for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
 
 test("documents the Envoy browser port published by both Compose topologies", () => {
   const deployment = readFileSync(join(composeRoot, "..", "README.md"), "utf8");
-  assert.match(deployment, /http:\/\/localhost:18080/gu);
+  assert.match(deployment, /https:\/\/localhost:18080/gu);
 });
 
 const browserRoutes = [
   ["/spine.auth.AuthenticationService/ResolveContext", "30s"],
   ["/spine.client.CommandService/Post", "30s"],
   ["/spine.client.QueryService/Read", "30s"],
+  ["/spine.client.QueryService/Execute", "30s"],
   ["/spine.client.SubscriptionService/Subscribe", "30s"],
   ["/spine.client.SubscriptionService/Activate", "0s"],
   ["/spine.client.SubscriptionService/Cancel", "30s"],

@@ -11,13 +11,15 @@ Production hosts may supply gRPC-Web or Connect through
 username and message values are submitted to the server so its Proto validation
 messages can be shown, but the server does not accept them.
 
-The gateway URL defaults to `http://127.0.0.1:8090` and accepts only an
-`http://127.0.0.1` URL with a port from 1 through 65535. The Vite origin is
-`http://127.0.0.1:5173`.
+The local browser Gateway URL is the HTTPS Vite origin, normally
+`https://127.0.0.1:5173`. Vite requires certificate/key files, the internal
+HTTP Gateway URL, and the same-origin browser URL when serving. The browser
+client accepts an explicit HTTP or HTTPS URL with a port from 1 through 65535;
+the maintained local launcher uses HTTPS so concurrent streams negotiate HTTP/2.
 
 ## UI and recovery behavior
 
-The host creates one request scope for the public demo. The form uses
+The host creates one request scope for public mode or one verified bearer session per signed reader. Board selection and account switches replace the reader generation; late validation and query completions cannot overwrite the current reader. The form uses
 `postAndSubscribe` for `PostMessage`, selecting `MessagePosted` and
 `MessageAlreadyPosted`. It reports admission separately from the observed
 outcome and keeps listening after a first-update timeout. It does not repost
@@ -26,7 +28,7 @@ on timeout. Blank values still reach the server for validation.
 Each post receives its updates separately and is canceled separately. Component
 retirement aborts setup/posting and cancels the handle; stale generations cannot
 change the UI. After an outcome is handled, the form cancels that per-post
-subscription. The board-view subscription continues independently. Failed
+subscription. The board-view and broad MessagePosted Event subscriptions continue independently. The statistics Entity Topic stays active alongside per-post outcome streams over the HTTPS/HTTP2 edge and reconciles each update with a typed App Query. Failed
 cleanup remains retryable through the client.
 
 Board state starts with an authoritative Query. A normal complete update is
@@ -43,6 +45,8 @@ subscriptions before sending; failed activation prevents that Command from
 being sent. The message textarea posts on Command+Enter
 or Control+Enter, keeps plain Enter multiline, and ignores shortcuts during IME
 composition.
+
+`ReadBoardStats` reports lifetime messages, distinct domain author IDs, and first accepted Event time for the selected board and announcements. Restricted boards and announcements are filtered by verified authority facts; public names are redacted and contributor IDs never leave the Server.
 
 ## Tests and Envoy topology
 

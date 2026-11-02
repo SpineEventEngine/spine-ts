@@ -5,19 +5,13 @@ should start with the [Message Board README](README.md).
 
 ## Package responsibilities
 
-- `model` contains authored Message Board Proto sources, the single `UserId` definition,
-  generated Protobuf-ES code, typed rejections, and its `ProtoModule`.
-- `app` contains the bounded context, Aggregate, Projection, generated model
-  registry and passive handler metadata, public-demo admission, and executable server.
-- `web` contains the React view, request scope, query,
-  subscription, and visible retry behavior.
-- `command-handlers`, `view-handlers`, and `composed-app` form the separate
-  [multi-package example](composed-app/README.md): one Bounded Context spans the
-  two handler packages, and the app registers its App Query handler and typed
-  Bounded Context/Server read filters.
+- `model` contains authored Protobuf messages and typed App Query companions.
+- `command-handlers` contains `BoardMessageAggregate`; `view-handlers` contains the Message Board and announcement Projections.
+- `composed-app` assembles both Bounded Contexts and typed read policies.
+- `app` starts that same assembly in local, combined, and managed deployment modes and configures admission.
+- `web` renders the real browser readers and posting flow.
 
-Nothing in the family is published. Generated Proto, handler output, and
-`dist/` are ignored outputs and must not be edited.
+Generated Proto, handler output, and `dist/` are ignored outputs and must not be edited.
 
 ## Runtime topology
 
@@ -28,17 +22,13 @@ and shutdown. The application supplies `BoardAccessPolicy`,
 `BoardContextResolver`, its model registry, and framework `publicAccess`. The
 browser never receives the private backend URL.
 
-The local browser origin is exactly `http://127.0.0.1:5173`. The example
-creates no browser credential; production hosts choose their own admission,
-TLS, and network policy.
+The local browser origin is exactly `https://127.0.0.1:5173`. Public mode uses no browser credential. Signed mode verifies an operator-issued session before exposing restricted readers; TLS and native endpoint isolation remain deployment responsibilities.
 
 ## Domain and client behavior
 
 Each `MessageId` identifies one `BoardMessageAggregate`. `PostMessage` is
 validated from its Proto options before the handler runs. A successful handler
-stores the Aggregate and emits `MessagePosted`; `BoardViewProjection`
-creates one full-visible `BoardMessageView` with indexed board, author, and
-posting time.
+stores the Aggregate and emits `MessagePosted`; `BoardViewProjection` creates `BoardMessageView`, while cumulative Projections build lifetime board and announcement statistics from accepted Events.
 
 Duplicate or concurrent reuse of an ID keeps the first Aggregate and Projection
 and publishes one `MessageAlreadyPosted` rejection for the later command. The
@@ -63,8 +53,7 @@ while IME composition is active.
 outcomes. A first-update timeout displays a waiting notice without resending or
 closing observation; late confirmation remains valid. The application cancels
 this per-post subscription after handling the outcome or retiring the form.
-The board-view Entity subscription keeps delivering updates and has no
-first-update warning for an idle board.
+The board-view Entity subscription keeps delivering updates and has no first-update warning for an idle board. The statistics Entity Topic stays active alongside the board, announcement, and Event Topics over the HTTPS/HTTP2 edge and triggers authoritative `ReadBoardStats` refreshes. The broad Event notification Topic stays continuous.
 
 ## Verification and interoperability
 
