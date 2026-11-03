@@ -26,7 +26,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ProtoGeneration } from "../src/generation/generator.js";
 import { HandlerGeneration } from "../src/generation/handler-generator.js";
@@ -84,204 +84,212 @@ function compile(directory: string): void {
 }
 
 describe("real App Query generation", () => {
-  it("keeps same-basename modules and full-type handler associations distinct", async () => {
-    const temporary = realpathSync(mkdtempSync(join(tmpdir(), "spine-app-query-generation-")));
-    const model = join(temporary, "model");
-    const application = join(temporary, "application");
-    try {
-      mkdirSync(model);
-      mkdirSync(application);
-      write(
-        model,
-        "package.json",
-        JSON.stringify({
-          name: "@example/mixed-query-model",
-          version: "1.0.0",
-          type: "module",
-          dependencies: { "@spine-event-engine/core": frameworkVersion },
-          exports: {
-            "./spine-proto-manifest.json": "./spine-proto-manifest.json",
-            "./generated/*.js": {
-              types: "./dist/generated/*.d.ts",
-              default: "./dist/generated/*.js",
-            },
-          },
-        }),
-      );
-      write(
-        model,
-        "spine-proto.json",
-        JSON.stringify({
-          formatVersion: 1,
-          mode: "model",
-          packageName: "@example/mixed-query-model",
-          protoRoot: "proto",
-          generatedRoot: "src/generated",
-          exportRoot: "generated",
-          dependencies: [],
-          moduleExport: "modelProtoModule",
-        }),
-      );
-      write(
-        model,
-        "tsconfig.json",
-        JSON.stringify({
-          compilerOptions: {
-            module: "NodeNext",
-            moduleResolution: "NodeNext",
-            target: "ES2024",
-            rootDir: "src",
-            outDir: "dist",
-            strict: true,
-            skipLibCheck: true,
-            declaration: true,
-            paths: { "@spine-event-engine/core": [join(root, "packages/core/dist/index.d.ts")] },
-          },
-          include: ["src/**/*.ts"],
-        }),
-      );
-      write(
-        model,
-        "proto/issues/app_queries.proto",
-        [
-          'syntax = "proto3";',
-          "package example.issues;",
-          "",
-          "// Summarizes issue activity.",
-          "message Summary {",
-          "  // Selects the issue scope.",
-          "  message Query {",
-          "    // Scope to summarize.",
-          "    string scope = 1;",
-          "  }",
-          "",
-          "  // Returns the issue count.",
-          "  message Response {",
-          "    // Number of matching issues.",
-          "    int32 count = 1;",
-          "  }",
-          "}",
-          "",
-          "// Lists recent issue identifiers.",
-          "message Recent {",
-          "  // Selects a recent issue page.",
-          "  message Query {",
-          "    // Maximum issue count.",
-          "    int32 limit = 1;",
-          "  }",
-          "",
-          "  // Returns a recent issue page.",
-          "  message Response {",
-          "    // Matching issue identifiers.",
-          "    repeated string ids = 1;",
-          "  }",
-          "}",
-          "",
-          "// Reusable issue criteria, not an application operation.",
-          "message IssueCriteria {",
-          "  // Whether closed issues are included.",
-          "  bool include_closed = 1;",
-          "}",
-          "",
-        ].join("\n"),
-      );
-      write(
-        model,
-        "proto/projects/app_queries.proto",
-        [
-          'syntax = "proto3";',
-          "package example.projects;",
-          "",
-          "// Summarizes project activity.",
-          "message Summary {",
-          "  // Selects the project scope.",
-          "  message Query {",
-          "    // Scope to summarize.",
-          "    string scope = 1;",
-          "  }",
-          "",
-          "  // Returns the project count.",
-          "  message Response {",
-          "    // Number of matching projects.",
-          "    int32 count = 1;",
-          "  }",
-          "}",
-          "",
-        ].join("\n"),
-      );
-      write(
-        model,
-        "proto/helpers/filter_queries.proto",
-        [
-          'syntax = "proto3";',
-          "package example.helpers;",
-          "",
-          "// Reusable filter input without an application operation.",
-          "message FilterCriteria {",
-          "  // Filter label.",
-          "  string label = 1;",
-          "}",
-          "",
-        ].join("\n"),
-      );
-      link(
-        model,
-        "@bufbuild/protobuf",
-        join(root, "packages/proto-tools/node_modules/@bufbuild/protobuf"),
-      );
-      link(model, "@spine-event-engine/proto", join(root, "packages/proto"));
-      link(model, "@spine-event-engine/core", join(root, "packages/core"));
-      write(
-        model,
-        "src/core-contract.ts",
-        [
-          'import type { AppQueryResponses } from "@spine-event-engine/core";',
-          "",
-          "/** Response associations supplied by generated application query companions. */",
-          "export type RegisteredResponses = AppQueryResponses;",
-          "",
-        ].join("\n"),
-      );
+  let temporary = "";
+  let model = "";
+  let application = "";
 
-      ProtoGeneration.generate(model);
-      expect(existsSync(join(model, "src/generated/issues/app_queries_app_query.ts"))).toBe(true);
-      expect(existsSync(join(model, "src/generated/projects/app_queries_app_query.ts"))).toBe(true);
-      expect(existsSync(join(model, "src/generated/helpers/filter_queries_app_query.ts"))).toBe(
-        false,
-      );
-      expect(existsSync(join(model, "src/generated/helpers/filter_queries_pb.ts"))).toBe(true);
-      compile(model);
+  beforeAll(() => {
+    temporary = realpathSync(mkdtempSync(join(tmpdir(), "spine-app-query-generation-")));
+    model = join(temporary, "model");
+    application = join(temporary, "application");
+    mkdirSync(model);
+    mkdirSync(application);
+    write(
+      model,
+      "package.json",
+      JSON.stringify({
+        name: "@example/mixed-query-model",
+        version: "1.0.0",
+        type: "module",
+        dependencies: { "@spine-event-engine/core": frameworkVersion },
+        exports: {
+          "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+          "./generated/*.js": {
+            types: "./dist/generated/*.d.ts",
+            default: "./dist/generated/*.js",
+          },
+        },
+      }),
+    );
+    write(
+      model,
+      "spine-proto.json",
+      JSON.stringify({
+        formatVersion: 1,
+        mode: "model",
+        packageName: "@example/mixed-query-model",
+        protoRoot: "proto",
+        generatedRoot: "src/generated",
+        exportRoot: "generated",
+        dependencies: [],
+        moduleExport: "modelProtoModule",
+      }),
+    );
+    write(
+      model,
+      "tsconfig.json",
+      JSON.stringify({
+        compilerOptions: {
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          target: "ES2024",
+          rootDir: "src",
+          outDir: "dist",
+          strict: true,
+          skipLibCheck: true,
+          declaration: true,
+          paths: { "@spine-event-engine/core": [join(root, "packages/core/dist/index.d.ts")] },
+        },
+        include: ["src/**/*.ts"],
+      }),
+    );
+    write(
+      model,
+      "proto/issues/app_queries.proto",
+      [
+        'syntax = "proto3";',
+        "package example.issues;",
+        "",
+        "// Summarizes issue activity.",
+        "message Summary {",
+        "  // Selects the issue scope.",
+        "  message Query {",
+        "    // Scope to summarize.",
+        "    string scope = 1;",
+        "  }",
+        "",
+        "  // Returns the issue count.",
+        "  message Response {",
+        "    // Number of matching issues.",
+        "    int32 count = 1;",
+        "  }",
+        "}",
+        "",
+        "// Lists recent issue identifiers.",
+        "message Recent {",
+        "  // Selects a recent issue page.",
+        "  message Query {",
+        "    // Maximum issue count.",
+        "    int32 limit = 1;",
+        "  }",
+        "",
+        "  // Returns a recent issue page.",
+        "  message Response {",
+        "    // Matching issue identifiers.",
+        "    repeated string ids = 1;",
+        "  }",
+        "}",
+        "",
+        "// Reusable issue criteria, not an application operation.",
+        "message IssueCriteria {",
+        "  // Whether closed issues are included.",
+        "  bool include_closed = 1;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    write(
+      model,
+      "proto/projects/app_queries.proto",
+      [
+        'syntax = "proto3";',
+        "package example.projects;",
+        "",
+        "// Summarizes project activity.",
+        "message Summary {",
+        "  // Selects the project scope.",
+        "  message Query {",
+        "    // Scope to summarize.",
+        "    string scope = 1;",
+        "  }",
+        "",
+        "  // Returns the project count.",
+        "  message Response {",
+        "    // Number of matching projects.",
+        "    int32 count = 1;",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    write(
+      model,
+      "proto/helpers/filter_queries.proto",
+      [
+        'syntax = "proto3";',
+        "package example.helpers;",
+        "",
+        "// Reusable filter input without an application operation.",
+        "message FilterCriteria {",
+        "  // Filter label.",
+        "  string label = 1;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    link(
+      model,
+      "@bufbuild/protobuf",
+      join(root, "packages/proto-tools/node_modules/@bufbuild/protobuf"),
+    );
+    link(model, "@spine-event-engine/proto", join(root, "packages/proto"));
+    link(model, "@spine-event-engine/core", join(root, "packages/core"));
+    write(
+      model,
+      "src/core-contract.ts",
+      [
+        'import type { AppQueryResponses } from "@spine-event-engine/core";',
+        "",
+        "/** Response associations supplied by generated application query companions. */",
+        "export type RegisteredResponses = AppQueryResponses;",
+        "",
+      ].join("\n"),
+    );
 
-      const { modelProtoModule } = (await import(
-        pathToFileURL(join(model, "dist/generated/proto-module.js")).href
-      )) as unknown as {
-        readonly modelProtoModule: { readonly schemas: readonly { readonly typeName: string }[] };
-      };
-      const names = modelProtoModule.schemas.map((schema) => schema.typeName);
-      for (const name of [
-        "example.issues.Summary.Query",
-        "example.issues.Summary.Response",
-        "example.issues.Recent.Query",
-        "example.issues.Recent.Response",
-        "example.issues.IssueCriteria",
-        "example.projects.Summary.Query",
-        "example.projects.Summary.Response",
-        "example.helpers.FilterCriteria",
-      ])
-        expect(names).toContain(name);
-      expect(names.filter((name: string) => name.endsWith("Summary.Query"))).toHaveLength(2);
-      const { TypeRegistry } = (await import(
-        pathToFileURL(join(root, "packages/core/dist/index.js")).href
-      )) as unknown as {
-        readonly TypeRegistry: {
-          from(module: unknown): {
-            findByFullName(name: string): { readonly fullTypeName: string } | undefined;
-          };
+    ProtoGeneration.generate(model);
+    expect(existsSync(join(model, "src/generated/issues/app_queries_app_query.ts"))).toBe(true);
+    expect(existsSync(join(model, "src/generated/projects/app_queries_app_query.ts"))).toBe(true);
+    expect(existsSync(join(model, "src/generated/helpers/filter_queries_app_query.ts"))).toBe(
+      false,
+    );
+    expect(existsSync(join(model, "src/generated/helpers/filter_queries_pb.ts"))).toBe(true);
+    compile(model);
+  });
+
+  it("compiles distinct companion modules and retains ordinary helper schemas in the registry", async () => {
+    const { modelProtoModule } = (await import(
+      pathToFileURL(join(model, "dist/generated/proto-module.js")).href
+    )) as unknown as {
+      readonly modelProtoModule: { readonly schemas: readonly { readonly typeName: string }[] };
+    };
+    const names = modelProtoModule.schemas.map((schema) => schema.typeName);
+    for (const name of [
+      "example.issues.Summary.Query",
+      "example.issues.Summary.Response",
+      "example.issues.Recent.Query",
+      "example.issues.Recent.Response",
+      "example.issues.IssueCriteria",
+      "example.projects.Summary.Query",
+      "example.projects.Summary.Response",
+      "example.helpers.FilterCriteria",
+    ])
+      expect(names).toContain(name);
+    expect(names.filter((name: string) => name.endsWith("Summary.Query"))).toHaveLength(2);
+    const { TypeRegistry } = (await import(
+      pathToFileURL(join(root, "packages/core/dist/index.js")).href
+    )) as unknown as {
+      readonly TypeRegistry: {
+        from(module: unknown): {
+          findByFullName(name: string): { readonly fullTypeName: string } | undefined;
         };
       };
-      const registry = TypeRegistry.from(modelProtoModule);
-      for (const name of names) expect(registry.findByFullName(name)?.fullTypeName).toBe(name);
+    };
+    const registry = TypeRegistry.from(modelProtoModule);
+    for (const name of names) expect(registry.findByFullName(name)?.fullTypeName).toBe(name);
+  });
 
+  describe("application handler metadata", () => {
+    beforeAll(() => {
       write(
         application,
         "package.json",
@@ -373,6 +381,9 @@ describe("real App Query generation", () => {
 
       HandlerGeneration.generate(application);
       compile(application);
+    });
+
+    it("pairs same-name operations with their respective handlers and responses", async () => {
       const { spineMetadata } = (await import(
         pathToFileURL(join(application, "dist/generated/spine-metadata.js")).href
       )) as unknown as {
@@ -411,8 +422,10 @@ describe("real App Query generation", () => {
       const generated = readFileSync(join(application, "generated/spine-metadata.ts"), "utf8");
       expect(generated).toContain("issues/app_queries_pb.js");
       expect(generated).toContain("projects/app_queries_pb.js");
-    } finally {
-      rmSync(temporary, { recursive: true, force: true });
-    }
+    });
+  });
+
+  afterAll(() => {
+    if (temporary !== "") rmSync(temporary, { recursive: true, force: true });
   });
 });
