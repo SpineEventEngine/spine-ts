@@ -86,7 +86,6 @@ describe("TS-to-TS multi-machine delivery", () => {
       };
       observation = (async () => {
         for await (const frame of admin.subscribeToShardUpdates(create(EmptySchema))) {
-          if (updates.length === 21) throw new Error("Admin frame collection overflow.");
           updates.push(frame);
         }
       })().catch((error: unknown) => {
@@ -182,12 +181,13 @@ describe("TS-to-TS multi-machine delivery", () => {
       expect(takeoverElapsed).toBeLessThan(TAKEOVER_DEADLINE_MS);
       await eventually(() => {
         rejectStream(streamFailure);
-        const actual = updates.filter(update).map(summary);
+        const actual = canonicalAdminUpdates(updates).map(summary);
         expect([takeoverThrough("NOT_PICKED/1"), takeoverThrough("PICKED/0")]).toContainEqual(
           actual,
         );
       });
-      const stallPrefix = updates.filter(update).map(summary)[ordinaryThrough("beta").length];
+      const stallPrefix =
+        canonicalAdminUpdates(updates).map(summary)[ordinaryThrough("beta").length];
       if (stallPrefix !== "NOT_PICKED/1" && stallPrefix !== "PICKED/0")
         throw new Error("Stall pickup status is invalid.");
       await command(survivor, { command: "replace" });
@@ -197,8 +197,8 @@ describe("TS-to-TS multi-machine delivery", () => {
       });
       await adminBarrier(updates, fullSequence(stallPrefix), () => streamFailure);
       rejectStream(streamFailure);
-      const adminUpdates = updates.filter(update);
-      expect(updates).toHaveLength(21);
+      const adminUpdates = canonicalAdminUpdates(updates);
+      expect(updates.slice(1).every(update)).toBe(true);
       expect(adminUpdates).toHaveLength(20);
       expect(adminUpdates.map(summary)).toEqual(fullSequence(stallPrefix));
       const snapshot = await admin.getShardInfo(create(EmptySchema));
@@ -356,6 +356,33 @@ describe("TS-to-TS multi-machine delivery", () => {
     );
     expect(coordinationState(sendFailure)).toEqual([0, 0, 0, 0, 0]);
   }, 10_000);
+
+  it("accepts only complete same-shard idle pickup cycles after ordinary delivery", () => {
+    const frame = (status: ShardStatus, messages: number, index = 0, ofTotal = 1) => ({
+      value: {
+        case: "update",
+        value: { index: { index, ofTotal }, newStatus: status, newMessagesCount: messages },
+      },
+    });
+    const picked = (messages: number, index = 0, ofTotal = 1) =>
+      frame(ShardStatus.PICKED, messages, index, ofTotal);
+    const unpicked = (messages: number, index = 0, ofTotal = 1) =>
+      frame(ShardStatus.NOT_PICKED, messages, index, ofTotal);
+    const direct = [picked(0), unpicked(0)];
+    const ordinary = [unpicked(1), picked(1), picked(0), unpicked(0)];
+    const completed = [...direct, ...ordinary];
+    const idle = [picked(0), unpicked(0)];
+
+    expect(canonicalAdminUpdates([...completed, ...idle]).map(summary)).toEqual(
+      completed.map(summary),
+    );
+    expect(canonicalAdminUpdates([...direct, ...idle])).toHaveLength(4);
+    expect(canonicalAdminUpdates([...completed, picked(0)])).toHaveLength(7);
+    expect(canonicalAdminUpdates([...completed, picked(0), unpicked(1)])).toHaveLength(8);
+    expect(canonicalAdminUpdates([...completed, picked(0, 1, 2), unpicked(0, 1, 2)])).toHaveLength(
+      8,
+    );
+  });
 });
 
 function parseControlFrame(frame: unknown): unknown {
@@ -493,6 +520,67 @@ function summary(frame: { readonly value: { readonly value: Record<string, unkno
   return `${status}/${String(value.newMessagesCount)}`;
 }
 
+/**
+ * Removes only complete empty pickup cycles after a shard has reached an idle boundary.
+ * The pair must use the same shard as the preceding release; other transitions remain visible.
+ *
+ * @param frames Admin stream frames, including the initial creation frame.
+ * @returns Ordered updates with redundant idle cycles removed.
+ */
+function canonicalAdminUpdates(frames: readonly unknown[]) {
+  const updates = frames.filter(update);
+  const canonical: typeof updates = [];
+  for (let index = 0; index < updates.length; index += 1) {
+    const current = updates[index];
+    const next = updates[index + 1];
+    const prior = canonical.at(-1);
+    if (
+      canonical.length >= ordinaryThrough("alpha").length &&
+      prior !== undefined &&
+      current !== undefined &&
+      next !== undefined &&
+      summary(prior) === "NOT_PICKED/0" &&
+      summary(current) === "PICKED/0" &&
+      summary(next) === "NOT_PICKED/0" &&
+      sameShard(prior, current) &&
+      sameShard(current, next)
+    ) {
+      index += 1;
+      continue;
+    }
+    if (current !== undefined) canonical.push(current);
+  }
+  return canonical;
+}
+
+/**
+ * Checks whether two Admin updates identify the same shard.
+ *
+ * @param left First update.
+ * @param right Second update.
+ * @returns Whether both updates carry the same valid shard index.
+ */
+function sameShard(
+  left: { readonly value: { readonly value: Record<string, unknown> } },
+  right: { readonly value: { readonly value: Record<string, unknown> } },
+): boolean {
+  const first = left.value.value.index;
+  const second = right.value.value.index;
+  return (
+    isRecord(first) &&
+    isRecord(second) &&
+    typeof first.index === "number" &&
+    typeof first.ofTotal === "number" &&
+    Number.isSafeInteger(first.index) &&
+    Number.isSafeInteger(first.ofTotal) &&
+    first.ofTotal > 0 &&
+    first.index >= 0 &&
+    first.index < first.ofTotal &&
+    first.index === second.index &&
+    first.ofTotal === second.ofTotal
+  );
+}
+
 async function adminBarrier(
   updates: readonly unknown[],
   expected: readonly string[],
@@ -500,7 +588,7 @@ async function adminBarrier(
 ): Promise<void> {
   await eventually(() => {
     rejectStream(failure());
-    expect(updates.filter(update).map(summary)).toEqual(expected);
+    expect(canonicalAdminUpdates(updates).map(summary)).toEqual(expected);
   });
 }
 
