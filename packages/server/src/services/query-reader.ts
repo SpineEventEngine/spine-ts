@@ -21,6 +21,9 @@ import type { NormalizedQueryPlan } from "@spine-event-engine/storage";
 import { standAccess, type Stand, type StandReadResult } from "../stand/stand.js";
 import type { ReadSideContext } from "../stand/read-side-filter.js";
 
+/**
+ * Callback notified when a typed Stand query is read.
+ */
 type QueryReaderObserver = (query: Readonly<Query>) => void;
 
 const observers = new Set<QueryReaderObserver>();
@@ -102,6 +105,9 @@ export const QueryReader: Readonly<QueryReaderAccess> = Object.freeze({
       : standAccess.queryPlanVersioned(stand, schema, selected, options, readSide);
   },
 
+  /**
+   * Registers a testing observer and returns a handle that removes it.
+   */
   observe(onRead: QueryReaderObserver): { readonly close: () => void } {
     observers.add(onRead);
     return Object.freeze({

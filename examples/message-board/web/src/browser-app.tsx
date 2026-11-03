@@ -18,9 +18,17 @@ import { LocalBoardGateway } from "./board-config.js";
 import { SessionBoardApp } from "./session-app.js";
 
 declare global {
+
+  /**
+   * Runtime settings injected into the browser page by deployment.
+   */
   interface Window {
     readonly MESSAGE_BOARD_RUNTIME_CONFIG?: Readonly<Record<string, string | undefined>>;
   }
+
+  /**
+   * Bundler environment and optional hot-reload hook for this browser entry.
+   */
   interface ImportMeta {
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly hot?: Readonly<{

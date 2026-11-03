@@ -529,6 +529,9 @@ export interface ReleaseContextOptions {
  * Builds the local ReleaseNotes Bounded Context with a trusted AI registry.
  */
 export const ReleaseNotesContext: Readonly<{
+  /**
+   * Builds the Release Notes Bounded Context with trusted AI and storage facilities.
+   */
   create(
     ai: AiRegistry,
     storage?: StorageFactory,

@@ -143,6 +143,9 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
  */
 export type MessageSchema = GenMessage<Message>;
 
+/**
+ * Nonempty tuple of schemas forming one message interface.
+ */
 type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
 
 /**
@@ -151,6 +154,10 @@ type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
  * @typeParam Schemas Nonempty tuple of member message schemas.
  */
 type InterfaceMember<Schemas extends InterfaceSchemas> = MessageShape<Schemas[number]>;
+
+/**
+ * Secure random APIs used when creating framework signal identifiers.
+ */
 interface SecureRandomCrypto {
   readonly randomUUID?: () => string;
   readonly getRandomValues?: (bytes: Uint8Array) => Uint8Array;
@@ -1838,6 +1845,9 @@ export const defaultStringifierRegistry: StringifierRegistry = new StringifierRe
  */
 export type PrimitiveIdentifierType = "string" | "int32" | "int64";
 
+/**
+ * Packs and unpacks message or primitive Entity identifiers.
+ */
 interface IdentifierCodec {
   // prettier-ignore
 
@@ -1982,9 +1992,25 @@ function packIdentifier<Schema extends MessageSchema>(
   schema: Schema,
   value: MessageShape<Schema>,
 ): Any;
+
+/**
+ * Packs a string identifier into its typed envelope.
+ */
 function packIdentifier(type: "string", value: string): Any;
+
+/**
+ * Packs a validated 32-bit integer identifier into its typed envelope.
+ */
 function packIdentifier(type: "int32", value: number): Any;
+
+/**
+ * Packs a validated 64-bit integer identifier into its typed envelope.
+ */
 function packIdentifier(type: "int64", value: bigint): Any;
+
+/**
+ * Implements packing for registered message and primitive identifier kinds.
+ */
 function packIdentifier(
   type: MessageSchema | PrimitiveIdentifierType,
   value: Message | string | number | bigint,
@@ -2021,9 +2047,25 @@ function unpackIdentifier<Schema extends MessageSchema>(
   schema: Schema,
   value: Any,
 ): MessageShape<Schema> | undefined;
+
+/**
+ * Reads a string identifier from its typed envelope when its kind matches.
+ */
 function unpackIdentifier(type: "string", value: Any): string | undefined;
+
+/**
+ * Reads a 32-bit integer identifier when the packed kind matches.
+ */
 function unpackIdentifier(type: "int32", value: Any): number | undefined;
+
+/**
+ * Reads a 64-bit integer identifier when the packed kind matches.
+ */
 function unpackIdentifier(type: "int64", value: Any): bigint | undefined;
+
+/**
+ * Implements decoding for registered message and primitive identifier kinds.
+ */
 function unpackIdentifier(
   type: MessageSchema | PrimitiveIdentifierType,
   value: Any,
@@ -2529,6 +2571,9 @@ const RegistryLookups = {
   },
 };
 
+/**
+ * Proto module awaiting schema registration in the shared type registry.
+ */
 interface ModuleFrame {
   readonly module: ProtoModule;
   readonly appendSchemas: boolean;
@@ -2541,6 +2586,9 @@ export const spineCoreRegistry: TypeRegistryLookup = RegistryLookups.lookup(
   TypeRegistry.spineCore(),
 );
 
+/**
+ * Validation error fields permitted in a detached public diagnostic.
+ */
 interface SanitizableConstraintViolation {
   readonly typeName: string;
   readonly fieldPath?:

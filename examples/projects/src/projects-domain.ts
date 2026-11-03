@@ -790,6 +790,9 @@ export class CleanupManager extends ProcessManager<string, typeof CleanupManager
   }
 }
 
+/**
+ * One routed participant in the project example's command and Event topology.
+ */
 interface TopologyEntry {
   readonly name: string;
   readonly command?: string;

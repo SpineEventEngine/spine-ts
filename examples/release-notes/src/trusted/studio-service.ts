@@ -286,6 +286,9 @@ export interface StudioHistoryPage {
   readonly cursor?: string;
 }
 
+/**
+ * Immutable generation inputs and identity facts captured at admission.
+ */
 interface GenerationAdmission {
   readonly draftId: string;
   readonly comparison: GitReleaseComparison;
@@ -297,6 +300,9 @@ interface GenerationAdmission {
   rejection?: "inputs-conflict";
 }
 
+/**
+ * Final Event kind used to close a generation attempt.
+ */
 type GenerationTerminalEvidence = "completed" | "terminated";
 
 const Admission = {
@@ -417,12 +423,22 @@ export class ReleaseStudio {
   /**
    * Source Event subscription activated before generation Commands are posted.
    */
-  private sourceSubscription?: { cancel(): Promise<void> };
+  private sourceSubscription?: {
+    /**
+     * Stops source Event observation.
+     */
+    cancel(): Promise<void>;
+  };
 
   /**
    * Typed rejection observation activated before generation Commands are posted.
    */
-  private rejectionSubscription?: { cancel(): Promise<void> };
+  private rejectionSubscription?: {
+    /**
+     * Stops typed Command rejection observation.
+     */
+    cancel(): Promise<void>;
+  };
 
   /**
    * Prevents overlapping selection and generation admission.

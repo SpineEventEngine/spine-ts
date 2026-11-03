@@ -369,7 +369,14 @@ export interface EntitySubscriptionOptions extends ClientOperationOptions {
    *
    * @returns Returns the authoritative entity query.
    */
-  readonly authoritativeQuery: () => Query | { build(): Query };
+  readonly authoritativeQuery: () =>
+    | Query
+    | {
+        /**
+         * Builds the authoritative Entity query after a subscription gap.
+         */
+        build(): Query;
+      };
 }
 
 /**
@@ -791,7 +798,17 @@ export interface ClientRequest {
    * @param options Supplies cancellation options.
    * @returns Returns the query response.
    */
-  send(query: Query | { build(): Query }, options?: ClientOperationOptions): Promise<QueryResponse>;
+  send(
+    query:
+      | Query
+      | {
+          /**
+           * Builds the Entity query submitted by this read operation.
+           */
+          build(): Query;
+        },
+    options?: ClientOperationOptions,
+  ): Promise<QueryResponse>;
 
   /**
    * Executes a generated application request and decodes its paired result.

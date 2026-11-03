@@ -27,6 +27,9 @@ import { SubscriptionObservers } from "./subscription-observer.js";
 import { standAccess, type Stand, type StandSubscription } from "./stand.js";
 import type { StandSubscriptionEntry, StandSubscriptionRegistry } from "./subscription-registry.js";
 
+/**
+ * Durable registry entry and its local Event or Entity observer attachment.
+ */
 interface LocalSubscriptionAttachment {
   readonly entry: StandSubscriptionEntry;
   readonly subscription: StandSubscription;
@@ -36,6 +39,9 @@ const subscriptionRuntimeLoggers = new WeakMap<SubscriptionRuntime, ILogLayer>()
 const subscriptionRuntimeContextNames = new WeakMap<SubscriptionRuntime, string>();
 const subscriptionRuntimes = new WeakSet<SubscriptionRuntime>();
 
+/**
+ * Framework hooks for logger and subscription runtime coordination.
+ */
 interface SubscriptionRuntimeAccess {
   /**
    * Registers the server logger for this runtime.
@@ -223,6 +229,9 @@ export class SubscriptionRuntime {
     return cycle;
   }
 
+  /**
+   * Shares one timer-triggered reconciliation until its registry scan settles.
+   */
   #reconcileTimer(): Promise<void> {
     if (this.#timerReconciliation !== undefined) return this.#timerReconciliation;
     const reconciliation = this.reconcile().finally(() => {
@@ -236,6 +245,9 @@ export class SubscriptionRuntime {
     return reconciliation;
   }
 
+  /**
+   * Emits bounded metadata for a failed background reconciliation.
+   */
   #warnReconciliationFailure(error: unknown): void {
     const logger = subscriptionRuntimeLoggers.get(this);
     if (logger === undefined) return;
@@ -281,6 +293,9 @@ export class SubscriptionRuntime {
     else this.#retireAttached(id);
   }
 
+  /**
+   * Detaches the local observer for one durable subscription ID.
+   */
   #detach(id: string): void {
     const attachment = this.#attachments.get(id);
     if (attachment === undefined) return;
@@ -352,6 +367,9 @@ export class SubscriptionRuntime {
     return this.#closed;
   }
 
+  /**
+   * Drains consumers and closes the registry, retaining every cleanup failure.
+   */
   async #finishClose(): Promise<void> {
     const errors: unknown[] = [];
     await SubscriptionRuntime.#closePart(() => this.drainClose(), errors);
@@ -386,16 +404,29 @@ export class SubscriptionRuntime {
     this.#closed ??= this.#abortClose();
   }
 
+  /**
+   * Drains active subscriptions and closes the registry after failed construction.
+   */
   async #abortClose(): Promise<void> {
     this.beginClose();
     const registryClose = SubscriptionRuntime.#closeThunk(() => this.#registry.close());
     await Promise.allSettled([this.drainClose(), registryClose]);
   }
 
+  /**
+   * Creates a cancellable handle for one attached subscription consumer.
+   */
   #consumerHandle(id: string, consumer: RuntimeConsumer): StandSubscription {
     let closed = false;
+
+    /**
+     * Checks whether this consumer is still registered for its subscription.
+     */
     const active = () => this.#consumers.get(id)?.has(consumer) === true;
     return Object.freeze({
+      /**
+       * Reports whether this consumer was removed or its registration changed.
+       */
       get closed() {
         return closed || !active();
       },
@@ -424,6 +455,9 @@ export class SubscriptionRuntime {
     return this.#consumerHandle(id, consumer);
   }
 
+  /**
+   * Removes one reader callback from the active consumer set.
+   */
   #removeConsumer(id: string, consumer: RuntimeConsumer): void {
     const consumers = this.#consumers.get(id);
     consumers?.delete(consumer);
@@ -445,6 +479,9 @@ export class SubscriptionRuntime {
     }
   }
 
+  /**
+   * Attaches an Event or Entity observer only while the durable entry remains active.
+   */
   async #attach(id: string, expected: StandSubscriptionEntry): Promise<void> {
     const current = await this.#registry.get(create(SubscriptionIdSchema, { value: id }));
     if (current?.phase !== "active" || !sameEntry(current, expected) || this.#closing) return;
@@ -477,6 +514,9 @@ export class SubscriptionRuntime {
       this.#attachments.set(id, { entry: current, subscription: attachment });
   }
 
+  /**
+   * Runs one close step and collects its failure without skipping later steps.
+   */
   static async #closePart(work: () => Promise<void>, errors: unknown[]): Promise<void> {
     try {
       await work();
@@ -485,10 +525,16 @@ export class SubscriptionRuntime {
     }
   }
 
+  /**
+   * Adapts a registry close callback to the runtime's close work signature.
+   */
   static async #closeThunk(work: () => Promise<void>): Promise<void> {
     await work();
   }
 
+  /**
+   * Delivers one update to current consumers without letting a callback suppress peers.
+   */
   #notify(id: string, update: SubscriptionUpdate): void {
     for (const consumer of [...(this.#consumers.get(id) ?? [])]) {
       const attached = this.#attachments.get(id);
@@ -515,6 +561,9 @@ export class SubscriptionRuntime {
     }
   }
 
+  /**
+   * Records a failed consumer callback without logging the update payload.
+   */
   static #warnConsumerFailure(logger: ILogLayer | undefined, id: string): void {
     if (logger === undefined) return;
     emitServerWarning(logger, "Subscription consumer delivery failed.", {
@@ -524,6 +573,9 @@ export class SubscriptionRuntime {
     });
   }
 
+  /**
+   * Checks whether a callback result needs asynchronous failure observation.
+   */
   static #isPromiseLike(value: unknown): value is PromiseLike<unknown> {
     return (
       (typeof value === "object" || typeof value === "function") &&
@@ -581,6 +633,9 @@ export const subscriptionRuntimeAccess: SubscriptionRuntimeAccess = Object.freez
   },
 });
 
+/**
+ * Delivery callback and attachment state for one active subscription reader.
+ */
 interface RuntimeConsumer {
   readonly onUpdate: (update: SubscriptionUpdate) => void;
   readonly onInvalidated?: () => void;

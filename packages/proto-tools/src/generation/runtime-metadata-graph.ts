@@ -87,8 +87,14 @@ export interface RuntimeMetadataDiscovery extends ReadonlyArray<RuntimeMetadataP
   readonly edges: readonly RuntimeMetadataEdge[];
 }
 
+/**
+ * Package coordinates used to detect conflicting runtime metadata versions.
+ */
 type RuntimePackageIdentity = Pick<RuntimeMetadataPackage, "name" | "version" | "root">;
 
+/**
+ * Package manifest fields needed for passive metadata dependency discovery.
+ */
 interface RuntimePackageJson {
   readonly name: string;
   readonly version: string;
@@ -98,12 +104,18 @@ interface RuntimePackageJson {
   readonly type?: string;
 }
 
+/**
+ * Metadata adapter emitted earlier in the current generation transaction.
+ */
 interface StagedMetadata {
   readonly packageName: string;
   readonly staged: string;
   readonly moduleRoot?: string;
 }
 
+/**
+ * One declared runtime dependency awaiting resolution.
+ */
 interface RuntimeStep {
   readonly name: string;
   readonly requester: string;
@@ -111,6 +123,9 @@ interface RuntimeStep {
   readonly format: "import" | "require";
 }
 
+/**
+ * Mutable traversal state for passive runtime metadata discovery.
+ */
 interface RuntimeGraphState {
   readonly format: "import" | "require";
   readonly visited: Map<string, RuntimePackageIdentity>;
@@ -125,11 +140,18 @@ interface RuntimeGraphState {
  * Resolves passive metadata participants from declared runtime dependencies.
  */
 export const RuntimeMetadataGraph: Readonly<{
+  /**
+   * Discovers metadata participants and dependency edges from a package root.
+   */
   resolve(
     applicationRoot: string,
     staged?: readonly StagedMetadata[],
     format?: "import" | "require",
   ): RuntimeMetadataDiscovery;
+
+  /**
+   * Selects the Node module condition used by this application package.
+   */
   format(applicationRoot: string): "import" | "require";
 }> = Object.freeze({
   /**

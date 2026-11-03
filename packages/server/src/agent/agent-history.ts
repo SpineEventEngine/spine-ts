@@ -255,6 +255,9 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
     bindings.set(entity, binding);
   },
 
+  /**
+   * Installs a temporary history-read interceptor for the active Entity execution.
+   */
   withReadInterceptor(entity: object, interceptRead: AgentHistoryReadInterceptor): () => void {
     const binding = bindings.get(entity);
     if (binding === undefined)
@@ -419,6 +422,10 @@ export const AgentHistoryReads: AgentHistoryReadAccess = Object.freeze({
             conversation: clone(ConversationIdSchema, view.conversation),
           }
         : view;
+
+    /**
+     * Admits the captured history read through the configured read boundary.
+     */
     const onRead = () =>
       AgentHistoryPages.readBound(binding, capturedView, capturedRequest, actorContext);
     return binding.onAdmit === undefined ? onRead() : binding.onAdmit(onRead);
@@ -453,8 +460,16 @@ const AgentHistoryPages = Object.freeze({
       view,
       maxBytes,
     );
+
+    /**
+     * Loads the next provider page when cached history cannot serve the request.
+     */
     const live = (): Promise<AgentHistoryPage> =>
       this.load(binding, view, request, after, maxBytes);
+
+    /**
+     * Converts one retained page and applies the configured visibility filter.
+     */
     const present = (page: AgentHistoryPage): Promise<HistoryPage<AgentHistoryEntry>> => {
       const result = this.present(binding.scope, view, page);
       return binding.filterPage === undefined

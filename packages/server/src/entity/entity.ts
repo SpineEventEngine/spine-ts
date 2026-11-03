@@ -72,6 +72,9 @@ import {
 } from "./entity-transaction.js";
 import type { StateTransitionResult } from "./entity-transition-validation.js";
 
+/**
+ * Captures the rejected Entity transaction state for deferred commit handling.
+ */
 type RejectedCommitSnapshot = EntityTransactionRejectedCommit<DescriptorMessageSchema>;
 
 /**
@@ -112,6 +115,9 @@ interface EntityQueryRead<Schema extends DescriptorMessageSchema> {
   read(): Promise<readonly MessageShape<Schema>[]>;
 }
 
+/**
+ * Active read execution and actor metadata bound to a Process Manager invocation.
+ */
 interface ProcessManagerQueryCapability {
   readonly actorContext: ActorContext;
 
@@ -196,11 +202,18 @@ const EntityQueryReads = Object.freeze({
  * @internal
  */
 export const processManagerQueryAccess: Readonly<{
+  /**
+   * Binds query execution to an Entity for the duration of one invocation.
+   */
   bind(
     entity: object,
     execute: ProcessManagerQueryCapability["execute"],
     actorContext: ActorContext,
   ): () => void;
+
+  /**
+   * Returns the active Process Manager query capability or rejects an unbound read.
+   */
   require(entity: object): ProcessManagerQueryCapability;
 
   /**
@@ -721,6 +734,9 @@ export abstract class Entity<Id, Schema extends DescriptorMessageSchema> {
   }
 }
 
+/**
+ * History readers and maintenance stores bound to an active Entity.
+ */
 interface BoundEntityHistory {
   readonly stateAt: (time: Timestamp) => Promise<unknown>;
   readonly states: (depth: number) => Promise<readonly unknown[]>;
@@ -732,6 +748,9 @@ interface BoundEntityHistory {
 const boundEntityHistories = new WeakMap<object, BoundEntityHistory>();
 const activeHistoryActors = new WeakMap<object, ActorContext>();
 
+/**
+ * Internal bridge for binding history readers to Aggregate invocations.
+ */
 interface EntityHistoryAccess {
   /**
    * Binds signal actor metadata to one active Aggregate handler.
@@ -1461,7 +1480,12 @@ export abstract class ProcessManager<
    */
   protected select<QuerySchema extends DescriptorMessageSchema, Id>(
     query: EntityQueryDescription<QuerySchema, Id>,
-  ): Readonly<{ read(): Promise<readonly MessageShape<QuerySchema>[]> }>;
+  ): Readonly<{
+    /**
+     * Executes the bound Entity query and returns its visible states.
+     */
+    read(): Promise<readonly MessageShape<QuerySchema>[]>;
+  }>;
 
   /**
    * Starts the existing schema-and-columns query builder for the active handler.
@@ -1496,7 +1520,12 @@ export abstract class ProcessManager<
     columns?: Columns,
   ):
     | ProcessManagerQuery<QuerySchema, Columns>
-    | Readonly<{ read(): Promise<readonly MessageShape<QuerySchema>[]> }> {
+    | Readonly<{
+        /**
+         * Executes the bound Entity query and returns its visible states.
+         */
+        read(): Promise<readonly MessageShape<QuerySchema>[]>;
+      }> {
     const capability = processManagerQueryAccess.require(this);
     if (schemaOrQuery instanceof EntityQueryDescription) {
       return EntityQueryReads.select(this, schemaOrQuery);

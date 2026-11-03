@@ -80,6 +80,9 @@ const reservedWords = new Set([
   "yield",
 ]);
 
+/**
+ * Imported runtime symbol and its local alias in generated registry source.
+ */
 interface ImportRef {
   readonly importedName: string;
   readonly localName: string;
@@ -87,6 +90,9 @@ interface ImportRef {
   readonly defaultExport?: boolean;
 }
 
+/**
+ * Resolved names and imports used while rendering one registry module.
+ */
 interface RenderRefs {
   readonly entityNames: ReadonlyMap<string, string>;
   readonly schemaNames: ReadonlyMap<string, string>;

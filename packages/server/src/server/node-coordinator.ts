@@ -1037,6 +1037,9 @@ export class NodeCoordinator {
   }
 }
 
+/**
+ * Command request, caller context, and acknowledgment queued for coordination.
+ */
 interface CoordinatorCommand {
   readonly kind: "command";
   readonly command: Command;
@@ -1044,6 +1047,10 @@ interface CoordinatorCommand {
   readonly reader: TrustedReaderContext;
   response: Ack;
 }
+
+/**
+ * Entity query request, reader context, and response queued for coordination.
+ */
 interface CoordinatorQuery {
   readonly kind: "query";
   readonly query: Query;
@@ -1051,6 +1058,10 @@ interface CoordinatorQuery {
   readonly reader: TrustedReaderContext;
   response: QueryResponse;
 }
+
+/**
+ * Application Query request and response carried across the Coordinator queue.
+ */
 interface CoordinatorAppQuery {
   readonly kind: "app-query";
   readonly query: AppQuery;
@@ -1058,8 +1069,15 @@ interface CoordinatorAppQuery {
   readonly reader: TrustedReaderContext;
   response: AppQueryResponse;
 }
+
+/**
+ * Command or read request admitted to the Coordinator queue.
+ */
 type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery | CoordinatorAppQuery;
 
+/**
+ * Serialized subscription definition awaiting activation before its deadline.
+ */
 interface PendingActivation {
   readonly definition: Uint8Array;
   readonly timer: NodeJS.Timeout;
@@ -1129,6 +1147,9 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
     for (const waiter of this.#waiters.splice(0)) waiter({ value: undefined, done: true });
   }
 
+  /**
+   * Resolves one waiting consumer with the next queued subscription update.
+   */
   #deliver(entry: {
     update: SubscriptionUpdate;
     delivered: boolean;

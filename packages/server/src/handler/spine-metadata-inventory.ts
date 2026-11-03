@@ -72,6 +72,9 @@ export interface AppQueryDescription {
   readonly responseSchema: GenMessage<Message>;
 }
 
+/**
+ * Receiver constructor and the generated metadata module that declared it.
+ */
 interface RegisteredReceiver {
   readonly receiver: GeneratedReceiver;
   readonly moduleId: string;
@@ -131,9 +134,24 @@ const MetadataGraph = Object.freeze({
  * @param moduleId Generated metadata module identifier for diagnostics.
  */
 export const SpineMetadataInventory: Readonly<{
+  /**
+   * Registers passive handler and query descriptions from one module.
+   */
   register(metadata: SpineMetadata, moduleId: string): void;
+
+  /**
+   * Checks that one App Query description matches its generated pair.
+   */
   validateQuery(query: AppQueryDescription): void;
+
+  /**
+   * Selects handlers registered for explicitly supplied constructors.
+   */
   select(constructors: readonly ReceiverConstructor[]): GeneratedHandlerRegistry;
+
+  /**
+   * Selects App Query descriptions for explicitly supplied handler types.
+   */
   selectQueries(
     constructors: readonly AppQueryDescription["handlerType"][],
   ): readonly AppQueryDescription[];
@@ -255,7 +273,12 @@ export const spineMetadataFor: typeof SpineMetadataInventory.select = SpineMetad
 /**
  * Test-facing reset for independent metadata assembly cases.
  */
-export const spineMetadataTestAccess: Readonly<{ clear(): void }> = Object.freeze({
+export const spineMetadataTestAccess: Readonly<{
+  /**
+   * Clears registrations between independent metadata tests.
+   */
+  clear(): void;
+}> = Object.freeze({
   /**
    * Clears process-local descriptions between isolated tests.
    */

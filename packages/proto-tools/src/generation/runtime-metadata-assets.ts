@@ -67,6 +67,9 @@ export interface MetadataAssets {
  * Builds static adapters from resolved public package exports.
  */
 export const RuntimeMetadataAssets: Readonly<{
+  /**
+   * Renders adapters for the discovered runtime metadata graph.
+   */
   render(
     project: string,
     publishedBootstrap: string,

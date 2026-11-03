@@ -143,6 +143,9 @@ export async function runDatastoreOrdersLoad(
   return await new DatastoreOrdersLoadRun(options).execute();
 }
 
+/**
+ * Latencies observed for one accepted order user flow.
+ */
 interface UserResult {
   readonly commandAcknowledgementMs: number;
   readonly queryVisibilityMs: number;
@@ -273,6 +276,9 @@ class DatastoreOrdersLoadRun {
   }
 }
 
+/**
+ * First subscription update and iterator awaiting later order events.
+ */
 interface SubscriptionRead {
   readonly iterator: AsyncIterator<SubscriptionUpdate>;
   readonly firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>;

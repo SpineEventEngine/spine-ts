@@ -400,9 +400,9 @@ describe("multi-package Message Board", () => {
           postedAt: create(TimestampSchema, { seconds: 1n }),
         }),
       );
-      const entityResult = await client.asGuest().send(
-        BoardMessageViewQuery.create().byId(id).build(),
-      );
+      const entityResult = await client
+        .asGuest()
+        .send(BoardMessageViewQuery.create().byId(id).build());
       expect(entityResult.message).toHaveLength(0);
       const aggregateResult = await client.asGuest().send(
         create(QuerySchema, {

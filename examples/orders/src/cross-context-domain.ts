@@ -71,6 +71,9 @@ export class OrderReview extends ProcessManager<string, typeof OrderReviewSchema
  * Assembles the separate catalog and ordering contexts for one server.
  */
 export const OrderReviewContexts: Readonly<{
+  /**
+   * Builds catalog and ordering Bounded Contexts using the supplied storage.
+   */
   create(storageFactory: StorageFactory): Promise<{
     readonly catalog: BoundedContext;
     readonly orders: BoundedContext;

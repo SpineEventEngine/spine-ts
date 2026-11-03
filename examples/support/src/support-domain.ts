@@ -151,6 +151,9 @@ export class SupportReview extends Projection<SupportTicketId, typeof SupportRev
  * Configures the real generated repositories and explicit model deployment.
  */
 export const SupportContext: Readonly<{
+  /**
+   * Builds the Support Bounded Context with the configured AI registry and storage.
+   */
   create(ai: AiRegistry, storage?: StorageFactory): Promise<BoundedContext>;
 }> = Object.freeze({
   /**

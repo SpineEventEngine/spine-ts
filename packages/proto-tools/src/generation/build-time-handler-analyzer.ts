@@ -21,6 +21,9 @@ import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
 import ts from "typescript";
 
+/**
+ * Handler role recognized in generated repository metadata.
+ */
 type GeneratedHandlerKind =
   | "command-assignment"
   | "command-substitution"
@@ -28,6 +31,10 @@ type GeneratedHandlerKind =
   | "event-subscription"
   | "state-subscription"
   | "event-reaction";
+
+/**
+ * Supported arity of decorated handler methods.
+ */
 type GeneratedHandlerParameterCount = 1 | 2;
 
 /**
@@ -272,6 +279,9 @@ export interface BuildWhereOptions {
   readonly equals: string;
 }
 
+/**
+ * Parsed method, decorators, and source scope awaiting handler validation.
+ */
 interface AnalyzedMethodInput {
   readonly node: ts.MethodDeclaration;
   readonly handler: HandlerDecoratorUse;
@@ -417,6 +427,9 @@ export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
   },
 });
 
+/**
+ * TypeScript source and imported symbols used by one analysis pass.
+ */
 interface AnalyzerScope {
   readonly program: ts.Program;
   readonly source: ts.SourceFile;
@@ -424,6 +437,9 @@ interface AnalyzerScope {
   readonly diagnostics: BuildHandlerDiagnostic[];
 }
 
+/**
+ * Resolved Entity or standalone base class for a decorated receiver.
+ */
 type ReceiverLineage =
   | {
       readonly receiverKind: "entity";
@@ -436,6 +452,9 @@ type ReceiverLineage =
       readonly stateSchema: undefined;
     };
 
+/**
+ * Read-only symbol bindings discovered from source imports.
+ */
 interface ImportState {
   readonly generatedNamespaces: ReadonlyMap<string, GeneratedNamespace>;
   readonly generatedSymbols: ReadonlyMap<string, GeneratedSymbol>;
@@ -449,6 +468,9 @@ interface ImportState {
   readonly protoContextSymbols: ReadonlyMap<string, "CommandContext" | "EventContext">;
 }
 
+/**
+ * Symbol bindings accumulated while scanning source imports.
+ */
 interface MutableImportState {
   readonly generatedNamespaces: Map<string, GeneratedNamespace>;
   readonly generatedSymbols: Map<string, GeneratedSymbol>;
@@ -462,16 +484,25 @@ interface MutableImportState {
   readonly protoContextSymbols: Map<string, "CommandContext" | "EventContext">;
 }
 
+/**
+ * Generated module exports and the import specifier that supplies them.
+ */
 interface GeneratedNamespace {
   readonly exports: GeneratedExports;
   readonly moduleSpecifier: string;
 }
 
+/**
+ * Generated rejection module exports and their import specifier.
+ */
 interface RejectionNamespace {
   readonly exports: GeneratedExports;
   readonly moduleSpecifier: string;
 }
 
+/**
+ * Imported generated symbol with its signal role and schema association.
+ */
 interface GeneratedSymbol extends GeneratedNamespace {
   readonly exportName: string;
   readonly kind: SignalKind | undefined;
@@ -479,50 +510,85 @@ interface GeneratedSymbol extends GeneratedNamespace {
   readonly schemaValue: boolean;
 }
 
+/**
+ * Signal kind and source reference resolved from a generated schema use.
+ */
 interface SchemaUse {
   readonly kind: SignalKind | undefined;
   readonly reference: SchemaReference;
 }
 
+/**
+ * Type, value, and schema-role inventory for one generated module.
+ */
 interface GeneratedExports {
   readonly types: Set<string>;
   readonly values: Set<string>;
   readonly schemaRoles: Map<string, SignalKind | undefined>;
 }
 
+/**
+ * Generated source file and its analyzed message descriptors.
+ */
 interface GeneratedFile {
   readonly sourceFile: string;
   readonly packageName: string;
   readonly messages: readonly DescriptorMessage[];
 }
 
+/**
+ * Descriptor message shape needed to classify Entity and nested message uses.
+ */
 interface DescriptorMessage {
   readonly name: string;
   readonly isEntityState: boolean;
   readonly nested: readonly DescriptorMessage[];
 }
 
+/**
+ * Descriptor selected for one generated export name and nested type path.
+ */
 interface DescriptorMessageSelection {
   readonly descriptor: DescriptorMessage;
   readonly exportName: string;
   readonly typePath: string;
 }
 
+/**
+ * Remaining and visited types while resolving inherited handler declarations.
+ */
 interface TypeWalk {
   remaining: number;
   readonly seen: Set<string>;
 }
 
+/**
+ * Handler decorator names recognized by build-time analysis.
+ */
 type HandlerDecorator = "Assign" | "Command" | "React" | "Subscribe";
+
+/**
+ * Server decorator names permitted on generated handlers.
+ */
 type ServerDecorator = HandlerDecorator | "Where" | "Throws";
+
+/**
+ * Domain signal role assigned to a referenced generated schema.
+ */
 type SignalKind = "command" | "event" | "rejection" | "state" | "app-query" | "app-response";
 
+/**
+ * Syntax and argument presence of one recognized Server decorator.
+ */
 interface DecoratorUse {
   readonly hasArguments: boolean;
   readonly name: ServerDecorator;
   readonly node: ts.Decorator;
 }
 
+/**
+ * Handler-specific decorator accepted on a receiver method.
+ */
 interface HandlerDecoratorUse extends DecoratorUse {
   readonly name: HandlerDecorator;
 }
@@ -4124,12 +4190,18 @@ const HandlerSources = Object.freeze({
   },
 });
 
+/**
+ * Generated Query schema reference and its resolved signal kind.
+ */
 interface QuerySchemaUse {
   readonly kind: SignalKind | undefined;
   readonly typeName: string;
   readonly reference: SchemaReference;
 }
 
+/**
+ * App Query base clause with generic bindings resolved from its class hierarchy.
+ */
 interface AppQueryBase {
   readonly clause: ts.ExpressionWithTypeArguments;
   readonly bindings: ReadonlyMap<ts.Symbol, ts.TypeNode>;
@@ -4598,7 +4670,14 @@ const AppQuerySources = Object.freeze({
  * Finds the package identity that owns an analyzed source file.
  */
 export const PackageIdentity: Readonly<{
+  /**
+   * Finds the package name declared above an analyzed source file.
+   */
   nameFor(sourceFile: string): string | undefined;
+
+  /**
+   * Finds the nearest package directory above an analyzed source file.
+   */
   rootFor(sourceFile: string): string | undefined;
 }> = Object.freeze({
   /**

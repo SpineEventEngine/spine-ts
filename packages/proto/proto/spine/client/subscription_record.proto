@@ -37,7 +37,7 @@ enum SubscriptionStatus {
 
 // Stable verified reader identity retained with a subscription definition.
 message SubscriptionReaderBinding {
-  // Exactly one admitted reader state; absence identifies an unverifiable legacy record.
+  // Exactly one admitted reader identity; absence cannot establish reader access.
   oneof identity {
     // Application-authenticated principal ID, never ActorContext or provider credentials.
     string principal_id = 1;

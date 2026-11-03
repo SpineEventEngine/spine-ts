@@ -150,6 +150,10 @@ export interface ServerEnvironmentSettings {
  * @returns The facilities selected for the environment.
  */
 export type ServerEnvironmentSettingsFactory = () => ServerEnvironmentSettings;
+
+/**
+ * Accepts either fixed server-environment settings or a factory evaluated when the environment resolves.
+ */
 type SettingsInput = ServerEnvironmentSettings | ServerEnvironmentSettingsFactory;
 const configuredSettings = new Map<EnvironmentType, SettingsInput>();
 let resolvedEnvironment: ServerEnvironment | undefined;
@@ -329,8 +333,16 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    * @param type Identifies the environment to configure.
    * @returns A one-use configuration entry point.
    */
-  static when(type: EnvironmentType): { use(settings: SettingsInput): void } {
+  static when(type: EnvironmentType): {
+    /**
+     * Configures settings for this environment type before singleton resolution.
+     */
+    use(settings: SettingsInput): void;
+  } {
     return Object.freeze({
+      /**
+       * Stores settings for this environment type unless reset or singleton resolution has started.
+       */
       use(settings: SettingsInput) {
         if (resetInProgress !== undefined) {
           throw new Error("ServerEnvironment reset is in progress.");
@@ -355,6 +367,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     return (resolvedEnvironment ??= this.#resolve());
   }
 
+  /**
+   * Resolves the current Environment and its configured or default facilities into the process-wide ServerEnvironment.
+   */
   static #resolve(): ServerEnvironment {
     const environment = Environment.instance();
     const configured = configuredSettings.get(environment.type);
@@ -471,6 +486,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     if (failure?.status === "rejected") throw failure.reason;
   }
 
+  /**
+   * Opens configured facilities, validates shared storage, and initializes shared Delivery before context startup.
+   */
   async #completeSetup(): Promise<void> {
     try {
       if (typeof this.integrationChannelFactory.initialize !== "function")
@@ -609,6 +627,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     throw new AggregateError(failures, "Required environment initialization failed.");
   }
 
+  /**
+   * Opens the configured delivery facility once and records successful opening for later cleanup.
+   */
   #openDelivery(): Promise<void> {
     if (this.#deliveryOpened) return Promise.resolve();
     const opening = (this.#deliveryOpen ??= Promise.resolve()
@@ -653,6 +674,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     if (ports?.source !== undefined) this.#installSupervisor(this.#publicDelivery, ports.source);
   }
 
+  /**
+   * Checks whether a Delivery inbox message targets an Entity or Projection currently served by this environment.
+   */
   #acceptsMessage(message: InboxMessage): boolean {
     return (
       EnvironmentContextRegistrations.forEnvironment(this).recipient(
@@ -661,6 +685,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     );
   }
 
+  /**
+   * Creates the Delivery supervisor and connects inbox, work registry, and shard delivery notifications.
+   */
   #installSupervisor(delivery: PublicDelivery, source: DeliverySource): void {
     const supervisor = new DeliverySupervisor({
       source,
@@ -675,6 +702,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     remoteSupervisedEnvironments.add(this);
   }
 
+  /**
+   * Starts the configured Delivery supervisor once and records fatal startup failures for environment cleanup.
+   */
   #startSupervisor(): Promise<void> {
     const supervisor = this.#supervisor;
     return supervisor === undefined
@@ -682,6 +712,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       : managedDeliveryGate.start(() => (this.#supervisorStart ??= supervisor.start()));
   }
 
+  /**
+   * Notifies the supervisor that work for a shard may now be available.
+   */
   #notifyDelivery(shard: import("../delivery/shard-index.js").ShardIndex): void {
     if (this.#supervisor === undefined) {
       this.#delivery?.wake(shard);
@@ -697,6 +730,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     }
   }
 
+  /**
+   * Waits until the environment’s supervised Delivery has no active work.
+   */
   async #whenDeliveryIdle(): Promise<void> {
     const settled = await Promise.allSettled([
       this.#supervisor?.whenIdle(),
@@ -710,6 +746,10 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       throw new AggregateError(failures, "Environment Delivery idle wait failed.");
   }
 
+  /**
+   * Replays a persisted Delivery inbox message through the matching context recipient and signals
+   * completion or failure.
+   */
   async #replayMessage(message: InboxMessage): Promise<void> {
     const context = EnvironmentContextRegistrations.forEnvironment(this).recipient(
       message.inboxId.targetTypeUrl,
@@ -721,6 +761,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   }
 }
 
+/**
+ * Contains normalized server facilities after defaults and environment-specific requirements are applied.
+ */
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly subscriptionQueueCapacity: number;
@@ -778,6 +821,9 @@ export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<
     },
   });
 
+/**
+ * Groups package-private lifecycle, delivery, context-registration, and startup-failure operations.
+ */
 interface ServerEnvironmentAccess {
   /**
    * Returns the retained runtime behind the public Delivery facade.
@@ -1128,24 +1174,43 @@ class EnvironmentContextRegistrations {
  * @internal
  */
 export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
+  /**
+   * Returns the initialized internal Delivery engine, failing before environment setup completes.
+   */
   coreDelivery(environment: ServerEnvironment): CoreDelivery {
     const core = environmentDeliveryCores.get(environment);
     if (core === undefined)
       throw new Error("ServerEnvironment.completeSetup() must finish before Delivery use.");
     return core;
   },
+
+  /**
+   * Reports whether this environment uses a remote Delivery source supervised by the runtime.
+   */
   remoteSupervised(environment: ServerEnvironment): boolean {
     return remoteSupervisedEnvironments.has(environment);
   },
+
+  /**
+   * Waits for supervised Delivery work to become idle.
+   */
   whenDeliveryIdle(environment: ServerEnvironment): Promise<void> {
     return deliveryIdlers.get(environment)?.() ?? Promise.resolve();
   },
+
+  /**
+   * Signals that the supplied shard may have Delivery work ready.
+   */
   notifyDelivery(
     environment: ServerEnvironment,
     shard: import("../delivery/shard-index.js").ShardIndex,
   ): void {
     deliveryNotifiers.get(environment)?.(shard);
   },
+
+  /**
+   * Requires an available environment and waits for its shared setup promise.
+   */
   awaitSetup(environment: ServerEnvironment) {
     this.requireAvailable(environment);
     return (
@@ -1157,6 +1222,10 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
       this.requireAvailable(environment);
     });
   },
+
+  /**
+   * Starts tracking an in-progress context build in the environment lifecycle registry.
+   */
   beginContextBuild(environment: ServerEnvironment): () => void {
     this.requireAvailable(environment);
     return EnvironmentContextRegistrations.forEnvironment(environment).beginBuild();
@@ -1171,11 +1240,19 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
   failStartup(environment: ServerEnvironment, cause: unknown): void {
     startupControls.get(environment)?.fail(cause);
   },
+
+  /**
+   * Waits for the environment’s fatal startup failure, rejecting if the environment is unknown.
+   */
   awaitStartupFailure(environment: ServerEnvironment): Promise<never> {
     const control = startupControls.get(environment);
     if (control === undefined) return Promise.reject(new Error("Unknown ServerEnvironment."));
     return control.awaitFailure();
   },
+
+  /**
+   * Reports whether a required environment startup phase has failed.
+   */
   hasStartupFailure(environment: ServerEnvironment): boolean {
     return startupControls.get(environment)?.failed() ?? false;
   },
@@ -1189,6 +1266,10 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
   recordStartupCleanup(environment: ServerEnvironment, error: unknown): void {
     startupControls.get(environment)?.recordCleanup(error);
   },
+
+  /**
+   * Throws when the environment is closing or unavailable after startup failure.
+   */
   requireAvailable(environment: ServerEnvironment): void {
     startupControls.get(environment)?.available();
   },
@@ -1216,9 +1297,17 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     EnvironmentContextRegistrations.forEnvironment(environment).serving(typeUrl),
   openContexts: (environment: ServerEnvironment) =>
     EnvironmentContextRegistrations.forEnvironment(environment).openContexts(),
+
+  /**
+   * Returns the logger configured for this server environment.
+   */
   loggerFor(environment: ServerEnvironment): ILogLayer {
     return ServerEnvironmentValues.loggerFor(environment);
   },
+
+  /**
+   * Emits one production warning when a context uses a non-persistent subscription registry.
+   */
   warnVolatileRegistry(environment: ServerEnvironment, context: BoundedContext) {
     if (environment.environment.type !== EnvironmentType.Production) return;
     if (boundedContextAccess.subscriptionRegistry(context).persistent) return;

@@ -27,12 +27,34 @@ import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import { ReadSideMessages } from "./read-side-message.js";
 import type { ReadSideContext, ReadSideField, ReadSideFilter } from "./read-side-filter.js";
 
+/**
+ * Generated schema for a domain value admitted to a read filter.
+ */
 type DomainSchema = GenMessage<Message>;
+
+/**
+ * Policy registered for a domain message schema.
+ */
 type DomainFilter = ReadSideFilter<DomainSchema>;
+
+/**
+ * Domain message after filtering, with null denoting removal.
+ */
 type DomainValue = Message | null;
+
+/**
+ * Writes a filtered child back into its detached parent.
+ */
 type Put = (value: DomainValue) => void;
+
+/**
+ * Retrieves the detached parent snapshot required by a nested filter.
+ */
 type ParentFor = (schema: DomainSchema) => Message | undefined;
 
+/**
+ * Work item for visiting one domain message occurrence.
+ */
 interface Visit {
   readonly kind: "visit";
   readonly schema: DomainSchema;
@@ -42,11 +64,17 @@ interface Visit {
   readonly put: Put;
 }
 
+/**
+ * Deferred container update after its children have been inspected.
+ */
 interface Finish {
   readonly kind: "finish";
   readonly commit: () => void;
 }
 
+/**
+ * Iterative read-filter traversal step.
+ */
 type Work = Visit | Finish;
 
 /**
@@ -183,6 +211,10 @@ export class ReadSideFilterEngine {
     const children: Visit[] = [];
     const commits: Finish[] = [];
     let baseline: Message | undefined;
+
+    /**
+     * Captures a stable parent only when a registered nested child policy needs it.
+     */
     const parentFor: ParentFor = (childSchema) => {
       const url = this.#registry.findByFullName(childSchema.typeName)?.typeUrl;
       if (url === undefined || !this.#filters.get(url)?.some((filter) => filter.nested))

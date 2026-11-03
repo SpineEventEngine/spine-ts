@@ -436,7 +436,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/auth/authenticated_subscription.proto",
-      "sha256": "0bdf0de8bb3246b10c28dffb7dd900e166c3c5d20c628d464dfe1aa81119379f"
+      "sha256": "da3f4c1ff9a0b968bfed0193c8b43deb0bfd71d126b375ab8832532625d15553"
     },
     {
       "localPath": "packages/proto/proto/spine/auth/authentication_service.proto",
@@ -444,7 +444,7 @@
     },
     {
       "localPath": "packages/proto/proto/spine/client/subscription_record.proto",
-      "sha256": "3c4a390efad454b9a5dcae6f804c8100139f6cf6f2c543dad5cfafeba3f9eb3e"
+      "sha256": "614caf2608bf3fc36a419f887305ae6b7b1cfad657800b5bc3a5d886d396bd86"
     },
     {
       "localPath": "packages/proto/proto/spine/deployment/node_discovery.proto",

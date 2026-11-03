@@ -60,6 +60,9 @@ export const MessageNotifications = (props: {
   );
 };
 
+/**
+ * Active Event subscription tracked by the notification stream.
+ */
 interface NotificationState {
   active: boolean;
   subscription?: Subscription;

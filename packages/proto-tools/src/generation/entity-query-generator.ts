@@ -29,9 +29,19 @@ const { AppQueryGenerator } = (await import(
   `./app-query-generator.${appQueryExtension}`
 )) as typeof import("./app-query-generator.js");
 
+/**
+ * Generated source writer for one Entity query companion.
+ */
 type QueryOutput = ReturnType<Schema["generateFile"]>;
+
+/**
+ * Imported generated symbol reference in the companion writer.
+ */
 type Imported = ReturnType<QueryOutput["import"]>;
 
+/**
+ * Generated imports required to render typed Entity query builders.
+ */
 interface QueryImports {
   readonly entityColumn: Imported;
   readonly columnTypes: Imported;

@@ -45,6 +45,9 @@ import { generatedSource, normalizeGeneratedTree } from "./generated-source-poli
 import { assertSourceViewCurrent, modelSourceView, writeViewRecord } from "./source-view.js";
 import type { ModelSourceView } from "./source-view.js";
 
+/**
+ * Prepared paths, graph, and operations shared by one model generation run.
+ */
 interface ModelGenerationStage {
   readonly packageRoot: string;
   readonly config: ModelConfig;
@@ -323,11 +326,17 @@ export interface CompositionOperations {
   readonly registryOperations?: Partial<ManifestFileOperations>;
 }
 
+/**
+ * Path and token identifying an active generated-file lock.
+ */
 interface GenerationLock {
   readonly path: string;
   readonly token: string;
 }
 
+/**
+ * File content and identity captured before replacing a generation claim.
+ */
 interface ClaimSnapshot {
   readonly content: string;
   readonly identity: string;
@@ -1516,6 +1525,10 @@ export const ProtoGeneration: Readonly<{
   compose(packageRoot: string, operations?: CompositionOperations): void;
 }> = Object.freeze({
   ...protoGeneration,
+
+  /**
+   * Generates package sources through the configured model or application path.
+   */
   generate(packageRoot: string, operations?: GenerationOperations): void {
     const config = ProtoConfig.read(packageRoot);
     if (config.mode === "model")

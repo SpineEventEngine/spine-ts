@@ -71,6 +71,9 @@ export const MessageBoardApp = (props: MessageBoardAppProps): ReactElement => {
   );
 };
 
+/**
+ * Combines posting, board rows, announcements, and lifetime statistics.
+ */
 const Board = function Board({
   board,
   request,
@@ -106,6 +109,9 @@ const Board = function Board({
   );
 };
 
+/**
+ * Displays the latest visible announcement and its recoverable read error.
+ */
 const AnnouncementPanel = ({
   value,
   error,
@@ -120,6 +126,9 @@ const AnnouncementPanel = ({
   </section>
 );
 
+/**
+ * Shows the board Entity subscription's current connection state.
+ */
 const SubscriptionBadge = function SubscriptionBadge({
   lifecycle,
 }: {

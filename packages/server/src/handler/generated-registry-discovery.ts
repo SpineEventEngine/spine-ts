@@ -221,6 +221,9 @@ export class GeneratedRegistryDiscovery {
   }
 }
 
+/**
+ * Generated handler registry together with its resolved module identifier.
+ */
 interface LoadedGeneratedRegistry {
   readonly moduleId: string;
   readonly registry: GeneratedHandlerRegistry;

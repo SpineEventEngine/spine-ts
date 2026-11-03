@@ -42,7 +42,14 @@ import { IncomingRequests } from "../request/index.js";
 declare const setTimeout: (callback: () => void, milliseconds: number) => unknown;
 declare const clearTimeout: (handle: unknown) => void;
 
+/**
+ * Lifecycle of an admitted subscription binding.
+ */
 type BindingState = "inactive" | "active" | "cancelling" | "closed";
+
+/**
+ * Captured definition, reader, expiry, and serialized work for one subscription.
+ */
 interface Binding {
   readonly definition: Uint8Array;
   readonly context: ActorContext;
@@ -172,7 +179,15 @@ export interface SubscriptionBindingTransition {
    */
   readonly kind: "activated" | "closed" | "denied";
 }
+
+/**
+ * Subscription request kind admitted by the Gateway.
+ */
 type SubscriptionOperation = "subscribe" | "activate" | "cancel";
+
+/**
+ * Verified subscription request awaiting a binding transition.
+ */
 interface PreparedOperation {
   readonly source: Extract<IncomingRequest, { readonly kind: SubscriptionOperation }>;
   readonly context: ActorContext;
@@ -448,6 +463,10 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       if (input.signal.aborted || binding?.state !== "inactive") return { kind: "denied" };
       binding.state = "active";
       binding.controller = new AbortController();
+
+      /**
+       * Cancels this activation when the caller aborts.
+       */
       const abort = () => {
         binding.controller.abort();
       };
@@ -1372,6 +1391,10 @@ export class SubscriptionGateway {
   ): Promise<SubscriptionGatewayResult> {
     const activeController = new AbortController();
     const active = activeController.signal;
+
+    /**
+     * Cancels this activation when the caller aborts.
+     */
     const abort = () => {
       activeController.abort();
     };

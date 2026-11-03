@@ -988,11 +988,24 @@ import {
   ProjectOverviewStateSchema,
 } from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
 
+/**
+ * Replaces a project name in all ordinary Entity Query results.
+ */
 class PublicProjectName extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+  /**
+   * Registers the filter for project overview state.
+   */
   constructor() {
     super(ProjectOverviewStateSchema);
   }
 
+  /**
+   * Replaces the name only for ordinary Entity Query responses.
+   *
+   * @param state Project overview returned by the read side.
+   * @param context Describes the read operation and verified reader.
+   * @returns The project overview with its name replaced for ordinary Entity Queries.
+   */
   filter(state: ProjectOverviewState, context: ReadSideContext): ProjectOverviewState {
     if (context.operation.kind === "query") state.name = "Public project";
     return state;
@@ -1000,6 +1013,13 @@ class PublicProjectName extends ReadSideFilter<typeof ProjectOverviewStateSchema
 }
 
 const projectPolicy = new PublicProjectName();
+
+/**
+ * Registers the project name policy in its supplying Bounded Context.
+ *
+ * @param builder Configures the project Bounded Context.
+ * @returns The builder with the read policy installed.
+ */
 function installProjectPolicy(builder: BoundedContextBuilder): BoundedContextBuilder {
   return builder.addReadSideFilter(projectPolicy);
 }
@@ -1040,7 +1060,16 @@ import {
 } from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
 import { GetProjectOverview } from "../../test-fixtures/generated/repository-routing/project_queries_app_query.js";
 
+/**
+ * Runs a typed App Query from an active Process Manager handler.
+ */
 class ScopedAppQueryManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  /**
+   * Captures the scoped query callback supplied during repository construction.
+   *
+   * @param options Configures this Process Manager instance.
+   * @param ask Executes a generated App Query with trusted handler context.
+   */
   constructor(
     options: EntityOptions<string, typeof ProcessManagerStateSchema>,
     private readonly ask: (
@@ -1051,6 +1080,12 @@ class ScopedAppQueryManager extends ProcessManager<string, typeof ProcessManager
     super(options);
   }
 
+  /**
+   * Reads the current project overview while handling the creation Command.
+   *
+   * @param command Project creation request being assigned.
+   * @returns Event carrying the selected overview name.
+   */
   @Assign
   async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
     const result = await this.ask(
@@ -1066,6 +1101,9 @@ class ScopedAppQueryManager extends ProcessManager<string, typeof ProcessManager
   }
 }
 
+/**
+ * Injects the Server's typed App Query route into new Process Manager instances.
+ */
 export const scopedOnCreate =
   (server: Server) => (options: EntityOptions<string, typeof ProcessManagerStateSchema>) =>
     new ScopedAppQueryManager(options, (q, context) => server.query(q, context));

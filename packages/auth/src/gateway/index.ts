@@ -244,6 +244,9 @@ export type UnaryGatewayResult =
       readonly reason: UnaryGatewayRejection;
     };
 
+/**
+ * Gateway unary method selected by the decoded request kind.
+ */
 type Operation =
   | {
       readonly kind: "command";
@@ -265,7 +268,15 @@ type Operation =
       readonly service: "spine.auth.AuthenticationService";
       readonly method: "ResolveContext";
     };
+
+/**
+ * Unary operation forwarded to the native Command or Query service.
+ */
 type ForwardOperation = Exclude<Operation, { readonly kind: "resolve-context" }>;
+
+/**
+ * Command, Entity Query, or application Query decoded for unary Gateway admission.
+ */
 type IncomingUnary = IncomingCommand | IncomingQuery | IncomingAppQuery;
 
 /**

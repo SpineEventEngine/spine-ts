@@ -164,12 +164,18 @@ export async function runProjectManagementLoad(
   };
 }
 
+/**
+ * Latencies observed for one accepted project user flow.
+ */
 interface UserResult {
   readonly commandAcknowledgementMs: number;
   readonly queryVisibilityMs: number;
   readonly subscriptionDeliveryMs: number;
 }
 
+/**
+ * First project update and iterator awaiting later subscription deliveries.
+ */
 interface SubscriptionRead {
   readonly iterator: AsyncIterator<SubscriptionUpdate>;
   readonly firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>;

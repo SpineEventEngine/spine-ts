@@ -135,6 +135,9 @@ const serviceInstances = new WeakSet<SpineServices>();
 const serviceAppQueries = new WeakMap<SpineServices, AppQueryExecution>();
 const serviceReadFilters = new WeakMap<SpineServices, ReadSideFilterEngine>();
 
+/**
+ * Framework-only hooks for installing service read policies and App Query routing.
+ */
 interface SpineServicesAccess {
   /**
    * Attaches one Server's gRPC read policy before accepting requests.
@@ -1370,11 +1373,17 @@ export interface SpineServicesOptions {
   readonly subscriptionLimit?: number;
 }
 
+/**
+ * Bounded Context selected to receive one registered Command type URL.
+ */
 interface CommandRoute {
   readonly context: BoundedContext;
   readonly typeUrl: string;
 }
 
+/**
+ * Entity state route with queryable columns and its supplying Bounded Context.
+ */
 interface StateRoute {
   readonly allowedColumnNames: ReadonlySet<string>;
   readonly columnFields: ReadonlyMap<string, DescField>;
@@ -1386,20 +1395,32 @@ interface StateRoute {
   readonly typeUrl: string;
 }
 
+/**
+ * Proto field name and optional nested message schema used by query routing.
+ */
 interface MessageFieldInfo {
   readonly name: string;
   readonly localName: string;
   readonly message?: MessageSchema;
 }
 
+/**
+ * Event type URL and the Bounded Context that publishes it.
+ */
 interface EventRoute {
   readonly context: BoundedContext;
   readonly kind: "event";
   readonly typeUrl: string;
 }
 
+/**
+ * Entity state or Event route selected for a subscription Topic.
+ */
 type SubscriptionRoute = StateRoute | EventRoute;
 
+/**
+ * Captured subscription definition and delivery channel after admission.
+ */
 interface SubscriptionRecordBase {
   readonly id: string;
   readonly subscription: Subscription;
@@ -1408,24 +1429,39 @@ interface SubscriptionRecordBase {
   readonly delivery: SubscriptionDelivery;
 }
 
+/**
+ * Completion and rejection controls for an in-progress subscription removal.
+ */
 interface SubscriptionRemoval {
   readonly reject: (reason?: unknown) => void;
   readonly resolve: () => void;
   readonly settled: Promise<void>;
 }
 
+/**
+ * Active Event or Entity state subscription record.
+ */
 type SubscriptionRecord = EventSubscriptionRecord | StateSubscriptionRecord;
 
+/**
+ * Active Event subscription and its publishing route.
+ */
 interface EventSubscriptionRecord extends SubscriptionRecordBase {
   readonly kind: "event";
   readonly route: EventRoute;
 }
 
+/**
+ * Active Entity subscription and its state route.
+ */
 interface StateSubscriptionRecord extends SubscriptionRecordBase {
   readonly kind: "state";
   readonly route: StateRoute;
 }
 
+/**
+ * Route shape selected before attaching an Event or Entity subscription.
+ */
 type SubscriptionShape =
   | {
       readonly kind: "event";
@@ -1638,6 +1674,9 @@ class SubscriptionDelivery {
   }
 }
 
+/**
+ * Live source attachment that can be detached during subscription cleanup.
+ */
 interface SubscriptionAttachment {
   readonly closed: boolean;
 
@@ -2505,11 +2544,17 @@ function validateEventSubscriptionTopic(target: Target): void {
   }
 }
 
+/**
+ * One nested composite filter and its current traversal depth.
+ */
 interface SubscriptionFilterFrame {
   readonly filter: CompositeFilter;
   readonly depth: number;
 }
 
+/**
+ * Running totals checked against the subscription filter complexity budget.
+ */
 interface SubscriptionFilterCounts {
   compositeCount: number;
   simpleCount: number;
@@ -2625,10 +2670,16 @@ function validateSubscriptionPath(fieldPath: readonly string[], label: "field fi
   return value;
 }
 
+/**
+ * Leaf message schema found while validating a subscription field path.
+ */
 interface ResolvedMessagePath {
   readonly leafSchema?: MessageSchema;
 }
 
+/**
+ * Field name and nested schema found in a subscription filter path.
+ */
 interface MessageFieldInfo {
   readonly name: string;
   readonly localName: string;
@@ -2868,6 +2919,9 @@ const TenantStatuses = Object.freeze({
       };
 }
 
+/**
+ * Structured public error selected for a rejected service request.
+ */
 interface ContractError {
   readonly type: string;
   readonly message: string;

@@ -43,6 +43,9 @@ const commandBusWorkCounters = new WeakMap<CommandBus, () => number>();
 const commandBusRuntimes = new WeakMap<CommandBus, SingleProcessServerRuntime>();
 const commandAdmissions = new WeakMap<CommandBus, (command: Command) => Promise<void>>();
 
+/**
+ * Framework-only operations for coordinating a CommandBus with its runtime and environment.
+ */
 interface CommandBusAccess {
   /**
    * Binds this context bus's private runtime to its captured environment.
@@ -116,6 +119,9 @@ interface CommandBusAccess {
   acceptedWorkCount(commandBus: CommandBus): number;
 }
 
+/**
+ * Lifecycle state controlling external command admission and shutdown.
+ */
 type CommandBusIntakeState = "open" | "closing" | "closed";
 
 /**
@@ -215,6 +221,9 @@ export class CommandBus {
     return this.#closed;
   }
 
+  /**
+   * Clones and queues an internal command while the bus can still accept work.
+   */
   #postInternal(command: Command): Promise<void> {
     const accepted = clone(CommandSchema, command);
 
@@ -225,6 +234,9 @@ export class CommandBus {
     return this.#enqueueAccepted(accepted);
   }
 
+  /**
+   * Queues an internal follow-up in the runtime lane reserved for accepted work during close.
+   */
   #postInternalFollowUp(command: Command): Promise<void> {
     const accepted = clone(CommandSchema, command);
     if (this.#intakeState === "closed") {
@@ -236,32 +248,50 @@ export class CommandBus {
     );
   }
 
+  /**
+   * Counts and schedules a command already accepted by the bus.
+   */
   #enqueueAccepted(command: Command): Promise<void> {
     this.#acceptedWorkCount++;
     return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatch(command)));
   }
 
+  /**
+   * Moves command intake from open to closing.
+   */
   #beginClose(): void {
     if (this.#intakeState === "open") {
       this.#intakeState = "closing";
     }
   }
 
+  /**
+   * Waits for the runtime queue to finish accepted dispatches.
+   */
   #drain(): Promise<void> {
     return this.#started.then(() => runtimeAccess.drain(this.#runtime));
   }
 
+  /**
+   * Completes or reuses the bus close operation.
+   */
   #finishClose(): Promise<void> {
     this.#closed ??= this.#closeOnce();
     return this.#closed;
   }
 
+  /**
+   * Forces intake closed and starts best-effort runtime shutdown.
+   */
   #abortClose(): void {
     this.#beginClose();
     void this.#started.then(() => this.#runtime.close()).catch(() => undefined);
     this.#intakeState = "closed";
   }
 
+  /**
+   * Closes intake, waits for startup, then closes the command runtime.
+   */
   async #closeOnce(): Promise<void> {
     this.#beginClose();
     await this.#started;
@@ -269,12 +299,18 @@ export class CommandBus {
     this.#intakeState = "closed";
   }
 
+  /**
+   * Checks tenant admission and dispatches a validated command.
+   */
   async #dispatch(command: Command): Promise<void> {
     const dispatcher = this.#checkedDispatcher(command);
     await commandAdmissions.get(this)?.(command);
     await dispatcher.dispatch(command);
   }
 
+  /**
+   * Validates the command envelope and payload, then resolves its registered dispatcher.
+   */
   #checkedDispatcher(command: Command): CommandDispatcher {
     CommandValidationError.checkEnvelope(command);
     const packed = command.message;
@@ -352,6 +388,10 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
       throw new TypeError("Command admission requires a CommandBus instance.");
     commandAdmissions.set(commandBus, onAdmit);
   },
+
+  /**
+   * Posts a framework-generated command through the bus internal admission path.
+   */
   postInternal(commandBus: CommandBus, command: Command): Promise<void> {
     const postInternal = internalCommandPosters.get(commandBus);
 
@@ -362,6 +402,9 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     return postInternal(command);
   },
 
+  /**
+   * Posts a framework follow-up that may run while accepted work is draining.
+   */
   postInternalFollowUp(commandBus: CommandBus, command: Command): Promise<void> {
     const post = commandFollowUpPosters.get(commandBus);
     if (post === undefined) {
@@ -370,6 +413,9 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     return post(command);
   },
 
+  /**
+   * Stops external command intake for coordinated context shutdown.
+   */
   beginClose(commandBus: CommandBus): void {
     const beginClose = commandBusCloseStarters.get(commandBus);
 
@@ -380,6 +426,9 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     beginClose();
   },
 
+  /**
+   * Waits until commands already accepted by this bus complete.
+   */
   drain(commandBus: CommandBus): Promise<void> {
     const drain = commandBusDrainers.get(commandBus);
 
@@ -390,6 +439,9 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     return drain();
   },
 
+  /**
+   * Finishes closing the command runtime.
+   */
   finishClose(commandBus: CommandBus): Promise<void> {
     const finishClose = commandBusCloseFinishers.get(commandBus);
 
@@ -400,6 +452,9 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     return finishClose();
   },
 
+  /**
+   * Aborts close coordination and makes the bus terminal.
+   */
   abortClose(commandBus: CommandBus): void {
     const abortClose = commandBusAborters.get(commandBus);
 
@@ -410,6 +465,9 @@ export const commandBusAccess: CommandBusAccess = Object.freeze({
     abortClose();
   },
 
+  /**
+   * Returns the count of accepted command dispatches still in progress.
+   */
   acceptedWorkCount(commandBus: CommandBus): number {
     const acceptedWorkCount = commandBusWorkCounters.get(commandBus);
 

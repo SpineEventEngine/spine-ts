@@ -557,6 +557,9 @@ class ManagedChildLifecycle {
   }
 }
 
+/**
+ * Child process and lifecycle state for one managed server replica.
+ */
 interface ReplicaRecord {
   readonly slot: number;
   readonly incarnation: string;
@@ -574,6 +577,9 @@ interface ReplicaRecord {
   terminal: boolean;
 }
 
+/**
+ * Acknowledgment and failure state for one replica shutdown attempt.
+ */
 interface ReplicaCloseAttempt {
   readonly acknowledged: Deferred<undefined>;
   readonly drained: Deferred<undefined>;
@@ -606,6 +612,9 @@ interface Deferred<Value> {
   reject(reason: unknown): void;
 }
 
+/**
+ * Replacement and readiness state for one managed replica slot.
+ */
 interface SlotRecord {
   readonly slot: number;
   failures: number;
@@ -680,6 +689,9 @@ export interface ManagedServerCoordinatorDependencies {
   }) => Promise<NodeCoordinator>;
 }
 
+/**
+ * Coordinator settings with a port assigned during managed startup.
+ */
 type ManagedServerCoordinatorOptions = Omit<ManagedServerApplicationOptions, "port"> & {
   readonly port?: number;
   readonly manageProcessSignals?: boolean;
@@ -760,6 +772,10 @@ export class ManagedServerCoordinator {
     for (const slot of this.#slots) this.#start(slot);
     await this.#ready;
     await this.#openCoordinator();
+
+    /**
+     * Reports whether any managed replica has announced readiness.
+     */
     const isReady = () => this.#slots.some((slot) => slot.replica?.readyAt !== undefined);
     const handle: ManagedServerApplicationHandle = {
       /**

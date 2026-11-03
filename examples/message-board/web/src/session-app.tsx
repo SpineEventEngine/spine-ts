@@ -21,6 +21,9 @@ import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { MessageBoardApp } from "./index.js";
 
+/**
+ * Verified browser reader with its live client and admission generation.
+ */
 interface ActiveReader {
   readonly actor: string;
   readonly client: Client;
@@ -29,6 +32,9 @@ interface ActiveReader {
   readonly generation: number;
 }
 
+/**
+ * Credential form and active board state for signed admission.
+ */
 interface SignedReaderState {
   readonly token: string;
   readonly active: ActiveReader | undefined;
@@ -41,6 +47,9 @@ interface SignedReaderState {
   readonly signOut: () => void;
 }
 
+/**
+ * Mutable controls shared by one credential validation attempt.
+ */
 interface SessionControls {
   readonly setActive: (reader: ActiveReader | undefined) => void;
   readonly setBoard: (board: string) => void;
@@ -134,6 +143,9 @@ const SessionConnections = Object.freeze({
   },
 });
 
+/**
+ * Closes superseded or unmounted browser sessions and their clients.
+ */
 const useSessionCleanup = (
   active: ActiveReader | undefined,
   generation: React.RefObject<number>,
@@ -162,6 +174,9 @@ const useSessionCleanup = (
   );
 };
 
+/**
+ * Manages credential validation, selected board, and sign-out lifecycle.
+ */
 const useSignedReader = (url: string): SignedReaderState => {
   const [token, setToken] = useState("");
   const [active, setActive] = useState<ActiveReader>();
@@ -172,9 +187,17 @@ const useSignedReader = (url: string): SignedReaderState => {
   const pending = useRef<BrowserSession | undefined>(undefined);
   useSessionCleanup(active, generation, pending);
   const controls = { setActive, setBoard, setToken, setError, setValidating, generation, pending };
+
+  /**
+   * Starts validation for the credential currently entered in the form.
+   */
   const connect = () => {
     void SessionConnections.connect(url, token, controls);
   };
+
+  /**
+   * Invalidates the active reader and closes its session.
+   */
   const signOut = () => {
     generation.current += 1;
     void pending.current?.close();
@@ -200,6 +223,9 @@ export const SessionBoardApp = (props: {
   return <SignedBoard url={props.url} />;
 };
 
+/**
+ * Shows the credential form and mounts a board after signed admission.
+ */
 const SignedBoard = ({ url }: { readonly url: string }): ReactElement => {
   const state = useSignedReader(url);
   return (
@@ -214,6 +240,9 @@ const SignedBoard = ({ url }: { readonly url: string }): ReactElement => {
   );
 };
 
+/**
+ * Collects one issued bearer credential and displays validation errors.
+ */
 const CredentialForm = ({ state }: { readonly state: SignedReaderState }): ReactElement => (
   <form
     onSubmit={(event) => {
@@ -236,6 +265,9 @@ const CredentialForm = ({ state }: { readonly state: SignedReaderState }): React
   </form>
 );
 
+/**
+ * Renders the board for the verified actor and selected board ID.
+ */
 const ActiveBoard = ({
   state,
   active,
@@ -258,6 +290,9 @@ const ActiveBoard = ({
   </>
 );
 
+/**
+ * Opens a public reader and hides signed-session controls.
+ */
 const PublicBoard = (props: { readonly url: string }): ReactElement => {
   const [client] = useState(() => Client.forConnect(props.url));
   const [board, setBoard] = useState("general");
@@ -277,6 +312,9 @@ const PublicBoard = (props: { readonly url: string }): ReactElement => {
   );
 };
 
+/**
+ * Selects the visible board for the current reader.
+ */
 const BoardSelector = (props: {
   readonly board: string;
   readonly onChange: (board: string) => void;

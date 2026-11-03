@@ -40,6 +40,6 @@ message GatewayAuthenticatedSubscription {
   // The time after which the authenticated subscription is no longer valid.
   google.protobuf.Timestamp when_expires = 3 [(required) = true];
 
-  // Stable reader identity; older records without this field cannot be reused.
+  // Verified reader identity required to reuse this subscription.
   spine.client.SubscriptionReaderBinding reader = 4;
 }

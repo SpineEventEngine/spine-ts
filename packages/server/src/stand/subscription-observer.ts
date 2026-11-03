@@ -77,6 +77,9 @@ export interface StandObservedState {
   readonly idField: string;
 }
 
+/**
+ * Tests an Entity state update and classifies it as matching, newly excluded, or irrelevant.
+ */
 interface StateMatcher {
   /**
    * Determines state delivery or removal from the update and topic filters.
@@ -87,11 +90,17 @@ interface StateMatcher {
   match(update: StandUpdate): "state" | "noLongerMatching" | undefined;
 }
 
+/**
+ * Contains local field names resolved from a filter path and metadata for its leaf field.
+ */
 interface ResolvedPath {
   readonly local: readonly string[];
   readonly leaf: { readonly localName: string; readonly message?: MessageSchema } | undefined;
 }
 
+/**
+ * Represents decoded entity lifecycle payload fields used to construct state subscription updates.
+ */
 interface LifecycleMessage extends Message {
   readonly entity?: { readonly id?: Any; readonly typeUrl: string };
   readonly state?: Any;
@@ -135,6 +144,9 @@ export class SubscriptionObservers {
       : undefined;
     const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     return eventBusAccess.subscribe(domainEventBus, typeUrl, {
+      /**
+       * Applies tenant and origin filters to a domain Event, then forwards its rendered subscription update.
+       */
       onEvent(event) {
         if (
           tenantId !== undefined &&
@@ -171,6 +183,9 @@ export class SubscriptionObservers {
         systemEventBus,
         TypeUrls.derive(EntityLog.EntityStateChangedSchema),
         {
+          /**
+           * Converts a matching EntityStateChanged System Event into a rendered state subscription update.
+           */
           onEvent(event) {
             const update = SubscriptionObservers.#stateChangeUpdate(event, state, tenantId);
             if (update !== undefined) {
@@ -181,6 +196,9 @@ export class SubscriptionObservers {
         },
       ),
       eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityArchivedSchema), {
+        /**
+         * Handles an EntityArchived System Event by emitting removal when the prior state matched.
+         */
         onEvent(event) {
           SubscriptionObservers.#lifecycleRemoval(
             event,
@@ -193,6 +211,9 @@ export class SubscriptionObservers {
         },
       }),
       eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityDeletedSchema), {
+        /**
+         * Handles an EntityDeleted System Event by emitting removal when the prior state matched.
+         */
         onEvent(event) {
           SubscriptionObservers.#lifecycleRemoval(
             event,
@@ -205,6 +226,9 @@ export class SubscriptionObservers {
         },
       }),
       eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityUnarchivedSchema), {
+        /**
+         * Handles an EntityUnarchived System Event by rendering the restored current state when it matches.
+         */
         onEvent(event) {
           SubscriptionObservers.#lifecycleState(
             event,
@@ -217,6 +241,9 @@ export class SubscriptionObservers {
         },
       }),
       eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityRestoredSchema), {
+        /**
+         * Handles an EntityRestored System Event by rendering the restored current state when it matches.
+         */
         onEvent(event) {
           SubscriptionObservers.#lifecycleState(
             event,
@@ -230,9 +257,16 @@ export class SubscriptionObservers {
       }),
     ];
     return {
+      /**
+       * Reports whether this subscription has stopped receiving events.
+       */
       get closed() {
         return subscriptions.every((subscription) => subscription.closed);
       },
+
+      /**
+       * Detaches every System Event subscription and aggregates failures so all detach attempts run.
+       */
       unsubscribe() {
         const errors: unknown[] = [];
         for (const subscription of subscriptions) {
@@ -272,6 +306,9 @@ export class SubscriptionObservers {
     );
   }
 
+  /**
+   * Emits a no-longer-matching update when an archived or deleted entity’s last state matched the subscription.
+   */
   static #lifecycleRemoval(
     event: Event,
     state: StandObservedState,
@@ -306,6 +343,9 @@ export class SubscriptionObservers {
     onUpdate(SubscriptionObservers.#removalUpdate(id, state, subscription));
   }
 
+  /**
+   * Unpacks an unarchived or restored entity state and emits it when it satisfies the subscription filters.
+   */
   static #lifecycleState(
     event: Event,
     state: StandObservedState,
@@ -340,6 +380,9 @@ export class SubscriptionObservers {
     if (rendered !== undefined) onUpdate(rendered);
   }
 
+  /**
+   * Creates a successful entity update that marks the specified entity ID as no longer matching.
+   */
   static #removalUpdate(
     id: unknown,
     state: StandObservedState,
@@ -362,6 +405,9 @@ export class SubscriptionObservers {
     });
   }
 
+  /**
+   * Builds a renderer that filters state changes and encodes matching or removal updates for the client.
+   */
   static #createStateRenderer(
     subscription: Subscription,
     state: StandObservedState,
@@ -394,6 +440,9 @@ export class SubscriptionObservers {
     };
   }
 
+  /**
+   * Wraps a cloned domain Event in a successful event subscription update.
+   */
   static #createEventUpdate(subscription: Subscription, event: Event): SubscriptionUpdate {
     return create(SubscriptionUpdateSchema, {
       subscription: clone(SubscriptionSchema, subscription),
@@ -407,6 +456,9 @@ export class SubscriptionObservers {
     });
   }
 
+  /**
+   * Decodes a System state-change event into a Stand update after checking tenant, Entity type, state, and ID.
+   */
   static #stateChangeUpdate(
     event: Event,
     state: StandObservedState,
@@ -440,12 +492,18 @@ export class SubscriptionObservers {
     });
   }
 
+  /**
+   * Creates the successful Response included in rendered subscription updates.
+   */
   static #okResponse() {
     return create(ResponseSchema, {
       status: create(StatusSchema, { status: { case: "ok", value: {} } }),
     });
   }
 
+  /**
+   * Builds the state matcher from optional ID and field filters in a subscription target.
+   */
   static #createMatcher(subscription: Subscription, state: StandObservedState): StateMatcher {
     const target = subscription.topic?.target;
     if (target?.criterion.case !== "filters") return { match: () => "state" };
@@ -456,6 +514,9 @@ export class SubscriptionObservers {
     );
     const predicate = SubscriptionObservers.#createPredicate(filters.filter, state.schema);
     return {
+      /**
+       * Returns state when the new state matches, removal when only the previous state matched, or undefined otherwise.
+       */
       match(update) {
         if (
           ids !== undefined &&
@@ -471,6 +532,9 @@ export class SubscriptionObservers {
     };
   }
 
+  /**
+   * Combines all top-level composite filters with AND semantics.
+   */
   static #createPredicate(
     filters: readonly CompositeFilter[],
     schema: MessageSchema,
@@ -481,6 +545,9 @@ export class SubscriptionObservers {
     return (state) => predicates.every((predicate) => predicate(state));
   }
 
+  /**
+   * Builds a predicate for nested filters, applying EITHER as any-match and the default operator as all-match.
+   */
   static #compositePredicate(
     filter: CompositeFilter,
     schema: MessageSchema,
@@ -497,6 +564,9 @@ export class SubscriptionObservers {
     return (state) => parts.every((predicate) => predicate(state));
   }
 
+  /**
+   * Builds an equality predicate for a resolved state field path; unsupported operators or missing values never match.
+   */
   static #simplePredicate(filter: Filter, schema: MessageSchema): (state: Message) => boolean {
     if (filter.operator !== Filter_Operator.EQUAL || filter.value === undefined) return () => false;
     const path = SubscriptionObservers.#resolvePath(schema, filter.fieldPath?.fieldName ?? []);
@@ -509,6 +579,9 @@ export class SubscriptionObservers {
       );
   }
 
+  /**
+   * Resolves descriptor field names through nested message schemas and returns local property names plus leaf metadata.
+   */
   static #resolvePath(schema: MessageSchema, names: readonly string[]): ResolvedPath {
     let current: MessageSchema | undefined = schema;
     let leaf: { readonly localName: string; readonly message?: MessageSchema } | undefined;
@@ -522,6 +595,9 @@ export class SubscriptionObservers {
     return { local, leaf };
   }
 
+  /**
+   * Finds a schema field by protobuf name or local property name.
+   */
   static #findField(
     schema: MessageSchema | undefined,
     name: string,
@@ -537,6 +613,9 @@ export class SubscriptionObservers {
     )?.find((field) => field.name === name || field.localName === name);
   }
 
+  /**
+   * Reads a nested property path safely, returning undefined when an intermediate value is not an object.
+   */
   static #readPath(value: unknown, path: readonly string[]): unknown {
     let current = value;
     for (const part of path) {
@@ -546,6 +625,9 @@ export class SubscriptionObservers {
     return current;
   }
 
+  /**
+   * Decodes an Any identifier using its known field schema, preserving Any when that is the declared type.
+   */
   static #decodeId(value: Any, schema: MessageSchema | undefined): unknown {
     return schema === undefined
       ? SubscriptionObservers.#unpackValue(value)
@@ -554,6 +636,10 @@ export class SubscriptionObservers {
         : AnyPacker.tryUnpack(value, schema);
   }
 
+  /**
+   * Unpacks a typed Any value when possible, then tries supported protobuf wrapper schemas before
+   * returning the original Any.
+   */
   static #unpackValue(value: Any, schema?: MessageSchema): unknown {
     if (schema !== undefined) {
       if (schema.typeName === AnySchema.typeName) return value;
@@ -579,6 +665,9 @@ export class SubscriptionObservers {
     (value: Any) => AnyPacker.tryUnpack(value, BytesValueSchema)?.value,
   ]);
 
+  /**
+   * Compares protobuf messages and Any values by wire bytes, byte arrays by contents, and other values with Object.is.
+   */
   static #equals(left: unknown, right: unknown, schema?: MessageSchema): boolean {
     if (
       schema !== undefined &&
@@ -599,6 +688,9 @@ export class SubscriptionObservers {
     return Object.is(left, right);
   }
 
+  /**
+   * Packs supported Entity identifier values into Any using the state ID field schema or matching protobuf wrapper.
+   */
   static #packEntityId(state: StandObservedState, id: unknown): Any | undefined {
     if (SubscriptionObservers.#isAny(id)) return clone(AnySchema, id);
     const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
@@ -617,6 +709,9 @@ export class SubscriptionObservers {
       : undefined;
   }
 
+  /**
+   * Clones the Event for client delivery and removes command and stacktrace details from rejection context.
+   */
   static #cloneClientEvent(event: Event): Event {
     const client = clone(EventSchema, event);
     const rejection = client.context?.rejection;
@@ -629,6 +724,9 @@ export class SubscriptionObservers {
     return client;
   }
 
+  /**
+   * Extracts tenant identity from import or past-message Event origin metadata.
+   */
   static #eventTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
@@ -642,22 +740,37 @@ export class SubscriptionObservers {
     }
   }
 
+  /**
+   * Returns a defensive clone of an optional tenant identifier.
+   */
   static #tenantValue(tenant: TenantId | undefined): TenantId | undefined {
     return tenant === undefined ? undefined : clone(TenantIdSchema, tenant);
   }
 
+  /**
+   * Compares tenant IDs using their normalized TenantBoundary keys.
+   */
   static #sameTenant(left: TenantId | undefined, right: TenantId): boolean {
     return left !== undefined && TenantBoundary.from(left).key === TenantBoundary.from(right).key;
   }
 
+  /**
+   * Checks whether a value is a non-null object with a protobuf message type name.
+   */
   static #isMessage(value: unknown): value is Message {
     return typeof value === "object" && value !== null && "$typeName" in value;
   }
 
+  /**
+   * Checks whether a protobuf message has the google.protobuf.Any type name.
+   */
   static #isAny(value: unknown): value is Any {
     return SubscriptionObservers.#isMessage(value) && value.$typeName === "google.protobuf.Any";
   }
 
+  /**
+   * Compares two byte arrays by length and byte content.
+   */
   static #sameBytes(left: Uint8Array, right: Uint8Array): boolean {
     return left.length === right.length && left.every((byte, index) => byte === right[index]);
   }

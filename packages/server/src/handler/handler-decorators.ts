@@ -17,6 +17,9 @@ import { type WhereOptions } from "./handler-metadata.js";
 
 export type { WhereOptions } from "./handler-metadata.js";
 
+/**
+ * TypeScript method decorator metadata used to validate handler declarations.
+ */
 interface HandlerDecoratorContext {
   readonly static: boolean;
   readonly private: boolean;

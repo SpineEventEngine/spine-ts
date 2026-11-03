@@ -622,6 +622,9 @@ export interface CommandRequestInput {
   readonly registry?: TypeRegistryLookup;
 }
 
+/**
+ * Builds the allowlisted transport facts exposed to admission policies.
+ */
 interface TransportFactsApi {
   /**
    * Builds allowlisted transport facts without credentials.

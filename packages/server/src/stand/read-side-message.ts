@@ -15,6 +15,9 @@
 import { toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 
+/**
+ * Cursor for copying one object without recursive calls.
+ */
 interface CopyFrame {
   readonly source: object;
   readonly target: object;

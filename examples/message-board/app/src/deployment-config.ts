@@ -33,31 +33,49 @@ import { LogLayer, type ILogLayer } from "loglayer";
 import type { BoardServerOptions } from "./index.js";
 import { typeRegistry } from "./model-registry.js";
 
+/**
+ * Listener and Datastore project settings shared by deployment modes.
+ */
 interface DeploymentConfig extends BoardServerOptions {
   readonly host: string;
   readonly port: number;
   readonly projectId: string;
 }
 
+/**
+ * Combined Server and Gateway settings with the permitted web origin.
+ */
 interface CombinedConfig extends DeploymentConfig {
   readonly webOrigin: string;
 }
 
+/**
+ * Gateway backend addresses or service discovery settings.
+ */
 interface GatewayConfig extends CombinedConfig {
   readonly backendUrls?: readonly [string, ...string[]];
   readonly discovery?: { readonly serviceName: string; readonly port: number };
 }
 
+/**
+ * Replica and delivery shard counts for managed deployment.
+ */
 interface ManagedConfig extends DeploymentConfig {
   readonly processCount: number;
   readonly deliveryShardCount: number;
 }
 
+/**
+ * Storage and optional delivery facilities constructed for a managed replica.
+ */
 interface ManagedServerFacilities {
   readonly storageFactory: StorageFactory;
   readonly delivery?: ServerEnvironmentDelivery;
 }
 
+/**
+ * Validated deployment configuration and facility constructors.
+ */
 interface DeploymentContract {
   /**
    * Reads application host, port, and Datastore project settings.

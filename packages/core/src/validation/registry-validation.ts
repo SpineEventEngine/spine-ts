@@ -32,6 +32,9 @@ import { required, validate } from "@spine-event-engine/proto/generated/spine/op
 import type { ConstraintViolation } from "@spine-event-engine/proto";
 import type { MessageSchema, TypeRegistryLookup } from "../index.js";
 
+/**
+ * List or map descriptor whose nested members need supplemental validation.
+ */
 type CollectionField = Extract<DescField, { fieldKind: "list" | "map" }>;
 
 /**
@@ -82,6 +85,9 @@ export const RegistryValidation = {
    */
   view(schema: DescMessage, message: Message): Message {
     return new Proxy(RegistryValidation.target(schema, message), {
+      /**
+       * Resolves oneof or nested fields through the descriptor-aware validation view.
+       */
       get(_target, property) {
         const field = schema.fields.find((candidate) => candidate.localName === property);
         if (field === undefined) return Reflect.get(message, property) as unknown;
@@ -89,6 +95,10 @@ export const RegistryValidation = {
         if (!getOption(field, validate)) return value;
         const nested = RegistryValidation.messageSchema(field);
         if (nested === undefined) return value;
+
+        /**
+         * Wraps a nested message for recursive validation while preserving absence.
+         */
         const wrap = (entry: Message | null | undefined): Message | null | undefined => {
           if (entry === undefined || entry === null) return entry;
           return nested.typeName === AnySchema.typeName
@@ -114,6 +124,9 @@ export const RegistryValidation = {
    */
   opaque(packed: Any): Any {
     return new Proxy(create(AnySchema, { typeUrl: packed.typeUrl, value: packed.value }), {
+      /**
+       * Hides a packed type URL from the upstream validator while retaining its value.
+       */
       get(_target, property) {
         return property === "typeUrl" && packed.typeUrl
           ? "type.spine.io/!validation-opaque"

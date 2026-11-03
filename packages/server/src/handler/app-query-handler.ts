@@ -52,7 +52,14 @@ export interface AppQueryContext {
    */
   select<Schema extends GenMessage<Message>, Id>(
     query: EntityQueryDescription<Schema, Id>,
-  ): Readonly<{ read(): Promise<readonly MessageShape<Schema>[]> }>;
+  ): Readonly<{
+    /**
+     * Reads visible Entity states using this application's trusted query scope.
+     *
+     * @returns States admitted by the supplying Bounded Context read policies.
+     */
+    read(): Promise<readonly MessageShape<Schema>[]>;
+  }>;
 }
 
 /**

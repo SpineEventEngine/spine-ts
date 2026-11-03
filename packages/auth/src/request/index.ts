@@ -24,6 +24,9 @@ import {
 import { AnyPacker } from "@spine-event-engine/core";
 import type { IncomingRequest, IncomingRequestInput } from "../index.js";
 
+/**
+ * Converts an accepted wire envelope into authorization request facts.
+ */
 interface IncomingRequestDecoder {
   /**
    * Decodes one accepted wire request.

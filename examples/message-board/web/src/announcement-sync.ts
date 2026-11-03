@@ -34,11 +34,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
  * Applies only a matching announcement BoardId state or removal.
  */
 export const AnnouncementPayloads: Readonly<{
+  /**
+   * Applies a matching announcement update or requests an authoritative recovery.
+   */
   reconcile(
     previous: AnnouncementBoardView | undefined,
     update: SubscriptionUpdate,
   ): AnnouncementBoardView | undefined | "recover";
 }> = Object.freeze({
+  /**
+   * Resolves an update only when every changed Entity targets announcements.
+   */
   reconcile(previous, update) {
     if (update.update.case !== "entityUpdates" || update.update.value.update.length === 0)
       return "recover";
@@ -60,6 +66,9 @@ export const AnnouncementPayloads: Readonly<{
   },
 });
 
+/**
+ * Extracts the announcement board row from an authoritative Entity response.
+ */
 const row = (response: QueryResponse): AnnouncementBoardView | undefined => {
   return response.message.flatMap((item) => {
     const value =
@@ -110,6 +119,9 @@ export const useAnnouncementSync = (
   };
 };
 
+/**
+ * Creates the announcement Entity query and matching live Topic.
+ */
 const useAnnouncementSource = () => {
   const query = useMemo(
     () =>
@@ -131,6 +143,9 @@ const useAnnouncementSource = () => {
   return { query, topic, initial };
 };
 
+/**
+ * Tracks the last applied announcement with cancellation and generation guards.
+ */
 const useAnnouncementState = (request: ClientRequest, onChanged: () => void) => {
   const [applied, setApplied] = useState<{ value: AnnouncementBoardView | undefined }>();
   const [error, setError] = useState(false);
@@ -166,6 +181,9 @@ const useAnnouncementState = (request: ClientRequest, onChanged: () => void) => 
     updateGeneration, controller, mounted, apply };
 };
 
+/**
+ * State maintained while applying live announcement updates and recovery reads.
+ */
 type AnnouncementState = ReturnType<typeof useAnnouncementState>;
 
 const AnnouncementRecoveries = Object.freeze({
@@ -212,6 +230,9 @@ const AnnouncementRecoveries = Object.freeze({
   },
 });
 
+/**
+ * Starts an authoritative announcement read after an ambiguous live update.
+ */
 const useAnnouncementRecovery = (
   request: ClientRequest,
   query: ReturnType<typeof useAnnouncementSource>["query"],

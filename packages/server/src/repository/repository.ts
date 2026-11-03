@@ -457,6 +457,9 @@ export type ConcreteRepositoryEntityType<EntityType extends RepositoryEntityType
             ? never
             : unknown;
 
+/**
+ * Runtime constructor identity needed to validate a repository Entity type.
+ */
 interface RuntimeRepositoryEntityType {
   readonly prototype: object;
   readonly name: string;
@@ -1053,6 +1056,9 @@ export class Repository<
   }
 }
 
+/**
+ * Validated Agent identity and tenant-scoped read context captured before opening history storage.
+ */
 interface CapturedAgentRead {
   readonly runtime: RepositoryRuntime;
   readonly context: StorageContext;
@@ -1412,17 +1418,33 @@ const repositoryProjectionDirect = new WeakMap<
   (event: Event, rebuild?: boolean) => Promise<void>
 >();
 const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
+
+/**
+ * Physical storage port that can be synchronously closed.
+ */
 interface RepositoryClosePort {
   /**
    * Closes this physical storage port.
    */
   close(): void;
 }
+
+/**
+ * Entity storage reader returned by the configured entity storage factory.
+ */
 type RepositoryReadEntityPort = ReturnType<EntityStorageFactory["createEntityStorage"]>;
+
+/**
+ * A retained read port and, when opened, its full Entity storage wrapper.
+ */
 interface RetainedEntitySlot {
   readonly entity: RepositoryReadEntityPort;
   full?: RepositoryEntityStorage<unknown, Message>;
 }
+
+/**
+ * Per-repository registry of opened storage, active work, and close state.
+ */
 interface RepositoryStorageLifetime {
   readonly entities: Map<string, Map<string | symbol, RetainedEntitySlot>>;
   readonly histories: Map<string, Map<string | symbol, AgentHistoryStorage<unknown>>>;
@@ -1444,6 +1466,10 @@ const entityStateHistoryCaches = new WeakMap<
     clear(): void;
   }
 >();
+
+/**
+ * History enablement and dispatch-guard limits configured for a repository.
+ */
 interface RepositoryHistoryConfiguration {
   stateHistory: boolean;
   readonly processManagerEventHistory: boolean;
@@ -1454,12 +1480,20 @@ const repositoryHistoryConfigurations = new WeakMap<
   RepositoryHistoryConfiguration
 >();
 const repositoryAiConfigurations = new WeakMap<RepositoryView, RepositoryAiOptions>();
+
+/**
+ * Serialized dispatch lane with bounded completion memory and in-flight count.
+ */
 interface DispatchGuard {
   readonly completed: Set<string>;
   readonly order: string[];
   chain: Promise<void>;
   active: number;
 }
+
+/**
+ * Per-repository dispatch lanes and their eviction order.
+ */
 interface RepositoryDispatchGuards {
   readonly lanes: Map<string, DispatchGuard>;
   readonly order: string[];
@@ -1559,13 +1593,32 @@ const RepositoryRegistration = {
 Object.freeze(RepositoryRegistration);
 Object.freeze(Repository);
 
+/**
+ * Entity inbox operation handled by Aggregate or Process Manager dispatch.
+ */
 type EntityInboxLabel = "HANDLE_COMMAND" | "REACT_UPON_EVENT";
+
+/**
+ * Deferred command follow-up scheduled after inbox replay.
+ */
 type EntityInboxFollowUp = () => Promise<void>;
+
+/**
+ * Completion of inbox replay, optionally yielding a follow-up to dispatch.
+ */
 type EntityInboxReplay = Promise<EntityInboxFollowUp | undefined>;
+
+/**
+ * Persisted Entity inbox message constrained to deliverable command or event work.
+ */
 type EntityInboxMessage = InboxMessage & {
   readonly label: EntityInboxLabel;
   readonly status: "TO_DELIVER";
 };
+
+/**
+ * Input for a new Entity inbox message; storage supplies receipt time, version, and shard.
+ */
 type EntityInboxInput = Omit<InboxMessageInput, "whenReceived" | "version" | "shard"> & {
   readonly label: EntityInboxLabel;
   readonly status: "TO_DELIVER";
@@ -1661,6 +1714,9 @@ type ProjectionInboxMessage = InboxMessage & {
   readonly status: "TO_DELIVER";
 };
 
+/**
+ * Input for a new projection update; storage supplies receipt time and version.
+ */
 type ProjectionInboxInput = Omit<InboxMessageInput, "whenReceived" | "version"> & {
   readonly label: "UPDATE_SUBSCRIBER";
   readonly status: "TO_DELIVER";
@@ -2003,6 +2059,9 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return schemas;
   },
 
+  /**
+   * Returns the AI registry configured for this repository, if present.
+   */
   agentConfiguration(repository: RepositoryView) {
     const ai = repositoryAiConfigurations.get(repository);
     return ai === undefined ? {} : { ai };
@@ -2045,6 +2104,9 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     );
   },
 
+  /**
+   * Reads one tenant-admitted Agent history page through retained history storage.
+   */
   async agentHistoryPage(
     repository: RepositoryView,
     entityId: unknown,
@@ -2243,6 +2305,9 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
   },
 });
 
+/**
+ * Dispatchers assembled for command, domain event, and system event routing.
+ */
 interface RepositoryDispatchers {
   readonly command: CommandDispatcher | undefined;
   readonly event: EventDispatcher | undefined;
@@ -2348,6 +2413,9 @@ interface RepositoryRouting<Id = unknown> {
   ): Promise<RepositoryStateUpdateRoute<Id> | undefined>;
 }
 
+/**
+ * Message schemas partitioned by routing role during repository registration.
+ */
 interface RoutingSchemas {
   readonly command: readonly MessageSchema[];
   readonly event: readonly MessageSchema[];
@@ -2358,11 +2426,17 @@ interface RoutingSchemas {
   readonly producedCommand: readonly MessageSchema[];
 }
 
+/**
+ * Optional registration indexes used to select command and event handlers.
+ */
 interface RoutingReadiness {
   readonly command: CommandRegistrationReadinessLookup | undefined;
   readonly event: EventRegistrationReadinessLookup | undefined;
 }
 
+/**
+ * Precomputed handler filter plans and command-reaction selections.
+ */
 interface RoutingFilters {
   readonly commandReactions: ReadonlyMap<
     string,
@@ -2410,6 +2484,9 @@ interface RoutingInput<Id> {
   readonly stringifiers: StringifierRegistry;
 }
 
+/**
+ * Live repository services and callbacks required for dispatch, storage, and Agent work.
+ */
 interface RepositoryRuntime {
   readonly context: StorageMode;
   readonly storageFactory: StorageFactory;
@@ -2430,28 +2507,57 @@ interface RepositoryRuntime {
   readonly deferAgent: (message: InboxMessage, tenantId: TenantId | undefined) => void;
 }
 
+/**
+ * Agent handler result represented as a produced Event or Command.
+ */
 type AgentOutput =
   | { readonly case: "event"; readonly value: Event }
   | { readonly case: "command"; readonly value: Command };
 
+/**
+ * Supported handler metadata input forms for repository registration.
+ */
 type RepositoryHandlersOption =
   EntityHandlersMetadata | readonly EntityHandlersMetadata[] | undefined;
+
+/**
+ * Inferred command assignee metadata result type.
+ */
 type RepositoryCommandAssignee = NonNullable<
   ReturnType<NonNullable<RepositoryRouting["commandReadiness"]>["findCommandAssignee"]>
 >;
+
+/**
+ * Inferred event subscriber metadata result type.
+ */
 type RepositoryEventSubscribers = NonNullable<
   ReturnType<NonNullable<RepositoryRouting["eventReadiness"]>["findEventSubscribers"]>
 >;
+
+/**
+ * State subscription handlers selected for a state type.
+ */
 type RepositoryStateSubscribers =
   readonly RegisteredHandlerMetadata<StateSubscriptionHandlerMetadata>[];
+
+/**
+ * Command reaction handlers indexed by command type URL.
+ */
 type RepositoryCommandReactions = ReadonlyMap<
   string,
   readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[]
 >;
+
+/**
+ * State subscription handlers indexed by state type URL.
+ */
 type RepositoryStateSubscriptionMap = ReadonlyMap<string, RepositoryStateSubscribers>;
 
 const inboxDedupMs = 30_000;
 
+/**
+ * Aggregate reconstructed from persisted state and event history.
+ */
 interface LoadedAggregate {
   readonly commits: EntityCommitStorage;
   readonly current: EntityRecord | undefined;
@@ -2463,6 +2569,9 @@ interface LoadedAggregate {
   readonly storageInput: EntityStorageInput<unknown, Message>;
 }
 
+/**
+ * Repository storage APIs bound to the active repository context.
+ */
 interface BoundRepositoryStorage {
   readonly commits: EntityCommitStorage;
   readonly events: EntityEventHistoryPort<unknown>;
@@ -2470,6 +2579,9 @@ interface BoundRepositoryStorage {
   readonly storageInput: EntityStorageInput<unknown, Message>;
 }
 
+/**
+ * Persisted Aggregate state and version used to initialize or restore it.
+ */
 interface AggregateSnapshot {
   readonly state: unknown;
   readonly versionMessage: Version;
@@ -2477,6 +2589,9 @@ interface AggregateSnapshot {
   readonly deleted: boolean;
 }
 
+/**
+ * Dependencies and initial state supplied when constructing an Aggregate.
+ */
 interface AggregateConstructorOptions {
   id: unknown;
   schema: DescriptorMessageSchema;
@@ -2530,7 +2645,12 @@ export const repositoryReadAccess: Readonly<{
   bind<EntityType extends RepositoryEntityType>(
     repository: RepositoryView & { readonly entityType: EntityType },
     tenantId?: TenantId,
-  ): RepositoryReadQueries<EntityType> & { close(): void };
+  ): RepositoryReadQueries<EntityType> & {
+    /**
+     * Releases the scoped repository read binding.
+     */
+    close(): void;
+  };
 }> = Object.freeze({
   /**
    * Creates read-only access for a registered repository with an active runtime.
@@ -2543,7 +2663,12 @@ export const repositoryReadAccess: Readonly<{
   bind<EntityType extends RepositoryEntityType>(
     repository: RepositoryView & { readonly entityType: EntityType },
     tenantId?: TenantId,
-  ): RepositoryReadQueries<EntityType> & { close(): void } {
+  ): RepositoryReadQueries<EntityType> & {
+    /**
+     * Releases the scoped repository read binding.
+     */
+    close(): void;
+  } {
     const runtime = repositoryRuntimes.get(repository);
     if (runtime === undefined)
       throw new Error("Repository reads require an active runtime binding.");
@@ -2794,6 +2919,9 @@ const RepositoryReadPredicates = {
   },
 };
 
+/**
+ * Entity state loaded from storage with the metadata needed for dispatch.
+ */
 interface LoadedRepositoryEntity {
   readonly commits: EntityCommitStorage;
   readonly current: EntityRecord | undefined;
@@ -3750,6 +3878,9 @@ class AggregateEventExecution {
   }
 }
 
+/**
+ * Selects stored-state loading or state rebuilding from history.
+ */
 type EntityLoadMode = "stored" | "rebuild";
 
 /**
@@ -4817,10 +4948,16 @@ const AgentLiveHandler = {
   },
 };
 
+/**
+ * Outcome of live Agent execution: produced messages or a rejection output.
+ */
 type AgentLiveResult =
   | { readonly case: "produced"; readonly values: readonly unknown[] }
   | { readonly case: "rejected"; readonly output: AgentOutput };
 
+/**
+ * Captured inputs required to admit one live Agent inbox message.
+ */
 interface AgentLiveAdmit {
   readonly repository: RepositoryView;
   readonly runtime: RepositoryRuntime;
@@ -10580,6 +10717,9 @@ const RepositoryStorage = {
 };
 Object.freeze(RepositoryStorage);
 
+/**
+ * Repository, tenant, and cached readers captured for one Entity history request.
+ */
 interface BoundHistoryReadScope {
   readonly repository: RepositoryView;
   readonly lifetime: RepositoryStorageLifetime;

@@ -79,6 +79,9 @@ export class OrderCard extends Projection<string, typeof OrderCardSchema> {
  * Builds the independent order-card demonstration context.
  */
 export const OrderCardContext: Readonly<{
+  /**
+   * Builds the order-card Bounded Context with the supplied storage.
+   */
   create(storageFactory: StorageFactory): Promise<BoundedContext>;
 }> = Object.freeze({
   /**

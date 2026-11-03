@@ -44,6 +44,10 @@ import {
 import { SubscriptionReaderBindings } from "../stand/subscription-reader-binding.js";
 
 const expiryBatchSize = 25;
+
+/**
+ * Original cleanup callback and its installed durable-store delegate.
+ */
 interface DurableCleanupState {
   readonly caller: OnSubscriptionDefinition;
   backend: OnSubscriptionDefinition | undefined;

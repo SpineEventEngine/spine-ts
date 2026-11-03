@@ -171,10 +171,16 @@ export class MessageBoardApplication {
     return BrowserServer.run(native, this.#browserOptions(options));
   }
 
+  /**
+   * Configures in-memory storage for local example startup.
+   */
   #localEnvironment(): void {
     this.#environment(new InMemoryStorageFactory());
   }
 
+  /**
+   * Installs the selected storage and delivery facilities in the local Server environment.
+   */
   #environment(storageFactory: StorageFactory, deliveryStrategy?: DeliveryStrategy): void {
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory,
@@ -182,6 +188,9 @@ export class MessageBoardApplication {
     });
   }
 
+  /**
+   * Builds Gateway settings from the selected admission mode and listener options.
+   */
   #browserOptions(options: BoardServerOptions): BrowserServerOptions {
     const policy = new BoardAccessPolicy();
     const signed = this.#admission();
@@ -202,6 +211,9 @@ export class MessageBoardApplication {
     };
   }
 
+  /**
+   * Resolves signed admission once when configured for the deployment.
+   */
   #admission(): SignedBoardAdmission | undefined {
     if ((this.configuration.MESSAGE_BOARD_AUTH_MODE ?? "public") === "public") return undefined;
     return (this.#signed ??= BoardAdmission.configured(this.configuration));

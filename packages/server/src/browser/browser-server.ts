@@ -66,6 +66,9 @@ import { ServerEnvironment } from "../server/server-environment.js";
 const gracefulBrowserDrainMs = 100;
 const reservedPathSet = new Set(reservedSpineRpcPaths);
 
+/**
+ * Browser admission inputs before session and access requirements are normalized.
+ */
 interface UncheckedBrowserAdmission {
   readonly sessions?: SessionResolver;
   readonly publicAccess?: true;

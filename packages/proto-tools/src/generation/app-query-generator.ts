@@ -15,7 +15,14 @@
 import type { DescMessage } from "@bufbuild/protobuf";
 import type { Schema } from "@bufbuild/protoplugin";
 
+/**
+ * File writer returned by the existing Proto generation stage.
+ */
 type QueryOutput = ReturnType<Schema["generateFile"]>;
+
+/**
+ * One top-level application operation and its nested request/result descriptors.
+ */
 interface QueryPair {
   readonly operation: DescMessage;
   readonly query: DescMessage;
@@ -26,8 +33,19 @@ interface QueryPair {
  * Emits grouped application query declarations from the normal Proto plugin stage.
  */
 export const AppQueryGenerator: Readonly<{
+  /**
+   * Generates grouped companions from eligible Proto files.
+   */
   generate(schema: Schema): void;
+
+  /**
+   * Resolves the nested Query and Response messages for one operation.
+   */
   pair(operation: DescMessage): QueryPair;
+
+  /**
+   * Writes the generated aliases and request-to-result association.
+   */
   emit(output: QueryOutput, pair: QueryPair): void;
 }> = Object.freeze({
   /**

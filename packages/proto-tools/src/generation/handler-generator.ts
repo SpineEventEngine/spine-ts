@@ -21,17 +21,21 @@ import { generatedSource } from "./generated-source-policy.js";
 /**
  * Generates application handler registries.
  */
-export const HandlerGeneration: Readonly<{ generate(applicationRoot: string): void }> =
-  Object.freeze({
-    // prettier-ignore
+export const HandlerGeneration: Readonly<{
+  /**
+   * Generates handler registry source for the given application package.
+   */
+  generate(applicationRoot: string): void;
+}> = Object.freeze({
+  // prettier-ignore
 
-    /**
-     * Generates an application's conventional handler registry from its TypeScript project.
-     *
-     * @param applicationRoot The application package root.
-     * @returns Nothing.
-     */
-    generate(applicationRoot: string): void {
+  /**
+   * Generates an application's conventional handler registry from its TypeScript project.
+   *
+   * @param applicationRoot The application package root.
+   * @returns Nothing.
+   */
+  generate(applicationRoot: string): void {
       const config = existsSync(join(applicationRoot, "spine-proto.json"))
         ? ProtoConfig.read(applicationRoot)
         : undefined;
@@ -53,6 +57,9 @@ export const HandlerGeneration: Readonly<{ generate(applicationRoot: string): vo
       generateHandlerRegistry(
         { appRoot: applicationRoot },
         {
+          /**
+           * Writes generated registry source with metadata typing where needed.
+           */
           write(path, source) {
             const typedSource = /\.spine-(?:metadata|bootstrap)\.ts\./u.test(path);
             writeFileSync(path, typedSource ? generatedSource(source, sources) : source, "utf8");
@@ -60,4 +67,4 @@ export const HandlerGeneration: Readonly<{ generate(applicationRoot: string): vo
         },
       );
     },
-  });
+});

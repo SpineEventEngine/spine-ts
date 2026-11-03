@@ -31,6 +31,9 @@ import {
 } from "@spine-event-engine/proto/client";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
+/**
+ * Mutable generation and cancellation state for authoritative statistics reads.
+ */
 interface StatsReadState {
   generation: number;
   dirty: boolean;
@@ -38,12 +41,18 @@ interface StatsReadState {
   controller: AbortController | undefined;
 }
 
+/**
+ * Latest paired statistics response and manual refresh capability.
+ */
 interface StatsReadResult {
   readonly value: ReadBoardStats.Response | undefined;
   readonly status: "loading" | "ready" | "error";
   readonly refresh: () => void;
 }
 
+/**
+ * Statistics read state with the live Topic connection status.
+ */
 interface StatsResult extends StatsReadResult {
   readonly liveStatus: "connecting" | "connected" | "error";
 }
@@ -95,6 +104,9 @@ const StatsQueries = Object.freeze({
   },
 });
 
+/**
+ * Coalesces typed statistics reads and discards responses from stale generations.
+ */
 const useStatsRead = (boardId: BoardId, request: ClientRequest): StatsReadResult => {
   const [value, setValue] = useState<ReadBoardStats.Response>();
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -122,6 +134,9 @@ const useStatsRead = (boardId: BoardId, request: ClientRequest): StatsReadResult
   return { value, status, refresh };
 };
 
+/**
+ * Cancellation and subscription state for the statistics Projection Topic.
+ */
 interface StatsTopicState {
   active: boolean;
   subscription?: Subscription;
@@ -174,6 +189,9 @@ const StatsTopics = Object.freeze({
   },
 });
 
+/**
+ * Watches statistics Projection changes and requests paired App Query refreshes.
+ */
 const useStatsTopic = (
   request: ClientRequest,
   topic: Topic,
@@ -250,6 +268,9 @@ export const BoardStatisticsPanel = (props: {
   );
 };
 
+/**
+ * Renders the cumulative counts and first accepted post time for one board.
+ */
 const Summary = (props: {
   readonly title: string;
   readonly value: BoardStatistics | undefined;

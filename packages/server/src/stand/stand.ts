@@ -146,6 +146,9 @@ export interface StandReadOptions {
   readonly signal?: AbortSignal;
 }
 
+/**
+ * Stand read options with the effective policy context captured at admission.
+ */
 interface CapturedStandRead extends StandReadOptions {
   readonly readSide?: ReadSideContext;
 }
@@ -281,7 +284,14 @@ export class Stand {
 
   readonly #entityHandles = new Map<
     string,
-    { readonly current: EntityRecordStorage<unknown>; close(): void }
+    {
+      readonly current: EntityRecordStorage<unknown>;
+
+      /**
+       * Releases the provider's Entity-record handle.
+       */
+      close(): void;
+    }
   >();
 
   readonly #handleCloseErrors: unknown[] = [];
@@ -1007,9 +1017,16 @@ export class Stand {
     const delivery = this.#subscribeDelivery(schema, observer, options, registration, tenantKey);
 
     return Object.freeze({
+      /**
+       * Reports whether this subscription handle has stopped delivering.
+       */
       get closed() {
         return delivery.closed;
       },
+
+      /**
+       * Detaches the subscriber and stops future local deliveries.
+       */
       unsubscribe() {
         delivery.close();
       },
@@ -1091,6 +1108,9 @@ export class Stand {
     return this.#closedPromise;
   }
 
+  /**
+   * Drains accepted Stand work, closes subscriptions, and releases Entity handles.
+   */
   async #closeOnce(): Promise<void> {
     this.#closing = true;
     await Promise.all([...this.#inFlight]);
@@ -1139,6 +1159,9 @@ export class Stand {
     return registration as Registration<Schema>;
   }
 
+  /**
+   * Reuses single-tenant storage or opens a temporary multitenant Entity handle.
+   */
   #leaseCurrent(registration: Registration, tenantId: TenantId | undefined): CurrentStorageLease {
     if (this.#context.multitenant) {
       return this.#lease(
@@ -1168,8 +1191,18 @@ export class Stand {
     return this.#lease(handle, false);
   }
 
+  /**
+   * Returns a release callback for a current-state storage handle.
+   */
   #lease(
-    handle: { readonly current: EntityRecordStorage<unknown>; close(): void },
+    handle: {
+      readonly current: EntityRecordStorage<unknown>;
+
+      /**
+       * Releases this provider storage handle when the read ends.
+       */
+      close(): void;
+    },
     releaseAfterOperation: boolean,
   ): CurrentStorageLease {
     let released = false;
@@ -1260,11 +1293,17 @@ export class Stand {
     }
   }
 
+  /**
+   * Creates the subscription partition key for the selected tenant.
+   */
   #tenantKey(tenantId: TenantId | undefined): string {
     const selected = this.#tenantId(tenantId);
     return selected === undefined ? "__single__" : String(TenantBoundary.from(selected).key);
   }
 
+  /**
+   * Checks whether a registered Entity state has subscribers in this tenant slice.
+   */
   #hasTenantSubscribers(registration: Registration, tenantId: TenantId | undefined): boolean {
     const tenantKey = this.#tenantKey(tenantId);
 
@@ -1292,6 +1331,9 @@ export class Stand {
     return [...registration.subscribers].filter((subscriber) => subscriber.tenantKey === tenantKey);
   }
 
+  /**
+   * Validates and detaches the tenant ID required by this Stand's tenancy mode.
+   */
   #tenantId(tenantId: TenantId | undefined): TenantId | undefined {
     if (!this.#context.multitenant) {
       if (tenantId !== undefined) {
@@ -1319,6 +1361,9 @@ export class Stand {
     return selected;
   }
 
+  /**
+   * Builds the provider storage scope for a validated tenant selection.
+   */
   #storageContext(tenantId: TenantId | undefined): StorageContext {
     if (!this.#context.multitenant) {
       this.#tenantId(tenantId);
@@ -1334,12 +1379,18 @@ export class Stand {
     });
   }
 
+  /**
+   * Rejects a new operation once Stand closing has begun.
+   */
   #requireOpen(): void {
     if (this.#closing || this.#closed) {
       throw new Error("Stand is closed.");
     }
   }
 
+  /**
+   * Tracks an accepted operation and returns its completion callback.
+   */
   #beginOperation(): () => void {
     this.#requireOpen();
     let finish: (() => void) | undefined;
@@ -1395,6 +1446,9 @@ export class Stand {
     });
   }
 
+  /**
+   * Extracts the registered Entity ID field from a state update.
+   */
   static #readStateId(
     state: Message,
     registration: Pick<Registration, "schema" | "typeUrl" | "idField">,
@@ -1406,10 +1460,16 @@ export class Stand {
     return id;
   }
 
+  /**
+   * Detaches a structured storage value before returning it to a caller.
+   */
   static #cloneValue(value: unknown): unknown {
     return typeof value === "object" && value !== null ? globalThis.structuredClone(value) : value;
   }
 
+  /**
+   * Translates a supported RecordQuery into the normalized storage query plan.
+   */
   static #legacyPlan(query: RecordQuery<unknown>): NormalizedQueryPlan<unknown> {
     RecordQuery.validate(query);
     if (query.after !== undefined) {
@@ -1455,7 +1515,14 @@ export class Stand {
   static #openStorage<I, S extends Message>(
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
-  ): { readonly current: EntityRecordStorage<I>; close(): void } {
+  ): {
+    readonly current: EntityRecordStorage<I>;
+
+    /**
+     * Closes the provider's Entity-record storage handle.
+     */
+    close(): void;
+  } {
     const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
     if (candidate.createEntityStorage === undefined) {
       throw new Error("StorageFactory does not provide the required entity-record storage seam.");
@@ -1463,6 +1530,9 @@ export class Stand {
     return candidate.createEntityStorage(input);
   }
 
+  /**
+   * Freezes a detached name and tenancy mode for storage configuration.
+   */
   static #cloneContext(context: StorageMode): StorageMode {
     return Object.freeze({ name: context.name, multitenant: context.multitenant });
   }
@@ -1796,6 +1866,14 @@ export const standAccess: StandAccess = Object.freeze({
     return message === null ? null : create(EventSchema, { ...clone(EventSchema, event), message });
   },
 
+  /**
+   * Applies Bounded Context policy to one subscription update before delivery.
+   *
+   * @param stand Context read facade.
+   * @param update Subscription update awaiting delivery.
+   * @param context Actual subscription read facts.
+   * @returns Visible update, or null when policy removes it.
+   */
   filterSubscription(
     stand: Stand,
     update: SubscriptionUpdate,

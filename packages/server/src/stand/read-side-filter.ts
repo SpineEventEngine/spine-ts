@@ -23,6 +23,9 @@ import type { HistoryRead } from "@spine-event-engine/ai";
 import type { AgentHistoryView } from "@spine-event-engine/storage/provider";
 import type { BoundedContext } from "../context/bounded-context.js";
 
+/**
+ * Exposes byte contents without mutation methods to read-side policies.
+ */
 type ReadonlyBytes = Readonly<Pick<Uint8Array, "length" | "at" | "slice"> & Record<number, number>>;
 
 /**

@@ -52,7 +52,15 @@ const defaultPort = 0;
 const defaultMessageMaxBytes = 4_194_304;
 const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
+
+/**
+ * A context supplied directly or assembled from a builder during server startup.
+ */
 type ServerContext = BoundedContext | BoundedContextBuilder;
+
+/**
+ * Identifies whether caller-managed or server-managed startup controls the environment lifecycle.
+ */
 type EnvironmentOwnership = "caller" | "server";
 
 /**
@@ -112,7 +120,12 @@ export class Server {
 
   readonly #contexts: ServerContext[] = [];
 
-  readonly #resources: { close(): unknown }[] = [];
+  readonly #resources: {
+    /**
+     * Releases a registered resource during server shutdown.
+     */
+    close(): unknown;
+  }[] = [];
 
   readonly #listenerLifecycles: ListenerLifecycle[] = [];
 
@@ -219,7 +232,12 @@ export class Server {
    * @param resource Supplies the resource to close after contexts.
    * @returns This server builder.
    */
-  addResource(resource: { close(): unknown }): this {
+  addResource(resource: {
+    /**
+     * Releases this resource during server shutdown.
+     */
+    close(): unknown;
+  }): this {
     this.#resources.push(resource);
     return this;
   }
@@ -256,6 +274,9 @@ export class Server {
     return this.#start("caller");
   }
 
+  /**
+   * Shares or begins startup under the selected environment lifecycle mode.
+   */
   #start(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const current = this.#starting;
     if (current !== undefined) {
@@ -620,6 +641,9 @@ export class Server {
     }
   }
 
+  /**
+   * Retries deferred network and resource cleanup from a failed startup, then reports the prior failure.
+   */
   async #retryFailedStartCleanup(cleanup: FailedStartCleanup): Promise<never> {
     const errors: unknown[] = [];
 
@@ -633,6 +657,9 @@ export class Server {
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
+  /**
+   * Retries a failed listener lifecycle close and leaves the server terminal.
+   */
   async #retryFailedListenerLifecycle(running: RunningHttp2Server): Promise<never> {
     await running.close();
     this.#failedListenerLifecycle = undefined;
@@ -640,6 +667,9 @@ export class Server {
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
+  /**
+   * Cleans up startup resources after listener lifecycle startup fails.
+   */
   async #cleanupFailedListenerStart(
     cleanup: FailedStartCleanup,
     startError: unknown,
@@ -653,6 +683,9 @@ export class Server {
     return ServerValues.throwListenerStartError(startError, errors);
   }
 
+  /**
+   * Closes acquired dependencies and releases startup registrations after network cleanup succeeds.
+   */
   async #advanceFailedStartCleanup(cleanup: FailedStartCleanup, errors: unknown[]): Promise<void> {
     let closeFailed = false;
     try {
@@ -670,6 +703,9 @@ export class Server {
     }
   }
 
+  /**
+   * Attempts listener and session shutdown, retaining cleanup state if it fails.
+   */
   async #closeFailedStartNetwork(cleanup: FailedStartCleanup, errors: unknown[]): Promise<boolean> {
     const network = cleanup.network;
     if (network === undefined) {
@@ -685,6 +721,9 @@ export class Server {
     }
   }
 
+  /**
+   * Clears the in-progress startup marker after the shared attempt settles.
+   */
   #finishStart(starting: Promise<RunningServer>): void {
     if (this.#starting === starting) {
       this.#starting = undefined;
@@ -693,6 +732,9 @@ export class Server {
   }
 }
 
+/**
+ * Resources and registrations retained to retry cleanup after startup failure.
+ */
 interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
   readonly routes?: RegisteredTargets | undefined;
@@ -701,11 +743,17 @@ interface FailedStartCleanup {
   network?: FailedStartNetwork;
 }
 
+/**
+ * Context admission token and contexts installed for one running server.
+ */
 interface ContextAdmission {
   readonly token: object;
   readonly contexts: BoundedContext[];
 }
 
+/**
+ * Native listener and sessions that must close before startup resources are released.
+ */
 interface FailedStartNetwork {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;
@@ -717,14 +765,23 @@ interface FailedStartNetwork {
  * @internal
  */
 export const serverBuilderAccess: Readonly<{
+  /**
+   * Reports whether the configured server host resolves to a loopback address.
+   */
   isLoopback(server: Server): boolean;
 }> = Object.freeze({
+  /**
+   * Reports whether the configured server host resolves to a loopback address.
+   */
   isLoopback(server: Server): boolean {
     const host = serverHosts.get(server);
     return host !== undefined && isLoopbackHost(host);
   },
 });
 
+/**
+ * Recognizes IPv4 and IPv6 loopback host spellings accepted by the server.
+ */
 function isLoopbackHost(host: string): boolean {
   if (host === "::1" || host === "::ffff:127.0.0.1") return true;
   const match = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
@@ -792,7 +849,12 @@ export interface ServerOptions {
   /**
    * Extra framework-owned closeables to close after contexts become safe to close.
    */
-  readonly resources?: readonly { close(): unknown }[];
+  readonly resources?: readonly {
+    /**
+     * Releases the resource after contexts are safe to close.
+     */
+    close(): unknown;
+  }[];
 }
 
 /**
@@ -865,11 +927,18 @@ export interface RunningServerAccess {
  * @internal
  */
 export const runningServerAccess: RunningServerAccess = Object.freeze({
+  /**
+   * Returns subscription registries for contexts in this running server, when available.
+   */
   subscriptionRegistries(server: RunningServer): readonly StandSubscriptionRegistry[] | undefined {
     return runningContexts
       .get(server)
       ?.map((context) => boundedContextAccess.subscriptionRegistry(context));
   },
+
+  /**
+   * Waits for admitted Delivery work across this server’s contexts to settle.
+   */
   drainDelivery(server: RunningServer): Promise<void> {
     return server instanceof RunningHttp2Server ? server.drainDelivery() : Promise.resolve();
   },
@@ -1081,6 +1150,9 @@ class RunningHttp2Server implements RunningServer {
   }
 }
 
+/**
+ * Listener, context, service, route, and lifecycle dependencies for a running HTTP/2 server.
+ */
 interface RunningHttp2ServerOptions {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;

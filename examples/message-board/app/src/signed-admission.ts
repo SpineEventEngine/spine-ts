@@ -37,6 +37,9 @@ export interface SignedBoardAdmission {
   readonly readerAdmission: Required<NonNullable<SpineServicesOptions["readerAdmission"]>>;
 }
 
+/**
+ * Reads one mandatory signed-admission setting and rejects an empty value.
+ */
 const required = (environment: NodeJS.ProcessEnv, name: string): string => {
   const value = environment[name];
   if (value === undefined || value.length === 0)
@@ -48,8 +51,19 @@ const required = (environment: NodeJS.ProcessEnv, name: string): string => {
  * Configures real signed sessions and operation-bound reader assertions.
  */
 export const BoardAdmission: Readonly<{
+  /**
+   * Creates signed session and native reader admission from protected settings.
+   */
   signed(environment: NodeJS.ProcessEnv): SignedBoardAdmission;
+
+  /**
+   * Selects public admission or the configured signed session mode.
+   */
   configured(environment: NodeJS.ProcessEnv): SignedBoardAdmission | undefined;
+
+  /**
+   * Verifies direct credentials and operation-bound Gateway proof at the native port.
+   */
   readerAdmission(
     sessions: SignedSessions,
     digest: (bytes: Uint8Array) => Buffer,
@@ -85,6 +99,10 @@ export const BoardAdmission: Readonly<{
     );
     if (secret.length < 32)
       throw new Error("MESSAGE_BOARD_READER_PROOF_KEY_BASE64 must decode to at least 32 bytes.");
+
+    /**
+     * Authenticates a native request payload with the configured proof key.
+     */
     const digest = (bytes: Uint8Array) => createHmac("sha256", secret).update(bytes).digest();
     return {
       sessions,

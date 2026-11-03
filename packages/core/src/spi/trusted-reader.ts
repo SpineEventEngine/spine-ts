@@ -215,6 +215,10 @@ const TrustedReaderSnapshots = Object.freeze({
     facts: Readonly<Record<string, AuthorityFact>> | null,
   ): Readonly<Record<string, AuthorityFact>> {
     const seen = new WeakSet<object>();
+
+    /**
+     * Copies one JSON authority fact while rejecting cycles and invalid values.
+     */
     const copy = (value: unknown): AuthorityFact => {
       if (value === null || typeof value === "string" || typeof value === "boolean") return value;
       if (typeof value === "number" && Number.isFinite(value)) return value;
