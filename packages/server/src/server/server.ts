@@ -14,6 +14,13 @@
 
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
+import { clone, type Message } from "@bufbuild/protobuf";
+import { ActorContextSchema, type ActorContext } from "@spine-event-engine/proto";
+import type { AppQueryResponseFor } from "@spine-event-engine/core";
+import {
+  snapshotTrustedReader,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
@@ -30,6 +37,12 @@ import {
   type SpineServicesOptions,
 } from "../services/spine-services.js";
 import { RegisteredTargets } from "../services/registered-targets.js";
+import { AppQueryExecution } from "../services/app-query-execution.js";
+import type { AppQueryHandler } from "../handler/app-query-handler.js";
+import { ReadSideFilter } from "../stand/read-side-filter.js";
+import { ReadSideFilterEngine } from "../stand/read-side-filter-engine.js";
+import { TypeRegistry } from "@spine-event-engine/core";
+import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
@@ -39,8 +52,31 @@ const defaultPort = 0;
 const defaultMessageMaxBytes = 4_194_304;
 const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
+
+/**
+ * A context supplied directly or assembled from a builder during server startup.
+ */
 type ServerContext = BoundedContext | BoundedContextBuilder;
+
+/**
+ * Identifies whether caller-managed or server-managed startup controls the environment lifecycle.
+ */
 type EnvironmentOwnership = "caller" | "server";
+
+/**
+ * Trusted framework input for a direct application query call.
+ */
+export interface ServerQueryExecutionContext extends TrustedReaderContext {
+  /**
+   * Effective actor and tenant captured from the current invocation.
+   */
+  readonly actorContext: ActorContext;
+
+  /**
+   * Cancellation of the current invocation, when available.
+   */
+  readonly signal?: AbortSignal;
+}
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
 const serverHosts = new WeakMap<Server, string>();
 const assemblingStands = new WeakMap<Stand, object>();
@@ -84,9 +120,20 @@ export class Server {
 
   readonly #contexts: ServerContext[] = [];
 
-  readonly #resources: { close(): unknown }[] = [];
+  readonly #resources: {
+    /**
+     * Releases a registered resource during server shutdown.
+     */
+    close(): unknown;
+  }[] = [];
 
   readonly #listenerLifecycles: ListenerLifecycle[] = [];
+
+  readonly #appQueries: readonly AppQueryHandler<never, Message>[];
+
+  readonly #readFilters: readonly ReadSideFilter<
+    import("@spine-event-engine/core").MessageSchema
+  >[];
 
   readonly #services: Omit<SpineServicesOptions, "contexts">;
 
@@ -97,6 +144,8 @@ export class Server {
   #startingOwnership: EnvironmentOwnership | undefined;
 
   #run: Promise<RunningServer> | undefined;
+
+  #active: RunningHttp2Server | undefined;
 
   #failedStartCleanup: FailedStartCleanup | undefined;
 
@@ -121,6 +170,8 @@ export class Server {
       "writeMaxBytes",
     );
     this.#contexts.push(...(options.contexts ?? []));
+    this.#appQueries = Object.freeze([...(options.appQueries ?? [])]);
+    this.#readFilters = Object.freeze([...new Set(options.readSideFilters ?? [])]);
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
     this.#environment = ServerEnvironment.instance();
@@ -154,12 +205,39 @@ export class Server {
   }
 
   /**
+   * Executes a generated application request through this Server's active handler table.
+   *
+   * @typeParam Q Generated request with a declared paired response.
+   * @param query Generated application request, captured before any await.
+   * @param executionContext Effective actor and verified facts from framework execution.
+   * @returns The paired generated application result.
+   */
+  async query<Q extends Message>(
+    query: Q & (AppQueryResponseFor<Q> extends never ? never : unknown),
+    executionContext: ServerQueryExecutionContext,
+  ): Promise<AppQueryResponseFor<Q>> {
+    const detached = structuredClone(query);
+    const actor = clone(ActorContextSchema, executionContext.actorContext);
+    const reader = snapshotTrustedReader(executionContext);
+    const signal = executionContext.signal;
+    const running = this.#starting === undefined ? this.#active : await this.#starting;
+    if (!(running instanceof RunningHttp2Server))
+      throw new Error("Server App Query execution requires a running Server.");
+    return running.queryTyped(detached, actor, reader, signal);
+  }
+
+  /**
    * Adds a framework closeable owned by this server assembly.
    *
    * @param resource Supplies the resource to close after contexts.
    * @returns This server builder.
    */
-  addResource(resource: { close(): unknown }): this {
+  addResource(resource: {
+    /**
+     * Releases this resource during server shutdown.
+     */
+    close(): unknown;
+  }): this {
     this.#resources.push(resource);
     return this;
   }
@@ -196,6 +274,9 @@ export class Server {
     return this.#start("caller");
   }
 
+  /**
+   * Shares or begins startup under the selected environment lifecycle mode.
+   */
   #start(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const current = this.#starting;
     if (current !== undefined) {
@@ -283,6 +364,7 @@ export class Server {
     const routes = await this.#installContexts(contexts, admission);
     const running = await this.#openListener(contexts, routes);
     await this.#startLifecycles(running);
+    this.#active = running;
     return running;
   }
 
@@ -328,12 +410,7 @@ export class Server {
     closeables: readonly unknown[],
     cleanup: FailedStartCleanup,
   ): Promise<RunningHttp2Server> {
-    const services = new SpineServices({ contexts, ...this.#services });
-    cleanup.services = services;
-    spineServicesAccess.installLogger(
-      services,
-      serverEnvironmentAccess.loggerFor(this.#environment),
-    );
+    const { queries, services } = this.#createReadServices(contexts, routes, cleanup);
     const { httpServer, sessions } = this.#createHttpListener(services);
     cleanup.network = { server: httpServer, sessions };
     const address = await ServerValues.listen(httpServer, this.#host, this.#port);
@@ -343,12 +420,49 @@ export class Server {
       sessions,
       environment: this.#environment,
       routes,
+      queries,
       services,
       host,
       port: address.port,
       contexts,
       closeables,
     });
+  }
+
+  /**
+   * Installs Server result policies and query execution into one listener's services.
+   *
+   * @param contexts Exposed Bounded Contexts.
+   * @param routes Validated Entity state routes.
+   * @param cleanup Retained failure cleanup state.
+   * @returns Listener services and App Query execution lifetime.
+   */
+  #createReadServices(
+    contexts: readonly BoundedContext[],
+    routes: RegisteredTargets,
+    cleanup: FailedStartCleanup,
+  ): { queries: AppQueryExecution; services: SpineServices } {
+    const filters =
+      this.#readFilters.length === 0
+        ? undefined
+        : new ReadSideFilterEngine(
+            this.#readFilters,
+            TypeRegistry.from(...registeredProtoModules()),
+          );
+    const queries = new AppQueryExecution(this.#appQueries, routes, filters);
+    const services = new SpineServices({
+      contexts,
+      readMaxBytes: this.#readMaxBytes,
+      ...this.#services,
+    });
+    cleanup.services = services;
+    spineServicesAccess.installAppQueries(services, queries);
+    if (filters !== undefined) spineServicesAccess.installReadFilters(services, filters);
+    spineServicesAccess.installLogger(
+      services,
+      serverEnvironmentAccess.loggerFor(this.#environment),
+    );
+    return { queries, services };
   }
 
   /**
@@ -527,6 +641,9 @@ export class Server {
     }
   }
 
+  /**
+   * Retries deferred network and resource cleanup from a failed startup, then reports the prior failure.
+   */
   async #retryFailedStartCleanup(cleanup: FailedStartCleanup): Promise<never> {
     const errors: unknown[] = [];
 
@@ -540,6 +657,9 @@ export class Server {
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
+  /**
+   * Retries a failed listener lifecycle close and leaves the server terminal.
+   */
   async #retryFailedListenerLifecycle(running: RunningHttp2Server): Promise<never> {
     await running.close();
     this.#failedListenerLifecycle = undefined;
@@ -547,6 +667,9 @@ export class Server {
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
+  /**
+   * Cleans up startup resources after listener lifecycle startup fails.
+   */
   async #cleanupFailedListenerStart(
     cleanup: FailedStartCleanup,
     startError: unknown,
@@ -560,6 +683,9 @@ export class Server {
     return ServerValues.throwListenerStartError(startError, errors);
   }
 
+  /**
+   * Closes acquired dependencies and releases startup registrations after network cleanup succeeds.
+   */
   async #advanceFailedStartCleanup(cleanup: FailedStartCleanup, errors: unknown[]): Promise<void> {
     let closeFailed = false;
     try {
@@ -577,6 +703,9 @@ export class Server {
     }
   }
 
+  /**
+   * Attempts listener and session shutdown, retaining cleanup state if it fails.
+   */
   async #closeFailedStartNetwork(cleanup: FailedStartCleanup, errors: unknown[]): Promise<boolean> {
     const network = cleanup.network;
     if (network === undefined) {
@@ -592,6 +721,9 @@ export class Server {
     }
   }
 
+  /**
+   * Clears the in-progress startup marker after the shared attempt settles.
+   */
   #finishStart(starting: Promise<RunningServer>): void {
     if (this.#starting === starting) {
       this.#starting = undefined;
@@ -600,6 +732,9 @@ export class Server {
   }
 }
 
+/**
+ * Resources and registrations retained to retry cleanup after startup failure.
+ */
 interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
   readonly routes?: RegisteredTargets | undefined;
@@ -608,11 +743,17 @@ interface FailedStartCleanup {
   network?: FailedStartNetwork;
 }
 
+/**
+ * Context admission token and contexts installed for one running server.
+ */
 interface ContextAdmission {
   readonly token: object;
   readonly contexts: BoundedContext[];
 }
 
+/**
+ * Native listener and sessions that must close before startup resources are released.
+ */
 interface FailedStartNetwork {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;
@@ -624,14 +765,23 @@ interface FailedStartNetwork {
  * @internal
  */
 export const serverBuilderAccess: Readonly<{
+  /**
+   * Reports whether the configured server host resolves to a loopback address.
+   */
   isLoopback(server: Server): boolean;
 }> = Object.freeze({
+  /**
+   * Reports whether the configured server host resolves to a loopback address.
+   */
   isLoopback(server: Server): boolean {
     const host = serverHosts.get(server);
     return host !== undefined && isLoopbackHost(host);
   },
 });
 
+/**
+ * Recognizes IPv4 and IPv6 loopback host spellings accepted by the server.
+ */
 function isLoopbackHost(host: string): boolean {
   if (host === "::1" || host === "::ffff:127.0.0.1") return true;
   const match = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
@@ -680,6 +830,18 @@ export interface ServerOptions {
   readonly contexts?: readonly (BoundedContext | BoundedContextBuilder)[];
 
   /**
+   * Handler instances selected explicitly for this Server's App Query routes.
+   */
+  readonly appQueries?: readonly AppQueryHandler<never, Message>[];
+
+  /**
+   * Domain policies applied once to this Server's gRPC read results.
+   */
+  readonly readSideFilters?: readonly ReadSideFilter<
+    import("@spine-event-engine/core").MessageSchema
+  >[];
+
+  /**
    * Service-level options for Command, Query, and Subscription routes.
    */
   readonly services?: Omit<SpineServicesOptions, "contexts">;
@@ -687,7 +849,12 @@ export interface ServerOptions {
   /**
    * Extra framework-owned closeables to close after contexts become safe to close.
    */
-  readonly resources?: readonly { close(): unknown }[];
+  readonly resources?: readonly {
+    /**
+     * Releases the resource after contexts are safe to close.
+     */
+    close(): unknown;
+  }[];
 }
 
 /**
@@ -760,11 +927,18 @@ export interface RunningServerAccess {
  * @internal
  */
 export const runningServerAccess: RunningServerAccess = Object.freeze({
+  /**
+   * Returns subscription registries for contexts in this running server, when available.
+   */
   subscriptionRegistries(server: RunningServer): readonly StandSubscriptionRegistry[] | undefined {
     return runningContexts
       .get(server)
       ?.map((context) => boundedContextAccess.subscriptionRegistry(context));
   },
+
+  /**
+   * Waits for admitted Delivery work across this server’s contexts to settle.
+   */
   drainDelivery(server: RunningServer): Promise<void> {
     return server instanceof RunningHttp2Server ? server.drainDelivery() : Promise.resolve();
   },
@@ -792,6 +966,8 @@ class RunningHttp2Server implements RunningServer {
 
   readonly #services: SpineServices;
 
+  readonly #queries: AppQueryExecution;
+
   readonly host: string;
 
   readonly port: number;
@@ -818,6 +994,7 @@ class RunningHttp2Server implements RunningServer {
     this.#environment = options.environment;
     this.#routes = options.routes;
     this.#services = options.services;
+    this.#queries = options.queries;
     this.host = options.host;
     this.port = options.port;
     this.baseUrl = `http://${ServerValues.formatHostForUrl(options.host)}:${options.port.toString()}`;
@@ -828,11 +1005,33 @@ class RunningHttp2Server implements RunningServer {
   }
 
   /**
+   * Dispatches a generated request only while this listener remains active.
+   *
+   * @typeParam Q Generated application request with a paired response.
+   * @param query Captured generated request.
+   * @param actor Current effective actor and tenant.
+   * @param reader Verified current invocation facts.
+   * @param signal Current invocation cancellation, when available.
+   * @returns The paired generated application result.
+   */
+  queryTyped<Q extends Message>(
+    query: Q,
+    actor: ActorContext,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
+  ): Promise<AppQueryResponseFor<Q>> {
+    if (this.#closed !== undefined)
+      return Promise.reject(new Error("Server App Query execution is closed."));
+    return this.#queries.executeTyped(query, actor, reader, signal);
+  }
+
+  /**
    * Closes this listener once, preserving a failed close for retry.
    *
    * @returns Completion after resources close.
    */
   close(): Promise<void> {
+    this.#queries.beginClose();
     this.#closed ??= this.#closeOnce().catch((error: unknown) => {
       this.#closed = undefined;
       throw error;
@@ -934,6 +1133,7 @@ class RunningHttp2Server implements RunningServer {
    * @returns Completion after all context work drains.
    */
   async #drainContexts(): Promise<void> {
+    await this.#queries.drain();
     for (const context of this.#contexts) boundedContextAccess.beginClose(context);
     const drained = await Promise.allSettled(
       this.#contexts.map((context) => boundedContextAccess.drainWork(context)),
@@ -950,6 +1150,9 @@ class RunningHttp2Server implements RunningServer {
   }
 }
 
+/**
+ * Listener, context, service, route, and lifecycle dependencies for a running HTTP/2 server.
+ */
 interface RunningHttp2ServerOptions {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;
@@ -959,6 +1162,7 @@ interface RunningHttp2ServerOptions {
   readonly environment: ServerEnvironment;
   readonly routes: RegisteredTargets;
   readonly services: SpineServices;
+  readonly queries: AppQueryExecution;
   readonly host: string;
   readonly port: number;
 }

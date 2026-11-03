@@ -175,13 +175,6 @@ converts only namespaces recognized by its `NamespaceConverter`. `keep()`
 stores no `TenantId` row or other discovery record; Datastore exposes native
 metadata after an application entity is written in that namespace.
 
-Before deployment to an existing project, run `pnpm --dir
-packages/storage-datastore inventory:legacy -- --project <project-id>`. It
-enumerates native namespaces and kinds and fails closed on discovery errors,
-an old `_scope` property, or a scope-derived key name. Passing the inventory is
-a startup prerequisite; the application performs migration offline, with no
-dual-layout reads or automatic conflict winner.
-
 ## Agent live persistence
 
 `AgentHistoryStorage.appendAll()` saves one complete immutable audit group

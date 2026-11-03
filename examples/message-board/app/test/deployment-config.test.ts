@@ -12,27 +12,41 @@
  * the License.
  */
 
+import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import type { Datastore } from "@google-cloud/datastore";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MessageBoardDeployment } from "../src/deployment-config.js";
+import { typeRegistry } from "../src/model-registry.js";
 
 const completeEnvironment: NodeJS.ProcessEnv = {
   HOST: "127.0.0.1",
   PORT: "8080",
   DATASTORE_PROJECT_ID: "message-board-test",
   BROWSER_ORIGIN: "https://board.example.com",
-  BACKEND_URL: "http://application:8081",
+  BACKEND_URLS: "http://application:8081",
   DELIVERY_SERVER_URL: "http://delivery:8484",
 };
 const client = {} as Datastore;
 
 afterEach(async () => {
   await resetServerEnvironmentForTest();
+  vi.unstubAllEnvs();
 });
 
 describe("MessageBoard deployment configuration", () => {
+  it("configures the production Coordinator before shared environment resolution", () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    MessageBoardDeployment.configureManagedCoordinator();
+
+    const environment = ServerEnvironment.instance();
+    expect(environment.environment.type).toBe(EnvironmentType.Production);
+    expect(environment.typeRegistry).toBe(typeRegistry);
+    expect(environment.subscriptionQueueCapacity).toBe(100);
+  });
+
   it("requires shared Delivery for a managed replica", () => {
     expect(() =>
       MessageBoardDeployment.configureManagedServer(
@@ -118,13 +132,23 @@ describe("MessageBoard deployment configuration", () => {
     },
   );
 
-  it("prefers the ordered fixed BACKEND_URLS topology over the legacy backend URL", () => {
+  it("uses the ordered fixed BACKEND_URLS topology", () => {
     expect(
       MessageBoardDeployment.gateway({
         ...completeEnvironment,
         BACKEND_URLS: "http://application-a:8081,http://application-b:8081",
       }).backendUrls,
     ).toEqual(["http://application-a:8081", "http://application-b:8081"]);
+  });
+
+  it("rejects the retired singular backend URL without BACKEND_URLS", () => {
+    expect(() =>
+      MessageBoardDeployment.gateway({
+        ...completeEnvironment,
+        BACKEND_URLS: undefined,
+        BACKEND_URL: "http://application:8081",
+      }),
+    ).toThrow("Missing required configuration: BACKEND_URLS.");
   });
 
   it("uses GKE discovery instead of a fixed backend list when configured", () => {
@@ -152,7 +176,7 @@ describe("MessageBoard deployment configuration", () => {
     ["HOST", undefined],
     ["DATASTORE_PROJECT_ID", ""],
     ["BROWSER_ORIGIN", undefined],
-    ["BACKEND_URL", undefined],
+    ["BACKEND_URLS", undefined],
   ])("rejects missing required %s", (name, value) => {
     expect(() => MessageBoardDeployment.gateway({ ...completeEnvironment, [name]: value })).toThrow(
       `Missing required configuration: ${name}.`,

@@ -204,18 +204,23 @@ describe("MessageBoard deployment entrypoints", () => {
   it("starts the Coordinator with its complete-replica callbacks and framework-owned lifecycle", async () => {
     vi.resetModules();
     vi.doUnmock("../src/multi-process-coordinator.js");
-    const run = vi.fn().mockResolvedValue(undefined);
+    const configureManagedCoordinator = vi.fn();
+    const run = vi.fn().mockImplementation(() => {
+      expect(configureManagedCoordinator).toHaveBeenCalledOnce();
+      return Promise.resolve();
+    });
     const config = { processCount: 2, host: "127.0.0.1", port: 8090 };
     const options = { createServer: vi.fn(), synchronize: vi.fn() };
     vi.doMock("@spine-event-engine/server", () => ({ ManagedServerApplication: { run } }));
     vi.doMock("../src/deployment-config.js", () => ({
-      MessageBoardDeployment: { managed: () => config },
+      MessageBoardDeployment: { managed: () => config, configureManagedCoordinator },
     }));
     vi.doMock("../src/multi-process-replica.js", () => ({ managedReplicaOptions: () => options }));
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     await import("../src/multi-process-coordinator.js");
 
+    expect(configureManagedCoordinator).toHaveBeenCalledOnce();
     expect(run).toHaveBeenCalledWith(
       expect.objectContaining({
         processCount: 2,

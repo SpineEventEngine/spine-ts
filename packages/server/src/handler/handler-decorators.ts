@@ -13,27 +13,13 @@
  */
 
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
-import {
-  EntityHandlers,
-  type EntityClass,
-  type EntityHandlersMetadata,
-  type HandlerKind,
-  type HandlerMethodName,
-  type HandlerMetadata,
-  type HandlerRegistrationBuilder,
-  type WhereOptions,
-} from "./handler-metadata.js";
+import { type WhereOptions } from "./handler-metadata.js";
 
 export type { WhereOptions } from "./handler-metadata.js";
 
-type DecoratedHandlerKind = Exclude<HandlerKind, "state-subscription">;
-
-interface DecoratedHandlerRecord {
-  readonly kind: DecoratedHandlerKind;
-  readonly schema?: DescriptorMessageSchema;
-  readonly methodName: string;
-}
-
+/**
+ * TypeScript method decorator metadata used to validate handler declarations.
+ */
 interface HandlerDecoratorContext {
   readonly static: boolean;
   readonly private: boolean;
@@ -86,8 +72,6 @@ export interface RejectionDeclaration {
   readonly schema: DescriptorMessageSchema;
 }
 
-const handlerDecoratorMetadataKey = Symbol("@spine-event-engine/server.handlerDecorators");
-
 /**
  * Validates declared domain rejections for build-time handler discovery.
  *
@@ -123,7 +107,7 @@ export function Throws(...declarations: readonly RejectionDeclaration[]): Handle
     throw new TypeError("@Throws cannot declare the same rejection more than once.");
   }
   return (_value, context): void => {
-    DecoratorMetadata.methodName(context);
+    DecoratorValidation.methodName(context);
   };
 }
 
@@ -133,8 +117,8 @@ export function Throws(...declarations: readonly RejectionDeclaration[]): Handle
  * Bare `@Assign` is the ordinary application form. Generated handler
  * registries require a command input and normal event output; a rejection is
  * valid in neither role, but the handler may throw a generated rejection
- * throwable. The decorator records metadata only; it does not register the
- * handler, instantiate the entity, or invoke the method.
+ * throwable. Generated tooling discovers the declaration from source; the
+ * decorator validates method placement without registering or invoking it.
  *
  * Declare a generated Event type, a union such as `TaskAssigned | TaskReassigned`,
  * a flat Event array (`T[]`, `readonly T[]`, `Array<T>`, or `ReadonlyArray<T>`),
@@ -153,7 +137,7 @@ export function Throws(...declarations: readonly RejectionDeclaration[]): Handle
  * @typeParam This Receiver instance on which the method runs.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
- * @param value Decorated method implementation or command schema.
+ * @param value Decorated method implementation.
  * @param context Standard decorator context for bare usage.
  */
 export function Assign<This extends object, Parameters extends readonly unknown[], Return>(
@@ -162,17 +146,13 @@ export function Assign<This extends object, Parameters extends readonly unknown[
 ): void;
 
 /**
- * Creates command-assignment decorator metadata or a schema-bearing decorator.
+ * Validates a bare command-assignment declaration.
  *
- * @param schemaOrValue Command schema or decorated method implementation.
- * @param context Standard decorator context for bare usage.
- * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
+ * @param value Decorated method implementation.
+ * @param context Standard decorator context.
  */
-export function Assign(
-  schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
-  context?: ClassMethodDecoratorContext,
-): HandlerMethodDecorator | undefined {
-  return DecoratorMetadata.decorateOrCreate("command-assignment", schemaOrValue, context);
+export function Assign(value: HandlerMethodValue, context: ClassMethodDecoratorContext): void {
+  DecoratorValidation.method(value, context);
 }
 
 /**
@@ -204,7 +184,7 @@ export function Assign(
  * @typeParam This Receiver instance on which the method runs.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
- * @param value Decorated method implementation or command schema.
+ * @param value Decorated method implementation.
  * @param context Standard decorator context for bare usage.
  */
 export function Command<This extends object, Parameters extends readonly unknown[], Return>(
@@ -213,21 +193,13 @@ export function Command<This extends object, Parameters extends readonly unknown
 ): void;
 
 /**
- * Creates command-handler decorator metadata or a schema-bearing decorator.
- * Command input declares a Process Manager command substitution; Event or rejection
- * input declares an Event Bus command reaction. Schema-bearing metadata cannot
- * provide declared returned schemas and is rejected during materialization.
+ * Validates a bare command handler declaration.
  *
- * @param schemaOrValue Generated Command, Event, or rejection schema, or
- * decorated method implementation.
- * @param context Standard decorator context for bare usage.
- * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
+ * @param value Decorated method implementation.
+ * @param context Standard decorator context.
  */
-export function Command(
-  schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
-  context?: ClassMethodDecoratorContext,
-): HandlerMethodDecorator | undefined {
-  return DecoratorMetadata.decorateOrCreate("command-reaction", schemaOrValue, context);
+export function Command(value: HandlerMethodValue, context: ClassMethodDecoratorContext): void {
+  DecoratorValidation.method(value, context);
 }
 
 /**
@@ -241,8 +213,8 @@ export function Command(
  * producing handlers such as {@link React}, not subscribers. Nested promises
  * and custom thenables are unsupported. Event/rejection inputs produce
  * event-subscription metadata; Entity state inputs produce state-subscription
- * metadata. Subscribers are metadata-only declarations bridged by generated
- * registry and runtime metadata.
+ * metadata. Generated registry tooling discovers subscribers from source and
+ * bridges their declarations to runtime handler metadata.
  *
  * @typeParam This Receiver instance on which the method runs.
  * @typeParam Parameters - Parameters accepted by the method.
@@ -256,18 +228,13 @@ export function Subscribe<This extends object, Parameters extends readonly unkno
 ): void;
 
 /**
- * Creates subscriber decorator metadata or a schema-bearing decorator.
+ * Validates a bare event subscription declaration.
  *
- * @param schemaOrValue Event, rejection, or descriptor-marked Entity state
- * schema, or the decorated method implementation.
- * @param context Standard decorator context for bare usage.
- * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
+ * @param value Decorated method implementation.
+ * @param context Standard decorator context.
  */
-export function Subscribe(
-  schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
-  context?: ClassMethodDecoratorContext,
-): HandlerMethodDecorator | undefined {
-  return DecoratorMetadata.decorateOrCreate("event-subscription", schemaOrValue, context);
+export function Subscribe(value: HandlerMethodValue, context: ClassMethodDecoratorContext): void {
+  DecoratorValidation.method(value, context);
 }
 
 /**
@@ -292,7 +259,7 @@ export function Subscribe(
  * @typeParam This Receiver instance on which the method runs.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
- * @param value Decorated method implementation or event schema.
+ * @param value Decorated method implementation.
  * @param context Standard decorator context for bare usage.
  */
 export function React<This extends object, Parameters extends readonly unknown[], Return>(
@@ -301,17 +268,13 @@ export function React<This extends object, Parameters extends readonly unknown[]
 ): void;
 
 /**
- * Creates event-reaction decorator metadata or a schema-bearing decorator.
+ * Validates a bare event reaction declaration.
  *
- * @param schemaOrValue Event schema or decorated method implementation.
- * @param context Standard decorator context for bare usage.
- * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
+ * @param value Decorated method implementation.
+ * @param context Standard decorator context.
  */
-export function React(
-  schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
-  context?: ClassMethodDecoratorContext,
-): HandlerMethodDecorator | undefined {
-  return DecoratorMetadata.decorateOrCreate("event-reaction", schemaOrValue, context);
+export function React(value: HandlerMethodValue, context: ClassMethodDecoratorContext): void {
+  DecoratorValidation.method(value, context);
 }
 
 /**
@@ -329,85 +292,17 @@ export function Where(options: WhereOptions): HandlerMethodDecorator {
 
   return (_value, context): void => {
     void snapshot;
-    DecoratorMetadata.methodName(context);
+    DecoratorValidation.methodName(context);
   };
 }
 
-/**
- * Builds schema-bearing decorator declarations for framework compatibility.
- *
- * The returned object is the same frozen `EntityHandlersMetadata` contract
- * produced by `EntityHandlers.define()` and accepted by
- * `HandlerMetadataRegistry`. Only own prototype methods of `entityType` are
- * inspected; inherited decorated methods are intentionally not materialized by
- * this per-class adapter.
- *
- * Application code must not call this function and must not provide its own
- * handler discovery/materialization. Generated framework registries own schema
- * inference for bare decorators; this adapter only supports legacy
- * schema-bearing decorator metadata.
- *
- * @typeParam Instance Entity instance on which the handlers run.
- * @typeParam StateSchema - Schema that describes the entity state.
- * @param entityType Entity class whose own decorated methods are read.
- * @param stateSchema Schema that describes the entity state.
- * @returns Frozen handler metadata for the decorated methods.
- */
-export function materializeDecoratedEntityHandlers<
-  Instance extends object,
-  StateSchema extends DescriptorMessageSchema,
->(
-  entityType: EntityClass<Instance>,
-  stateSchema: StateSchema,
-): EntityHandlersMetadata<Instance, StateSchema> {
-  const decoratedHandlers = DecoratorMetadata.collect(entityType);
-
-  return EntityHandlers.define(entityType, stateSchema, (builder) =>
-    decoratedHandlers.map((handler) =>
-      DecoratorMetadata.materializeLegacyHandler(builder, handler),
-    ),
-  );
-}
-
-const DecoratorMetadata = Object.freeze({
+const DecoratorValidation = Object.freeze({
   /**
-   * Builds legacy schema-bearing metadata for one decorated Entity method.
-   *
-   * @typeParam Instance Entity receiver type.
-   * @param builder Entity handler registration builder.
-   * @param handler Decorated method record.
-   * @returns Canonical handler metadata.
-   */
-  materializeLegacyHandler<Instance extends object>(
-    builder: HandlerRegistrationBuilder<Instance>,
-    handler: DecoratedHandlerRecord,
-  ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>> {
-    const methodName = handler.methodName as HandlerMethodName<Instance>;
-    switch (handler.kind) {
-      case "command-assignment":
-        return builder.assign(DecoratorMetadata.schema(handler), methodName);
-      case "command-substitution":
-        throw new TypeError(
-          "Command substitutions require generated registry metadata with emitted schemas.",
-        );
-      case "command-reaction":
-        throw new TypeError(
-          "@Command handlers require generated registry metadata with emitted schemas.",
-        );
-      case "event-subscription":
-        return builder.subscribe(DecoratorMetadata.schema(handler), methodName);
-      case "event-reaction":
-        return builder.react(DecoratorMetadata.schema(handler), methodName);
-    }
-  },
-
-  /**
-   * Validates a public instance method and reads its string name.
+   * Validates a public instance method with a string name.
    *
    * @param context TypeScript decorator context identifying the method.
-   * @returns The method name used in handler metadata.
    */
-  methodName(context: HandlerDecoratorContext): string {
+  methodName(context: HandlerDecoratorContext): void {
     if (context.static || context.private) {
       throw new TypeError("Spine handler decorators must be applied to public instance methods.");
     }
@@ -415,175 +310,20 @@ const DecoratorMetadata = Object.freeze({
     if (typeof context.name !== "string") {
       throw new TypeError("Spine handler decorators require string-named methods.");
     }
-    return context.name;
   },
 
   /**
-   * Applies a bare decorator or creates the internal schema-bearing form.
+   * Validates one bare method decorator invocation.
    *
-   * @param kind Handler role recorded for the method.
-   * @param schemaOrValue Decorated method, or schema for the internal form.
-   * @param context Present when TypeScript invokes a bare decorator.
-   * @returns The internal decorator, or undefined after bare decoration.
+   * @param value Decorated method implementation.
+   * @param context Standard method decorator context.
    */
-  decorateOrCreate(
-    kind: DecoratedHandlerKind,
-    schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
-    context: ClassMethodDecoratorContext | undefined,
-  ): HandlerMethodDecorator | undefined {
-    if (context !== undefined) {
-      DecoratorMetadata.create(kind)(schemaOrValue as HandlerMethodValue, context);
-      return undefined;
+  method(value: HandlerMethodValue, context: ClassMethodDecoratorContext): void {
+    const suppliedContext = context as { readonly kind?: string } | undefined;
+    if (suppliedContext?.kind !== "method" || typeof value !== "function") {
+      throw new TypeError("Spine handler decorators require a standard method decorator context.");
     }
-
-    return DecoratorMetadata.create(kind, schemaOrValue as DescriptorMessageSchema);
-  },
-
-  /**
-   * Creates a decorator that appends immutable metadata for one method.
-   *
-   * @param kind Handler role recorded for the method.
-   * @param schema Optional schema supplied by internal compatibility tooling.
-   * @returns A standard TypeScript method decorator.
-   */
-  create(kind: DecoratedHandlerKind, schema?: DescriptorMessageSchema): HandlerMethodDecorator {
-    return (_value, context): void => {
-      const methodName = DecoratorMetadata.methodName(context);
-
-      const record: DecoratedHandlerRecord = Object.freeze({
-        kind,
-        ...(schema === undefined ? {} : { schema }),
-        methodName,
-      });
-
-      const metadata = DecoratorMetadata.require(context);
-      const previous = DecoratorMetadata.read(metadata);
-
-      Object.defineProperty(metadata, handlerDecoratorMetadataKey, {
-        configurable: true,
-        enumerable: false,
-        value: Object.freeze([...previous, record]),
-        writable: true,
-      });
-    };
-  },
-
-  /**
-   * Reads a legacy declaration's schema, rejecting bare declarations.
-   *
-   * @param handler Decorator record being materialized.
-   * @returns Its explicitly supplied message schema.
-   */
-  schema(handler: DecoratedHandlerRecord): DescriptorMessageSchema {
-    if (handler.schema === undefined) {
-      throw new TypeError(
-        `Decorated handler "${handler.methodName}" was declared without a schema; ` +
-          "use generated registry metadata or explicit EntityHandlers.define() registration.",
-      );
-    }
-
-    return handler.schema;
-  },
-
-  /**
-   * Reads handler declarations for methods defined on this class prototype.
-   *
-   * @typeParam Instance Entity instance represented by the constructor.
-   * @param entityType Constructor whose declared handlers are collected.
-   * @returns A frozen list of matching decorator records.
-   */
-  collect<Instance extends object>(
-    entityType: EntityClass<Instance>,
-  ): readonly DecoratedHandlerRecord[] {
-    const metadata = DecoratorMetadata.classMetadata(entityType);
-
-    if (metadata === undefined) {
-      return Object.freeze([]);
-    }
-
-    const records = DecoratorMetadata.read(metadata).filter((record) => {
-      const descriptor = Object.getOwnPropertyDescriptor(entityType.prototype, record.methodName);
-
-      return typeof descriptor?.value === "function";
-    });
-
-    return Object.freeze(records);
-  },
-
-  /**
-   * Initializes Symbol.metadata when the runtime does not yet supply it.
-   *
-   * @returns The existing or newly installed decorator metadata symbol.
-   */
-  installSymbol(): symbol {
-    const existingMetadata = Reflect.get(Symbol, "metadata");
-
-    if (typeof existingMetadata === "symbol") {
-      return existingMetadata;
-    }
-
-    const metadata = Symbol("Symbol.metadata");
-
-    Object.defineProperty(Symbol, "metadata", {
-      configurable: true,
-      enumerable: false,
-      value: metadata,
-      writable: false,
-    });
-
-    return metadata;
-  },
-
-  /**
-   * Reads TypeScript's class metadata object, rejecting missing support.
-   *
-   * @param context Decorator context with optional runtime metadata support.
-   * @returns The writable class metadata object.
-   */
-  require(context: {
-    readonly metadata: Record<PropertyKey, unknown> | undefined;
-  }): Record<PropertyKey, unknown> {
-    if (context.metadata === undefined) {
-      throw new TypeError("Spine handler decorators require standard decorator metadata support.");
-    }
-
-    return context.metadata;
-  },
-
-  /**
-   * Reads metadata defined directly on the Entity constructor.
-   *
-   * @typeParam Instance Entity instance represented by the constructor.
-   * @param entityType Constructor whose metadata is inspected.
-   * @returns Its metadata object, or undefined when none is present.
-   */
-  classMetadata<Instance extends object>(
-    entityType: EntityClass<Instance>,
-  ): Record<PropertyKey, unknown> | undefined {
-    const descriptor = Object.getOwnPropertyDescriptor(entityType, decoratorMetadataSymbol);
-    const metadata: unknown = descriptor?.value;
-
-    if (metadata === null || typeof metadata !== "object") {
-      return undefined;
-    }
-
-    return metadata as Record<PropertyKey, unknown>;
-  },
-
-  /**
-   * Reads Spine handler records without inheriting a parent metadata array.
-   *
-   * @param metadata Class metadata object to inspect.
-   * @returns Stored handler records, or an empty list when absent.
-   */
-  read(metadata: Record<PropertyKey, unknown>): readonly DecoratedHandlerRecord[] {
-    if (!Object.hasOwn(metadata, handlerDecoratorMetadataKey)) {
-      return [];
-    }
-
-    const value = metadata[handlerDecoratorMetadataKey];
-
-    return Array.isArray(value) ? (value as readonly DecoratedHandlerRecord[]) : [];
+    DecoratorValidation.methodName(context);
   },
 });
 
@@ -613,5 +353,3 @@ const WhereValues = Object.freeze({
     return Object.freeze({ eventField: options.eventField, equals: options.equals });
   },
 });
-
-const decoratorMetadataSymbol = DecoratorMetadata.installSymbol();

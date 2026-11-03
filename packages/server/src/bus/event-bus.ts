@@ -12,9 +12,9 @@
  * the License.
  */
 
-import { clone } from "@bufbuild/protobuf";
+import { clone, create, equals } from "@bufbuild/protobuf";
 import { AnyPacker, Validate, type MessageSchema } from "@spine-event-engine/core";
-import { EventSchema, type Event } from "@spine-event-engine/proto";
+import { EventContextSchema, EventSchema, type Event } from "@spine-event-engine/proto";
 import * as AgentInteraction from "@spine-event-engine/proto/agent";
 import type { EventStore } from "@spine-event-engine/storage";
 import { eventStoreAccess } from "@spine-event-engine/storage/provider";
@@ -64,6 +64,9 @@ const eventBusRoles = new WeakMap<EventBus, EventBusRole>();
 const eventBusLoggers = new WeakMap<EventBus, ILogLayer>();
 const eventAdmissions = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 
+/**
+ * Selects whether an EventBus accepts domain event schemas or framework System event schemas.
+ */
 type EventBusRole = "domain" | "system";
 
 const agentSystemTypes = new Set<string>([
@@ -87,11 +90,17 @@ const agentSystemTypes = new Set<string>([
 export const isSystemEventSchema = (schema: MessageSchema): boolean =>
   schema.typeName.startsWith("spine.system.") || agentSystemTypes.has(schema.typeName);
 
+/**
+ * Pairs a recipient with the cloned Event it accepted, preserving its accepted payload for dispatch.
+ */
 interface AcceptedEventDispatcher {
   readonly dispatcher: EventDispatcher;
   readonly event: Event;
 }
 
+/**
+ * Defines package-private EventBus assembly, posting, subscription, schema, logging, and close operations.
+ */
 interface EventBusAccess {
   // prettier-ignore
 
@@ -247,6 +256,9 @@ interface EventBusAccess {
   clearLogger(eventBus: EventBus): void;
 }
 
+/**
+ * Tracks whether an EventBus still accepts work, is draining, or has closed.
+ */
 type EventBusIntakeState = "open" | "closing" | "closed";
 
 /**
@@ -367,6 +379,10 @@ export class EventBus {
     return this.#closed;
   }
 
+  /**
+   * Stops EventBus intake, closes the runtime, clears subscribers, closes the optional event
+   * store, and aggregates cleanup failures.
+   */
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
@@ -384,6 +400,9 @@ export class EventBus {
     }
   }
 
+  /**
+   * Performs best-effort immediate closure for a partially assembled EventBus and releases its idle event store.
+   */
   #abortClose(): void {
     this.#beginClose();
     try {
@@ -396,6 +415,10 @@ export class EventBus {
     }
   }
 
+  /**
+   * Validates and admits a new Event, persists it when applicable, then dispatches accepted
+   * recipients and notifies subscribers.
+   */
   async #dispatch(event: Event): Promise<void> {
     const typeUrl = event.message?.typeUrl;
 
@@ -403,14 +426,13 @@ export class EventBus {
       throw new Error("EventBus requires event.message.typeUrl.");
     }
 
+    this.#validate(event, typeUrl);
     const onAdmit = eventAdmissions.get(this);
-    if (onAdmit !== undefined) this.#validate(event, typeUrl);
     await onAdmit?.(event);
 
     const dispatchers = this.#registry.find(typeUrl, event.context?.external === true);
 
     if (forgettingBuses.has(this)) {
-      if (onAdmit === undefined) this.#validate(event, typeUrl);
       const accepted = await this.#accept(event, dispatchers);
       await this.#deliverAccepted(event, accepted);
       return;
@@ -423,13 +445,15 @@ export class EventBus {
 
     let acceptedDispatchers: readonly AcceptedEventDispatcher[] = [];
     const stored = await eventStore.acceptThenAppend(event, async (accepted) => {
-      if (onAdmit === undefined) this.#validate(accepted, typeUrl);
       acceptedDispatchers = await this.#accept(accepted, dispatchers);
     });
 
     await this.#deliverAccepted(stored, acceptedDispatchers);
   }
 
+  /**
+   * Queues an already-stored Event for recipient acceptance and dispatch without appending it again.
+   */
   #postStored(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
 
@@ -440,6 +464,9 @@ export class EventBus {
     return this.#runExclusive(() => this.#dispatchStored(accepted));
   }
 
+  /**
+   * Queues an already-stored follow-up Event behind current runtime work without appending it again.
+   */
   #postStoredFollowUp(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
 
@@ -453,6 +480,9 @@ export class EventBus {
     );
   }
 
+  /**
+   * Queues a follow-up Event behind current runtime work for normal acceptance and dispatch.
+   */
   #postFollowUp(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
 
@@ -466,6 +496,10 @@ export class EventBus {
     );
   }
 
+  /**
+   * Validates and accepts a stored Event, dispatches its accepted recipients, and notifies
+   * subscribers without storing it.
+   */
   async #dispatchStored(event: Event): Promise<void> {
     const typeUrl = event.message?.typeUrl;
 
@@ -497,6 +531,10 @@ export class EventBus {
     this.#notify(event);
   }
 
+  /**
+   * Clones the Event for each matching recipient, awaits its optional acceptance hook, and returns
+   * the accepted recipient payloads.
+   */
   async #accept(
     event: Event,
     dispatchers: readonly EventDispatcher[],
@@ -510,7 +548,20 @@ export class EventBus {
     return Object.freeze(accepted);
   }
 
+  /**
+   * Checks required Event identity and context, registered schema and bus role, payload decoding,
+   * and Protobuf validity.
+   */
   #validate(event: Event, typeUrl: string): void {
+    if (event.id?.value === undefined || event.id.value === "") {
+      throw new Error("EventBus requires non-empty event.id.value.");
+    }
+    if (
+      event.context === undefined ||
+      equals(EventContextSchema, event.context, create(EventContextSchema))
+    ) {
+      throw new Error("EventBus requires a non-default event.context.");
+    }
     const schema = this.#registry.schema(typeUrl);
 
     if (schema === undefined) {
@@ -526,6 +577,7 @@ export class EventBus {
       throw new Error("Event payload does not match its registered schema.");
     }
 
+    Validate.check(EventSchema, event);
     Validate.check(schema, message);
   }
 
@@ -548,6 +600,9 @@ export class EventBus {
       .then(() => result as Result);
   }
 
+  /**
+   * Registers a subscriber for one event type and returns an idempotent unsubscribe handle.
+   */
   #subscribe(typeUrl: string, subscriber: EventSubscriber): EventSubscription {
     if (this.#intakeState !== "open") {
       throw new Error("EventBus is closed.");
@@ -564,6 +619,9 @@ export class EventBus {
     this.#subscribers.set(typeUrl, subscribers);
 
     return Object.freeze({
+      /**
+       * Reports whether this subscription has stopped receiving events.
+       */
       get closed() {
         return record.closed;
       },
@@ -573,6 +631,9 @@ export class EventBus {
     });
   }
 
+  /**
+   * Marks a subscriber record closed and removes it from the type-specific subscriber set.
+   */
   #unsubscribe(record: EventSubscriberRecord): void {
     if (record.closed) {
       return;
@@ -588,6 +649,9 @@ export class EventBus {
     }
   }
 
+  /**
+   * Closes all subscriber records, drops their callbacks, and removes the bus logger.
+   */
   #clearSubscribers(): void {
     for (const subscribers of this.#subscribers.values()) {
       for (const record of subscribers) {
@@ -599,6 +663,9 @@ export class EventBus {
     eventBusLoggers.delete(this);
   }
 
+  /**
+   * Notifies a snapshot of subscribers for the Event type; subscriber failures are logged and do not interrupt intake.
+   */
   #notify(event: Event): void {
     const typeUrl = event.message?.typeUrl;
     if (typeUrl === undefined) {
@@ -628,6 +695,9 @@ export class EventBus {
     }
   }
 
+  /**
+   * Emits a structured diagnostic when a subscriber throws or returns a rejected promise.
+   */
   #recordSubscriberFailure(typeUrl: string, logger: ILogLayer | undefined): void {
     if (logger !== undefined) {
       emitServerError(logger, "Event subscriber failed.", {
@@ -638,21 +708,33 @@ export class EventBus {
     }
   }
 
+  /**
+   * Transitions an open bus to closing so new event work is rejected.
+   */
   #beginClose(): void {
     if (this.#intakeState === "open") {
       this.#intakeState = "closing";
     }
   }
 
+  /**
+   * Waits for the EventBus runtime queue to drain after runtime startup.
+   */
   #drain(): Promise<void> {
     return this.#started.then(() => runtimeAccess.drain(this.#runtime));
   }
 
+  /**
+   * Starts or returns the idempotent EventBus close operation.
+   */
   #finishClose(): Promise<void> {
     this.#closed ??= this.#closeOnce();
     return this.#closed;
   }
 
+  /**
+   * Awaits one close hook and appends its failure so remaining cleanup can continue.
+   */
   static async #closePart(close: () => unknown, errors: unknown[]): Promise<void> {
     try {
       await close();
@@ -661,6 +743,9 @@ export class EventBus {
     }
   }
 
+  /**
+   * Rejects a missing store and returns the supplied event-store sentinel or EventStore.
+   */
   static #requireEventStore(eventStore: unknown): EventStore | typeof forgettingBus {
     if (eventStore === undefined) {
       throw new TypeError("EventBus requires an EventStore.");
@@ -669,6 +754,9 @@ export class EventBus {
     return eventStore as EventStore | typeof forgettingBus;
   }
 
+  /**
+   * Recognizes object or function values with a callable then property.
+   */
   static #isPromiseLike(value: unknown): value is PromiseLike<unknown> {
     return (
       (typeof value === "object" || typeof value === "function") &&
@@ -758,6 +846,9 @@ export interface EventSubscription {
   unsubscribe(): void;
 }
 
+/**
+ * Tracks one subscriber registration, its event type, and whether its subscription remains active.
+ */
 interface EventSubscriberRecord {
   closed: boolean;
   subscriber: EventSubscriber | undefined;
@@ -793,24 +884,39 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
       throw new TypeError("Event admission requires an EventBus instance.");
     eventAdmissions.set(eventBus, onAdmit);
   },
+
+  /**
+   * Removes the logger associated with a valid EventBus.
+   */
   clearLogger(eventBus: EventBus): void {
     if (!storedDispatchers.has(eventBus)) {
       throw new TypeError("EventBus logger requires an EventBus instance.");
     }
     eventBusLoggers.delete(eventBus);
   },
+
+  /**
+   * Associates a structured diagnostic logger with a valid EventBus.
+   */
   installLogger(eventBus: EventBus, logger: ILogLayer): void {
     if (!storedDispatchers.has(eventBus)) {
       throw new TypeError("EventBus logger requires an EventBus instance.");
     }
     eventBusLoggers.set(eventBus, logger);
   },
+
+  /**
+   * Creates an internal EventBus that dispatches accepted events without persisting them.
+   */
   createForgettingBus(dispatchers: Iterable<EventDispatcher> = []): EventBus {
     const eventBus = new EventBus(forgettingBus as never, dispatchers);
     forgettingBuses.add(eventBus);
     return eventBus;
   },
 
+  /**
+   * Creates an internal System-role EventBus, optionally backed by a store, and registers initial dispatchers.
+   */
   createSystemBus(
     eventStore: EventStore | undefined,
     dispatchers: Iterable<EventDispatcher> = [],
@@ -818,6 +924,9 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return EventBusRoles.createSystem(eventStore, dispatchers);
   },
 
+  /**
+   * Dispatches an already-persisted Event through this bus without appending it to the store.
+   */
   postStored(eventBus: EventBus, event: Event): Promise<void> {
     const postStored = storedDispatchers.get(eventBus);
 
@@ -828,6 +937,9 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return postStored(event);
   },
 
+  /**
+   * Schedules dispatch of an already-persisted Event as follow-up runtime work.
+   */
   postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void> {
     const postStoredFollowUp = storedFollowUpDispatchers.get(eventBus);
 
@@ -838,6 +950,9 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return postStoredFollowUp(event);
   },
 
+  /**
+   * Schedules normal Event acceptance and dispatch as follow-up runtime work.
+   */
   postFollowUp(eventBus: EventBus, event: Event): Promise<void> {
     const postFollowUp = followUpPosters.get(eventBus);
 
@@ -865,6 +980,9 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return runExclusive(work);
   },
 
+  /**
+   * Registers a callback for a particular event type on this bus.
+   */
   subscribe(eventBus: EventBus, typeUrl: string, subscriber: EventSubscriber): EventSubscription {
     const subscribe = subscriberRegistrars.get(eventBus);
 
@@ -875,6 +993,9 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return subscribe(typeUrl, subscriber);
   },
 
+  /**
+   * Returns the schemas registered with this EventBus.
+   */
   eventSchemas(eventBus: EventBus): readonly MessageSchema[] {
     const eventSchemas = eventSchemaLists.get(eventBus);
 
@@ -885,6 +1006,9 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return eventSchemas();
   },
 
+  /**
+   * Registers event payload schemas with this EventBus.
+   */
   registerSchemas(eventBus: EventBus, schemas: Iterable<MessageSchema>): void {
     const registerSchemas = eventSchemaRegistrars.get(eventBus);
 
@@ -898,17 +1022,28 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     }
     registerSchemas(checked);
   },
+
+  /**
+   * Removes the supplied dispatcher and its registrations from this EventBus.
+   */
   unregister(eventBus: EventBus, dispatcher: EventDispatcher): void {
     const unregister = dispatcherUnregistrars.get(eventBus);
     if (unregister === undefined) throw new TypeError("Event dispatcher requires an EventBus.");
     unregister(dispatcher);
   },
+
+  /**
+   * Looks up the registered event payload schema for a type URL.
+   */
   schema(eventBus: EventBus, typeUrl: string): MessageSchema | undefined {
     const schema = eventSchemaFinders.get(eventBus);
     if (schema === undefined) throw new TypeError("Event schema requires an EventBus.");
     return schema(typeUrl);
   },
 
+  /**
+   * Stops this EventBus from accepting newly posted events.
+   */
   beginClose(eventBus: EventBus): void {
     const beginClose = eventBusCloseStarters.get(eventBus);
 
@@ -919,6 +1054,9 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     beginClose();
   },
 
+  /**
+   * Waits for queued EventBus work to complete.
+   */
   drain(eventBus: EventBus): Promise<void> {
     const drain = eventBusDrainers.get(eventBus);
 
@@ -929,6 +1067,9 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return drain();
   },
 
+  /**
+   * Completes the idempotent close operation for this EventBus.
+   */
   finishClose(eventBus: EventBus): Promise<void> {
     const finishClose = eventBusCloseFinishers.get(eventBus);
 
@@ -938,6 +1079,10 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
 
     return finishClose();
   },
+
+  /**
+   * Closes a partially assembled EventBus without waiting for normal drain.
+   */
   abortClose(eventBus: EventBus): void {
     const abortClose = eventBusAborters.get(eventBus);
     if (abortClose === undefined)
@@ -945,6 +1090,9 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     abortClose();
   },
 
+  /**
+   * Returns the count of EventBus work admitted for runtime drain stability checks.
+   */
   acceptedWorkCount(eventBus: EventBus): number {
     const acceptedWorkCount = eventBusWorkCounters.get(eventBus);
 

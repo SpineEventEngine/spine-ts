@@ -12,10 +12,6 @@
  * the License.
  */
 
-import { constants as fsConstants } from "node:fs";
-import { access, realpath } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ILogLayer } from "loglayer";
 
 import { clone, create, getOption, hasOption, type Message } from "@bufbuild/protobuf";
@@ -91,7 +87,7 @@ import type {
   DescriptorFieldMetadata,
   EntityMetadata,
 } from "../entity/entity-metadata.js";
-import { GeneratedRegistryDiscovery } from "../handler/generated-registry-discovery.js";
+import { SpineMetadataInventory } from "../handler/spine-metadata-inventory.js";
 import {
   HandlerRegistryIngestor,
   type GeneratedEntityHandlerGroup,
@@ -111,11 +107,14 @@ import {
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { runtimeAccess } from "../runtime/runtime.js";
 import { Stand, standAccess } from "../stand/stand.js";
+import type { SubscriptionReadWork } from "../stand/subscription-read-filters.js";
+import { ReadSideFilter } from "../stand/read-side-filter.js";
 import { SubscriptionRuntime, subscriptionRuntimeAccess } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
-  subscriptionRecordSpec,
+  subscriptionRecordGroup,
   type StandSubscriptionRegistry,
+  type StandSubscriptionEntry,
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import type { DeliveryStrategy } from "../delivery/delivery-builder.js";
@@ -189,6 +188,9 @@ export interface BoundedContextSnapshot {
   readonly spec: ContextSpecSnapshot;
 }
 
+/**
+ * Pairs a domain bounded-context snapshot with the framework System context specification used alongside it.
+ */
 interface SystemPairingSnapshot {
   readonly domain: BoundedContextSnapshot;
   readonly system: ContextSpecSnapshot;
@@ -298,6 +300,9 @@ interface RepositoryRegistration {
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
 }
 
+/**
+ * Captures the prepared Entity inbox target and admission behavior for one registered repository.
+ */
 interface RegisteredEntityInbox extends EntityInbox {
   /**
    * Waits for callbacks already accepted by exact local handoffs.
@@ -321,6 +326,9 @@ interface RegisteredEntityInbox extends EntityInbox {
   endpoints(): readonly DeliveryEndpoint[];
 }
 
+/**
+ * Captures the prepared Projection inbox target and dispatch behavior for one registered repository.
+ */
 interface PrjInbox extends ProjectionInbox {
   /**
    * Registers a Projection target for local subscriber delivery.
@@ -360,6 +368,9 @@ export interface ContextDeliveryDescriptor {
   replay(message: DeliveryEndpointMessage, tenantId?: TenantId): Promise<void>;
 }
 
+/**
+ * Stores the repository and state metadata committed when a repository registers with a bounded context.
+ */
 interface RegistrationSnapshot {
   readonly entityType: RepositoryEntityType;
   readonly entityFamily: RepositoryView["entityFamily"];
@@ -455,6 +466,9 @@ export interface ReadCatchUpResult {
   readonly clearedStateTypes: readonly string[];
 }
 
+/**
+ * Stable reason code attached to failures while validating or dispatching a stored read-side replay event.
+ */
 type CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
 
 /**
@@ -520,6 +534,9 @@ export class DuplicateEntityStateException extends Error {
   }
 }
 
+/**
+ * Unforgeable-in-module marker required to construct framework-managed bounded-context runtime parts.
+ */
 interface FrameworkConstructionToken {
   readonly frameworkConstructionToken: true;
 }
@@ -527,11 +544,8 @@ interface FrameworkConstructionToken {
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
-const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const errorDetailLimit = 500;
-const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
-const generatedRegistryLoadAttempts = new Map<string, number>();
 const eventSubscribers = new WeakMap<
   BoundedContext,
   (typeUrl: string, subscriber: EventSubscriber) => EventSubscription
@@ -577,6 +591,9 @@ const explicitPreparations = new WeakMap<
   (mode: StoragePreparationMode, ids: readonly TenantId[]) => Promise<void>
 >();
 
+/**
+ * Groups package-private operations for constructing, observing, and shutting down bounded-context runtime parts.
+ */
 interface BoundedContextAccess {
   /**
    * Returns whether a completed context has begun closing.
@@ -762,12 +779,16 @@ interface BoundedContextAccess {
    * @param context Context containing the subscription.
    * @param id Registered subscription ID.
    * @param onUpdate Callback receiving updates.
+   * @param onInvalidated Closes this delivery when the retained definition changes.
+   * @param expected Exact canonical entry admitted for this reader.
    * @returns Promise resolving to the subscription handle.
    */
   consumeSubscription(
     context: BoundedContext,
     id: string,
-    onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
+    onUpdate: (work: SubscriptionReadWork) => void,
+    onInvalidated?: () => void,
+    expected?: StandSubscriptionEntry,
   ): Promise<import("../stand/stand.js").StandSubscription>;
 
   /**
@@ -1127,17 +1148,10 @@ export class BoundedContext {
    * @returns Shared preparation completion.
    */
   #prepareShared(mode: StoragePreparationMode): Promise<void> {
-    if (!(this.#subscriptionRuntime.registry() instanceof StorageSubscriptionRegistry))
-      return Promise.resolve();
+    const registry = this.#subscriptionRuntime.registry();
+    if (!(registry instanceof StorageSubscriptionRegistry)) return Promise.resolve();
     if (this.#sharedPreparation !== undefined) return this.#sharedPreparation;
-    const attempt = this.#trackPreparation(() =>
-      StoragePreparations.for(this.#storageFactory).prepareRecord(
-        ContextParts.createSubscriptionStorageContext(this.#snapshot.spec),
-        subscriptionRecordSpec,
-        undefined,
-        mode,
-      ),
-    );
+    const attempt = this.#trackPreparation(() => registry.prepare(mode));
     this.#sharedPreparation = attempt;
     void attempt.catch(() => {
       if (this.#sharedPreparation === attempt) this.#sharedPreparation = undefined;
@@ -1456,6 +1470,10 @@ export class BoundedContext {
     );
   }
 
+  /**
+   * Prepares repository registrations, reserves their state types, and commits their Stand and
+   * inbox targets; rolls back uncommitted storage preparation on failure.
+   */
   #registerRepositories(repositories: readonly RepositoryView[]): void {
     const preparedRepositories = this.#prepareRepositories(repositories);
 
@@ -1497,6 +1515,10 @@ export class BoundedContext {
     }
   }
 
+  /**
+   * Builds prepared repository registrations using this context’s storage and delivery services,
+   * cleaning earlier preparations if a later one fails.
+   */
   #prepareRepositories(repositories: readonly RepositoryView[]): PreparedRepository[] {
     const registration = this.#repositoryRegistration();
     const preparedRepositories: PreparedRepository[] = [];
@@ -1582,6 +1604,10 @@ export class BoundedContext {
     });
   }
 
+  /**
+   * Closes storage for repositories that were prepared but not committed, then rethrows the
+   * registration error with cleanup failures aggregated.
+   */
   #failRegistration(error: unknown, preparedRepositories: readonly PreparedRepository[]): never {
     const uncommitted = preparedRepositories.filter(
       ({ repository }) => !this.#repositoryViews.has(repository),
@@ -1761,6 +1787,10 @@ export class BoundedContext {
     return eventBusAccess.runExclusive(this.#eventBus, () => this.#catchUpReadSideOnce(options));
   }
 
+  /**
+   * Clears registered Projection state for the selected tenant slice, reads stored events,
+   * validates each event’s tenant, and dispatches replay sequentially.
+   */
   async #catchUpReadSideOnce(options: ReadCatchUpOptions): Promise<ReadCatchUpResult> {
     const storageContext = ContextParts.catchUpStorageContext(this.#snapshot.spec, options);
     const tenantOptions = ContextParts.catchUpStandOptions(storageContext);
@@ -2036,6 +2066,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return phase.trackReplay(onOperation);
   },
 
+  /**
+   * Registers replay work with the context close lifecycle so shutdown waits for it.
+   */
   trackReplay(context: BoundedContext, onReplay: () => Promise<void>): Promise<void> {
     const phase = contextClosePhases.get(context);
     if (phase === undefined)
@@ -2058,12 +2091,19 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
       ? issued.repository
       : undefined;
   },
+
+  /**
+   * Stops new work at this Bounded Context and begins shutdown of its runtime facilities.
+   */
   beginClose(context: BoundedContext): void {
     const phase = contextClosePhases.get(context);
     if (phase === undefined) throw new TypeError("Close phase requires a built BoundedContext.");
     phase.begin();
   },
 
+  /**
+   * Waits for accepted runtime work and replay operations to finish.
+   */
   drainWork(context: BoundedContext): Promise<void> {
     const phase = contextClosePhases.get(context);
     if (phase === undefined)
@@ -2071,6 +2111,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return phase.drain();
   },
 
+  /**
+   * Installs the context logger on both EventBuses, the signal publisher, and subscription runtime.
+   */
   installLogger(context: BoundedContext, logger: ILogLayer): void {
     if (!contextStorageFactories.has(context)) {
       throw new TypeError("Context logger requires a built BoundedContext instance.");
@@ -2093,6 +2136,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     subscriptionRuntimeAccess.installLogger(runtime, logger, context.name.value);
   },
 
+  /**
+   * Returns the diagnostic logger installed on this Bounded Context.
+   */
   loggerFor(context: BoundedContext): ILogLayer {
     const logger = contextLoggers.get(context);
     if (logger === undefined) {
@@ -2101,6 +2147,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return logger;
   },
 
+  /**
+   * Checks whether a value is a BoundedContextBuilder created by this module.
+   */
   isBuilder(value: unknown): value is BoundedContextBuilder {
     return (
       typeof value === "object" &&
@@ -2109,6 +2158,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     );
   },
 
+  /**
+   * Builds the supplied context builder and completes its configured initialization.
+   */
   build(builder: BoundedContextBuilder): Promise<BoundedContext> {
     const build = builderBuilds.get(builder);
 
@@ -2119,6 +2171,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return build();
   },
 
+  /**
+   * Attaches a subscriber to the context domain EventBus for the requested event type.
+   */
   subscribeToEvent(
     context: BoundedContext,
     typeUrl: string,
@@ -2133,6 +2188,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return subscribe(typeUrl, subscriber);
   },
 
+  /**
+   * Posts a framework System Event through the context System EventBus.
+   */
   postSystemEvent(context: BoundedContext, event: Event): Promise<void> {
     const post = systemEventPosters.get(context);
     if (post === undefined) {
@@ -2141,6 +2199,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return post(event);
   },
 
+  /**
+   * Posts an external domain Event through the context EventBus.
+   */
   postExternalEvent(context: BoundedContext, event: Event): Promise<void> {
     const imported = clone(EventSchema, event);
     imported.context = clone(EventContextSchema, imported.context ?? create(EventContextSchema));
@@ -2148,6 +2209,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return context.eventBus().post(imported);
   },
 
+  /**
+   * Subscribes to events produced by this context and forwards matching signals to the supplied observer.
+   */
   observeProducedSignals(
     context: BoundedContext,
     observer: {
@@ -2162,14 +2226,23 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return publisher.observe(observer);
   },
 
+  /**
+   * Returns the domain/System specification pairing captured when the context was built.
+   */
   systemPairing(context: BoundedContext): SystemPairingSnapshot {
     return ContextParts.cloneSystemPairing(ContextParts.requireSystemPairing(context));
   },
 
+  /**
+   * Returns the live tenant membership index configured for this context.
+   */
   tenantIndex(context: BoundedContext): TenantIndex {
     return ContextParts.requireTenantIndex(context);
   },
 
+  /**
+   * Returns the storage factory captured for repository and Stand operations in this context.
+   */
   storageFactory(context: BoundedContext): StorageFactory {
     const storageFactory = contextStorageFactories.get(context);
 
@@ -2180,6 +2253,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return storageFactory;
   },
 
+  /**
+   * Returns the persistent or in-memory registry used to store Stand subscription definitions.
+   */
   subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry {
     const runtime = contextSubscriptionRuntimes.get(context);
     if (runtime === undefined) {
@@ -2188,18 +2264,36 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return runtime.registry();
   },
 
+  /**
+   * Consumes a registered Stand subscription update and returns its managed delivery handle.
+   */
   consumeSubscription(
     context: BoundedContext,
     id: string,
-    onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
+    onUpdate: (work: SubscriptionReadWork) => void,
+    onInvalidated?: () => void,
+    expected?: StandSubscriptionEntry,
   ) {
     const runtime = contextSubscriptionRuntimes.get(context);
     if (runtime === undefined) {
       throw new TypeError("Subscription consumption requires a built BoundedContext instance.");
     }
-    return runtime.consume(id, onUpdate);
+    return runtime.consume(
+      id,
+      (update) => {
+        onUpdate({
+          update,
+          filter: (facts) => standAccess.filterSubscription(context.stand(), update, facts),
+        });
+      },
+      onInvalidated,
+      expected,
+    );
   },
 
+  /**
+   * Returns the context delivery descriptor used to route Entity and Projection inbox work.
+   */
   delivery(context: BoundedContext): ContextDeliveryDescriptor {
     const descriptor = contextDeliveryDescriptors.get(context);
 
@@ -2248,6 +2342,9 @@ interface ContextBuildResources {
   runtime?: SubscriptionRuntime;
 }
 
+/**
+ * Holds domain and System buses, stores, publisher, and System Stand assembled for a context build.
+ */
 interface ContextBuildBuses {
   readonly commandBus: CommandBus;
   readonly eventStore: EventStore | undefined;
@@ -2259,6 +2356,9 @@ interface ContextBuildBuses {
   readonly systemSpec: ContextSpecSnapshot;
 }
 
+/**
+ * Holds the System event infrastructure and specification assembled for a bounded context.
+ */
 interface ContextSystemBuses {
   readonly eventStore: EventStore | undefined;
   readonly eventBus: EventBus;
@@ -2266,11 +2366,17 @@ interface ContextSystemBuses {
   readonly spec: ContextSpecSnapshot;
 }
 
+/**
+ * Separates context-build recipients into domain and System Event dispatcher groups.
+ */
 interface ContextBuildDispatchers {
   readonly domain: readonly EventDispatcher[];
   readonly system: readonly EventDispatcher[];
 }
 
+/**
+ * Groups the Stand, subscription registry, and subscription runtime created during context assembly.
+ */
 interface ContextBuildRuntime {
   readonly stand: Stand;
   readonly registry: StandSubscriptionRegistry;
@@ -2312,6 +2418,8 @@ export class BoundedContextBuilder {
 
   readonly #entityTypes = new Set<RepositoryEntityType>();
 
+  readonly #readFilters = new Set<ReadSideFilter<DescriptorMessageSchema>>();
+
   readonly #generatedRepositoryOptions = new Map<RepositoryEntityType, object>();
 
   #aiRegistry: AiRegistry | undefined;
@@ -2321,8 +2429,6 @@ export class BoundedContextBuilder {
   #subscriptionRegistry: StandSubscriptionRegistry | undefined;
 
   #persistSystemEvents = false;
-
-  #generatedRegistryRoot: string | URL | undefined;
 
   /**
    * Registers the framework-only construction hook for this module.
@@ -2385,10 +2491,19 @@ export class BoundedContextBuilder {
   }
 
   /**
+   * Adds an outward read policy to this Bounded Context.
+   * @param filter Policy applied before Server-level outward policies.
+   * @returns This builder for further configuration.
+   */
+  addReadSideFilter(filter: ReadSideFilter<DescriptorMessageSchema>): this {
+    this.#readFilters.add(filter);
+    return this;
+  }
+
+  /**
    * Adds an explicitly assembled repository.
-   *
    * @typeParam EntityType Concrete Entity class represented by the repository.
-   * @param entry The repository to register.
+   * @param entry Repository to register.
    * @returns This builder for further configuration.
    */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
@@ -2582,17 +2697,6 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets a trusted compiled application root for generated handler metadata.
-   *
-   * @param root Names the compiled package or application root.
-   * @returns Returns this builder for further configuration.
-   */
-  withGeneratedRegistryRoot(root: string | URL): this {
-    this.#generatedRegistryRoot = root;
-    return this;
-  }
-
-  /**
    * Builds a context after loading generated handlers and preparing runtime resources.
    *
    * @param options Independent eager structure and subscription timing choices.
@@ -2602,6 +2706,10 @@ export class BoundedContextBuilder {
     return this.#buildAsyncWith(options);
   }
 
+  /**
+   * Loads generated handlers and repositories, assembles context facilities, and completes
+   * requested initialization before publishing the context.
+   */
   async #buildAsyncWith(options: BoundedContextBuildOptions = {}): Promise<BoundedContext> {
     const environment = ServerEnvironment.instance();
     const finishBuild = serverEnvironmentAccess.beginContextBuild(environment);
@@ -2633,7 +2741,7 @@ export class BoundedContextBuilder {
     options: BoundedContextBuildOptions,
     environment: ServerEnvironment,
   ): Promise<BoundedContext> {
-    const generated = await this.#loadGeneratedArtifacts([...this.#entityTypes]);
+    const generated = this.#loadGeneratedArtifacts([...this.#entityTypes]);
     serverEnvironmentAccess.requireAvailable(environment);
     const repositories = [...this.#repositories, ...generated.repositories];
 
@@ -2732,6 +2840,10 @@ export class BoundedContextBuilder {
     }
   }
 
+  /**
+   * Assembles dispatchers, buses, Stand, subscription runtime, and integration hooks, registering
+   * the completed context with its environment.
+   */
   #assembleContext(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
@@ -2797,6 +2909,9 @@ export class BoundedContextBuilder {
     }
   }
 
+  /**
+   * Collects repository and configured event recipients into domain and System dispatcher groups.
+   */
   #buildDispatchers(repositories: readonly RepositoryView[]): ContextBuildDispatchers {
     const event = [
       ...ContextParts.repositoryEventDispatchers(repositories),
@@ -2811,6 +2926,9 @@ export class BoundedContextBuilder {
     };
   }
 
+  /**
+   * Creates command, domain Event, and System Event buses plus their stores and signal publisher.
+   */
   #buildBuses(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
@@ -2846,6 +2964,9 @@ export class BoundedContextBuilder {
     };
   }
 
+  /**
+   * Creates the System context store, EventBus, and Stand, then registers System event dispatchers.
+   */
   #buildSystemBuses(
     storageFactory: StorageFactory,
     dispatchers: readonly EventDispatcher[],
@@ -2876,6 +2997,10 @@ export class BoundedContextBuilder {
     };
   }
 
+  /**
+   * Matches generated standalone handlers to configured instances and registers their dispatchers
+   * on the appropriate buses.
+   */
   #installStandalone(
     standalone: readonly GeneratedStandaloneHandlerGroup[],
     buses: ContextBuildBuses,
@@ -2900,6 +3025,9 @@ export class BoundedContextBuilder {
     return event;
   }
 
+  /**
+   * Creates the context Stand, subscription registry, and runtime that observes domain and System events.
+   */
   #buildRuntime(
     storageFactory: StorageFactory,
     buses: ContextBuildBuses,
@@ -2912,6 +3040,7 @@ export class BoundedContextBuilder {
       new StorageSubscriptionRegistry(
         ContextParts.createSubscriptionStorageContext(this.#specSnapshot),
         storageFactory,
+        subscriptionRecordGroup(this.#specSnapshot.name.value),
       );
     resources.registry = registry;
     const runtime = new SubscriptionRuntime(
@@ -2937,6 +3066,7 @@ export class BoundedContextBuilder {
       context: ContextParts.createStorageMode(this.#specSnapshot),
       storageFactory,
     });
+    if (this.#readFilters.size > 0) standAccess.installReadFilters(stand, [...this.#readFilters]);
     standAccess.setAdmission(stand, (tenantId) =>
       TenantAdmissions.require(
         tenantIndex,
@@ -2948,6 +3078,10 @@ export class BoundedContextBuilder {
     return stand;
   }
 
+  /**
+   * Constructs the immutable BoundedContext using assembled buses, runtime parts, environment
+   * delivery strategy, and tenant index.
+   */
   #createContext(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
@@ -2967,6 +3101,9 @@ export class BoundedContextBuilder {
     );
   }
 
+  /**
+   * Closes partial context resources after assembly fails and aggregates cleanup errors with the original failure.
+   */
   async #failBuild(resources: ContextBuildResources, error: unknown): Promise<never> {
     const cleanupErrors: unknown[] = [];
     if (resources.context !== undefined) {
@@ -2998,27 +3135,23 @@ export class BoundedContextBuilder {
     throw error;
   }
 
-  async #loadGeneratedArtifacts(entityTypes: readonly RepositoryEntityType[]): Promise<{
+  /**
+   * Selects generated metadata for configured Entity and standalone handler types and creates
+   * repository views and handler groups.
+   */
+  #loadGeneratedArtifacts(entityTypes: readonly RepositoryEntityType[]): {
     readonly repositories: readonly RepositoryView[];
     readonly standalone: readonly GeneratedStandaloneHandlerGroup[];
-  }> {
+  } {
     if (entityTypes.length === 0 && this.#standaloneInstances().length === 0) {
       return Object.freeze({ repositories: Object.freeze([]), standalone: Object.freeze([]) });
     }
 
-    const root = ContextParts.requireGeneratedRegistryRoot(this.#generatedRegistryRoot);
-    const discovery = new GeneratedRegistryDiscovery();
-    const registryModule = await ContextParts.trustedGeneratedRegistryModule(root);
-    const registryKey = registryModule.href;
-    const registries = (await discovery
-      .load({
-        modules: [registryModule],
-        ...ContextParts.generatedRegistryCacheBust(registryKey),
-      })
-      .catch((error: unknown) => {
-        ContextParts.recordGeneratedRegistryFailure(registryKey);
-        throw error;
-      })) as readonly GeneratedHandlerRegistry[];
+    const selected = [
+      ...entityTypes,
+      ...this.#standaloneInstances().map((instance) => instance.constructor),
+    ];
+    const registries = [SpineMetadataInventory.select(selected)];
     const metadata = ContextParts.ingestGeneratedRegistries(registries);
 
     const repositories = Object.freeze(
@@ -3042,6 +3175,9 @@ export class BoundedContextBuilder {
     return Object.freeze({ repositories, standalone });
   }
 
+  /**
+   * Returns a frozen list of configured standalone assignee, commander, and event-receiver instances.
+   */
   #standaloneInstances(): readonly object[] {
     return Object.freeze([...this.#assignees, ...this.#commanders, ...this.#eventReceivers]);
   }
@@ -3153,6 +3289,9 @@ interface PreparedRepository {
 
 const registeredRepositories = new WeakMap<RepositoryView, RepositoryOwner>();
 
+/**
+ * Pairs a registered Projection dispatcher with its Entity state schema for replay dispatch.
+ */
 interface ProjectionDispatch {
   readonly repository: RepositoryView;
   readonly dispatcher: EventDispatcher;
@@ -3161,11 +3300,17 @@ interface ProjectionDispatch {
   readonly typeUrl: string;
 }
 
+/**
+ * Identifies a Projection state schema and type URL whose rows must be cleared before replay.
+ */
 interface ProjectionStateClearTarget {
   readonly schema: DescriptorMessageSchema;
   readonly typeUrl: string;
 }
 
+/**
+ * Carries the stored event identity and underlying failure used to report a replay error.
+ */
 interface CatchUpReplayDetail {
   readonly name: string;
   readonly message: string;
@@ -3373,7 +3518,7 @@ const ContextParts = Object.freeze({
     ai?: AiRegistry,
     tenantIndex?: TenantIndex,
   ): BoundedContext {
-    return constructBoundedContext({
+    const context = constructBoundedContext({
       snapshot: ContextParts.snapshotFor(specSnapshot),
       commandBus: buses.commandBus,
       eventBus: buses.eventBus,
@@ -3390,6 +3535,8 @@ const ContextParts = Object.freeze({
       ...(ai === undefined ? {} : { ai }),
       token: frameworkConstructionToken,
     });
+    standAccess.bindProducingContext(running.stand, context);
+    return context;
   },
 
   /**
@@ -3797,186 +3944,6 @@ const ContextParts = Object.freeze({
         `${operation} requires a Repository instance. Use an entity class only with build().`,
       );
     }
-  },
-
-  /**
-   * Validates that a root exists when generated metadata must be loaded.
-   *
-   * @param root Configured registry location.
-   * @returns Configured root; throws when absent.
-   */
-  requireGeneratedRegistryRoot(root: string | URL | undefined): string | URL {
-    if (root !== undefined) {
-      return root;
-    }
-
-    throw new Error(
-      "BoundedContextBuilder.build() requires withGeneratedRegistryRoot(root) " +
-        "when assembling entity classes from generated metadata.",
-    );
-  },
-
-  /**
-   * Resolves the generated registry module and verifies it stays beneath the configured root.
-   *
-   * @param root Configured filesystem path or file URL.
-   * @returns Registry module file URL.
-   */
-  async trustedGeneratedRegistryModule(root: string | URL): Promise<URL> {
-    const trustedRoot = await ContextParts.canonicalGeneratedRegistryRoot(root);
-    const registryPath = resolve(trustedRoot, generatedRegistryFile);
-    const canonicalRegistryPath = await ContextParts.canonicalReadableRegistryPath(registryPath);
-
-    if (ContextParts.resolvesOutsideRoot(trustedRoot, canonicalRegistryPath)) {
-      throw new Error(
-        `Generated handler registry module "${canonicalRegistryPath}" must resolve within ` +
-          `the configured generated registry root "${trustedRoot}".`,
-      );
-    }
-
-    return pathToFileURL(canonicalRegistryPath);
-  },
-
-  /**
-   * Resolves a generated registry root to its canonical filesystem path.
-   *
-   * @param root Configured path or file URL.
-   * @returns Canonical directory path.
-   */
-  async canonicalGeneratedRegistryRoot(root: string | URL): Promise<string> {
-    const rootPath = ContextParts.generatedRegistryRootPath(root);
-
-    try {
-      return await realpath(rootPath);
-    } catch (error) {
-      throw new Error(
-        `Generated registry root "${rootPath}" must be an existing readable directory.`,
-        { cause: error },
-      );
-    }
-  },
-
-  /**
-   * Converts a registry root path or file URL to an absolute filesystem path.
-   *
-   * @param root Configured path or file URL.
-   * @returns Absolute filesystem path.
-   */
-  generatedRegistryRootPath(root: string | URL): string {
-    if (root instanceof URL) {
-      return ContextParts.fileUrlPath(root, "Generated registry root");
-    }
-
-    if (ContextParts.isUrlLike(root)) {
-      return ContextParts.fileUrlPath(ContextParts.parseRootUrl(root), "Generated registry root");
-    }
-
-    return resolve(root);
-  },
-
-  /**
-   * Validates a file URL and converts it to an absolute filesystem path.
-   *
-   * @param url File URL to convert.
-   * @param label Label used in validation errors.
-   * @returns Filesystem path.
-   */
-  fileUrlPath(url: URL, label: string): string {
-    if (url.protocol !== "file:") {
-      throw new Error(`${label} "${url.href}" must use the file: URL scheme.`);
-    }
-
-    if (url.search.length > 0 || url.hash.length > 0) {
-      throw new Error(`${label} "${url.href}" must not include a query or hash.`);
-    }
-
-    return resolve(fileURLToPath(url));
-  },
-
-  /**
-   * Parses a generated registry root string as a URL.
-   *
-   * @param root Registry root string.
-   * @returns Parsed URL.
-   */
-  parseRootUrl(root: string): URL {
-    try {
-      return new URL(root);
-    } catch (error) {
-      throw new Error(`Generated registry root "${root}" is not a valid URL.`, { cause: error });
-    }
-  },
-
-  /**
-   * Checks strings for a URL scheme, excluding Windows drive paths.
-   *
-   * @param value String to inspect.
-   * @returns True when the string has a URL scheme.
-   */
-  isUrlLike(value: string): boolean {
-    return moduleSchemeRe.test(value) && !/^[A-Za-z]:[\\/]/.test(value);
-  },
-
-  /**
-   * Verifies registry-module readability and resolves its canonical path.
-   *
-   * @param registryPath Registry module filesystem path.
-   * @returns Canonical readable path.
-   */
-  async canonicalReadableRegistryPath(registryPath: string): Promise<string> {
-    try {
-      await access(registryPath, fsConstants.R_OK);
-      return await realpath(registryPath);
-    } catch (error) {
-      throw new Error(
-        `Generated handler registry module "${registryPath}" must exist and be readable.`,
-        { cause: error },
-      );
-    }
-  },
-
-  /**
-   * Checks whether a canonical path escapes a canonical root.
-   *
-   * @param canonicalRoot Root directory.
-   * @param canonicalPath Candidate path.
-   * @returns True when the candidate escapes the root.
-   */
-  resolvesOutsideRoot(canonicalRoot: string, canonicalPath: string): boolean {
-    const relativePath = relative(canonicalRoot, canonicalPath);
-
-    return (
-      relativePath.startsWith("..") ||
-      relativePath === ".." ||
-      relativePath.split(sep).includes("..") ||
-      isAbsolute(relativePath)
-    );
-  },
-
-  /**
-   * Creates a cache-bust query after a prior registry load failure.
-   *
-   * @param registryKey Canonical registry identifier.
-   * @returns Retry query, or an empty object on the first attempt.
-   */
-  generatedRegistryCacheBust(
-    registryKey: string,
-  ): { readonly cacheBust: string } | Record<string, never> {
-    const attempt = generatedRegistryLoadAttempts.get(registryKey) ?? 0;
-
-    return attempt === 0 ? {} : { cacheBust: `retry-${attempt.toString()}` };
-  },
-
-  /**
-   * Records another failed load for a registry.
-   *
-   * @param registryKey Canonical registry identifier.
-   */
-  recordGeneratedRegistryFailure(registryKey: string): void {
-    generatedRegistryLoadAttempts.set(
-      registryKey,
-      (generatedRegistryLoadAttempts.get(registryKey) ?? 0) + 1,
-    );
   },
 
   /**
@@ -4841,6 +4808,9 @@ const ContextParts = Object.freeze({
   },
 });
 
+/**
+ * Defines framework hooks for publishing imported events and signaling that standalone setup is ready.
+ */
 interface StandaloneConstructor {
   readonly name: string;
 }
@@ -4851,12 +4821,26 @@ interface StandaloneConstructor {
  * @internal
  */
 export const boundedContextIntegrationAccess: Readonly<{
+  /**
+   * Publishes an imported Event through the context’s import path.
+   */
   publishImported(context: BoundedContext, event: Event): Promise<void>;
+
+  /**
+   * Signals that standalone context integration is ready.
+   */
   ready(context: BoundedContext): Promise<void>;
 }> = Object.freeze({
+  /**
+   * Publishes an imported Event through the context’s import path.
+   */
   publishImported(context: BoundedContext, event: Event): Promise<void> {
     return ContextParts.publishImported(context, event);
   },
+
+  /**
+   * Signals that standalone context integration is ready.
+   */
   ready(context: BoundedContext): Promise<void> {
     return ContextParts.integrationReady(context);
   },

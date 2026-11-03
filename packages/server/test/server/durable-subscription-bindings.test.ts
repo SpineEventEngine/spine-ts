@@ -12,10 +12,22 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/auth";
-import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
+import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import {
+  GatewayAuthenticatedSubscriptionSchema,
+  type GatewayAuthenticatedSubscription,
+} from "@spine-event-engine/proto/auth";
+import {
+  SubscriptionReaderBindingSchema,
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  TopicSchema,
+  type SubscriptionId,
+} from "@spine-event-engine/proto/client";
+import { EmptySchema, timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { ActorContextSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import { TypeUrls } from "@spine-event-engine/core";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import {
   InMemoryStorageFactory,
   type RecordSpec as StorageRecordSpec,
@@ -36,6 +48,7 @@ const context = create(ActorContextSchema, {
   actor: { value: "actor" },
   tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
 });
+const anonymousReader = { kind: "anonymous" as const };
 
 function topic(): Uint8Array {
   return toBinary(TopicSchema, create(TopicSchema, { id: { value: "topic" }, context }));
@@ -51,6 +64,7 @@ function rawRecord(input: {
   readonly id?: string;
   readonly whenExpires: number;
   readonly topic?: ReturnType<typeof create<typeof TopicSchema>>;
+  readonly anonymousReader?: boolean;
 }) {
   return create(GatewayAuthenticatedSubscriptionSchema, {
     ...(input.id === undefined ? {} : { id: { value: input.id } }),
@@ -59,10 +73,239 @@ function rawRecord(input: {
       topic: input.topic ?? create(TopicSchema, { context }),
     }),
     whenExpires: { seconds: BigInt(Math.floor(input.whenExpires / 1_000)) },
+    ...(input.anonymousReader
+      ? {
+          reader: create(SubscriptionReaderBindingSchema, {
+            identity: { case: "anonymous", value: create(EmptySchema) },
+          }),
+        }
+      : {}),
   });
 }
 
 describe("DurableSubscriptionBindings", () => {
+  it("retains principal binding across store reopen", async () => {
+    const factory = new InMemoryStorageFactory();
+    const options = {
+      storageFactory: factory,
+      namespace: "reader-reopen",
+      nextId: () => "s-reopen",
+      cleanup: () => Promise.resolve(),
+    };
+    const first = new DurableSubscriptionBindings(options);
+    const alice = { kind: "principal" as const, id: "reader/alice" };
+    const bob = { kind: "principal" as const, id: "reader/bob" };
+    const fullTopic = create(TopicSchema, {
+      id: { value: "topic-reopen" },
+      context,
+      target: {
+        type: TypeUrls.derive(ProjectOverviewStateSchema),
+        criterion: { case: "includeAll", value: true },
+      },
+    });
+    const wire = await first.create({
+      topic: { kind: "subscription-topic", bytes: toBinary(TopicSchema, fullTopic) },
+      whenExpires: 10_000,
+      reader: alice,
+    });
+    await first.close();
+    const reopened = new DurableSubscriptionBindings(options);
+    const id = subscriptionId(wire.bytes);
+    let forwarded = 0;
+    const onDefinition = () => {
+      forwarded++;
+      return Promise.resolve();
+    };
+    await expect(
+      reopened.activate({
+        id,
+        context,
+        reader: bob,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onDefinition,
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await expect(
+      reopened.activate({
+        id,
+        context,
+        reader: alice,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onDefinition,
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+    expect(forwarded).toBe(1);
+    await reopened.close();
+  });
+  it("does not abort an active principal's stream when another reader cancels", async () => {
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "foreign-active-reader",
+      nextId: () => "s-active-reader",
+      cleanup: () => Promise.resolve(),
+    });
+    const alice = { kind: "principal" as const, id: "reader/alice" };
+    const bob = { kind: "principal" as const, id: "reader/bob" };
+    const completeTopic = create(TopicSchema, {
+      id: { value: "topic-active-reader" },
+      context,
+      target: {
+        type: TypeUrls.derive(ProjectOverviewStateSchema),
+        criterion: { case: "includeAll", value: true },
+      },
+    });
+    const wire = await bindings.create({
+      topic: { kind: "subscription-topic", bytes: toBinary(TopicSchema, completeTopic) },
+      whenExpires: 10_000,
+      reader: alice,
+    });
+    const id = subscriptionId(wire.bytes);
+    let streamSignal: AbortSignal | undefined;
+    let entered: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const activation = bindings.activate({
+      id,
+      context,
+      reader: alice,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onDefinition: (_wire, signal) => {
+        streamSignal = signal;
+        entered();
+        return new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    await started;
+    await expect(
+      bindings.cancel({
+        id,
+        context,
+        reader: bob,
+        nowMs: 1,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    expect(streamSignal?.aborted).toBe(false);
+    const cancelling = bindings.cancel({
+      id,
+      context,
+      reader: alice,
+      nowMs: 1,
+      onDefinition: () => Promise.resolve(),
+    });
+    await activation;
+    await expect(cancelling).resolves.toEqual({ kind: "closed" });
+    await bindings.close();
+  });
+  it("keeps a readable legacy record without a reader binding unclaimable", async () => {
+    const backing = new InMemoryStorageFactory();
+    const completeTopic = create(TopicSchema, {
+      id: { value: "topic-legacy" },
+      context,
+      target: {
+        type: TypeUrls.derive(ProjectOverviewStateSchema),
+        criterion: { case: "includeAll", value: true },
+      },
+    });
+    const stored = rawRecord({ id: "s-legacy", whenExpires: 10_000, topic: completeTopic });
+    // @ts-expect-error Fault fixture exposes only the record storage used by this test.
+    const factory: StorageFactory = {
+      createRecordStorage: ((
+        storageContext: StorageContext,
+        spec: RecordSpec<unknown, unknown>,
+      ) => {
+        const storage = backing.createRecordStorage(storageContext, spec);
+        Object.assign(storage, { read: () => Promise.resolve(stored) });
+        return storage;
+      }) as never,
+    };
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: factory,
+      namespace: "legacy-reader",
+      nextId: () => "other",
+      cleanup: () => Promise.resolve(),
+    });
+    let effects = 0;
+    const onDefinition = () => {
+      effects++;
+      return Promise.resolve();
+    };
+    await expect(
+      bindings.activate({
+        id: "s-legacy",
+        context,
+        reader: anonymousReader,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onDefinition,
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await expect(
+      bindings.cancel({ id: "s-legacy", context, reader: anonymousReader, nowMs: 1, onDefinition }),
+    ).resolves.toEqual({ kind: "denied" });
+    expect(effects).toBe(0);
+    await bindings.close();
+  });
+  it("persists reader identity and rejects a different principal with the same ActorContext", async () => {
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "reader-identity",
+      nextId: () => "s-reader",
+      cleanup: () => Promise.resolve(),
+    });
+    const alice = { kind: "principal" as const, id: "reader/alice" };
+    const bob = { kind: "principal" as const, id: "reader/bob" };
+    const completeTopic = create(TopicSchema, {
+      id: { value: "topic-reader" },
+      context,
+      target: {
+        type: TypeUrls.derive(ProjectOverviewStateSchema),
+        criterion: { case: "includeAll", value: true },
+      },
+    });
+    const wire = await bindings.create({
+      topic: { kind: "subscription-topic", bytes: toBinary(TopicSchema, completeTopic) },
+      whenExpires: 10_000,
+      reader: alice,
+    });
+    const id = subscriptionId(wire.bytes);
+    let effects = 0;
+    const onDefinition = () => {
+      effects += 1;
+      return Promise.resolve();
+    };
+    await expect(
+      bindings.activate({
+        id,
+        context,
+        reader: bob,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onDefinition,
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await expect(
+      bindings.cancel({ id, context, reader: bob, nowMs: 1, onDefinition }),
+    ).resolves.toEqual({ kind: "denied" });
+    expect(effects).toBe(0);
+    await expect(
+      bindings.cancel({ id, context, reader: alice, nowMs: 1, onDefinition }),
+    ).resolves.toEqual({ kind: "closed" });
+    expect(effects).toBe(1);
+    await bindings.close();
+  });
   it("stores the approved authenticated subscription record directly", () => {
     const factory = new InMemoryStorageFactory();
     const open = factory.createRecordStorage.bind(factory);
@@ -98,22 +341,26 @@ describe("DurableSubscriptionBindings", () => {
     expect(isDurableSubscriptionBindings(undefined)).toBe(false);
     await expect(
       bindings.create({
+        reader: anonymousReader,
         topic: { kind: "subscription-topic", bytes: toBinary(TopicSchema, create(TopicSchema)) },
         whenExpires: 1_000,
       }),
     ).rejects.toThrow("trusted context");
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
     await expect(
       bindings.create({
+        reader: anonymousReader,
         topic: { kind: "subscription-topic", bytes: topic() },
         whenExpires: 1_000,
       }),
     ).resolves.toMatchObject({ kind: "public-subscription" });
     await expect(
       bindings.create({
+        reader: anonymousReader,
         topic: { kind: "subscription-topic", bytes: topic() },
         whenExpires: 2_000,
       }),
@@ -121,6 +368,7 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
     await expect(
       bindings.create({
+        reader: anonymousReader,
         topic: { kind: "subscription-topic", bytes: topic() },
         whenExpires: 1_000,
       }),
@@ -150,7 +398,9 @@ describe("DurableSubscriptionBindings", () => {
         nextId: () => "s-one",
         cleanup: () => Promise.resolve(),
       });
-      await expect(bindings.create(input)).rejects.toThrow("record is invalid");
+      await expect(bindings.create({ ...input, reader: anonymousReader })).rejects.toThrow(
+        "record is invalid",
+      );
     }
   });
 
@@ -178,6 +428,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: "requested",
         context,
         nowMs: 1,
@@ -294,7 +545,11 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     await expect(
-      blank.create({ topic: { kind: "subscription-topic", bytes: topic() }, whenExpires: 1_000 }),
+      blank.create({
+        topic: { kind: "subscription-topic", bytes: topic() },
+        whenExpires: 1_000,
+        reader: anonymousReader,
+      }),
     ).rejects.toThrow("non-blank");
 
     const bindings = new DurableSubscriptionBindings({
@@ -304,6 +559,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     const wire = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
@@ -311,6 +567,7 @@ describe("DurableSubscriptionBindings", () => {
     signal.abort();
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: subscriptionId(wire.bytes),
         context,
         nowMs: 1,
@@ -377,6 +634,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.create({
+        reader: anonymousReader,
         topic: { kind: "subscription-topic", bytes: topic() },
         whenExpires: 1_000,
       }),
@@ -410,6 +668,7 @@ describe("DurableSubscriptionBindings", () => {
         cleanup: () => Promise.resolve(),
       });
       const creating = bindings.create({
+        reader: anonymousReader,
         topic: { kind: "subscription-topic", bytes: topic() },
         whenExpires: 1_000,
       });
@@ -453,6 +712,7 @@ describe("DurableSubscriptionBindings", () => {
     });
     await expect(
       bindings.create({
+        reader: anonymousReader,
         topic: { kind: "subscription-topic", bytes: topic() },
         whenExpires: 1_000,
       }),
@@ -470,6 +730,7 @@ describe("DurableSubscriptionBindings", () => {
     const created = await first.create({
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
+      reader: anonymousReader,
     });
     await first.close();
     const reopened = new DurableSubscriptionBindings({
@@ -487,6 +748,127 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
     expect(restored).toEqual([created.bytes]);
+  });
+
+  it("does not recover a row canceled after its page was read", async () => {
+    const backing = new InMemoryStorageFactory();
+    const pageRead = Promise.withResolvers<undefined>();
+    const releasePage = Promise.withResolvers<undefined>();
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
+    const factory: StorageFactory = {
+      createRecordStorage: ((
+        storageContext: StorageContext,
+        spec: RecordSpec<unknown, unknown>,
+      ) => {
+        const storage = backing.createRecordStorage(storageContext, spec);
+        const queryEntries = storage.queryEntries.bind(storage);
+        storage.queryEntries = async (query) => {
+          const page = await queryEntries(query);
+          if (page.length > 0) {
+            pageRead.resolve(undefined);
+            await releasePage.promise;
+          }
+          return page;
+        };
+        return storage;
+      }) as never,
+    };
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: factory,
+      namespace: "cancel-during-recovery",
+      nextId: () => "s-one",
+      cleanup: () => Promise.resolve(),
+    });
+    await bindings.create({
+      reader: anonymousReader,
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 2_000,
+    });
+    const restored: string[] = [];
+    const recovery = bindings.recoverActive({
+      nowMs: 1,
+      onDefinition: (wire) => {
+        restored.push(subscriptionId(wire.bytes));
+        return Promise.resolve();
+      },
+    });
+    await pageRead.promise;
+    await expect(
+      bindings.cancel({
+        id: "s-one",
+        context,
+        reader: anonymousReader,
+        nowMs: 1,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    releasePage.resolve(undefined);
+    await recovery;
+    expect(restored).toEqual([]);
+  });
+
+  it("does not clean up a refreshed row from an expired page snapshot", async () => {
+    const backing = new InMemoryStorageFactory();
+    const pageRead = Promise.withResolvers<undefined>();
+    const releasePage = Promise.withResolvers<undefined>();
+    let refresh: (() => Promise<void>) | undefined;
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
+    const factory: StorageFactory = {
+      createRecordStorage: ((
+        storageContext: StorageContext,
+        spec: RecordSpec<SubscriptionId, GatewayAuthenticatedSubscription>,
+      ) => {
+        const storage = backing.createRecordStorage(storageContext, spec);
+        const queryEntries = storage.queryEntries.bind(storage);
+        storage.queryEntries = async (query) => {
+          const page = await queryEntries(query);
+          if (page.length > 0) {
+            pageRead.resolve(undefined);
+            await releasePage.promise;
+          }
+          return page;
+        };
+        refresh = async () => {
+          const id = create(SubscriptionIdSchema, { value: "s-one" });
+          const current = await storage.read(id);
+          if (current === undefined) throw new Error("Expected retained row.");
+          const updated = clone(GatewayAuthenticatedSubscriptionSchema, current);
+          updated.whenExpires = timestampFromMs(3_000);
+          if (!(await storage.compareAndSet(id, current, updated)))
+            throw new Error("Expected refreshed row to replace expired row.");
+        };
+        return storage;
+      }) as never,
+    };
+    let cleanups = 0;
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: factory,
+      namespace: "refresh-during-recovery",
+      nextId: () => "s-one",
+      cleanup: () => {
+        cleanups++;
+        return Promise.resolve();
+      },
+    });
+    await bindings.create({
+      reader: anonymousReader,
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 1_000,
+    });
+    const recovered: number[] = [];
+    const recovery = bindings.recoverActive({
+      nowMs: 1_500,
+      onDefinition: (_wire, whenExpires) => {
+        recovered.push(whenExpires);
+        return Promise.resolve();
+      },
+    });
+    await pageRead.promise;
+    await refresh?.();
+    releasePage.resolve(undefined);
+    await recovery;
+    expect(cleanups).toBe(0);
+    expect(recovered).toEqual([3_000]);
   });
 
   it("fails recovery without deletion when a stored record is malformed", async () => {
@@ -579,6 +961,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.reject(new Error("backend unavailable")),
     });
     const created = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1,
     });
@@ -607,6 +990,7 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1,
     });
@@ -627,6 +1011,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     const retainedWithoutTenant = await bindings.create({
+      reader: anonymousReader,
       topic: {
         kind: "subscription-topic",
         bytes: toBinary(TopicSchema, create(TopicSchema, { context: noTenant })),
@@ -635,6 +1020,7 @@ describe("DurableSubscriptionBindings", () => {
     });
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: subscriptionId(retainedWithoutTenant.bytes),
         context: noTenant,
         nowMs: 1,
@@ -644,6 +1030,7 @@ describe("DurableSubscriptionBindings", () => {
     ).resolves.toEqual({ kind: "activated" });
     await expect(
       bindings.cancel({
+        reader: anonymousReader,
         id: subscriptionId(retainedWithoutTenant.bytes),
         context,
         nowMs: 1,
@@ -664,6 +1051,7 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1,
     });
@@ -683,6 +1071,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     const created = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 10,
     });
@@ -694,6 +1083,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id,
         context: foreign,
         nowMs: 1,
@@ -702,10 +1092,17 @@ describe("DurableSubscriptionBindings", () => {
       }),
     ).resolves.toEqual({ kind: "denied" });
     await expect(
-      bindings.cancel({ id, context: foreign, nowMs: 1, onDefinition: () => Promise.resolve() }),
+      bindings.cancel({
+        reader: anonymousReader,
+        id,
+        context: foreign,
+        nowMs: 1,
+        onDefinition: () => Promise.resolve(),
+      }),
     ).resolves.toEqual({ kind: "denied" });
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id,
         context,
         nowMs: 10,
@@ -714,7 +1111,13 @@ describe("DurableSubscriptionBindings", () => {
       }),
     ).resolves.toEqual({ kind: "denied" });
     await expect(
-      bindings.cancel({ id: "missing", context, nowMs: 1, onDefinition: () => Promise.resolve() }),
+      bindings.cancel({
+        reader: anonymousReader,
+        id: "missing",
+        context,
+        nowMs: 1,
+        onDefinition: () => Promise.resolve(),
+      }),
     ).resolves.toEqual({ kind: "closed" });
   });
 
@@ -726,11 +1129,13 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     const created = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: subscriptionId(created.bytes),
         context,
         nowMs: 1,
@@ -752,6 +1157,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     const created = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
@@ -759,6 +1165,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.cancel({
+        reader: anonymousReader,
         id,
         context,
         nowMs: 1,
@@ -769,7 +1176,13 @@ describe("DurableSubscriptionBindings", () => {
       }),
     ).resolves.toEqual({ kind: "closed" });
     await expect(
-      bindings.cancel({ id, context, nowMs: 1, onDefinition: () => Promise.resolve() }),
+      bindings.cancel({
+        reader: anonymousReader,
+        id,
+        context,
+        nowMs: 1,
+        onDefinition: () => Promise.resolve(),
+      }),
     ).resolves.toEqual({ kind: "closed" });
     expect(calls).toEqual([created.bytes]);
   });
@@ -804,12 +1217,14 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     const wire = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
     const input = {
       id: subscriptionId(wire.bytes),
       context,
+      reader: anonymousReader,
       nowMs: 1,
       onDefinition: () => Promise.resolve(),
     };
@@ -825,6 +1240,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     const created = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
@@ -832,6 +1248,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.cancel({
+        reader: anonymousReader,
         id,
         context,
         nowMs: 1,
@@ -857,6 +1274,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     const created = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
@@ -867,6 +1285,7 @@ describe("DurableSubscriptionBindings", () => {
       started = resolve;
     });
     const active = bindings.activate({
+      reader: anonymousReader,
       id,
       context,
       nowMs: 1,
@@ -888,7 +1307,13 @@ describe("DurableSubscriptionBindings", () => {
 
     await activated;
     await expect(
-      bindings.cancel({ id, context, nowMs: 1, onDefinition: () => Promise.resolve() }),
+      bindings.cancel({
+        reader: anonymousReader,
+        id,
+        context,
+        nowMs: 1,
+        onDefinition: () => Promise.resolve(),
+      }),
     ).resolves.toEqual({ kind: "closed" });
     await expect(active).resolves.toEqual({ kind: "activated" });
     expect(aborted).toBe(true);
@@ -902,6 +1327,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
@@ -910,6 +1336,7 @@ describe("DurableSubscriptionBindings", () => {
       release = resolve;
     });
     const active = bindings.activate({
+      reader: anonymousReader,
       id: "s-one",
       context,
       nowMs: 1,
@@ -918,6 +1345,7 @@ describe("DurableSubscriptionBindings", () => {
     });
     await Promise.resolve();
     const cancelling = bindings.cancel({
+      reader: anonymousReader,
       id: "s-one",
       context,
       nowMs: 1,
@@ -925,6 +1353,7 @@ describe("DurableSubscriptionBindings", () => {
     });
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: "s-one",
         context,
         nowMs: 1,
@@ -945,6 +1374,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
@@ -961,6 +1391,7 @@ describe("DurableSubscriptionBindings", () => {
       releaseSecond = resolve;
     });
     const first = bindings.activate({
+      reader: anonymousReader,
       id: "s-one",
       context,
       nowMs: 1,
@@ -969,6 +1400,7 @@ describe("DurableSubscriptionBindings", () => {
     });
     await Promise.resolve();
     const second = bindings.activate({
+      reader: anonymousReader,
       id: "s-one",
       context,
       nowMs: 1,
@@ -981,6 +1413,7 @@ describe("DurableSubscriptionBindings", () => {
     releaseFirst();
     await secondStart;
     const third = bindings.activate({
+      reader: anonymousReader,
       id: "s-one",
       context,
       nowMs: 1,
@@ -989,6 +1422,7 @@ describe("DurableSubscriptionBindings", () => {
     });
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: "s-one",
         context,
         nowMs: 1,
@@ -1009,6 +1443,7 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
@@ -1018,6 +1453,7 @@ describe("DurableSubscriptionBindings", () => {
       resolveStarted = resolve;
     });
     const active = bindings.activate({
+      reader: anonymousReader,
       id: "s-one",
       context,
       nowMs: 1,
@@ -1050,11 +1486,13 @@ describe("DurableSubscriptionBindings", () => {
         cleanup: () => Promise.resolve(),
       });
       await bindings.create({
+        reader: anonymousReader,
         topic: { kind: "subscription-topic", bytes: topic() },
         whenExpires: 1_000,
       });
       const caller = new AbortController();
       const active = bindings.activate({
+        reader: anonymousReader,
         id: "s-one",
         context,
         nowMs: 1,
@@ -1088,12 +1526,14 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     const wire = await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
     const id = subscriptionId(wire.bytes);
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id,
         context,
         nowMs: 1,
@@ -1102,10 +1542,17 @@ describe("DurableSubscriptionBindings", () => {
       }),
     ).rejects.toThrow("activation failed");
     await expect(
-      bindings.cancel({ id, context, nowMs: 1, onDefinition: () => Promise.resolve() }),
+      bindings.cancel({
+        reader: anonymousReader,
+        id,
+        context,
+        nowMs: 1,
+        onDefinition: () => Promise.resolve(),
+      }),
     ).resolves.toEqual({ kind: "closed" });
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: "",
         context,
         nowMs: 1,
@@ -1131,10 +1578,12 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1,
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 2,
     });
@@ -1170,6 +1619,7 @@ describe("DurableSubscriptionBindings", () => {
       return Promise.resolve();
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1,
     });
@@ -1213,6 +1663,7 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1,
     });
@@ -1249,6 +1700,7 @@ describe("DurableSubscriptionBindings", () => {
     });
     for (let index = 0; index < 26; index += 1) {
       await bindings.create({
+        reader: anonymousReader,
         topic: { kind: "subscription-topic", bytes: topic() },
         whenExpires: 1,
       });
@@ -1286,10 +1738,12 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1,
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 2,
     });
@@ -1347,10 +1801,12 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1,
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 2,
     });
@@ -1400,6 +1856,7 @@ describe("DurableSubscriptionBindings", () => {
       limits: { shutdownTimeoutMs: 100 },
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1,
     });
@@ -1459,7 +1916,7 @@ describe("DurableSubscriptionBindings", () => {
 
   it("denies a raw cancel CAS loss when its reread still retains the row", async () => {
     const backing = new InMemoryStorageFactory();
-    const stored = rawRecord({ id: "raw-cancel", whenExpires: 2_000 });
+    const stored = rawRecord({ id: "raw-cancel", whenExpires: 2_000, anonymousReader: true });
     // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
@@ -1483,6 +1940,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.cancel({
+        reader: anonymousReader,
         id: "raw-cancel",
         context,
         nowMs: 1,
@@ -1491,6 +1949,7 @@ describe("DurableSubscriptionBindings", () => {
     ).resolves.toEqual({ kind: "denied" });
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: "raw-cancel",
         context,
         nowMs: 1,
@@ -1534,12 +1993,19 @@ describe("DurableSubscriptionBindings", () => {
       cleanup: () => Promise.resolve(),
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 1_000,
     });
 
     await expect(
-      bindings.cancel({ id: "s-one", context, nowMs: 1, onDefinition: () => Promise.resolve() }),
+      bindings.cancel({
+        reader: anonymousReader,
+        id: "s-one",
+        context,
+        nowMs: 1,
+        onDefinition: () => Promise.resolve(),
+      }),
     ).resolves.toEqual({ kind: "closed" });
   });
 
@@ -1569,6 +2035,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.cancel({
+        reader: anonymousReader,
         id: "raw",
         context,
         nowMs: 1,
@@ -1607,6 +2074,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: "raw-untrusted-topic",
         context,
         nowMs: 1,
@@ -1616,6 +2084,7 @@ describe("DurableSubscriptionBindings", () => {
     ).rejects.toThrow("record is invalid");
     await expect(
       bindings.cancel({
+        reader: anonymousReader,
         id: "raw-untrusted-topic",
         context,
         nowMs: 1,
@@ -1633,6 +2102,7 @@ describe("DurableSubscriptionBindings", () => {
       limits: { operationTimeoutMs: 1 },
     });
     await bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 2_000,
     });
@@ -1640,6 +2110,7 @@ describe("DurableSubscriptionBindings", () => {
     let aborted = false;
     let settled = false;
     const active = bindings.activate({
+      reader: anonymousReader,
       id: "s-timeout",
       context,
       nowMs: 1,
@@ -1673,6 +2144,7 @@ describe("DurableSubscriptionBindings", () => {
     expect(aborted).toBe(true);
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: "s-timeout",
         context,
         nowMs: 1,
@@ -1731,12 +2203,14 @@ describe("DurableSubscriptionBindings", () => {
       });
       if (operation !== "create")
         await bindings.create({
+          reader: anonymousReader,
           topic: { kind: "subscription-topic", bytes: topic() },
           whenExpires: operation === "purge" ? 1 : 2_000,
         });
       const admitted =
         operation === "create"
           ? bindings.create({
+              reader: anonymousReader,
               topic: { kind: "subscription-topic", bytes: topic() },
               whenExpires: 2_000,
             })
@@ -1783,6 +2257,7 @@ describe("DurableSubscriptionBindings", () => {
       limits: { shutdownTimeoutMs: 1 },
     });
     void bindings.create({
+      reader: anonymousReader,
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 2_000,
     });

@@ -6,7 +6,7 @@ with the [To-Do README](README.md) and [walkthrough](USER_GUIDE.md).
 ## Responsibilities
 
 The package contains the To-Do Proto model, generated model module, Aggregate and
-Projection handlers, generated handler registry, local server entry point, and
+Projection handlers, generated passive metadata and bootstrap, local server entry point, and
 smoke client. Generated Proto and registry output is ignored build output;
 regenerate it through package/workspace scripts rather than editing it.
 The same normal generation run emits `TaskListQuery` with automatic column
@@ -97,5 +97,5 @@ Do not edit it. Regenerate with `pnpm proto:generate`.
 | Reassign or unassign with no assignee        | `TaskNotAssigned`     |
 | Reassign to the current assignee             | `TaskAlreadyAssigned` |
 
-`TaskList.id` moved to field 4 and field 1 is reserved. Snapshots reset; there
-is no automatic migration or ID inference.
+`TaskList.id` is a typed `TaskListId` in field 4; field 1 is reserved. A task-list
+ID is supplied by the TaskList command rather than inferred from a task ID.

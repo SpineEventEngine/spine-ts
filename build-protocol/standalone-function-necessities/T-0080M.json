@@ -1,7 +1,7 @@
 [
   {
     "rule": "standalone-function",
-    "file": "examples/projects/src/index.ts",
+    "file": "examples/projects/src/projects-domain.ts",
     "kind": "function-declaration",
     "identity": "createProjectManagementContext()#1",
     "name": "createProjectManagementContext",
@@ -10,7 +10,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/projects/src/index.ts",
+    "file": "examples/projects/src/projects-domain.ts",
     "kind": "function-declaration",
     "identity": "startProjectManagementServer()#1",
     "name": "startProjectManagementServer",

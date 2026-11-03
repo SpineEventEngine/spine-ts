@@ -43,6 +43,7 @@ import {
   type FileOptions,
 } from "@bufbuild/protobuf/wkt";
 import { validate as validateWithSpine } from "@spine-event-engine/validation";
+import { RegistryValidation } from "./validation/registry-validation.js";
 import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import {
   ActorContextSchema,
@@ -87,6 +88,22 @@ import {
 
 export { Time, type TimeProvider } from "./time/index.js";
 
+/**
+ * Generated application Query message type name to its paired Response type.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Generated companions augment this open type map.
+export interface AppQueryResponses {}
+
+/**
+ * Resolves a generated application Query to its declared response message.
+ *
+ * @typeParam Query Generated application request message.
+ */
+export type AppQueryResponseFor<Query extends Message> =
+  Query["$typeName"] extends keyof AppQueryResponses
+    ? AppQueryResponses[Query["$typeName"]]
+    : never;
+
 export {
   EntityColumn,
   type EntityColumnDefinition,
@@ -126,6 +143,9 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
  */
 export type MessageSchema = GenMessage<Message>;
 
+/**
+ * Nonempty tuple of schemas forming one message interface.
+ */
 type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
 
 /**
@@ -134,6 +154,10 @@ type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
  * @typeParam Schemas Nonempty tuple of member message schemas.
  */
 type InterfaceMember<Schemas extends InterfaceSchemas> = MessageShape<Schemas[number]>;
+
+/**
+ * Secure random APIs used when creating framework signal identifiers.
+ */
 interface SecureRandomCrypto {
   readonly randomUUID?: () => string;
   readonly getRandomValues?: (bytes: Uint8Array) => Uint8Array;
@@ -332,7 +356,7 @@ export type MessageValidationResult =
       // prettier-ignore
 
       /**
-       * The message failed validation or the validation runtime failed.
+       * The message failed a declared validation constraint.
        */
       readonly valid: false;
 
@@ -595,22 +619,27 @@ export const Validate = {
    * @typeParam Schema Generated schema of the message being validated.
    * @param schema The message schema.
    * @param message The message to validate.
+   * @param registry Optional type lookup overriding the registered Proto-module inventory.
    * @returns The sanitized validation result.
+   * @throws Error if the validator or its configuration fails.
    */
   message<Schema extends MessageSchema>(
     schema: Schema,
     message: MessageShape<Schema>,
+    registry?: TypeRegistryLookup,
   ): MessageValidationResult {
     try {
       return ValidationResults.from(
-        validateWithSpine(schema, message).map((violation) =>
-          ValidationResults.violation(violation),
-        ),
+        [
+          ...validateWithSpine(
+            schema,
+            RegistryValidation.view(schema, message) as MessageShape<Schema>,
+          ),
+          ...RegistryValidation.collect(schema, message, registry ?? GeneratedDescriptors.types()),
+        ].map((violation) => ValidationResults.violation(violation)),
       );
     } catch {
-      return ValidationResults.from([
-        ValidationResults.failure(schema.typeName, VALIDATION_RUNTIME_FAILURE_MESSAGE),
-      ]);
+      throw new Error(VALIDATION_RUNTIME_FAILURE_MESSAGE);
     }
   },
 
@@ -619,13 +648,16 @@ export const Validate = {
    * @typeParam Schema Generated schema of the message being validated.
    * @param schema The message schema.
    * @param message The message to validate.
+   * @param registry Optional type lookup overriding the registered Proto-module inventory.
    * @returns The validated message.
+   * @throws ValidationException for field constraints, or Error for validator failures.
    */
   check<Schema extends MessageSchema>(
     schema: Schema,
     message: MessageShape<Schema>,
+    registry?: TypeRegistryLookup,
   ): MessageShape<Schema> {
-    const result = Validate.message(schema, message);
+    const result = Validate.message(schema, message, registry);
     if (!result.valid) throw new ValidationException(result.error);
     return message;
   },
@@ -1771,6 +1803,7 @@ export class StringifierRegistry {
 
 let descriptorSnapshot: readonly ProtoModule[] | undefined;
 let descriptorRegistry: Registry | undefined;
+let descriptorTypes: TypeRegistry | undefined;
 
 /**
  * Reuses descriptor composition until another generated module registers.
@@ -1786,9 +1819,19 @@ const GeneratedDescriptors = Object.freeze({
     if (current !== descriptorSnapshot) {
       const types = TypeRegistry.from(...current);
       descriptorRegistry = createRegistry(...types.list().map((item) => item.descriptor));
+      descriptorTypes = types;
       descriptorSnapshot = current;
     }
     return descriptorRegistry;
+  },
+
+  /**
+   * Resolves generated types for annotated packed-message validation.
+   * @returns The current module-derived type lookup.
+   */
+  types(): TypeRegistryLookup | undefined {
+    GeneratedDescriptors.current();
+    return descriptorTypes;
   },
 });
 
@@ -1802,6 +1845,9 @@ export const defaultStringifierRegistry: StringifierRegistry = new StringifierRe
  */
 export type PrimitiveIdentifierType = "string" | "int32" | "int64";
 
+/**
+ * Packs and unpacks message or primitive Entity identifiers.
+ */
 interface IdentifierCodec {
   // prettier-ignore
 
@@ -1946,9 +1992,25 @@ function packIdentifier<Schema extends MessageSchema>(
   schema: Schema,
   value: MessageShape<Schema>,
 ): Any;
+
+/**
+ * Packs a string identifier into its typed envelope.
+ */
 function packIdentifier(type: "string", value: string): Any;
+
+/**
+ * Packs a validated 32-bit integer identifier into its typed envelope.
+ */
 function packIdentifier(type: "int32", value: number): Any;
+
+/**
+ * Packs a validated 64-bit integer identifier into its typed envelope.
+ */
 function packIdentifier(type: "int64", value: bigint): Any;
+
+/**
+ * Implements packing for registered message and primitive identifier kinds.
+ */
 function packIdentifier(
   type: MessageSchema | PrimitiveIdentifierType,
   value: Message | string | number | bigint,
@@ -1985,9 +2047,25 @@ function unpackIdentifier<Schema extends MessageSchema>(
   schema: Schema,
   value: Any,
 ): MessageShape<Schema> | undefined;
+
+/**
+ * Reads a string identifier from its typed envelope when its kind matches.
+ */
 function unpackIdentifier(type: "string", value: Any): string | undefined;
+
+/**
+ * Reads a 32-bit integer identifier when the packed kind matches.
+ */
 function unpackIdentifier(type: "int32", value: Any): number | undefined;
+
+/**
+ * Reads a 64-bit integer identifier when the packed kind matches.
+ */
 function unpackIdentifier(type: "int64", value: Any): bigint | undefined;
+
+/**
+ * Implements decoding for registered message and primitive identifier kinds.
+ */
 function unpackIdentifier(
   type: MessageSchema | PrimitiveIdentifierType,
   value: Any,
@@ -2493,6 +2571,9 @@ const RegistryLookups = {
   },
 };
 
+/**
+ * Proto module awaiting schema registration in the shared type registry.
+ */
 interface ModuleFrame {
   readonly module: ProtoModule;
   readonly appendSchemas: boolean;
@@ -2505,6 +2586,9 @@ export const spineCoreRegistry: TypeRegistryLookup = RegistryLookups.lookup(
   TypeRegistry.spineCore(),
 );
 
+/**
+ * Validation error fields permitted in a detached public diagnostic.
+ */
 interface SanitizableConstraintViolation {
   readonly typeName: string;
   readonly fieldPath?:

@@ -173,6 +173,7 @@ const expectedAuthExports = [
   "GitHubProviderOptions",
   "IdentityMapping",
   "IncomingCommand",
+  "IncomingAppQuery",
   "IncomingQuery",
   "IncomingRequest",
   "IncomingRequestInput",
@@ -258,6 +259,8 @@ const expectedAuthExports = [
   "TransportFacts",
 ];
 const expectedCoreExports = [
+  "AppQueryResponses",
+  "AppQueryResponseFor",
   "DEFAULT_TYPE_URL_PREFIX",
   "TypeRegistry",
   "TypeRegistryLookup",
@@ -307,6 +310,7 @@ const expectedCoreCodegenExports = [
   "GeneratedQueryBuilder",
 ];
 const expectedClientExports = [
+  "AppQueryClientResponse",
   "Client",
   "ClientKernel",
   "ClientOperationOptions",
@@ -347,6 +351,7 @@ const expectedClientCodegenExports = [
   "GeneratedEntityColumns",
 ];
 const expectedClientWebExports = [
+  "AppQueryClientResponse",
   "BearerBrowserSessionOptions",
   "BrowserClientOptions",
   "BrowserSession",
@@ -623,6 +628,8 @@ const expectedTestingExports = [
   "BlackBoxTimeoutError",
 ];
 const expectedServerExports = [
+  "AppQueryContext",
+  "AppQueryHandler",
   "Aggregate",
   "AbstractAssignee",
   "AbstractCommander",
@@ -656,6 +663,10 @@ const expectedServerExports = [
   "ContextSpecSnapshot",
   "ReadCatchUpOptions",
   "ReadCatchUpResult",
+  "ReadSideContext",
+  "ReadSideField",
+  "ReadSideFilter",
+  "ReadSideOperation",
   "RejectionDeclaration",
   "AlreadyPickedUp",
   "Delivery",
@@ -751,6 +762,7 @@ const expectedServerExports = [
   "ServerEnvironmentDelivery",
   "ServerEnvironmentSettings",
   "ServerOptions",
+  "ServerQueryExecutionContext",
   "ServerRuntimeLifecycle",
   "ServerRuntimeRejectedState",
   "StateUpdateRoute",
@@ -793,8 +805,10 @@ const expectedServerExports = [
   "StandReadResult",
   "StandRegisterOptions",
   "StandStateTypeError",
+  "StandSubscriptionCapacityError",
   "StandSubscribeOptions",
   "StandSubscription",
+  "StandObserver",
   "StandUpdate",
   "StandUpdateOptions",
   "EntityScopeReason",
@@ -872,7 +886,6 @@ const expectedServerExports = [
   "failSignalIntake",
   "isEntitySchema",
   "describeEntityMetadata",
-  "materializeDecoratedEntityHandlers",
   "validateEntityStateTransition",
 ];
 const expectedBrowserServerExports = [
@@ -1369,6 +1382,8 @@ const publishedModuleInventories = [
     documentedModulePath: "packages/server/src/spi/handler-registry",
     sourcePath: join("packages", "server", "src", "spi", "handler-registry.ts"),
     expectedDeclaredExports: [
+      "SpineMetadata",
+      "registerSpineMetadata",
       "GeneratedEntityHandlerGroup",
       "GeneratedEntityHandlers",
       "GeneratedHandlerKind",
@@ -1380,6 +1395,8 @@ const publishedModuleInventories = [
       "GeneratedStandaloneHandlerGroup",
     ],
     expectedDocumentedExports: [
+      "SpineMetadata",
+      "registerSpineMetadata",
       "GeneratedEntityHandlerGroup",
       "GeneratedEntityHandlers",
       "GeneratedHandlerKind",

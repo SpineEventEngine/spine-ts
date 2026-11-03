@@ -34,6 +34,145 @@ import {
 } from "../src/generation/generated-registry-writer.js";
 
 describe("generated registry writer", () => {
+  it("keeps App Query implementation metadata passive and tied to its exact class", () => {
+    const repoRoot = createCompileFixture();
+    const outputFile = join(repoRoot, "packages/demo/generated/spine-metadata.ts");
+    const source = new GeneratedRegistryWriter().render(
+      {
+        receivers: [],
+        diagnostics: [],
+        appQueries: [
+          {
+            className: "TopIssuesHandler",
+            sourceFile: join(repoRoot, "packages/demo/src/top-issues.ts"),
+            queryTypeName: "example.issues.SummarizeTopIssues.Query",
+            querySchema: schema(
+              "../generated/issue_queries_pb.js",
+              "SummarizeTopIssues_QuerySchema",
+            ),
+            responseSchema: schema(
+              "../generated/issue_queries_pb.js",
+              "SummarizeTopIssues_ResponseSchema",
+            ),
+          },
+        ],
+      },
+      { outputFile },
+    );
+    expect(source).toContain("appQueries: [");
+    expect(source).toContain("handlerType: TopIssuesHandler");
+    expect(source).toContain('queryTypeName: "example.issues.SummarizeTopIssues.Query"');
+    expect(source).toContain("querySchema: SummarizeTopIssues_QuerySchema");
+    expect(source).toContain("responseSchema: SummarizeTopIssues_ResponseSchema");
+    expect(source).not.toContain("new TopIssuesHandler");
+  });
+  it("renders a passive bootstrap that registers local metadata once imported", () => {
+    const source = new GeneratedRegistryWriter().renderBootstrap();
+
+    expect(source).toContain('import { spineMetadata } from "./spine-metadata.js";');
+    expect(source).toContain('registerSpineMetadata(spineMetadata, "./spine-metadata.js")');
+    expect(source).not.toContain("new Server");
+  });
+  it.each(["customMetadata", "SpineMetadataInventory", "registerSpineMetadata"])(
+    "uses supported metadata export %s in the compiled bootstrap",
+    (registryName) => {
+      const repoRoot = createCompileFixture();
+      const outputFile = join(repoRoot, "packages/demo/generated/spine-metadata.ts");
+      const bootstrapFile = join(repoRoot, "packages/demo/generated/spine-bootstrap.ts");
+      const writer = new GeneratedRegistryWriter();
+      writeFileSync(
+        outputFile,
+        writer.render(
+          { diagnostics: [], receivers: [] },
+          {
+            outputFile,
+            registryName,
+          },
+        ),
+      );
+      writeFileSync(bootstrapFile, writer.renderBootstrap({ registryName }));
+      writeFileSync(
+        join(repoRoot, "packages/demo/generated/spine-dependencies.d.ts"),
+        "export {};\n",
+      );
+
+      expect(readFileSync(bootstrapFile, "utf8")).toContain(`import { ${registryName} }`);
+      expect(compileIsolatedDeclarations(bootstrapFile)).toEqual([]);
+    },
+  );
+
+  it.each(["spineMetadata", "TaskAggregate", "TaskSchema"])(
+    "aliases a Proto export named %s without colliding with metadata bindings",
+    (protoModuleExport) => {
+      const repoRoot = createCompileFixture();
+      const generatedRoot = join(repoRoot, "packages/demo/generated");
+      const outputFile = join(generatedRoot, "spine-metadata.ts");
+      writeFileSync(
+        join(generatedRoot, "proto-module.ts"),
+        `export const ${protoModuleExport} = {};\n`,
+      );
+      const source = new GeneratedRegistryWriter().render(
+        {
+          diagnostics: [],
+          receivers: [
+            {
+              className: "TaskAggregate",
+              receiverKind: "entity",
+              sourceFile: join(repoRoot, "packages/demo/src/task-aggregate.ts"),
+              stateSchema: schema("@acme/generated/task_pb.js", "TaskSchema"),
+              handlers: [],
+            },
+          ],
+        },
+        { outputFile, protoModuleExport },
+      );
+      writeFileSync(outputFile, source);
+
+      expect(source).toContain(`import { ${protoModuleExport} as ${protoModuleExport}_2 }`);
+      expect(source).toContain(`protoModule: ${protoModuleExport}_2,`);
+      expect(compileIsolatedDeclarations(outputFile)).toEqual([]);
+    },
+  );
+  it("writes the local bootstrap inside an ignored generated root", () => {
+    const repoRoot = createRepoFixture("packages/demo/generated/\n");
+    const generatedRoot = join(repoRoot, "packages/demo/generated");
+    const outputFile = join(generatedRoot, "spine-bootstrap.ts");
+
+    const source = new GeneratedRegistryWriter().writeBootstrap({
+      generatedRoot,
+      outputFile,
+      repoRoot,
+    });
+
+    expect(readFileSync(outputFile, "utf8")).toBe(source);
+    expect(source).toContain("registerSpineMetadata");
+  });
+  it("renders passive local model metadata without handler instances", () => {
+    const source = new GeneratedRegistryWriter().render(
+      { diagnostics: [], receivers: [] },
+      {
+        outputFile: "/workspace/repo/generated/spine-metadata.ts",
+        protoModuleExport: "todoProtoModule",
+      },
+    );
+
+    expect(source).toContain('import { todoProtoModule } from "./proto-module.js";');
+    expect(source).toContain("export const spineMetadata:");
+    expect(source).toContain("protoModule: todoProtoModule,");
+    expect(source).toContain("receivers: [");
+    expect(source).not.toContain("new TaskAggregate");
+  });
+  it("rejects an invalid Proto module export before rendering metadata", () => {
+    expect(() =>
+      new GeneratedRegistryWriter().render(
+        { diagnostics: [], receivers: [] },
+        {
+          outputFile: "/workspace/repo/generated/spine-metadata.ts",
+          protoModuleExport: "not-a-valid-export!",
+        },
+      ),
+    ).toThrow("Invalid Proto module export");
+  });
   it("renders a standalone receiver without an Entity state schema", () => {
     const repoRoot = "/workspace/repo";
     const source = new GeneratedRegistryWriter().render(
@@ -149,7 +288,7 @@ describe("generated registry writer", () => {
 
     expect(source).toBe(
       [
-        "import type { GeneratedHandlerRegistry } from " +
+        "import type { SpineMetadata } from " +
           '"@spine-event-engine/server/spi/handler-registry";',
         'import { TaskAggregate } from "../../src/task-aggregate.js";',
         'import { TaskProjection } from "../../src/task-projection.js";',
@@ -158,7 +297,7 @@ describe("generated registry writer", () => {
           'from "../spine/examples/todo/task_events_pb.js";',
         'import { TaskSchema } from "../spine/examples/todo/tasks_pb.js";',
         "",
-        "export const generatedHandlerRegistry: GeneratedHandlerRegistry = {",
+        "export const spineMetadata: SpineMetadata = {",
         "  receivers: [",
         "    {",
         '      receiverKind: "entity",',
@@ -365,7 +504,7 @@ describe("generated registry writer", () => {
     );
 
     expect(source).toContain(
-      'import type { GeneratedHandlerRegistry } from "@spine-event-engine/server\\u2029with\\nbreak";',
+      'import type { SpineMetadata } from "@spine-event-engine/server\\u2029with\\nbreak";',
     );
     expect(source).toContain('methodName: "create\\u2028\\"task\\"\\nnext",');
   });
@@ -400,7 +539,7 @@ describe("generated registry writer", () => {
     const repoRoot = "/workspace/repo";
     const outputFile = join(repoRoot, "generated/handler/generated-handler-registry.ts");
 
-    for (const registryName of ["GeneratedHandlerRegistry", "TaskAggregate"]) {
+    for (const registryName of ["SpineMetadata", "TaskAggregate"]) {
       expect(() =>
         new GeneratedRegistryWriter().render(analysis(repoRoot), {
           outputFile,
@@ -524,7 +663,7 @@ describe("generated registry writer", () => {
       repoRoot,
     });
 
-    expect(readFileSync(outputFile, "utf8")).toContain("generatedHandlerRegistry");
+    expect(readFileSync(outputFile, "utf8")).toContain("spineMetadata");
   });
 
   it("renders imports for the published registry path when writing to staging", () => {
@@ -1127,7 +1266,8 @@ function createCompileFixture(): string {
     [
       'export type GeneratedHandlerKind = "command-assignment" | "command-substitution" | ' +
         '"command-reaction" | "event-subscription" | "event-reaction";',
-      "export type GeneratedHandlerRegistry = {",
+      "export type SpineMetadata = {",
+      "  readonly protoModule?: object;",
       "  readonly receivers: readonly {",
       '    readonly receiverKind: "entity" | "standalone";',
       "    readonly receiverType: { readonly prototype: object; };",
@@ -1141,6 +1281,7 @@ function createCompileFixture(): string {
       "    }[];",
       "  }[];",
       "}",
+      "export declare function registerSpineMetadata(metadata: SpineMetadata, moduleId: string): void;",
       "",
     ].join("\n"),
   );

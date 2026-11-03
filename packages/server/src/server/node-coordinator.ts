@@ -18,7 +18,13 @@ import type { AddressInfo } from "node:net";
 
 import { clone, create, equals, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
+import {
+  Code,
+  ConnectError,
+  createClient,
+  type ConnectRouter,
+  type HandlerContext,
+} from "@connectrpc/connect";
 import {
   connectNodeAdapter,
   createGrpcTransport,
@@ -30,6 +36,17 @@ import {
   type BackendMembershipKernelOptions,
 } from "@spine-event-engine/deployment/spi/backend-membership";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
+import { Validate } from "@spine-event-engine/core";
+import {
+  ReaderForwarding,
+  type ReaderProofIssuer,
+  type ReaderProofVerifier,
+} from "@spine-event-engine/core/spi/reader-forwarding";
+import {
+  ReaderIdentities,
+  snapshotTrustedReader,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
 import {
   AckSchema,
   ResponseSchema,
@@ -39,9 +56,14 @@ import {
   type Response,
 } from "@spine-event-engine/proto";
 import {
+  type AppQuery,
+  type AppQueryResponse,
+  AppQueryResponseSchema,
+  AppQuerySchema,
   type Query,
   type QueryResponse,
   QueryResponseSchema,
+  QuerySchema,
   CommandService,
   QueryService,
   type Subscription,
@@ -53,12 +75,17 @@ import {
   type Topic,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
+import { ReadRequestStatus } from "../services/read-request-status.js";
+import {
+  TrustedReaderIngress,
+  type DirectReaderAuthenticator,
+} from "../services/trusted-reader-ingress.js";
+import { ServerEnvironment } from "./server-environment.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
 const defaultMessageMaxBytes = 4_194_304;
 const gracefulSessionDrainMs = 100;
-const subscriptionQueueLimit = 100;
 
 /**
  * Describes one private managed child available for Coordinator forwarding.
@@ -98,7 +125,7 @@ export interface ReadyCoordinatorMember {
 }
 
 /**
- * Supplies managed READY members and their change notification.
+ * Returns managed READY members and their change notification.
  *
  * @internal
  */
@@ -106,7 +133,6 @@ export interface ReadyMemberSource {
   // prettier-ignore
 
   /**
-   *
    * Returns the current complete READY-member snapshot.
    *
    * @returns The current private member facts.
@@ -122,7 +148,6 @@ export interface ReadyMemberSource {
   relayMembers(): readonly ReadyCoordinatorMember[];
 
   /**
-   *
    * Subscribes one callback after READY membership changes.
    *
    * @param onChange Runs after a new snapshot becomes current.
@@ -172,7 +197,7 @@ export interface NodeCoordinatorOptions {
 
   /**
    *
-   * Supplies private managed READY membership.
+   * Returns private managed READY membership.
    */
 
   readonly members: ReadyMemberSource;
@@ -204,6 +229,19 @@ export interface NodeCoordinatorOptions {
    */
 
   readonly writeMaxBytes?: number;
+
+  /**
+   * Configured native reader admission at the managed listener.
+   */
+  readonly readerAdmission?: Readonly<{
+    forwarded?: ReaderProofVerifier<HandlerContext>;
+    direct?: DirectReaderAuthenticator<HandlerContext>;
+  }>;
+
+  /**
+   * Configured proof issuer for each Coordinator-to-child request.
+   */
+  readonly forwardingProof?: ReaderProofIssuer;
 }
 
 /**
@@ -215,6 +253,20 @@ export class NodeCoordinator {
   // prettier-ignore
 
   readonly #members: ReadyMemberSource;
+
+  readonly #readerAdmission: NodeCoordinatorOptions["readerAdmission"];
+
+  readonly #forwardingProof: ReaderProofIssuer | undefined;
+
+  readonly #readers = new Map<string, TrustedReaderContext>();
+
+  readonly #children = new Map<string, Set<string>>();
+
+  readonly #logicalForChild = new Map<string, string>();
+
+  readonly #readMaxBytes: number;
+
+  readonly #subscriptionQueueCapacity: number;
 
   readonly #unaryKernel: BackendMembershipKernel<
     ReadyCoordinatorMember,
@@ -276,35 +328,73 @@ export class NodeCoordinator {
    * @param server The HTTP/2 server.
    * @param address The listening address.
    * @param sessions Tracked HTTP/2 sessions.
+   * @param subscriptionQueueCapacity Resolved bound for each managed subscriber.
    */
   private constructor(
     options: NodeCoordinatorOptions,
     server: http2.Http2Server,
     address: AddressInfo,
     sessions: Set<http2.ServerHttp2Session>,
+    subscriptionQueueCapacity: number,
   ) {
     this.#members = options.members;
-    this.#unaryKernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
-    this.#subscriptionKernel = new BackendMembershipKernel(
-      NodeCoordinatorValues.unaryKernelOptions(options.members),
+    this.#readerAdmission = options.readerAdmission;
+    this.#forwardingProof = options.forwardingProof;
+    this.#readMaxBytes = options.readMaxBytes ?? defaultMessageMaxBytes;
+    this.#subscriptionQueueCapacity = subscriptionQueueCapacity;
+    this.#unaryKernel = new BackendMembershipKernel(
+      NodeCoordinatorValues.unaryKernelOptions(
+        undefined,
+        this.#forwardingProof,
+        this.#readMaxBytes,
+        (bytes) => this.#readerFor(bytes),
+      ),
     );
+    this.#subscriptionKernel = this.#makeSubscriptionKernel(options.members);
     this.#server = server;
     this.#sessions = sessions;
     this.host = address.address;
     this.port = address.port;
     this.baseUrl = `http://${NodeCoordinatorValues.formatHostForUrl(this.host)}:${this.port.toString()}`;
     const reconcile = () => {
-      this.#membershipReconciliation = this.#membershipReconciliation
-        .then(
-          () => this.#reconcile(),
-          () => this.#reconcile(),
-        )
-        .catch(() => undefined);
+      this.#scheduleReconciliation();
     };
     this.#stopMembers = [
       options.members.onReadyMembersChange(reconcile),
       options.members.onRelayMembersChange(reconcile),
     ];
+  }
+
+  /**
+   * Builds the subscription kernel with reader provenance for each child.
+   *
+   * @param members The available backend member source.
+   * @returns The native subscription kernel.
+   */
+  #makeSubscriptionKernel(members: ReadyMemberSource) {
+    return new BackendMembershipKernel(
+      NodeCoordinatorValues.unaryKernelOptions(
+        members,
+        this.#forwardingProof,
+        this.#readMaxBytes,
+        (bytes) => this.#readerFor(bytes),
+        (definition, child) => {
+          this.#rememberChild(definition, child);
+        },
+      ),
+    );
+  }
+
+  /**
+   * Serializes membership refresh after readiness or relay changes.
+   */
+  #scheduleReconciliation(): void {
+    this.#membershipReconciliation = this.#membershipReconciliation
+      .then(
+        () => this.#reconcile(),
+        () => this.#reconcile(),
+      )
+      .catch(() => undefined);
   }
 
   /**
@@ -314,6 +404,7 @@ export class NodeCoordinator {
    * @returns The running private Coordinator.
    */
   static async open(options: NodeCoordinatorOptions): Promise<NodeCoordinator> {
+    const subscriptionQueueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
     const { host, port, readMaxBytes, writeMaxBytes } = this.#listenerOptions(options);
     // eslint-disable-next-line prefer-const -- routes capture the Coordinator before the listener exists.
     let coordinator: NodeCoordinator;
@@ -321,21 +412,7 @@ export class NodeCoordinator {
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
-          router.service(CommandService, {
-            post: async (command, context) => {
-              return coordinator.#post(command, context);
-            },
-          });
-          router.service(QueryService, {
-            read: async (query, context) => {
-              return coordinator.#read(query, context);
-            },
-          });
-          router.service(SubscriptionService, {
-            subscribe: (topic, context) => coordinator.#subscribe(topic, context),
-            activate: (subscription, context) => coordinator.#activate(subscription, context),
-            cancel: (subscription, context) => coordinator.#cancel(subscription, context),
-          });
+          this.#routes(router, () => coordinator);
         },
         readMaxBytes,
         writeMaxBytes,
@@ -343,9 +420,36 @@ export class NodeCoordinator {
     );
     this.#trackSessions(server, sessions);
     const address = await NodeCoordinatorValues.listen(server, host, port);
-    coordinator = new NodeCoordinator(options, server, address, sessions);
+    coordinator = new NodeCoordinator(
+      options,
+      server,
+      address,
+      sessions,
+      subscriptionQueueCapacity,
+    );
     await coordinator.#reconcile();
     return coordinator;
+  }
+
+  /**
+   * Registers native service routes after the listener receives its Coordinator instance.
+   *
+   * @param router Connect router for the private listener.
+   * @param current Returns the initialized Coordinator at request time.
+   */
+  static #routes(router: ConnectRouter, current: () => NodeCoordinator): void {
+    router.service(CommandService, {
+      post: (command, context) => current().#post(command, context),
+    });
+    router.service(QueryService, {
+      read: (query, context) => current().#read(query, context),
+      execute: (query, context) => current().#execute(query, context),
+    });
+    router.service(SubscriptionService, {
+      subscribe: (topic, context) => current().#subscribe(topic, context),
+      activate: (subscription, context) => current().#activate(subscription, context),
+      cancel: (subscription, context) => current().#cancel(subscription, context),
+    });
   }
 
   /**
@@ -418,40 +522,139 @@ export class NodeCoordinator {
     await this.#subscriptionKernel.close();
   }
 
+  /**
+   * Admits a command reader and forwards the command to a managed child.
+   *
+   * @param command Command envelope from the native client.
+   * @param context The trusted context for this operation.
+   * @returns Child acknowledgment after forwarding.
+   */
   async #post(command: Command, context: HandlerContext): Promise<Ack> {
+    const reader = await this.#admit(
+      "spine.client.CommandService",
+      "Post",
+      toBinary(CommandService.method.post.input, command),
+      context,
+    );
     const request: CoordinatorCommand = {
       kind: "command",
       command,
       context,
+      reader,
       response: create(AckSchema),
     };
     await this.#forward(request);
     return request.response;
   }
 
+  /**
+   * Admits a read reader and forwards the query to a managed child.
+   *
+   * @param query Query envelope from the native client.
+   * @param context The trusted context for this operation.
+   * @returns Child read response after forwarding.
+   */
   async #read(query: Query, context: HandlerContext): Promise<QueryResponse> {
+    const reader = await this.#admit(
+      "spine.client.QueryService",
+      "Read",
+      toBinary(QuerySchema, query),
+      context,
+    );
+    ReadRequestStatus.check("query", () => Validate.check(QuerySchema, query));
     const request: CoordinatorQuery = {
       kind: "query",
       query,
       context,
+      reader,
       response: create(QueryResponseSchema),
     };
     await this.#forward(request);
     return request.response;
   }
 
+  /**
+   * Admits an App Query and forwards it to a ready application replica.
+   *
+   * @param query App Query envelope.
+   * @param context Native RPC context.
+   * @returns The application replica's response.
+   */
+  async #execute(query: AppQuery, context: HandlerContext): Promise<AppQueryResponse> {
+    const reader = await this.#admit(
+      "spine.client.QueryService",
+      "Execute",
+      toBinary(QueryService.method.execute.input, query),
+      context,
+    );
+    ReadRequestStatus.check("query", () => Validate.check(AppQuerySchema, query));
+    const request: CoordinatorAppQuery = {
+      kind: "app-query",
+      query,
+      context,
+      reader,
+      response: create(AppQueryResponseSchema),
+    };
+    await this.#forward(request);
+    return request.response;
+  }
+
+  /**
+   * Verifies forwarded or direct reader facts at the managed ingress.
+   *
+   * @param service Canonical RPC service.
+   * @param method Canonical RPC method.
+   * @param request Canonical request bytes.
+   * @param context Native transport context.
+   * @returns Detached trusted reader facts.
+   */
+  #admit(
+    service: string,
+    method: string,
+    request: Uint8Array,
+    context: HandlerContext,
+  ): Promise<TrustedReaderContext> {
+    return TrustedReaderIngress.admit({
+      service,
+      method,
+      request,
+      headers: context.requestHeader,
+      peer: context,
+      maxBytes: this.#readMaxBytes,
+      ...this.#readerAdmission,
+    });
+  }
+
+  /**
+   * Validates and retains a reader-bound subscription definition.
+   *
+   * @param topic Framework subscription Topic.
+   * @param context The trusted context for this operation.
+   * @returns The new subscription definition.
+   */
   async #subscribe(topic: Topic, context: HandlerContext): Promise<Subscription> {
+    const reader = await this.#admit(
+      "spine.client.SubscriptionService",
+      "Subscribe",
+      toBinary(TopicSchema, topic),
+      context,
+    );
+    ReadRequestStatus.check("topic", () => Validate.check(TopicSchema, topic));
     if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: `s-${randomUUID()}` }),
       topic,
     });
+    const id = subscription.id?.value;
+    if (id === undefined) throw new Error("Created subscription has no ID.");
+    this.#readers.set(id, reader);
     try {
       await this.#subscriptionKernel.subscribe(
         toBinary(SubscriptionSchema, subscription),
         context.signal,
       );
     } catch (error) {
+      this.#forgetReader(id);
       throw this.#availabilityError(error);
     }
     if (this.#isDraining()) {
@@ -471,10 +674,18 @@ export class NodeCoordinator {
     return this.#draining;
   }
 
+  /**
+   * Verifies membership and activates a retained subscription.
+   *
+   * @param subscription The subscription definition being processed.
+   * @param context The trusted context for this operation.
+   * @returns The update stream after admission.
+   */
   async *#activate(
     subscription: Subscription,
     context: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
+    await this.#admitActivation(subscription, context);
     if (this.#draining) throw new ConnectError("Managed application is closing.", Code.Unavailable);
     const definition = toBinary(SubscriptionSchema, subscription);
     this.#clearPendingActivation(subscription);
@@ -484,10 +695,13 @@ export class NodeCoordinator {
     };
     context.signal.addEventListener("abort", abort, { once: true });
     if (context.signal.aborted) abort();
-    const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit, abort);
-    const activation = this.#activateChild(definition, subscription, updates, overflow.signal);
+    const updates = new SubscriptionUpdateQueue(this.#subscriptionQueueCapacity, abort);
+    const ack = Promise.withResolvers<SubscriptionUpdate | undefined>();
+    const activation = this.#activateChild(definition, subscription, updates, ack, overflow.signal);
     let failure: Error | undefined;
     try {
+      const ready = await ack.promise;
+      if (ready !== undefined) yield ready;
       for await (const update of updates) yield update;
     } catch (error) {
       failure = NodeCoordinatorValues.error(error);
@@ -500,11 +714,31 @@ export class NodeCoordinator {
   }
 
   /**
+   * Admits and validates a reader-bound activation before changing pending state.
+   *
+   * @param subscription The subscription definition being processed.
+   * @param context The trusted context for this operation.
+   * @returns Completion after the operation settles.
+   */
+  async #admitActivation(subscription: Subscription, context: HandlerContext): Promise<void> {
+    const reader = await this.#admit(
+      "spine.client.SubscriptionService",
+      "Activate",
+      toBinary(SubscriptionSchema, subscription),
+      context,
+    );
+    ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
+    ReadRequestStatus.checkLifecycleCriterion(subscription);
+    this.#requireReader(subscription, reader);
+  }
+
+  /**
    * Relays accepted child updates through the bounded logical stream.
    *
    * @param definition The validated child subscription bytes.
    * @param subscription The logical subscription exposed to callers.
    * @param updates The bounded caller stream queue.
+   * @param ack The separate activation acknowledgment gate.
    * @param signal Cancels the active child relay.
    * @returns Completion after the backend activation ends.
    */
@@ -512,6 +746,7 @@ export class NodeCoordinator {
     definition: Uint8Array,
     subscription: Subscription,
     updates: SubscriptionUpdateQueue,
+    ack: PromiseWithResolvers<SubscriptionUpdate | undefined>,
     signal: AbortSignal,
   ): Promise<void> {
     return this.#subscriptionKernel
@@ -520,15 +755,28 @@ export class NodeCoordinator {
         async (childUpdate) => {
           const update = fromBinary(SubscriptionUpdateSchema, childUpdate);
           update.subscription = clone(SubscriptionSchema, subscription);
+          if (update.response?.status?.status.case === "ok" && update.update.case === undefined) {
+            ack.resolve(update);
+            return;
+          }
           await updates.push(update);
         },
         signal,
       )
       .finally(() => {
+        ack.resolve(undefined);
         updates.close();
       });
   }
 
+  /**
+   * Finishes one activated stream and clears pending state.
+   *
+   * @param definition The serialized subscription definition.
+   * @param activation Activation task and its stream state.
+   * @param previousFailure Earlier lifecycle failure.
+   * @returns Completion after the operation settles.
+   */
   async #finishActivation(
     definition: Uint8Array,
     activation: Promise<void>,
@@ -551,7 +799,28 @@ export class NodeCoordinator {
       throw new AggregateError(failures, "Coordinator activation cleanup failed.");
   }
 
+  /**
+   * Verifies reader membership and removes a retained subscription.
+   *
+   * @param subscription The subscription definition being processed.
+   * @param context The trusted context for this operation.
+   * @returns The cancellation acknowledgment.
+   */
   async #cancel(subscription: Subscription, context: HandlerContext): Promise<Response> {
+    const reader = await this.#admit(
+      "spine.client.SubscriptionService",
+      "Cancel",
+      toBinary(SubscriptionSchema, subscription),
+      context,
+    );
+    ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
+    ReadRequestStatus.checkLifecycleCriterion(subscription);
+    const id = subscription.id?.value;
+    if (id !== undefined && this.#readers.has(id)) this.#requireReader(subscription, reader);
+    else
+      return create(ResponseSchema, {
+        status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+      });
     this.#clearPendingActivation(subscription);
     await this.#cancelDefinition(toBinary(SubscriptionSchema, subscription), context.signal);
     return create(ResponseSchema, {
@@ -559,6 +828,12 @@ export class NodeCoordinator {
     });
   }
 
+  /**
+   * Forwards a verified request to the selected managed child.
+   *
+   * @param request The request being processed.
+   * @returns Completion after the operation settles.
+   */
   async #forward(request: CoordinatorRequest): Promise<void> {
     if (this.#draining)
       throw new ConnectError("No ready application replica is available.", Code.Unavailable);
@@ -569,12 +844,23 @@ export class NodeCoordinator {
     }
   }
 
+  /**
+   * Maps child transport failure to the public availability status.
+   *
+   * @param error The failure being classified or propagated.
+   * @returns The public transport error.
+   */
   #availabilityError(error: unknown): unknown {
     return error instanceof Error && error.message === "backend membership is unavailable."
       ? new ConnectError("No ready application replica is available.", Code.Unavailable)
       : error;
   }
 
+  /**
+   * Starts the activation handshake expiry for a new subscription.
+   *
+   * @param subscription The subscription definition being processed.
+   */
   #schedulePendingActivation(subscription: Subscription): void {
     const id = NodeCoordinatorValues.requiredValue(
       subscription.id?.value,
@@ -591,6 +877,13 @@ export class NodeCoordinator {
     this.#pendingActivations.set(id, pending);
   }
 
+  /**
+   * Forwards cancellation of a native subscription definition.
+   *
+   * @param definition The serialized subscription definition.
+   * @param signal The cancellation signal for this operation.
+   * @returns Completion after the operation settles.
+   */
   #cancelDefinition(definition: Uint8Array, signal: AbortSignal): Promise<void> {
     const id = NodeCoordinatorValues.requiredValue(
       fromBinary(SubscriptionSchema, definition).id?.value,
@@ -598,13 +891,85 @@ export class NodeCoordinator {
     );
     const active = this.#cancellations.get(id);
     if (active !== undefined) return active;
-    const cancellation = this.#subscriptionKernel.cancel(definition, signal).finally(() => {
-      if (this.#cancellations.get(id) === cancellation) this.#cancellations.delete(id);
-    });
+    const cancellation = this.#subscriptionKernel
+      .cancel(definition, signal)
+      .then(() => {
+        this.#forgetReader(id);
+      })
+      .finally(() => {
+        if (this.#cancellations.get(id) === cancellation) this.#cancellations.delete(id);
+      });
     this.#cancellations.set(id, cancellation);
     return cancellation;
   }
 
+  /**
+   * Verifies and refreshes the reader before subscription effects.
+   *
+   * @param subscription The subscription definition being processed.
+   * @param reader The verified reader facts for this operation.
+   */
+  #requireReader(subscription: Subscription, reader: TrustedReaderContext): void {
+    const id = subscription.id?.value;
+    const previous = id === undefined ? undefined : this.#readers.get(id);
+    if (id === undefined || previous === undefined) throw ReadRequestStatus.unknownSubscription();
+    if (!ReaderIdentities.matches(ReaderIdentities.from(previous), ReaderIdentities.from(reader)))
+      throw new ConnectError("Subscription reader is not authorized.", Code.PermissionDenied);
+    this.#readers.set(id, reader);
+    for (const child of this.#children.get(id) ?? []) this.#readers.set(child, reader);
+  }
+
+  /**
+   * Associates one native child with the admitted logical reader.
+   *
+   * @param definition The serialized subscription definition.
+   * @param child The native child subscription definition.
+   */
+  #rememberChild(definition: Uint8Array, child: Uint8Array): void {
+    const id = fromBinary(SubscriptionSchema, definition).id?.value;
+    const childId = fromBinary(SubscriptionSchema, child).id?.value;
+    if (id === undefined || childId === undefined) return;
+    const logicalId = this.#logicalForChild.get(id) ?? (this.#readers.has(id) ? id : undefined);
+    if (logicalId === undefined) return;
+    const children = this.#children.get(logicalId) ?? new Set<string>();
+    children.add(childId);
+    this.#children.set(logicalId, children);
+    this.#logicalForChild.set(childId, logicalId);
+    const reader = this.#readers.get(id);
+    if (reader !== undefined) this.#readers.set(childId, reader);
+  }
+
+  /**
+   * Returns current detached facts for a logical or child subscription.
+   *
+   * @param bytes The serialized message bytes.
+   * @returns The verified reader for this subscription.
+   */
+  #readerFor(bytes: Uint8Array): TrustedReaderContext | undefined {
+    const id = fromBinary(SubscriptionSchema, bytes).id?.value;
+    const reader = id === undefined ? undefined : this.#readers.get(id);
+    return reader === undefined ? undefined : snapshotTrustedReader(reader);
+  }
+
+  /**
+   * Removes a finished logical definition and its current child mappings.
+   *
+   * @param id The stable identifier for this record.
+   */
+  #forgetReader(id: string): void {
+    this.#readers.delete(id);
+    for (const child of this.#children.get(id) ?? []) {
+      this.#readers.delete(child);
+      this.#logicalForChild.delete(child);
+    }
+    this.#children.delete(id);
+  }
+
+  /**
+   * Removes a pending activation timer and its tracking entry.
+   *
+   * @param subscription The subscription definition being processed.
+   */
   #clearPendingActivation(subscription: Subscription): void {
     const id = subscription.id?.value;
     if (id === undefined) return;
@@ -614,6 +979,13 @@ export class NodeCoordinator {
     this.#pendingActivations.delete(id);
   }
 
+  /**
+   * Expires an unactivated subscription after its handshake window.
+   *
+   * @param id The stable identifier for this record.
+   * @param pending Pending activation or retry state.
+   * @returns Completion after the operation settles.
+   */
   async #expirePendingActivation(id: string, pending: PendingActivation): Promise<void> {
     if (this.#pendingActivations.get(id) !== pending) return;
     try {
@@ -625,6 +997,11 @@ export class NodeCoordinator {
     }
   }
 
+  /**
+   * Reconciles managed child subscriptions after topology changes.
+   *
+   * @returns Completion after the operation settles.
+   */
   #reconcile(): Promise<void> {
     if (this.#members.onRelaySynchronized !== undefined)
       return this.#subscriptionKernel
@@ -640,6 +1017,11 @@ export class NodeCoordinator {
     ]).then(() => undefined);
   }
 
+  /**
+   * Runs shutdown once while concurrent callers await the same completion.
+   *
+   * @returns Completion after the operation settles.
+   */
   async #closeOnce(): Promise<void> {
     this.#stopMembers.forEach((stop) => {
       stop();
@@ -655,20 +1037,47 @@ export class NodeCoordinator {
   }
 }
 
+/**
+ * Command request, caller context, and acknowledgment queued for coordination.
+ */
 interface CoordinatorCommand {
   readonly kind: "command";
   readonly command: Command;
   readonly context: HandlerContext;
+  readonly reader: TrustedReaderContext;
   response: Ack;
 }
+
+/**
+ * Entity query request, reader context, and response queued for coordination.
+ */
 interface CoordinatorQuery {
   readonly kind: "query";
   readonly query: Query;
   readonly context: HandlerContext;
+  readonly reader: TrustedReaderContext;
   response: QueryResponse;
 }
-type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery;
 
+/**
+ * Application Query request and response carried across the Coordinator queue.
+ */
+interface CoordinatorAppQuery {
+  readonly kind: "app-query";
+  readonly query: AppQuery;
+  readonly context: HandlerContext;
+  readonly reader: TrustedReaderContext;
+  response: AppQueryResponse;
+}
+
+/**
+ * Command or read request admitted to the Coordinator queue.
+ */
+type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery | CoordinatorAppQuery;
+
+/**
+ * Serialized subscription definition awaiting activation before its deadline.
+ */
 interface PendingActivation {
   readonly definition: Uint8Array;
   readonly timer: NodeJS.Timeout;
@@ -680,11 +1089,11 @@ interface PendingActivation {
  * @internal
  */
 export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate> {
-  readonly #updates: SubscriptionUpdate[] = [];
+  #active: { update: SubscriptionUpdate; delivered: boolean; resolve: () => void } | undefined;
+
+  readonly #updates: { update: SubscriptionUpdate; delivered: boolean; resolve: () => void }[] = [];
 
   readonly #waiters: ((value: IteratorResult<SubscriptionUpdate>) => void)[] = [];
-
-  readonly #delivered: (() => void)[] = [];
 
   readonly #limit: number;
 
@@ -695,7 +1104,7 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
   /**
    * Creates one terminal bounded update queue.
    *
-   * @param limit Limits retained updates before terminal closure.
+   * @param limit Maximum waiting updates beyond one active update.
    * @param onOverflow Aborts the public relay when the queue reaches its bound.
    */
   constructor(limit: number, onOverflow: () => void = () => undefined) {
@@ -711,18 +1120,19 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
    */
   push(update: SubscriptionUpdate): Promise<void> {
     if (this.#closed) return Promise.resolve();
-    const waiter = this.#waiters.shift();
-    if (waiter !== undefined) {
-      waiter({ value: update, done: false });
-      return Promise.resolve();
-    }
-    if (this.#updates.length >= this.#limit) {
+    if (this.#active !== undefined && this.#updates.length >= this.#limit) {
       this.#onOverflow();
       this.close();
       return Promise.resolve();
     }
-    this.#updates.push(update);
-    return new Promise((resolve) => this.#delivered.push(resolve));
+    return new Promise((resolve) => {
+      const entry = { update, delivered: false, resolve };
+      if (this.#active === undefined) {
+        this.#active = entry;
+        const waiter = this.#waiters.shift();
+        if (waiter !== undefined) waiter(this.#deliver(entry));
+      } else this.#updates.push(entry);
+    });
   }
 
   /**
@@ -731,9 +1141,23 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
-    this.#updates.length = 0;
+    this.#active?.resolve();
+    this.#active = undefined;
+    for (const update of this.#updates.splice(0)) update.resolve();
     for (const waiter of this.#waiters.splice(0)) waiter({ value: undefined, done: true });
-    for (const delivered of this.#delivered.splice(0)) delivered();
+  }
+
+  /**
+   * Resolves one waiting consumer with the next queued subscription update.
+   */
+  #deliver(entry: {
+    update: SubscriptionUpdate;
+    delivered: boolean;
+    resolve: () => void;
+  }): IteratorResult<SubscriptionUpdate> {
+    entry.delivered = true;
+    entry.resolve();
+    return { value: entry.update, done: false };
   }
 
   /**
@@ -744,12 +1168,9 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
   [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
     return {
       next: (): Promise<IteratorResult<SubscriptionUpdate>> => {
-        const update = this.#updates.shift();
-        if (update !== undefined) {
-          this.#delivered.shift()?.();
-          return Promise.resolve({ value: update, done: false });
-        }
         if (this.#closed) return Promise.resolve({ value: undefined, done: true });
+        if (this.#active?.delivered) this.#active = this.#updates.shift();
+        if (this.#active !== undefined) return Promise.resolve(this.#deliver(this.#active));
         return new Promise((resolve) => this.#waiters.push(resolve));
       },
     };
@@ -762,29 +1183,63 @@ const NodeCoordinatorValues = Object.freeze({
    *
    * @param members The ready member source when available.
    * @returns The configured membership kernel options.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
+   * @param readerFor Reader lookup for a retained subscription.
+   * @param onRememberChild Records a native child ID for its logical subscription.
    */
   unaryKernelOptions(
     members?: ReadyMemberSource,
+    issuer?: ReaderProofIssuer,
+    maxBytes = defaultMessageMaxBytes,
+    readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
+    onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
   ): BackendMembershipKernelOptions<
     ReadyCoordinatorMember,
     CoordinatorRequest,
     Uint8Array,
     Uint8Array
   > {
-    // The Coordinator deliberately uses only the kernel's member lifecycle and
-    // one-shot forwarding operations. Subscription fan-out is owned by T-0208.
     return {
       create: (member: ReadyCoordinatorMember) =>
-        Promise.resolve(NodeCoordinatorValues.client(member, members)),
+        Promise.resolve(
+          NodeCoordinatorValues.client(
+            member,
+            members,
+            issuer,
+            maxBytes,
+            readerFor,
+            onRememberChild,
+          ),
+        ),
       memberKey: (member: ReadyCoordinatorMember) =>
         `${member.slot.toString()}/${member.incarnation}`,
       sameMember: (left: ReadyCoordinatorMember, right: ReadyCoordinatorMember) =>
         left.endpoint === right.endpoint,
       definitionKey: (definition) => fromBinary(SubscriptionSchema, definition).id?.value,
-      childDefinition: NodeCoordinatorValues.childDefinition,
+      childDefinition: (definition, member) =>
+        NodeCoordinatorValues.rememberChildDefinition(definition, member, onRememberChild),
       childSize: (child) => child.byteLength,
       ...NodeCoordinatorValues.activationAckOptions(members),
     };
+  },
+
+  /**
+   * Builds and records a child definition before member subscription.
+   *
+   * @param definition The serialized subscription definition.
+   * @param member The selected backend member.
+   * @param onRememberChild Records a native child ID for its logical subscription.
+   * @returns The retained managed-child definition.
+   */
+  rememberChildDefinition(
+    definition: Uint8Array,
+    member: ReadyCoordinatorMember,
+    onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
+  ): Uint8Array {
+    const child = NodeCoordinatorValues.childDefinition(definition, member);
+    onRememberChild?.(definition, child);
+    return child;
   },
 
   /**
@@ -841,73 +1296,316 @@ const NodeCoordinatorValues = Object.freeze({
    * @param member The discovered backend member.
    * @param members The ready member source when available.
    * @returns The member transport client.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
+   * @param readerFor Reader lookup for a retained subscription.
+   * @param onRememberChild Records a native child ID for its logical subscription.
    */
   client(
     member: ReadyCoordinatorMember,
     members: ReadyMemberSource | undefined,
+    issuer?: ReaderProofIssuer,
+    maxBytes = defaultMessageMaxBytes,
+    readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
+    onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
   ): BackendMemberClient<CoordinatorRequest, Uint8Array, Uint8Array> {
     const manager = new Http2SessionManager(member.endpoint);
     const transport = createGrpcTransport({ baseUrl: member.endpoint, sessionManager: manager });
     return {
-      forward: (request) => NodeCoordinatorValues.forward(transport, request),
-      close: () => {
-        manager.abort();
-        return Promise.resolve();
-      },
-      subscribe: async (definition, signal) => {
-        const subscription = fromBinary(SubscriptionSchema, definition);
-        const created = await createClient(SubscriptionService, transport).subscribe(
-          NodeCoordinatorValues.requiredValue(
-            subscription.topic,
-            "Coordinator subscription definition is missing a Topic.",
-          ),
-          { signal },
-        );
-        return toBinary(SubscriptionSchema, created);
-      },
-      activate: (child, updates, signal) =>
-        NodeCoordinatorValues.activateChild(transport, member, members, child, updates, signal),
-      dispose: async (child, signal) => {
-        const subscription = fromBinary(SubscriptionSchema, child);
-        members?.onChildSubscriptionCancelled?.(member, subscription);
-        await createClient(SubscriptionService, transport).cancel(subscription, { signal });
-      },
+      forward: (request) => NodeCoordinatorValues.forward(transport, request, issuer, maxBytes),
+      close: () => NodeCoordinatorValues.closeManager(manager),
+      subscribe: (definition, signal) =>
+        NodeCoordinatorValues.subscribeChild(
+          transport,
+          definition,
+          signal,
+          readerFor?.(definition),
+          issuer,
+          maxBytes,
+          onRememberChild,
+        ),
+      ...NodeCoordinatorValues.childOperations(
+        transport,
+        member,
+        members,
+        issuer,
+        maxBytes,
+        readerFor,
+      ),
     };
   },
 
   /**
-   * Sends one native Command or Query to a ready member.
+   * Closes the transport manager for a departed native member.
+   *
+   * @param manager Native session manager.
+   * @returns Completion after the operation settles.
+   */
+  closeManager(manager: Http2SessionManager): Promise<void> {
+    manager.abort();
+    return Promise.resolve();
+  },
+
+  /**
+   * Returns streaming and cancellation operations for a native member.
+   *
+   * @param transport The connected native transport.
+   * @param member The selected backend member.
+   * @param members The available backend member source.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
+   * @param readerFor Reader lookup for a retained subscription.
+   * @returns The managed-child operations.
+   */
+  childOperations(
+    transport: ReturnType<typeof createGrpcTransport>,
+    member: ReadyCoordinatorMember,
+    members: ReadyMemberSource | undefined,
+    issuer: ReaderProofIssuer | undefined,
+    maxBytes: number,
+    readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
+  ) {
+    return {
+      activate: NodeCoordinatorValues.activation(
+        transport,
+        member,
+        members,
+        issuer,
+        maxBytes,
+        readerFor,
+      ),
+      dispose: (child: Uint8Array, signal: AbortSignal) =>
+        NodeCoordinatorValues.cancelChild(
+          transport,
+          member,
+          members,
+          child,
+          signal,
+          readerFor?.(child),
+          issuer,
+          maxBytes,
+        ),
+    };
+  },
+
+  /**
+   * Captures native member context for one child stream.
+   *
+   * @param transport The connected native transport.
+   * @param member The selected backend member.
+   * @param members The available backend member source.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
+   * @param readerFor Reader lookup for a retained subscription.
+   * @returns The activation stream completion.
+   */
+  activation(
+    transport: ReturnType<typeof createGrpcTransport>,
+    member: ReadyCoordinatorMember,
+    members: ReadyMemberSource | undefined,
+    issuer: ReaderProofIssuer | undefined,
+    maxBytes: number,
+    readerFor?: (definition: Uint8Array) => TrustedReaderContext | undefined,
+  ) {
+    return (
+      child: Uint8Array,
+      updates: (update: Uint8Array) => Promise<void>,
+      signal: AbortSignal,
+    ) =>
+      NodeCoordinatorValues.activateChild(
+        transport,
+        member,
+        members,
+        child,
+        updates,
+        signal,
+        readerFor?.(child),
+        issuer,
+        maxBytes,
+      );
+  },
+
+  /**
+   * Creates one native child and records any backend-assigned ID.
+   *
+   * @param transport The connected native transport.
+   * @param definition The serialized subscription definition.
+   * @param signal The cancellation signal for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
+   * @param onRememberChild Records a native child ID for its logical subscription.
+   * @returns The managed-child subscription.
+   */
+  async subscribeChild(
+    transport: ReturnType<typeof createGrpcTransport>,
+    definition: Uint8Array,
+    signal: AbortSignal,
+    reader: TrustedReaderContext | undefined,
+    issuer: ReaderProofIssuer | undefined,
+    maxBytes: number,
+    onRememberChild?: (definition: Uint8Array, child: Uint8Array) => void,
+  ): Promise<Uint8Array> {
+    const subscription = fromBinary(SubscriptionSchema, definition);
+    const topic = NodeCoordinatorValues.requiredValue(
+      subscription.topic,
+      "Coordinator subscription definition is missing a Topic.",
+    );
+    const headers = await NodeCoordinatorValues.readerHeaders(
+      "Subscribe",
+      toBinary(TopicSchema, topic),
+      reader,
+      issuer,
+      maxBytes,
+    );
+    const created = await createClient(SubscriptionService, transport).subscribe(topic, {
+      signal,
+      ...(headers === undefined ? {} : { headers }),
+    });
+    const bytes = toBinary(SubscriptionSchema, created);
+    onRememberChild?.(definition, bytes);
+    return bytes;
+  },
+
+  /**
+   * Cancels one native child with the same verified reader as its creation.
+   *
+   * @param transport The connected native transport.
+   * @param member The selected backend member.
+   * @param members The available backend member source.
+   * @param child The native child subscription definition.
+   * @param signal The cancellation signal for this operation.
+   * @param reader The verified reader facts for this operation.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
+   * @returns Completion after the operation settles.
+   */
+  async cancelChild(
+    transport: ReturnType<typeof createGrpcTransport>,
+    member: ReadyCoordinatorMember,
+    members: ReadyMemberSource | undefined,
+    child: Uint8Array,
+    signal: AbortSignal,
+    reader: TrustedReaderContext | undefined,
+    issuer: ReaderProofIssuer | undefined,
+    maxBytes: number,
+  ): Promise<void> {
+    const subscription = fromBinary(SubscriptionSchema, child);
+    members?.onChildSubscriptionCancelled?.(member, subscription);
+    const headers = await NodeCoordinatorValues.readerHeaders(
+      "Cancel",
+      child,
+      reader,
+      issuer,
+      maxBytes,
+    );
+    await createClient(SubscriptionService, transport).cancel(subscription, {
+      signal,
+      ...(headers === undefined ? {} : { headers }),
+    });
+  },
+
+  /**
+   * Sends one native Command, entity read, or App Query to a ready member.
    *
    * @param transport The connected native transport.
    * @param request The request to forward.
    * @returns Empty routing bytes after the response is assigned.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
    */
   async forward(
     transport: ReturnType<typeof createGrpcTransport>,
     request: CoordinatorRequest,
+    issuer?: ReaderProofIssuer,
+    maxBytes = defaultMessageMaxBytes,
   ): Promise<Uint8Array> {
+    const headers = await NodeCoordinatorValues.forwardHeaders(request, issuer, maxBytes);
     if (request.kind === "command") {
+      await NodeCoordinatorValues.forwardCommand(transport, request, headers);
+    } else if (request.kind === "query") {
       const response = await transport.unary(
-        CommandService.method.post,
+        QueryService.method.read,
         request.context.signal,
         request.context.timeoutMs(),
-        NodeCoordinatorValues.applicationHeaders(request.context.requestHeader),
-        request.command,
+        headers,
+        request.query,
       );
       NodeCoordinatorValues.responseMetadata(response.header, response.trailer, request.context);
       request.response = response.message;
     } else {
       const response = await transport.unary(
-        QueryService.method.read,
+        QueryService.method.execute,
         request.context.signal,
         request.context.timeoutMs(),
-        NodeCoordinatorValues.applicationHeaders(request.context.requestHeader),
+        headers,
         request.query,
       );
       NodeCoordinatorValues.responseMetadata(response.header, response.trailer, request.context);
       request.response = response.message;
     }
     return new Uint8Array();
+  },
+
+  /**
+   * Invokes the Command branch and retains its native response metadata.
+   *
+   * @param transport The selected native child transport.
+   * @param request The admitted Command and response slot.
+   * @param headers Operation-bound verified-reader metadata.
+   * @returns Completion after assigning the native response.
+   */
+  async forwardCommand(
+    transport: ReturnType<typeof createGrpcTransport>,
+    request: CoordinatorCommand,
+    headers: Headers,
+  ): Promise<void> {
+    const response = await transport.unary(
+      CommandService.method.post,
+      request.context.signal,
+      request.context.timeoutMs(),
+      headers,
+      request.command,
+    );
+    NodeCoordinatorValues.responseMetadata(response.header, response.trailer, request.context);
+    request.response = response.message;
+  },
+
+  /**
+   * Encodes verified reader facts into one exact native unary operation.
+   *
+   * @param request The request being processed.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
+   * @returns The operation-bound forwarding headers.
+   */
+  async forwardHeaders(
+    request: CoordinatorRequest,
+    issuer: ReaderProofIssuer | undefined,
+    maxBytes: number,
+  ): Promise<Headers> {
+    const service =
+      request.kind === "command" ? "spine.client.CommandService" : "spine.client.QueryService";
+    const method =
+      request.kind === "command" ? "Post" : request.kind === "query" ? "Read" : "Execute";
+    const value =
+      request.kind === "command"
+        ? toBinary(CommandService.method.post.input, request.command)
+        : request.kind === "query"
+          ? toBinary(QuerySchema, request.query)
+          : toBinary(AppQuerySchema, request.query);
+    const headers = NodeCoordinatorValues.applicationHeaders(request.context.requestHeader);
+    if (
+      issuer === undefined &&
+      (request.reader.principal !== undefined || request.reader.authorityFacts !== undefined)
+    )
+      throw new ConnectError("Managed reader forwarding is unavailable.", Code.Internal);
+    if (issuer !== undefined)
+      for (const [name, entry] of Object.entries(
+        await ReaderForwarding.seal(service, method, value, request.reader, issuer, maxBytes),
+      ))
+        headers.set(name, entry);
+    return headers;
   },
 
   /**
@@ -920,6 +1618,9 @@ const NodeCoordinatorValues = Object.freeze({
    * @param updates The logical update sink.
    * @param signal Cancels child activation.
    * @returns Completion after the child stream closes.
+   * @param reader The verified reader facts for this operation.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
    */
   async activateChild(
     transport: ReturnType<typeof createGrpcTransport>,
@@ -928,27 +1629,83 @@ const NodeCoordinatorValues = Object.freeze({
     child: Uint8Array,
     updates: (update: Uint8Array) => Promise<void>,
     signal: AbortSignal,
+    reader?: TrustedReaderContext,
+    issuer?: ReaderProofIssuer,
+    maxBytes = defaultMessageMaxBytes,
   ): Promise<void> {
     const subscription = fromBinary(SubscriptionSchema, child);
     members?.onChildSubscriptionActivated?.(member, subscription);
+    const headers = await NodeCoordinatorValues.readerHeaders(
+      "Activate",
+      child,
+      reader,
+      issuer,
+      maxBytes,
+    );
     for await (const update of createClient(SubscriptionService, transport).activate(subscription, {
       signal,
+      ...(headers === undefined ? {} : { headers }),
     })) {
-      const topic = subscription.topic;
-      const updateTopic = update.subscription?.topic;
-      if (
-        update.subscription?.id?.value !== subscription.id?.value ||
-        topic === undefined ||
-        updateTopic === undefined ||
-        !equals(TopicSchema, updateTopic, topic)
-      )
-        throw new Error("Backend child update does not match its subscription.");
+      NodeCoordinatorValues.checkChildUpdate(subscription, update);
       await updates(toBinary(SubscriptionUpdateSchema, update));
     }
   },
 
   /**
-   * Copies backend response metadata into the public context.
+   * Rejects a native update for a different child ID or Topic.
+   *
+   * @param subscription The subscription definition being processed.
+   * @param update Native subscription update.
+   */
+  checkChildUpdate(subscription: Subscription, update: SubscriptionUpdate): void {
+    const topic = subscription.topic;
+    const updateTopic = update.subscription?.topic;
+    if (
+      update.subscription?.id?.value !== subscription.id?.value ||
+      topic === undefined ||
+      updateTopic === undefined ||
+      !equals(TopicSchema, updateTopic, topic)
+    )
+      throw new Error("Backend child update does not match its subscription.");
+  },
+
+  /**
+   * Encodes one verified reader against the exact child subscription RPC.
+   *
+   * @param method The canonical RPC method name.
+   * @param value Canonical child subscription RPC bytes.
+   * @param reader The verified reader facts for this operation.
+   * @param issuer The configured forwarding proof producer.
+   * @param maxBytes The existing native message-size bound.
+   * @returns The canonical reader assertion headers.
+   */
+  async readerHeaders(
+    method: string,
+    value: Uint8Array,
+    reader: TrustedReaderContext | undefined,
+    issuer: ReaderProofIssuer | undefined,
+    maxBytes: number,
+  ): Promise<Headers | undefined> {
+    if (reader === undefined) return undefined;
+    if (issuer === undefined) {
+      if (reader.principal !== undefined || reader.authorityFacts !== undefined)
+        throw new ConnectError("Managed reader forwarding is unavailable.", Code.Internal);
+      return undefined;
+    }
+    return new Headers(
+      await ReaderForwarding.seal(
+        "spine.client.SubscriptionService",
+        method,
+        value,
+        reader,
+        issuer,
+        maxBytes,
+      ),
+    );
+  },
+
+  /**
+   * Snapshots backend response metadata into the public context.
    *
    * @param headers Headers received from the backend.
    * @param trailers Trailers received from the backend.
@@ -962,7 +1719,7 @@ const NodeCoordinatorValues = Object.freeze({
   },
 
   /**
-   * Copies application headers for forwarding.
+   * Snapshots application headers for forwarding.
    *
    * @param headers Headers received from the backend.
    * @returns Forwardable application headers.
@@ -975,7 +1732,9 @@ const NodeCoordinatorValues = Object.freeze({
         name === "te" ||
         name === "user-agent" ||
         name.startsWith("grpc-") ||
-        name.startsWith("connect-")
+        name.startsWith("connect-") ||
+        name === "spine-internal-reader" ||
+        name === "spine-internal-reader-proof"
       )
         forwarded.delete(name);
     }

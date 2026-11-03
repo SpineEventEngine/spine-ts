@@ -25,6 +25,7 @@ import { MessageBoardDeployment } from "./deployment-config.js";
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
 import { typeRegistry } from "./model-registry.js";
 import { SystemClock } from "./system-clock.js";
+import { BoardAdmission } from "./signed-admission.js";
 
 const config = MessageBoardDeployment.gateway(process.env);
 const client = new Datastore({ projectId: config.projectId });
@@ -32,6 +33,7 @@ const logger = MessageBoardDeployment.logger(config.projectId, process.env);
 const storage = MessageBoardDeployment.storage(client);
 MessageBoardDeployment.configureGatewayServer(config, storage, logger);
 const policy = new BoardAccessPolicy();
+const signed = BoardAdmission.configured(process.env);
 const { discovery, backendUrls } = config;
 const topology =
   discovery === undefined
@@ -51,7 +53,12 @@ const server = await BrowserServer.run({
   ...topology,
   origins: [config.webOrigin],
   registry: typeRegistry,
-  publicAccess: true,
+  ...(signed === undefined
+    ? { publicAccess: true as const }
+    : {
+        sessions: signed.sessions,
+        forwardingProof: signed.forwardingProof,
+      }),
   authorize: policy.authorize.bind(policy),
   contexts: new BoardContextResolver(),
   clock: new SystemClock(),

@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/example-project-management",
-  "version": "2.0.0-snapshot.25",
+  "version": "2.0.0-snapshot.26",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,6 +10,10 @@
     "prepack": "pnpm clean:generated-dist && tsc -b"
   },
   "exports": {
+    "./spine": {
+      "types": "./dist/generated/spine-metadata.d.ts",
+      "default": "./dist/generated/spine-metadata.js"
+    },
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
@@ -35,10 +39,10 @@
     "@connectrpc/connect-node": "2.1.2",
     "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
-    "@spine-event-engine/proto": "2.0.0-snapshot.25",
+    "@spine-event-engine/proto": "2.0.0-snapshot.26",
     "@spine-event-engine/server": "workspace:*"
   },
   "devDependencies": {
-    "@spine-event-engine/proto-tools": "2.0.0-snapshot.25"
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.26"
   }
 }

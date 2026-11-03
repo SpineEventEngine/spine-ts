@@ -33,6 +33,9 @@
     { "path": "./examples/support" },
     { "path": "./examples/release-notes" },
     { "path": "./examples/message-board/model" },
+    { "path": "./examples/message-board/command-handlers" },
+    { "path": "./examples/message-board/view-handlers" },
+    { "path": "./examples/message-board/composed-app" },
     { "path": "./examples/message-board/app" },
     { "path": "./examples/message-board/web" }
   ]

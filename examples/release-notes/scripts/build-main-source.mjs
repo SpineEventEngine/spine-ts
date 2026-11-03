@@ -21,10 +21,7 @@ const directory = resolve(fileURLToPath(new URL("..", import.meta.url)));
 await build({
   entryPoints: {
     index: resolve(directory, "src/main.ts"),
-    "generated/handler/generated-handler-registry": resolve(
-      directory,
-      "generated/handler/generated-handler-registry.ts",
-    ),
+    "generated/spine-bootstrap": resolve(directory, "generated/spine-bootstrap.ts"),
   },
   outdir: resolve(directory, ".studio-build"),
   bundle: true,

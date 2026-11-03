@@ -33,31 +33,49 @@ import { LogLayer, type ILogLayer } from "loglayer";
 import type { BoardServerOptions } from "./index.js";
 import { typeRegistry } from "./model-registry.js";
 
+/**
+ * Listener and Datastore project settings shared by deployment modes.
+ */
 interface DeploymentConfig extends BoardServerOptions {
   readonly host: string;
   readonly port: number;
   readonly projectId: string;
 }
 
+/**
+ * Combined Server and Gateway settings with the permitted web origin.
+ */
 interface CombinedConfig extends DeploymentConfig {
   readonly webOrigin: string;
 }
 
+/**
+ * Gateway backend addresses or service discovery settings.
+ */
 interface GatewayConfig extends CombinedConfig {
   readonly backendUrls?: readonly [string, ...string[]];
   readonly discovery?: { readonly serviceName: string; readonly port: number };
 }
 
+/**
+ * Replica and delivery shard counts for managed deployment.
+ */
 interface ManagedConfig extends DeploymentConfig {
   readonly processCount: number;
   readonly deliveryShardCount: number;
 }
 
+/**
+ * Storage and optional delivery facilities constructed for a managed replica.
+ */
 interface ManagedServerFacilities {
   readonly storageFactory: StorageFactory;
   readonly delivery?: ServerEnvironmentDelivery;
 }
 
+/**
+ * Validated deployment configuration and facility constructors.
+ */
 interface DeploymentContract {
   /**
    * Reads application host, port, and Datastore project settings.
@@ -150,6 +168,11 @@ interface DeploymentContract {
     environment: NodeJS.ProcessEnv,
     logger?: ILogLayer,
   ): ManagedServerFacilities;
+
+  /**
+   * Sets the production model registry for the managed Coordinator process.
+   */
+  configureManagedCoordinator(): void;
 }
 
 /**
@@ -327,6 +350,13 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     });
     return { storageFactory, delivery };
   },
+
+  /**
+   * Sets the production model registry before the Coordinator opens its listener.
+   */
+  configureManagedCoordinator(): void {
+    ServerEnvironment.when(EnvironmentType.Production).use({ typeRegistry });
+  },
 });
 
 /**
@@ -356,9 +386,7 @@ const DeploymentValues = Object.freeze({
    * @returns Nonempty backend endpoint list.
    */
   backendUrls(environment: NodeJS.ProcessEnv): readonly [string, ...string[]] {
-    const configured = environment.BACKEND_URLS;
-    if (configured === undefined || configured.length === 0)
-      return [DeploymentValues.required(environment, "BACKEND_URL")];
+    const configured = DeploymentValues.required(environment, "BACKEND_URLS");
     const values = configured.split(",").map((value) => value.trim());
     if (values.some((value) => value.length === 0))
       throw new Error("Invalid required configuration: BACKEND_URLS.");

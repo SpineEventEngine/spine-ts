@@ -14,7 +14,8 @@ pnpm add @spine-event-engine/server@snapshot
 ```
 
 Use Node.js in ESM mode. Before adding entities, generate your application
-model and handler registry with `@spine-event-engine/proto-tools`. The small
+model and handler metadata with `@spine-event-engine/proto-tools`, then import
+`generated/spine-bootstrap.js` before assembly. The small
 example below has no entity handlers, so it is useful for proving that native
 assembly, listener startup, and cleanup work locally.
 
@@ -78,13 +79,15 @@ import { TaskAssignment, type AssignmentWeightService } from "../src/index.js";
 
 // Create shared services before starting the context.
 const weights: AssignmentWeightService = { weightFor: () => 2 };
-const builder = BoundedContext.singleTenant("Assignments")
-  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
-  .add(TaskAssignment, {
-    // Forward Spine's options and add the service required by the constructor.
-    onCreate: (options) => new TaskAssignment(options, weights),
-  });
+const builder = BoundedContext.singleTenant("Assignments").add(TaskAssignment, {
+  // Forward Spine's options and add the service required by the constructor.
+  onCreate: (options) => new TaskAssignment(options, weights),
+});
 ```
+
+The application's `src/index.js` imports its generated `spine-bootstrap.js`
+before assembly, so `add(TaskAssignment)` finds the passive metadata for that
+exact class.
 
 Await `builder.build()` to assemble the context. The callback runs for each
 fresh or restored Entity object, not just once per ID. It also works for
@@ -202,6 +205,28 @@ Bounded Contexts causes a startup error.
 The [Orders example](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/orders/README.md#cross-context-order-review)
 shows this in an Event handler and includes a runnable integration test.
 
+Application queries use generated `_queries.proto` request/response companions.
+Pass concrete `AppQueryHandler<Q, R>` instances in `ServerOptions.appQueries`;
+generated metadata alone never enables a route. On direct app-node ingress,
+`QueryService.Execute` validates the wire envelope and Q before dispatch.
+Native and browser Gateways forward Execute to the app node; `ClientRequest.query(generatedQ)`
+returns the wire `Response` and zero or one decoded paired results. Application code calls
+`server.query(generatedQ, executionContext)` and receives the paired generated R.
+The trusted execution context supplies the current `actorContext`, optional
+verified principal and authority facts, and an optional cancellation signal.
+For a Process Manager or Agent, inject a Server-bound query function through the
+repository's `onCreate` callback and use `currentActorContext` only inside an
+active handler. That actor metadata does not prove authentication. Source reads
+from an application query use registered query-visible Entity routes and enforce
+the destination's tenant membership; a handler that performs no source read has
+no destination tenant to check. Direct calls do not run Server output filters.
+
+The [typed callback example](REFERENCE.md#services-reads-and-lifecycle) shows
+the repository `onCreate` injection and active handler call. The actor/tenant
+snapshot supplies no verified principal or provider facts; the
+[scoped integration test](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/test/entity/process-manager-querying.test.ts) shows
+the complete repository setup.
+
 Queries preserve the handler's actor and effective tenant; there is no tenant
 override. Single-tenant execution uses `SINGLE_TENANT`, even when the request
 omits a tenant field. A named tenant cannot query a single-tenant context: that
@@ -300,7 +325,7 @@ class SupportDraftAgent extends Agent<SupportTicketId, typeof SupportDraftStateS
 Configure the registry outside the Entity. The Bounded Context requires persisted System
 Events, and the Agent registration supplies its permitted capabilities. The
 [example Bounded Context factory](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/support/src/index.ts)
-assembles these settings with the generated handler registry. Supply the registry
+assembles these settings with generated passive handler metadata. Supply the AI registry
 through `ServerEnvironment.when(type).use({ ai: registry })` as a default, or
 `BoundedContextBuilder.withAi(registry)` for one Bounded Context.
 
@@ -364,7 +389,7 @@ field. Event routing uses a compatible producer ID when available and otherwise
 uses the Event's declared first field. State-update routing selects the first
 state field compatible with the Entity ID.
 
-## Browser gateway migration
+## Browser gateway setup
 
 The server root has no browser options and does not load auth. To host a
 browser-facing Gateway, install the optional auth peer and import the browser
@@ -385,6 +410,21 @@ public admission, authorization and trusted-context resolvers, finite limits,
 and backend forwarding. Authenticated durable bindings are browser-host
 infrastructure, not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 before exposing a backend to a browser.
+
+## Native reader admission
+
+Native authentication is configured through `ServerOptions.services.readerAdmission`.
+Use `direct` to authenticate native callers or `forwarded` to verify reader
+assertions from an authenticated gateway. For browser forwarding, supply the
+corresponding issuer as `BrowserServerOptions.forwardingProof`. Configure both
+ends; the backend does not trust an actor ID or incoming identity header by
+itself. With neither admission adapter configured, the native server remains
+public and supplies no authenticated principal or authority facts.
+
+Subscription activation and cancellation also check the admitted principal
+against the stored reader binding. A different principal cannot reuse a
+subscription even with the same ActorContext. See [native reader admission](REFERENCE.md#native-reader-admission)
+for adapter signatures, public admission, and managed application configuration.
 
 ## Limits
 

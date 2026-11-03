@@ -408,15 +408,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/handler/handler-decorators.ts",
     "kind": "function-declaration",
-    "identity": "materializeDecoratedEntityHandlers()#1",
-    "name": "materializeDecoratedEntityHandlers",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration materializeDecoratedEntityHandlers()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/handler/handler-decorators.ts",
-    "kind": "function-declaration",
     "identity": "React()#1",
     "name": "React",
     "disposition": "migration-debt",
@@ -660,15 +651,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "errorResponse()#1",
-    "name": "errorResponse",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration errorResponse()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "errorStatus()#1",
     "name": "errorStatus",
     "disposition": "migration-debt",
@@ -790,24 +772,6 @@
     "name": "packVersionedState",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration packVersionedState()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "positiveInteger()#1",
-    "name": "positiveInteger",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration positiveInteger()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "queryErrorResponse()#1",
-    "name": "queryErrorResponse",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration queryErrorResponse()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",

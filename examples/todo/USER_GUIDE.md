@@ -80,7 +80,7 @@ handler does not build an Event envelope or choose Event IDs itself.
 
 The runnable [black-box tests](test/black-box.test.ts) exercise both choices,
 both tuple lengths, Event order, and the old and new assignee read models through
-the generated handler registry. Generate and build the example first, then run
+generated passive handler metadata. Generate and build the example first, then run
 the two focused journeys from the repository root:
 
 ```bash
@@ -239,7 +239,7 @@ when it stops.
 ## Build and server lifecycle
 
 From the repository root, run `pnpm typecheck:build`. It generates
-`examples/todo/generated/handler/generated-handler-registry.ts` and compiles
+`examples/todo/generated/spine-metadata.ts` and `spine-bootstrap.ts`, then compiles
 the package. Both generated and compiled directories are ignored.
 
 Start the process with:
@@ -254,10 +254,13 @@ context. For programmatic local tests, the public package exports
 server's `close()` method. The command-line process keeps its listener until
 `Ctrl-C` stops it. Each start has fresh in-memory state.
 
-`createTodoContext()` adds `TaskAggregate` and `TaskListProjection`, then loads
-the compiled registry from the package root before `build()`. If the
-generated registry is missing or unreadable, context creation fails with its
-module path; rerun `pnpm typecheck:build` and retry. Application handlers keep
+Importing Todo's application entrypoint runs its generated
+`generated/spine-bootstrap.js` before `createTodoContext()` assembles the
+context. The function adds `TaskAggregate` and `TaskListProjection`; `build()`
+selects their registered descriptions by class. If bootstrap import is omitted,
+context creation reports the class with missing metadata and the required
+bootstrap import. Rerun `pnpm typecheck:build` if the generated bootstrap is
+absent. Application handlers keep
 their bare `@Assign` and `@Subscribe` decorators: they do not manually register
 handler schemas.
 
@@ -318,12 +321,8 @@ change that acknowledgement and may leave no observed outcome.
 Rejected commands preserve aggregate state and produce no normal event route
 targets. The rejection event has its own declared TaskList route where needed.
 
-### Snapshot boundary
-
-`TaskList` now stores its typed `TaskListId` in field 4; field 1 is reserved.
-Existing snapshots are reset for this change. The example provides no automatic
-migration and does not infer a task-list ID from a task ID, so start local
-example data fresh after updating.
+`TaskList` stores its typed `TaskListId` in field 4; field 1 is reserved. A task-list
+ID comes from the TaskList command and is not inferred from an individual task ID.
 
 ## Query task lists
 
@@ -503,7 +502,7 @@ pnpm vitest run examples/todo/test/startup-contract.test.ts
 
 The black-box test starts a real loopback server and proves public generated
 clients, acknowledgement handling, eventual projection reads, subscriptions,
-validation/rejections, generated-registry recovery, and listener/session cleanup.
+validation/rejections, generated-metadata startup, and listener/session cleanup.
 
 The startup-contract test verifies structural commands, public exports, settings,
 and documentation contracts. Behavioral launcher coverage and the documented

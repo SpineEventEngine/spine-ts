@@ -48,6 +48,8 @@ export {
   type StandRegisterOptions,
   type StandSubscribeOptions,
   type StandSubscription,
+  type StandObserver,
+  StandSubscriptionCapacityError,
   StandStateTypeError,
   type StandUpdate,
   type StandUpdateOptions,
@@ -70,6 +72,7 @@ export {
   type ListenerLifecycle,
   type RunningServer,
   type ServerOptions,
+  type ServerQueryExecutionContext,
 } from "./server/server.js";
 export {
   ManagedServerApplication,
@@ -86,6 +89,13 @@ export {
 } from "./server/server-environment.js";
 
 export { CommandBus } from "./bus/command-bus.js";
+export { AppQueryHandler, type AppQueryContext } from "./handler/app-query-handler.js";
+export {
+  ReadSideFilter,
+  type ReadSideContext,
+  type ReadSideField,
+  type ReadSideOperation,
+} from "./stand/read-side-filter.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";
 export { EventBus } from "./bus/event-bus.js";
 export type { EventDispatcher } from "./bus/event-dispatcher.js";
@@ -283,7 +293,6 @@ export {
   Where,
   type RejectionDeclaration,
   type WhereOptions,
-  materializeDecoratedEntityHandlers,
 } from "./handler/handler-decorators.js";
 
 export type { External } from "./handler/external.js";

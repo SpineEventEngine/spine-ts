@@ -1,9 +1,10 @@
 {
   "formatVersion": 2,
-  "generationId": "b23937ec-f05a-47d7-ab6a-c5617f253c41",
+  "generationId": "6541d830-6b83-412f-a183-2f3fff09ccb5",
   "packageName": "@spine-event-engine/example-message-board-model",
-  "packageVersion": "2.0.0-snapshot.25",
+  "packageVersion": "2.0.0-snapshot.26",
   "protoFiles": [
+    "spine/examples/messageboard/board_queries.proto",
     "spine/examples/messageboard/commands.proto",
     "spine/examples/messageboard/events.proto",
     "spine/examples/messageboard/message_board.proto",
@@ -11,6 +12,7 @@
     "spine/examples/messageboard/user.proto"
   ],
   "generatedExports": {
+    "spine/examples/messageboard/board_queries.proto": "generated/spine/examples/messageboard/board_queries_pb.js",
     "spine/examples/messageboard/commands.proto": "generated/spine/examples/messageboard/commands_pb.js",
     "spine/examples/messageboard/events.proto": "generated/spine/examples/messageboard/events_pb.js",
     "spine/examples/messageboard/message_board.proto": "generated/spine/examples/messageboard/message_board_pb.js",

@@ -18,8 +18,9 @@ test("managed-node documented command starts and cleans up its Delivery endpoint
   assert.match(readme, /docker rm --force message-board-delivery/u);
 });
 
-test("deployment guide teaches the public-demo gateway without credential setup", () => {
-  assert.doesNotMatch(deploymentReadme, /session signing|private key|bearer|sign-in/iu);
-  assert.match(deploymentReadme, /request actor/iu);
+test("deployment guide distinguishes public and protected signed admission", () => {
+  assert.match(deploymentReadme, /MESSAGE_BOARD_AUTH_MODE=signed/u);
+  assert.match(deploymentReadme, /MESSAGE_BOARD_SESSION_PRIVATE_KEY_PEM/u);
+  assert.match(deploymentReadme, /issue-board-session/u);
   assert.match(deploymentReadme, /static reference/iu);
 });

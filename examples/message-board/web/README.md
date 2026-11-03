@@ -14,7 +14,9 @@ is down, the UI reports the failure.
 - ✅ Oldest-first messages with approximate relative time.
 - ✅ A board query followed by complete Projection update payloads.
 - ✅ Local updates for normal payloads and authoritative recovery when needed.
-- ✅ One live-status badge: `Updating live` only for a connected subscription,
+- ✅ Lifetime board and announcement statistics through typed `ReadBoardStats`, with a recoverable statistics Topic.
+- ✅ Public or signed sessions, board selection, and the latest permitted MessagePosted notification.
+- ✅ One board-view live-status badge: `Updating live` only for a connected subscription,
   otherwise `No live updates`.
 
 ## Posting and continuing updates
@@ -33,20 +35,28 @@ subscriptions, and the local single-process UI needs no shared Delivery server.
 
 ## 🚀 Start the UI
 
-Start the [Message Board server](../app/README.md) first. Then run:
+Create and trust a local certificate as shown in the [Message Board README](../README.md), then start the full local application and HTTPS/HTTP2 browser edge:
 
 ```bash
+examples/message-board/scripts/start-local-single-process.sh
+```
+
+For UI development with an already running local Gateway, configure the same-origin edge explicitly before starting Vite:
+
+```bash
+MESSAGE_BOARD_TLS_KEY_FILE="$PWD/examples/message-board/web/.local/localhost-key.pem" \
+MESSAGE_BOARD_TLS_CERT_FILE="$PWD/examples/message-board/web/.local/localhost-cert.pem" \
+MESSAGE_BOARD_INTERNAL_GATEWAY_URL=http://127.0.0.1:8090 \
+VITE_MESSAGE_BOARD_GATEWAY_URL=https://127.0.0.1:5173 \
 pnpm --dir examples/message-board/web start
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The UI connects to
-`http://127.0.0.1:8090` by default. Set `VITE_MESSAGE_BOARD_GATEWAY_URL` to another
-`http://127.0.0.1:<port>` address when needed.
+Vite fails at startup if any of these serving settings are absent. Its production build does not require local TLS files.
 
 ## 🔄 How updates work
 
 The page posts `PostMessage`, queries the `BoardMessageView` read-side
-Projection for board `general`, and subscribes to the same Projection topic.
+Projection for the selected board, and subscribes to the same Projection topic.
 A normal complete entity payload is validated and applied to the local oldest-
 first rows without another query. The page queries only for its initial state,
 after reconnect, a possible gap, a malformed payload, or a successful post
@@ -116,9 +126,11 @@ pnpm --config.verify-deps-before-run=false --dir examples/message-board/web test
 Install Playwright browsers once with
 `pnpm exec playwright install chromium firefox webkit`.
 
-## Public demo
+## Reader admission and lifetime statistics
 
-The visible demo creates no browser credential. It sends the selected actor in each request. The Gateway checks that actor and tenant against its resolver before forwarding; it preserves Command creation metadata for outcome matching. Production hosts choose the admission policy.
+Public mode has no credential and hides author display names. Set `VITE_MESSAGE_BOARD_AUTH_MODE=signed` when the Gateway uses signed sessions. The UI accepts an issued bearer credential and validates it with the existing `AuthenticationService.resolveContext` RPC before opening readers. It never asks the reader to choose a role. On sign-out or account switch, pending sessions and subscriptions are closed, and late completions cannot replace the active reader. The UI never renders contributor ID arrays.
+
+`ReadBoardStats` returns lifetime message and distinct domain-author-ID counts and the first accepted Event time for the selected board and announcements. A statistics Entity Topic refreshes this typed App Query after projection changes. The HTTPS edge multiplexes this Topic with the board, announcement, and broad Event subscriptions, including per-post outcomes. The broad `MessagePosted` notification stream stays continuous. A statistics Topic failure is visible while the last successful query result remains visible.
 
 ## 🔗 Learn more
 

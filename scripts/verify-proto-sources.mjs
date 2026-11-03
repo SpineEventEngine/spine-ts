@@ -1,9 +1,71 @@
+import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * The one approved local change to a pinned upstream Proto source.
+ */
+export const targetFiltersAdaptation = Object.freeze({
+  path: "packages/proto/proto/spine/client/filters.proto",
+  kind: "target-filters-require",
+  before: 'option (required_field) = "id_filter|filter";',
+  after: 'option (require).fields = "id_filter|filter";',
+});
+
+/**
+ * The exact local QueryService import and method addition.
+ */
+export const queryServiceAdaptation = Object.freeze({
+  path: "packages/proto/proto/spine/client/query_service.proto",
+  kind: "query-service-execute",
+  imports: Object.freeze({
+    before: 'import "spine/client/query.proto";',
+    after: 'import "spine/client/query.proto";\nimport "spine/client/app_query.proto";',
+  }),
+  method: Object.freeze({
+    before: "    rpc Read(Query) returns (QueryResponse);",
+    after: [
+      "    rpc Read(Query) returns (QueryResponse);",
+      "",
+      "    // Executes an application-defined Query and returns its paired Response.",
+      "    rpc Execute(AppQuery) returns (AppQueryResponse);",
+    ].join("\n"),
+  }),
+});
+
+/**
+ * Restores upstream bytes from the exact approved TargetFilters delta.
+ *
+ * @param source Manifest entry with optional local adaptation.
+ * @param contents Local Proto source bytes.
+ * @returns Original upstream bytes after reversing the approved delta.
+ */
+export function restoreUpstreamSource(source, contents) {
+  if (source.localAdaptation === undefined) return contents;
+  const adaptation = [targetFiltersAdaptation, queryServiceAdaptation].find(
+    (candidate) =>
+      source.localPath === candidate.path && source.localAdaptation.kind === candidate.kind,
+  );
+  if (adaptation === undefined) {
+    throw new Error("unapproved local Proto adaptation");
+  }
+  let text = contents.toString("utf8");
+  const edits =
+    adaptation === targetFiltersAdaptation
+      ? [targetFiltersAdaptation]
+      : [queryServiceAdaptation.method, queryServiceAdaptation.imports];
+  for (const { before, after } of edits) {
+    if (text.split(after).length !== 2) {
+      throw new Error(`${adaptation.kind} adaptation must occur exactly once`);
+    }
+    text = text.replace(after, before);
+  }
+  return Buffer.from(text, "utf8");
+}
 
 function parseArgs(argv) {
   const options = {
@@ -143,6 +205,21 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
     failures.push(`${localPath}: sha256 must be a 64-character lowercase hex digest`);
   }
 
+  const adaptation = source.localAdaptation;
+  if (
+    adaptation !== undefined &&
+    (adaptation === null ||
+      typeof adaptation !== "object" ||
+      Array.isArray(adaptation) ||
+      ![targetFiltersAdaptation, queryServiceAdaptation].some(
+        (candidate) => localPath === candidate.path && adaptation.kind === candidate.kind,
+      ) ||
+      !/^[0-9a-f]{64}$/.test(adaptation.sha256) ||
+      Object.keys(adaptation).sort().join(",") !== "kind,sha256")
+  ) {
+    failures.push(`${localPath}: unapproved local Proto adaptation`);
+  }
+
   const filePath = resolve(repoRoot, localPath);
 
   if (!isUnderPath(filePath, protoRoot) && filePath !== protoRoot) {
@@ -168,6 +245,7 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
     localPath,
     filePath,
     sha256,
+    localAdaptation: adaptation,
   };
 }
 
@@ -277,9 +355,21 @@ export function verifyProtoSources(options = {}) {
   for (const source of validatedSources) {
     const contents = readFileSync(source.filePath);
     const actual = createHash("sha256").update(contents).digest("hex");
+    const expectedLocal = source.localAdaptation?.sha256 ?? source.sha256;
 
-    if (actual !== source.sha256) {
-      failures.push(`${source.localPath}: expected ${source.sha256}, got ${actual}`);
+    if (actual !== expectedLocal) {
+      failures.push(`${source.localPath}: expected ${expectedLocal}, got ${actual}`);
+    }
+    if (source.localAdaptation !== undefined) {
+      try {
+        const upstream = restoreUpstreamSource(source, contents);
+        const upstreamDigest = createHash("sha256").update(upstream).digest("hex");
+        if (upstreamDigest !== source.sha256) {
+          failures.push(`${source.localPath}: upstream source checksum does not match original`);
+        }
+      } catch (error) {
+        failures.push(`${source.localPath}: ${error.message}`);
+      }
     }
   }
 

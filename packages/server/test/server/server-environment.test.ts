@@ -13,17 +13,16 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { rmSync } from "node:fs";
 import { create, type Message } from "@bufbuild/protobuf";
-import { SignalEnvelopes, spineCoreRegistry } from "@spine-event-engine/core";
-import { EventContextSchema, type TenantId } from "@spine-event-engine/proto";
+import { Identifiers, SignalEnvelopes, spineCoreRegistry } from "@spine-event-engine/core";
+import { EventContextSchema, VersionSchema, type TenantId } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
   StorageFactory,
+  StorageGroup,
   type RecordSpec,
   type RecordStorage,
   type StorageContext,
-  type StorageGroup,
 } from "@spine-event-engine/storage";
 import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 
@@ -72,6 +71,32 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("resolves the default subscription waiting capacity", () => {
+    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(100);
+  });
+
+  it("captures a configured subscription capacity from a settings factory once and resets it", async () => {
+    const settings = vi.fn(() => ({ subscriptionQueueCapacity: 0 }));
+    ServerEnvironment.when(EnvironmentType.Local).use(settings);
+    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(0);
+    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(0);
+    expect(settings).toHaveBeenCalledOnce();
+    await resetServerEnvironmentForTest();
+    expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(100);
+  });
+
+  it.each([-1, 0.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, null, "2"])(
+    "rejects invalid subscription capacity %s before constructing facilities",
+    (capacity) => {
+      ServerEnvironment.when(EnvironmentType.Local).use({
+        subscriptionQueueCapacity: capacity as number,
+      });
+      expect(() => ServerEnvironment.instance()).toThrow(RangeError);
+      ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: 0 });
+      expect(ServerEnvironment.instance().subscriptionQueueCapacity).toBe(0);
+    },
+  );
+
   it("accepts an inline remote Delivery facility", async () => {
     const ports = new CoreDelivery({
       context: { name: "InlineRemote", multitenant: false },
@@ -549,7 +574,10 @@ describe("ServerEnvironment delivery lifecycle", () => {
     try {
       await producer.eventBus().post(
         SignalEnvelopes.event({
-          context: create(EventContextSchema),
+          context: create(EventContextSchema, {
+            producerId: Identifiers.pack("string", "server-producer"),
+            version: create(VersionSchema, { number: 1 }),
+          }),
           schema: ServerStartedSchema,
           message: create(ServerStartedSchema, { id: "default-channel-event", name: "Producer" }),
         }),
@@ -792,6 +820,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const registry = new StorageSubscriptionRegistry(
       { name: "PersistentTasks", multitenant: false },
       storageFactory,
+      new StorageGroup("subscriptions_PersistentTasks"),
     );
     const context = await BoundedContext.singleTenant("PersistentTasks")
       .withSubscriptionRegistry(registry)
@@ -867,9 +896,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
 
     await environment.completeSetup();
     expect(snapshots).toBe(0);
-    const registry = serverStatusRegistry();
+    serverStatusRegistry();
     const context = await BoundedContext.singleTenant("RemoteSourceRecipient")
-      .withGeneratedRegistryRoot(registry.root)
+
       .add(ServerStatusProjection)
       .build();
     try {
@@ -877,7 +906,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     } finally {
       await context.close();
       await environment.close();
-      rmSync(registry.directory, { recursive: true, force: true });
     }
 
     expect(snapshots).toBeGreaterThan(0);

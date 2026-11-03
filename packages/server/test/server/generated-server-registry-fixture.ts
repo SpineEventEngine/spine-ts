@@ -12,17 +12,16 @@
  * the License.
  */
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-
 import { Projection } from "../../src/entity/entity.js";
 import {
   type ServerStarted,
   ServerStartedSchema,
 } from "../../test-fixtures/generated/server-lifecycle/events_pb.js";
 import { ServerStatusSchema } from "../../test-fixtures/generated/server-lifecycle/states_pb.js";
+import {
+  registerSpineMetadata,
+  type SpineMetadata,
+} from "../../src/handler/spine-metadata-inventory.js";
 
 /**
  * Real server-status Projection used to register a Delivery recipient.
@@ -36,36 +35,28 @@ export class ServerStatusProjection extends Projection<string, typeof ServerStat
   }
 }
 
+const serverStatusMetadata: SpineMetadata = {
+  receivers: [
+    {
+      receiverKind: "entity" as const,
+      receiverType: ServerStatusProjection,
+      stateSchema: ServerStatusSchema,
+      handlers: [
+        {
+          kind: "event-subscription" as const,
+          methodName: "onServerStarted",
+          input: { schema: ServerStartedSchema, origin: "domestic" },
+          outcomes: { returned: [], thrown: [] },
+          parameterCount: 1,
+        },
+      ],
+    },
+  ],
+};
+
 /**
- * Creates generated-handler metadata for the server-status fixture.
+ * Creates passive metadata for the server-status fixture.
  */
-export function serverStatusRegistry(): { readonly directory: string; readonly root: URL } {
-  const slot = `__spineServerEnvironment_${Math.random().toString(36).slice(2)}`;
-  const directory = mkdtempSync(join(tmpdir(), "spine-server-environment-"));
-  const moduleDirectory = join(directory, "generated/handler");
-  mkdirSync(moduleDirectory, { recursive: true });
-  (globalThis as Record<string, unknown>)[slot] = Object.freeze({
-    receivers: [
-      {
-        receiverKind: "entity",
-        receiverType: ServerStatusProjection,
-        stateSchema: ServerStatusSchema,
-        handlers: [
-          {
-            kind: "event-subscription",
-            methodName: "onServerStarted",
-            input: { schema: ServerStartedSchema, origin: "domestic" },
-            outcomes: { returned: [], thrown: [] },
-            parameterCount: 1,
-          },
-        ],
-      },
-    ],
-  });
-  writeFileSync(
-    join(moduleDirectory, "generated-handler-registry.js"),
-    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
-    "utf8",
-  );
-  return Object.freeze({ directory, root: pathToFileURL(directory) });
+export function serverStatusRegistry(): void {
+  registerSpineMetadata(serverStatusMetadata, "test:server-status-projection");
 }

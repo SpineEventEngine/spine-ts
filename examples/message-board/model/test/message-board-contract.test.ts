@@ -17,6 +17,26 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("MessageBoard PostMessage contract", () => {
+  it("declares lifetime statistics and a typed ReadBoardStats query", async () => {
+    const model = await readFile(
+      new URL("../proto/spine/examples/messageboard/message_board.proto", import.meta.url),
+      "utf8",
+    );
+    const queries = await readFile(
+      new URL("../proto/spine/examples/messageboard/board_queries.proto", import.meta.url),
+      "utf8",
+    );
+    expect(model).toContain("message BoardStatisticsView {");
+    expect(model).toContain("message BoardStatistics {");
+    expect(model.match(/uint64 message_count =/gu)).toHaveLength(3);
+    expect(model.match(/repeated UserId authors =/gu)).toHaveLength(2);
+    expect(queries).toContain("message ReadBoardStats {");
+    expect(queries).toMatch(
+      /BoardId board = 1 \[\s*\(required\) = true,\s*\(validate\) = true\s*\];/u,
+    );
+    expect(queries).toContain("BoardStatistics announcements = 2;");
+  });
+
   it("declares server-authored required messages for username and text", async () => {
     const source = await readFile(
       new URL("../proto/spine/examples/messageboard/commands.proto", import.meta.url),
@@ -45,8 +65,10 @@ describe("MessageBoard PostMessage contract", () => {
     expect(commands).toContain("MessageId id = 1 [(validate) = true];");
     expect(commands).not.toMatch(/MessageId id = 1 \[[^\]]*\(required\)/u);
     expect(
-      entities.match(/MessageId id = 1 \[\(validate\) = true, \(set_once\) = true\];/gu),
+      entities.match(/MessageId id = 1 \[\s*\(validate\) = true,\s*\(set_once\) = true\s*\];/gu),
     ).toHaveLength(2);
-    expect(entities).toContain("BoardId id = 1 [(validate) = true, (set_once) = true];");
+    expect(entities).toMatch(
+      /BoardId id = 1 \[\s*\(validate\) = true,\s*\(set_once\) = true\s*\];/u,
+    );
   });
 });

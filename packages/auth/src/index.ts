@@ -14,6 +14,7 @@
 
 import type { Message } from "@bufbuild/protobuf";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
+import type { AuthorityFact } from "@spine-event-engine/core/spi/trusted-reader";
 import type {
   ActorContext,
   Command,
@@ -24,6 +25,7 @@ import type {
 } from "@spine-event-engine/proto";
 import {
   type Query,
+  type AppQuery,
   type Subscription,
   type Target,
   type Topic,
@@ -157,6 +159,33 @@ export interface IncomingQuery {
 }
 
 /**
+ * Application Query facts available to authorization policy.
+ */
+export interface IncomingAppQuery {
+  // prettier-ignore
+
+  /**
+   * Identifies application query execution.
+   */
+  readonly kind: "app-query";
+
+  /**
+   * Carries the received App Query envelope and packed Q.
+   */
+  readonly query: AppQuery;
+
+  /**
+   * Carries the caller-requested actor and tenant.
+   */
+  readonly requestedContext: ActorContext;
+
+  /**
+   * Carries allowlisted transport facts.
+   */
+  readonly transport: TransportRequestContext;
+}
+
+/**
  * Subscription-creation facts available to authorization policy.
  */
 export interface IncomingSubscription {
@@ -248,6 +277,7 @@ export interface IncomingSubscriptionCancellation {
 export type IncomingRequest =
   | IncomingCommand
   | IncomingQuery
+  | IncomingAppQuery
   | IncomingSubscription
   | IncomingSubscriptionActivation
   | IncomingSubscriptionCancellation;
@@ -402,6 +432,12 @@ export interface AuthorizedRequestContext {
    * Identifies the actor's resolved language for Query and subscription contexts.
    */
   readonly language?: Language;
+
+  /**
+   * Application-resolved authority facts for the admitted invocation.
+   * These facts are independent of provider credentials and may be absent.
+   */
+  readonly authorityFacts?: Readonly<Record<string, AuthorityFact>>;
 }
 
 /**
@@ -478,6 +514,24 @@ export type IncomingRequestInput =
 
       /**
        * Carries the serialized query bytes.
+       */
+      readonly value: Uint8Array;
+
+      /**
+       * Carries allowlisted transport facts.
+       */
+      readonly transport: TransportRequestContext;
+    }
+  | {
+      // prettier-ignore
+
+      /**
+       * Identifies an App Query wire envelope.
+       */
+      readonly kind: "app-query";
+
+      /**
+       * Carries serialized App Query bytes.
        */
       readonly value: Uint8Array;
 
@@ -568,6 +622,9 @@ export interface CommandRequestInput {
   readonly registry?: TypeRegistryLookup;
 }
 
+/**
+ * Builds the allowlisted transport facts exposed to admission policies.
+ */
 interface TransportFactsApi {
   /**
    * Builds allowlisted transport facts without credentials.

@@ -95,6 +95,14 @@ export type SubscriptionActivationOptions =
 export type ClientRequest = import("@spine-event-engine/client-web").ClientRequest;
 
 /**
+ * Shared decoded application result contract for generated Query messages.
+ *
+ * @typeParam Q Generated application request.
+ */
+export type AppQueryClientResponse<Q extends import("@bufbuild/protobuf").Message> =
+  import("@spine-event-engine/client-web").AppQueryClientResponse<Q>;
+
+/**
  * Shared injected transport contract; Node factories create it internally.
  */
 export type ClientTransport = import("@spine-event-engine/client-web").ClientTransport;

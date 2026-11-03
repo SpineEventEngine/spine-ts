@@ -30,7 +30,7 @@ export const generatedDeclarationRoots = Object.freeze([
   "examples/message-board/app",
 ]);
 const generatedDeclarationPattern =
-  /(?:_pb|rejections|_columns|proto-module|generated-handler-registry|model-registry|interfaces\/.+)\.d\.ts$/u;
+  /(?:_pb|rejections|_columns|proto-module|spine-metadata|spine-bootstrap|model-registry|interfaces\/.+)\.d\.ts$/u;
 
 /**
  * Lists declaration files whose generated forms require provenance normalization within bounded traversal.

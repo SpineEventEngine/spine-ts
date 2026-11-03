@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import {
   changedPaths,
   classifyTaskChanges,
@@ -77,6 +78,7 @@ describe("verify-task", () => {
     for (const path of [
       "packages/testing/test/black-box.node.test.mjs",
       "scripts/check-log-containment.test.mjs",
+      "scripts/dependency-compatibility.test.mjs",
       "compatibility-tests/jvm/wire-compatibility.test.mjs",
     ]) {
       expect(() => parseTaskVerificationArgs(["--no-coverage", path])).toThrow(
@@ -99,6 +101,7 @@ describe("verify-task", () => {
 
     expect(recordOnly).toEqual({ proto: false, typeDoc: false });
     expect(taskGateCommands(recordOnly)).not.toContain("proto:generate");
+    expect(taskGateCommands(recordOnly)).not.toContain("proto:check-fixtures");
     expect(taskGateCommands(recordOnly)).not.toContain("docs:check:generated");
     expect(taskGateCommands(recordOnly)).toContain("docs:audience:check");
     expect(taskGateCommands(recordOnly)).toContain("check:time-reads");
@@ -113,6 +116,21 @@ describe("verify-task", () => {
     ]) {
       expect(classifyTaskChanges([path])).toEqual({ proto: true, typeDoc: true });
     }
+    const gates = taskGateCommands({ proto: true, typeDoc: true });
+    expect(gates[0]).toBe("proto:check-fixtures");
+    expect(gates[1]).toBe("proto:generate");
+  });
+
+  it("runs the generation fixture contract before the release build", () => {
+    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    const scripts = manifest.scripts;
+    expect(scripts["proto:check-fixtures"]).toBe(
+      "tsc -p packages/proto-tools/tsconfig.bootstrap.json --outDir packages/proto-tools/dist/src && vitest run scripts/check-generated-clean.test.mjs scripts/generate-handler-registry.test.mjs scripts/clean-build-outputs.test.mjs",
+    );
+    expect(scripts["verify:release:generated"]).toMatch(
+      /^pnpm proto:check-fixtures && pnpm verify:generated-gates/u,
+    );
+    expect(scripts["verify:release"]).toContain("pnpm verify:release:generated");
   });
 
   it("requires repository tests for every non-Markdown classification", () => {

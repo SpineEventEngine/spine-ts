@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/core",
-  "version": "2.0.0-snapshot.25",
+  "version": "2.0.0-snapshot.26",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -33,6 +33,14 @@
     "./spi/entity-query-plan": {
       "types": "./dist/spi/entity-query-plan.d.ts",
       "default": "./dist/spi/entity-query-plan.js"
+    },
+    "./spi/trusted-reader": {
+      "types": "./dist/spi/trusted-reader.d.ts",
+      "default": "./dist/spi/trusted-reader.js"
+    },
+    "./spi/reader-forwarding": {
+      "types": "./dist/spi/reader-forwarding.d.ts",
+      "default": "./dist/spi/reader-forwarding.js"
     }
   },
   "files": [
@@ -43,6 +51,6 @@
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
     "@spine-event-engine/validation": "2.0.0-snapshot.7",
-    "@spine-event-engine/proto": "2.0.0-snapshot.25"
+    "@spine-event-engine/proto": "2.0.0-snapshot.26"
   }
 }

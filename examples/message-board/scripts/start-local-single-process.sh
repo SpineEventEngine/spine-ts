@@ -4,6 +4,9 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 gateway_port=${MESSAGE_BOARD_LOCAL_PORT:-8090}
 web_port=${MESSAGE_BOARD_WEB_PORT:-5173}
+tls_key=${MESSAGE_BOARD_TLS_KEY_FILE:-$root/examples/message-board/web/.local/localhost-key.pem}
+tls_cert=${MESSAGE_BOARD_TLS_CERT_FILE:-$root/examples/message-board/web/.local/localhost-cert.pem}
+[[ -r "$tls_key" && -r "$tls_cert" ]] || { echo "Provide trusted local TLS files via MESSAGE_BOARD_TLS_KEY_FILE and MESSAGE_BOARD_TLS_CERT_FILE (see Message Board README)." >&2; exit 1; }
 for port in "$gateway_port" "$web_port"; do
   [[ "$port" =~ ^[1-9][0-9]{0,4}$ ]] && (( port <= 65535 )) || {
     echo "Message Board ports must be between 1 and 65535." >&2
@@ -38,7 +41,10 @@ for attempt in $(seq 1 30); do
   sleep 1
 done
 grep -q 'MessageBoard local server ready' "$app_log" || { cat "$app_log" >&2; exit 1; }
-echo "Message Board local UI: http://127.0.0.1:$web_port"
-VITE_MESSAGE_BOARD_GATEWAY_URL="http://127.0.0.1:$gateway_port" \
+echo "Message Board local UI: https://127.0.0.1:$web_port"
+VITE_MESSAGE_BOARD_GATEWAY_URL="https://127.0.0.1:$web_port" \
+  VITE_MESSAGE_BOARD_AUTH_MODE="${MESSAGE_BOARD_AUTH_MODE:-public}" \
+  MESSAGE_BOARD_INTERNAL_GATEWAY_URL="http://127.0.0.1:$gateway_port" \
+  MESSAGE_BOARD_TLS_KEY_FILE="$tls_key" MESSAGE_BOARD_TLS_CERT_FILE="$tls_cert" \
   node "$root/examples/message-board/web/node_modules/vite/bin/vite.js" "$root/examples/message-board/web" --host 127.0.0.1 --port "$web_port" --strictPort & ui=$!
 wait "$ui"

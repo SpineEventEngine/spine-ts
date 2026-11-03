@@ -19,7 +19,7 @@ import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
-import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
 import { QueryIdSchema, QuerySchema } from "@spine-event-engine/proto/client";
@@ -164,12 +164,18 @@ export async function runProjectManagementLoad(
   };
 }
 
+/**
+ * Latencies observed for one accepted project user flow.
+ */
 interface UserResult {
   readonly commandAcknowledgementMs: number;
   readonly queryVisibilityMs: number;
   readonly subscriptionDeliveryMs: number;
 }
 
+/**
+ * First project update and iterator awaiting later subscription deliveries.
+ */
 interface SubscriptionRead {
   readonly iterator: AsyncIterator<SubscriptionUpdate>;
   readonly firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>;
@@ -211,8 +217,11 @@ class ProjectManagementUserLoad {
     this.queries = createClient(QueryService, transport);
     this.subscriptions = createClient(SubscriptionService, transport);
     this.id = `load-${String(index)}-${randomUUID()}`;
-    this.actorContext = metadata.actorContext({
-      actor: create(UserIdSchema, { value: `load-user-${String(index)}` }),
+    this.actorContext = create(ActorContextSchema, {
+      ...metadata.actorContext({
+        actor: create(UserIdSchema, { value: `load-user-${String(index)}` }),
+      }),
+      timestamp: metadata.timestamp(),
     });
   }
 

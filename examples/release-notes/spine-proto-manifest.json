@@ -1,8 +1,8 @@
 {
   "formatVersion": 2,
-  "generationId": "b88ef1ed-cb21-4c89-a5b2-2dbb1b75694c",
+  "generationId": "e3f93e92-0739-400e-b230-75bedb75e58b",
   "packageName": "@spine-event-engine/example-release-notes",
-  "packageVersion": "2.0.0-snapshot.25",
+  "packageVersion": "2.0.0-snapshot.26",
   "protoFiles": [
     "spine/examples/releasenotes/commands.proto",
     "spine/examples/releasenotes/events.proto",

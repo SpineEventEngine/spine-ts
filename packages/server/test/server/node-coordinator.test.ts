@@ -15,7 +15,8 @@
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
-import { create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import {
@@ -25,11 +26,13 @@ import {
   type DynamicUnaryClient,
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { AnyPacker } from "@spine-event-engine/core";
+import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
+import { ReaderForwarding } from "@spine-event-engine/core/spi/reader-forwarding";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
 import {
   ActorContextSchema,
   AckSchema,
+  ErrorSchema,
   CommandIdSchema,
   EventContextSchema,
   EventIdSchema,
@@ -37,18 +40,26 @@ import {
   ResponseSchema,
   StatusSchema,
   TenantIdSchema,
+  UserIdSchema,
 } from "@spine-event-engine/proto";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/auth";
 import {
   CommandService,
   QueryService,
+  AppQueryResponseSchema,
+  AppQuerySchema,
   QueryResponseSchema,
+  QueryIdSchema,
+  QuerySchema,
   EventUpdatesSchema,
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionService,
+  SubscriptionValidationError,
   SubscriptionUpdateSchema,
   TopicSchema,
+  TopicIdSchema,
+  TargetSchema,
 } from "@spine-event-engine/proto/client";
 import {
   InMemoryStorageFactory,
@@ -63,7 +74,16 @@ import {
   type ReadyMemberSource,
 } from "../../src/server/node-coordinator.js";
 import { DurableSubscriptionBindings } from "../../src/browser/durable-subscription-bindings.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
+import {
+  GetProjectOverview_QuerySchema,
+  GetProjectOverview_ResponseSchema,
+} from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
@@ -72,6 +92,163 @@ import {
 type RecordSpec<I, R> = StorageRecordSpec<I, R extends Message ? R : Message>;
 
 describe("NodeCoordinator", () => {
+  it("reissues a verified reader proof for the managed child Read operation", async () => {
+    const observed: string[] = [];
+    const replica = await backend("proved-read", {
+      read: async (context) => {
+        const query = coordinatorQuery();
+        const reader = await ReaderForwarding.open(
+          context.requestHeader,
+          "spine.client.QueryService",
+          "Read",
+          toBinary(QuerySchema, query),
+          { verify: (_bytes, proof) => proof === "coordinator-signed" },
+          context,
+          4_194_304,
+        );
+        observed.push(reader.principal?.id ?? "missing");
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      forwardingProof: { issue: () => "coordinator-signed" },
+    });
+    closeables.push(() => coordinator.close());
+    await createClient(QueryService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).read(
+      coordinatorQuery(),
+    );
+    expect(observed).toEqual(["reader-a"]);
+  });
+  it("rejects authenticated managed reads and subscriptions without a proof issuer", async () => {
+    let reads = 0;
+    const replica = await backend("missing-reader-issuer", {
+      read: () => {
+        reads++;
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+    });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
+
+    await expect(
+      createClient(QueryService, transport).read(coordinatorQuery()),
+    ).rejects.toMatchObject({
+      code: Code.Internal,
+    });
+    await expect(
+      createClient(SubscriptionService, transport).subscribe(coordinatorTopic()),
+    ).rejects.toMatchObject({ code: Code.Internal });
+    expect(reads).toBe(0);
+    expect(replica.subscriptions()).toBe(0);
+  });
+  it("forwards explicitly public managed reads and subscriptions without a proof issuer", async () => {
+    let reads = 0;
+    const replica = await backend("public-without-issuer", {
+      read: () => {
+        reads++;
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({}) } },
+    });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
+    await createClient(QueryService, transport).read(coordinatorQuery());
+    const subscription = await createClient(SubscriptionService, transport).subscribe(
+      coordinatorTopic(),
+    );
+    expect(subscription.id?.value).toBeTruthy();
+    expect(reads).toBe(1);
+    expect(replica.subscriptions()).toBe(1);
+  });
+  it("reissues distinct Subscribe, Activate and Cancel proofs for managed children", async () => {
+    const observed: string[] = [];
+    const replica = await backend("proved-subscriptions", {
+      holdActivation: true,
+      verifyReader: async (method, bytes, context) => {
+        const reader = await ReaderForwarding.open(
+          context.requestHeader,
+          "spine.client.SubscriptionService",
+          method,
+          bytes,
+          { verify: (_bytes, proof) => proof === "coordinator-signed" },
+          context,
+          4_194_304,
+        );
+        observed.push(`${method}:${reader.principal?.id ?? "missing"}`);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      forwardingProof: { issue: () => "coordinator-signed" },
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    expect(observed).toEqual(["Subscribe:reader-a"]);
+    const updates = client.activate(subscription)[Symbol.asyncIterator]();
+    await updates.next();
+    expect(observed).toEqual(["Subscribe:reader-a", "Activate:reader-a"]);
+    await client.cancel(subscription);
+    await updates.return?.();
+    expect(observed).toEqual(["Subscribe:reader-a", "Activate:reader-a", "Cancel:reader-a"]);
+  });
+  it("keeps a managed pending subscription after a foreign reader cancels", async () => {
+    const replica = await backend("foreign-managed", { holdActivation: true });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: ({ headers }) => ({
+            principal: {
+              id:
+                ("get" in headers && typeof headers.get === "function"
+                  ? headers.get("x-reader")
+                  : (headers as Readonly<Record<string, string>>)["x-reader"]) ?? "anonymous",
+            },
+          }),
+        },
+      },
+      forwardingProof: { issue: () => "coordinator-signed" },
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const alice = { headers: { "x-reader": "reader/alice" } };
+    const subscription = await client.subscribe(coordinatorTopic(), alice);
+    await expect(
+      client.cancel(subscription, { headers: { "x-reader": "reader/bob" } }),
+    ).rejects.toMatchObject({ code: Code.PermissionDenied });
+    expect(replica.cancellations()).toBe(0);
+    const updates = client.activate(subscription, alice)[Symbol.asyncIterator]();
+    await expect(updates.next()).resolves.toMatchObject({ done: false });
+    await client.cancel(subscription, alice);
+    await updates.return?.();
+  });
   const closeables: (() => Promise<void>)[] = [];
 
   afterEach(async () => {
@@ -120,6 +297,125 @@ describe("NodeCoordinator", () => {
     ).rejects.toMatchObject({ code: 14 });
   });
 
+  it("returns unavailable for Execute when no application replica is ready", async () => {
+    const coordinator = await NodeCoordinator.open({ members: new TestReadyMembers([]), port: 0 });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    await expect(client.execute(coordinatorAppQuery())).rejects.toMatchObject({
+      code: Code.Unavailable,
+    });
+  });
+
+  it("forwards an App Query and its verified reader to the selected application replica", async () => {
+    const observed: string[] = [];
+    const answer = create(GetProjectOverview_ResponseSchema, { project: { id: "project-1" } });
+    const replica = await backend("app-query", {
+      execute: async (query, context) => {
+        const reader = await ReaderForwarding.open(
+          context.requestHeader,
+          "spine.client.QueryService",
+          "Execute",
+          toBinary(AppQuerySchema, query),
+          { verify: (_bytes, proof) => proof === "coordinator-signed" },
+          context,
+          4_194_304,
+        );
+        observed.push(reader.principal?.id ?? "missing");
+        return create(AppQueryResponseSchema, {
+          response: create(ResponseSchema),
+          message: [AnyPacker.pack(GetProjectOverview_ResponseSchema, answer)],
+        });
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      forwardingProof: { issue: () => "coordinator-signed" },
+    });
+    closeables.push(() => coordinator.close());
+    const result = await createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    ).execute(coordinatorAppQuery());
+    expect(AnyPacker.tryUnpack(result.message[0], GetProjectOverview_ResponseSchema)).toEqual(
+      answer,
+    );
+    expect(observed).toEqual(["reader-a"]);
+  });
+
+  it("preserves structured Execute errors from the application replica", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.QueryValidationError",
+      code: 2,
+      message: "query validation failed.",
+    });
+    const replica = await backend("app-query-error", {
+      execute: () =>
+        Promise.reject(
+          new ConnectError("query validation failed.", Code.InvalidArgument, undefined, [
+            { desc: ErrorSchema, value: detail },
+          ]),
+        ),
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const failure = await createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    )
+      .execute(coordinatorAppQuery())
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(failure).toBeInstanceOf(ConnectError);
+    expect((failure as ConnectError).code).toBe(Code.InvalidArgument);
+    expect((failure as ConnectError).findDetails(ErrorSchema)).toEqual([detail]);
+  });
+
+  it("forwards Execute cancellation to the selected application replica", async () => {
+    let cancelled = false;
+    const replica = await backend("app-query-cancel", {
+      execute: (_query, context) =>
+        new Promise((_, reject) => {
+          context.signal.addEventListener(
+            "abort",
+            () => {
+              cancelled = true;
+              reject(new ConnectError("cancelled", Code.Canceled));
+            },
+            { once: true },
+          );
+        }),
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl, defaultTimeoutMs: 20 });
+    await expect(
+      transport.unary(
+        QueryService.method.execute,
+        undefined,
+        undefined,
+        undefined,
+        coordinatorAppQuery(),
+      ),
+    ).rejects.toMatchObject({ code: Code.DeadlineExceeded });
+    await expect.poll(() => cancelled).toBe(true);
+  });
+
   it("returns unavailable when a subscription has no ready replica", async () => {
     const coordinator = await NodeCoordinator.open({ members: new TestReadyMembers([]), port: 0 });
     closeables.push(() => coordinator.close());
@@ -128,7 +424,7 @@ describe("NodeCoordinator", () => {
       createClient(
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
-      ).subscribe(create(TopicSchema)),
+      ).subscribe(coordinatorTopic()),
     ).rejects.toMatchObject({ code: Code.Unavailable });
   });
 
@@ -143,9 +439,103 @@ describe("NodeCoordinator", () => {
 
     await expect(
       createClient(QueryService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).read(
-        create(QueryService.method.read.input),
+        coordinatorQuery(),
       ),
     ).resolves.toEqual(create(QueryResponseSchema));
+  });
+
+  it("rejects a caller-supplied internal reader assertion before managed forwarding", async () => {
+    let reads = 0;
+    const replica = await backend("forged-reader", {
+      read: () => {
+        reads += 1;
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    await expect(
+      client.read(coordinatorQuery(), {
+        headers: {
+          "spine-internal-reader": "Zm9yZ2Vk",
+          "spine-internal-reader-proof": "forged",
+        },
+      }),
+    ).rejects.toMatchObject({ code: Code.Unauthenticated });
+    expect(reads).toBe(0);
+  });
+
+  it("rejects malformed read-side requests before forwarding to a replica", async () => {
+    const replica = await backend("invalid-read");
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
+    const queries = createClient(QueryService, transport);
+    const subscriptions = createClient(SubscriptionService, transport);
+
+    await expect(queries.read(create(QueryService.method.read.input))).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    });
+    await expect(subscriptions.subscribe(create(TopicSchema))).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    });
+    await expect(subscriptions.cancel(create(SubscriptionSchema))).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    });
+    expect(replica.subscriptions()).toBe(0);
+    expect(replica.cancellations()).toBe(0);
+  });
+
+  it("preserves backend Query validation details through native Coordinator forwarding", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.QueryValidationError",
+      code: 2,
+      message: "query validation failed.",
+    });
+    const failure = new ConnectError(
+      "query validation failed.",
+      Code.InvalidArgument,
+      {
+        "spine-error-bin": Buffer.from(toBinary(ErrorSchema, detail)).toString("base64"),
+      },
+      [{ desc: ErrorSchema, value: detail }],
+    );
+    const replica = await backend("query-error", { read: () => Promise.reject(failure) });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const actual = await createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    )
+      .read(coordinatorQuery())
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(actual).toBeInstanceOf(ConnectError);
+    expect((actual as ConnectError).code).toBe(Code.InvalidArgument);
+    expect((actual as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+      type: "spine.client.QueryValidationError",
+      code: 2,
+    });
+    expect((actual as ConnectError).metadata.get("spine-error-bin")).toBeDefined();
   });
 
   it("creates a native subscription on every current replica", async () => {
@@ -161,7 +551,7 @@ describe("NodeCoordinator", () => {
     const subscription = await createClient(
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
-    ).subscribe(create(TopicSchema));
+    ).subscribe(coordinatorTopic());
 
     expect(subscription.id?.value).toMatch(/^s-[0-9a-f-]{36}$/u);
     expect(first.subscriptions()).toBe(1);
@@ -193,9 +583,49 @@ describe("NodeCoordinator", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
       );
-      await subscriptions.subscribe(create(TopicSchema));
+      await subscriptions.subscribe(coordinatorTopic());
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
 
+      await expect.poll(() => replica.cancellations()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("preserves a pending activation after malformed lifecycle criteria", async () => {
+    vi.useFakeTimers();
+    try {
+      const replica = await backend("malformed-pending");
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+      });
+      closeables.push(() => coordinator.close());
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      );
+      const subscription = await client.subscribe(coordinatorTopic());
+      const malformed = clone(SubscriptionSchema, subscription);
+      if (malformed.topic?.target === undefined) throw new Error("Expected topic target.");
+      malformed.topic.target.criterion = { case: "includeAll", value: false };
+
+      await expect(client.cancel(malformed)).rejects.toMatchObject({ code: Code.InvalidArgument });
+      const iterator = client.activate(malformed)[Symbol.asyncIterator]();
+      const failure = await iterator.next().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(ConnectError);
+      expect((failure as ConnectError).findDetails(ErrorSchema)[0]).toMatchObject({
+        type: "spine.client.SubscriptionValidationError",
+        code: 2,
+      });
+      expect(replica.cancellations()).toBe(0);
+      expect(replica.activations()).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
       await expect.poll(() => replica.cancellations()).toBe(1);
     } finally {
       vi.useRealTimers();
@@ -216,7 +646,7 @@ describe("NodeCoordinator", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
       );
-      await subscriptions.subscribe(create(TopicSchema));
+      await subscriptions.subscribe(coordinatorTopic());
 
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
       await expect.poll(() => replica.cancellations()).toBe(1);
@@ -245,7 +675,7 @@ describe("NodeCoordinator", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
       );
-      const subscription = await client.subscribe(create(TopicSchema));
+      const subscription = await client.subscribe(coordinatorTopic());
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS - 1);
       const controller = new AbortController();
       const updates = client
@@ -305,6 +735,7 @@ describe("NodeCoordinator", () => {
       const definition = await firstBindings.create({
         topic: { kind: "subscription-topic", bytes: trustedTopic() },
         whenExpires: 10_000,
+        reader: { kind: "anonymous" },
       });
       await new DynamicSubscriptionCreator(firstOwner).subscribe(
         definition,
@@ -387,7 +818,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     expect(members.childActivations()).toBe(0);
     const updates = client.activate(subscription)[Symbol.asyncIterator]();
 
@@ -414,13 +845,108 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const updates = client.activate(subscription)[Symbol.asyncIterator]();
 
     await expect(updates.next()).rejects.toMatchObject({ code: Code.Internal });
     await vi.waitFor(() => {
       expect(replica.cancellations()).toBe(1);
     });
+  });
+
+  it("forwards a child's structured unknown-subscription activation failure", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.SubscriptionValidationError",
+      code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+      message: "Subscription is unknown to this server.",
+    });
+    const replica = await backend("unknown-child", {
+      activateError: new ConnectError(detail.message, Code.NotFound, undefined, [
+        { desc: ErrorSchema, value: detail },
+      ]),
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    const iterator = client.activate(subscription)[Symbol.asyncIterator]();
+    const failure = await iterator.next().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(ConnectError);
+    expect((failure as ConnectError).code).toBe(Code.NotFound);
+    expect((failure as ConnectError).findDetails(ErrorSchema)).toEqual([detail]);
+    expect(replica.activations()).toBe(1);
+  });
+
+  it("keeps unknown Cancel idempotent but reports unknown Activate before child work", async () => {
+    const replica = await backend("unknown-logical");
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const unknown = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "unknown-logical" }),
+      topic: coordinatorTopic(),
+    });
+
+    await expect(client.cancel(unknown)).resolves.toBeDefined();
+    const failure = await client
+      .activate(unknown)
+      [Symbol.asyncIterator]()
+      .next()
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(failure).toMatchObject({ code: Code.NotFound });
+    expect((failure as ConnectError).findDetails(ErrorSchema)).toMatchObject([
+      {
+        type: "spine.client.SubscriptionValidationError",
+        code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+      },
+    ]);
+    expect(replica.cancellations()).toBe(0);
+    expect(replica.activations()).toBe(0);
+  });
+
+  it("retries failed child cleanup before an explicit Cancel", async () => {
+    const replica = await backend("activation-cleanup-retry", {
+      activateError: new ConnectError("native activation unavailable", Code.Unavailable),
+      cancelFailures: 1,
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    await expect(client.activate(subscription)[Symbol.asyncIterator]().next()).rejects.toThrow();
+    expect(replica.activations()).toBe(1);
+    expect(replica.cancellations()).toBe(2);
+
+    await expect(client.cancel(subscription)).resolves.toBeDefined();
+    expect(replica.cancellations()).toBe(2);
   });
 
   it("cancels active native streams when the public subscription stream aborts", async () => {
@@ -435,7 +961,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const controller = new AbortController();
     const updates = client
       .activate(subscription, { signal: controller.signal })
@@ -464,7 +990,7 @@ describe("NodeCoordinator", () => {
     );
 
     await expect(client.cancel(create(SubscriptionSchema))).rejects.toMatchObject({
-      code: Code.Internal,
+      code: Code.InvalidArgument,
     });
   });
 
@@ -483,7 +1009,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const updates = client.activate(subscription)[Symbol.asyncIterator]();
     await expect(updates.next()).resolves.toMatchObject({
       value: { response: { status: { status: { case: "ok" } } } },
@@ -515,7 +1041,7 @@ describe("NodeCoordinator", () => {
     closeables.push(() => coordinator.close());
     const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
     const subscription = await createClient(SubscriptionService, transport).subscribe(
-      create(TopicSchema),
+      coordinatorTopic(),
     );
     const iterator = createClient(SubscriptionService, transport)
       .activate(subscription)
@@ -547,7 +1073,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const controller = new AbortController();
     const iterator = client
       .activate(subscription, { signal: controller.signal })
@@ -577,7 +1103,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const firstAbort = new AbortController();
     const firstUpdates = client
       .activate(subscription, { signal: firstAbort.signal })
@@ -591,7 +1117,7 @@ describe("NodeCoordinator", () => {
     await expect(first).rejects.toMatchObject({ code: Code.Canceled });
     await expect.poll(() => replica.cancellations()).toBe(1);
     release.resolve(undefined);
-    const replacement = await client.subscribe(create(TopicSchema));
+    const replacement = await client.subscribe(coordinatorTopic());
     const second = client.activate(replacement)[Symbol.asyncIterator]();
     await expect(second.next()).resolves.toMatchObject({
       value: { response: { status: { status: { case: "ok" } } } },
@@ -612,7 +1138,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    const subscription = await client.subscribe(create(TopicSchema));
+    const subscription = await client.subscribe(coordinatorTopic());
     const controller = new AbortController();
     const iterator = client
       .activate(subscription, { signal: controller.signal })
@@ -638,7 +1164,7 @@ describe("NodeCoordinator", () => {
       SubscriptionService,
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
-    await subscriptions.subscribe(create(TopicSchema));
+    await subscriptions.subscribe(coordinatorTopic());
 
     members.set([current.member, joining.member]);
     await expect.poll(() => joining.subscriptions()).toBe(1);
@@ -668,7 +1194,7 @@ describe("NodeCoordinator", () => {
       await Promise.all([current.close(), joining.close()]);
     });
     const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
-    await createClient(SubscriptionService, transport).subscribe(create(TopicSchema));
+    await createClient(SubscriptionService, transport).subscribe(coordinatorTopic());
 
     members.setReady([current.member], [current.member, joining.member]);
     await subscriptionStarted.promise;
@@ -700,7 +1226,7 @@ describe("NodeCoordinator", () => {
     const coordinator = await NodeCoordinator.open({ members, port: 0 });
     closeables.push(() => coordinator.close());
     const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
-    await createClient(SubscriptionService, transport).subscribe(create(TopicSchema));
+    await createClient(SubscriptionService, transport).subscribe(coordinatorTopic());
     expect(draining.subscriptions()).toBe(1);
 
     members.setReady([], [draining.member]);
@@ -727,8 +1253,10 @@ describe("NodeCoordinator", () => {
     );
     const topic = create(TopicSchema, {
       id: { value: "drain-topic" },
+      target: coordinatorTarget(),
       context: create(ActorContextSchema, {
         actor: { value: "actor" },
+        timestamp: create(TimestampSchema, { seconds: 1n }),
         tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
       }),
     });
@@ -960,7 +1488,7 @@ describe("NodeCoordinator", () => {
         SubscriptionService,
         createGrpcTransport({ baseUrl: coordinator.baseUrl }),
       );
-      await subscriptions.subscribe(create(TopicSchema));
+      await subscriptions.subscribe(coordinatorTopic());
 
       await coordinator.close();
       const cancellationsAfterClose = replica.cancellations();
@@ -1020,17 +1548,157 @@ describe("NodeCoordinator", () => {
     await expect(coordinator.close()).resolves.toBeUndefined();
     await expect(request).rejects.toBeInstanceOf(ConnectError);
   }, 5_000);
+
+  it("rejects invalid queue capacity before binding the managed HTTP2 port", async () => {
+    const probe = http2.createServer();
+    await new Promise<void>((resolve) => {
+      probe.listen(0, "127.0.0.1", resolve);
+    });
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => {
+      probe.close(() => {
+        resolve();
+      });
+    });
+    await resetServerEnvironmentForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: -1 });
+    try {
+      await expect(
+        NodeCoordinator.open({ members: new TestReadyMembers([]), port }),
+      ).rejects.toThrow(/subscriptionQueueCapacity/u);
+      const rebound = http2.createServer();
+      await new Promise<void>((resolve) => {
+        rebound.listen(port, "127.0.0.1", resolve);
+      });
+      await new Promise<void>((resolve) => {
+        rebound.close(() => {
+          resolve();
+        });
+      });
+    } finally {
+      await resetServerEnvironmentForTest();
+    }
+  });
+
+  it.each([0, 1])(
+    "delivers one active and %i waiting managed updates after ACK",
+    async (capacity) => {
+      await resetServerEnvironmentForTest();
+      ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: capacity });
+      const replica = await backend(`capacity-${capacity.toString()}`, {
+        updates: capacity + 1,
+        holdActivation: true,
+        observeActivationAbort: true,
+      });
+      closeables.push(replica.close);
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+      });
+      closeables.push(() => coordinator.close());
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      );
+      const subscription = await client.subscribe(coordinatorTopic());
+      const abort = new AbortController();
+      const iterator = client
+        .activate(subscription, { signal: abort.signal })
+        [Symbol.asyncIterator]();
+      try {
+        await expect(iterator.next()).resolves.toMatchObject({
+          value: { response: { status: { status: { case: "ok" } } } },
+        });
+        for (let index = 0; index <= capacity; index++) {
+          const delivered = await iterator.next();
+          expect(delivered.value).toMatchObject({ update: { case: "eventUpdates" } });
+        }
+        expect(replica.activationAborts()).toBe(0);
+      } finally {
+        abort.abort();
+        await iterator.return?.();
+        await coordinator.close();
+        await resetServerEnvironmentForTest();
+      }
+    },
+  );
+
+  it.each([0])("overflows after one active plus %i waiting managed updates", async (capacity) => {
+    await resetServerEnvironmentForTest();
+    ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: capacity });
+    const replicas = await Promise.all(
+      Array.from({ length: capacity + 1 }, (_value, index) =>
+        backend(`overflow-${capacity.toString()}-${index.toString()}`, {
+          updates: 2,
+          holdActivation: true,
+          observeActivationAbort: true,
+        }),
+      ),
+    );
+    const pushed = vi.spyOn(SubscriptionUpdateQueue.prototype, "push");
+    closeables.push(...replicas.map((replica) => replica.close));
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers(
+        replicas.map((replica, index) => ({ ...replica.member, slot: index })),
+      ),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    const abort = new AbortController();
+    const iterator = client
+      .activate(subscription, { signal: abort.signal })
+      [Symbol.asyncIterator]();
+    try {
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { response: { status: { status: { case: "ok" } } } },
+      });
+      const firstData = await iterator.next();
+      expect(firstData.value).toMatchObject({ update: { case: "eventUpdates" } });
+      await expect.poll(() => pushed.mock.calls.length).toBeGreaterThan(capacity + 1);
+      await expect(iterator.next()).resolves.toMatchObject({ done: true });
+    } finally {
+      pushed.mockRestore();
+      abort.abort();
+      await iterator.return?.();
+      await coordinator.close();
+      await resetServerEnvironmentForTest();
+    }
+  });
 });
 
 describe("SubscriptionUpdateQueue", () => {
+  it.each([0, 1, 100])("reserves one active update plus %i waiting updates", async (capacity) => {
+    let overflowed = 0;
+    const queue = new SubscriptionUpdateQueue(capacity, () => overflowed++);
+    const iterator = queue[Symbol.asyncIterator]();
+    const first = create(SubscriptionUpdateSchema);
+    const firstDelivery = queue.push(first);
+    await expect(iterator.next()).resolves.toEqual({ value: first, done: false });
+    await expect(firstDelivery).resolves.toBeUndefined();
+    expect(overflowed).toBe(0);
+    for (let index = 0; index < capacity; index++)
+      void queue.push(create(SubscriptionUpdateSchema));
+    expect(overflowed).toBe(0);
+    await queue.push(create(SubscriptionUpdateSchema));
+    expect(overflowed).toBe(1);
+    await expect(iterator.next()).resolves.toEqual({ value: undefined, done: true });
+  });
+
   it("closes terminally on overflow, resolves blocked producers, and ignores later updates", async () => {
     let overflowed = false;
     const queue = new SubscriptionUpdateQueue(1, () => {
       overflowed = true;
     });
     const first = queue.push(create(SubscriptionUpdateSchema));
+    const waiting = queue.push(create(SubscriptionUpdateSchema));
     await queue.push(create(SubscriptionUpdateSchema));
     await expect(first).resolves.toBeUndefined();
+    await expect(waiting).resolves.toBeUndefined();
     await expect(queue[Symbol.asyncIterator]().next()).resolves.toEqual({
       value: undefined,
       done: true,
@@ -1123,13 +1791,58 @@ function dynamicCoordinatorClient(endpoint: string): DynamicUnaryClient {
   };
 }
 
+function coordinatorTarget() {
+  return create(TargetSchema, {
+    type: TypeUrls.derive(ProjectOverviewStateSchema),
+    criterion: { case: "includeAll", value: true },
+  });
+}
+
+function coordinatorActorContext() {
+  return create(ActorContextSchema, {
+    actor: create(UserIdSchema, { value: "actor" }),
+    timestamp: create(TimestampSchema, { seconds: 1n }),
+  });
+}
+
+function coordinatorTopic() {
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: "topic" }),
+    target: coordinatorTarget(),
+    context: coordinatorActorContext(),
+  });
+}
+
+function coordinatorQuery() {
+  return create(QuerySchema, {
+    id: create(QueryIdSchema, { value: "query" }),
+    target: coordinatorTarget(),
+    context: coordinatorActorContext(),
+  });
+}
+
+function coordinatorAppQuery() {
+  return create(AppQuerySchema, {
+    id: create(QueryIdSchema, { value: "app-query" }),
+    message: AnyPacker.pack(
+      GetProjectOverview_QuerySchema,
+      create(GetProjectOverview_QuerySchema, {
+        project: create(ProjectIdSchema, { value: "project-1" }),
+      }),
+    ),
+    context: coordinatorActorContext(),
+  });
+}
+
 function trustedTopic(): Uint8Array {
   return toBinary(
     TopicSchema,
     create(TopicSchema, {
       id: { value: "topic" },
+      target: coordinatorTarget(),
       context: create(ActorContextSchema, {
         actor: { value: "actor" },
+        timestamp: create(TimestampSchema, { seconds: 1n }),
         tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
       }),
     }),
@@ -1140,6 +1853,16 @@ async function backend(
   name: string,
   options: {
     readonly post?: (context: HandlerContext) => Promise<never> | MessageShape<typeof AckSchema>;
+    readonly read?: (
+      context: HandlerContext,
+    ) =>
+      Promise<MessageShape<typeof QueryResponseSchema>> | MessageShape<typeof QueryResponseSchema>;
+    readonly execute?: (
+      query: MessageShape<typeof AppQuerySchema>,
+      context: HandlerContext,
+    ) =>
+      | Promise<MessageShape<typeof AppQueryResponseSchema>>
+      | MessageShape<typeof AppQueryResponseSchema>;
     readonly updates?: number;
     readonly mismatchedActivationAck?: boolean;
     readonly holdActivation?: boolean;
@@ -1149,6 +1872,12 @@ async function backend(
     readonly cancelFailures?: number;
     readonly subscribeGate?: Promise<undefined>;
     readonly subscriptionStarted?: { readonly resolve: (value: undefined) => void };
+    readonly activateError?: ConnectError;
+    readonly verifyReader?: (
+      method: string,
+      bytes: Uint8Array,
+      context: HandlerContext,
+    ) => Promise<void>;
   } = {},
 ): Promise<{
   readonly member: ReadyMember;
@@ -1179,10 +1908,19 @@ async function backend(
           },
         });
         router.service(QueryService, {
-          read: (): MessageShape<typeof QueryResponseSchema> => create(QueryResponseSchema),
+          execute: (query, context) =>
+            options.execute?.(query, context) ?? create(AppQueryResponseSchema),
+          read: (
+            _query,
+            context,
+          ):
+            | MessageShape<typeof QueryResponseSchema>
+            | Promise<MessageShape<typeof QueryResponseSchema>> =>
+            options.read?.(context) ?? create(QueryResponseSchema),
         });
         router.service(SubscriptionService, {
-          subscribe: (topic) => {
+          subscribe: async (topic, context) => {
+            await options.verifyReader?.("Subscribe", toBinary(TopicSchema, topic), context);
             value.subscriptions++;
             options.subscriptionStarted?.resolve(undefined);
             const subscription = create(SubscriptionSchema, {
@@ -1192,7 +1930,13 @@ async function backend(
             return options.subscribeGate?.then(() => subscription) ?? subscription;
           },
           activate: async function* (subscription, context) {
+            await options.verifyReader?.(
+              "Activate",
+              toBinary(SubscriptionSchema, subscription),
+              context,
+            );
             value.activations++;
+            if (options.activateError !== undefined) throw options.activateError;
             if (options.observeActivationAbort)
               context.signal.addEventListener(
                 "abort",
@@ -1243,7 +1987,12 @@ async function backend(
                 void options.releaseActivation?.then(resolve);
               });
           },
-          cancel: () => {
+          cancel: async (subscription, context) => {
+            await options.verifyReader?.(
+              "Cancel",
+              toBinary(SubscriptionSchema, subscription),
+              context,
+            );
             value.cancellations++;
             if (value.cancellations <= (options.cancelFailures ?? 0))
               throw new ConnectError("native cancellation failed", Code.Unavailable);

@@ -1,8 +1,8 @@
 {
   "formatVersion": 2,
-  "generationId": "88e38abe-3cd2-4b56-aab8-e8b6d9827e34",
+  "generationId": "ecd282af-168e-4348-853a-31b0bb7346a1",
   "packageName": "@spine-event-engine/server-blackbox-tests",
-  "packageVersion": "2.0.0-snapshot.25",
+  "packageVersion": "2.0.0-snapshot.26",
   "protoFiles": [
     "example/support/storage_layout.proto",
     "spine/server/testing/project_commands.proto",

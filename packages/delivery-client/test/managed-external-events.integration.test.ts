@@ -29,7 +29,7 @@ import {
   InboxService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
-import { UserIdSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import {
   CommandService,
@@ -235,7 +235,10 @@ function externalStateTopic() {
       type: TypeUrls.derive(ProjectOverviewStateSchema),
       criterion: { case: "includeAll", value: true },
     }),
-    context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0210" }) }),
+    context: create(ActorContextSchema, {
+      ...metadata.actorContext({ actor: create(UserIdSchema, { value: "t0210" }) }),
+      timestamp: metadata.timestamp(),
+    }),
   });
 }
 

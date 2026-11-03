@@ -1,0 +1,55 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+syntax = "proto3";
+
+package spine.client;
+
+import "google/protobuf/any.proto";
+import "spine/client/query.proto";
+import "spine/core/actor_context.proto";
+import "spine/core/response.proto";
+import "spine/options.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "AppQueryProto";
+option java_package = "io.spine.client";
+option (type_url_prefix) = "type.spine.io";
+
+// One application-defined read request.
+message AppQuery {
+  // Identifies this read request for response correlation.
+  QueryId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Carries the application-defined Query message.
+  google.protobuf.Any message = 2 [(required) = true];
+
+  // Records the actor and time admitted for this request.
+  spine.core.ActorContext context = 3 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+// The transport response for an application-defined read.
+message AppQueryResponse {
+  // Reports whether the application read completed or failed.
+  spine.core.Response response = 1 [(required) = true];
+
+  // Contains the paired application Response after a successful read.
+  repeated google.protobuf.Any message = 2;
+}

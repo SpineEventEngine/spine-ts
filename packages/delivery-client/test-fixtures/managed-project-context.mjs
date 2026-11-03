@@ -12,14 +12,9 @@
  * the License.
  */
 
-import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-
 import { create } from "@bufbuild/protobuf";
 import { Aggregate, BoundedContext, EventRouting, Projection } from "@spine-event-engine/server";
+import { registerSpineMetadata } from "@spine-event-engine/server/spi/handler-registry";
 
 import { CreateProjectSchema } from "@spine-event-engine/server-test-fixtures/entity/project_commands_pb.js";
 import { ProjectCreatedSchema } from "@spine-event-engine/server-test-fixtures/entity/project_events_pb.js";
@@ -75,53 +70,16 @@ class ManagedProjectProjection extends Projection {
  */
 export async function createManagedProjectContext(options = {}) {
   ManagedProjectAggregate.onCreateProject = options.onCreateProject;
-  const registry = await createRegistry(options.includeProjection === true);
-  try {
-    const builder = BoundedContext.singleTenant("ManagedProjects")
-      .withGeneratedRegistryRoot(registry.root)
-      .add(ManagedProjectAggregate);
-    if (options.includeProjection === true) {
-      builder.add(ManagedProjectProjection, {
-        eventRouting: EventRouting.create().route(ProjectCreatedSchema, (event) => [event.id]),
-      });
-    }
-    if (options.subscriptionRegistry !== undefined) {
-      builder.withSubscriptionRegistry(options.subscriptionRegistry);
-    }
-    return await builder.build();
-  } finally {
-    await registry.clear();
+  const builder = BoundedContext.singleTenant("ManagedProjects").add(ManagedProjectAggregate);
+  if (options.includeProjection === true) {
+    builder.add(ManagedProjectProjection, {
+      eventRouting: EventRouting.create().route(ProjectCreatedSchema, (event) => [event.id]),
+    });
   }
-}
-
-/**
- *
- * Creates the generated-handler registry consumed by the fixture context.
- */
-async function createRegistry(includeProjection) {
-  const directory = await mkdtemp(join(tmpdir(), "spine-managed-projects-"));
-  const moduleDirectory = join(directory, "generated/handler");
-  const slot = `__spineManagedProjects_${randomUUID().replaceAll("-", "")}`;
-  const receivers = [aggregateReceiver()];
-  if (includeProjection) receivers.push(projectionReceiver());
-  globalThis[slot] = { receivers };
-  await mkdir(moduleDirectory, { recursive: true });
-  await writeFile(
-    join(moduleDirectory, "generated-handler-registry.js"),
-    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
-  );
-  return {
-    root: pathToFileURL(directory),
-
-    /**
-     *
-     * Removes the temporary registry module and its global value.
-     */
-    async clear() {
-      Reflect.deleteProperty(globalThis, slot);
-      await rm(directory, { recursive: true, force: true });
-    },
-  };
+  if (options.subscriptionRegistry !== undefined) {
+    builder.withSubscriptionRegistry(options.subscriptionRegistry);
+  }
+  return builder.build();
 }
 
 /**
@@ -165,3 +123,5 @@ function projectionReceiver() {
     ],
   };
 }
+
+registerSpineMetadata({ receivers: [aggregateReceiver(), projectionReceiver()] }, import.meta.url);

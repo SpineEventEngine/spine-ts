@@ -13,6 +13,7 @@
  */
 
 import { create, type Message } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TypeUrls, AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
 import {
@@ -21,7 +22,6 @@ import {
   EventIdSchema,
   EventSchema,
   type Event,
-  UserIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
 import {
@@ -150,6 +150,36 @@ describe("EventBus", () => {
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-schema-only" } }]);
   });
 
+  it("rejects missing envelope context before admission, acceptance, or storage", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ReviewTaskAssignedSchema],
+        accept: () => {
+          observed.push("accept");
+          return Promise.resolve();
+        },
+        dispatch: () => {
+          observed.push("dispatch");
+          return Promise.resolve();
+        },
+      },
+    ]);
+    eventBusAccess.setAdmission(bus, () => {
+      observed.push("admit");
+      return Promise.resolve();
+    });
+    const event = createReviewTaskAssigned("event-without-context");
+    event.context = undefined;
+    await expect(bus.post(event)).rejects.toThrow();
+    expect(observed).toEqual([]);
+    await expect(store.read()).resolves.toEqual([]);
+  });
+
   it("unregisters only target origin routes while preserving admission and unrelated dispatchers", async () => {
     const bus = eventBusAccess.createForgettingBus();
     const target = createEventDispatcher([ReviewTaskAssignedSchema, ReviewStartedSchema], () =>
@@ -173,11 +203,19 @@ describe("EventBus", () => {
     eventBusAccess.unregister(bus, target);
     eventBusAccess.unregister(bus, target);
     const external = createReviewTaskAssigned("external-route");
-    external.context = create(EventContextSchema, { external: true });
+    external.context = create(EventContextSchema, {
+      external: true,
+      producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "task-1" })),
+    });
     await bus.post(external);
     await bus.post(
       SignalEnvelopes.event({
-        context: create(EventContextSchema),
+        context: create(EventContextSchema, {
+          producerId: AnyPacker.pack(
+            StringValueSchema,
+            create(StringValueSchema, { value: "task-1" }),
+          ),
+        }),
         schema: ReviewStartedSchema,
         message: create(ReviewStartedSchema, { id: "domestic-route" }),
       }),
@@ -265,8 +303,14 @@ describe("EventBus", () => {
     await bus.post(createValidatedEvent("event-forgotten", "name"));
     await bus.close();
 
-    expect(observed).toEqual(["validate", "accept", "dispatch", "subscriber:event-forgotten"]);
-    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(observed).toEqual([
+      "validate",
+      "validate",
+      "accept",
+      "dispatch",
+      "subscriber:event-forgotten",
+    ]);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
     storage.expectNoAccess();
     storage.restore();
   });
@@ -291,7 +335,7 @@ describe("EventBus", () => {
     await expect(bus.post(createValidatedEvent("event-forgotten-invalid", ""))).rejects.toThrow();
     await bus.close();
 
-    expect(observed).toEqual(["validate"]);
+    expect(observed).toEqual(["validate", "validate"]);
     storage.expectNoAccess();
     storage.restore();
   });
@@ -326,7 +370,7 @@ describe("EventBus", () => {
     ).rejects.toThrow("admission failed");
     await bus.close();
 
-    expect(observed).toEqual(["validate", "accept"]);
+    expect(observed).toEqual(["validate", "validate", "accept"]);
     storage.expectNoAccess();
     storage.restore();
   });
@@ -521,7 +565,7 @@ describe("EventBus", () => {
     });
 
     await expect(bus.post(createValidatedEvent("event-invalid-post", ""))).rejects.toThrow();
-    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
     validationChecks.mockClear();
 
     let followUp!: Promise<void>;
@@ -532,13 +576,13 @@ describe("EventBus", () => {
       );
     });
     await expect(followUp).rejects.toThrow();
-    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
     validationChecks.mockClear();
 
     await expect(
       eventBusAccess.postStored(bus, createValidatedEvent("event-invalid-stored", "")),
     ).rejects.toThrow();
-    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
     validationChecks.mockClear();
 
     let storedFollowUp!: Promise<void>;
@@ -550,7 +594,7 @@ describe("EventBus", () => {
     });
     await expect(storedFollowUp).rejects.toThrow();
 
-    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
     expect(observed).toEqual([]);
     await expect(store.read()).resolves.toEqual([]);
   });
@@ -583,10 +627,11 @@ describe("EventBus", () => {
     ]);
 
     await bus.post(createValidatedEvent("event-valid-post", "name"));
-    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
     expect(observed).toEqual([
-      "store:event-valid-post",
       "validate",
+      "validate",
+      "store:event-valid-post",
       "accept",
       "append:event-valid-post",
       "dispatch",
@@ -602,10 +647,11 @@ describe("EventBus", () => {
       );
     });
     await followUp;
-    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
     expect(observed).toEqual([
-      "store:event-valid-follow-up",
       "validate",
+      "validate",
+      "store:event-valid-follow-up",
       "accept",
       "append:event-valid-follow-up",
       "dispatch",
@@ -614,8 +660,8 @@ describe("EventBus", () => {
     validationChecks.mockClear();
     observed.length = 0;
     await eventBusAccess.postStored(bus, createValidatedEvent("event-valid-stored", "name"));
-    expect(validationChecks).toHaveBeenCalledTimes(1);
-    expect(observed).toEqual(["validate", "accept", "dispatch"]);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
+    expect(observed).toEqual(["validate", "validate", "accept", "dispatch"]);
 
     validationChecks.mockClear();
     observed.length = 0;
@@ -627,8 +673,8 @@ describe("EventBus", () => {
       );
     });
     await storedFollowUp;
-    expect(validationChecks).toHaveBeenCalledTimes(1);
-    expect(observed).toEqual(["validate", "accept", "dispatch"]);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
+    expect(observed).toEqual(["validate", "validate", "accept", "dispatch"]);
   });
 
   it("validates an admitted event once before storing and dispatching it", async () => {
@@ -653,7 +699,7 @@ describe("EventBus", () => {
 
     await bus.post(createValidatedEvent("event-valid", "name"));
 
-    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(validationChecks).toHaveBeenCalledTimes(2);
     expect(observed).toEqual(["accept", "dispatch"]);
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-valid" } }]);
   });
@@ -1243,7 +1289,7 @@ function createReviewTaskAssigned(id: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
+      producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "task-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
     message: AnyPacker.pack(
@@ -1257,7 +1303,7 @@ function createValidatedEvent(id: string, name: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: AnyPacker.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
+      producerId: AnyPacker.pack(StringValueSchema, create(StringValueSchema, { value: "task-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
     message: AnyPacker.pack(

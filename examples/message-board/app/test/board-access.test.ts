@@ -25,8 +25,10 @@ import {
 } from "@spine-event-engine/auth";
 import type { HandlerContext } from "@connectrpc/connect";
 import {
+  AnnouncementBoardViewSchema,
   BoardMessageViewSchema,
   BoardIdSchema,
+  BoardStatisticsViewSchema,
   MessageIdSchema,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { PostMessageSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
@@ -50,6 +52,7 @@ import {
   CompositeFilterSchema,
   Filter_Operator,
   FilterSchema,
+  IdFilterSchema,
   QueryService,
   QuerySchema,
   SubscriptionSchema,
@@ -69,7 +72,44 @@ const principal: AuthenticatedPrincipal = {
 };
 
 describe("MessageBoard gateway policy", () => {
-  it("allows only a self-origin PostMessage outcome topic with matching tenant", async () => {
+  it("derives restricted authority only from the verified principal attributes", async () => {
+    const resolver = new BoardContextResolver();
+    const clock: Clock = { now: () => create(TimestampSchema, { seconds: 1n }) };
+    const requestedContext = create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "spoofed" }),
+    });
+    const request = {
+      kind: "query" as const,
+      query: create(QuerySchema),
+      target: create(TargetSchema),
+      requestedContext,
+      transport: { headers: {}, service: "spine.client.QueryService", method: "Read" },
+    };
+    const granted = await resolver.resolve(
+      {
+        id: "verified",
+        attributes: {
+          canReadRestricted: "true",
+        },
+      },
+      request,
+      clock,
+    );
+    expect(granted.actor.value).toBe("verified");
+    expect(granted.authorityFacts?.canReadRestricted).toBe(true);
+    const ordinary = await resolver.resolve(
+      {
+        id: "verified",
+        attributes: {
+          canReadRestricted: "false",
+        },
+      },
+      request,
+      clock,
+    );
+    expect(ordinary.authorityFacts?.canReadRestricted).toBe(false);
+  });
+  it("allows self-origin outcomes and a broad notification topic while rejecting malformed outcomes", async () => {
     const policy = new BoardAccessPolicy();
     const context = create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "ada" }),
@@ -124,6 +164,24 @@ describe("MessageBoard gateway policy", () => {
     await expect(
       policy.authorize(authenticated, outcomeRequest(PostMessageSchema, context)),
     ).resolves.toBe(false);
+    await expect(
+      policy.authorize(
+        authenticated,
+        outcomeRequest(MessagePostedSchema, context, { missingOriginValue: true }),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      policy.authorize(
+        authenticated,
+        outcomeRequest(MessagePostedSchema, context, { missingCommandId: true }),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      policy.authorize(
+        authenticated,
+        outcomeRequest(MessagePostedSchema, context, { withIdFilter: true }),
+      ),
+    ).resolves.toBe(false);
     const unscoped = outcomeRequest(MessagePostedSchema, context);
     if (unscoped.kind !== "subscribe") throw new Error("Expected subscription request.");
     const target = create(TargetSchema, {
@@ -136,7 +194,7 @@ describe("MessageBoard gateway policy", () => {
         target,
         topic: create(TopicSchema, { target, context }),
       }),
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
   });
   it("composes publicAccess with request-derived actor context and no session fixture", async () => {
     const policy = new BoardAccessPolicy();
@@ -344,6 +402,22 @@ describe("MessageBoard gateway policy", () => {
     await expect(policy.authorize(principal, boardRequest("subscribe", "board-b"))).resolves.toBe(
       false,
     );
+  });
+
+  it("admits the two cumulative Projection targets through their reader filters", async () => {
+    const policy = new BoardAccessPolicy();
+    for (const schema of [AnnouncementBoardViewSchema, BoardStatisticsViewSchema]) {
+      const request = boardRequest("query", "board-a");
+      if (request.kind !== "query") throw new Error("Expected query request.");
+      const target = create(TargetSchema, { type: TypeUrls.derive(schema) });
+      await expect(
+        policy.authorize(principal, {
+          ...request,
+          query: create(QuerySchema, { target }),
+          target,
+        }),
+      ).resolves.toBe(true);
+    }
   });
 
   it("requires a compositional authorized-board guarantee for ALL and EITHER filters", async () => {
@@ -626,13 +700,30 @@ describe("MessageBoard gateway policy", () => {
       actor: create(UserIdSchema, { value: "ada" }),
       tenant: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
       timestamp: create(TimestampSchema, { seconds: 42n }),
+      authorityFacts: { canReadRestricted: false },
     });
     await expect(
       resolver.resolve(principal, boardRequest("query", "board-a"), clock),
     ).resolves.toEqual({
       actor: create(UserIdSchema, { value: "ada" }),
       timestamp: create(TimestampSchema, { seconds: 42n }),
+      authorityFacts: { canReadRestricted: false },
     });
+  });
+
+  it("refuses an empty public actor before creating a reader context", async () => {
+    const resolver = new BoardContextResolver();
+    const request = boardRequest("query", "general");
+    await expect(
+      resolver.resolve(
+        { id: "spine-gateway-public" },
+        {
+          ...request,
+          requestedContext: create(ActorContextSchema, { actor: create(UserIdSchema) }),
+        },
+        { now: () => create(TimestampSchema) },
+      ),
+    ).rejects.toThrow("Public demo actor is required.");
   });
 });
 
@@ -697,11 +788,16 @@ function outcomeRequest(
     tenant?: string | null;
     commandType?: string;
     fieldPath?: string[];
+    missingOriginValue?: boolean;
+    missingCommandId?: boolean;
+    withIdFilter?: boolean;
   } = {},
 ): IncomingRequest {
   const origin = create(OriginSchema, {
     message: create(CoreMessageIdSchema, {
-      id: AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-1" })),
+      id: changes.missingCommandId
+        ? undefined
+        : AnyPacker.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-1" })),
       typeUrl: changes.commandType ?? TypeUrls.derive(PostMessageSchema),
     }),
     actorContext: create(ActorContextSchema, {
@@ -721,6 +817,7 @@ function outcomeRequest(
     criterion: {
       case: "filters",
       value: create(TargetFiltersSchema, {
+        idFilter: changes.withIdFilter ? create(IdFilterSchema) : undefined,
         filter: [
           create(CompositeFilterSchema, {
             operator: CompositeFilter_CompositeOperator.ALL,
@@ -728,7 +825,9 @@ function outcomeRequest(
               create(FilterSchema, {
                 fieldPath: { fieldName: changes.fieldPath ?? ["context", "past_message"] },
                 operator: Filter_Operator.EQUAL,
-                value: AnyPacker.pack(OriginSchema, origin),
+                value: changes.missingOriginValue
+                  ? undefined
+                  : AnyPacker.pack(OriginSchema, origin),
               }),
             ],
           }),

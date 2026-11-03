@@ -19,6 +19,10 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { EventContext } from "@spine-event-engine/proto";
 import { EventRouting, Projection } from "@spine-event-engine/server";
+import {
+  registerSpineMetadata,
+  type SpineMetadata,
+} from "@spine-event-engine/server/spi/handler-registry";
 
 import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/entity-metadata/project_states_pb.js";
 import {
@@ -66,11 +70,13 @@ export const wave13OriginRouting = EventRouting.create<string>().route(
   (event) => [event.id],
 );
 
+let cachedOriginMetadata: SpineMetadata | undefined;
+
 export function createWave13OriginRegistry(): { readonly clear: () => void; readonly root: URL } {
   const root = mkdtempSync(join(tmpdir(), "spine-wave13-origin-registry-"));
   const directory = join(root, "generated/handler");
   const slot = `__spineWave13Origin_${crypto.randomUUID().replaceAll("-", "")}`;
-  const registry = {
+  const registry: SpineMetadata = cachedOriginMetadata ?? {
     receivers: [
       {
         receiverKind: "entity",
@@ -95,6 +101,8 @@ export function createWave13OriginRegistry(): { readonly clear: () => void; read
       },
     ],
   };
+  cachedOriginMetadata = registry;
+  registerSpineMetadata(registry, slot);
   mkdirSync(directory, { recursive: true });
   (globalThis as Record<string, unknown>)[slot] = registry;
   writeFileSync(

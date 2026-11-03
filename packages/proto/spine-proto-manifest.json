@@ -1,13 +1,14 @@
 {
   "formatVersion": 2,
   "packageName": "@spine-event-engine/proto",
-  "packageVersion": "2.0.0-snapshot.25",
+  "packageVersion": "2.0.0-snapshot.26",
   "protoFiles": [
     "grpc/health/v1/health.proto",
     "spine/auth/authenticated_subscription.proto",
     "spine/auth/authentication_service.proto",
     "spine/base/error.proto",
     "spine/base/field_path.proto",
+    "spine/client/app_query.proto",
     "spine/client/command_service.proto",
     "spine/client/entities.proto",
     "spine/client/filters.proto",
@@ -67,6 +68,7 @@
     "spine/auth/authentication_service.proto": "generated/spine/auth/authentication_service_pb.js",
     "spine/base/error.proto": "generated/spine/base/error_pb.js",
     "spine/base/field_path.proto": "generated/spine/base/field_path_pb.js",
+    "spine/client/app_query.proto": "generated/spine/client/app_query_pb.js",
     "spine/client/command_service.proto": "generated/spine/client/command_service_pb.js",
     "spine/client/entities.proto": "generated/spine/client/entities_pb.js",
     "spine/client/filters.proto": "generated/spine/client/filters_pb.js",
@@ -122,5 +124,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "d797f084-45d2-4856-a0de-c212f7b596c2"
+  "generationId": "59d5f830-a0dd-4178-b856-1265feff8e7e"
 }

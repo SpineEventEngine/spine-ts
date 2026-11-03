@@ -17,8 +17,9 @@ describe("release policy", () => {
     const workspace = parse(readFileSync(resolve(root, "pnpm-workspace.yaml"), "utf8"));
     const lockfile = parse(readFileSync(resolve(root, "pnpm-lock.yaml"), "utf8"));
 
-    expect(workspace.patchedDependencies).toBeUndefined();
-    expect(lockfile.patchedDependencies).toBeUndefined();
+    for (const patches of [workspace.patchedDependencies, lockfile.patchedDependencies]) {
+      expect(Object.keys(patches ?? {}).filter((name) => name.startsWith("sigstore@"))).toEqual([]);
+    }
     expect(existsSync(resolve(root, "patches/sigstore@4.1.1.patch"))).toBe(false);
   });
 

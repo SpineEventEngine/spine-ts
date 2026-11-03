@@ -176,6 +176,14 @@ describe("approved framework record sources", () => {
         required: false,
         validate: false,
       },
+      {
+        name: "reader",
+        number: 6,
+        type: "message:spine.client.SubscriptionReaderBinding",
+        presence: 1,
+        required: false,
+        validate: false,
+      },
     ]);
     expect(messageShape(GatewayAuthenticatedSubscriptionSchema).fields).toEqual([
       {
@@ -200,6 +208,14 @@ describe("approved framework record sources", () => {
         type: "message:google.protobuf.Timestamp",
         presence: 1,
         required: true,
+        validate: false,
+      },
+      {
+        name: "reader",
+        number: 4,
+        type: "message:spine.client.SubscriptionReaderBinding",
+        presence: 1,
+        required: false,
         validate: false,
       },
     ]);

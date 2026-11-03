@@ -109,6 +109,14 @@ describe("authored Proto style", () => {
     }
   });
 
+  it("accepts the App Query source role suffix for a domain fixture", () => {
+    expect(
+      fixtureProtoNameFailures(
+        "packages/server/test-fixtures/proto/repository-routing/project_queries.proto",
+      ),
+    ).toEqual([]);
+  });
+
   it("ignores unchanged example baseline style debt but rejects a modified example", () => {
     const root = protoStyleFixture();
     const path = join(root, "examples/todo/proto/spine/examples/todo/commands.proto");

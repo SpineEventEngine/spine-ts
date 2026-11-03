@@ -20,6 +20,10 @@ import {
 } from "@spine-event-engine/deployment/spi/backend-membership";
 import { SubscriptionSchema, SubscriptionUpdateSchema } from "@spine-event-engine/proto/client";
 import type { ILogLayer } from "loglayer";
+import {
+  snapshotTrustedReader,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
 
 import type { UnaryForwarder } from "./index.js";
 import type {
@@ -78,10 +82,29 @@ export interface DynamicUnaryOptions {
 }
 
 /**
+ * Identifies one native child attempt and every ID it exposes to forwarding.
+ */
+interface ChildReaderAssociation {
+  readonly logicalId: string;
+  readonly initialId: string;
+  readonly ids: Set<string>;
+}
+
+/**
  * Adapts Gateway unary operations to the deployment-owned membership kernel.
  * Durable logical ownership remains in the Gateway's subscription bindings.
  */
 export class DynamicUnaryForwarder implements UnaryForwarder {
+  readonly #readers = new Map<string, TrustedReaderContext>();
+
+  readonly #children = new Map<string, Set<string>>();
+
+  readonly #associationsById = new Map<string, ChildReaderAssociation>();
+
+  readonly #pendingAssociations = new WeakMap<Uint8Array, ChildReaderAssociation>();
+
+  readonly #activeAssociations = new WeakMap<BackendSubscriptionEnvelope, ChildReaderAssociation>();
+
   readonly #kernel: BackendMembershipKernel<
     ApplicationNode,
     Parameters<UnaryForwarder["forward"]>[0],
@@ -107,14 +130,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       BackendSubscriptionEnvelope,
       SubscriptionUpdateWire
     >({
-      create: async (node, signal) =>
-        DynamicUnaryForwarder.memberClient(await options.create(node, signal)),
+      create: async (node, signal) => this.memberClient(await options.create(node, signal)),
       memberKey: (node) => node.id,
       sameMember: (left, right) =>
         left.endpoint === right.endpoint && left.tlsServerName === right.tlsServerName,
       definitionKey: (definition) => DynamicUnaryForwarder.definitionKey(definition),
-      childDefinition: (definition, node) =>
-        DynamicUnaryForwarder.childDefinition(definition, node),
+      childDefinition: (definition, node) => this.childDefinition(definition, node),
       childSize: (child) => child.bytes.byteLength,
       isActivationAck: (update) => DynamicUnaryForwarder.isActivationAck(update),
       logicalActivationAck: (definition, childAck) =>
@@ -129,12 +150,32 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   }
 
   /**
+   * Records the native child definition and its admitted logical reader.
+   *
+   * @param definition The serialized logical subscription definition.
+   * @param node Selected managed application node.
+   * @returns The child subscription definition.
+   */
+  private childDefinition(definition: Uint8Array, node: ApplicationNode): Uint8Array {
+    const child = DynamicUnaryForwarder.childDefinition(definition, node);
+    const logicalId = DynamicUnaryForwarder.definitionKey(definition);
+    const reader = this.#readers.get(logicalId ?? "");
+    const childId = DynamicUnaryForwarder.definitionKey(child);
+    if (logicalId !== undefined && childId !== undefined) {
+      const association = { logicalId, initialId: childId, ids: new Set<string>() };
+      this.#pendingAssociations.set(child, association);
+      this.associateChildId(association, childId, reader);
+    }
+    return child;
+  }
+
+  /**
    * Builds membership operations for one connected gateway client.
    *
    * @param client The connected gateway client.
    * @returns The member's forwarding and subscription operations.
    */
-  private static memberClient(
+  private memberClient(
     client: DynamicUnaryClient,
   ): BackendMemberClient<
     Parameters<UnaryForwarder["forward"]>[0],
@@ -143,23 +184,148 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   > {
     return {
       forward: (request) => client.forward(request),
-      subscribe: (definition, signal) =>
-        client.subscribe({ kind: "public-subscription", bytes: definition.slice() }, signal),
+      subscribe: (definition, signal) => this.subscribeChild(client, definition, signal),
       activate: (child, updates, signal) =>
         client.activate(
           {
-            wire: { kind: "backend-subscription-envelope", bytes: child.bytes.slice() },
+            wire: {
+              kind: "backend-subscription-envelope",
+              bytes: child.bytes.slice(),
+              ...this.readerField(child.bytes),
+            },
             updates,
           },
           signal,
         ),
-      dispose: (child, signal) =>
-        client.dispose(
-          { kind: "backend-subscription-envelope", bytes: child.bytes.slice() },
-          signal,
-        ),
+      dispose: (child, signal) => this.disposeChild(client, child, signal),
       close: () => client.close(),
     };
+  }
+
+  /**
+   * Removes one native child and then retires its reader associations.
+   *
+   * @param client Connected member client that created this child.
+   * @param child Backend-issued child envelope.
+   * @param signal Cancellation signal for native disposal.
+   * @returns Completion after native disposal and reader cleanup.
+   */
+  private async disposeChild(
+    client: DynamicUnaryClient,
+    child: BackendSubscriptionEnvelope,
+    signal: AbortSignal,
+  ): Promise<void> {
+    await client.dispose(
+      {
+        kind: "backend-subscription-envelope",
+        bytes: child.bytes.slice(),
+        ...this.readerField(child.bytes),
+      },
+      signal,
+    );
+    const association = this.#activeAssociations.get(child);
+    if (association !== undefined) this.retireChild(association);
+  }
+
+  /**
+   * Starts a native child and tracks an assigned ID for its admitted reader.
+   *
+   * @param client Native subscription client.
+   * @param definition The serialized subscription definition.
+   * @param signal The cancellation signal for this operation.
+   * @returns The managed-child subscription.
+   */
+  private subscribeChild(client: DynamicUnaryClient, definition: Uint8Array, signal: AbortSignal) {
+    const reader = this.readerField(definition);
+    const association = this.#pendingAssociations.get(definition);
+    const result = client.subscribe(
+      { kind: "public-subscription", bytes: definition.slice(), ...reader },
+      signal,
+    );
+    return result.then(
+      (child) => {
+        if (association !== undefined) {
+          this.#activeAssociations.set(child, association);
+          this.rememberProducedChild(association, child.bytes);
+        }
+        return child;
+      },
+      (error: unknown) => {
+        if (association !== undefined) this.retireChild(association);
+        throw error;
+      },
+    );
+  }
+
+  /**
+   * Finds detached reader facts for one retained logical or native child definition.
+   *
+   * @param bytes The serialized message bytes.
+   * @returns The persisted reader binding field.
+   */
+  private readerField(bytes: Uint8Array): { readonly reader?: TrustedReaderContext } {
+    let id: string | undefined;
+    try {
+      id = DynamicUnaryForwarder.definitionKey(bytes);
+    } catch {
+      return {};
+    }
+    const reader = this.#readers.get(id ?? "");
+    return reader === undefined ? {} : { reader: snapshotTrustedReader(reader) };
+  }
+
+  /**
+   * Records a backend-assigned child ID to its admitted logical reader.
+   *
+   * @param association Native child attempt that produced the backend ID.
+   * @param produced Backend update produced for a subscription.
+   */
+  private rememberProducedChild(association: ChildReaderAssociation, produced: Uint8Array): void {
+    if (this.#associationsById.get(association.initialId) !== association) return;
+    let producedId: string | undefined;
+    try {
+      producedId = DynamicUnaryForwarder.definitionKey(produced);
+    } catch {
+      return;
+    }
+    if (producedId === undefined) return;
+    this.associateChildId(association, producedId, this.#readers.get(association.initialId));
+  }
+
+  /**
+   * Records one child ID with its attempt and current logical reader.
+   *
+   * @param association Native child attempt that introduced the ID.
+   * @param childId Initial or backend-issued child ID.
+   * @param reader Current verified reader facts, if supplied.
+   */
+  private associateChildId(
+    association: ChildReaderAssociation,
+    childId: string,
+    reader: TrustedReaderContext | undefined,
+  ): void {
+    association.ids.add(childId);
+    const children = this.#children.get(association.logicalId) ?? new Set<string>();
+    children.add(childId);
+    this.#children.set(association.logicalId, children);
+    this.#associationsById.set(childId, association);
+    if (reader !== undefined) this.#readers.set(childId, reader);
+  }
+
+  /**
+   * Removes only IDs still associated with this retired child attempt.
+   *
+   * @param association Native child attempt after successful disposal.
+   */
+  private retireChild(association: ChildReaderAssociation): void {
+    const children = this.#children.get(association.logicalId);
+    for (const id of association.ids) {
+      if (this.#associationsById.get(id) !== association) continue;
+      this.#associationsById.delete(id);
+      this.#readers.delete(id);
+      children?.delete(id);
+    }
+    if (children?.size === 0) this.#children.delete(association.logicalId);
   }
 
   /**
@@ -217,7 +383,11 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns Completion of backend cleanup.
    */
   close(): Promise<void> {
-    return this.#kernel.close();
+    return this.#kernel.close().finally(() => {
+      this.#readers.clear();
+      this.#children.clear();
+      this.#associationsById.clear();
+    });
   }
 
   /**
@@ -238,6 +408,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       (!Number.isSafeInteger(maxBackendEnvelopeBytes) || maxBackendEnvelopeBytes < 1)
     )
       throw new RangeError("maxBackendEnvelopeBytes must be a positive safe integer.");
+    this.rememberReader(request);
     return this.#kernel
       .subscribe(request.bytes, signal, maxBackendEnvelopeBytes)
       .catch((error: unknown) => DynamicUnaryForwarder.#gatewayError(error));
@@ -259,6 +430,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       (!Number.isSafeInteger(maxBackendEnvelopeBytes) || maxBackendEnvelopeBytes < 1)
     )
       throw new RangeError("maxBackendEnvelopeBytes must be a positive safe integer.");
+    this.rememberReader(request);
     await this.#kernel
       .rehydrate(request.bytes, maxBackendEnvelopeBytes)
       .catch((error: unknown) => DynamicUnaryForwarder.#gatewayError(error));
@@ -270,14 +442,14 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @param wire Supplies the public subscription wire.
    * @param updates Receives relayed subscription updates.
    * @param signal Cancels update relay.
-   * @returns Completion after cancellation; rejects on unexpected child failure, possibly
-   * including bounded cleanup failure.
+   * @returns Completion after cancellation; rejects on unexpected child or bounded cleanup failure.
    */
   activateDefinition(
     wire: PublicSubscriptionWire,
     updates: SubscriptionUpdateSink,
     signal: AbortSignal,
   ): Promise<void> {
+    this.rememberReader(wire);
     return this.#kernel.activate(wire.bytes, updates, signal);
   }
 
@@ -289,7 +461,31 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns Completion of child cleanup.
    */
   cancelDefinition(wire: PublicSubscriptionWire, signal: AbortSignal): Promise<void> {
-    return this.#kernel.cancel(wire.bytes, signal);
+    this.rememberReader(wire);
+    return this.#kernel.cancel(wire.bytes, signal).then(() => {
+      const id = DynamicUnaryForwarder.definitionKey(wire.bytes);
+      if (id === undefined) return;
+      this.#readers.delete(id);
+      for (const childId of this.#children.get(id) ?? []) {
+        this.#readers.delete(childId);
+        this.#associationsById.delete(childId);
+      }
+      this.#children.delete(id);
+    });
+  }
+
+  /**
+   * Updates current reader facts for a retained definition and its native children.
+   *
+   * @param wire The admitted definition with current verified reader facts.
+   */
+  private rememberReader(wire: PublicSubscriptionWire): void {
+    if (wire.reader === undefined) return;
+    const id = DynamicUnaryForwarder.definitionKey(wire.bytes);
+    if (id === undefined) return;
+    const reader = snapshotTrustedReader(wire.reader);
+    this.#readers.set(id, reader);
+    for (const childId of this.#children.get(id) ?? []) this.#readers.set(childId, reader);
   }
 
   /**
@@ -329,6 +525,11 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     return toBinary(SubscriptionSchema, subscription);
   }
 
+  /**
+   * Sanitizes a gateway failure before returning it to the caller.
+   *
+   * @param error The failure being classified or propagated.
+   */
   static #gatewayError(error: unknown): never {
     if (error instanceof Error && error.message === "backend membership is unavailable.")
       throw new Error("Gateway backend is absent.");

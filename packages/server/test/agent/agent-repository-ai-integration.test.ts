@@ -13,7 +13,6 @@
  */
 
 import { create, equals, isMessage } from "@bufbuild/protobuf";
-import { rmSync } from "node:fs";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type AiScope } from "@spine-event-engine/ai";
 import { createBackendRegistration } from "@spine-event-engine/ai/spi/adapter";
@@ -847,9 +846,9 @@ describe("Agent repository source integration", () => {
       .persistSystemEvents()
       .add(followupRepository())
       .build();
-    const siblingRegistry = serverStatusRegistry();
+    serverStatusRegistry();
     const sibling = await BoundedContext.singleTenant("SiblingDuringAgentClose")
-      .withGeneratedRegistryRoot(siblingRegistry.root)
+
       .add(ServerStatusProjection)
       .build();
     const siblingHandler = vi.spyOn(ServerStatusProjection.prototype, "onServerStarted");
@@ -893,7 +892,6 @@ describe("Agent repository source integration", () => {
       observer.close();
       siblingHandler.mockRestore();
       await sibling.close();
-      rmSync(siblingRegistry.directory, { recursive: true, force: true });
       release.resolve(undefined);
       FollowupAgent.gate = undefined;
       await context.close();

@@ -1,0 +1,14 @@
+diff --git a/dist/lib/utils/fs.js b/dist/lib/utils/fs.js
+index 956605e164ba166e21da2868672e0c744ba6e95f..0342ae5cc055fe940d8dcf71e0f4c580f60d4075 100644
+--- a/dist/lib/utils/fs.js
++++ b/dist/lib/utils/fs.js
+@@ -208,7 +208,8 @@ export function glob(pattern, root, options = {}) {
+                 !shouldIncludeNodeModules) {
+                 return false;
+             }
+-            return mini.set.some((row) => mini.matchOne(childPath, row, /* partial */ true));
++            const partialMatch = mini.match(childPath.join("/"), /* partial */ true);
++            return mini.negate ? !partialMatch : partialMatch;
+         },
+         matchDirectories: options.includeDirectories,
+         followSymlinks: options.followSymlinks,

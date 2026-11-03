@@ -97,6 +97,40 @@ function commandServiceMethod(set: DescriptorSet) {
 }
 
 describe("frozen Spine descriptor compatibility", () => {
+  it("adds Execute without changing QueryService.Read or its envelope fields", () => {
+    const service = requireFirst(
+      requireFile(descriptorSet, "spine/client/query_service.proto").service,
+      "QueryService descriptor",
+    );
+    expect(
+      service.method.map(({ name, inputType, outputType }) => [name, inputType, outputType]),
+    ).toEqual([
+      ["Read", ".spine.client.Query", ".spine.client.QueryResponse"],
+      ["Execute", ".spine.client.AppQuery", ".spine.client.AppQueryResponse"],
+    ]);
+    const envelopes = requireFile(descriptorSet, "spine/client/app_query.proto");
+    expect(
+      requireMessage(envelopes, "AppQuery").field.map(({ name, number, typeName }) => [
+        name,
+        number,
+        typeName,
+      ]),
+    ).toEqual([
+      ["id", 1, ".spine.client.QueryId"],
+      ["message", 2, ".google.protobuf.Any"],
+      ["context", 3, ".spine.core.ActorContext"],
+    ]);
+    expect(
+      requireMessage(envelopes, "AppQueryResponse").field.map(({ name, number, typeName }) => [
+        name,
+        number,
+        typeName,
+      ]),
+    ).toEqual([
+      ["response", 1, ".spine.core.Response"],
+      ["message", 2, ".google.protobuf.Any"],
+    ]);
+  });
   it("retains the Java option fields and adds TypeScript fields at their pinned numbers", () => {
     const options = requireFile(descriptorSet, "spine/options.proto");
     const everyIs = requireMessage(options, "EveryIsOption");

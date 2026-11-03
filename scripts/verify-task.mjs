@@ -7,6 +7,7 @@ const nativeNodeTestFiles = new Set(
     "packages/testing/test/black-box.node.test.mjs",
     "packages/testing/test/black-box.lifecycle.node.test.mjs",
     "scripts/check-log-containment.test.mjs",
+    "scripts/dependency-compatibility.test.mjs",
     "compatibility-tests/jvm/wire-compatibility.test.mjs",
   ].map((path) => resolve(path)),
 );
@@ -89,7 +90,7 @@ export function classifyTaskChanges(paths) {
  */
 export function taskGateCommands(classification) {
   return [
-    ...(classification.proto ? ["proto:generate"] : []),
+    ...(classification.proto ? ["proto:check-fixtures", "proto:generate"] : []),
     "typecheck:build:generated",
     "typecheck:tooling",
     "eslint",

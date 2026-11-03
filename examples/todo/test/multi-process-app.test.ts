@@ -13,6 +13,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
 
 interface ManagedRunOptions {
   createServer(endpoint: { readonly host: string; readonly port: number }): Promise<unknown>;
@@ -23,6 +24,8 @@ const calls = vi.hoisted(() => ({
   coordinator: vi.fn(),
   replica: { server: {}, synchronize: vi.fn(() => Promise.resolve()) },
   createReplica: vi.fn(),
+  environmentUse: vi.fn(),
+  environmentWhen: vi.fn(),
   run: vi.fn(),
   settings: {
     deliveryServerUrl: "http://127.0.0.1:8484",
@@ -35,7 +38,9 @@ const calls = vi.hoisted(() => ({
 }));
 
 vi.mock("@spine-event-engine/server", () => ({
+  EnvironmentType: { Production: "production" },
   ManagedServerApplication: { run: calls.run },
+  ServerEnvironment: { when: calls.environmentWhen },
 }));
 
 describe("To-Do multi-process app entry selection", () => {
@@ -43,6 +48,7 @@ describe("To-Do multi-process app entry selection", () => {
 
   beforeEach(() => {
     calls.createReplica.mockResolvedValue(calls.replica);
+    calls.environmentWhen.mockReturnValue({ use: calls.environmentUse });
   });
 
   afterEach(() => {
@@ -51,7 +57,33 @@ describe("To-Do multi-process app entry selection", () => {
     vi.resetModules();
   });
 
-  it("creates and synchronizes a replica before the parent owns terminal shutdown", async () => {
+  it("configures production metadata before the parent starts managed coordination", async () => {
+    calls.run.mockImplementationOnce(() => {
+      expect(calls.environmentWhen).toHaveBeenCalledWith("production");
+      expect(calls.environmentUse).toHaveBeenCalledOnce();
+      return Promise.resolve({ ready: true, close: vi.fn(() => Promise.resolve()) });
+    });
+    vi.doMock("../src/multi-process-coordinator.js", () => ({
+      runTodoCoordinator: calls.coordinator,
+    }));
+    vi.doMock("../src/multi-process-replica.js", () => ({
+      createTodoReplica: calls.createReplica,
+    }));
+    vi.doMock("../src/multi-process-settings.js", () => ({
+      readMultiProcessSettings: vi.fn(() => calls.settings),
+    }));
+
+    await import("../src/multi-process-app.js");
+
+    const configured = calls.environmentUse.mock.calls[0]?.[0] as {
+      readonly typeRegistry?: {
+        findByFullName(name: string): { readonly schema: unknown } | undefined;
+      };
+    };
+    expect(configured.typeRegistry?.findByFullName(TaskSchema.typeName)?.schema).toBe(TaskSchema);
+  });
+
+  it("creates and synchronizes a replica before the parent handles terminal shutdown", async () => {
     calls.run.mockImplementationOnce(async (options: ManagedRunOptions) => {
       await options.createServer({ host: "127.0.0.2", port: 9000 });
       await options.synchronize?.();
@@ -100,5 +132,6 @@ describe("To-Do multi-process app entry selection", () => {
     await import("../src/multi-process-app.js");
 
     expect(calls.coordinator).not.toHaveBeenCalled();
+    expect(calls.environmentUse).not.toHaveBeenCalled();
   });
 });

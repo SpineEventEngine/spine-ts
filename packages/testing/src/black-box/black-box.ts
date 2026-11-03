@@ -29,6 +29,8 @@ import {
   type SubscriptionActivationOptions,
 } from "@spine-event-engine/client-node";
 import { SignalEnvelopes } from "@spine-event-engine/core";
+import type { AppQueryResponseFor } from "@spine-event-engine/core";
+import type { AppQueryClientResponse } from "@spine-event-engine/client-node";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -251,7 +253,12 @@ export class BlackBox {
 
   readonly #waits = new AbortController();
 
-  readonly #subscriptions = new Set<{ cancel(): Promise<void> }>();
+  readonly #subscriptions = new Set<{
+    /**
+     * Cancels this tracked test subscription.
+     */
+    cancel(): Promise<void>;
+  }>();
 
   readonly #commands: Command[] = [];
 
@@ -552,7 +559,14 @@ export class BlackBox {
    * @param handle The cancelable handle to track.
    * @returns The same handle registered for cleanup.
    */
-  #track<Handle extends { cancel(): Promise<void> }>(handle: Handle): Handle {
+  #track<
+    Handle extends {
+      /**
+       * Cancels the tracked handle during BlackBox cleanup.
+       */
+      cancel(): Promise<void>;
+    },
+  >(handle: Handle): Handle {
     this.#assertOpen();
     this.#subscriptions.add(handle);
     return handle;
@@ -563,7 +577,12 @@ export class BlackBox {
    *
    * @param handle The cancelable handle to track.
    */
-  #release(handle: { cancel(): Promise<void> }): void {
+  #release(handle: {
+    /**
+     * Cancels the test handle when its scope closes.
+     */
+    cancel(): Promise<void>;
+  }): void {
     this.#subscriptions.delete(handle);
   }
 
@@ -665,7 +684,12 @@ export interface BlackBoxTestAccess {
   track(
     blackBox: BlackBox,
     handle: BlackBoxTestHandle,
-  ): AsyncIterable<unknown> & { cancel(): Promise<void> };
+  ): AsyncIterable<unknown> & {
+    /**
+     * Cancels the tracked stream and releases its test handle.
+     */
+    cancel(): Promise<void>;
+  };
 
   /**
    * Opens a BlackBox through supplied lifecycle seams for startup regression tests.
@@ -711,7 +735,12 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
   track(
     blackBox: BlackBox,
     handle: BlackBoxTestHandle,
-  ): AsyncIterable<unknown> & { cancel(): Promise<void> } {
+  ): AsyncIterable<unknown> & {
+    /**
+     * Cancels the tracked stream and releases its test handle.
+     */
+    cancel(): Promise<void>;
+  } {
     const tracked = new Tracked(handle, () => {
       BlackBoxAccess.get(blackBox).onRelease(tracked);
     });
@@ -813,22 +842,42 @@ export interface BlackBoxTestResources {
   /**
    * Closes the test client.
    */
-  readonly client: { close(): Promise<void> };
+  readonly client: {
+    /**
+     * Closes the test client.
+     */
+    close(): Promise<void>;
+  };
 
   /**
    * Closes the test server.
    */
-  readonly server: { close(): Promise<void> };
+  readonly server: {
+    /**
+     * Closes the test server.
+     */
+    close(): Promise<void>;
+  };
 
   /**
    * Lists subscriptions to close with the BlackBox.
    */
-  readonly subscriptions?: readonly { cancel(): Promise<void> }[];
+  readonly subscriptions?: readonly {
+    /**
+     * Cancels a test subscription during cleanup.
+     */
+    cancel(): Promise<void>;
+  }[];
 
   /**
    * Stops produced-signal observation during BlackBox cleanup.
    */
-  readonly observation?: { close(): void };
+  readonly observation?: {
+    /**
+     * Stops produced-signal observation.
+     */
+    close(): void;
+  };
 }
 
 /**
@@ -856,7 +905,12 @@ export interface BlackBoxTestStartup {
    *
    * @returns A closeable test server.
    */
-  readonly start: () => Promise<{ close(): Promise<void> }>;
+  readonly start: () => Promise<{
+    /**
+     * Closes the started test server.
+     */
+    close(): Promise<void>;
+  }>;
 
   /**
    * Connects the test client to the started server.
@@ -864,7 +918,17 @@ export interface BlackBoxTestStartup {
    * @param server The server returned by start.
    * @returns A closeable test client.
    */
-  readonly connect: (server: { close(): Promise<void> }) => { close(): Promise<void> };
+  readonly connect: (server: {
+    /**
+     * Closes the started server.
+     */
+    close(): Promise<void>;
+  }) => {
+    /**
+     * Closes the connected test client.
+     */
+    close(): Promise<void>;
+  };
 }
 
 /**
@@ -992,6 +1056,22 @@ class Request implements BlackBoxScope {
   ) {
     this.#internals.assertOpen();
     return this.#request.send(query, options);
+  }
+
+  /**
+   * Executes a paired generated App Query through this actor's client scope.
+   *
+   * @typeParam Q Generated application request with a paired result.
+   * @param query Generated domain request.
+   * @param options Optional cancellation signal.
+   * @returns Wire status with zero or one decoded results.
+   */
+  query<Q extends Message>(
+    query: Q & (AppQueryResponseFor<Q> extends never ? never : unknown),
+    options?: ClientOperationOptions,
+  ): Promise<AppQueryClientResponse<Q>> {
+    this.#internals.assertOpen();
+    return this.#request.query(query, options);
   }
 
   /**

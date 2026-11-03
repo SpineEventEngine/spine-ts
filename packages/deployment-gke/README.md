@@ -153,7 +153,7 @@ sessions and may supply named durable subscription bindings; public mode
 supplies `publicAccess: true`, and the framework owns process-local bindings.
 Both modes supply authorization, trusted actor-context resolution, allowed
 origins, a clock, and a type registry. The complete
-[server browser guide](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/README.md#browser-gateway-migration) and
+[server browser guide](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/README.md#browser-gateway-setup) and
 [browser authentication guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explain those application integration points.
 
@@ -252,6 +252,11 @@ export const ApplicationEntrypoint = Object.freeze({
 The [complete application entrypoint](examples/application.ts) receives its
 typed bounded-context, service, and resource configuration as
 `ApplicationOptions`.
+Before invoking it in a production Coordinator, configure that process's
+`ServerEnvironment` with the application's Proto model registry. Each child
+configures its own environment inside `createServer`. The repository's
+`examples/todo/src/multi-process-app.ts` shows the parent configuration using
+its actual `todoProtoModule`.
 
 The ConfigMap in the template exposes matching service and port values as a
 simple convention. Adapt the names or use another configuration loader; Spine

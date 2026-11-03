@@ -29,6 +29,36 @@ const scope = {
 const page = { entries: [], hasMore: false };
 
 describe("live Agent reads", () => {
+  it("keeps an outward history policy inside the admitted read lifetime", async () => {
+    let entered!: () => void;
+    let release!: () => void;
+    const policyEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const policyGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const reads = new AgentLiveReadRuntime(scope, new AgentLiveBudget({ recordedReads: 1 }));
+    const result = reads.history(
+      scope,
+      { pageSize: 1 },
+      () => Promise.resolve(page),
+      undefined,
+      async () => {
+        entered();
+        await policyGate;
+        return { items: [] };
+      },
+    );
+    await policyEntered;
+    expect(() => {
+      reads.finish();
+    }).toThrow("still in progress");
+    release();
+    await expect(result).resolves.toEqual({ items: [] });
+    reads.finish();
+  });
+
   it("serializes provider reads and charges the shared bound before a second callback", async () => {
     let releaseFirst: (() => void) | undefined;
     const firstGate = new Promise<void>((resolve) => {

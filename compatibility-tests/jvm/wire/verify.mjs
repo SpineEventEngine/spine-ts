@@ -4,6 +4,7 @@ import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { prepareFixture } from "../fixture.mjs";
+import { restoreUpstreamSource } from "../../../scripts/verify-proto-sources.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const expectedServices = [
@@ -104,6 +105,10 @@ async function compareProtoClosure(source) {
   const missingWireFiles = [];
   const digests = [];
   const archiveFiles = await archiveProtoFiles(source);
+  const sourceManifest = JSON.parse(
+    await readFile(resolve(root, "packages/proto/proto/spine-sources.json"), "utf8"),
+  );
+  const sources = new Map(sourceManifest.sources.map((entry) => [entry.localPath, entry]));
   while (remaining.length > 0) {
     const file = remaining.pop();
     if (visited.has(file)) continue;
@@ -117,6 +122,7 @@ async function compareProtoClosure(source) {
         `file incompatibility: unable to read ${file}: ${error.code ?? error.message}`,
       );
     }
+    const restored = restoreFrozenProto(file, repository, sources);
     const archivePaths = archiveFiles.get(file);
     if (archivePaths === undefined) {
       if (annotationOnlyImport(file))
@@ -124,11 +130,11 @@ async function compareProtoClosure(source) {
       else missingWireFiles.push(file);
     } else {
       const upstream = await readArchiveProto(archivePaths, file);
-      if (!upstream.equals(repository))
+      if (!upstream.equals(restored))
         throw new Error(`file incompatibility: bytes differ for ${file}`);
       digests.push(`${file}:${createHash("sha256").update(upstream).digest("hex")}`);
     }
-    for (const imported of importsOf(repository)) {
+    for (const imported of importsOf(restored)) {
       const reason = imported.startsWith("google/protobuf/") ? "Google well-known type" : undefined;
       if (reason !== undefined) excludedImports[imported] = reason;
       else remaining.push(imported);
@@ -154,6 +160,28 @@ async function compareProtoClosure(source) {
       `file incompatibility: missing wire-bearing imports (${inventory.missingWireFiles.length}): ${inventory.missingWireFiles.join(", ")}; compared=${digests.length}; annotation-only=${Object.keys(inventory.annotationOnlyExternals).length}; wkt=${Object.keys(inventory.excludedImports).length}`,
     );
   return inventory;
+}
+
+/**
+ * Reverses only manifest-approved local edits before comparing frozen source bytes.
+ *
+ * @param file Proto path relative to the package's Proto root.
+ * @param repository Local source bytes.
+ * @param sources Pinned upstream source entries indexed by local path.
+ * @returns Original upstream bytes for archive comparison and import traversal.
+ */
+export function restoreFrozenProto(file, repository, sources) {
+  const path = `packages/proto/proto/${file}`;
+  const entry = sources.get(path);
+  if (entry === undefined) throw new Error(`file incompatibility: missing source manifest for ${file}`);
+  const local = createHash("sha256").update(repository).digest("hex");
+  if (local !== (entry.localAdaptation?.sha256 ?? entry.sha256))
+    throw new Error(`file incompatibility: local checksum differs for ${file}`);
+  const restored = restoreUpstreamSource(entry, repository);
+  const upstream = createHash("sha256").update(restored).digest("hex");
+  if (upstream !== entry.sha256)
+    throw new Error(`file incompatibility: upstream checksum differs for ${file}`);
+  return restored;
 }
 
 function annotationOnlyImport(file) {

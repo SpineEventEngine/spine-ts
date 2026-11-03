@@ -15,8 +15,23 @@
 import { randomUUID } from "node:crypto";
 import type { ILogLayer } from "loglayer";
 
-import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
-import { clone, create, ScalarType, type DescField, type Message } from "@bufbuild/protobuf";
+import { Code, ConnectError, type ConnectRouter, type HandlerContext } from "@connectrpc/connect";
+import {
+  clone,
+  create,
+  equals,
+  toBinary,
+  ScalarType,
+  type DescField,
+  type Message,
+} from "@bufbuild/protobuf";
+import type { ReaderProofVerifier } from "@spine-event-engine/core/spi/reader-forwarding";
+import {
+  ReaderIdentities,
+  snapshotTrustedReader,
+  type ReaderIdentity,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import {
   AnySchema,
@@ -32,9 +47,10 @@ import {
   UInt64ValueSchema,
 } from "@bufbuild/protobuf/wkt";
 import type { MessageSchema } from "@spine-event-engine/core";
-import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
+import { TypeUrls, AnyPacker, Validate } from "@spine-event-engine/core";
 import {
   CommandIdSchema,
+  CommandValidationError as CommandValidationErrorCode,
   type Command,
   type TenantId,
   TenantIdSchema,
@@ -57,6 +73,7 @@ import {
   EntityStateWithVersionSchema as EntityStateVersionSchema,
   OrderBy_Direction,
   QueryResponseSchema,
+  QuerySchema,
   type OrderBy,
   type Query,
   type QueryResponse,
@@ -95,15 +112,49 @@ import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import { type StandReadResult } from "../stand/stand.js";
 import { QueryReader } from "./query-reader.js";
+import { AppQueryExecution } from "./app-query-execution.js";
+import { ReadRequestStatus } from "./read-request-status.js";
+import { TrustedReaderIngress, type DirectReaderAuthenticator } from "./trusted-reader-ingress.js";
 import { RegisteredTargets } from "./registered-targets.js";
 import { emitServerError, emitServerWarning } from "../server/server-log.js";
+import { ServerEnvironment } from "../server/server-environment.js";
 import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
-import { type StandSubscriptionRegistry } from "../stand/subscription-registry.js";
+import {
+  type StandSubscriptionEntry,
+  type StandSubscriptionRegistry,
+} from "../stand/subscription-registry.js";
+import { ReadSideFilterEngine } from "../stand/read-side-filter-engine.js";
+import {
+  SubscriptionReadFilters,
+  type SubscriptionReadWork,
+} from "../stand/subscription-read-filters.js";
+import type { ReadSideContext } from "../stand/read-side-filter.js";
 
 const serviceLoggers = new WeakMap<SpineServices, ILogLayer>();
 const serviceInstances = new WeakSet<SpineServices>();
+const serviceAppQueries = new WeakMap<SpineServices, AppQueryExecution>();
+const serviceReadFilters = new WeakMap<SpineServices, ReadSideFilterEngine>();
 
+/**
+ * Framework-only hooks for installing service read policies and App Query routing.
+ */
 interface SpineServicesAccess {
+  /**
+   * Attaches one Server's gRPC read policy before accepting requests.
+   *
+   * @param services Prepared service adapter.
+   * @param filters Registered policy engine.
+   */
+  installReadFilters(services: SpineServices, filters: ReadSideFilterEngine): void;
+
+  /**
+   * Attaches the Server-selected App Query capability before listener binding.
+   *
+   * @param services Adapter created for this Server.
+   * @param queries Exact-class handler table prepared by the Server.
+   */
+  installAppQueries(services: SpineServices, queries: AppQueryExecution): void;
+
   /**
    * Sets the server logger for service diagnostics.
    *
@@ -136,7 +187,8 @@ interface SpineServicesAccess {
  * Queries allow at most 100 IDs, 16 simple filters, 8 composites, and 8 orderings.
  * Use proto column names such as `open_task_count`, not generated TS local names
  * such as `openTaskCount`. Invalid columns, values, operators, and query shapes
- * return stable `INVALID_QUERY` responses before Stand storage is read.
+ * reject with structured `INVALID_ARGUMENT` and `INVALID_QUERY` details before
+ * Stand storage is read.
  *
  * `SubscriptionService.Subscribe` accepts known state targets with
  * `include_all` or validated ID/field filters and known event targets exposed
@@ -152,7 +204,9 @@ interface SpineServicesAccess {
  * rejected-command payload forms and stack trace from their client-facing
  * context.
  * Application code remains on generated domain event messages through handler
- * dispatch. Unknown or duplicate activation IDs complete without updates.
+ * dispatch. Unknown or expired activation IDs fail with `NOT_FOUND` and
+ * `UNKNOWN_SUBSCRIPTION` details. A duplicate active activation completes
+ * without another update stream.
  * Cancellation of unknown or already-cleaned IDs returns OK after admission to
  * the bounded unknown-removal pool.
  */
@@ -173,9 +227,13 @@ export class SpineServices {
 
   readonly #unknownRemovals = new Set<string>();
 
-  readonly #queueLimit: number;
+  readonly #queueCapacity: number;
 
   readonly #subscriptionLimit: number;
+
+  readonly #readerAdmission: SpineServicesOptions["readerAdmission"];
+
+  readonly #readMaxBytes: number;
 
   /**
    * Creates service adapters over built bounded contexts.
@@ -185,12 +243,12 @@ export class SpineServices {
   constructor(options: SpineServicesOptions) {
     serviceInstances.add(this);
     this.#contexts = Object.freeze([...options.contexts]);
-    this.#queueLimit = ServiceValues.positiveInteger(
-      options.queueLimit ?? ServiceValues.defaultQueueLimit,
-    );
+    this.#queueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
     this.#subscriptionLimit = ServiceValues.subscriptionLimit(
       options.subscriptionLimit ?? ServiceValues.defaultSubscriptionLimit,
     );
+    this.#readerAdmission = options.readerAdmission;
+    this.#readMaxBytes = options.readMaxBytes ?? 4_194_304;
     this.#registerSignalRoutes();
     this.#registerStateRoutes(new RegisteredTargets(this.#contexts));
   }
@@ -249,18 +307,170 @@ export class SpineServices {
    * @returns Returns the registered router.
    */
   register(router: ConnectRouter): ConnectRouter {
+    this.#registerUnary(router);
+    this.#registerSubscriptions(router);
+    return router;
+  }
+
+  /**
+   * Registers admitted Command and Query routes.
+   *
+   * @param router Connect service router.
+   */
+  #registerUnary(router: ConnectRouter): void {
     router.service(CommandService, {
-      post: (command) => this.#post(command),
+      post: async (command, context) => {
+        await this.#admit(
+          "spine.client.CommandService",
+          "Post",
+          toBinary(CommandService.method.post.input, command),
+          context,
+        );
+        return this.#post(command);
+      },
     });
     router.service(QueryService, {
-      read: (query) => this.#read(query),
+      read: async (query, context) => {
+        const detached = clone(QuerySchema, query);
+        const reader = await this.#admit(
+          "spine.client.QueryService",
+          "Read",
+          toBinary(QuerySchema, detached),
+          context,
+        );
+        return this.#read(detached, reader, (context as typeof context | undefined)?.signal);
+      },
+      execute: async (query, context) => {
+        const detached = clone(QueryService.method.execute.input, query);
+        const reader = await this.#admit(
+          "spine.client.QueryService",
+          "Execute",
+          toBinary(QueryService.method.execute.input, detached),
+          context,
+        );
+        return this.#executeAppQuery(detached, reader, context.signal);
+      },
     });
+  }
+
+  /**
+   * Executes a detached App Query with facts established by a trusted admission port.
+   *
+   * @param query Captured application query envelope.
+   * @param reader Verified current invocation facts.
+   * @param signal Current invocation cancellation, when available.
+   * @returns One paired response from the Server-selected handler.
+   */
+  #executeAppQuery(
+    query: import("@spine-event-engine/proto/client").AppQuery,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
+  ): Promise<import("@spine-event-engine/proto/client").AppQueryResponse> {
+    const queries = serviceAppQueries.get(this);
+    if (queries === undefined)
+      return Promise.reject(
+        new ConnectError("App Query execution is unavailable.", Code.Unimplemented),
+      );
+    return queries.execute(query, reader, signal);
+  }
+
+  /**
+   * Registers reader-bound subscription routes.
+   *
+   * @param router Connect service router.
+   */
+  #registerSubscriptions(router: ConnectRouter): void {
     router.service(SubscriptionService, {
-      subscribe: (topic) => this.#subscribe(topic),
-      activate: (subscription) => this.#activate(subscription),
-      cancel: (subscription) => this.#cancel(subscription),
+      subscribe: (topic, context) => this.#subscribeAdmitted(topic, context),
+      activate: (subscription, context) => this.#activateAdmitted(subscription, context),
+      cancel: (subscription, context) => this.#cancelAdmitted(subscription, context),
     });
-    return router;
+  }
+
+  /**
+   * Keeps direct in-process Subscribe validation synchronous while admitting native peers.
+   *
+   * @param topic Requested subscription topic.
+   * @param context Native transport context, absent for direct in-process calls.
+   * @returns Subscription or admitted native operation promise.
+   */
+  #subscribeAdmitted(topic: Topic, context?: HandlerContext): Subscription | Promise<Subscription> {
+    if (context === undefined) return this.#subscribe(topic, { kind: "anonymous" });
+    return this.#admit(
+      "spine.client.SubscriptionService",
+      "Subscribe",
+      toBinary(TopicSchema, topic),
+      context,
+    ).then((reader) => this.#subscribe(topic, ReaderIdentities.from(reader)));
+  }
+
+  /**
+   * Keeps direct in-process Cancel synchronous while admitting native peers.
+   *
+   * @param subscription Requested subscription definition.
+   * @param context Native transport context, absent for direct in-process calls.
+   * @returns Cancel acknowledgment or admitted native operation promise.
+   */
+  #cancelAdmitted(
+    subscription: Subscription,
+    context?: HandlerContext,
+  ): Response | Promise<Response> {
+    if (context === undefined) return this.#cancel(subscription, { kind: "anonymous" });
+    return this.#admit(
+      "spine.client.SubscriptionService",
+      "Cancel",
+      toBinary(SubscriptionSchema, subscription),
+      context,
+    ).then((reader) => this.#cancel(subscription, ReaderIdentities.from(reader)));
+  }
+
+  /**
+   * Verifies one native reader assertion before service side effects.
+   *
+   * @param service Canonical RPC service.
+   * @param method Canonical RPC method.
+   * @param bytes Canonical request bytes.
+   * @param context Native transport context when called through Connect.
+   * @returns Detached trusted reader facts.
+   */
+  async #admit(
+    service: string,
+    method: string,
+    bytes: Uint8Array,
+    context?: HandlerContext,
+  ): Promise<TrustedReaderContext> {
+    if (context === undefined) return Object.freeze({});
+    return TrustedReaderIngress.admit({
+      service,
+      method,
+      request: bytes,
+      headers: context.requestHeader,
+      peer: context,
+      maxBytes: this.#readMaxBytes,
+      ...this.#readerAdmission,
+    });
+  }
+
+  /**
+   * Verifies activation before entering the subscription lifecycle generator.
+   *
+   * @param subscription Native activation request.
+   * @param context Native transport context.
+   * @returns Admitted subscription update stream.
+   */
+  async *#activateAdmitted(
+    subscription: Subscription,
+    context?: HandlerContext,
+  ): AsyncIterable<SubscriptionUpdate> {
+    const captured = clone(SubscriptionSchema, subscription);
+    const signal = context?.signal;
+    const reader = await this.#admit(
+      "spine.client.SubscriptionService",
+      "Activate",
+      toBinary(SubscriptionSchema, captured),
+      context,
+    );
+    yield* this.#activate(captured, snapshotTrustedReader(reader), signal);
   }
 
   /**
@@ -271,17 +481,37 @@ export class SpineServices {
    */
   async #post(command: Command): Promise<Ack> {
     const messageId = command.id && AnyPacker.pack(CommandIdSchema, command.id);
-    const typeUrl = command.message?.typeUrl;
-    if (typeUrl === undefined || typeUrl.length === 0)
+    try {
+      CommandValidationError.checkEnvelope(command);
+    } catch (error) {
+      const failure = ServiceValues.commandPostError(error);
       return ServiceValues.commandErrorAck(
         messageId,
-        "INVALID_COMMAND",
-        "Command message type is required.",
+        failure.type,
+        failure.message,
+        failure.code,
+        failure.details,
       );
+    }
+    const typeUrl = command.message.typeUrl;
     const admission = this.#commandAdmission(command, messageId, typeUrl);
     if ("ack" in admission) return admission.ack;
-    const { route } = admission;
+    return this.#dispatchCommand(admission.route, command, messageId);
+  }
 
+  /**
+   * Dispatches an admitted Command and maps its completed or failed outcome.
+   *
+   * @param route Selected Command route.
+   * @param command Validated Command envelope.
+   * @param messageId Packed ID for the acknowledgement.
+   * @returns The completed Command acknowledgement.
+   */
+  async #dispatchCommand(
+    route: CommandRoute,
+    command: Command,
+    messageId: Any | undefined,
+  ): Promise<Ack> {
     try {
       await route.context.commandBus().post(command);
       return create(AckSchema, {
@@ -294,7 +524,12 @@ export class SpineServices {
       this.#logCommandPostFailure(route, command, error);
       return create(AckSchema, {
         messageId,
-        status: ServiceValues.errorStatus(postError.type, postError.message, postError.details),
+        status: ServiceValues.errorStatus(
+          postError.type,
+          postError.message,
+          postError.details,
+          postError.code,
+        ),
       });
     }
   }
@@ -317,8 +552,9 @@ export class SpineServices {
       return {
         ack: ServiceValues.commandErrorAck(
           messageId,
-          "UNSUPPORTED_COMMAND",
+          "spine.core.CommandValidationError",
           "No bounded context accepted the command.",
+          CommandValidationErrorCode.UNSUPPORTED_COMMAND,
         ),
       };
     }
@@ -362,25 +598,27 @@ export class SpineServices {
    * Validates a public state query before reading its registered Stand.
    *
    * @param query Public query request.
-   * @returns States or a stable query error response.
+   * @param reader Verified facts from current admission.
+   * @param signal Current request cancellation.
+   * @returns States for an admitted Query.
+   * @throws ConnectError for invalid input or a sanitized read failure.
    */
-  async #read(query: Query): Promise<QueryResponse> {
+  async #read(
+    query: Query,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
+  ): Promise<QueryResponse> {
+    ReadRequestStatus.check("query", () => Validate.check(QuerySchema, query));
     const target = query.target;
     const route = this.#readRoute(target);
-
     if (target === undefined || route === undefined) {
-      return ServiceValues.queryErrorResponse(
-        "UNSUPPORTED_QUERY_TARGET",
-        "No bounded context owns query target.",
-      );
+      throw ReadRequestStatus.invalid("query", true, "No bounded context owns query target.");
     }
-
     const queryError = ServiceValues.validateReadQuery(query, target, route);
     if (queryError !== undefined) {
-      return ServiceValues.queryErrorResponse(queryError.type, queryError.message);
+      throw ReadRequestStatus.invalid("query", false, queryError.message);
     }
-
-    return this.#readValidated(query, target, route);
+    return this.#readValidated(query, target, route, reader, signal);
   }
 
   /**
@@ -389,9 +627,17 @@ export class SpineServices {
    * @param query Validated public query.
    * @param target Registered query target.
    * @param route Route containing the target Stand and schema.
-   * @returns States or a stable tenant/read error response.
+   * @param reader Verified current invocation facts.
+   * @param signal Current request cancellation.
+   * @returns States when tenant admission and storage read succeed.
    */
-  async #readValidated(query: Query, target: Target, route: StateRoute): Promise<QueryResponse> {
+  async #readValidated(
+    query: Query,
+    target: Target,
+    route: StateRoute,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
+  ): Promise<QueryResponse> {
     const tenantId = ServiceValues.tenantValue(query.context?.tenantId);
     const tenantError = ServiceValues.tenantMismatch(
       route.context.isMultitenant,
@@ -399,7 +645,7 @@ export class SpineServices {
       "query",
     );
     if (tenantError !== undefined) {
-      return ServiceValues.queryErrorResponse(tenantError.type, tenantError.message);
+      throw ReadRequestStatus.tenant(tenantError.type, tenantError.message);
     }
 
     try {
@@ -409,34 +655,89 @@ export class SpineServices {
         route,
         ServiceValues.createReadPlan(target, query, route),
         destination,
+        query,
+        reader,
+        signal,
       );
     } catch (error) {
       if (error instanceof TenantUnknownError) throw TenantStatuses.unknown(error);
-      return ServiceValues.queryErrorResponse("QUERY_READ_ERROR", "Query read failed.");
+      throw ReadRequestStatus.technical(error, "Query read failed.");
     }
   }
 
-  #readRoute(target: Target | undefined): StateRoute | undefined {
+  /**
+   * Finds the registered Entity state route for a query target.
+   *
+   * @param target Declared query or Topic target.
+   * @returns The matching read route, if present.
+   */ #readRoute(target: Target | undefined): StateRoute | undefined {
     return target === undefined ? undefined : this.#stateRoutes.get(target.type);
   }
 
-  async #query(
+  /**
+   * Executes a validated Entity state read through its registered route.
+   *
+   * @param route Registered target route with schema and tenancy.
+   * @param plan Validated Entity read plan.
+   * @param tenantId Declared Proto tenant identifier.
+   * @param query Validated public query with effective actor data.
+   * @param reader Verified current invocation facts.
+   * @param signal Current request cancellation.
+   * @returns The Entity query response.
+   */ async #query(
     route: StateRoute,
     plan: NormalizedQueryPlan<unknown>,
     tenantId: TenantId | undefined,
+    query: Query,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
   ): Promise<QueryResponse> {
+    const facts: ReadSideContext = {
+      operation: { kind: "query", query },
+      ...(query.context === undefined ? {} : { actorContext: query.context }),
+      ...(tenantId === undefined ? {} : { effectiveTenant: tenantId }),
+      producingContext: route.context,
+      ...reader,
+      ...(signal === undefined ? {} : { signal }),
+    };
     const results = await QueryReader.read(
       route.context.stand(),
       route.schema,
       plan,
       tenantId,
       ServiceValues.queryResultLimit,
+      query,
+      facts,
     );
+    const visible = await this.#visibleStates(route, results, facts);
 
     return create(QueryResponseSchema, {
       response: ServiceValues.okResponse(),
-      message: results.map((result) => ServiceValues.packVersionedState(route.schema, result)),
+      message: visible.map((result) => ServiceValues.packVersionedState(route.schema, result)),
     });
+  }
+
+  /**
+   * Applies this Server's outward policy after BC source policy and storage work.
+   *
+   * @param route Registered Entity result schema.
+   * @param results States returned by the producing context.
+   * @param facts Verified current Query facts.
+   * @returns Surviving states without replenishing removed records.
+   */
+  async #visibleStates(
+    route: StateRoute,
+    results: readonly StandReadResult[],
+    facts: ReadSideContext,
+  ): Promise<readonly StandReadResult[]> {
+    const filters = serviceReadFilters.get(this);
+    if (filters === undefined) return results;
+    const visible: StandReadResult[] = [];
+    for (const result of results) {
+      const state = await filters.apply(route.schema, result.state, facts);
+      if (state !== null) visible.push({ ...result, state });
+    }
+    return visible;
   }
 
   /**
@@ -444,11 +745,12 @@ export class SpineServices {
    *
    * @param topic Requested subscription topic.
    * @returns Created subscription after admission.
+   * @param reader The verified reader facts for this operation.
    */
-  #subscribe(topic: Topic): Promise<Subscription> {
+  #subscribe(topic: Topic, reader: ReaderIdentity): Promise<Subscription> {
+    ReadRequestStatus.check("topic", () => Validate.check(TopicSchema, topic));
     const route = this.#subscriptionRoute(topic);
-    ServiceValues.validateTopic(topic);
-    ServiceValues.createSubscriptionShape(topic, route);
+    ServiceValues.checkTopicSemantics(topic, route);
     const tenantId = ServiceValues.topicTenant(topic);
     const tenantError = ServiceValues.tenantMismatch(
       route.context.isMultitenant,
@@ -457,7 +759,7 @@ export class SpineServices {
     );
 
     if (tenantError !== undefined) {
-      throw new ConnectError(tenantError.message, Code.InvalidArgument);
+      throw ReadRequestStatus.tenant(tenantError.type, tenantError.message);
     }
 
     const subscription = create(SubscriptionSchema, {
@@ -472,36 +774,111 @@ export class SpineServices {
 
     const registry = boundedContextAccess.subscriptionRegistry(route.context);
     return TenantStatuses.require(route.context, tenantId, async () => {
-      await registry.create(subscription);
+      await registry.create(subscription, reader);
     }).then(() => clone(SubscriptionSchema, subscription));
   }
 
-  async *#activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> {
+  /**
+   * Verifies membership and activates a retained subscription.
+   *
+   * @param subscription The subscription definition being processed.
+   * @param reader The verified reader facts for this operation.
+   * @returns The update stream after admission.
+   */ async *#activate(
+    subscription: Subscription,
+    reader: TrustedReaderContext,
+    signal?: AbortSignal,
+  ): AsyncIterable<SubscriptionUpdate> {
+    ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
+    ReadRequestStatus.checkLifecycleCriterion(subscription);
     const id = subscription.id?.value;
     if (id === undefined) {
       return;
     }
 
-    const record = await this.#activationRecord(id);
+    const record = await this.#activationRecord(id, ReaderIdentities.from(reader), signal);
     if (record === undefined) return;
+    yield* this.#streamSubscription(record, reader);
+  }
 
+  /**
+   * Delivers one activation in source order while honoring its cancellation.
+   *
+   * @param record Attached subscription and existing admission queue.
+   * @param reader Verified facts of this activation.
+   * @returns ACK followed by surviving filtered data updates.
+   */
+  async *#streamSubscription(
+    record: SubscriptionRecord,
+    reader: TrustedReaderContext,
+  ): AsyncIterable<SubscriptionUpdate> {
     try {
+      const facts = SpineServices.#subscriptionFacts(record, reader);
+      if (record.delivery.closed) return;
       yield create(SubscriptionUpdateSchema, {
         subscription: clone(SubscriptionSchema, record.subscription),
         response: ServiceValues.okResponse(),
       });
       for (;;) {
-        const update = await record.delivery.next();
-        if (update === undefined) {
-          return;
+        const work = await record.delivery.next();
+        if (work === undefined) return;
+        const update = await record.delivery.settle(this.#filteredSubscription(work, facts));
+        if (update === undefined) return;
+        if (update !== null) {
+          if (record.delivery.signal.aborted) return;
+          yield update;
         }
-        yield update;
+        record.delivery.advance();
       }
+    } catch (error) {
+      record.delivery.close();
+      throw ReadRequestStatus.technical(error, "Subscription filtering failed.");
     } finally {
-      if (!record.delivery.closed) {
-        await this.#removeSubscription(id);
+      if (this.#subscriptions.get(record.id) === record) {
+        if (record.delivery.closed) this.#removeDetachedSubscription(record.id);
+        else await this.#removeSubscription(record.id);
       }
     }
+  }
+
+  /**
+   * Captures the original Topic and authenticated activation facts for policy code.
+   *
+   * @param record Current source route and canonical subscription.
+   * @param reader Verified facts of this activation.
+   * @returns Subscription operation context with a live cancellation signal.
+   */
+  static #subscriptionFacts(
+    record: SubscriptionRecord,
+    reader: TrustedReaderContext,
+  ): ReadSideContext {
+    const topic = record.subscription.topic;
+    if (topic === undefined) throw new TypeError("Activated subscription Topic is missing.");
+    return {
+      operation: { kind: "subscription", subscription: record.subscription, topic },
+      ...(topic.context === undefined ? {} : { actorContext: topic.context }),
+      ...(record.tenantId === undefined ? {} : { effectiveTenant: record.tenantId }),
+      producingContext: record.route.context,
+      ...reader,
+      signal: record.delivery.signal,
+    };
+  }
+
+  /**
+   * Applies the producing BC policy before this Server's final policy.
+   *
+   * @param work Queued matched update and lazy BC capability.
+   * @param facts Trusted activation and original Topic facts.
+   * @returns Surviving update or null for an empty domain-data batch.
+   */
+  async #filteredSubscription(
+    work: SubscriptionReadWork,
+    facts: ReadSideContext,
+  ): Promise<SubscriptionUpdate | null> {
+    const source = await work.filter(facts);
+    return source === null
+      ? null
+      : SubscriptionReadFilters.apply(source, serviceReadFilters.get(this), facts);
   }
 
   /**
@@ -509,11 +886,16 @@ export class SpineServices {
    *
    * @param id The logical subscription identifier.
    * @returns The attached record, or undefined when admission fails.
+   * @param reader The verified reader facts for this operation.
    */
-  async #activationRecord(id: string): Promise<SubscriptionRecord | undefined> {
+  async #activationRecord(
+    id: string,
+    reader: ReaderIdentity,
+    signal?: AbortSignal,
+  ): Promise<SubscriptionRecord | undefined> {
     let attached: SubscriptionRecord | undefined;
     await this.#serializeActivation(id, async () => {
-      attached = await this.#startActivationRecord(id);
+      attached = await this.#startActivationRecord(id, reader, signal);
     });
     return attached;
   }
@@ -523,13 +905,19 @@ export class SpineServices {
    *
    * @param id The logical subscription identifier.
    * @returns The attached record, or undefined when unavailable.
+   * @param reader The verified reader facts for this operation.
    */
-  async #startActivationRecord(id: string): Promise<SubscriptionRecord | undefined> {
+  async #startActivationRecord(
+    id: string,
+    reader: ReaderIdentity,
+    signal?: AbortSignal,
+  ): Promise<SubscriptionRecord | undefined> {
     const record = this.#subscriptions.get(id) ?? (await this.#findSubscription(id));
-    if (record === undefined) return undefined;
+    if (record === undefined) throw ReadRequestStatus.unknownSubscription();
+    if (!ReaderIdentities.matches(record.reader, reader)) throw this.#readerDenied();
     let attached: SubscriptionRecord | undefined;
     await this.#requireSubscriptionTenant(record, async () => {
-      attached = await this.#activateKnownRecord(record, id);
+      attached = await this.#activateKnownRecord(record, id, reader, signal);
     });
     return attached;
   }
@@ -540,22 +928,31 @@ export class SpineServices {
    * @param record Discovered subscription record.
    * @param id Canonical subscription ID.
    * @returns Attached record, if activation remains eligible.
+   * @param reader The verified reader facts for this operation.
    */
   async #activateKnownRecord(
     record: SubscriptionRecord,
     id: string,
+    reader: ReaderIdentity,
+    signal?: AbortSignal,
   ): Promise<SubscriptionRecord | undefined> {
     if (record.delivery.active) return undefined;
     const activation = await boundedContextAccess
       .subscriptionRegistry(record.route.context)
-      .activate(create(SubscriptionIdSchema, { value: id }));
-    if (activation.kind === "missing" || activation.kind === "expired" || record.delivery.closed)
-      return undefined;
+      .activate(create(SubscriptionIdSchema, { value: id }), reader);
+    if (activation.kind === "denied") throw this.#readerDenied();
+    if (!("entry" in activation)) throw ReadRequestStatus.unknownSubscription();
+    if (!equals(SubscriptionSchema, record.subscription, activation.entry.subscription))
+      throw ReadRequestStatus.unknownSubscription();
+    if (record.delivery.closed) return undefined;
     try {
       this.#subscriptions.set(id, record);
-      await this.#activateRecord(record);
+      record.delivery.track(signal);
+      await this.#activateRecord(record, activation.entry);
+      await this.#checkAttachedRecord(record, id, reader, signal);
       return record;
     } catch (error) {
+      if (record.delivery.invalidated) throw error;
       try {
         await this.#removeSubscription(id);
       } catch (cleanupError) {
@@ -568,7 +965,35 @@ export class SpineServices {
     }
   }
 
-  async #serializeActivation(id: string, work: () => Promise<void>): Promise<void> {
+  /**
+   * Rejects an entry removed or replaced before its first activation ACK.
+   * @param record Attached delivery that may have been invalidated.
+   * @param id Canonical subscription ID.
+   * @param reader Reader admitted by the earlier activation.
+   * @param signal Transport cancellation, which ends the stream normally.
+   */
+  async #checkAttachedRecord(
+    record: SubscriptionRecord,
+    id: string,
+    reader: ReaderIdentity,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (!record.delivery.invalidated || signal?.aborted === true) return;
+    const current = await boundedContextAccess
+      .subscriptionRegistry(record.route.context)
+      .get(create(SubscriptionIdSchema, { value: id }));
+    if (current !== undefined && !ReaderIdentities.matches(current.reader, reader))
+      throw this.#readerDenied();
+    throw ReadRequestStatus.unknownSubscription();
+  }
+
+  /**
+   * Serializes activation callbacks for the same subscription ID.
+   *
+   * @param id The stable identifier for this record.
+   * @param work Accepted lifecycle operation.
+   * @returns Completion after the operation settles.
+   */ async #serializeActivation(id: string, work: () => Promise<void>): Promise<void> {
     const previous = this.#activationTails.get(id) ?? Promise.resolve();
     let finish: () => void = () => undefined;
     const settled = new Promise<void>((resolve) => {
@@ -590,15 +1015,18 @@ export class SpineServices {
    *
    * @param subscription Subscription identity supplied by the caller.
    * @returns Cancellation response after any required membership check.
+   * @param reader The verified reader facts for this operation.
    */
-  #cancel(subscription: Subscription): Response | Promise<Response> {
+  #cancel(subscription: Subscription, reader: ReaderIdentity): Response | Promise<Response> {
+    ReadRequestStatus.check("subscription", () => Validate.check(SubscriptionSchema, subscription));
+    ReadRequestStatus.checkLifecycleCriterion(subscription);
     const id = subscription.id?.value;
 
     if (id === undefined) {
       return ServiceValues.okResponse();
     }
 
-    return this.#cancelKnown(id);
+    return this.#cancelKnown(id, reader);
   }
 
   /**
@@ -606,12 +1034,32 @@ export class SpineServices {
    *
    * @param id Subscription ID with a possible shared-registry record.
    * @returns Successful cancellation response after removal.
+   * @param reader The verified reader facts for this operation.
    */
-  async #cancelKnown(id: string): Promise<Response> {
-    const record = this.#subscriptions.get(id) ?? (await this.#findSubscription(id));
-    if (record === undefined) await this.#removeSubscription(id);
-    else await this.#requireSubscriptionTenant(record, () => this.#removeSubscription(id));
+  async #cancelKnown(id: string, reader: ReaderIdentity): Promise<Response> {
+    const live = this.#subscriptions.get(id);
+    const record = live ?? (await this.#findSubscription(id));
+    if (record === undefined) return ServiceValues.okResponse();
+    if (!ReaderIdentities.matches(record.reader, reader)) throw this.#readerDenied();
+    await this.#requireSubscriptionTenant(record, async () => {
+      if (live !== undefined) return this.#removeSubscription(id, reader);
+      await this.#registryOperation(record.route.context, async () => {
+        const outcome = await boundedContextAccess
+          .subscriptionRegistry(record.route.context)
+          .delete(create(SubscriptionIdSchema, { value: id }), reader);
+        if (outcome === "denied") throw this.#readerDenied();
+      });
+    });
     return ServiceValues.okResponse();
+  }
+
+  /**
+   * Returns a sanitized denial for a foreign or legacy-bound subscription.
+   *
+   * @returns The reader authorization error.
+   */
+  #readerDenied(): ConnectError {
+    return new ConnectError("Subscription reader is not authorized.", Code.PermissionDenied);
   }
 
   /**
@@ -619,6 +1067,7 @@ export class SpineServices {
    *
    * @param record Canonical shared-registry subscription record.
    * @param onReady Complete admitted one-shot mutation, if present.
+   * @returns Completion after the operation settles.
    */
   async #requireSubscriptionTenant(
     record: SubscriptionRecord,
@@ -627,7 +1076,12 @@ export class SpineServices {
     await TenantStatuses.require(record.route.context, record.tenantId, onReady);
   }
 
-  #subscriptionRoute(topic: Topic): SubscriptionRoute {
+  /**
+   * Finds the registered state or event route for a Topic target.
+   *
+   * @param topic Framework subscription Topic.
+   * @returns The matching subscription route.
+   */ #subscriptionRoute(topic: Topic): SubscriptionRoute {
     const target = topic.target;
     const route =
       target === undefined
@@ -635,26 +1089,46 @@ export class SpineServices {
         : (this.#stateRoutes.get(target.type) ?? this.#eventRoutes.get(target.type));
 
     if (target === undefined || route === undefined) {
-      throw new ConnectError("Unsupported subscription target.", Code.InvalidArgument);
+      throw ReadRequestStatus.invalid("topic", true, "Unsupported subscription target.");
     }
 
     return route;
   }
 
-  async #activateRecord(record: SubscriptionRecord): Promise<void> {
+  /**
+   * Attaches delivery for the validated retained subscription.
+   *
+   * @param record The durable subscription record.
+   * @returns Completion after the operation settles.
+   * @param expected Exact entry activated for this reader.
+   */ async #activateRecord(
+    record: SubscriptionRecord,
+    expected: StandSubscriptionEntry,
+  ): Promise<void> {
     const consumer = await boundedContextAccess.consumeSubscription(
       record.route.context,
       record.id,
-      (update) => {
-        record.delivery.push(update);
+      (work) => {
+        record.delivery.push(work);
         if (record.delivery.closed) this.#removeDetachedSubscription(record.id);
       },
+      () => {
+        if (this.#subscriptions.get(record.id) === record) this.#subscriptions.delete(record.id);
+        record.delivery.invalidate();
+      },
+      expected,
     );
     record.delivery.attach(consumer);
     managedChildSubscriptionAccess.installed(record.id);
   }
 
-  #removeSubscription(id: string): Promise<void> {
+  /**
+   * Serializes removal of a retained subscription and its delivery.
+   *
+   * @param id The stable identifier for this record.
+   * @param reader The verified reader facts for this operation.
+   * @returns Completion after the operation settles.
+   */ #removeSubscription(id: string, reader?: ReaderIdentity): Promise<void> {
     const existing = this.#removals.get(id);
     if (existing !== undefined) {
       return existing.settled;
@@ -662,6 +1136,7 @@ export class SpineServices {
 
     const record = this.#subscriptions.get(id);
     const unknown = record === undefined;
+    if (reader !== undefined && unknown) return Promise.resolve();
     if (unknown && this.#unknownRemovals.size >= this.#subscriptionLimit) {
       return Promise.reject(
         new ConnectError(
@@ -672,18 +1147,22 @@ export class SpineServices {
     }
     if (unknown) {
       this.#unknownRemovals.add(id);
-    } else {
+    } else if (reader === undefined) {
       record.delivery.close();
       this.#subscriptions.delete(id);
     }
 
     const removal = ServiceValues.createSubscriptionRemoval();
     this.#removals.set(id, removal);
-    void this.#runRemoval(id, removal, record, unknown);
+    void this.#runRemoval(id, removal, record, unknown, reader);
     return removal.settled;
   }
 
-  #removeDetachedSubscription(id: string): void {
+  /**
+   * Cleans up delivery after a subscription record is detached.
+   *
+   * @param id The stable identifier for this record.
+   */ #removeDetachedSubscription(id: string): void {
     // spine-log-boundary: server.subscription_cleanup_failure
     void this.#removeSubscription(id).catch(() => {
       const logger = serviceLoggers.get(this);
@@ -697,17 +1176,32 @@ export class SpineServices {
     });
   }
 
-  async #runRemoval(
+  /**
+   * Executes serialized subscription cleanup for one ID.
+   *
+   * @param id The stable identifier for this record.
+   * @param removal Shared subscription-removal task.
+   * @param record The durable subscription record.
+   * @param unknown Unrecognized route or filter value.
+   * @param reader The verified reader facts for this operation.
+   * @returns Completion after the operation settles.
+   */ async #runRemoval(
     id: string,
     removal: SubscriptionRemoval,
     record: SubscriptionRecord | undefined,
     unknown: boolean,
+    reader?: ReaderIdentity,
   ): Promise<void> {
     try {
       if (record !== undefined) {
-        await boundedContextAccess
+        const deleted = await boundedContextAccess
           .subscriptionRegistry(record.route.context)
-          .delete(create(SubscriptionIdSchema, { value: id }));
+          .delete(create(SubscriptionIdSchema, { value: id }), reader);
+        if (deleted === "denied") throw this.#readerDenied();
+        if (reader !== undefined) {
+          record.delivery.close();
+          this.#subscriptions.delete(id);
+        }
       } else {
         await this.#deleteUnknownSubscription(id);
       }
@@ -728,6 +1222,7 @@ export class SpineServices {
    * Deletes an unknown subscription from every configured context registry.
    *
    * @param id Subscription ID to remove.
+   * @returns Completion after the operation settles.
    */
   async #deleteUnknownSubscription(id: string): Promise<void> {
     await Promise.all(
@@ -741,7 +1236,12 @@ export class SpineServices {
     );
   }
 
-  async #findSubscription(id: string): Promise<SubscriptionRecord | undefined> {
+  /**
+   * Loads a retained subscription record by opaque ID.
+   *
+   * @param id The stable identifier for this record.
+   * @returns The retained record, if present.
+   */ async #findSubscription(id: string): Promise<SubscriptionRecord | undefined> {
     const subscriptionId = create(SubscriptionIdSchema, { value: id });
     for (const context of ServiceValues.uniqueContexts(this.#contexts)) {
       let entry: Awaited<ReturnType<StandSubscriptionRegistry["get"]>>;
@@ -765,7 +1265,8 @@ export class SpineServices {
         subscription: clone(SubscriptionSchema, subscription),
         shape: ServiceValues.createSubscriptionShape(canonicalTopic, route),
         tenantId,
-        queueLimit: this.#queueLimit,
+        queueCapacity: this.#queueCapacity,
+        ...(entry.reader === undefined ? {} : { reader: entry.reader }),
       });
     }
     return undefined;
@@ -789,6 +1290,28 @@ export class SpineServices {
  * @internal
  */
 export const spineServicesAccess: SpineServicesAccess = Object.freeze({
+  /**
+   * Attaches Server-only outward read policies to its service adapter.
+   *
+   * @param services Prepared service adapter.
+   * @param filters Registered policy engine.
+   */
+  installReadFilters(services: SpineServices, filters: ReadSideFilterEngine): void {
+    if (!serviceInstances.has(services)) throw new TypeError("Expected SpineServices instance.");
+    serviceReadFilters.set(services, filters);
+  },
+
+  /**
+   * Attaches this Server's prepared handler table without exposing registration options.
+   *
+   * @param services Adapter receiving its internal App Query capability.
+   * @param queries Selected handler table from Server preparation.
+   */
+  installAppQueries(services: SpineServices, queries: AppQueryExecution): void {
+    if (!serviceInstances.has(services)) throw new TypeError("Expected SpineServices instance.");
+    serviceAppQueries.set(services, queries);
+  },
+
   /**
    * Clears the logger installed for a closed service adapter.
    *
@@ -827,11 +1350,17 @@ export interface SpineServicesOptions {
   readonly contexts: readonly BoundedContext[];
 
   /**
-   * Maximum queued updates per active subscription before delivery is closed.
-   *
-   * Defaults to 100. Non-positive or non-finite values are coerced to 1.
+   * Existing native request-size bound used for internal reader assertions.
    */
-  readonly queueLimit?: number;
+  readonly readMaxBytes?: number;
+
+  /**
+   * Configured direct and trusted-peer authentication ports.
+   */
+  readonly readerAdmission?: Readonly<{
+    forwarded?: ReaderProofVerifier<HandlerContext>;
+    direct?: DirectReaderAuthenticator<HandlerContext>;
+  }>;
 
   /**
    * Maximum concurrent unknown-ID cancellation operations for this
@@ -844,11 +1373,17 @@ export interface SpineServicesOptions {
   readonly subscriptionLimit?: number;
 }
 
+/**
+ * Bounded Context selected to receive one registered Command type URL.
+ */
 interface CommandRoute {
   readonly context: BoundedContext;
   readonly typeUrl: string;
 }
 
+/**
+ * Entity state route with queryable columns and its supplying Bounded Context.
+ */
 interface StateRoute {
   readonly allowedColumnNames: ReadonlySet<string>;
   readonly columnFields: ReadonlyMap<string, DescField>;
@@ -860,45 +1395,73 @@ interface StateRoute {
   readonly typeUrl: string;
 }
 
+/**
+ * Proto field name and optional nested message schema used by query routing.
+ */
 interface MessageFieldInfo {
   readonly name: string;
   readonly localName: string;
   readonly message?: MessageSchema;
 }
 
+/**
+ * Event type URL and the Bounded Context that publishes it.
+ */
 interface EventRoute {
   readonly context: BoundedContext;
   readonly kind: "event";
   readonly typeUrl: string;
 }
 
+/**
+ * Entity state or Event route selected for a subscription Topic.
+ */
 type SubscriptionRoute = StateRoute | EventRoute;
 
+/**
+ * Captured subscription definition and delivery channel after admission.
+ */
 interface SubscriptionRecordBase {
   readonly id: string;
   readonly subscription: Subscription;
+  readonly reader?: ReaderIdentity;
   readonly tenantId: TenantId | undefined;
   readonly delivery: SubscriptionDelivery;
 }
 
+/**
+ * Completion and rejection controls for an in-progress subscription removal.
+ */
 interface SubscriptionRemoval {
   readonly reject: (reason?: unknown) => void;
   readonly resolve: () => void;
   readonly settled: Promise<void>;
 }
 
+/**
+ * Active Event or Entity state subscription record.
+ */
 type SubscriptionRecord = EventSubscriptionRecord | StateSubscriptionRecord;
 
+/**
+ * Active Event subscription and its publishing route.
+ */
 interface EventSubscriptionRecord extends SubscriptionRecordBase {
   readonly kind: "event";
   readonly route: EventRoute;
 }
 
+/**
+ * Active Entity subscription and its state route.
+ */
 interface StateSubscriptionRecord extends SubscriptionRecordBase {
   readonly kind: "state";
   readonly route: StateRoute;
 }
 
+/**
+ * Route shape selected before attaching an Event or Entity subscription.
+ */
 type SubscriptionShape =
   | {
       readonly kind: "event";
@@ -913,23 +1476,33 @@ type SubscriptionShape =
  * Buffers subscription updates and wakes active stream readers.
  */
 class SubscriptionDelivery {
-  readonly #queue: SubscriptionUpdate[] = [];
+  #active: SubscriptionReadWork | undefined;
 
-  readonly #waiters: ((update: SubscriptionUpdate | undefined) => void)[] = [];
+  readonly #queue: SubscriptionReadWork[] = [];
 
-  readonly #queueLimit: number;
+  readonly #waiters: ((update: SubscriptionReadWork | undefined) => void)[] = [];
+
+  readonly #controller = new AbortController();
+
+  readonly #queueCapacity: number;
+
+  #activationSignal: AbortSignal | undefined;
+
+  #onActivationAbort: (() => void) | undefined;
 
   #subscription: SubscriptionAttachment | undefined;
 
   #closed = false;
 
+  #invalidated = false;
+
   /**
    * Sets the bounded update queue capacity.
    *
-   * @param queueLimit Maximum pending updates before closure.
+   * @param queueCapacity Maximum waiting updates beyond the active update.
    */
-  constructor(queueLimit: number) {
-    this.#queueLimit = queueLimit;
+  constructor(queueCapacity: number) {
+    this.#queueCapacity = queueCapacity;
   }
 
   /**
@@ -951,6 +1524,78 @@ class SubscriptionDelivery {
   }
 
   /**
+   * Returns source invalidation separately from transport cancellation before the first ACK.
+   * @returns Whether the admitted canonical entry changed or disappeared.
+   */
+  get invalidated(): boolean {
+    return this.#invalidated;
+  }
+
+  /**
+   * Closes this delivery after the admitted source entry changes.
+   */
+  invalidate(): void {
+    if (this.#closed) return;
+    this.#invalidated = true;
+    this.close();
+  }
+
+  /**
+   * Returns a cancellation signal for active policy when this consumer is removed.
+   *
+   * @returns Cancellation signal for the current activation.
+   */
+  get signal(): AbortSignal {
+    return this.#controller.signal;
+  }
+
+  /**
+   * Registers transport cancellation before the source attachment awaits.
+   *
+   * @param signal Cancellation of the admitted activation, when available.
+   */
+  track(signal?: AbortSignal): void {
+    if (signal === undefined) return;
+    if (signal.aborted) {
+      this.close();
+      return;
+    }
+    this.#activationSignal = signal;
+    this.#onActivationAbort = () => {
+      this.close();
+    };
+    signal.addEventListener("abort", this.#onActivationAbort, { once: true });
+  }
+
+  /**
+   * Stops waiting on one policy call when this activation closes.
+   *
+   * @param work The policy result; a late rejection remains observed by the race.
+   * @returns The result, or undefined after cancellation.
+   */
+  async settle(
+    work: Promise<SubscriptionUpdate | null>,
+  ): Promise<SubscriptionUpdate | null | undefined> {
+    if (this.#closed) {
+      // spine-log-boundary: server.subscription_closed_policy_rejection
+      void work.catch(() => undefined);
+      return undefined;
+    }
+    let onAbort: (() => void) | undefined;
+    const closed = new Promise<undefined>((resolve) => {
+      onAbort = () => {
+        resolve(undefined);
+      };
+      this.#controller.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    try {
+      return await Promise.race([work, closed]);
+    } finally {
+      if (onAbort !== undefined) this.#controller.signal.removeEventListener("abort", onAbort);
+    }
+  }
+
+  /**
    * Attaches a source subscription or immediately removes it after close.
    *
    * @param subscription Source attachment to track.
@@ -969,21 +1614,21 @@ class SubscriptionDelivery {
    *
    * @param update State or Event update to deliver.
    */
-  push(update: SubscriptionUpdate): void {
+  push(update: SubscriptionReadWork): void {
     if (this.#closed) {
       return;
     }
 
-    const waiter = this.#waiters.shift();
-    if (waiter === undefined) {
-      if (this.#queue.length >= this.#queueLimit) {
-        this.close();
-        return;
-      }
-      this.#queue.push(update);
-    } else {
-      waiter(update);
+    if (this.#active === undefined) {
+      this.#active = update;
+      this.#waiters.shift()?.(update);
+      return;
     }
+    if (this.#queue.length >= this.#queueCapacity) {
+      this.close();
+      return;
+    }
+    this.#queue.push(update);
   }
 
   /**
@@ -991,13 +1636,19 @@ class SubscriptionDelivery {
    *
    * @returns Next update, or `undefined` after closure.
    */
-  next(): Promise<SubscriptionUpdate | undefined> {
-    const update = this.#queue.shift();
-    if (update !== undefined || this.#closed) {
-      return Promise.resolve(update);
-    }
-
+  next(): Promise<SubscriptionReadWork | undefined> {
+    if (this.#closed) return Promise.resolve(undefined);
+    if (this.#active !== undefined) return Promise.resolve(this.#active);
     return new Promise((resolve) => this.#waiters.push(resolve));
+  }
+
+  /**
+   * Removes the consumed active update and promotes the next waiting update.
+   */
+  advance(): void {
+    if (this.#closed) return;
+    this.#active = this.#queue.shift();
+    if (this.#active !== undefined) this.#waiters.shift()?.(this.#active);
   }
 
   /**
@@ -1009,7 +1660,11 @@ class SubscriptionDelivery {
     }
 
     this.#closed = true;
+    this.#controller.abort();
+    if (this.#activationSignal !== undefined && this.#onActivationAbort !== undefined)
+      this.#activationSignal.removeEventListener("abort", this.#onActivationAbort);
     this.#queue.length = 0;
+    this.#active = undefined;
     this.#subscription?.unsubscribe();
     this.#subscription = undefined;
 
@@ -1019,6 +1674,9 @@ class SubscriptionDelivery {
   }
 }
 
+/**
+ * Live source attachment that can be detached during subscription cleanup.
+ */
 interface SubscriptionAttachment {
   readonly closed: boolean;
 
@@ -1030,6 +1688,8 @@ interface SubscriptionAttachment {
 
 /**
  * Builds an OK status for service responses.
+ *
+ * @returns The successful status.
  */
 function okStatus(): Status {
   return create(StatusSchema, {
@@ -1040,34 +1700,44 @@ function okStatus(): Status {
   });
 }
 
-function errorStatus(type: string, message: string, details?: Any): Status {
+/**
+ * Builds a structured status from a public validation error.
+ *
+ * @param type Registered target type URL.
+ * @param message Public validation or error message.
+ * @param details Structured validation details.
+ * @param code Public status code.
+ * @returns The structured error status.
+ */ function errorStatus(type: string, message: string, details?: Any, code?: number): Status {
   return create(StatusSchema, {
     status: {
       case: "error",
       value: create(ErrorSchema, {
         type,
         message,
+        ...(code === undefined ? {} : { code }),
         ...(details === undefined ? {} : { details }),
       }),
     },
   });
 }
 
-function okResponse(): Response {
+/**
+ * Builds a successful subscription service response.
+ *
+ * @returns The OK response.
+ */ function okResponse(): Response {
   return create(ResponseSchema, { status: okStatus() });
 }
 
-function errorResponse(type: string, message: string): Response {
-  return create(ResponseSchema, { status: errorStatus(type, message) });
-}
-
-function queryErrorResponse(type: string, message: string): QueryResponse {
-  return create(QueryResponseSchema, {
-    response: errorResponse(type, message),
-  });
-}
-
-function validateReadQuery(
+/**
+ * Checks a read query envelope and target before routing.
+ *
+ * @param query Framework Entity read query.
+ * @param target Declared query or Topic target.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The validated read request.
+ */ function validateReadQuery(
   query: Query,
   target: Target,
   route: StateRoute,
@@ -1090,7 +1760,13 @@ function validateReadQuery(
   }
 }
 
-function validateFilters(filters: TargetFilters, route: StateRoute): ContractError | undefined {
+/**
+ * Checks target filters against the registered Entity schema.
+ *
+ * @param filters Target or subscription filter collection.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The validated target filters.
+ */ function validateFilters(filters: TargetFilters, route: StateRoute): ContractError | undefined {
   const idCount = filters.idFilter?.id.length ?? 0;
   if (idCount > QueryLimits.idCount) {
     return invalidQueryError("QueryService.Read id_filter may contain at most 100 IDs.");
@@ -1120,7 +1796,13 @@ function validateFilters(filters: TargetFilters, route: StateRoute): ContractErr
     : undefined;
 }
 
-function validateCompositeFilters(
+/**
+ * Checks nested composite filters and their traversal bounds.
+ *
+ * @param filters Target or subscription filter collection.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The validated composite filters.
+ */ function validateCompositeFilters(
   filters: readonly CompositeFilter[],
   route: StateRoute,
 ): ContractError | undefined {
@@ -1154,7 +1836,13 @@ function validateCompositeFilters(
   return undefined;
 }
 
-function validateQueryIds(
+/**
+ * Checks query ID Any payloads against the registered Entity ID.
+ *
+ * @param ids Opaque query or subscription IDs.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The validated query IDs.
+ */ function validateQueryIds(
   ids: readonly (Any | undefined)[] | undefined,
   route: StateRoute,
 ): ContractError | undefined {
@@ -1176,7 +1864,12 @@ function validateQueryIds(
   return undefined;
 }
 
-function countSimpleFilters(filters: readonly CompositeFilter[]): number {
+/**
+ * Counts leaf filters in a nested subscription criterion.
+ *
+ * @param filters Target or subscription filter collection.
+ * @returns The number of simple filter nodes.
+ */ function countSimpleFilters(filters: readonly CompositeFilter[]): number {
   const pending = [...filters];
   let count = 0;
   while (pending.length > 0) {
@@ -1188,7 +1881,13 @@ function countSimpleFilters(filters: readonly CompositeFilter[]): number {
   return count;
 }
 
-function validateSimpleFilters(
+/**
+ * Checks field filters and their typed Any values.
+ *
+ * @param filters Target or subscription filter collection.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The validated simple filters.
+ */ function validateSimpleFilters(
   filters: readonly Filter[],
   route: StateRoute,
 ): ContractError | undefined {
@@ -1236,6 +1935,10 @@ function validateSimpleFilters(
 
 /**
  * Checks query ordering and limits against the registered state route.
+ *
+ * @param format Declared filter value format.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The structured read error.
  */
 function formatReadError(format: Query["format"], route: StateRoute): ContractError | undefined {
   if (format === undefined) {
@@ -1261,6 +1964,11 @@ function formatReadError(format: Query["format"], route: StateRoute): ContractEr
 
 /**
  * Converts an accepted wire query into a storage plan for complete states.
+ *
+ * @param target Declared query or Topic target.
+ * @param query Framework Entity read query.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The validated Entity read plan.
  */
 function createReadPlan(
   target: Target,
@@ -1289,7 +1997,13 @@ function createReadPlan(
   });
 }
 
-function normalizedFilters(
+/**
+ * Converts validated target filters to executable predicates.
+ *
+ * @param filters Target or subscription filter collection.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The normalized filter predicates.
+ */ function normalizedFilters(
   filters: TargetFilters,
   route: StateRoute,
 ): NormalizedQueryPredicate<unknown> {
@@ -1307,12 +2021,24 @@ function normalizedFilters(
     : { kind: "all", predicates };
 }
 
-function decodeQueryIdValue(value: Any, route: StateRoute): unknown {
+/**
+ * Decodes an opaque query ID using the registered Entity ID schema.
+ *
+ * @param value Packed Entity ID Any from the query.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The typed Entity ID.
+ */ function decodeQueryIdValue(value: Any, route: StateRoute): unknown {
   const schema = route.idField.message;
   return schema === undefined ? decodeAnyValue(value) : decodeAnyValue(value, schema);
 }
 
-function normalizedComposite(
+/**
+ * Converts a validated composite filter to its execution form.
+ *
+ * @param filter One target or subscription filter.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The normalized composite criterion.
+ */ function normalizedComposite(
   filter: CompositeFilter,
   route: StateRoute,
 ): NormalizedQueryPredicate<unknown> {
@@ -1331,19 +2057,35 @@ function normalizedComposite(
   };
 }
 
-function requiredFilterColumn(filter: Filter): string {
+/**
+ * Resolves a declared state column for a field filter.
+ *
+ * @param filter One target or subscription filter.
+ * @returns The required state column.
+ */ function requiredFilterColumn(filter: Filter): string {
   const column = filter.fieldPath?.fieldName[0];
   if (column !== undefined) return column;
   throw new TypeError("Validated query filter has no column.");
 }
 
-function requiredComparison(filter: Filter): NormalizedComparisonOperator {
+/**
+ * Maps a wire filter operator to a supported comparison.
+ *
+ * @param filter One target or subscription filter.
+ * @returns The required comparison operator.
+ */ function requiredComparison(filter: Filter): NormalizedComparisonOperator {
   const operator = wireComparison(filter.operator);
   if (operator !== undefined) return operator;
   throw new TypeError("Validated query filter has no supported comparison operator.");
 }
 
-function decodeColumnValue(filter: Filter, route: StateRoute): unknown {
+/**
+ * Decodes a filter value for the target state column.
+ *
+ * @param filter One target or subscription filter.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The typed column value.
+ */ function decodeColumnValue(filter: Filter, route: StateRoute): unknown {
   const column = filter.fieldPath?.fieldName[0] ?? "";
   if (column === "version" && filter.value !== undefined) {
     const value = AnyPacker.tryUnpack(filter.value, VersionSchema);
@@ -1362,7 +2104,13 @@ function decodeColumnValue(filter: Filter, route: StateRoute): unknown {
   );
 }
 
-function filterValueMatches(field: DescField, value: Any): boolean {
+/**
+ * Checks an Any filter value against the registered field schema.
+ *
+ * @param field Registered Protobuf field descriptor.
+ * @param value Packed field-filter value.
+ * @returns Whether the filter value has the expected type.
+ */ function filterValueMatches(field: DescField, value: Any): boolean {
   const schema = filterValueSchema(field);
   if (
     schema === undefined ||
@@ -1391,7 +2139,12 @@ function filterValueMatches(field: DescField, value: Any): boolean {
   return typeof decoded === "number" && Number.isFinite(decoded);
 }
 
-function filterValueSchema(field: DescField): MessageSchema | undefined {
+/**
+ * Selects the Protobuf schema required for a state field filter.
+ *
+ * @param field Registered Protobuf field descriptor.
+ * @returns The declared filter-value schema.
+ */ function filterValueSchema(field: DescField): MessageSchema | undefined {
   if (field.fieldKind === "message") return field.message as MessageSchema;
   if (field.fieldKind === "enum") return Int32ValueSchema;
   if (field.fieldKind !== "scalar") return undefined;
@@ -1416,7 +2169,13 @@ function filterValueSchema(field: DescField): MessageSchema | undefined {
   return Int32ValueSchema;
 }
 
-function systemValueMatches(column: string, value: Any): boolean {
+/**
+ * Checks special state columns against a wire filter value.
+ *
+ * @param column Registered Entity state column.
+ * @param value Packed value for a system state column.
+ * @returns Whether the special value matches.
+ */ function systemValueMatches(column: string, value: Any): boolean {
   if (column === "version") {
     return (
       value.typeUrl === TypeUrls.derive(VersionSchema) &&
@@ -1432,7 +2191,12 @@ function systemValueMatches(column: string, value: Any): boolean {
   return false;
 }
 
-function supportsRange(field: DescField): boolean {
+/**
+ * Checks whether a field type supports ordered comparisons.
+ *
+ * @param field Registered Protobuf field descriptor.
+ * @returns Whether range comparisons are supported.
+ */ function supportsRange(field: DescField): boolean {
   if (field.fieldKind === "message") {
     return (
       field.message.typeName === "google.protobuf.Timestamp" ||
@@ -1446,7 +2210,12 @@ function supportsRange(field: DescField): boolean {
   );
 }
 
-function wireComparison(operator: Filter_Operator): NormalizedComparisonOperator | undefined {
+/**
+ * Maps a wire filter enum to the execution comparison.
+ *
+ * @param operator Wire filter comparison enum.
+ * @returns The comparison operator.
+ */ function wireComparison(operator: Filter_Operator): NormalizedComparisonOperator | undefined {
   if (operator === Filter_Operator.EQUAL) return "equal";
   if (operator === Filter_Operator.GREATER_THAN) return "greaterThan";
   if (operator === Filter_Operator.LESS_THAN) return "lessThan";
@@ -1455,29 +2224,47 @@ function wireComparison(operator: Filter_Operator): NormalizedComparisonOperator
   return undefined;
 }
 
-function unsupportedFilterError(message: string): ContractError {
+/**
+ * Creates a structured error for an unsupported filter.
+ *
+ * @param message Public validation or error message.
+ * @returns The invalid-filter error.
+ */ function unsupportedFilterError(message: string): ContractError {
   return invalidQueryError(message);
 }
 
-function unsupportedFormatError(message: string): ContractError {
+/**
+ * Creates a structured error for an unsupported filter format.
+ *
+ * @param message Public validation or error message.
+ * @returns The invalid-format error.
+ */ function unsupportedFormatError(message: string): ContractError {
   return invalidQueryError(message);
 }
 
-function invalidQueryError(message: string): ContractError {
+/**
+ * Creates the structured invalid-query error.
+ *
+ * @param message Public validation or error message.
+ * @returns The invalid-query error.
+ */ function invalidQueryError(message: string): ContractError {
   return {
     type: "INVALID_QUERY",
     message,
   };
 }
 
-function invalidCriterionError(): ContractError {
+/**
+ * Creates the structured invalid-subscription criterion error.
+ *
+ * @returns The invalid-criterion error.
+ */ function invalidCriterionError(): ContractError {
   return {
     type: "INVALID_QUERY",
     message: "QueryService.Read requires filters or include_all = true.",
   };
 }
 
-const DEFAULT_QUEUE_LIMIT = 100;
 const DEFAULT_SUBSCRIPTION_LIMIT = 100;
 
 /**
@@ -1503,11 +2290,12 @@ const SubscriptionLimits = Object.freeze({
   pathSegmentLength: 128,
 });
 
-function positiveInteger(value: number): number {
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
-}
-
-function subscriptionLimit(value: number): number {
+/**
+ * Validates the configured maximum concurrent subscriptions.
+ *
+ * @param value Configured maximum concurrent subscriptions.
+ * @returns The accepted subscription limit.
+ */ function subscriptionLimit(value: number): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new TypeError("SpineServices subscriptionLimit must be a positive safe integer.");
   }
@@ -1515,23 +2303,34 @@ function subscriptionLimit(value: number): number {
   return value;
 }
 
-function createSubscriptionRecord(input: {
+/**
+ * Constructs an in-memory subscription record with its reader binding.
+ *
+ * @param input Fields for a new reader-bound subscription record.
+ * @returns The new subscription record.
+ */ function createSubscriptionRecord(input: {
   readonly id: string;
   readonly subscription: Subscription;
   readonly shape: SubscriptionShape;
   readonly tenantId: TenantId | undefined;
-  readonly queueLimit: number;
+  readonly queueCapacity: number;
+  readonly reader?: ReaderIdentity;
 }): SubscriptionRecord {
   return {
     id: input.id,
     subscription: clone(SubscriptionSchema, input.subscription),
+    ...(input.reader === undefined ? {} : { reader: input.reader }),
     tenantId: input.tenantId === undefined ? undefined : clone(TenantIdSchema, input.tenantId),
-    delivery: new SubscriptionDelivery(input.queueLimit),
+    delivery: new SubscriptionDelivery(input.queueCapacity),
     ...input.shape,
   };
 }
 
-function createSubscriptionRemoval(): SubscriptionRemoval {
+/**
+ * Creates a shared removal task for concurrent cancellation.
+ *
+ * @returns The removal task and its completion promise.
+ */ function createSubscriptionRemoval(): SubscriptionRemoval {
   let reject!: (reason?: unknown) => void;
   let resolve!: () => void;
   const settled = new Promise<void>((settle, fail) => {
@@ -1543,11 +2342,20 @@ function createSubscriptionRemoval(): SubscriptionRemoval {
   return { reject, resolve, settled };
 }
 
-function uniqueContexts(contexts: readonly BoundedContext[]): readonly BoundedContext[] {
+/**
+ * Deduplicates registered bounded contexts for routing.
+ *
+ * @param contexts Built bounded contexts available for routing.
+ * @returns The distinct bounded contexts.
+ */ function uniqueContexts(contexts: readonly BoundedContext[]): readonly BoundedContext[] {
   return [...new Set(contexts)];
 }
 
-function validateTopic(topic: Topic): void {
+/**
+ * Checks Topic identity, context, target and criterion.
+ *
+ * @param topic Framework subscription Topic.
+ */ function validateTopic(topic: Topic): void {
   if (topic.id?.value === undefined || topic.id.value.trim().length === 0) {
     throw new ConnectError("Subscription topic ID is required.", Code.InvalidArgument);
   }
@@ -1561,6 +2369,10 @@ function validateTopic(topic: Topic): void {
 
 /**
  * Validates a topic and returns its state or Event subscription shape.
+ *
+ * @param topic Framework subscription Topic.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The normalized subscription shape.
  */
 function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): SubscriptionShape {
   const target = topic.target;
@@ -1594,6 +2406,8 @@ function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): Subscr
 
 /**
  * Checks the supported event topic criteria.
+ *
+ * @param target Declared query or Topic target.
  */
 function validateEventSubscriptionTopic(target: Target): void {
   switch (target.criterion.case) {
@@ -1616,7 +2430,11 @@ function validateEventSubscriptionTopic(target: Target): void {
   }
 }
 
-function validateSubscriptionFilterTree(filters: readonly CompositeFilter[]): void {
+/**
+ * Checks a Topic filter tree before accepting its definition.
+ *
+ * @param filters Target or subscription filter collection.
+ */ function validateSubscriptionFilterTree(filters: readonly CompositeFilter[]): void {
   if (filters.length > SubscriptionLimits.compositeCount) {
     throw new ConnectError(
       "SubscriptionService.Subscribe may contain at most 8 composite filters.",
@@ -1644,7 +2462,13 @@ function validateSubscriptionFilterTree(filters: readonly CompositeFilter[]): vo
   }
 }
 
-function validateSubscriptionFilterNode(
+/**
+ * Checks one nested subscription filter node and its bounds.
+ *
+ * @param filter One target or subscription filter.
+ * @param depth Current composite-filter nesting depth.
+ * @param counts Current filter traversal counts.
+ */ function validateSubscriptionFilterNode(
   filter: CompositeFilter,
   depth: number,
   counts: SubscriptionFilterCounts,
@@ -1698,7 +2522,13 @@ function validateSubscriptionFilterNode(
   }
 }
 
-function enqueueSubscriptionFilterChildren(
+/**
+ * Queues nested filter children for bounded traversal.
+ *
+ * @param filter One target or subscription filter.
+ * @param depth Current composite-filter nesting depth.
+ * @param stack Pending filter traversal stack.
+ */ function enqueueSubscriptionFilterChildren(
   filter: CompositeFilter,
   depth: number,
   stack: SubscriptionFilterFrame[],
@@ -1714,11 +2544,17 @@ function enqueueSubscriptionFilterChildren(
   }
 }
 
+/**
+ * One nested composite filter and its current traversal depth.
+ */
 interface SubscriptionFilterFrame {
   readonly filter: CompositeFilter;
   readonly depth: number;
 }
 
+/**
+ * Running totals checked against the subscription filter complexity budget.
+ */
 interface SubscriptionFilterCounts {
   compositeCount: number;
   simpleCount: number;
@@ -1726,6 +2562,9 @@ interface SubscriptionFilterCounts {
 
 /**
  * Checks a state filter path before resolving its fields.
+ *
+ * @param fieldPath Declared filter field path.
+ * @param label Diagnostic label for the invalid input.
  */
 function validateSubscriptionPath(fieldPath: readonly string[], label: "field filter"): void {
   if (fieldPath.length === 0 || fieldPath.some((field) => field.trim().length === 0)) {
@@ -1748,7 +2587,13 @@ function validateSubscriptionPath(fieldPath: readonly string[], label: "field fi
   }
 }
 
-function decodeSubscriptionIdValue(value: Any, route: StateRoute): unknown {
+/**
+ * Decodes a subscription ID filter using the target ID schema.
+ *
+ * @param value Packed subscription ID Any.
+ * @param route Registered target route with schema and tenancy.
+ * @returns The typed subscription filter ID.
+ */ function decodeSubscriptionIdValue(value: Any, route: StateRoute): unknown {
   if (!isAny(value)) {
     throw new ConnectError(
       "SubscriptionService.Subscribe id_filter values must be packed Any messages.",
@@ -1773,7 +2618,13 @@ function decodeSubscriptionIdValue(value: Any, route: StateRoute): unknown {
   return decoded;
 }
 
-function decodeFieldFilterValue(value: Any | undefined, schema: MessageSchema | undefined) {
+/**
+ * Decodes a field-filter Any with its declared value schema.
+ *
+ * @param value Packed field-filter Any, if present.
+ * @param schema Registered Protobuf message schema.
+ * @returns The typed field-filter value.
+ */ function decodeFieldFilterValue(value: Any | undefined, schema: MessageSchema | undefined) {
   if (value === undefined || schema === undefined) {
     return decodeAnyValue(value);
   }
@@ -1790,7 +2641,13 @@ function decodeFieldFilterValue(value: Any | undefined, schema: MessageSchema | 
   return decoded;
 }
 
-function decodeAnyValue(value: Any | undefined, schema?: MessageSchema): unknown {
+/**
+ * Decodes a known Any payload against its declared schema.
+ *
+ * @param value Packed Any payload, if present.
+ * @param schema Registered Protobuf message schema.
+ * @returns The decoded payload value.
+ */ function decodeAnyValue(value: Any | undefined, schema?: MessageSchema): unknown {
   if (value === undefined) {
     return undefined;
   }
@@ -1813,10 +2670,16 @@ function decodeAnyValue(value: Any | undefined, schema?: MessageSchema): unknown
   return value;
 }
 
+/**
+ * Leaf message schema found while validating a subscription field path.
+ */
 interface ResolvedMessagePath {
   readonly leafSchema?: MessageSchema;
 }
 
+/**
+ * Field name and nested schema found in a subscription filter path.
+ */
 interface MessageFieldInfo {
   readonly name: string;
   readonly localName: string;
@@ -1825,6 +2688,11 @@ interface MessageFieldInfo {
 
 /**
  * Resolves a state filter path to generated message fields.
+ *
+ * @param schema Registered Protobuf message schema.
+ * @param fieldPath Declared filter field path.
+ * @param label Diagnostic label for the invalid input.
+ * @returns The registered field at the declared path.
  */
 function resolveMessagePath(
   schema: MessageSchema,
@@ -1858,7 +2726,13 @@ function resolveMessagePath(
   });
 }
 
-function findMessageField(
+/**
+ * Finds a declared field in a registered Protobuf message.
+ *
+ * @param schema Registered Protobuf message schema.
+ * @param name Configured header or field name.
+ * @returns The matching field descriptor, if present.
+ */ function findMessageField(
   schema: MessageSchema | undefined,
   name: string,
 ): MessageFieldInfo | undefined {
@@ -1867,11 +2741,21 @@ function findMessageField(
   return fields.find((field) => field.name === name || field.localName === name);
 }
 
-function isMessage(value: unknown): value is Message {
+/**
+ * Recognizes a Protobuf message value.
+ *
+ * @param value Candidate value to inspect as a Protobuf message.
+ * @returns Whether the value is a message.
+ */ function isMessage(value: unknown): value is Message {
   return typeof value === "object" && value !== null && "$typeName" in value;
 }
 
-function isAny(value: unknown): value is Any {
+/**
+ * Recognizes a Protobuf Any message by its declared type name.
+ *
+ * @param value Candidate value to inspect as a Protobuf Any.
+ * @returns Whether the value is an Any message.
+ */ function isAny(value: unknown): value is Any {
   return isMessage(value) && value.$typeName === "google.protobuf.Any";
 }
 
@@ -1893,15 +2777,30 @@ function packVersionedState<Schema extends MessageSchema>(
   });
 }
 
-function commandTenant(command: Command): TenantId | undefined {
+/**
+ * Extracts the declared tenant from a command actor context.
+ *
+ * @param command Framework command envelope.
+ * @returns The declared command tenant, if present.
+ */ function commandTenant(command: Command): TenantId | undefined {
   return tenantValue(command.context?.actorContext?.tenantId);
 }
 
-function topicTenant(topic: Topic | undefined): TenantId | undefined {
+/**
+ * Extracts the declared tenant from a Topic actor context.
+ *
+ * @param topic Framework subscription Topic.
+ * @returns The Topic tenant, if present.
+ */ function topicTenant(topic: Topic | undefined): TenantId | undefined {
   return tenantValue(topic?.context?.tenantId);
 }
 
-function tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
+/**
+ * Extracts the tenant value from a Proto tenant identifier.
+ *
+ * @param tenantId Declared Proto tenant identifier.
+ * @returns The tenant value, if present.
+ */ function tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
   if (tenantId === undefined) return undefined;
   try {
     return TenantBoundary.from(tenantId).tenantId;
@@ -1910,7 +2809,13 @@ function tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
   }
 }
 
-function stateRouteIdField(
+/**
+ * Finds the declared Entity ID field for a registered state route.
+ *
+ * @param schema Registered Protobuf message schema.
+ * @param idField Registered Entity ID field.
+ * @returns The Entity ID field descriptor.
+ */ function stateRouteIdField(
   schema: MessageSchema,
   idField: { readonly name?: string; readonly localName?: string } | undefined,
 ): MessageFieldInfo {
@@ -1981,26 +2886,18 @@ const TenantStatuses = Object.freeze({
    * @returns Connect failure preserving its stable Spine error type.
    */
   unknown(error: TenantUnknownError): ConnectError {
-    return new ConnectError(
-      error.message,
-      Code.NotFound,
-      undefined,
-      [
-        {
-          desc: ErrorSchema,
-          value: create(ErrorSchema, {
-            type: error.type,
-            code: Code.NotFound,
-            message: error.message,
-          }),
-        },
-      ],
-      error,
-    );
+    return ReadRequestStatus.unknownTenant(error);
   },
 });
 
-function tenantMismatch(
+/**
+ * Checks a request tenant against bounded-context tenancy.
+ *
+ * @param multitenant Whether the bounded context requires a tenant.
+ * @param tenantId Declared Proto tenant identifier.
+ * @param subject Verified request subject.
+ * @returns The tenant mismatch status, if any.
+ */ function tenantMismatch(
   multitenant: boolean,
   tenantId: TenantId | undefined,
   subject: "command" | "query" | "subscription",
@@ -2022,13 +2919,22 @@ function tenantMismatch(
       };
 }
 
+/**
+ * Structured public error selected for a rejected service request.
+ */
 interface ContractError {
   readonly type: string;
   readonly message: string;
   readonly details?: Any;
+  readonly code?: number;
 }
 
-function commandPostError(error: unknown): ContractError {
+/**
+ * Maps a command-post failure to its public structured status.
+ *
+ * @param error The failure being classified or propagated.
+ * @returns The sanitized command status.
+ */ function commandPostError(error: unknown): ContractError {
   if (error instanceof TransitionValidationError) {
     return {
       type: error.type,
@@ -2039,7 +2945,8 @@ function commandPostError(error: unknown): ContractError {
 
   if (error instanceof CommandValidationError) {
     return {
-      type: "COMMAND_VALIDATION_ERROR",
+      type: "spine.core.CommandValidationError",
+      code: CommandValidationErrorCode.INVALID_COMMAND,
       message: "Command payload validation failed.",
       details: AnyPacker.pack(ValidationErrorSchema, error.validationError),
     };
@@ -2125,6 +3032,24 @@ const VALUE_DECODERS = Object.freeze([
  * Groups non-public service contract, query, and subscription operations.
  */
 const ServiceValues = Object.freeze({
+  /**
+   * Maps supported Topic shape errors to structured public failures.
+   *
+   * @param topic Constraint-valid Topic to inspect.
+   * @param route Registered state or Event route.
+   */
+  checkTopicSemantics(topic: Topic, route: SubscriptionRoute): void {
+    try {
+      ServiceValues.validateTopic(topic);
+      ServiceValues.createSubscriptionShape(topic, route);
+    } catch (error) {
+      if (error instanceof ConnectError && error.code === Code.InvalidArgument) {
+        throw ReadRequestStatus.invalid("topic", false, error.rawMessage);
+      }
+      throw new ConnectError("Topic validation failed.", Code.Internal);
+    }
+  },
+
   /**
    * Checks one composite query filter and its current traversal bounds.
    *
@@ -2282,26 +3207,31 @@ const ServiceValues = Object.freeze({
    * Builds a stable Command rejection acknowledgement.
    *
    * @param messageId The packed Command ID, if supplied.
-   * @param type The public error code.
+   * @param type The error type.
    * @param message The public error message.
+   * @param code Numeric Proto error code when available.
+   * @param details Packed structured validation details when available.
    * @returns A sanitized Ack.
    */
-  commandErrorAck(messageId: Any | undefined, type: string, message: string): Ack {
-    return create(AckSchema, { messageId, status: errorStatus(type, message) });
+  commandErrorAck(
+    messageId: Any | undefined,
+    type: string,
+    message: string,
+    code?: number,
+    details?: Any,
+  ): Ack {
+    return create(AckSchema, { messageId, status: errorStatus(type, message, details, code) });
   },
   commandTenant,
   createReadPlan,
   createSubscriptionRecord,
   createSubscriptionRemoval,
   createSubscriptionShape,
-  defaultQueueLimit: DEFAULT_QUEUE_LIMIT,
   defaultSubscriptionLimit: DEFAULT_SUBSCRIPTION_LIMIT,
   errorStatus,
   okResponse,
   okStatus,
-  positiveInteger,
   packVersionedState,
-  queryErrorResponse,
   queryResultLimit: QueryLimits.resultCount,
   stateRouteIdField,
   subscriptionLimit,

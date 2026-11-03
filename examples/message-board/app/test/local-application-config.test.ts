@@ -70,7 +70,7 @@ describe("local MessageBoard launch configuration", () => {
     await import("../src/local-application-server.js");
     expect(application.run).toHaveBeenCalledExactlyOnceWith({
       port: 0,
-      webOrigin: "http://127.0.0.1:25173",
+      webOrigin: "https://127.0.0.1:25173",
     });
     expect(logged).toHaveBeenCalledWith(
       "MessageBoard local server ready at http://127.0.0.1:24001",
@@ -84,7 +84,7 @@ describe("local MessageBoard launch configuration", () => {
     await import("../src/local-application-server.js");
     expect(application.run).toHaveBeenCalledExactlyOnceWith({
       port: 8090,
-      webOrigin: "http://127.0.0.1:5173",
+      webOrigin: "https://127.0.0.1:5173",
     });
   });
 });

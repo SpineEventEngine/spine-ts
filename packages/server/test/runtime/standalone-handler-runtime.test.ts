@@ -338,7 +338,7 @@ describe("StandaloneHandlerRuntime", () => {
           ),
         }),
       ),
-    ).rejects.toThrow("invalid declared payload");
+    ).rejects.toThrow("Validation runtime failed.");
     expect(published).toEqual([]);
   });
 

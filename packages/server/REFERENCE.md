@@ -585,9 +585,8 @@ await context.commandBus().post(
 The generated record declares `ApproveProjectSchema` as the input and
 `ScheduleProjectSchema` as the emitted Command schema; registry ingestion, not
 manual decorator materialization, constructs the output-bearing metadata.
-Application builds emit the record to
-`generated/handler/generated-handler-registry.js`; those applications use
-`build()` with their compiled package root.
+Application builds emit the record to `generated/spine-metadata.js` and import
+`generated/spine-bootstrap.js` before `build()` selects registered classes.
 
 One `@Where({ eventField, equals })` equality filter may narrow an event- or
 rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type
@@ -611,9 +610,9 @@ environment setup to supply record/event storage to all contexts.
 `withTenantIndex(index)` selects a different live membership directory for one
 context; `context.tenantIndex` and `ServerEnvironment.instance().tenantIndex`
 return the configured objects. Closing a context does not close either index.
-`withGeneratedRegistryRoot(root)` enables framework discovery of the generated
-handler registry for classes registered with `add(EntityClass)`;
-`build()` asynchronously performs that discovery and assembly, including
+The application imports its generated `spine-bootstrap.js` before registering
+classes with `add(EntityClass)`; `build()` then selects passive descriptions
+by exact constructor and performs assembly, including
 explicit `Repository` registration. Await it before using the context. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 Trusted server-side code can call `context.getRepository(EntityClass)` to obtain
@@ -631,13 +630,12 @@ registry shapes with an instruction to regenerate.
 Each built context also has one `StandSubscriptionRegistry`. By default the
 builder creates a storage-backed registry from the resolved context
 `StorageFactory` (including the `ServerEnvironment` factory used for a builder
-added to a server). It stores one `spine.client.SubscriptionRecord` under each
+added to a server). Its physical `StorageGroup` derives from the logical Bounded Context name, so two contexts using one factory keep distinct definitions. An injected `StorageSubscriptionRegistry` takes an explicit group as its third constructor argument and prepares its captured factory and context. It stores one `spine.client.SubscriptionRecord` under each
 explicit `SubscriptionId`. A complete custom implementation can instead be
 supplied with `withSubscriptionRegistry(registry)`; responsibility transfers to
 the builder on the first build attempt.
 
-`SubscriptionService` streams are live best-effort notifications, not replay,
-ordering, or completeness contracts. A standalone Server defaults to the
+`SubscriptionService` streams are live notifications. Each subscriber receives its admitted filtered updates in order, but there is no replay, exactly-once, or cluster-wide completeness guarantee. A standalone Server defaults to the
 persistent registry. In a group of managed server replicas, the framework starts
 and closes each child Server and accepts only every context's actual
 `InMemorySubscriptionRegistry`; a persistent or custom registry is rejected
@@ -645,7 +643,12 @@ and the assembled child is closed before READY. Durable logical bindings remain
 Gateway-only. The Coordinator fans each logical definition to ready children,
 merges updates, propagates cancellation, and carries no subscription payload on
 parent/child IPC. A late or replacement child synchronizes retained definitions
-before it is eligible for normal requests. Active definitions attach their
+before it is eligible for normal requests. The Coordinator resolves the same
+`subscriptionQueueCapacity` before binding its HTTP/2 listener. Its activation
+ACK is separate from the update queue, which reserves one active DATA update
+plus the configured waiting count for each logical subscriber. Overflow closes
+that subscriber's relay and aborts its child streams.
+Active definitions attach their
 child streams before admission; subscribed but inactive definitions do not
 block readiness. Each child observes application-configured remote/shared
 Delivery directly. During DRAINING, new unary and shard admission stops while
@@ -678,12 +681,21 @@ completed cycle. This is best-effort per-node convergence, not a
 cluster-completeness, replay, ordering, gap-repair, or exactly-once guarantee.
 
 The registry accepts only a generated `SubscriptionId` for activate, get, and
-delete. `create(subscription)` returns `{ kind: "created", entry }` or
+delete. `create(subscription, reader?)` returns `{ kind: "created", entry }` or
 `{ kind: "existing", entry }`; the latter requires byte-equivalent canonical
-content and a different definition with the same ID throws `StandConflictError`.
-`activate(id)` returns `activated`, `active`, `missing`, or `expired`.
-`delete(id)` returns `deleted` or `missing`. Blank IDs or topics and malformed
-durable records fail closed.
+content and the same reader binding. A different definition or binding with the
+same ID throws `StandConflictError`. `activate(id, reader?)` returns `activated`,
+`active`, `missing`, `expired`, or `denied`. `delete(id, reader?)` returns `deleted`,
+`missing`, or `denied`. Blank IDs or topics and malformed durable records fail closed.
+
+Service requests always supply the admitted principal ID or an explicit anonymous
+binding. When supplied, the registry checks the binding again after every failed
+compare-and-set, before changing a reread record. The omitted argument is for
+trusted internal lifecycle work; it is not a way to admit an unauthenticated RPC.
+Reader identity is stored atomically with the subscription definition and phase.
+Attributes, authority facts, and credentials are not part of the stored identity.
+A missing legacy binding is not anonymous and cannot be claimed by a caller;
+the client must create a new subscription.
 
 Entries and nested subscriptions returned by create, activate, get, and
 snapshot are clone-safe views. Protobuf byte arrays remain mutable runtime
@@ -840,6 +852,11 @@ The scope is explicit: pass `{}` in a single-tenant Bounded Context or
 `{ tenantId }` in a multitenant Bounded Context. Reads use indexed storage
 without restoring an Agent. The application bridge must authorize access;
 actor metadata does not grant read permission.
+For a trusted in-process caller, the scope can also include detached
+`actorContext`, a verified `reader` with principal and authority facts, and a
+`signal`. Read-side filters receive those facts for that history call; omitting
+`reader` leaves principal and authority facts absent. The bridge supplies
+verified facts explicitly and cannot derive them from `actorContext`.
 
 If a selected model's `authorizeUse` callback explicitly returns `false`
 before the handler, the turn records one `AgentInvocationTerminated` System
@@ -849,10 +866,15 @@ may correlate this fact with the original source through paged Agent history.
 
 ## Signals, validation, and rejection behavior
 
-`CommandBus` validates every accepted command from Proto validation options
-before dispatcher or repository handler code runs. It raises the framework's
-command-validation failure, which `SpineServices` maps to
-`COMMAND_VALIDATION_ERROR` with a packed `spine.validation.ValidationError`.
+`CommandBus` checks the nonempty Command ID, nondefault message and context,
+and declared payload constraints before admission or dispatcher code runs.
+Annotated packed messages use generated Proto modules registered in the process.
+`SpineServices` reports invalid Commands in an error Ack with type
+`spine.core.CommandValidationError`, numeric `INVALID_COMMAND` code, and a
+packed `spine.validation.ValidationError`. Unsupported Commands use the same
+enum type and numeric `UNSUPPORTED_COMMAND` code.
+Technical validator failures use a sanitized `COMMAND_POST_ERROR` Ack without
+constraint details; they are distinct from invalid Command input.
 Entity transition validation failures that escape service processing map to
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with the same detail type. Managed
 reception of ordinary Entity work sends post-handler transition rejection to `DeliveryMonitor`;
@@ -871,6 +893,8 @@ an internal diagnostic, not a retry guarantee.
 Every domain context has an internal paired System Context. Domain events use
 the domain `EventBus` and domain `EventStore`. System events use only the
 System Context `EventBus`, so they never enter the domain EventStore.
+Each EventBus validates the Event envelope and domain payload before admission,
+storage, or delivery.
 `persistSystemEvents()` enables the paired System Context's separate storage.
 Bounded Contexts with Agents must enable it. For other Bounded Contexts it is optional; without
 it, the bus validates, dispatches and notifies without appending. Schemas may come from an external dispatcher or
@@ -886,6 +910,204 @@ opens the local Node HTTP/2 listener; default host is `127.0.0.1`. Set
 work to stop using dependencies, then closes contexts. Caller-managed `start()`
 does not close global process facilities; close `ServerEnvironment.instance()`
 separately when used. The final run-managed `run()` close closes its environment.
+
+`ServerOptions.appQueries` selects concrete generated `AppQueryHandler<Q, R>`
+instances by exact constructor metadata before listening. Duplicate Q routes
+or missing metadata fail startup. On direct app-node ingress,
+`QueryService.Execute` validates a complete AppQuery envelope and Q, then
+returns one packed paired R. Native and browser Gateways and managed Coordinators
+forward Execute to an app node; `ClientRequest.query(generatedQ)` decodes its paired R.
+The internal
+`Server.query(generatedQ, executionContext)` accepts a generated Q and returns
+its paired generated R, using a detached request and the effective actor,
+verified reader facts, and cancellation signal supplied by the current
+framework invocation. `ProcessManager.currentActorContext` and
+`Agent.currentActorContext` expose only the current signal's detached actor and
+tenant during a handler; neither establishes a verified principal. Constructor
+injection can bind the query function to a Server. Scoped Entity reads require
+query/full visibility and destination tenant membership. Direct calls do not
+cross the Server's gRPC output-filter boundary.
+
+`ReadSideFilter<typeof MessageSchema>` declares a typed policy for a registered
+Proto message. Its protected constructor takes the generated schema and optional
+`{ nested: true }`; `filter(message, context)` receives a detached mutable value
+and may return the same type or `null` to remove that occurrence. The context
+separates actor metadata from verified reader facts and identifies the current
+operation, plus a detached containing message and field for nested calls.
+Read-only packed bytes remain available to Buf decoding through a detached
+`value.slice()` passed to `fromBinary`.
+Call `addReadSideFilter(filter)` on a `BoundedContextBuilder` before `build()` to apply it to that
+Bounded Context's outward Entity reads and retained histories. Pass `readSideFilters`
+to `new Server(...)` to apply policies to Entity Query and App Query results
+leaving that Server over gRPC. The same instance can be installed in both
+places; each boundary invokes it once. Direct `Server.query()` runs BC source
+policies but does not cross the Server output boundary. An Entity root returned
+as `null` is omitted without another storage read; an App Query root returned
+as `null` produces OK with zero outer `AppQueryResponse.message` entries. A
+non-null response whose child field is absent remains one response entry.
+History removals retain the
+original continuation. Retained storage, hydration, and replay remain raw.
+Direct Stand and retained-history callbacks identify the producing Bounded
+Context. Protected history called from a handler carries its current signal
+actor; an out-of-handler diagnostic read has no actor or authenticated reader.
+Native SubscriptionService delivery filters already matched Entity states and
+Event payloads through the producing Bounded Context policy and then the
+Server policy. The `subscription` operation includes the original Topic and
+admitted subscription; its context carries the current verified reader facts,
+effective tenant, actor metadata, producing Bounded Context, and cancellation
+signal. Removing a state emits `no_longer_matching` with its original Entity
+ID; removing every Event payload suppresses that data batch. ACKs and existing
+removal controls remain unchanged. Policy failures end only that reader stream
+with a sanitized technical status.
+
+The operation describes the call that produced the value. `query` includes the
+actual Query and, during an App Query child read, the enclosing AppQuery. `app-query`
+identifies the final application result. `direct` identifies either a typed
+Stand state read by type URL and Entity ID, a caller-supplied RecordQuery, or a
+normalized query plan. `history` distinguishes an Entity state-at timestamp,
+Entity state/Event history depth, and an Agent view with its page request and
+optional cursor. Direct callers supply actor metadata, verified reader facts,
+and cancellation separately; they cannot override the operation.
+Direct subscription delivery uses `kind: "direct"` with
+`operation.subscription.typeUrl`, distinct from a one-off Stand read's
+`operation.read`.
+
+This filter uses the generated Project state and can be installed on the Bounded
+Context builder that contains its Repository:
+
+<!-- docs-snippet-path: packages/server/test/server/app-query-execution.test.ts -->
+
+```ts
+import {
+  type BoundedContextBuilder,
+  ReadSideFilter,
+  type ReadSideContext,
+} from "@spine-event-engine/server";
+import {
+  type ProjectOverviewState,
+  ProjectOverviewStateSchema,
+} from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
+
+/**
+ * Replaces a project name in all ordinary Entity Query results.
+ */
+class PublicProjectName extends ReadSideFilter<typeof ProjectOverviewStateSchema> {
+  /**
+   * Registers the filter for project overview state.
+   */
+  constructor() {
+    super(ProjectOverviewStateSchema);
+  }
+
+  /**
+   * Replaces the name only for ordinary Entity Query responses.
+   *
+   * @param state Project overview returned by the read side.
+   * @param context Describes the read operation and verified reader.
+   * @returns The project overview with its name replaced for ordinary Entity Queries.
+   */
+  filter(state: ProjectOverviewState, context: ReadSideContext): ProjectOverviewState {
+    if (context.operation.kind === "query") state.name = "Public project";
+    return state;
+  }
+}
+
+const projectPolicy = new PublicProjectName();
+
+/**
+ * Registers the project name policy in its supplying Bounded Context.
+ *
+ * @param builder Configures the project Bounded Context.
+ * @returns The builder with the read policy installed.
+ */
+function installProjectPolicy(builder: BoundedContextBuilder): BoundedContextBuilder {
+  return builder.addReadSideFilter(projectPolicy);
+}
+```
+
+The repository `onCreate` callback can inject `(q, context) => server.query(q, context)`
+into a Process Manager or Agent. Within an active handler, pass a generated Q
+with `{ actorContext: this.currentActorContext }`; the actor/tenant snapshot
+does not supply verified principal or provider facts. The
+[scoped integration test](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/test/entity/process-manager-querying.test.ts) includes
+the full callback and handler invocation.
+
+This example uses the generated Project query and the current Process Manager
+scope; pass `scopedOnCreate(server)` as the repository's `onCreate` callback.
+Ordinary generation and bootstrap register the decorated handler description:
+
+<!-- docs-snippet-path: packages/server/test/entity/process-manager-querying.test.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import {
+  Assign,
+  ProcessManager,
+  type EntityOptions,
+  type Server,
+  type ServerQueryExecutionContext,
+} from "@spine-event-engine/server";
+import { ProcessManagerStateSchema } from "../../test-fixtures/generated/entity-metadata/visibility_pb.js";
+import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+import {
+  type ProjectCreated as ProjectionEvent,
+  ProjectCreatedSchema as ProjectionEventSchema,
+} from "../../test-fixtures/generated/repository-routing/project_events_pb.js";
+import { type CreateReviewProject } from "../../test-fixtures/generated/validation-refusal/project_commands_pb.js";
+import {
+  type GetProjectOverview_Query,
+  type GetProjectOverview_Response,
+} from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { GetProjectOverview } from "../../test-fixtures/generated/repository-routing/project_queries_app_query.js";
+
+/**
+ * Runs a typed App Query from an active Process Manager handler.
+ */
+class ScopedAppQueryManager extends ProcessManager<string, typeof ProcessManagerStateSchema> {
+  /**
+   * Captures the scoped query callback supplied during repository construction.
+   *
+   * @param options Configures this Process Manager instance.
+   * @param ask Executes a generated App Query with trusted handler context.
+   */
+  constructor(
+    options: EntityOptions<string, typeof ProcessManagerStateSchema>,
+    private readonly ask: (
+      query: GetProjectOverview_Query,
+      context: ServerQueryExecutionContext,
+    ) => Promise<GetProjectOverview_Response>,
+  ) {
+    super(options);
+  }
+
+  /**
+   * Reads the current project overview while handling the creation Command.
+   *
+   * @param command Project creation request being assigned.
+   * @returns Event carrying the selected overview name.
+   */
+  @Assign
+  async assign(command: CreateReviewProject): Promise<ProjectionEvent> {
+    const result = await this.ask(
+      create(GetProjectOverview.querySchema, {
+        project: create(ProjectIdSchema, { value: command.id }),
+      }),
+      { actorContext: this.currentActorContext },
+    );
+    return create(ProjectionEventSchema, {
+      id: command.id,
+      name: result.project?.name ?? "",
+    });
+  }
+}
+
+/**
+ * Injects the Server's typed App Query route into new Process Manager instances.
+ */
+export const scopedOnCreate =
+  (server: Server) => (options: EntityOptions<string, typeof ProcessManagerStateSchema>) =>
+    new ScopedAppQueryManager(options, (q, context) => server.query(q, context));
+```
 
 `Stand` registers entity state for point/list reads, updates current state, and
 offers in-process subscriptions. The legacy-named local reset/replay helper
@@ -917,8 +1139,57 @@ authoritative queries from current state and Entity subscriptions observe
 committed `EntityStateChanged` messages on the paired System Context EventBus,
 so a direct Stand write alone does not produce a subscription update. Consumer
 callback failures are isolated from post-commit observation and other
-consumers. The package does not guarantee cluster-complete observations,
-subscription replay, event-gap repair, or exactly-once effects.
+consumers. Native subscription updates enter the existing bounded delivery
+queue before asynchronous read policies run; a full queue closes that stream.
+For a surviving Event, policy replaces only its domain payload and retains the original envelope.
+Direct `Stand.subscribe(schema, { next, error }, options)` applies only its
+producing Bounded Context's read policies, independently for each local
+subscriber. `next` receives either `{ kind: "state", state, previousState? }`
+or `{ kind: "removal", noLongerMatching: true }`; both retain the original type
+URL, Entity ID, version, and tenant metadata. A removed prior state is omitted
+from a surviving current state. `error` receives one terminal local policy,
+callback, or capacity fault. There is no raw callback overload. Options accept
+trusted `reader` facts, `actorContext` metadata, tenant, and cancellation;
+`ServerEnvironmentSettings.subscriptionQueueCapacity` sets the waiting count
+for direct and server-served subscriptions. Configure it before constructing
+the Stand or Bounded Context. It defaults to 100 waiting updates in addition to
+one active update; zero allows the active update with no waiting updates. Filter calls
+and `next` completion are sequential per subscriber. Overflow closes only that
+subscriber, clears waiting updates, invalidates the active result, and reports
+`StandSubscriptionCapacityError`; committed writes and other subscribers
+continue. Unsubscribe, cancellation, and Stand close invalidate outstanding
+results without waiting for a nonsettling policy. A producer does not await
+asynchronous policy or observer completion, although CPU-heavy synchronous
+policy work still runs on the producer's Node event loop.
+Direct subscribers do not cross a Server output-filter boundary. The package
+does not guarantee cluster-complete observations, subscription replay,
+event-gap repair, or exactly-once effects.
+
+This typed local observer handles visible states, removals, and terminal faults.
+Configure `subscriptionQueueCapacity: 250` through `ServerEnvironment.when(...).use(...)`
+before creating the Stand to allow 250 waiting updates beyond the active one:
+
+<!-- docs-snippet-path: packages/server/test/stand/stand-direct-subscription.test.ts -->
+
+```ts
+import { type Stand, type StandSubscription } from "@spine-event-engine/server";
+import { ProjectOverviewStateSchema } from "../../test-fixtures/generated/repository-routing/project_states_pb.js";
+
+export function observeProjects(
+  stand: Stand,
+  onState: (name: string) => void,
+  onRemoval: (id: unknown) => void,
+  onError: (error: Error) => void,
+): StandSubscription {
+  return stand.subscribe(ProjectOverviewStateSchema, {
+    next(update) {
+      if (update.kind === "state") onState(update.state.name);
+      else onRemoval(update.id);
+    },
+    error: onError,
+  });
+}
+```
 
 ### Native and managed hosting
 
@@ -988,6 +1259,48 @@ gRPC-Web transport message accepted by the public listener, so the effective
 inbound limit is the stricter applicable limit. `writeMaxBytes` limits public
 transport responses independently.
 
+### Native reader admission
+
+Configure app-node admission at `ServerOptions.services.readerAdmission`:
+
+- `direct.authenticate({ service, method, value, headers, peer })` authenticates
+  a direct native request. It returns verified `{ principal, authorityFacts }`,
+  an empty object for deliberate public access, or `undefined` to deny access.
+  The request value contains canonical Proto bytes; `peer` is the Connect
+  `HandlerContext` for that invocation.
+- `forwarded.verify(bytes, proof, peer)` verifies an assertion from a trusted
+  forwarding peer. It must authenticate that peer and validate the supplied
+  proof over the exact bytes. `BrowserServerOptions.forwardingProof.issue(bytes)`
+  supplies the corresponding gateway adapter.
+
+Admission completes before service validation, routing, or subscription mutation.
+Principal IDs and authority facts are copied per invocation. `principal.attributes`
+remains a string map; `authorityFacts` accepts finite JSON values, including
+arrays and nested objects. ActorContext remains separate from authentication.
+Neither the framework nor these ports promise live provider information.
+
+With no admission adapters, native requests remain public. Internal identity
+headers are still rejected without a configured verifier. With a forwarding
+verifier but no direct adapter, a request without a forwarding assertion is
+rejected as unauthenticated. An application that also permits public direct
+requests can explicitly return an empty reader from its direct adapter.
+Malformed assertions and denied authentication return `UNAUTHENTICATED`;
+unexpected adapter faults return sanitized `INTERNAL`. Explicit cancellation,
+availability, and permission statuses retain their meaning.
+
+`ManagedServerApplication` accepts `readerAdmission` for its Coordinator listener
+and `forwardingProof` for Coordinator-to-child requests. Configure the receiving
+child Servers with their verifier as well. Each hop verifies its incoming
+assertion and issues a new proof for the actual outgoing operation and payload.
+Loopback placement alone does not authenticate a forwarding peer.
+
+Authenticated forwarding now requires an issuer; configure both gateway and
+receiving node when updating an existing authenticated deployment. The native
+Server root still does not load the optional auth package. The forwarding ports
+do not make a JVM endpoint understand the TS internal reader assertion.
+
+### Browser hosting
+
 For `BrowserServer` from `@spine-event-engine/server/browser`, origins must be unique canonical HTTP(S) origins with no path, query,
 fragment, or trailing slash. Requests without an allowed exact `Origin` receive
 403 before RPC handling. Allowed responses include credentialed exact-origin
@@ -1050,7 +1363,11 @@ never returns private native data through public subscription responses.
 The durable registry preserves one approved `GatewayAuthenticatedSubscription`
 per public subscription through a process restart. It validates the record ID,
 full Subscription, and expiry before use. The trusted Actor and Tenant remain
-inside the stored Topic and are checked for Activate and Cancel. Create assigns
+inside the stored Topic; a stable principal ID is stored beside it. Activate and
+Cancel check the newly admitted reader and Actor/Tenant before stream effects
+or record mutation. Changed authority facts do not change the principal ID.
+An explicit anonymous binding remains distinct from missing legacy identity;
+records with missing identity cannot be claimed by a caller. Create assigns
 the public ID directly; no quota, reservation, fingerprint, or lease is
 persisted. Cleanup remains bounded and restart-safe at the record level. It
 cleans the backend definition before deleting its record. It is not a cleaner

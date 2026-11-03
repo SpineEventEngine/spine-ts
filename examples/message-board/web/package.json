@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/example-message-board-web",
-  "version": "2.0.0-snapshot.25",
+  "version": "2.0.0-snapshot.26",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -34,6 +34,6 @@
     "serve": "node scripts/static-server.mjs",
     "start:dev-server": "vite --host 127.0.0.1 --port 5173",
     "start": "pnpm -C ../../.. typecheck:build && vite --host 127.0.0.1 --port 5173",
-    "test:browser": "pnpm -C ../../.. typecheck:build && playwright test -c test/browser/playwright.config.ts"
+    "test:browser": "pnpm -C ../../.. typecheck:build && playwright test -c test/browser/playwright.config.ts && playwright test -c test/browser/signed-playwright.config.ts"
   }
 }

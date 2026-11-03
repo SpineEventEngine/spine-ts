@@ -25,14 +25,19 @@ import {
   ResolveContextRequestSchema,
   ResolveContextResponseSchema,
 } from "@spine-event-engine/proto/auth";
-import { QuerySchema } from "@spine-event-engine/proto/client";
+import { AppQuerySchema, QuerySchema } from "@spine-event-engine/proto/client";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
+import {
+  snapshotTrustedReader,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
 import type {
   AuthorizedRequestContext,
   AuthorizationPolicy,
   Clock,
   ContextResolver,
   IncomingCommand,
+  IncomingAppQuery,
   IncomingQuery,
   RequestCredential,
   SessionResolver,
@@ -93,6 +98,11 @@ export interface UnaryForwarder {
     readonly service: string;
     readonly method: string;
     readonly value: Uint8Array;
+
+    /**
+     * Verified reader data, detached from the session and context resolver.
+     */
+    readonly reader?: TrustedReaderContext;
     readonly signal?: AbortSignal;
   }): Promise<Uint8Array>;
 }
@@ -234,6 +244,9 @@ export type UnaryGatewayResult =
       readonly reason: UnaryGatewayRejection;
     };
 
+/**
+ * Gateway unary method selected by the decoded request kind.
+ */
 type Operation =
   | {
       readonly kind: "command";
@@ -246,11 +259,25 @@ type Operation =
       readonly method: "Read";
     }
   | {
+      readonly kind: "app-query";
+      readonly service: "spine.client.QueryService";
+      readonly method: "Execute";
+    }
+  | {
       readonly kind: "resolve-context";
       readonly service: "spine.auth.AuthenticationService";
       readonly method: "ResolveContext";
     };
+
+/**
+ * Unary operation forwarded to the native Command or Query service.
+ */
 type ForwardOperation = Exclude<Operation, { readonly kind: "resolve-context" }>;
+
+/**
+ * Command, Entity Query, or application Query decoded for unary Gateway admission.
+ */
+type IncomingUnary = IncomingCommand | IncomingQuery | IncomingAppQuery;
 
 /**
  * Transport-neutral unary admission pipeline for Commands and Queries.
@@ -287,26 +314,36 @@ export class UnaryGateway {
     const transport = UnaryGatewayValues.snapshotTransport(operation, request.transport);
     const source = UnaryGatewayValues.decode(operation, value, transport, this.#options.registry);
     if (source === undefined) return UnaryGatewayValues.reject("malformed-request");
+    return this.#handleAuthorized(operation, source, value, transport, request);
+  }
+
+  /**
+   * Authorizes one decoded request and resolves its trusted actor and tenant.
+   *
+   * @param operation Accepted asynchronous operation.
+   * @param source Decoded incoming Command or Query request.
+   * @param value Decoded request bytes to authorize.
+   * @param transport The connected native transport.
+   * @param request The request being processed.
+   * @returns The authorized gateway response.
+   */
+  async #handleAuthorized(
+    operation: ForwardOperation,
+    source: IncomingUnary,
+    value: Uint8Array,
+    transport: TransportRequestContext,
+    request: UnaryGatewayRequest,
+  ): Promise<UnaryGatewayResult> {
     const requestedContext = clone(ActorContextSchema, source.requestedContext);
     const session = await this.#session(request.credential);
     if (session === undefined) return UnaryGatewayValues.reject("unauthenticated");
-    const authorizationRequest = UnaryGatewayValues.decode(
-      operation,
-      value,
-      UnaryGatewayValues.snapshotTransport(operation, transport),
-      this.#options.registry,
-    );
+    const authorizationRequest = this.#decodeRequest(operation, value, transport);
     // The same immutable owned bytes and fixed registry decoded above already proved this shape.
     /* v8 ignore next */
     if (authorizationRequest === undefined) return UnaryGatewayValues.reject("malformed-request");
     if (!(await this.#options.authorize(session.principal, authorizationRequest)))
       return UnaryGatewayValues.reject("forbidden");
-    const contextRequest = UnaryGatewayValues.decode(
-      operation,
-      value,
-      UnaryGatewayValues.snapshotTransport(operation, transport),
-      this.#options.registry,
-    );
+    const contextRequest = this.#decodeRequest(operation, value, transport);
     if (contextRequest === undefined) return UnaryGatewayValues.reject("malformed-request");
     const trusted = await this.#options.contexts.resolve(
       session.principal,
@@ -315,6 +352,47 @@ export class UnaryGateway {
     );
     if (!UnaryGatewayValues.matches(requestedContext, trusted))
       return UnaryGatewayValues.reject("context-stale");
+    return this.#forwardTrusted(operation, source, trusted, session.principal, request.signal);
+  }
+
+  /**
+   * Decodes a fresh collaborator view from admitted bytes and fixed transport facts.
+   *
+   * @param operation Accepted asynchronous operation.
+   * @param value Canonical request bytes decoded for the collaborator.
+   * @param transport The connected native transport.
+   * @returns The decoded request, if well formed.
+   */
+  #decodeRequest(
+    operation: ForwardOperation,
+    value: Uint8Array,
+    transport: TransportRequestContext,
+  ): IncomingUnary | undefined {
+    return UnaryGatewayValues.decode(
+      operation,
+      value,
+      UnaryGatewayValues.snapshotTransport(operation, transport),
+      this.#options.registry,
+    );
+  }
+
+  /**
+   * Forwards the rewritten request with detached verified reader facts.
+   *
+   * @param operation Accepted asynchronous operation.
+   * @param source Decoded incoming Command or Query request.
+   * @param trusted Verified principal and authority context.
+   * @param principal Verified principal from session resolution.
+   * @param signal The cancellation signal for this operation.
+   * @returns The verified forwarded request.
+   */
+  async #forwardTrusted(
+    operation: ForwardOperation,
+    source: IncomingUnary,
+    trusted: AuthorizedRequestContext,
+    principal: Parameters<AuthorizationPolicy["authorize"]>[0],
+    signal: AbortSignal | undefined,
+  ): Promise<UnaryGatewayResult> {
     return {
       kind: "forwarded",
       value: await UnaryGatewayValues.abortable(
@@ -322,9 +400,15 @@ export class UnaryGateway {
           service: operation.service,
           method: operation.method,
           value: UnaryGatewayValues.rewrite(source, trusted),
-          ...(request.signal === undefined ? {} : { signal: request.signal }),
+          reader: snapshotTrustedReader({
+            ...(this.#options.publicAccess === true ? {} : { principal }),
+            ...(this.#options.publicAccess === true || trusted.authorityFacts === undefined
+              ? {}
+              : { authorityFacts: trusted.authorityFacts }),
+          }),
+          ...(signal === undefined ? {} : { signal }),
         }),
-        request.signal,
+        signal,
       ),
     };
   }
@@ -360,7 +444,12 @@ export class UnaryGateway {
     };
   }
 
-  async #session(credential: RequestCredential | undefined): Promise<
+  /**
+   * Resolves the current gateway session from the incoming credential.
+   *
+   * @param credential Incoming gateway credential, if present.
+   * @returns The resolved session, if authenticated.
+   */ async #session(credential: RequestCredential | undefined): Promise<
     | {
         readonly principal: { readonly id: string };
         readonly expiresAt?: import("@bufbuild/protobuf/wkt").Timestamp;
@@ -397,6 +486,8 @@ const UnaryGatewayValues = Object.freeze({
       return { kind: "command", service: request.service, method: request.method };
     if (request.service === "spine.client.QueryService" && request.method === "Read")
       return { kind: "query", service: request.service, method: request.method };
+    if (request.service === "spine.client.QueryService" && request.method === "Execute")
+      return { kind: "app-query", service: request.service, method: request.method };
     if (
       request.service === "spine.auth.AuthenticationService" &&
       request.method === "ResolveContext"
@@ -445,7 +536,7 @@ const UnaryGatewayValues = Object.freeze({
     value: Uint8Array,
     transport: TransportRequestContext,
     registry: TypeRegistryLookup | undefined,
-  ): IncomingCommand | IncomingQuery | undefined {
+  ): IncomingUnary | undefined {
     const input =
       operation.kind === "command"
         ? {
@@ -456,7 +547,9 @@ const UnaryGatewayValues = Object.freeze({
           }
         : { kind: operation.kind, value, transport };
     const result = IncomingRequests.decode(input);
-    return result?.kind === "command" || result?.kind === "query" ? result : undefined;
+    return result?.kind === "command" || result?.kind === "query" || result?.kind === "app-query"
+      ? result
+      : undefined;
   },
 
   /**
@@ -497,7 +590,7 @@ const UnaryGatewayValues = Object.freeze({
    * @param trusted The resolved context for identity checks or Query forwarding.
    * @returns The forwarded request bytes.
    */
-  rewrite(source: IncomingCommand | IncomingQuery, trusted: AuthorizedRequestContext): Uint8Array {
+  rewrite(source: IncomingUnary, trusted: AuthorizedRequestContext): Uint8Array {
     if (source.kind === "command") {
       const command = clone(CommandSchema, source.command);
       const commandContext =
@@ -515,6 +608,11 @@ const UnaryGatewayValues = Object.freeze({
       ...(trusted.zoneId === undefined ? {} : { zoneId: trusted.zoneId }),
       ...(trusted.language === undefined ? {} : { language: trusted.language }),
     });
+    if (source.kind === "app-query") {
+      const query = clone(AppQuerySchema, source.query);
+      query.context = context;
+      return toBinary(AppQuerySchema, query);
+    }
     const query = clone(QuerySchema, source.query);
     query.context = context;
     return toBinary(QuerySchema, query);

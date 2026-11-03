@@ -23,7 +23,9 @@ import {
   type Transport,
 } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
-import { SignalEnvelopes, AnyPacker, Time, TypeUrls } from "@spine-event-engine/core";
+import { SignalEnvelopes, AnyPacker, Time, TypeUrls, TypeRegistry } from "@spine-event-engine/core";
+import type { AppQueryResponseFor } from "@spine-event-engine/core";
+import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -49,8 +51,12 @@ import {
   CommandService,
   QuerySchema,
   QueryResponseSchema,
+  AppQuerySchema,
+  QueryIdSchema,
+  type AppQueryResponse,
   QueryService,
   SubscriptionService,
+  SubscriptionValidationError,
   SubscriptionUpdateSchema,
   TargetSchema,
   TopicSchema,
@@ -363,7 +369,14 @@ export interface EntitySubscriptionOptions extends ClientOperationOptions {
    *
    * @returns Returns the authoritative entity query.
    */
-  readonly authoritativeQuery: () => Query | { build(): Query };
+  readonly authoritativeQuery: () =>
+    | Query
+    | {
+        /**
+         * Builds the authoritative Entity query after a subscription gap.
+         */
+        build(): Query;
+      };
 }
 
 /**
@@ -785,7 +798,30 @@ export interface ClientRequest {
    * @param options Supplies cancellation options.
    * @returns Returns the query response.
    */
-  send(query: Query | { build(): Query }, options?: ClientOperationOptions): Promise<QueryResponse>;
+  send(
+    query:
+      | Query
+      | {
+          /**
+           * Builds the Entity query submitted by this read operation.
+           */
+          build(): Query;
+        },
+    options?: ClientOperationOptions,
+  ): Promise<QueryResponse>;
+
+  /**
+   * Executes a generated application request and decodes its paired result.
+   *
+   * @typeParam Q Generated request with a declared response association.
+   * @param query Generated application request.
+   * @param options Supplies cancellation options.
+   * @returns The wire Response and zero or one decoded paired results.
+   */
+  query<Q extends Message>(
+    query: Q & (AppQueryResponseFor<Q> extends never ? never : unknown),
+    options?: ClientOperationOptions,
+  ): Promise<AppQueryClientResponse<Q>>;
 
   /**
    * Creates an inactive topic subscription registered for client cleanup.
@@ -808,6 +844,23 @@ export interface ClientRequest {
     options: EventSubscriptionOptions,
   ): Promise<Subscription>;
 }
+
+/**
+ * Preserves the wire status while exposing a readonly array of decoded results.
+ *
+ * @typeParam Q Generated application request with a paired response.
+ */
+export type AppQueryClientResponse<Q extends Message> = Readonly<{
+  /**
+   * Carries the server's application-level response status.
+   */
+  response: NonNullable<AppQueryResponse["response"]>;
+
+  /**
+   * Contains at most one decoded response paired with Q.
+   */
+  message: readonly AppQueryResponseFor<Q>[];
+}>;
 
 /**
  * Keeps an actor and fixed tenant and zone settings for fresh request contexts.
@@ -923,6 +976,32 @@ class Request implements ClientRequest {
       const query = clone(QuerySchema, source);
       query.context = this.#context();
       return createClient(QueryService, this.#owner.transport).read(query, { signal });
+    });
+  }
+
+  /**
+   * Sends a generated application request using this actor scope and decodes its paired result.
+   *
+   * @typeParam Q Generated application request with a declared response.
+   * @param request Generated domain request.
+   * @param options Optional cancellation signal.
+   * @returns Wire status and zero or one decoded paired results.
+   */
+  async query<Q extends Message>(
+    request: Q & (AppQueryResponseFor<Q> extends never ? never : unknown),
+    options: ClientOperationOptions = {},
+  ): Promise<AppQueryClientResponse<Q>> {
+    return this.#owner.run(options.signal, async (signal) => {
+      const schemas = RequestValues.appQuerySchemas(request);
+      const input = create(AppQuerySchema, {
+        id: create(QueryIdSchema, { value: crypto.randomUUID() }),
+        context: this.#context(),
+        message: AnyPacker.pack(schemas.query, request),
+      });
+      const result = await createClient(QueryService, this.#owner.transport).execute(input, {
+        signal,
+      });
+      return RequestValues.decodeAppQuery(result, schemas.response) as AppQueryClientResponse<Q>;
     });
   }
 
@@ -1074,6 +1153,66 @@ class Request implements ClientRequest {
     });
   }
 }
+
+/**
+ * Resolves App Query schemas through the ordinary registered Proto-module inventory.
+ */
+const RequestValues = Object.freeze({
+  /**
+   * Finds the declared Query/Response siblings registered by the model module.
+   *
+   * @param request Generated application request.
+   * @returns Registered schemas for the request and its paired result.
+   */
+  appQuerySchemas(request: Message): {
+    query: GenMessage<Message>;
+    response: GenMessage<Message>;
+  } {
+    const registry = TypeRegistry.from(...registeredProtoModules());
+    const query = registry.findByFullName(request.$typeName);
+    const parent = query?.schema.parent;
+    const response = parent?.nestedMessages.find((nested) => nested.name === "Response");
+    const paired = response === undefined ? undefined : registry.findByFullName(response.typeName);
+    if (
+      query?.schema.name !== "Query" ||
+      parent?.parent !== undefined ||
+      !query.schema.file.name.endsWith("_queries") ||
+      paired === undefined ||
+      paired.schema !== response
+    )
+      throw new ClientProtocolError("App Query request has no registered paired response.");
+    return { query: query.schema, response: paired.schema };
+  },
+
+  /**
+   * Accepts at most one exact paired result while preserving the wire status.
+   *
+   * @param wire App-node application query response.
+   * @param response Registered paired result schema.
+   * @returns Response with a frozen array of decoded results.
+   */
+  decodeAppQuery(
+    wire: AppQueryResponse,
+    response: GenMessage<Message>,
+  ): Readonly<{
+    response: NonNullable<AppQueryResponse["response"]>;
+    message: readonly Message[];
+  }> {
+    if (wire.response === undefined)
+      throw new ClientProtocolError("App Query response is missing Response status.");
+    if (wire.message.length > 1)
+      throw new ClientProtocolError("App Query response contains more than one result.");
+    const packed = wire.message[0];
+    if (packed === undefined)
+      return Object.freeze({ response: wire.response, message: Object.freeze([]) });
+    try {
+      const result = AnyPacker.unpack(packed, response);
+      return Object.freeze({ response: wire.response, message: Object.freeze([result]) });
+    } catch {
+      throw new ClientProtocolError("App Query response does not contain its paired result.");
+    }
+  },
+});
 
 /**
  * Coordinates operation cancellation, subscriptions, and transport closure for one client.
@@ -1778,12 +1917,25 @@ class TopicSubscription implements Subscription {
    * @returns Whether the failure permits another connection attempt.
    */
   #retryable(error: unknown): boolean {
-    if (
-      error instanceof ConnectError &&
-      error.code === Code.NotFound &&
-      error.findDetails(ErrorSchema).some((detail) => detail.type === "TENANT_UNKNOWN")
-    )
-      return false;
+    if (error instanceof ConnectError) {
+      if (error.code === Code.NotFound) {
+        const unknownReason: number = SubscriptionValidationError.UNKNOWN_SUBSCRIPTION;
+        return error
+          .findDetails(ErrorSchema)
+          .some(
+            (detail) =>
+              detail.type === "spine.client.SubscriptionValidationError" &&
+              detail.code === unknownReason,
+          );
+      }
+      return (
+        error.code === Code.Unavailable ||
+        error.code === Code.DeadlineExceeded ||
+        error.code === Code.Aborted ||
+        error.code === Code.Internal ||
+        error.code === Code.Unknown
+      );
+    }
     return (
       error instanceof SubscriptionStreamEndedError ||
       (error instanceof Error &&

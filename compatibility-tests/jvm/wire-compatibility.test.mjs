@@ -1,14 +1,30 @@
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 
 import {
   assertImportCategories,
   assertPomProvenance,
+  restoreFrozenProto,
   verifyTypeScriptFixtures,
   verifyWireCompatibility,
 } from "./wire/verify.mjs";
+
+test("compares approved local adaptations as frozen upstream bytes and rejects other changes", async () => {
+  const manifest = JSON.parse(await readFile("packages/proto/proto/spine-sources.json", "utf8"));
+  const sources = new Map(manifest.sources.map((entry) => [entry.localPath, entry]));
+  for (const file of ["spine/client/filters.proto", "spine/client/query_service.proto"]) {
+    const local = await readFile(`packages/proto/proto/${file}`);
+    const restored = restoreFrozenProto(file, local, sources);
+    assert.notDeepEqual(restored, local);
+    const changed = Buffer.from(local.toString("utf8").replace("syntax =", "syntax  ="));
+    assert.throws(
+      () => restoreFrozenProto(file, changed, sources),
+      /file incompatibility: local checksum differs/,
+    );
+  }
+});
 
 test("fails closed when the frozen POM provenance or category manifest changes", async () => {
   assert.throws(

@@ -87,7 +87,7 @@ describe("@spine-event-engine/core validation facade upstream boundary", () => {
     }
   });
 
-  it("returns structured validation failures when the upstream validator throws", async () => {
+  it("throws a sanitized technical error when the upstream validator fails", async () => {
     vi.resetModules();
     vi.doMock("@spine-event-engine/validation", () => ({
       validate: () => {
@@ -95,26 +95,19 @@ describe("@spine-event-engine/core validation facade upstream boundary", () => {
       },
     }));
 
-    const { ValidationException, Validate } = await import("../src/index.js");
+    const { Validate } = await import("../src/index.js");
     const message = create(ValidationErrorSchema, {});
-    const result = Validate.message(ValidationErrorSchema, message);
-
-    expect(result.valid).toBe(false);
-    expect(result.violations).toHaveLength(1);
-    expect(result.violations[0]?.typeName).toBe("spine.validation.ValidationError");
-    expect(result.violations[0]?.message?.withPlaceholders).toBe("Validation runtime failed.");
-    expect(JSON.stringify(result.error)).not.toContain("raw upstream payload secret");
-
-    expect(() => Validate.check(ValidationErrorSchema, message)).toThrow(ValidationException);
-
-    try {
-      Validate.check(ValidationErrorSchema, message);
-      throw new Error("Expected Validate.check() to throw.");
-    } catch (error) {
-      expect(error).toBeInstanceOf(ValidationException);
-      expect(
-        (error as InstanceType<typeof ValidationException>).asMessage().constraintViolation,
-      ).toHaveLength(1);
+    for (const invoke of [
+      () => Validate.message(ValidationErrorSchema, message),
+      () => Validate.check(ValidationErrorSchema, message),
+    ]) {
+      expect(invoke).toThrow("Validation runtime failed.");
+      try {
+        invoke();
+      } catch (error) {
+        expect(error).not.toHaveProperty("violations");
+        expect(JSON.stringify(error)).not.toContain("raw upstream payload secret");
+      }
     }
   });
 });

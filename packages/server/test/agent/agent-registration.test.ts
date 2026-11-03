@@ -12,7 +12,8 @@
  * the License.
  */
 
-import { clone, create, toBinary } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
+import { Code } from "@connectrpc/connect";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type HistoryPage } from "@spine-event-engine/ai";
 import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
@@ -24,6 +25,7 @@ import {
 import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
 import {
   AgentHistoryEntrySchema,
+  AgentHistoryCursorSchema,
   type AgentHistoryCursor,
   AiContentDigestSchema,
   AiOperationIdSchema,
@@ -40,18 +42,26 @@ import {
   EventSchema,
   MessageIdSchema,
   TenantIdSchema,
+  type Event,
 } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
 import type {
+  AgentCommitInput,
   AgentHistoryStorage,
   AgentHistoryStorageInput,
+  EntityCommitStorage,
+  EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
+import { TenantIndexes } from "../../src/context/tenant-index.js";
 import { Repository } from "../../src/repository/repository.js";
 import { repositoryAccess } from "../../src/repository/repository.js";
+import { ReadSideFilter, type ReadSideContext } from "../../src/stand/read-side-filter.js";
+import { serverTestFixturesProtoModule } from "../../test-fixtures/generated/proto-module.js";
+void serverTestFixturesProtoModule;
 import { EnvironmentType } from "../../src/server/environment.js";
 import {
   ServerEnvironment,
@@ -101,8 +111,8 @@ class WaitingSupportAgent extends Agent<SupportReplyAgentId, typeof SupportReply
     return create(SupportReplyDraftedSchema, { agent: this.id, reply: "Ready" });
   }
 
-  readBoundHistory(): Promise<HistoryPage<unknown>> {
-    return this.fullHistory({ pageSize: 1 });
+  readBoundHistory(): Promise<HistoryPage<Event>> {
+    return this.domainEventHistory({ pageSize: 1 });
   }
 }
 
@@ -175,12 +185,39 @@ class GatedProtectedAgentHistoryFactory extends CountingAgentHistoryFactory {
   armed = false;
   #entered!: () => void;
   #release!: () => void;
+  #domainEventAppended!: () => void;
+
+  /**
+   * Resolves after the handler's domain Event is committed to Agent history.
+   */
+  readonly domainEventAppended = new Promise<void>((resolve) => {
+    this.#domainEventAppended = resolve;
+  });
+
   readonly entered = new Promise<void>((resolve) => {
     this.#entered = resolve;
   });
   readonly gate = new Promise<void>((resolve) => {
     this.#release = resolve;
   });
+
+  /**
+   * Signals the test only after the atomic Agent commit includes its domain Event.
+   */
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    const commitAgent = storage.commitAgent.bind(storage);
+    storage.commitAgent = async <Id, State extends Message>(
+      transition: AgentCommitInput<Id, State>,
+    ) => {
+      await commitAgent(transition);
+      if (transition.historyEntries?.some((entry) => entry.item.case === "domainEvent"))
+        this.#domainEventAppended();
+    };
+    return storage;
+  }
 
   protected override createAgentHistoryStorage<Id>(
     input: AgentHistoryStorageInput<Id>,
@@ -297,6 +334,20 @@ describe("Agent registration readiness", () => {
   });
 
   it("drains protected Agent history reads and rejects an old Agent after rebind", async () => {
+    const observed: ReadSideContext[] = [];
+    class ProtectedReplyPolicy extends ReadSideFilter<typeof SupportReplyDraftedSchema> {
+      constructor() {
+        super(SupportReplyDraftedSchema);
+      }
+      filter(
+        event: import("../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js").SupportReplyDrafted,
+        read: ReadSideContext,
+      ) {
+        observed.push(read);
+        event.reply = "Protected visible";
+        return event;
+      }
+    }
     const factory = new GatedProtectedAgentHistoryFactory();
     await configureStorage(factory);
     const configured = waitingRepository();
@@ -304,6 +355,7 @@ describe("Agent registration readiness", () => {
       .withAi(ai())
       .persistSystemEvents()
       .add(configured)
+      .addReadSideFilter(new ProtectedReplyPolicy())
       .build();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-protected-history" });
     await context.commandBus().post(
@@ -313,9 +365,7 @@ describe("Agent registration readiness", () => {
         context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
       }),
     );
-    await vi.waitFor(() => {
-      expect(WaitingSupportAgent.latest).toBeDefined();
-    });
+    await factory.domainEventAppended;
     factory.armed = true;
     const agent = WaitingSupportAgent.latest;
     if (agent === undefined) throw new Error("Expected live Agent.");
@@ -325,7 +375,16 @@ describe("Agent registration readiness", () => {
     expect(factory.historyCloses).toBe(0);
     await expect(agent.readBoundHistory()).rejects.toThrow("active runtime");
     factory.release();
-    expect((await admitted).items).toHaveLength(1);
+    const page = await admitted;
+    expect(page.items).toHaveLength(1);
+    const entry = page.items[0];
+    if (entry?.message === undefined) throw new Error("Expected a retained domain Event.");
+    expect(AnyPacker.unpack(entry.message, SupportReplyDraftedSchema).reply).toBe(
+      "Protected visible",
+    );
+    expect(observed[0]?.producingContext).toBe(context);
+    expect(observed[0]?.principal).toBeUndefined();
+    expect(observed[0]?.actorContext).toBeUndefined();
     await closing;
     expect(factory.historyCloses).toBe(1);
     await context.close();
@@ -436,23 +495,165 @@ describe("Agent registration readiness", () => {
     expect(factory.historyCloses).toBe(1);
   });
 
-  it("isolates public Agent history by tenant and detaches returned entries", async () => {
-    const factory = new InMemoryStorageFactory();
+  it("cancels empty Agent history before or during tenant admission without opening storage", async () => {
+    const factory = new CountingAgentHistoryFactory();
     await configureStorage(factory);
+    const base = TenantIndexes.fromFactory(factory);
+    let entered!: () => void;
+    let release!: () => void;
+    const admissionEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let pause = false;
+    const index = {
+      contains: async (tenant: import("@spine-event-engine/proto").TenantId) => {
+        if (pause) {
+          entered();
+          await gate;
+        }
+        return base.contains(tenant);
+      },
+      all: () => base.all(),
+      page: (request: import("../../src/context/tenant-index.js").TenantIndexRead) =>
+        base.page(request),
+      keep: (tenant: import("@spine-event-engine/proto").TenantId) => base.keep(tenant),
+    };
     const configured = waitingRepository();
-    const context = await BoundedContext.multitenant("TenantAgentReads")
+    const context = await BoundedContext.multitenant("CanceledAgentHistory")
+      .withTenantIndex(index)
       .withAi(ai())
       .persistSystemEvents()
       .add(configured)
+      .build();
+    const tenantId = create(TenantIdSchema, { kind: { case: "value", value: "tenant-A" } });
+    const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-canceled-history" });
+    const conversation = create(ConversationIdSchema, { value: "T-canceled-conversation" });
+    await context.tenantIndex.keep(tenantId);
+    try {
+      const canceled = new AbortController();
+      canceled.abort();
+      const reader = configured.agentHistory(id, { tenantId, signal: canceled.signal });
+      const calls = [
+        reader.fullHistory({ pageSize: 1 }),
+        reader.conversationHistory({ pageSize: 1, conversation }),
+        reader.systemEventHistory({ pageSize: 1 }),
+        reader.domainEventHistory({ pageSize: 1 }),
+      ];
+      for (const call of calls) await expect(call).rejects.toMatchObject({ code: Code.Canceled });
+      expect(factory.historyOpens).toBe(0);
+      const during = new AbortController();
+      pause = true;
+      const pending = configured
+        .agentHistory(id, { tenantId, signal: during.signal })
+        .fullHistory({ pageSize: 1 });
+      await admissionEntered;
+      during.abort();
+      release();
+      await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+      expect(factory.historyOpens).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("isolates public Agent history by tenant and detaches returned entries", async () => {
+    const observed: ReadSideContext[] = [];
+    const conversationReads: ReadSideContext[] = [];
+    class DropPrivateReply extends ReadSideFilter<typeof SupportReplyDraftedSchema> {
+      constructor() {
+        super(SupportReplyDraftedSchema);
+      }
+      filter(
+        event: import("../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js").SupportReplyDrafted,
+      ) {
+        return event.reply === "Private" ? null : event;
+      }
+    }
+    class RedactReply extends ReadSideFilter<typeof SupportReplyDraftedSchema> {
+      constructor() {
+        super(SupportReplyDraftedSchema);
+      }
+      filter(
+        event: import("../../test-fixtures/generated/entity-metadata/support_agent_events_pb.js").SupportReplyDrafted,
+        context: ReadSideContext,
+      ) {
+        expect(context.operation.kind).toBe("history");
+        observed.push(context);
+        event.reply = "Visible reply";
+        return event;
+      }
+    }
+    class CaptureConversation extends ReadSideFilter<typeof ConversationRecordSchema> {
+      constructor() {
+        super(ConversationRecordSchema);
+      }
+      filter(
+        record: import("@spine-event-engine/proto/agent").ConversationRecord,
+        facts: ReadSideContext,
+      ) {
+        conversationReads.push(facts);
+        return record;
+      }
+    }
+    const factory = new InMemoryStorageFactory();
+    await configureStorage(factory);
+    const baseIndex = TenantIndexes.fromFactory(factory);
+    let pauseAdmission = false;
+    let entered!: () => void;
+    let release!: () => void;
+    const admissionEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const index = {
+      contains: async (tenant: import("@spine-event-engine/proto").TenantId) => {
+        if (pauseAdmission) {
+          pauseAdmission = false;
+          entered();
+          await gate;
+        }
+        return baseIndex.contains(tenant);
+      },
+      all: () => baseIndex.all(),
+      page: (request: import("../../src/context/tenant-index.js").TenantIndexRead) =>
+        baseIndex.page(request),
+      keep: (tenant: import("@spine-event-engine/proto").TenantId) => baseIndex.keep(tenant),
+    };
+    const configured = waitingRepository();
+    const context = await BoundedContext.multitenant("TenantAgentReads")
+      .withTenantIndex(index)
+      .withAi(ai())
+      .persistSystemEvents()
+      .add(configured)
+      .addReadSideFilter(new DropPrivateReply())
+      .addReadSideFilter(new RedactReply())
+      .addReadSideFilter(new CaptureConversation())
       .build();
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared" });
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-A" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-B" } });
     await context.tenantIndex.keep(tenantA);
     await context.tenantIndex.keep(tenantB);
-    const scope = { tenantId: tenantA };
+    const actorContext = create(ActorContextSchema);
+    const signal = new AbortController().signal;
+    const scope = {
+      tenantId: tenantA,
+      actorContext,
+      reader: {
+        principal: { id: "reviewer-1" },
+        authorityFacts: { roles: ["support"], permitted: true },
+      },
+      signal,
+    };
     const reader = configured.agentHistory(id, scope);
     scope.tenantId = tenantB;
+    scope.reader.principal.id = "changed";
+    scope.reader.authorityFacts.roles.push("admin");
     const storage = AgentHistoryStorageFactories.create(factory, {
       context: { name: "TenantAgentReads", multitenant: true, tenantId: tenantA },
       stateType: SupportReplyAgentStateSchema.typeName,
@@ -478,6 +679,24 @@ describe("Agent registration readiness", () => {
         create(AgentHistoryEntrySchema, {
           occurredAt,
           item: { case: "domainEvent", value: event },
+        }),
+      );
+      const privateAt = create(TimestampSchema, { seconds: 3n });
+      await storage.append(
+        id,
+        create(AgentHistoryEntrySchema, {
+          occurredAt: privateAt,
+          item: {
+            case: "domainEvent",
+            value: create(EventSchema, {
+              id: create(EventIdSchema, { value: "private-event" }),
+              message: AnyPacker.pack(
+                SupportReplyDraftedSchema,
+                create(SupportReplyDraftedSchema, { agent: id, reply: "Private" }),
+              ),
+              context: create(EventContextSchema, { timestamp: privateAt }),
+            }),
+          },
         }),
       );
       const conversation = create(ConversationIdSchema, { value: "tenant-draft" });
@@ -518,27 +737,52 @@ describe("Agent registration readiness", () => {
           item: { case: "conversationRecord", value: olderRecord },
         }),
       );
-      const first = await reader.domainEventHistory({ pageSize: 1 });
+      const removed = await reader.domainEventHistory({ pageSize: 1 });
+      expect(removed.items).toEqual([]);
+      if (removed.nextCursor === undefined)
+        throw new Error("Expected original continuation after removal.");
+      const first = await reader.domainEventHistory({ pageSize: 1, cursor: removed.nextCursor });
       expect(first.items.map((item) => item.id?.value)).toEqual(["tenant-event"]);
+      const visible = first.items[0]?.message;
+      if (visible === undefined) throw new Error("Expected domain Event payload.");
+      expect(AnyPacker.unpack(visible, SupportReplyDraftedSchema).reply).toBe("Visible reply");
+      expect(observed[0]?.principal?.id).toBe("reviewer-1");
+      expect(observed[0]?.authorityFacts).toEqual({ roles: ["support"], permitted: true });
+      expect(observed[0]?.actorContext).toEqual(actorContext);
+      expect(observed[0]?.effectiveTenant).toEqual(tenantA);
+      expect(observed[0]?.signal).toBe(signal);
       const returnedId = first.items[0]?.id;
       if (returnedId === undefined) throw new Error("Expected returned Event ID.");
       returnedId.value = "locally-mutated";
-      expect((await reader.domainEventHistory({ pageSize: 1 })).items[0]?.id?.value).toBe(
-        "tenant-event",
-      );
+      expect(
+        (await reader.domainEventHistory({ pageSize: 1, cursor: removed.nextCursor })).items[0]?.id
+          ?.value,
+      ).toBe("tenant-event");
       expect(
         (await reader.conversationHistory({ pageSize: 1, conversation })).items[0]?.id?.value,
       ).toBe("tenant-request");
       const firstConversation = await reader.conversationHistory({ pageSize: 1, conversation });
       if (firstConversation.nextCursor === undefined) throw new Error("Expected continuation.");
-      const secondConversation = await reader.conversationHistory({
+      const cursor = clone(AgentHistoryCursorSchema, firstConversation.nextCursor);
+      const expectedCursor = cursor.value;
+      pauseAdmission = true;
+      const secondReading = reader.conversationHistory({
         pageSize: 1,
         conversation,
-        cursor: firstConversation.nextCursor,
+        cursor,
       });
+      await admissionEntered;
+      cursor.value = "caller-mutated-cursor";
+      release();
+      const secondConversation = await secondReading;
       expect(secondConversation.items.map((item) => item.id?.value)).toEqual([
         "tenant-older-request",
       ]);
+      const operation = conversationReads.at(-1)?.operation;
+      expect(operation?.kind).toBe("history");
+      if (operation?.kind === "history" && operation.history.source === "agent") {
+        expect(operation.history.request.cursor?.value).toEqual(expectedCursor);
+      }
       expect(secondConversation.nextCursor).toBeUndefined();
       await expect(
         configured.agentHistory(id, { tenantId: tenantB }).conversationHistory({

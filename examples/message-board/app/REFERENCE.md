@@ -5,33 +5,15 @@ with the [Message Board app README](README.md).
 
 ## Assembly
 
-`MessageBoardApplication.createContext()` builds a single-tenant context with
-`InMemoryStorageFactory` by default, generated registry lookup, one Aggregate,
-and one Projection. `start()` embeds the server and leaves closing to
-the caller. `run()` delegates `SIGINT` and `SIGTERM` shutdown to `Server`.
+`MessageBoardApplication` uses `ComposedBoardApplication` in every startup mode. It builds the Message Board and announcements Bounded Contexts, registers `ReadBoardStats`, and applies Bounded Context and Server read filters. Each context has a distinct logical subscription storage group; the captured registry group is prepared during startup, including an injected registry. Partial startup closes already-created contexts. `start()` leaves closing to the caller; `run()` handles process signals.
 
-Browser configuration supplies the Message Board type registry, framework `publicAccess`,
-resolver and clock, `BoardAccessPolicy`, `BoardContextResolver`, exact
-Vite origin. Generic listener, CORS, router,
-subscription-binding, rollback, and lifecycle modules must remain in the
-framework rather than returning to this package.
-
-The server defaults to loopback and an ephemeral public port; the local CLI
-selects 8090. The native backend remains on an internal ephemeral loopback
-port. The service permits at most 1,000 active subscriptions.
-
-`BoardAccessPolicy` checks the board and author of each `PostMessage`, and
-requires board filters for Projection reads and subscriptions. The form also
-subscribes to `MessagePosted` and `MessageAlreadyPosted` for an exact
-`PostMessage` Origin belonging to the permitted actor. It does not receive an
-unrestricted stream of these Events. The gateway still checks actor and tenant
-before forwarding every request.
+Public admission accepts the demonstration actor without claiming verified identity. Signed admission requires the configured issuer, audience, P-256 private key and key ID, and HMAC proof key. `SignedSessions` supplies the principal and its `canReadRestricted` authority fact. The Gateway forwards a proof bound to each reader operation; direct native Query and subscription readers verify bearer admission. Keep the native endpoint on a trusted internal network. The example does not claim bearer authentication of every native Command RPC.
 
 ## Generated code
 
 `spine-proto compose` writes `src/model-registry.ts` from `spine-proto.json`.
 `spine-proto handlers` writes
-`generated/handler/generated-handler-registry.ts` from decorated classes.
+`generated/spine-metadata.ts` and `generated/spine-bootstrap.ts` from decorated classes.
 Both are generated outputs.
 
 ```bash

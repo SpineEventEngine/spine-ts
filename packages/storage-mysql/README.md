@@ -242,7 +242,7 @@ operations plan.
 ## ⚠️ Before production
 
 Use a dedicated database and account, protect the connection URL, configure
-TLS, and plan backups, monitoring, and migrations. Indexed `bigint` values must
+TLS, and plan backups and monitoring. Indexed `bigint` values must
 fit the exact signed 64-bit MySQL range. PostgreSQL is provided separately by
 [`@spine-event-engine/storage-postgres`](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/storage-postgres/README.md).
 

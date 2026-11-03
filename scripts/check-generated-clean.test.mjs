@@ -115,14 +115,37 @@ writeFileSync(new URL("proof.ts", \`file://\${output}/\`), "export {};\\n");
   const cli = join(repoRoot, "packages/proto-tools/dist/src/cli/spine-proto.js");
   mkdirSync(dirname(cli), { recursive: true });
   writeFileSync(cli, compositionSource);
+  const handler = join(repoRoot, "scripts/generate-handler-registry.mjs");
+  mkdirSync(dirname(handler), { recursive: true });
+  writeFileSync(
+    handler,
+    'import { mkdirSync, writeFileSync } from "node:fs";\n' +
+      'import { dirname, join } from "node:path";\n' +
+      'const output = process.argv[process.argv.indexOf("--out") + 1];\n' +
+      "const directory = dirname(output);\n" +
+      "mkdirSync(directory, { recursive: true });\n" +
+      'writeFileSync(output, "export const spineMetadata = {};\\n");\n' +
+      'writeFileSync(join(directory, "spine-bootstrap.ts"), "export {};\\n");\n' +
+      'writeFileSync(join(directory, "spine-dependencies.json"), JSON.stringify({ formatVersion: 2, inputs: [], edges: [], runtime: [] }) + "\\n");\n',
+  );
   writeFileSync(
     join(repoRoot, "buf.gen.yaml"),
     "version: v2\nplugins:\n  - local: test\n    out: packages/proto/generated\n",
   );
   mkdirSync(join(repoRoot, "packages/proto/generated"), { recursive: true });
-  writeFileSync(join(repoRoot, ".gitignore"), "packages/proto/generated/\n");
+  writeFileSync(
+    join(repoRoot, ".gitignore"),
+    "packages/proto/generated/\nexamples/message-board/app/generated/\n",
+  );
   const chat = join(repoRoot, "examples/message-board/app");
   mkdirSync(join(chat, "src"), { recursive: true });
+  mkdirSync(join(chat, "generated"), { recursive: true });
+  writeFileSync(join(chat, "generated/spine-metadata.ts"), "export const spineMetadata = {};\n");
+  writeFileSync(join(chat, "generated/spine-bootstrap.ts"), "export {};\n");
+  writeFileSync(
+    join(chat, "generated/spine-dependencies.json"),
+    `${JSON.stringify({ formatVersion: 2, inputs: [], edges: [], runtime: [] })}\n`,
+  );
   writeFileSync(join(chat, "package.json"), '{"name":"@example/chat"}\n');
   writeFileSync(join(chat, "spine-proto.json"), '{"formatVersion":1,"mode":"application"}\n');
   return repoRoot;
@@ -223,8 +246,8 @@ describe("check-generated-clean", () => {
   it("compares every atomic model output by default", () => {
     expect(generatedTargetsForCheck().map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
-      "packages/server-blackbox-tests/generated",
       "packages/server/test-fixtures/generated",
+      "packages/server-blackbox-tests/generated",
       "packages/core/test-fixtures/generated",
       "packages/testing/test-fixtures/generated",
       "examples/todo/generated",
@@ -233,6 +256,9 @@ describe("check-generated-clean", () => {
       "examples/support/generated",
       "examples/release-notes/generated",
       "examples/message-board/model/generated",
+      "examples/message-board/command-handlers/generated",
+      "examples/message-board/view-handlers/generated",
+      "examples/message-board/composed-app/generated",
       "examples/message-board/app/generated",
     ]);
   });

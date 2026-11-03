@@ -50,7 +50,7 @@ it("preserves unknown-tenant details through browser gateway and Connect client"
       dispatch,
     })
     .build();
-  const actorContext = { actor, tenant, timestamp: create(TimestampSchema) };
+  const actorContext = { actor, tenant, timestamp: create(TimestampSchema, { seconds: 1n }) };
   let native: Awaited<ReturnType<Server["start"]>> | undefined;
   let running: Awaited<ReturnType<typeof BrowserServer.run>> | undefined;
   let client: Client | undefined;
@@ -64,7 +64,7 @@ it("preserves unknown-tenant details through browser gateway and Connect client"
         resolve: () => Promise.resolve(actorContext),
         resolveContext: () => Promise.resolve(actorContext),
       },
-      clock: { now: () => create(TimestampSchema) },
+      clock: { now: () => create(TimestampSchema, { seconds: 1n }) },
     });
     client = Client.forConnect(running.baseUrl, {
       tenant,
@@ -116,7 +116,7 @@ it("preserves unknown-tenant details for browser subscription activation", async
       }),
     )
     .build();
-  const actorContext = { actor, tenant, timestamp: create(TimestampSchema) };
+  const actorContext = { actor, tenant, timestamp: create(TimestampSchema, { seconds: 1n }) };
   let native: Awaited<ReturnType<Server["start"]>> | undefined;
   let running: Awaited<ReturnType<typeof BrowserServer.run>> | undefined;
   let client: Client | undefined;
@@ -130,7 +130,7 @@ it("preserves unknown-tenant details for browser subscription activation", async
         resolve: () => Promise.resolve(actorContext),
         resolveContext: () => Promise.resolve(actorContext),
       },
-      clock: { now: () => create(TimestampSchema) },
+      clock: { now: () => create(TimestampSchema, { seconds: 1n }) },
     });
     client = Client.forConnect(running.baseUrl, {
       tenant,

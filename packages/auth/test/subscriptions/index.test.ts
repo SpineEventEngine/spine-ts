@@ -15,6 +15,8 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
+import { TypeUrls } from "@spine-event-engine/core";
+import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import {
   ActorContextSchema,
   TenantIdSchema,
@@ -204,8 +206,10 @@ function canonicalBinding(id: string, whenExpires: number) {
       bytes: toBinary(TopicSchema, subscription.topic ?? create(TopicSchema)),
     },
     whenExpires,
+    reader: anonymousReader,
   };
 }
+const anonymousReader = { kind: "anonymous" as const };
 function trustedContext() {
   return create(ActorContextSchema, {
     actor: user("owner-a"),
@@ -214,6 +218,38 @@ function trustedContext() {
 }
 
 describe("SubscriptionGateway", () => {
+  it("keeps verified reader facts private when a binding returns them", async () => {
+    const fixture = setup();
+    const original = fixture.bindings.create.bind(fixture.bindings);
+    fixture.bindings.create = async (input) => ({
+      ...(await original(input)),
+      reader: { principal: { id: "retained-reader" } },
+    });
+    let internalReader: unknown;
+    fixture.options.creator.subscribe = (wire) => {
+      internalReader = wire.reader;
+      return Promise.resolve();
+    };
+    const fullTopic = toBinary(
+      TopicSchema,
+      create(TopicSchema, {
+        id: { value: "task-created-topic" },
+        target: {
+          type: TypeUrls.derive(TaskCreatedSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+        context: create(ActorContextSchema, {
+          actor: { value: "owner-a" },
+          tenantId: tenant("tenant-a"),
+        }),
+      }),
+    );
+    const result = await gateway(fixture).handle(request("Subscribe", fullTopic));
+    expect(result.kind).toBe("subscribed");
+    if (result.kind !== "subscribed") return;
+    expect(result.wire).not.toHaveProperty("reader");
+    expect(internalReader).toMatchObject({ principal: { id: "owner-a" } });
+  });
   it.each([
     ["neither", { sessions: undefined }],
     ["both", { publicAccess: true }],
@@ -516,6 +552,7 @@ describe("SubscriptionGateway", () => {
     });
     await bindings.create(canonicalBinding("queued-activation", 100));
     const first = bindings.activate({
+      reader: anonymousReader,
       id: "queued-activation",
       context: trustedContext(),
       nowMs: 1,
@@ -529,6 +566,7 @@ describe("SubscriptionGateway", () => {
     const controller = new AbortController();
     let queuedNativeCalls = 0;
     const queued = bindings.activate({
+      reader: anonymousReader,
       id: "queued-activation",
       context: trustedContext(),
       nowMs: 1,
@@ -555,6 +593,7 @@ describe("SubscriptionGateway", () => {
     await bindings.create(canonicalBinding("active-cancel", 100));
     let cancels = 0;
     const active = bindings.activate({
+      reader: anonymousReader,
       id: "active-cancel",
       context: trustedContext(),
       nowMs: 1,
@@ -574,6 +613,7 @@ describe("SubscriptionGateway", () => {
     });
     await tick();
     const cancelled = bindings.cancel({
+      reader: anonymousReader,
       id: "active-cancel",
       context: trustedContext(),
       nowMs: 1,
@@ -598,6 +638,7 @@ describe("SubscriptionGateway", () => {
     const controller = new AbortController();
     let settled = false;
     const active = bindings.activate({
+      reader: anonymousReader,
       id: "long-lived-activation",
       context: trustedContext(),
       nowMs: 1,
@@ -640,6 +681,7 @@ describe("SubscriptionGateway", () => {
       await bindings.create(canonicalBinding("synchronous-cancellation", 100));
       const controller = new AbortController();
       const active = bindings.activate({
+        reader: anonymousReader,
         id: "synchronous-cancellation",
         context: trustedContext(),
         nowMs: 1,
@@ -891,6 +933,7 @@ describe("SubscriptionGateway", () => {
     });
     const cancel = (id: string, nowMs: number) =>
       bindings.cancel({
+        reader: anonymousReader,
         id,
         context: trustedContext(),
         nowMs,
@@ -1028,6 +1071,7 @@ describe("SubscriptionGateway", () => {
     await bindings.create(canonicalBinding("one", 100));
     await expect(
       bindings.cancel({
+        reader: anonymousReader,
         id: "one",
         context: create(ActorContextSchema, {
           actor: user("other"),
@@ -1061,6 +1105,7 @@ describe("SubscriptionGateway", () => {
     await bindings.create(canonicalBinding("one", 100));
     source.fill(9);
     await bindings.activate({
+      reader: anonymousReader,
       id: "one",
       context: trustedContext(),
       nowMs: 1,
@@ -1076,6 +1121,7 @@ describe("SubscriptionGateway", () => {
     );
     let retryBytes: Uint8Array | undefined;
     await bindings.cancel({
+      reader: anonymousReader,
       id: "one",
       context: trustedContext(),
       nowMs: 1,
@@ -1330,6 +1376,7 @@ describe("SubscriptionGateway", () => {
     });
     await bindings.create(canonicalBinding("one", 100));
     const activating = bindings.activate({
+      reader: anonymousReader,
       id: "one",
       context: trustedContext(),
       nowMs: 0,
@@ -1372,6 +1419,7 @@ describe("SubscriptionGateway", () => {
     });
     await bindings.create(canonicalBinding("one", 1));
     const activating = bindings.activate({
+      reader: anonymousReader,
       id: "one",
       context: trustedContext(),
       nowMs: 0,
@@ -1404,6 +1452,7 @@ describe("SubscriptionGateway", () => {
     await bindings.create(canonicalBinding("one", 100));
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: "one",
         context: trustedContext(),
         nowMs: 0,
@@ -1428,6 +1477,7 @@ describe("SubscriptionGateway", () => {
 
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: "one",
         context: trustedContext(),
         nowMs: 0,
@@ -1457,6 +1507,7 @@ describe("SubscriptionGateway", () => {
     });
     await bindings.create(canonicalBinding("one", 100));
     const activating = bindings.activate({
+      reader: anonymousReader,
       id: "one",
       context: trustedContext(),
       nowMs: 0,
@@ -1570,6 +1621,7 @@ describe("SubscriptionGateway", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await expect(
       bindings.activate({
+        reader: anonymousReader,
         id: defined(fromBinary(SubscriptionSchema, second.bytes).id, "expected subscription id")
           .value,
         context: trustedContext(),

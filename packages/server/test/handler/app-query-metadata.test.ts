@@ -1,0 +1,154 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+import type {
+  GetProjectOverview_Query,
+  GetProjectOverview_Response,
+} from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import {
+  GetProjectOverview_QuerySchema,
+  GetProjectOverview_ResponseSchema,
+} from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { AppQueryHandler, type AppQueryContext } from "../../src/handler/app-query-handler.js";
+import {
+  registerSpineMetadata,
+  SpineMetadataInventory,
+  spineMetadataTestAccess,
+  type SpineMetadata,
+} from "../../src/handler/spine-metadata-inventory.js";
+
+class FirstOverview extends AppQueryHandler<GetProjectOverview_Query, GetProjectOverview_Response> {
+  execute(
+    _query: GetProjectOverview_Query,
+    _context: AppQueryContext,
+  ): GetProjectOverview_Response {
+    void _query;
+    void _context;
+    throw new Error("not executed by metadata registration");
+  }
+}
+
+class SecondOverview extends AppQueryHandler<
+  GetProjectOverview_Query,
+  GetProjectOverview_Response
+> {
+  execute(
+    _query: GetProjectOverview_Query,
+    _context: AppQueryContext,
+  ): GetProjectOverview_Response {
+    void _query;
+    void _context;
+    throw new Error("not executed by metadata registration");
+  }
+}
+
+const first = {
+  handlerType: FirstOverview,
+  queryTypeName: "repository_routing.GetProjectOverview.Query",
+  querySchema: GetProjectOverview_QuerySchema,
+  responseSchema: GetProjectOverview_ResponseSchema,
+};
+
+afterEach(() => {
+  spineMetadataTestAccess.clear();
+});
+
+describe("passive App Query metadata", () => {
+  it("retains multiple implementations by exact constructor without activating either", () => {
+    const second = { ...first, handlerType: SecondOverview };
+    registerSpineMetadata({ receivers: [], appQueries: [first, second] }, "test:project-queries");
+    expect(SpineMetadataInventory.selectQueries([SecondOverview, FirstOverview])).toEqual([
+      second,
+      first,
+    ]);
+  });
+
+  it("rejects an inconsistent result schema before publishing metadata", () => {
+    expect(() => {
+      registerSpineMetadata(
+        {
+          receivers: [],
+          appQueries: [{ ...first, responseSchema: GetProjectOverview_QuerySchema }],
+        },
+        "test:bad-query",
+      );
+    }).toThrow(/Response schema/u);
+    expect(() => SpineMetadataInventory.selectQueries([FirstOverview])).toThrow(/missing/u);
+  });
+
+  it("rejects conflicting modules for one constructor without replacing the first description", () => {
+    registerSpineMetadata({ receivers: [], appQueries: [first] }, "test:first");
+    expect(() => {
+      registerSpineMetadata({ receivers: [], appQueries: [{ ...first }] }, "test:second");
+    }).toThrow(/Spine App Query metadata for FirstOverview conflicts/u);
+    expect(SpineMetadataInventory.selectQueries([FirstOverview])).toEqual([first]);
+  });
+
+  it("walks passive diamonds and cycles by object identity without activating handlers", () => {
+    let visited = 0;
+    const leaf: SpineMetadata = {
+      receivers: [],
+      appQueries: [first],
+      dependencies: () => {
+        visited++;
+        return [root];
+      },
+    };
+    const left: SpineMetadata = { receivers: [], dependencies: () => [leaf] };
+    const right: SpineMetadata = { receivers: [], dependencies: () => [leaf] };
+    const root: SpineMetadata = { receivers: [], dependencies: () => [left, right] };
+    registerSpineMetadata(root, "test:cycle");
+    expect(SpineMetadataInventory.selectQueries([FirstOverview])).toEqual([first]);
+    expect(visited).toBe(1);
+    spineMetadataTestAccess.clear();
+    registerSpineMetadata(root, "test:cycle-again");
+    expect(visited).toBe(2);
+  });
+
+  it("publishes none of a passive graph when a later dependency conflicts", () => {
+    const good: SpineMetadata = { receivers: [], appQueries: [first] };
+    const bad: SpineMetadata = { receivers: [], appQueries: [{ ...first }] };
+    expect(() => {
+      registerSpineMetadata({ receivers: [], dependencies: () => [bad, good] }, "test:conflict");
+    }).toThrow(/conflicts/u);
+    expect(() => SpineMetadataInventory.selectQueries([FirstOverview])).toThrow(/missing/u);
+  });
+
+  it("rejects an undefined published dependency before registering any sibling", () => {
+    const good: SpineMetadata = { receivers: [], appQueries: [first] };
+    const root: SpineMetadata = { receivers: [], dependencies: () => [good, undefined] };
+    expect(() => {
+      registerSpineMetadata(root, "test:missing-export");
+    }).toThrow(/metadata dependency.*object/u);
+    expect(() => SpineMetadataInventory.selectQueries([FirstOverview])).toThrow(/missing/u);
+  });
+
+  it("rejects a malformed dependency result before registration", () => {
+    const root: SpineMetadata = {
+      receivers: [],
+      dependencies: () => ({ invalid: true }) as unknown as readonly SpineMetadata[],
+    };
+    expect(() => {
+      registerSpineMetadata(root, "test:bad-dependencies");
+    }).toThrow(/metadata dependencies.*array/u);
+    const missing: SpineMetadata = {
+      receivers: [],
+      dependencies: () => undefined as unknown as readonly unknown[],
+    };
+    expect(() => {
+      registerSpineMetadata(missing, "test:missing-dependencies");
+    }).toThrow(/metadata dependencies.*array/u);
+  });
+});

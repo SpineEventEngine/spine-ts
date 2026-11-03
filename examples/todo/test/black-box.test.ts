@@ -22,6 +22,7 @@ import { TypeUrls, AnyPacker, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ErrorSchema,
   CommandIdSchema,
+  ActorContextSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
@@ -64,7 +65,6 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
-  renameSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -123,7 +123,7 @@ afterEach(async () => {
 });
 
 describe("@spine-event-engine/example-todo", () => {
-  it("recovers registry loading after an initial generated-registry failure", async () => {
+  it("requires imported bootstrap before assembling a private application class", async () => {
     const fixture = realpathSync(mkdtempSync(join(tmpdir(), "spine-todo-registry-")));
     try {
       cpSync(fileURLToPath(new URL("../dist", import.meta.url)), fixture, { recursive: true });
@@ -140,7 +140,7 @@ describe("@spine-event-engine/example-todo", () => {
         "file",
       );
       const fixtureModule: unknown = await import(
-        pathToFileURL(join(fixture, "src/index.js")).href
+        pathToFileURL(join(fixture, "src/todo-domain.js")).href
       );
       if (
         fixtureModule === null ||
@@ -152,17 +152,13 @@ describe("@spine-event-engine/example-todo", () => {
       }
       const createFixtureContext =
         fixtureModule.createTodoContext as TodoModule["createTodoContext"];
-      const registry = join(fixture, "generated/handler/generated-handler-registry.js");
-      const hiddenRegistry = `${registry}.missing-for-test`;
-      renameSync(registry, hiddenRegistry);
       const failure = await createFixtureContext().catch((error: unknown) => error);
 
       expect(failure).toBeInstanceOf(Error);
       expect((failure as Error).message).toContain(
-        `Generated handler registry module "${registry}"`,
+        "Generated metadata for TaskAggregate is missing",
       );
-      expect((failure as Error).message).toContain("must exist and be readable.");
-      renameSync(hiddenRegistry, registry);
+      await import(pathToFileURL(join(fixture, "src/index.js")).href);
       const context = await createFixtureContext();
       await context.close();
     } finally {
@@ -548,7 +544,7 @@ describe("@spine-event-engine/example-todo", () => {
         "task state after complete refusal fence",
       );
 
-      expect(errorType(invalidRename.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+      expect(errorType(invalidRename.status?.status)).toBe("spine.core.CommandValidationError");
       expect(
         validationDetails(invalidRename.status?.status)?.constraintViolation.length,
       ).toBeGreaterThan(0);
@@ -898,7 +894,6 @@ describe("@spine-event-engine/example-todo", () => {
     const firstRouting = EventRouting.create<TaskListId>();
     firstRouting.route(TaskEvent, firstRoute);
     const first = await BoundedContext.singleTenant("Tasks")
-      .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
         // Generated interface tokens cross the dynamic compiled-example boundary.
@@ -975,7 +970,6 @@ describe("@spine-event-engine/example-todo", () => {
     });
     await ServerEnvironment.instance().completeSetup();
     const replay = await BoundedContext.singleTenant("Tasks")
-      .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
         // Generated interface tokens cross the dynamic compiled-example boundary.
@@ -1224,7 +1218,7 @@ describe("@spine-event-engine/example-todo", () => {
     const invalidRename = await scope.post(RenameTaskSchema, renameTask("task-invalid", ""));
     expect(invalidRename).toMatchObject({
       kind: "error",
-      error: { type: "COMMAND_VALIDATION_ERROR" },
+      error: { type: "spine.core.CommandValidationError" },
     });
     if (invalidRename.kind !== "error") throw new Error("Expected a validation error.");
     if (invalidRename.error.$typeName !== ErrorSchema.typeName)
@@ -1657,7 +1651,6 @@ describe("@spine-event-engine/example-todo", () => {
       .route(routedTaskReassignedSchema, reassignmentRoute);
     await ServerEnvironment.instance().completeSetup();
     const context = await BoundedContext.singleTenant("Rejected assignment routing")
-      .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskAssigneeProjection, { eventRouting: routing })
       .build();
@@ -2007,9 +2000,7 @@ async function withRemoteTodo<T>(onRun: (remote: RemoteTodo) => Promise<T>): Pro
 
 function assertBuiltExample(): void {
   const output = fileURLToPath(new URL("../dist/src/index.js", import.meta.url));
-  const registry = fileURLToPath(
-    new URL("../dist/generated/handler/generated-handler-registry.js", import.meta.url),
-  );
+  const registry = fileURLToPath(new URL("../dist/generated/spine-bootstrap.js", import.meta.url));
 
   if (!existsSync(output) || !existsSync(registry)) {
     throw new Error("Run `pnpm typecheck:build` before running the to-do example tests.");
@@ -2207,8 +2198,9 @@ function createTaskRejectionTopic(
 }
 
 function createActorContext() {
-  return signalMetadata.actorContext({
-    actor: create(UserIdSchema, { value: "todo-user" }),
+  return create(ActorContextSchema, {
+    ...signalMetadata.actorContext({ actor: create(UserIdSchema, { value: "todo-user" }) }),
+    timestamp: signalMetadata.timestamp(),
   });
 }
 

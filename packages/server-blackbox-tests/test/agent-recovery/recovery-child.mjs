@@ -29,9 +29,9 @@ import { MysqlStorageFactory } from "@spine-event-engine/storage-mysql";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { AiTestBackend, BlackBox } from "@spine-event-engine/testing";
 import process from "node:process";
-import { URL } from "node:url";
 
 import * as Commands from "../../dist/generated/spine/server/testing/support_recovery_commands_pb.js";
+import "../../dist/generated/spine-bootstrap.js";
 import { SupportReplyAgentIdSchema } from "../../dist/generated/spine/server/testing/support_agent_states_pb.js";
 import { SupportRecoveryStateSchema } from "../../dist/generated/spine/server/testing/support_recovery_states_pb.js";
 import { SupportReplyProposalSchema } from "../../dist/generated/spine/server/testing/support_recovery_types_pb.js";
@@ -187,7 +187,6 @@ async function run() {
     queuedOperations: 0,
   }).register(backend.registration);
   const context = await BoundedContext.singleTenant(contextName)
-    .withGeneratedRegistryRoot(new URL("../../dist/", import.meta.url))
     .withAi(registry)
     .persistSystemEvents()
     .addAssignee(new SupportReviewAssignee())

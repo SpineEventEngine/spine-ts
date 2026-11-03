@@ -119,38 +119,39 @@ approve(command: ApproveProject, context: CommandContext): ScheduleProject {
 }
 ```
 
-The generated unversioned receiver registry records `ApproveProjectSchema` as the input and
-`ScheduleProjectSchema` as the emitted schema. `BoundedContext.buildAsync()`
-loads that registry through `withGeneratedRegistryRoot(root)` before callers
-post `ApproveProject` through the Command Bus.
+The generated metadata records `ApproveProjectSchema` as the input and
+`ScheduleProjectSchema` as the emitted schema. The normal generation pipeline
+writes this information to `generated/spine-metadata.ts`, alongside Entity,
+standalone receiver, Proto, and App Query descriptions. These are descriptions;
+the application still chooses the classes and instances to register.
 
-Generated registry modules are build artifacts under ignored `generated/`
-directories. T-0015c implements the build-time analyzer that extracts
-structured handler records. T-0015d adds the internal writer that turns those
-records into deterministic unversioned TypeScript source and writes files only
-when explicitly invoked into a caller-configured generated root that stays
-under Git ignore. T-0015e adds `GeneratedRegistryDiscovery` as the small
-runtime loader for these artifacts. Callers provide explicit filesystem paths
-or clean `file:` URLs, or derive the conventional runtime file location
-`generated/handler/generated-handler-registry.js` from a package or app root.
-Discovery rejects unsupported non-`file:` URL schemes and `file:` URL
-query/hash aliases deterministically before import. It does not scan package
-trees or perform global automatic loading. Discovery validates the loaded
-module shape, reports stable import/export and ingestion failure codes, and
-registers the discovered metadata through `HandlerRegistryIngestor` into a
-`HandlerMetadataRegistry` supplied by the caller.
+Import the generated application bootstrap before assembling the application:
 
-Application packages that use bare decorators need a build step that runs after
-their Protobuf-ES files are generated and before TypeScript compilation. The
-step analyzes the package source, writes
-`generated/handler/generated-handler-registry.ts`, and lets `tsc` compile that
-ignored source artifact into the package output. Runtime assembly adds Entity
-classes and registered standalone instances to `BoundedContextBuilder`, then
-calls `buildAsync()`, which loads the compiled registry through framework
-discovery before constructing default repositories and matching standalone
-receiver records to their instances.
-If the registry is missing, stale, malformed, or rejected during ingestion,
-context creation should fail deterministically before any handler is invoked.
+<!-- docs-snippet-path: examples/todo/src/todo-app.ts -->
+
+```typescript
+import "../generated/spine-bootstrap.js";
+```
+
+The bootstrap imports the application's metadata and metadata from participating
+runtime dependencies. During generation, Spine follows the installed dependency
+graph and finds packages that publish a `./spine` export. It generates static
+imports for those packages. Application startup therefore needs no filesystem
+scan and no `withGeneratedRegistryRoot` call.
+
+For example, a package containing Entity classes can publish its generated
+metadata while the application package constructs the Bounded Context. The
+application imports those classes, adds them to its builder, and awaits
+`build()`. The builder selects their metadata by the exact class references.
+This also works when a Bounded Context uses classes from several packages.
+Importing a dependency does not automatically add its Entities to a Bounded
+Context or instantiate its App Query handlers.
+
+The metadata and bootstrap are ignored generated files. Generate Proto files
+and TypeScript metadata before compiling the application. Missing or conflicting
+metadata prevents the selected handler from running. Model-only packages publish
+Proto metadata without receivers; browser clients use their ordinary Proto
+module without importing Server code.
 
 ## Entity constructor dependencies
 
@@ -299,12 +300,16 @@ The final API must avoid hidden mutation that bypasses validation.
 
 End-user assembly should be concise:
 
+<!-- docs-snippet-path: examples/todo/src/todo-app.ts -->
+
 ```typescript
+import "../generated/spine-bootstrap.js";
+import { BoundedContext } from "@spine-event-engine/server";
+import { TaskAggregate } from "./todo-domain.js";
+
 const tasks = await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
-  .add(TaskProjection)
-  .withGeneratedRegistryRoot(compiledPackageRoot)
-  .buildAsync();
+  .build();
 ```
 
 The framework may create default repositories from entity classes, but it must also support custom repositories for:
@@ -315,14 +320,13 @@ The framework may create default repositories from entity classes, but it must a
 - dependency injection;
 - domain-specific repository methods.
 
-Generated entity-class assembly is asynchronous because the builder loads the
-compiled generated handler registry module before constructing default
-repositories. It requires an explicit trusted compiled package/app root through
-`withGeneratedRegistryRoot(root)`. Synchronous `build()` remains the explicit
-repository path:
+The generated bootstrap must have been imported before this code runs. The
+builder then uses the registered descriptions to construct default repositories.
+`build()` is asynchronous because assembly prepares resources and integrations.
+The explicit-repository path also returns a Promise:
 
 ```typescript
-const tasks = BoundedContext.singleTenant("Tasks")
+const tasks = await BoundedContext.singleTenant("Tasks")
   .add(new TaskRepository())
   .build();
 ```

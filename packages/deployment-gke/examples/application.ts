@@ -67,6 +67,8 @@ export const ApplicationEntrypoint = Object.freeze({
 
   /**
    * Starts the Coordinator and the configured number of complete application replicas.
+   * Configure the parent Production `ServerEnvironment` with the application model registry
+   * before calling this method. Each child configures its own facilities in `createServer`.
    *
    * @param options Supplies application assembly and managed-child configuration.
    * @param environment Provides injected deployment settings.

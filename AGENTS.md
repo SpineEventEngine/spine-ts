@@ -52,6 +52,14 @@ person narratives or compress several concepts into dense summary paragraphs.
 Do not apply documentation-writing skills. Independent documentation review must
 assess reader comprehension as well as completeness and factual accuracy.
 
+Document every message and field in changed authored Proto files and every
+type and method in changed authored production/example TypeScript files.
+Separate declarations with blank lines. Apply the same rules to README,
+tutorial, and PR snippets. Use original Spine JVM Proto layout as the reference
+alongside Buf formatting. Check documentation during implementation and again
+during independent review; it is not a deferred cleanup step. See
+`build-protocol/CODE_QUALITY.md` for generated and frozen-source exclusions.
+
 ## Pull Request Descriptions
 
 Write pull request descriptions for human framework users. Explain the concrete
@@ -186,6 +194,35 @@ Keep narrow TSDoc and behavior claims current in each runtime slice. Defer broad
 documentation and all-example execution until the affected runtime interfaces
 stabilize, unless a concrete changed interface requires earlier expansion.
 
+# GitHub Changes Require Explicit Permission
+
+NEVER EDIT PR or ISSUE descriptions, never CREATE PRs or ISSUES on GitHub — both unless the user explicitly asks.
+
+Requests to analyze, implement, prepare text, or produce copy-pasteable Markdown
+do not authorize publishing or changing anything on GitHub. Return requested
+PR descriptions in the chat as copy-pasteable Markdown unless the user explicitly
+asks to publish or update them on GitHub. This rule covers PRs, issues, comments,
+reviews, repository settings, workflow actions, and remote Git changes.
+Read-only inspection remains allowed. This rule overrides any automatic-push or
+automatic-publication instruction when explicit authorization is absent.
+
+## No Migrations
+
+We do not provide migrations for anyone. This rule remains in force until the
+human explicitly changes it. Do not add or retain migration implementations,
+migration tools, migration guides, or compatibility paths whose sole purpose is
+moving users or their data from an older framework API or format. Implement the
+current contract directly and update maintained code and examples directly.
+
+## Human-Facing Language
+
+Never use the verb `belong` or its inflections in human-facing text. State the
+actual relationship directly, for example where a handler is registered or
+where a setting is configured.
+
+Titles and subtitles must name a topic or feature. Do not phrase them as
+imperative commands. Follow a more specific structure supplied by the human.
+
 ## Official Repository Workflow
 
 The only development remote is `origin`, and it must resolve to
@@ -207,7 +244,7 @@ Every merge to official `master` starts NPM publication. Every feature branch
 intended for merge must therefore include one version-only commit that updates
 every workspace manifest to one common unused version. That commit changes only
 top-level `version` fields and uses the exact message `Bump version -> <version>`.
-Internal dependency pins and the lockfile belong in a separate commit. After a
+Update internal dependency pins and the lockfile in a separate commit. After a
 human merges the pull request, fetch and verify the resulting `origin/master`;
 do not integrate or push it yourself.
 

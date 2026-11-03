@@ -91,7 +91,8 @@ starts the repository's Delivery server, waits for both, then starts the
 parent process that accepts requests and forwards them to workers (the
 Coordinator) in [`multi-process-app.ts`](src/multi-process-app.ts). The parent
 uses [`multi-process-coordinator.ts`](src/multi-process-coordinator.ts)
-for readiness and shutdown, while every worker (a replica) uses
+for readiness and shutdown and configures the production Proto model registry
+before managed startup, while every worker (a replica) uses
 [`multi-process-replica.ts`](src/multi-process-replica.ts) to assemble a full
 To-Do application area with Datastore and Delivery. A Delivery shard is one
 independent partition of Delivery work. Settings are parsed in
@@ -111,7 +112,7 @@ Set `TODO_PROCESS_COUNT` and `TODO_DELIVERY_SHARD_COUNT` before running the
 launcher to select the number of replicas and Delivery shards independently.
 For example, `TODO_PROCESS_COUNT=3 TODO_DELIVERY_SHARD_COUNT=2` starts three
 complete app replicas with two Delivery shards. The launcher waits for the
-Coordinator's ready message and owns shutdown: normal exit, `Ctrl-C`, `SIGTERM`,
+Coordinator's ready message and handles shutdown: normal exit, `Ctrl-C`, `SIGTERM`,
 and partial startup all stop only the processes and emulator container it made.
 The Datastore emulator holds data only while its container runs. The simple
 Delivery server also keeps its Inbox only in memory: restarting it can lose

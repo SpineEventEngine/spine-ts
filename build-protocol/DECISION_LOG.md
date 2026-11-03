@@ -7056,3 +7056,135 @@ specifies builder APIs, collision scope, registry mutation and test acceptance.
 No migration, dual writes, tenant-routing change or Event ID change is authorized.
 Remove the unused Inbox `inbox_id` and `signal_id` materializations while retaining
 both Protobuf fields and all query-dependent columns.
+
+## App Queries and read-side filtering (2026-10-30)
+
+Status: approved for implementation, not yet delivered.
+
+The human approved [the integrated proposal](tasks/app-queries-read-filters/PROPOSAL.md)
+and explicitly authorized a separate worktree with early origin pushes. This
+contract supersedes earlier planning that places App Query registration on
+ServerEnvironment, requires generated-registry roots, restricts filters to
+whole records, or silently accepts unknown subscription activation. It preserves
+complete stored Entity state while permitting arbitrary returned-view edits.
+Implementation follows the task ledger and bounded milestones; no PR or merge
+is authorized.
+
+### Transitive metadata imports (M06)
+
+The [focused resolution](tasks/app-queries-read-filters/M06_RESOLUTION.md)
+addresses a participant installed only beneath a nonparticipating dependency.
+Generation resolves the published metadata export, then emits static source and
+compiled-location JavaScript/declaration adapters behind one stable bootstrap
+import. Existing generation transactions and clean-build restoration include
+these generated assets. No runtime discovery or manual registry path is added.
+
+Generate against the installed dependency graph before compiling or bundling.
+Relocating the complete generated application and dependency closure preserves
+relative imports. Installing a different graph requires ordinary regeneration;
+published dependency metadata remains reusable by each consuming application's
+build. This is an internal build decision within the approved discovery contract.
+
+### Durable subscription reader binding (M08)
+
+Keep stable reader identity in the existing TS-maintained subscription record,
+using its single-record compare-and-set lifecycle. Explicit anonymous admission
+is different from missing identity in an older record. Check the expected reader
+on every mutation retry and before disturbing a live stream. Reconnect supplies
+current verified authority facts after stable-ID matching. The
+[reader-binding decision](tasks/app-queries-read-filters/READER_BINDING.md) gives
+the storage, compatibility and failure rules. No sidecar, new transaction API,
+or frozen JVM descriptor change is needed.
+
+### App Query tenant admission (M09)
+
+An App Query has no implicit source Bounded Context. Validate its envelope and
+ActorContext after configured authentication, before invoking its handler.
+Existing tenant membership belongs to each Bounded Context's tenant index, so
+check that membership when a handler reads a destination Bounded Context, using
+its existing tenancy rules. An App Query that performs no such read has no
+destination membership to check. Do not infer a source Bounded Context from
+Q/R types, scan unrelated Bounded Context indexes, or introduce a Server-wide
+tenant directory. Application-specific access checks remain in the configured
+authentication/authorization ports and application code.
+
+## No migrations (2026-11-02)
+
+The human requires: “we do not provide any migration for anyone.” This is a
+standing rule until explicitly changed by the human. Remove migration
+implementations, migration tools and migration instructions. Maintained
+application code and examples use the current contract directly. Earlier
+requirements to deliver migrations are superseded. Current protocol
+interoperability, ordinary recovery, and invalid-format rejection do not migrate
+user data and are evaluated by their actual purpose.
+
+## Shared subscription capacity and Message Board overview (2026-11-02)
+
+Subscription waiting capacity is a single ServerEnvironment setting named
+subscriptionQueueCapacity, defaulting to 100 waiting updates in each subscription
+plus its active update. Both Server-served and direct Stand subscription delivery
+use this setting. No per-Server, service, Bounded Context, or per-subscription
+override remains. Invalid values fail configuration; zero means no waiting.
+Strict delivery order, independent writes, and subscription-local overflow remain.
+
+The Message Board example uses an App Query for statistics since board creation,
+including total messages and distinct participating users. Cumulative statistics
+from separate Bounded Contexts must reflect retained domain history rather than
+the size of a query page or the latest announcement. The message and announcement
+lists remain. Typed access filters apply before
+composition, Server filters redact author names for public readers, and matching
+Event filters prevent notification leaks. Verified principal and authority facts
+come from the configured authentication ports. The example and guides must show
+that complete flow, including Entity updates and Event notifications.
+
+The current domain establishes a board with its first accepted post. Statistics
+use that Event's occurrence time and count distinct domain UserId values, not
+display names or verified human identities. Dedicated cumulative Projection state
+keeps these totals independent of displayed message lists. Separate board totals
+are not combined into a misleading distinct-user count. A statistics subscription
+refreshes the App Query after that Projection changes. Restricted statistics use
+the same access rules as their messages; contributor identity bookkeeping is
+removed from Server responses for every reader.
+
+Durable subscription records use an explicit StorageGroup selected from the
+logical Bounded Context name. The StorageContext name remains diagnostic-only;
+providers do not derive physical families from it. Registry construction and
+storage preparation use the same captured group, including custom registries.
+This prevents one Bounded Context from activating another's retained Topics.
+
+The Message Board must preserve its separate Entity and Event subscriptions in
+multiple browser tabs. The browser route must support HTTP/2 multiplexing;
+removing subscription functionality or limiting tab counts is not an acceptable
+workaround for HTTP/1.1 connection exhaustion.
+
+The installed Vite HTTPS server supplies HTTP/2 with its existing streaming
+proxy for local development. Proxy only the reserved RPC paths to the private
+HTTP Gateway. Use supplied trusted TLS certificate/key files; launchers do not
+modify local trust stores. Existing deployment Envoy edges terminate TLS and
+advertise HTTP/2 through ALPN. No BrowserServer TLS API or separate proxy
+implementation is introduced. All maintained RPC route lists include
+QueryService.Execute. Multiple tabs retain every Entity and Event stream while
+posting; the temporary single-tab statistics suspension is not retained.
+
+Dependency metadata composes through each participating package's declared
+`./spine` exports. Generated passive descriptions expose their direct dependency
+metadata lazily; bootstrap registration traverses and deduplicates those
+objects. This preserves normal package resolution after an application is
+packed and installed, without embedding workspace-relative paths or performing
+runtime directory discovery. Generation still traverses the complete declared
+graph for conflicts and freshness. If a nonparticipating intermediate package
+hides a metadata dependency that cannot be reached through these public exports,
+generation reports the inaccessible metadata dependency instead of emitting a broken import.
+Packages grouping framework modules participate in the same metadata generation
+and export convention; applications do not repeat every indirect dependency.
+
+Clean generation stages all model outputs first, then handler packages in
+dependency order, then the application metadata. It does not require stale
+compiled outputs from a previous build. External dependency packages must still
+publish their declared metadata artifacts.
+
+Model-only packages remain independent of the Server package. Generated adapters
+retain each public metadata export's actual TypeScript type. Bootstrap treats
+dependency values as unvalidated input, validates the complete metadata graph,
+and publishes its registrations only after all descriptions and conflicts pass.
+A missing or malformed dependency export is an error rather than an omission.

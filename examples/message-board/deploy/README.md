@@ -7,7 +7,7 @@ Use this guide to run the local Message Board deployment examples. The nearby
 
 ```mermaid
 flowchart LR
-  Browser --> Gateway[Public-demo Gateway]
+  Browser --> Gateway[Gateway]
   Gateway --> Coordinator[Node Coordinator]
   Coordinator -->|one request| AppOne[Complete replica 1]
   Coordinator -->|one request| AppTwo[Complete replica 2]
@@ -17,7 +17,7 @@ flowchart LR
 The two application connections shown for unary routing are alternatives, not
 fan-out: one command or query is sent to one selected backend without retry.
 
-Combined mode runs one Message Board application and public-demo browser
+Combined mode runs one Message Board application and browser
 gateway in the same process. Use it to understand the smallest browser-facing
 deployment. Standalone mode runs a managed application node separately from one
 Gateway; Envoy is the only public service and the Gateway reaches its private
@@ -42,6 +42,8 @@ separately scalable application and Gateway processes.
 
 ## 🚀 Run the references
 
+Create or supply a locally trusted certificate for `localhost` before starting Compose. The default file locations are `examples/message-board/web/.local/localhost-cert.pem` and `localhost-key.pem`; `MESSAGE_BOARD_TLS_CERT_FILE` and `MESSAGE_BOARD_TLS_KEY_FILE` can select other files. See the [local certificate commands](../README.md). Envoy terminates HTTPS, advertises HTTP/2 with ALPN, and proxies exact RPC paths and the stock web UI over its internal HTTP clusters.
+
 Build the local-only images first:
 
 ```bash
@@ -51,8 +53,7 @@ pnpm images:build:local
 
 For concurrent task runs, select a distinct `MESSAGE_BOARD_IMAGE_TAG` for the
 image build and each Compose command, a distinct `MESSAGE_BOARD_PUBLIC_PORT`,
-and a distinct Compose project name. The web runtime URL and Gateway browser
-origin follow the selected public port. For example:
+and a distinct Compose project name. The HTTPS web runtime URL and Gateway browser origin follow the selected public port. For example:
 
 ```bash
 export MESSAGE_BOARD_IMAGE_TAG=sqlrel-example MESSAGE_BOARD_PUBLIC_PORT=28080
@@ -61,7 +62,7 @@ docker compose --project-name sqlrel-example \
   --file examples/message-board/deploy/compose/combined.compose.yaml up --detach
 ```
 
-Open `http://localhost:28080`, then use the same variables, project name and
+Open `https://localhost:28080`, then use the same variables, project name and
 file with `down --volumes --remove-orphans`. The default tag and port remain
 `local` and `18080` for a single tutorial run.
 
@@ -69,7 +70,7 @@ file with `down --volumes --remove-orphans`. The default tag and port remain
 docker compose --file examples/message-board/deploy/compose/combined.compose.yaml up --detach
 ```
 
-Open the stock browser UI at http://localhost:18080. Stop it with:
+Open the stock browser UI at https://localhost:18080. Stop it with:
 
 ```bash
 docker compose --file examples/message-board/deploy/compose/combined.compose.yaml down --volumes --remove-orphans
@@ -87,7 +88,7 @@ Start it with:
 docker compose --file examples/message-board/deploy/compose/standalone.compose.yaml up --detach
 ```
 
-Open http://localhost:18080, then stop it with the matching `down --volumes --remove-orphans` command.
+Open https://localhost:18080, then stop it with the matching `down --volumes --remove-orphans` command.
 
 The Kubernetes YAML files are static references, not local-Kubernetes
 instructions. They deploy the same stock UI behind Envoy and set its sole
@@ -113,3 +114,7 @@ process restarts, the browser reconnects, queries the current board, and resumes
 live updates.
 The references use TCP startup/readiness only and intentionally omit liveness
 probes and application health endpoints.
+
+## Signed admission
+
+Set `MESSAGE_BOARD_AUTH_MODE=signed` on both the application and Gateway processes and the web container. Supply the same protected `MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`, `MESSAGE_BOARD_SESSION_KEY_ID`, `MESSAGE_BOARD_SESSION_PRIVATE_KEY_PEM`, and `MESSAGE_BOARD_READER_PROOF_KEY_BASE64` to application and Gateway nodes. In Compose these values come from the invoking environment; in Kubernetes set `MESSAGE_BOARD_AUTH_MODE` in the ConfigMap and provision the values through the existing `message-board-runtime` Secret. Issue a credential offline with the app's `issue-board-session` entrypoint. Keep the native endpoint private and the signing key and proof key outside browser configuration.

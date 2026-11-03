@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -8,15 +8,28 @@ const tempParent = join(repoRoot, "node_modules/.cache");
 const toolSources = [
   "packages/proto-tools/src/generation/build-time-handler-analyzer.ts",
   "packages/proto-tools/src/generation/generated-registry-writer.ts",
+  "packages/proto-tools/src/generation/runtime-metadata-graph.ts",
+  "packages/proto-tools/src/generation/runtime-metadata-assets.ts",
 ];
 
-async function main(argv = process.argv.slice(2)) {
+/**
+ * Builds one application's passive handler metadata and static dependency adapters.
+ *
+ * @param argv Conventional handler generation options.
+ * @returns Process status after guarded publication.
+ */
+export async function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   mkdirSync(tempParent, { recursive: true });
   const tempRoot = mkdtempSync(join(tempParent, "spine-handler-registry-"));
 
   try {
-    const { BuildHandlerAnalyzer, GeneratedRegistryWriter } = await loadBuildTool(tempRoot);
+    const {
+      BuildHandlerAnalyzer,
+      GeneratedRegistryWriter,
+      RuntimeMetadataGraph,
+      RuntimeMetadataAssets,
+    } = await loadBuildTool(tempRoot);
     const program = createProgram(options.project, {
       redirects: options.sourceGeneratedRedirects ?? [
         {
@@ -32,11 +45,61 @@ async function main(argv = process.argv.slice(2)) {
       return 1;
     }
 
-    new GeneratedRegistryWriter().write(analysis, {
-      repoRoot: options.repoRoot,
-      generatedRoot: options.generatedRoot,
-      outputFile: options.outputFile,
-      publishedOutputFile: options.publishedOutputFile,
+    const writer = new GeneratedRegistryWriter();
+    const sourceBootstrap = join(dirname(options.outputFile), "spine-bootstrap.ts");
+    const publishedBootstrap = join(
+      dirname(options.publishedOutputFile ?? options.outputFile),
+      "spine-bootstrap.ts",
+    );
+    const format = RuntimeMetadataGraph.format(dirname(options.project));
+    const dependencies = RuntimeMetadataGraph.resolve(
+      dirname(options.project),
+      options.sourceGeneratedRedirects,
+      format,
+    );
+    const assets = RuntimeMetadataAssets.render(
+      options.project,
+      publishedBootstrap,
+      sourceBootstrap,
+      dependencies,
+      writer,
+      format,
+    );
+    const staged = options.outputFile !== (options.publishedOutputFile ?? options.outputFile);
+    const runtime = assets.runtime.map((asset, index) => ({
+      file: staged
+        ? join(dirname(dirname(options.outputFile)), `spine-runtime-adapter-${String(index)}`)
+        : asset.file,
+      source: asset.source,
+    }));
+    const paths = [
+      options.outputFile,
+      sourceBootstrap,
+      ...assets.source.map(({ file }) => file),
+      assets.record.file,
+      ...runtime.map(({ file }) => file),
+    ];
+    writer.validateDestinations(options.repoRoot, paths);
+    HandlerFilePublication.publish(paths, () => {
+      writer.write(publishedAppQuerySchemas(analysis, options.sourceGeneratedRedirects ?? []), {
+        repoRoot: options.repoRoot,
+        generatedRoot: options.generatedRoot,
+        outputFile: options.outputFile,
+        publishedOutputFile: options.publishedOutputFile,
+        protoModuleExport: options.protoModuleExport,
+        protoModuleSpecifier: options.protoModuleSpecifier,
+        dependencies: assets.directDependencies,
+      });
+      writer.writeBootstrap({
+        repoRoot: options.repoRoot,
+        generatedRoot: options.generatedRoot,
+        outputFile: sourceBootstrap,
+        dependencies: assets.directDependencies,
+      });
+      for (const asset of [...assets.source, assets.record, ...runtime]) {
+        mkdirSync(dirname(asset.file), { recursive: true });
+        writeFileSync(asset.file, asset.source);
+      }
     });
     return 0;
   } catch (error) {
@@ -46,6 +109,106 @@ async function main(argv = process.argv.slice(2)) {
     rmSync(tempRoot, { recursive: true, force: true });
   }
 }
+
+/**
+ * Maps verified staged App Query schema references to public package exports.
+ *
+ * @param analysis Analyzed handlers and their paired query schema references.
+ * @param redirects Explicit staged package roots supplied by generation.
+ * @returns Analysis with importable public schema references.
+ */
+export function publishedAppQuerySchemas(analysis, redirects) {
+  return {
+    ...analysis,
+    appQueries: (analysis.appQueries ?? []).map((query) => ({
+      ...query,
+      querySchema: publishedSchema(query, query.querySchema, redirects),
+      responseSchema: publishedSchema(query, query.responseSchema, redirects),
+    })),
+  };
+}
+
+/**
+ * Resolves a schema through an explicitly declared staged package root.
+ *
+ * @param query Handler analysis containing the source file of the schema reference.
+ * @param schema Query or response schema import to publish.
+ * @param redirects Explicit staged package roots supplied by generation.
+ * @returns Original or public schema import, preserving its schema export.
+ */
+function publishedSchema(query, schema, redirects) {
+  if (!schema.moduleSpecifier.startsWith(".")) return schema;
+  const resolved = resolve(dirname(query.sourceFile), schema.moduleSpecifier);
+  for (const redirect of redirects) {
+    if (redirect.packageName === undefined || redirect.moduleRoot === undefined) continue;
+    const suffix = relative(redirect.moduleRoot, resolved);
+    if (suffix.startsWith("..") || isAbsolute(suffix) || !suffix.endsWith(".js")) continue;
+    assertPublishedSchemaExport(redirect, suffix);
+    return {
+      ...schema,
+      moduleSpecifier: `${redirect.packageName}/generated/${suffix.split(sep).join("/")}`,
+    };
+  }
+  return schema;
+}
+
+/**
+ * Rejects a generated import unless the package publishes matching JS and types.
+ *
+ * @param redirect Staged package metadata including its package root and name.
+ * @param suffix Generated JavaScript path relative to the staged package root.
+ */
+function assertPublishedSchemaExport(redirect, suffix) {
+  const packageRoot = dirname(redirect.source);
+  const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+  const entry = manifest.exports?.["./generated/*.js"];
+  const stem = suffix.slice(0, -3).split(sep).join("/");
+  if (
+    manifest.name !== redirect.packageName ||
+    typeof entry?.types !== "string" ||
+    typeof entry?.default !== "string" ||
+    entry?.types?.replace("*", stem) !== `./dist/generated/${stem}.d.ts` ||
+    entry?.default?.replace("*", stem) !== `./dist/generated/${stem}.js`
+  ) {
+    throw new Error(
+      `Staged App Query schema lacks a matching public generated export: ${redirect.packageName}`,
+    );
+  }
+}
+
+/**
+ * Restores every previous file if generated metadata publication fails.
+ */
+export const HandlerFilePublication = Object.freeze({
+  /**
+   * Runs one generated-output transaction and restores prior bytes on failure.
+   *
+   * @param paths All paths that the publication may replace.
+   * @param publish Validated output writer.
+   */
+  publish(paths, publish) {
+    const prior = [...new Set(paths)].map((file) => ({
+      file,
+      bytes: existsSync(file) ? readFileSync(file) : undefined,
+    }));
+    try {
+      publish();
+    } catch (error) {
+      const failures = [error];
+      for (const { file, bytes } of prior.reverse()) {
+        try {
+          if (bytes === undefined) rmSync(file, { force: true });
+          else writeFileSync(file, bytes);
+        } catch (rollback) {
+          failures.push(rollback);
+        }
+      }
+      if (failures.length > 1)
+        throw new AggregateError(failures, "Generated adapter rollback failed");
+      throw error;
+    }
+  },
+});
 
 function parseArgs(argv) {
   const options = {
@@ -57,6 +220,8 @@ function parseArgs(argv) {
     sourceGeneratedRoot: undefined,
     stagedSourceGeneratedRoot: undefined,
     sourceGeneratedRedirects: undefined,
+    protoModuleExport: undefined,
+    protoModuleSpecifier: undefined,
   };
 
   for (let index = 0; index < argv.length; index += 2) {
@@ -91,6 +256,12 @@ function parseArgs(argv) {
         break;
       case "--published-out":
         options.publishedOutputFile = resolve(value);
+        break;
+      case "--proto-module-export":
+        options.protoModuleExport = value;
+        break;
+      case "--proto-module-specifier":
+        options.protoModuleSpecifier = value;
         break;
       default:
         throw new Error(`Unknown option: ${flag}`);
@@ -167,10 +338,14 @@ async function loadBuildTool(tempRoot) {
     pathToFileURL(join(tempRoot, "build-time-handler-analyzer.mjs")).href
   );
   const writer = await import(pathToFileURL(join(tempRoot, "generated-registry-writer.mjs")).href);
+  const graph = await import(pathToFileURL(join(tempRoot, "runtime-metadata-graph.mjs")).href);
+  const assets = await import(pathToFileURL(join(tempRoot, "runtime-metadata-assets.mjs")).href);
 
   return {
     BuildHandlerAnalyzer: analyzer.BuildHandlerAnalyzer,
     GeneratedRegistryWriter: writer.GeneratedRegistryWriter,
+    RuntimeMetadataGraph: graph.RuntimeMetadataGraph,
+    RuntimeMetadataAssets: assets.RuntimeMetadataAssets,
   };
 }
 
@@ -220,6 +395,18 @@ function createGeneratedRootRedirectHost(options, redirects) {
   ) =>
     moduleLiterals.map((literal) => {
       for (const [packageName, moduleRoot] of moduleRoots) {
+        if (literal.text === packageName) {
+          const source = join(moduleRoot, "index.ts");
+          if (host.fileExists(source)) {
+            return {
+              resolvedModule: {
+                resolvedFileName: source,
+                extension: ts.Extension.Ts,
+                isExternalLibraryImport: false,
+              },
+            };
+          }
+        }
         const prefix = `${packageName}/generated/`;
         if (literal.text.startsWith(prefix) && literal.text.endsWith(".js")) {
           const source = join(moduleRoot, `${literal.text.slice(prefix.length, -".js".length)}.ts`);

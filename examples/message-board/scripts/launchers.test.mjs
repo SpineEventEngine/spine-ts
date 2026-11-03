@@ -8,16 +8,19 @@ import { URL, fileURLToPath } from "node:url";
 import process from "node:process";
 import test from "node:test";
 import net from "node:net";
+import https from "node:https";
 import { clearTimeout, setTimeout } from "node:timers";
 
 const local = readFileSync(new URL("./start-local-multi-process.sh", import.meta.url), "utf8");
 const single = readFileSync(new URL("./start-local-single-process.sh", import.meta.url), "utf8");
+const tlsKey = fileURLToPath(new URL("../web/test/browser/fixtures/test-only-edge-key.pem", import.meta.url));
+const tlsCertificate = fileURLToPath(new URL("../web/test/browser/fixtures/test-only-edge-cert.pem", import.meta.url));
 
 test("single-process launcher keeps UI and Gateway ports aligned", () => {
   assert.match(single, /MESSAGE_BOARD_LOCAL_PORT/u);
   assert.match(single, /MESSAGE_BOARD_WEB_PORT/u);
   assert.match(single, /--strictPort/u);
-  assert.match(single, /VITE_MESSAGE_BOARD_GATEWAY_URL="http:\/\/127\.0\.0\.1:\$gateway_port"/u);
+  assert.match(single, /VITE_MESSAGE_BOARD_GATEWAY_URL="https:\/\/127\.0\.0\.1:\$web_port"/u);
   assert.match(single, /--port "\$web_port"/u);
   assert.match(
     single,
@@ -50,6 +53,8 @@ test(
           PATH: `${bin}:${process.env.PATH}`,
           MESSAGE_BOARD_LOCAL_PORT: String(appPort),
           MESSAGE_BOARD_WEB_PORT: String(webPort),
+          MESSAGE_BOARD_TLS_KEY_FILE: tlsKey,
+          MESSAGE_BOARD_TLS_CERT_FILE: tlsCertificate,
         },
       },
     );
@@ -64,10 +69,7 @@ test(
       let ready = false;
       while (Date.now() < deadline) {
         try {
-          const response = await globalThis.fetch(`http://127.0.0.1:${String(webPort)}`, {
-            signal: globalThis.AbortSignal.timeout(500),
-          });
-          if (response.ok) {
+          if (await endpointReady(webPort, true)) {
             ready = true;
             break;
           }
@@ -121,13 +123,27 @@ function bindPort(port) {
   });
 }
 
+function endpointReady(port, secure) {
+  if (!secure)
+    return globalThis.fetch(`http://127.0.0.1:${String(port)}`, {
+      signal: globalThis.AbortSignal.timeout(500),
+    }).then((response) => response.ok);
+  return new Promise((resolve, reject) => {
+    const request = https.get(`https://127.0.0.1:${String(port)}`, { rejectUnauthorized: false },
+      (response) => { response.resume(); resolve(response.statusCode === 200); });
+    request.setTimeout(500, () => request.destroy(new Error("readiness timeout")));
+    request.on("error", reject);
+  });
+}
+
 test("launchers reject invalid ports before starting services", () => {
   for (const [script, environment] of [
     ["start-local-single-process.sh", { MESSAGE_BOARD_LOCAL_PORT: "70000" }],
     ["start-local-multi-process.sh", { MESSAGE_BOARD_DELIVERY_PORT: "70000" }],
   ]) {
     const result = spawnSync("bash", [fileURLToPath(new URL(script, import.meta.url))], {
-      env: { ...process.env, ...environment },
+      env: { ...process.env, MESSAGE_BOARD_TLS_KEY_FILE: tlsKey,
+        MESSAGE_BOARD_TLS_CERT_FILE: tlsCertificate, ...environment },
       encoding: "utf8",
       timeout: 2_000,
     });
@@ -153,7 +169,7 @@ test("managed multi-process launcher owns one shared Delivery server", () => {
   assert.match(local, /DATASTORE_EMULATOR_HOST="127\.0\.0\.1:\$datastore_port"/u);
   assert.match(local, /PROCESS_COUNT="\$process_count"/u);
   assert.match(local, /DELIVERY_SHARD_COUNT="\$shard_count"/u);
-  assert.match(local, /BROWSER_ORIGIN="http:\/\/127\.0\.0\.1:\$web_port"/u);
+  assert.match(local, /BROWSER_ORIGIN="https:\/\/127\.0\.0\.1:\$web_port"/u);
   assert.match(local, /BACKEND_URLS="http:\/\/127\.0\.0\.1:\$coordinator_port"/u);
   assert.match(local, /NODE_ENV=production/u);
   assert.match(
@@ -191,6 +207,8 @@ test("local launcher refuses to start Gateway or UI after its Coordinator exits"
           PATH: `${bin}:${process.env.PATH}`,
           HARNESS_LOG: log,
           MESSAGE_BOARD_REPO_ROOT: temp,
+          MESSAGE_BOARD_TLS_KEY_FILE: tlsKey,
+          MESSAGE_BOARD_TLS_CERT_FILE: tlsCertificate,
         },
         encoding: "utf8",
         timeout: 5_000,
@@ -243,7 +261,7 @@ test(
       mkdirSync(join(file, ".."), { recursive: true });
       writeFileSync(
         file,
-        `const http=require('node:http');const server=http.createServer((_,res)=>res.end('ready'));server.listen(Number(${selectedPort}),'127.0.0.1',()=>console.log('${ready}'));process.on('SIGTERM',()=>server.close(()=>process.exit(0)));`,
+        `const secure=${JSON.stringify(path.includes('/web/'))};const http=require(secure?'node:https':'node:http');const fs=require('node:fs');const options=secure?{key:fs.readFileSync(process.env.MESSAGE_BOARD_TLS_KEY_FILE),cert:fs.readFileSync(process.env.MESSAGE_BOARD_TLS_CERT_FILE)}:{};const server=http.createServer(options,(_,res)=>res.end('ready'));server.listen(Number(${selectedPort}),'127.0.0.1',()=>console.log('${ready}'));process.on('SIGTERM',()=>server.close(()=>process.exit(0)));`,
       );
     }
     const ports = new Set();
@@ -264,6 +282,8 @@ test(
           MESSAGE_BOARD_COORDINATOR_PORT: String(appPort),
           MESSAGE_BOARD_GATEWAY_PORT: String(gatewayPort),
           MESSAGE_BOARD_WEB_PORT: String(webPort),
+          MESSAGE_BOARD_TLS_KEY_FILE: tlsKey,
+          MESSAGE_BOARD_TLS_CERT_FILE: tlsCertificate,
         },
       },
     );
@@ -279,10 +299,7 @@ test(
         let ready = false;
         while (Date.now() < deadline) {
           try {
-            const response = await globalThis.fetch(`http://127.0.0.1:${String(port)}`, {
-              signal: globalThis.AbortSignal.timeout(500),
-            });
-            if (response.ok) {
+            if (await endpointReady(port, port === webPort)) {
               ready = true;
               break;
             }

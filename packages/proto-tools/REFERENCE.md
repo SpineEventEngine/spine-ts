@@ -30,10 +30,11 @@ whose `spine-proto.json` it should read:
 - `spine-proto compose` accepts only application configuration and writes the
   configured model registry source;
 - `spine-proto handlers` accepts an application package and writes
-  `generated/handler/generated-handler-registry.ts`. The emitted module imports
-  `GeneratedHandlerRegistry` as a type from
+  `generated/spine-metadata.ts` and `generated/spine-bootstrap.ts`. The metadata module imports
+  `SpineMetadata` as a type from
   `@spine-event-engine/server/spi/handler-registry`; handler analysis and
-  rendering remain tooling-owned and never load Server at CLI runtime.
+  rendering remain tooling-owned and never load Server at CLI runtime. Import
+  the bootstrap once before Bounded Context assembly.
 
 The package also exposes `manifestFormatVersion`, `ProtoConfig`, and
 `ProtoManifest` for build tooling that needs to read or validate the same
@@ -69,6 +70,33 @@ and `spine-proto.json`; import the other model's canonical package path. The
 tool keeps package boundaries explicit and does not duplicate the dependency's source or
 generated output.
 
+## App Query files
+
+Normal model generation recognizes files ending in `_queries.proto`. Each
+top-level message with nested messages named `Query` and `Response` declares
+one App Query. A message with neither nested name remains an ordinary Proto
+message, including its normal generated types, schemas, and registry entries.
+A message with only one of the two names is rejected as an incomplete App Query.
+
+One file can contain several App Queries and ordinary helper messages. A module
+can contain several query files. Each file containing an App Query produces one
+`_app_query.ts` companion; a file containing only ordinary messages produces no
+App Query companion.
+
+Relative folders are preserved in generated output:
+
+```text
+proto/issues/app_queries.proto   → generated/issues/app_queries_app_query.ts
+proto/projects/app_queries.proto → generated/projects/app_queries_app_query.ts
+```
+
+The example uses `protoRoot: "proto"` and `generatedRoot: "generated"`.
+Identical filenames in different folders do not collide. Query/response
+associations use fully qualified Proto message names, so operation names may
+also repeat in different Proto packages. Duplicate fully qualified Proto
+message names remain invalid. Import aliases distinguish repeated operation
+names in TypeScript source.
+
 ## Application configuration
 
 `ApplicationConfig` requires `formatVersion: 1`, `mode: "application"`, direct
@@ -78,6 +106,30 @@ sufficient because `TypeRegistry.from()` follows declared dependencies.
 
 `handlers` must run after a decorated handler or its generated command, event,
 or state types change. Compile the generated registry with the application.
+It also inspects declared runtime dependencies transitively. A participating
+package publishes its passive generated metadata through a `./spine` export
+with JavaScript and declaration targets; build dependency packages before
+generating the consumer. The application bootstrap registers local metadata;
+lazy `dependencies()` accessors on participating packages expose direct
+`./spine` exports by package name. Bootstrap traversal collects the transitive
+graph once, including cycles and shared dependencies. A nonparticipating
+runtime package cannot hide a participating transitive package. Bounded
+Model-only generation applies the same bridge rule to its declared model
+dependencies. Bootstrap validates every returned metadata value and the
+complete graph before publishing any handler or App Query descriptions.
+Malformed or missing `spineMetadata` exports fail registration.
+Bounded
+Context assembly still selects the handler classes explicitly. Regenerate the
+consumer after changing its installed dependency
+layout, a participant's published metadata, or its effective TypeScript
+configuration. Changes to inherited `outDir` or `declarationDir` settings also
+require regeneration so adapter paths are recalculated.
+Generation writes source and emitted `spine-dependencies.js` adapters with
+matching declarations. The normal clean build restores the emitted adapters
+from the generated record before TypeScript compiles. If a separate build step
+deletes those emitted files, regenerate the application against its installed
+dependency tree before compiling. Rebuilding after an output-directory change
+retires the previous adapter locations.
 
 Explicit handler return annotations may resolve to one generated message, a
 union, a flat array, or a fixed tuple (including readonly, named, optional, and

@@ -72,7 +72,7 @@ message Target {
 
 // The set of filters to narrow down the query results/subscription updates.
 message TargetFilters {
-    option (required_field) = "id_filter|filter";
+    option (require).fields = "id_filter|filter";
 
     // Match objects by their IDs.
     IdFilter id_filter = 1 [(validate) = true];

@@ -294,7 +294,7 @@ mutation or storage. Aggregate command completion resolves after traceability
 event-journal append and latest persisted state write. Later produced-signal
 publication is contained by the internal publisher and does not extend the
 `BoundedContext` API. Generated entity-class assembly creates default repositories
-through `add(EntityClass).withGeneratedRegistryRoot(root).build()`. This
+through `add(EntityClass).build()` after importing the generated bootstrap. This
 implementation does not invoke query handlers, run durable delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported durable inbox
 handoffs are framework process-manager command replay, live
@@ -462,7 +462,8 @@ caches, catch-up, or transport startup. Built bounded contexts use repository
 metadata to register known state types with their direct read-side `Stand`.
 `Stand`, `StandOptions`, `StandRegisterOptions`, `StandReadOptions`,
 `StandReadResult`, `StandUpdateOptions`, `StandSubscribeOptions`,
-`StandUpdate`, `StandSubscription`, and `StandStateTypeError` form the
+`StandUpdate`, `StandObserver`, `StandSubscription`,
+`StandSubscriptionCapacityError`, and `StandStateTypeError` form the
 direct read-side entity-state API. A stand registers known generated state
 schemas, rejects unknown state types on read/update/subscribe, stores latest
 states through `StorageFactory`/`RecordStorage`, reads latest state by schema
@@ -470,18 +471,41 @@ and entity ID, can return the stored Spine `Version` through
 `readVersioned()`, can return storage-backed query results through
 `queryVersioned()`, can return storage-order list results through
 `readAllVersioned()`, can clear one registered state type through
-`clear(schema, options?)`, and delivers direct in-process update notifications.
+`clear(schema, options?)`, and delivers direct in-process filtered updates.
 `Stand` reads durable version and lifecycle metadata from the authoritative
 current entity record alongside the latest state.
-Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
+`subscribe(schema, { next, error }, options)` runs read policies and observer
+delivery sequentially per subscriber. `ServerEnvironmentSettings.subscriptionQueueCapacity`
+sets the waiting count for direct and server-served subscriptions before their
+Stand or service adapter is constructed. The default is 100 waiting updates
+beyond one active update; zero permits only the active update.
+Overflow reports `StandSubscriptionCapacityError` only to the affected observer
+and closes that subscription without undoing a committed write. A policy may
+remove the current state, yielding a removal update with original identity;
+it may independently remove the previous state, omitting that field from a
+surviving state update. Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
 require a `tenantId` on point reads, list reads, updates, and subscriptions
 while single-tenant stands reject tenant options.
-`StandUpdate.previousState` is a copy-safe cloned snapshot of the stored state
-before the update, omitted when no prior state existed, so subscribers may
-retain or mutate it after delivery.
+`StandUpdate.previousState` is a detached, filtered prior state, omitted when
+there was no prior state or a policy removed it. Subscribers may retain or
+mutate a delivered prior state without changing storage.
 `SpineServices` adapts built-context command buses and stands to the real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
-routes. `QueryService.Read` supports ID-filter reads for any registered state
+routes. Application query declarations in a `_queries.proto` file generate grouped
+`Query`/`Response` aliases and schema values for each paired operation. Importing the
+generated model companion augments `AppQueryResponseFor<Query>` through the ordinary
+core type map; both messages also enter the ordinary Proto module, Any, validation,
+and stringifier registries. `AppQueryHandler<Query, Response>` describes a concrete
+server implementation. `ServerOptions.appQueries` selects concrete instances by
+exact class metadata before listening; passive metadata never activates a route.
+On direct app-node ingress, `QueryService.Execute` validates the AppQuery
+envelope and generated Q, then returns one packed paired R. Browser gateways
+and coordinators forward Execute with verified reader context;
+`ClientRequest.query(generatedQ)` decodes the paired R as a typed result.
+Internal `Server.query(generatedQ, executionContext)` uses the same selected
+handler and returns the generated R directly. Source
+Entity reads use registered query-visible routes and target-specific tenant
+admission. `QueryService.Read` supports ID-filter reads for any registered state
 route and projection-state `Target.include_all = true` reads, packing
 `EntityStateWithVersion` replies from
 `Stand.queryVersioned()`. Column filters support `EQUAL`, `GREATER_THAN`,
@@ -497,22 +521,44 @@ ordering directives are accepted. Absent or zero wire limits use an implicit
 requires ordering.
 The imported `ResponseFormat.field_mask` field is ignored; reads return complete states.
 Undeclared columns, wrong value types, unsupported operators, invalid ordering
-or limits, missing criteria, and `include_all = false` return `INVALID_QUERY`
-before reading Stand storage.
-`Subscribe` allocates an opaque ID, validates criteria, and creates one pending
+or limits, missing criteria, and `include_all = false` reject with gRPC
+`INVALID_ARGUMENT` and a `spine.base.Error` detail of type
+`spine.client.QueryValidationError` before reading Stand storage. Declared
+constraint failures include a packed `ValidationError`; native gRPC also sends
+the same Spine Error in `spine-error-bin`. Unexpected read failures reject with
+sanitized `INTERNAL`. A valid read with no matching states succeeds with an
+empty message list.
+`Subscribe` validates the complete Topic before allocating an opaque ID and creating one pending
 definition in the context's Stand registry. `Activate` changes that definition
-to active before attaching this process's delivery; missing or expired
-definitions, and a definition already active for this process, produce no
-updates. `Cancel` and stream finalization release local delivery and physically
-delete the shared definition. Pending definitions expire after 30 seconds.
+to active before attaching this process's delivery. A well-formed activation
+for a missing or expired definition returns `NOT_FOUND` with structured
+`spine.client.SubscriptionValidationError` reason `UNKNOWN_SUBSCRIPTION`;
+an already active definition still produces no duplicate stream. `Cancel` and
+stream finalization release local delivery and physically
+delete the shared definition. Cancelling a well-formed unknown or already removed
+subscription returns OK, preserving idempotent cancellation. Pending definitions
+expire after 30 seconds.
+Malformed Topics reject with `INVALID_ARGUMENT` and structured
+`spine.client.TopicValidationError` reason `INVALID_TOPIC`; unsupported Topic
+targets use `UNSUPPORTED_TOPIC_TARGET`. Malformed `Activate` and `Cancel`
+requests use `spine.client.SubscriptionValidationError` reason
+`INVALID_SUBSCRIPTION`. Declared constraint failures carry packed
+`ValidationError` field paths in the Spine Error detail.
+The managed browser client recreates only a structured `UNKNOWN_SUBSCRIPTION`
+with a fresh server-issued ID within its bounded retry episode. Entity
+subscriptions query authoritative state after reconnecting; Event subscriptions
+emit `gapPossible` because the stream cannot replay missed events. Invalid,
+denied, unauthenticated, tenant-unknown, and unrelated `NOT_FOUND` failures are
+terminal.
 
 The built-in registry has no global quota for retained definitions, and active
 definitions have no framework TTL. Application or ingress admission must bound
 acceptable use. Separately,
 `SpineServices.subscriptionLimit` defaults to 100 per service instance and
 bounds concurrent unknown-ID cancellation work; it is not a registry or
-distributed quota. `SpineServices.queueLimit` defaults to 100 queued updates
-per active local stream and closes slow delivery when exhausted.
+distributed quota. The environment's `subscriptionQueueCapacity` defaults to
+100 waiting updates beyond one active update per local stream and closes slow
+delivery when exhausted.
 `Subscribe` accepts registered state targets and event targets exposed by
 built-context event dispatchers. It rejects unknown/private targets, invalid
 criteria, unsupported comparison operators, event filters,
@@ -749,29 +795,23 @@ reaction, event subscription, state subscription, and event reaction,
 canonical arity metadata, and `HandlerMetadataError` for registration-time
 structural failures. Handler names must refer to prototype data methods
 declared with normal class method syntax. `EntityHandlers.define()` remains
-public for framework tests, generated-registry ingestion, and legacy
-non-decorator migration tooling; ordinary application code should use bare
+public for framework tests and generated-registry ingestion; ordinary application code should use bare
 decorators plus generated registry assembly instead. Decorator adapter exports
 include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Throws`,
-framework-only `materializeDecoratedEntityHandlers()`,
 `HandlerMethodDecorator`, `HandlerMethodValue`, and `RejectionDeclaration`.
 Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the primary public
 handler decorators. A command-accepting handler uses `@Throws` below its primary
 decorator to declare generated domain rejections. Generated handler registries
-perform ordinary schema inference. Schema-bearing handler metadata is internal/tooling input for
-generated registry assembly and framework materialization; it is not a
-public decorator form. `materializeDecoratedEntityHandlers()` remains a
-framework-only helper; application code must not call it.
-Ordinary generated assembly uses
-`await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).build()`.
-`withGeneratedRegistryRoot(root)` accepts a trusted compiled package/app root as
-a filesystem path, `URL`, or `file:` URL string. It rejects malformed URL
-strings, non-`file:` URL schemes, and `file:` aliases carrying query/hash
-suffixes, and it is required before `build()` can assemble entity classes
-from generated metadata. The builder loads the conventional generated registry
-module under that root, matches entity-class metadata, constructs default
-repositories. The same asynchronous `build()` assembles explicit
-`add(repository)` registrations. The server registry exports
+perform ordinary schema inference from source. Bare decorators validate public
+instance method placement at runtime; generated registry metadata supplies the
+message schemas and handler records.
+Ordinary generated assembly imports `generated/spine-bootstrap.js` once at the
+application entry, then uses
+`await BoundedContext.singleTenant(name).add(EntityClass).build()`.
+The bootstrap registers passive `spine-metadata.js` descriptions by exact class
+constructor. Missing descriptions fail before assembly with a generation/import
+hint. The same asynchronous `build()` assembles explicit `add(repository)`
+registrations. The server registry exports
 include `HandlerMetadataRegistry`, `HandlerMetadataRegistryLookup`,
 `RegisteredHandlerMetadata`, and `HandlerMetadataRegistryError` for low-level
 lookup-only registration and duplicate-policy validation. These APIs are
@@ -920,22 +960,22 @@ await context.commandBus().post(
 Its generated registry record declares `ApproveProjectSchema` under `input` and
 `ScheduleProjectSchema` as a normal returned outcome. Declared rejection
 schemas, when present, appear separately under `outcomes.thrown`. Application builds emit that record
-to `generated/handler/generated-handler-registry.js`; those applications use
-`build()` with their compiled package root before Command Bus posting.
+to `generated/spine-metadata.js`; the application imports
+`generated/spine-bootstrap.js` before context assembly and Command Bus posting.
 The public `@spine-event-engine/server/spi/handler-registry` subpath is the
 generated-registry data-contract SPI. Generated source writes unversioned
 receiver records and rejects retired registry shapes. Generated registry source
 uses it for the
-type-only `GeneratedHandlerRegistry` contract; ordinary application code should
+type-only `SpineMetadata` contract; ordinary application code should
 use the package-root server APIs and context assembly rather than importing this
 tooling SPI directly. It remains a public, documented contract rather than a
 package-internal entry point.
 `HandlerRegistryIngestor` preserves generated arity in canonical metadata, and
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
-URLs for framework/tooling paths. Application package builds run registry
-generation after Protobuf-ES generation and before `tsc`; normal context
-assembly lets `build()` load the compiled registry module from the explicit
-trusted package output tree passed to `withGeneratedRegistryRoot(root)`.
+URLs for framework/tooling paths. Application package builds generate passive metadata and bootstrap after
+Protobuf-ES generation and before `tsc`. The application imports its compiled
+bootstrap before selecting classes for `build()`. Explicit registry loading
+remains available through `GeneratedRegistryDiscovery`.
 Repository execution calls generated two-argument command assignees, command
 substitutions, event subscribers, command reactions, and event reactors with generated
 `CommandContext` or `EventContext` values from the incoming envelope; if the

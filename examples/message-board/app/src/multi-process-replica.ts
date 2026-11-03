@@ -34,7 +34,14 @@ import { MessageBoardApplication } from "./index.js";
 export function managedReplicaOptions(
   config: ReturnType<typeof MessageBoardDeployment.managed>,
 ): Pick<ManagedServerApplicationOptions, "createServer" | "synchronize"> {
-  let delivery: { open(): unknown } | undefined;
+  let delivery:
+    | {
+        /**
+         * Opens shared delivery after managed replica startup.
+         */
+        open(): unknown;
+      }
+    | undefined;
   return {
     createServer: async ({ host, port }) => {
       const client = new Datastore({ projectId: config.projectId });
@@ -50,7 +57,7 @@ export function managedReplicaOptions(
         { host, port },
         facilities.storageFactory,
         UniformAcrossAllShards.forNumber(config.deliveryShardCount),
-        new InMemorySubscriptionRegistry(),
+        () => new InMemorySubscriptionRegistry(),
       );
     },
     synchronize: async () => {

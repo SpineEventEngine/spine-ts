@@ -26,7 +26,10 @@ const server = createServer((request, response) => {
       "cache-control": "no-store",
     });
     response.end(
-      `window.MESSAGE_BOARD_RUNTIME_CONFIG=${JSON.stringify({ MESSAGE_BOARD_GATEWAY_URL: gateway })};`,
+      `window.MESSAGE_BOARD_RUNTIME_CONFIG=${JSON.stringify({
+        MESSAGE_BOARD_GATEWAY_URL: gateway,
+        MESSAGE_BOARD_AUTH_MODE: process.env.MESSAGE_BOARD_AUTH_MODE ?? "public",
+      })};`,
     );
     return;
   }

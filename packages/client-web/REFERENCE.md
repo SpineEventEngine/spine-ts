@@ -9,11 +9,47 @@ Start with the [browser client overview](README.md) for a first connection.
 
 `ClientOptions` select tenant, zone, bounded subscription settings, and an optional `onReauthenticateBeforeReconnect` callback. `BrowserClientOptions` also accept per-call synchronous metadata and Fetch credential mode. The application supplies metadata; the client does not log it. `asGuest()` and `onBehalfOf(user)` return immutable request scopes. An empty actor is rejected.
 
-`post(schema, value, options)` returns `CommandAcknowledgement`: `ok` for acceptance, `error` with an admission error, or `rejection` with a rejection message. Acceptance does not mean that Command processing has finished; Events and rejections observed after processing are its outcomes. Command-envelope packing deliberately skips client-side Proto validation so the authoritative server can return its configured validation details. Commands are never retried. `send(query, options)` returns the raw validated `QueryResponse`. Caller cancellation and `client.close()` abort admitted work; transport, deadline, and wire-contract failures remain errors.
+`post(schema, value, options)` returns `CommandAcknowledgement`: `ok` for acceptance, `error` with an admission error, or `rejection` with a rejection message. Acceptance does not mean that Command processing has finished; Events and rejections observed after processing are its outcomes. Command-envelope packing deliberately skips client-side Proto validation so the authoritative server can return its configured validation details. Commands are never retried. `send(query, options)` returns the raw `QueryResponse` for admitted reads, including an empty message list when nothing matches. Invalid Query requests reject with `INVALID_ARGUMENT`; the `ConnectError` carries a typed `spine.base.Error` detail and declared constraint violations when available. Unexpected read failures reject with sanitized `INTERNAL`. Caller cancellation and `client.close()` abort admitted work; transport, deadline, and wire-contract failures remain errors.
 
 `send()` accepts a generated `StateQuery.create()...build()` value. The value has no actor or
 tenant; each request scope applies its actor and the client's tenant to a fresh wire query, so
 one value can be reused across scopes and clients.
+
+`query(generatedQ, options)` executes an application-defined request through
+`QueryService.Execute`. Import the generated `_app_query` companion for the
+grouped query (`GetProjectOverview` from `project_queries_app_query.js`, for
+example) so TypeScript sees the Query-to-Response association. Separately import
+the model package's ordinary Proto-module entry before calling `query()`; that entry registers the same Query and Response schemas
+used by `TypeRegistry` and `AnyPacker`. A leaf Query-schema import alone may not
+initialize the model module. The generated Q-to-R association infers the result
+type without importing Server handlers into browser code. The return value has a
+`response` status and a readonly `message` array containing zero or one decoded R.
+An unassociated Q is a TypeScript error; a missing registered pair, extra result,
+wrong type URL, or undecodable result raises `ClientProtocolError`. Transport
+errors retain their Connect status and typed details. The `signal` option cancels
+the call through the selected transport.
+
+In this fixture-backed example, the companion import supplies the TypeScript
+pairing and the separate Proto-module import registers the runtime schemas:
+
+<!-- docs-snippet-path: packages/client-web/test/client.test.ts -->
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Client } from "@spine-event-engine/client-web";
+import "../../server/test-fixtures/generated/proto-module.js";
+import { GetProjectOverview } from "../../server/test-fixtures/generated/repository-routing/project_queries_app_query.js";
+import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
+
+async function readOverview(client: ReturnType<typeof Client.usingTransport>) {
+  const result = await client.asGuest().query(
+    create(GetProjectOverview.querySchema, {
+      project: create(ProjectIdSchema, { value: "project-1" }),
+    }),
+  );
+  return result.message[0]?.project;
+}
+```
 
 ## Browser sessions
 
@@ -30,8 +66,10 @@ during authoritative reads, including recovery after reconnect. Its target must 
 to the Topic target. The returned query response is delivered as `resynchronization` before held
 updates. For event subscriptions, reconnection reports `gapPossible`; events can be missing,
 duplicated, or differently ordered, and no replay, completeness, or cluster-complete guarantee is made.
-An RPC `NotFound` carrying a structured `spine.base.Error` detail with type
-`TENANT_UNKNOWN` ends the subscription without recovery attempts. Other transient
+An RPC `NotFound` carrying `spine.client.SubscriptionValidationError` with
+`UNKNOWN_SUBSCRIPTION` starts bounded recovery with a fresh server-issued ID.
+An unrelated `NotFound`, `TENANT_UNKNOWN`, invalid input, or denied or
+unauthenticated access ends the subscription without recreation. Transient
 transport failures retain the configured retry behavior.
 
 The defaults are 64 queued updates, 1,048,576 queued update bytes, 32 lifecycle notices, five retry attempts, and 30,000 milliseconds of elapsed recovery. Every capacity, retry value, scheduler value, and custom delay is a positive safe integer. The default retry delay starts at 250 milliseconds with bounded jitter, caps at 5,000 milliseconds, and never falls below one millisecond. A stream connected for at least the configured elapsed-recovery window starts a fresh finite retry episode when it later fails; rapid failures remain in one episode and exhaust its limits. Overflow is terminal and never silently drops an update. `connecting`, `connected`, `resynchronizing`, `gapPossible`, `notificationFailed`, `failed`, and `closed` lifecycle notices describe that local subscription state.

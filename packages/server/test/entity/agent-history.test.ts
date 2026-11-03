@@ -88,7 +88,10 @@ describe("Agent history binding", () => {
       "Agent history is available only from repository execution.",
     );
     expect(() =>
-      AgentHistoryReads.withReadInterceptor(agent, async (_scope, _request, live) => live()),
+      AgentHistoryReads.withReadInterceptor(
+        agent,
+        async (_scope, _request, live, _maxBytes, present) => present(await live()),
+      ),
     ).toThrow("Agent history is available only from repository execution.");
     let readCount = 0;
     const storage: AgentHistoryStorage<SupportReplyAgentId> = {
@@ -302,10 +305,10 @@ describe("Agent history binding", () => {
         },
         close: () => undefined,
       },
-      interceptRead: (seenScope, request, live) => {
+      interceptRead: (seenScope, request, live, _maxBytes, present) => {
         expect(seenScope).toEqual(scope);
         expect(request).toEqual({ pageSize: 1 });
-        return live();
+        return live().then(present);
       },
     });
     expect(await agent.readFull({ pageSize: 1 })).toEqual(original);

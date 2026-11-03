@@ -461,8 +461,8 @@ profile exercises 32 and 40 discovered nodes with at most two concurrent
 connection starts; it is not a cloud throughput benchmark. Unary calls are
 round-robin without retry; subscriptions are best effort and can duplicate.
 Generic loss notices mean a possible gap and require an authoritative re-query.
-The legacy single-backend form remains supported for local fixtures; durable
-fan-in fencing rejects incompatible membership changes before attachment.
+Local Compose uses `BACKEND_URLS` for its fixed endpoint list; durable fan-in
+fencing rejects incompatible membership changes before attachment.
 
 Use this test matrix before changing an extension:
 

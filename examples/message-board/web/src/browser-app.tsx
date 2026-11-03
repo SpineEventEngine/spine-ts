@@ -12,34 +12,39 @@
  * the License.
  */
 
-import { Client } from "@spine-event-engine/client-web";
 import { createRoot } from "react-dom/client";
-
 import "./index.css";
-import { MessageBoardApp } from "./index.js";
 import { LocalBoardGateway } from "./board-config.js";
-
-/* Starts the stock browser Message Board application against its configured Gateway. */
+import { SessionBoardApp } from "./session-app.js";
 
 declare global {
+
+  /**
+   * Runtime settings injected into the browser page by deployment.
+   */
   interface Window {
     readonly MESSAGE_BOARD_RUNTIME_CONFIG?: Readonly<Record<string, string | undefined>>;
   }
 
+  /**
+   * Bundler environment and optional hot-reload hook for this browser entry.
+   */
   interface ImportMeta {
     readonly env: Readonly<Record<string, string | undefined>>;
-    readonly hot?: Readonly<{ dispose(onDispose: () => void): void }>;
+    readonly hot?: Readonly<{
+      /**
+       * Registers disposal of the React root during module replacement.
+       *
+       * @param onDispose Callback that releases the root.
+       */
+      dispose(onDispose: () => void): void;
+    }>;
   }
 }
 
-const client = Client.forConnect(
-  LocalBoardGateway.url({ ...import.meta.env, ...window.MESSAGE_BOARD_RUNTIME_CONFIG }),
-);
-const request = client.onBehalfOf("ada");
+const config = { ...import.meta.env, ...window.MESSAGE_BOARD_RUNTIME_CONFIG };
+const mode = config.MESSAGE_BOARD_AUTH_MODE ?? config.VITE_MESSAGE_BOARD_AUTH_MODE ?? "public";
+if (mode !== "public" && mode !== "signed") throw new Error("Invalid Message Board authentication mode.");
 const root = createRoot(document.getElementById("root")!);
-
-root.render(<MessageBoardApp actor="ada" board="general" request={request} />);
-
-const close = () => client.close();
-window.addEventListener("pagehide", () => void close(), { once: true });
-if (import.meta.hot) import.meta.hot.dispose(() => void close());
+root.render(<SessionBoardApp url={LocalBoardGateway.url(config)} mode={mode} />);
+if (import.meta.hot) import.meta.hot.dispose(() => root.unmount());

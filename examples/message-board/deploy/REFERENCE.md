@@ -24,7 +24,7 @@ wait for the delivery server before startup; the Gateway does not use Delivery.
 References use TCP startup/readiness probes and deliberately omit liveness
 probes and application health endpoints.
 
-The public demo creates no browser credential. Browser subscription state is
+Public mode creates no browser credential. Signed mode validates an operator-issued bearer credential; the Gateway and application nodes share the signing and proof configuration, while the web runtime receives only `MESSAGE_BOARD_AUTH_MODE`. Browser subscription state is
 local to the Gateway process. Like a doorbell, a notification only helps when
 the browser is present: after a Gateway restart it reconnects, queries the
 current board state, then resumes live updates.

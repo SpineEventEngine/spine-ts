@@ -22,7 +22,7 @@ import {
   type UnaryRequest,
   type UnaryResponse,
 } from "@connectrpc/connect";
-import { AnyPacker, Time } from "@spine-event-engine/core";
+import { AnyPacker, Time, TypeUrls, Validate } from "@spine-event-engine/core";
 import {
   AckSchema,
   ActorContextSchema,
@@ -40,6 +40,8 @@ import {
 } from "@spine-event-engine/proto";
 import {
   QueryResponseSchema,
+  type AppQuery,
+  AppQueryResponseSchema,
   EntityStateWithVersionSchema,
   QueryIdSchema,
   type Query,
@@ -48,6 +50,7 @@ import {
   EventUpdatesSchema,
   SubscriptionSchema,
   SubscriptionIdSchema,
+  SubscriptionValidationError,
   SubscriptionUpdateSchema,
   type SubscriptionUpdate,
   EntityUpdatesSchema,
@@ -65,6 +68,7 @@ import {
   ClientProtocolError,
   SubscriptionActivationTimeoutError,
   type BrowserClientOptions,
+  type AppQueryClientResponse,
   type CreateSubscriptionOptions,
   type SubscriptionLifecycle,
   type SubscriptionRetryPolicy,
@@ -75,6 +79,18 @@ import {
   ProjectRegisteredSchema,
 } from "../../server/test-fixtures/generated/repository-routing/project_events_pb.js";
 import { CreateProjectSchema } from "../../server/test-fixtures/generated/repository-routing/project_commands_pb.js";
+import "../../server/test-fixtures/generated/proto-module.js";
+import {
+  GetProjectOverview_QuerySchema,
+  GetProjectOverview_ResponseSchema,
+  type GetProjectOverview_Query,
+  type GetProjectOverview_Response,
+} from "../../server/test-fixtures/generated/repository-routing/project_queries_pb.js";
+// prettier-ignore
+import {
+  GetProjectOverview,
+} from "../../server/test-fixtures/generated/repository-routing/project_queries_app_query.js";
+import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 // prettier-ignore
 import {
   ProjectOverviewStateQuery,
@@ -92,6 +108,82 @@ vi.mock("@connectrpc/connect-web", () => ({
 }));
 
 describe("Client", () => {
+  it("rejects unusable Event selections and first-update deadlines before transport", async () => {
+    let calls = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport(() => {
+        calls++;
+        return create(ResponseSchema);
+      }),
+    });
+    const command = create(CreateProjectSchema, { id: "selection-1", name: "Selection" });
+    await expect(
+      client.asGuest().postAndSubscribe(CreateProjectSchema, command, {}),
+    ).rejects.toThrow("At least one Event or rejection schema is required.");
+    await expect(
+      client.asGuest().postAndSubscribe(CreateProjectSchema, command, {
+        events: [ProjectCreatedSchema],
+        firstUpdateTimeoutMs: 0,
+        onFirstUpdateTimeout: () => undefined,
+      }),
+    ).rejects.toThrow(
+      "Client subscription first update timeout must be 1..2147483647 milliseconds.",
+    );
+    await expect(
+      client.asGuest().postAndSubscribe(CreateProjectSchema, command, {
+        events: [ProjectCreatedSchema],
+        firstUpdateTimeoutMs: 1,
+      }),
+    ).rejects.toThrow("Subscription first update timeout requires onFirstUpdateTimeout.");
+    await expect(
+      client.asGuest().postAndSubscribe(CreateProjectSchema, command, {
+        events: [ProjectCreatedSchema],
+        activationTimeoutMs: 0,
+      }),
+    ).rejects.toThrow("Client subscription activation timeout must be 1..2147483647 milliseconds.");
+    await expect(
+      client.asGuest().createSubscription([ProjectCreatedSchema], {
+        kind: "entity",
+        authoritativeQuery: () =>
+          create(QuerySchema, {
+            id: create(QueryIdSchema, { value: "entity-recovery" }),
+            target: create(TargetSchema, {
+              type: TypeUrls.derive(ProjectOverviewStateSchema),
+              criterion: { case: "includeAll", value: true },
+            }),
+            context: create(ActorContextSchema),
+          }),
+      } as never),
+    ).rejects.toThrow("Grouped subscriptions require kind: 'event'.");
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "client-options-topic" }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ProjectCreatedSchema),
+        criterion: { case: "includeAll", value: true },
+      }),
+    });
+    await expect(
+      client.asGuest().createSubscription(topic, {
+        kind: "event",
+        firstUpdateTimeoutMs: "soon",
+      } as never),
+    ).rejects.toThrow("Subscription first update timeout must be a number.");
+    expect(calls).toBe(0);
+    await client.close();
+  });
+
+  it("does not activate a cancelled Event group", async () => {
+    const calls: string[] = [];
+    const client = Client.usingTransport({ transport: groupedTransport(calls, []) });
+    const group = await client
+      .asGuest()
+      .createSubscription([ProjectCreatedSchema, ProjectRegisteredSchema], { kind: "event" });
+    await group.cancel();
+    await expect(group.activate()).rejects.toThrow("cancelled");
+    expect(calls).toEqual([]);
+    await client.close();
+  });
+
   it("activates each distinct selected Event type before one Command post", async () => {
     const calls: string[] = [];
     const topics: Topic[] = [];
@@ -1727,6 +1819,258 @@ describe("Client", () => {
     await client.close();
   });
 
+  it("recreates an unknown Event subscription with a fresh ID and gap notice", async () => {
+    const unknown = new ConnectError("Subscription is unknown.", Code.NotFound, undefined, [
+      {
+        desc: ErrorSchema,
+        value: create(ErrorSchema, {
+          type: "spine.client.SubscriptionValidationError",
+          code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+        }),
+      },
+    ]);
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "unknown-event-topic" }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ProjectCreatedSchema),
+        criterion: { case: "includeAll", value: true },
+      }),
+    });
+    let subscribes = 0;
+    const activations: string[] = [];
+    const cancelled: string[] = [];
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              Validate.check(TopicSchema, input as Topic);
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `unknown-${String(++subscribes)}` }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel") cancelled.push((input as Subscription).id?.value ?? "");
+            return create(ResponseSchema, {
+              status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+            });
+          },
+          undefined,
+          () => {
+            activations.push(`unknown-${String(subscribes)}`);
+            if (activations.length === 1) throw unknown;
+            return neverEndingUpdates();
+          },
+        ),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    expect(subscribes).toBe(2);
+    expect(activations).toEqual(["unknown-1", "unknown-2"]);
+    expect(cancelled).toEqual(["unknown-1"]);
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "gapPossible" } });
+    await subscription.cancel();
+    await client.close();
+  });
+
+  it.each([
+    ["unrelated not-found", Code.NotFound],
+    ["invalid request", Code.InvalidArgument],
+    ["permission denied", Code.PermissionDenied],
+    ["unauthenticated", Code.Unauthenticated],
+  ] as const)("does not recreate after %s", async (_name, code) => {
+    const failure = new ConnectError("terminal activation", code);
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "terminal-event-topic" }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ProjectCreatedSchema),
+        criterion: { case: "includeAll", value: true },
+      }),
+    });
+    let subscribes = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              Validate.check(TopicSchema, input as Topic);
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `terminal-${String(++subscribes)}` }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema, {
+              status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+            });
+          },
+          undefined,
+          () => {
+            throw failure;
+          },
+        ),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+
+    await expect(subscription.activate()).rejects.toBe(failure);
+    expect(subscribes).toBe(1);
+    await client.close();
+  });
+
+  it("ends one unknown-subscription recovery episode after its bounded replacement fails", async () => {
+    const unknown = new ConnectError("Subscription is unknown.", Code.NotFound, undefined, [
+      {
+        desc: ErrorSchema,
+        value: create(ErrorSchema, {
+          type: "spine.client.SubscriptionValidationError",
+          code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+        }),
+      },
+    ]);
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "exhausted-event-topic" }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ProjectCreatedSchema),
+        criterion: { case: "includeAll", value: true },
+      }),
+    });
+    let subscribes = 0;
+    const cancelled: string[] = [];
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              Validate.check(TopicSchema, input as Topic);
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, {
+                  value: `exhaust-unknown-${String(++subscribes)}`,
+                }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel") cancelled.push((input as Subscription).id?.value ?? "");
+            return create(ResponseSchema, {
+              status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+            });
+          },
+          undefined,
+          () => {
+            throw unknown;
+          },
+        ),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+
+    await expect(subscription.activate()).rejects.toBe(unknown);
+    await expect(updates.next()).rejects.toBe(unknown);
+    expect(subscribes).toBe(2);
+    expect(cancelled).toEqual(["exhaust-unknown-1", "exhaust-unknown-2"]);
+    await client.close();
+  });
+
+  it("queries authoritative Entity state after replacing an unknown subscription", async () => {
+    const unknown = new ConnectError("Subscription is unknown.", Code.NotFound, undefined, [
+      {
+        desc: ErrorSchema,
+        value: create(ErrorSchema, {
+          type: "spine.client.SubscriptionValidationError",
+          code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+        }),
+      },
+    ]);
+    const target = create(TargetSchema, {
+      type: TypeUrls.derive(ProjectOverviewStateSchema),
+      criterion: { case: "includeAll", value: true },
+    });
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "unknown-entity-topic" }),
+      target,
+    });
+    let subscribes = 0;
+    let reads = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              Validate.check(TopicSchema, input as Topic);
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, {
+                  value: `entity-unknown-${String(++subscribes)}`,
+                }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema, {
+              status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+            });
+          },
+          (input) => {
+            Validate.check(QuerySchema, input as Query);
+            reads++;
+            return create(QueryResponseSchema, {
+              response: create(ResponseSchema, {
+                status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+              }),
+            });
+          },
+          () => {
+            if (subscribes === 1) throw unknown;
+            return neverEndingUpdates();
+          },
+        ),
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, {
+      kind: "entity",
+      authoritativeQuery: () =>
+        create(QuerySchema, {
+          id: create(QueryIdSchema, { value: "unknown-entity-recovery" }),
+          target,
+        }),
+    });
+    const updates = subscription.updates[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    expect(subscribes).toBe(2);
+    expect(reads).toBe(1);
+    await expect(updates.next()).resolves.toMatchObject({ value: { kind: "resynchronization" } });
+    await subscription.cancel();
+    await client.close();
+  });
+
   it("stops reconnecting when a previously accepted tenant becomes unknown", async () => {
     const unknown = new ConnectError("Tenant is not registered.", Code.NotFound, undefined, [
       { desc: ErrorSchema, value: create(ErrorSchema, { type: "TENANT_UNKNOWN" }) },
@@ -1989,7 +2333,23 @@ describe("Client", () => {
     expect(cancels).toBe(1);
   });
 
-  it("cancels a scheduler wait promptly, emits only closed, and starts no later RPC", async () => {
+  it("cancels unknown-subscription recovery during backoff without another RPC", async () => {
+    const unknown = new ConnectError("Subscription is unknown.", Code.NotFound, undefined, [
+      {
+        desc: ErrorSchema,
+        value: create(ErrorSchema, {
+          type: "spine.client.SubscriptionValidationError",
+          code: SubscriptionValidationError.UNKNOWN_SUBSCRIPTION,
+        }),
+      },
+    ]);
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "cancelled-unknown-event-topic" }),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ProjectCreatedSchema),
+        criterion: { case: "includeAll", value: true },
+      }),
+    });
     let subscribes = 0;
     let cancels = 0;
     let waiting: Promise<void> | undefined;
@@ -1998,6 +2358,7 @@ describe("Client", () => {
         transport: unaryTransport(
           (method, input) => {
             if (method.name === "Subscribe") {
+              Validate.check(TopicSchema, input as Topic);
               subscribes++;
               return create(SubscriptionSchema, {
                 id: create(SubscriptionIdSchema, { value: "waiting" }),
@@ -2005,10 +2366,17 @@ describe("Client", () => {
               });
             }
             if (method.name === "Cancel") cancels++;
-            return create(ResponseSchema);
+            return create(ResponseSchema, {
+              status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+            });
           },
           undefined,
-          () => emptyUpdates(),
+          () =>
+            (async function* () {
+              await Promise.resolve();
+              yield* emptyUpdates();
+              throw unknown;
+            })(),
         ),
       },
       {
@@ -2030,9 +2398,7 @@ describe("Client", () => {
         },
       },
     );
-    const subscription = await client
-      .asGuest()
-      .createSubscription(create(TopicSchema), eventSubscription);
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
 
     await subscription.activate();
@@ -3983,6 +4349,171 @@ describe("Client", () => {
     await client.close();
     await expect(client.asGuest().send(query)).rejects.toThrow("client is closing");
   });
+
+  it("exposes the server's structured invalid Query status from send", async () => {
+    const detail = create(ErrorSchema, {
+      type: "spine.client.QueryValidationError",
+      code: 2,
+      message: "query validation failed.",
+    });
+    const failure = new ConnectError("query validation failed.", Code.InvalidArgument, undefined, [
+      { desc: ErrorSchema, value: detail },
+    ]);
+    const client = Client.usingTransport({
+      transport: unaryTransport((method) => {
+        if (method.name === "Read") throw failure;
+        return create(ResponseSchema);
+      }),
+    });
+
+    await expect(client.asGuest().send(create(QuerySchema))).rejects.toBe(failure);
+    expect(failure.findDetails(ErrorSchema)).toEqual([detail]);
+    await client.close();
+  });
+
+  it("infers the generated App Query response and preserves its Response envelope", async () => {
+    const resultMessage = create(GetProjectOverview_ResponseSchema, {
+      project: { id: "project-1", name: "Ready", priority: 2 },
+    });
+    const client = Client.usingTransport({
+      transport: unaryTransport((method, input) => {
+        if (method.name !== "Execute") return create(QueryResponseSchema);
+        expect(input).toMatchObject({
+          message: { typeUrl: TypeUrls.derive(GetProjectOverview_QuerySchema) },
+          context: { actor: { value: "reader-a" } },
+        });
+        return create(AppQueryResponseSchema, {
+          response: create(ResponseSchema),
+          message: [AnyPacker.pack(GetProjectOverview_ResponseSchema, resultMessage)],
+        });
+      }),
+    });
+    const result = await client.onBehalfOf("reader-a").query(
+      create(GetProjectOverview.querySchema, {
+        project: create(ProjectIdSchema, { value: "project-1" }),
+      }),
+    );
+    expectTypeOf(result.message[0]).toEqualTypeOf<GetProjectOverview_Response | undefined>();
+    expect(result.message[0]?.project?.name).toBe("Ready");
+    expect(result.response).toBeDefined();
+    await client.close();
+  });
+
+  it("keeps concurrent App Query envelopes separate while the caller reuses one request", async () => {
+    const pending = Promise.withResolvers<Message>();
+    const inputs: AppQuery[] = [];
+    const transport = unaryTransport((method, input) => {
+      if (method.name !== "Execute") return create(QueryResponseSchema);
+      inputs.push(input as AppQuery);
+      return pending.promise;
+    });
+    const first = Client.usingTransport({ transport });
+    const second = Client.usingTransport({ transport });
+    const request = create(GetProjectOverview.querySchema, {
+      project: create(ProjectIdSchema, { value: "project-shared" }),
+    });
+    const results = [
+      first.onBehalfOf("reader-a").query(request),
+      second.onBehalfOf("reader-b").query(request),
+    ];
+    await vi.waitFor(() => {
+      expect(inputs).toHaveLength(2);
+    });
+    request.project = create(ProjectIdSchema, { value: "project-changed" });
+    expect(inputs.map((input) => input.context?.actor?.value)).toEqual(["reader-a", "reader-b"]);
+    expect(inputs[0]?.id?.value).not.toBe(inputs[1]?.id?.value);
+    for (const input of inputs) {
+      if (input.message === undefined) throw new Error("Expected packed App Query.");
+      expect(AnyPacker.unpack(input.message, GetProjectOverview_QuerySchema).project?.value).toBe(
+        "project-shared",
+      );
+    }
+    pending.resolve(
+      create(AppQueryResponseSchema, {
+        response: create(ResponseSchema),
+        message: [
+          AnyPacker.pack(
+            GetProjectOverview_ResponseSchema,
+            create(GetProjectOverview_ResponseSchema),
+          ),
+        ],
+      }),
+    );
+    expect((await Promise.all(results)).map((result) => result.message)).toHaveLength(2);
+    await first.close();
+    await second.close();
+  });
+
+  it("accepts an empty App Query result and rejects extra, wrong, or undecodable results", async () => {
+    const request = create(GetProjectOverview.querySchema, {
+      project: create(ProjectIdSchema, { value: "project-1" }),
+    });
+    const paired = AnyPacker.pack(
+      GetProjectOverview_ResponseSchema,
+      create(GetProjectOverview_ResponseSchema, { project: { id: "project-1" } }),
+    );
+    const wrong = AnyPacker.pack(
+      ProjectOverviewStateSchema,
+      create(ProjectOverviewStateSchema, { id: "project-1" }),
+    );
+    for (const [messages, expected] of [
+      [[], undefined],
+      [[paired, paired], "more than one"],
+      [[wrong], "paired result"],
+      [[{ ...paired, value: new Uint8Array([255]) }], "paired result"],
+    ] as const) {
+      const client = Client.usingTransport({
+        transport: unaryTransport((method) =>
+          method.name === "Execute"
+            ? create(AppQueryResponseSchema, {
+                response: create(ResponseSchema),
+                message: [...messages],
+              })
+            : create(QueryResponseSchema),
+        ),
+      });
+      try {
+        const outcome = client.asGuest().query(request);
+        if (expected === undefined) expect((await outcome).message).toEqual([]);
+        else await expect(outcome).rejects.toThrow(expected);
+      } finally {
+        await client.close();
+      }
+    }
+  });
+
+  function rejectUnpairedAppQueryAtCompileTime(request: ReturnType<Client["asGuest"]>): void {
+    // @ts-expect-error Entity state has no generated App Query response association.
+    void request.query(create(ProjectOverviewStateSchema));
+  }
+
+  it("rejects an application response without its required Response status", async () => {
+    const client = Client.usingTransport({
+      transport: unaryTransport((method) =>
+        method.name === "Execute" ? create(AppQueryResponseSchema) : create(QueryResponseSchema),
+      ),
+    });
+    try {
+      await expect(
+        client.asGuest().query(
+          create(GetProjectOverview.querySchema, {
+            project: create(ProjectIdSchema, { value: "project-1" }),
+          }),
+        ),
+      ).rejects.toThrow("missing Response");
+    } finally {
+      await client.close();
+    }
+  });
+  void rejectUnpairedAppQueryAtCompileTime;
+
+  function rejectMutableResultAtCompileTime(
+    result: AppQueryClientResponse<GetProjectOverview_Query>,
+  ): void {
+    // @ts-expect-error Decoded App Query results are readonly.
+    result.message[0] = create(GetProjectOverview_ResponseSchema);
+  }
+  void rejectMutableResultAtCompileTime;
 
   it("reuses one generated query in concurrent tenant-scoped sends", async () => {
     const shared = ProjectOverviewStateQuery.create().name().is("ready").build();

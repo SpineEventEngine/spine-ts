@@ -4,7 +4,16 @@ static_resources:
       address:
         socket_address: { address: 0.0.0.0, port_value: 8080 }
       filter_chains:
-        - filters:
+        - transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              common_tls_context:
+                alpn_protocols: [h2, http/1.1]
+                tls_certificates:
+                  - certificate_chain: { filename: /run/tls/tls.crt }
+                    private_key: { filename: /run/tls/tls.key }
+          filters:
             - name: envoy.filters.network.http_connection_manager
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
@@ -18,7 +27,7 @@ static_resources:
                       typed_per_filter_config:
                         envoy.filters.http.cors:
                           "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.CorsPolicy
-                          allow_origin_string_match: [{ safe_regex: { regex: "^http://localhost:[0-9]+$" } }]
+                          allow_origin_string_match: [{ safe_regex: { regex: "^https://localhost:[0-9]+$" } }]
                           allow_methods: "POST, OPTIONS"
                           allow_headers: "content-type,x-grpc-web,authorization,x-user-agent,grpc-timeout"
                           expose_headers: "grpc-status,grpc-message"
@@ -39,6 +48,12 @@ static_resources:
                         - match:
                             {
                               path: "/spine.client.QueryService/Read",
+                              headers: [{ name: ":method", exact_match: POST }],
+                            }
+                          route: { cluster: gateway, timeout: 30s }
+                        - match:
+                            {
+                              path: "/spine.client.QueryService/Execute",
                               headers: [{ name: ":method", exact_match: POST }],
                             }
                           route: { cluster: gateway, timeout: 30s }

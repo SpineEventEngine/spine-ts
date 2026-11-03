@@ -13,12 +13,12 @@
  */
 syntax = "proto3";
 
-package spine.server.testing;
+package spine.server.blackbox.support;
 
 import "spine/options.proto";
 import "spine/server/testing/support_agent_states.proto";
 
-option (type_url_prefix) = "type.spine.server.testing";
+option (type_url_prefix) = "type.spine.server.blackbox.support";
 
 // Records that a human-review step was requested for a support draft.
 message SupportReplyReviewStarted {

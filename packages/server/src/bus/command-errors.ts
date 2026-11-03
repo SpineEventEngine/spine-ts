@@ -12,32 +12,37 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
-import { Validate } from "@spine-event-engine/core";
+import { create, equals } from "@bufbuild/protobuf";
+import type { Any } from "@bufbuild/protobuf/wkt";
+import { ValidationException, Validate } from "@spine-event-engine/core";
 import {
+  CommandContextSchema,
+  CommandSchema,
   ConstraintViolationSchema,
+  FieldPathSchema,
   TemplateStringSchema,
   type ValidationError,
+  type Command,
 } from "@spine-event-engine/proto";
 
 /**
- * Error raised when a command envelope payload fails command-bus validation.
+ * Error raised when a command envelope or payload fails command-bus validation.
  */
 export class CommandValidationError extends Error {
   // prettier-ignore
 
   /**
-   * Structured payload validation details from the command-bus boundary.
+   * Structured validation details from the command-bus boundary.
    */
   readonly validationError: ValidationError;
 
   /**
    * Creates a command-bus validation error with structured details.
    *
-   * @param validationError the structured payload validation details.
+   * @param validationError Structured Command envelope or payload validation details.
    */
   constructor(validationError: ValidationError) {
-    super("Command payload validation failed.");
+    super("Command validation failed.");
     this.name = "CommandValidationError";
     this.validationError = validationError;
     Object.setPrototypeOf(this, new.target.prototype);
@@ -58,5 +63,55 @@ export class CommandValidationError extends Error {
         }),
       ]),
     );
+  }
+
+  /**
+   * Creates a field-addressed validation error for an incomplete Command envelope.
+   * @param path Proto field path from the Command envelope.
+   * @param message Developer-readable validation message.
+   * @returns The invalid-envelope error.
+   */
+  static invalidEnvelope(path: string[], message: string): CommandValidationError {
+    return new CommandValidationError(
+      Validate.createError([
+        create(ConstraintViolationSchema, {
+          typeName: "spine.core.Command",
+          fieldPath: create(FieldPathSchema, { fieldName: path }),
+          message: create(TemplateStringSchema, { withPlaceholders: message }),
+        }),
+      ]),
+    );
+  }
+
+  /**
+   * Rejects absent/default Command envelope fields and declared constraints.
+   * @param command Command to inspect before route admission or dispatch.
+   * @throws CommandValidationError for invalid input, or Error for validator failure.
+   */
+  static checkEnvelope(command: Command): asserts command is Command & { message: Any } {
+    if (!command.id?.uuid) {
+      throw CommandValidationError.invalidEnvelope(["id", "uuid"], "Command ID cannot be empty.");
+    }
+    if (!command.message?.typeUrl) {
+      throw CommandValidationError.invalidEnvelope(
+        ["message"],
+        "CommandBus requires command.message.typeUrl.",
+      );
+    }
+    if (
+      command.context === undefined ||
+      equals(CommandContextSchema, command.context, create(CommandContextSchema))
+    ) {
+      throw CommandValidationError.invalidEnvelope(
+        ["context"],
+        "Non-default command context must be set.",
+      );
+    }
+    try {
+      Validate.check(CommandSchema, command);
+    } catch (error) {
+      if (error instanceof ValidationException) throw new CommandValidationError(error.asMessage());
+      throw error;
+    }
   }
 }

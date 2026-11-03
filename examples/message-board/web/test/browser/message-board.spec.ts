@@ -21,11 +21,24 @@ import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-
 
 test("posts and reads a real MessageBoard Projection through the local gateway", async ({
   page,
-}) => {
+}, testInfo) => {
+  const protocols: string[] = [];
+  if (testInfo.project.name === "chromium") {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Network.enable");
+    cdp.on("Network.responseReceived", ({ response }) => {
+      if (response.url.includes("QueryService/Execute")) protocols.push(response.protocol ?? "");
+    });
+  }
   await page.goto("/");
   await expect(page).toHaveTitle("Message Board");
   await expect(page.getByRole("heading", { name: "Message Board" })).toBeVisible();
   await expect(page.getByRole("status")).toHaveText("Updating live");
+  const statistics = page.getByRole("region", { name: "Board statistics" });
+  await expect(statistics).toContainText(/No visible activity yet|\d+ messages/);
+  const previousCount = Number(
+    (await statistics.textContent())?.match(/(\d+) messages/)?.[1] ?? "0",
+  );
 
   await page.getByRole("textbox", { name: "Message" }).press("ControlOrMeta+Enter");
   await expect(page.getByText("Enter a username.")).toBeVisible();
@@ -43,12 +56,17 @@ test("posts and reads a real MessageBoard Projection through the local gateway",
 
   const messages = page.getByRole("list", { name: "Messages" });
   const posted = messages.getByRole("article").filter({ hasText: message });
-  await expect(posted.getByText(username)).toBeVisible();
+  await expect(posted.getByText("Anonymous")).toBeVisible();
+  await expect(posted.getByText(username)).toHaveCount(0);
   await expect(posted.getByText(message)).toBeVisible();
   await expect(posted.getByText("just now")).toBeVisible();
   await expect(messages.getByRole("listitem").last()).toContainText(message);
   await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("");
   await expect(page.getByRole("button", { name: "Post message" })).toBeEnabled();
+  await expect
+    .poll(async () => Number((await statistics.textContent())?.match(/(\d+) messages/)?.[1] ?? "0"))
+    .toBeGreaterThan(previousCount);
+  if (testInfo.project.name === "chromium") expect(protocols).toContain("h2");
 });
 
 test("keeps live updates connected beyond the former local timeout", async ({ page }, testInfo) => {
@@ -92,6 +110,15 @@ test("keeps two stock browser tabs live through alternating posts after the form
   test.setTimeout(stabilityObservationMilliseconds + 90_000);
 
   const sender = await page.context().newPage();
+  const protocols: { readonly url: string; readonly protocol: string }[] = [];
+  for (const browserPage of [page, sender]) {
+    const cdp = await browserPage.context().newCDPSession(browserPage);
+    await cdp.send("Network.enable");
+    cdp.on("Network.responseReceived", ({ response }) => {
+      if (response.url.includes("/spine."))
+        protocols.push({ url: response.url, protocol: response.protocol ?? "" });
+    });
+  }
   const failures: string[] = [];
   const cancellationTargets: { readonly id: string; readonly type: string }[] = [];
   const postedType = TypeUrls.derive(MessagePostedSchema);
@@ -183,6 +210,15 @@ test("keeps two stock browser tabs live through alternating posts after the form
       ),
     ).toBe(true);
     expect(failures).toEqual([]);
+    for (const path of [
+      "QueryService/Execute",
+      "SubscriptionService/Activate",
+      "CommandService/Post",
+    ])
+      expect(protocols.some(({ url, protocol }) => url.includes(path) && protocol === "h2")).toBe(
+        true,
+      );
+    expect(protocols.every(({ protocol }) => protocol === "h2")).toBe(true);
   } finally {
     await sender.close();
   }

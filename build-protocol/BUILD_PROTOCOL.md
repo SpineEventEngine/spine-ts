@@ -5,6 +5,14 @@ Navigation: [README](README.md) | Related: [Code Quality](CODE_QUALITY.md)
 This protocol governs future autonomous development of the TypeScript framework
 in Codex on macOS with sub-agents and worktrees available.
 
+## No Migrations
+
+We do not provide migrations for anyone. This rule remains in force until the
+human explicitly changes it. Do not add or retain migration implementations,
+migration tools, migration guides, or compatibility paths whose sole purpose is
+moving users or their data from an older framework API or format. Implement the
+current contract directly and update maintained code and examples directly.
+
 ## Human Review Reset
 
 On `2026-07-01`, human review rejected the current implementation direction as
@@ -209,14 +217,19 @@ Speed comes from smaller review surfaces and eliminating repeated mechanical
 work, never from weakening correctness or review requirements.
 
 1. Split broad requests into independently closable milestones when they mix
-   runtime behavior, example migration, broad documentation, generated output,
+   runtime behavior, example updates, broad documentation, generated output,
    or otherwise independent contracts. Preserve autonomous execution by running
    the resulting milestones in sequence without asking for routine approval.
 2. Before the full gate, run one mandatory cheap preflight over the affected
    scope: changed-file formatting, `git diff --check`, tooling and affected-
    package typechecks, focused tests, deterministic documentation checks, and
    changed-production-file coverage inspection. Begin the full gate only after
-   this preflight is clean.
+   this preflight is clean. For generator, staging, or build-output changes,
+   `proto:check-fixtures` is an automatic early gate in `verify:release` and
+   non-Markdown `verify:task`. It checks authored fixture setup, target order,
+   bootstrap expectations, and build-output roots before the full TypeScript
+   build or repository test suite. It validates expected behavior; it never
+   rewrites assertions or generated output.
 3. Identify required local capabilities before verification. Tests that bind
    loopback HTTP, HTTP/2, gRPC, or ZeroMQ endpoints must run with the necessary
    permission on their first attempt; a restricted sandbox is not a useful
@@ -227,6 +240,10 @@ work, never from weakening correctness or review requirements.
    build TypeScript once, run tests once with coverage, generate TypeDoc once,
    and perform each Proto generation/checksum check once. Downstream checks
    must reuse those outputs rather than rebuilding or regenerating them.
+   The small generation-fixture contract suites also run at the start of
+   verification, then again as part of the ordinary full Vitest suite so
+   ordinary test commands and coverage selection remain unchanged. This is
+   the only intentional early-test repeat.
 6. Treat coverage as an implementation-time requirement. Inspect changed
    production branches and add focused behavior tests before review instead of
    discovering a coverage shortage in the final repository-wide gate.
@@ -238,6 +255,15 @@ work, never from weakening correctness or review requirements.
    including commands, links, prohibited internal wording, beginner sections,
    README-to-REFERENCE links, package names, and example paths. Human-like
    review then focuses on accuracy, teaching quality, and clarity.
+   Documentation is part of implementation, including example code. Inventory
+   every new or modified authored Proto and TypeScript file before review.
+   Document each Proto message and field, and each TypeScript type and method,
+   with its domain meaning or behavior. Check declaration spacing against
+   `CODE_QUALITY.md` and original Spine JVM Proto sources. Apply the same rules
+   to code snippets in README files, tutorials, and PR descriptions; omitted
+   imports do not excuse undocumented declarations. Record a disposition for
+   every affected file. Generated and manifest-declared frozen copied sources
+   remain excluded. Passing a checker does not replace this semantic review.
 9. Return the complete accepted finding batch to the same implementation owner
    while that context is available. Do not dispatch a fresh fixer merely to
    rediscover the changed design.
@@ -482,6 +508,10 @@ focused, not a full project gate. It must check for common late-round findings:
 - docs that overclaim future policy, production behavior, monitor actions,
   scheduler/backoff behavior, topology, catch-up semantics, or adapters beyond
   the task's accepted scope.
+- missing or stale documentation for Proto messages and fields, TypeScript
+  types and methods, and their examples in human-facing text;
+- declarations without a separating blank line, including consecutive Proto
+  fields and nested messages, and undocumented code snippets in the PR draft.
 
 Run this docs/status lint before reviewer sub-agents receive the review
 package. Use targeted `rg`, `git diff`, and task-log checks. Reserve heavier
@@ -727,8 +757,7 @@ Additional end-user API gates:
 - end-user `@Subscribe` handlers must declare explicit `void` or `Promise<void>`
   return types;
 - end-user application code must not use schema-bearing decorators such as
-  `@Assign(SomeSchema)` unless a task records a temporary legacy/testing
-  exception;
+  `@Assign(SomeSchema)`;
 - aggregates must update state directly in framework-controlled transactions;
 - end-user application code must not call transaction-control methods such as
   `startTransaction()` or `commitTransaction()`;

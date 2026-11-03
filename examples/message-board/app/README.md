@@ -1,15 +1,13 @@
 # Message Board server application
 
-This package turns the Message Board model into a runnable Spine bounded context.
-The framework handles the network and process plumbing; the example contains only
-Message Board domain code, public-demo admission, and concise server configuration.
+This package starts the composed Message Board and announcements Bounded Contexts in every maintained mode. The framework handles network and process plumbing; the example configures public or signed admission.
 
 ## 💡 What is here?
 
 - ✅ `BoardMessageAggregate` guards write-side consistency for one posted
   message.
-- ✅ `BoardViewProjection` creates the browser’s query-side board view.
-- ✅ `BoardAccessPolicy` protects boards and message authors.
+- ✅ `BoardViewProjection` and `BoardStatisticsProjection` build Message Board views; the announcements Bounded Context builds its own view.
+- ✅ Bounded Context and Server read filters protect restricted rows, statistics, Events, and author names.
 - ✅ `MessageBoardApplication` builds the context and starts the framework server.
 - ✅ Framework validation rejects missing usernames and messages before a
   handler runs.
@@ -36,7 +34,7 @@ import { MessageBoardApplication } from "./index.js";
 
 const server = await new MessageBoardApplication().run({
   port: 8090,
-  webOrigin: "http://127.0.0.1:5173",
+  webOrigin: "https://127.0.0.1:5173",
 });
 console.log(`MessageBoard local server ready at ${server.baseUrl}`);
 ```
@@ -62,15 +60,11 @@ try {
 }
 ```
 
-## Public demo boundary
+## Admission modes
 
-The demo creates no browser credential. Its Gateway (from
-`@spine-event-engine/server/browser`) admits the public board and
-checks the declared actor and tenant before forwarding. A Command keeps its
-original context so the resulting Events match its outcome subscription;
-Queries and subscription Topics use the resolved context. Outcome subscriptions
-are restricted to the permitted actor's exact `PostMessage` Origin. Public-demo
-actor names are display identities, not authenticated credentials.
+`MESSAGE_BOARD_AUTH_MODE=public` uses the demonstration actor resolver. `signed` requires `MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`, `MESSAGE_BOARD_SESSION_KEY_ID`, `MESSAGE_BOARD_SESSION_PRIVATE_KEY_PEM`, and `MESSAGE_BOARD_READER_PROOF_KEY_BASE64`. Keep these values in protected server configuration. The offline [`issue-board-session`](src/issue-board-session.ts) entrypoint issues a signed credential after the operator supplies a principal and restricted-read grant. The UI accepts the credential, calls `AuthenticationService.resolveContext`, and displays the verified principal; it offers no role selector.
+
+Signed Gateway admission derives `canReadRestricted` from the verified principal and sends an operation-bound HMAC assertion to the application node. Native direct Query and subscription readers require the same verified admission. The native endpoint remains private/trusted; this example does not claim that every native Command RPC authenticates a bearer. The HMAC key minimum of 32 decoded bytes is the SHA-256 security-strength choice; a SHA-256 digest encodes as 43 base64url characters. These are cryptographic format requirements, not queue or request-size limits.
 
 ## 🧪 Test the application
 
@@ -89,10 +83,10 @@ The production-shaped source files are named for the process they start:
 | [`gateway-server.ts`](src/gateway-server.ts)                       | Starts only the browser-facing Gateway; it contains no Bounded Context and does not run Delivery work. |
 | [`combined-server.ts`](src/combined-server.ts)                     | Starts the application and Gateway together in one process.                                            |
 | [`multi-process-app.ts`](src/multi-process-app.ts)                 | Selects the Coordinator parent or complete replica startup role.                                       |
-| [`multi-process-coordinator.ts`](src/multi-process-coordinator.ts) | Owns parent lifecycle and starts the configured child replicas.                                        |
+| [`multi-process-coordinator.ts`](src/multi-process-coordinator.ts) | Configures the production model registry and starts the managed Coordinator and child replicas.        |
 | [`multi-process-replica.ts`](src/multi-process-replica.ts)         | Builds and synchronizes one complete replica with shared Delivery.                                     |
 | [`deployment-config.ts`](src/deployment-config.ts)                 | Validates the environment and assembles facilities shared by those entrypoints.                        |
-| [`index.ts`](src/index.ts)                                         | Defines the domain handlers and reusable complete application assembly.                                |
+| [`index.ts`](src/index.ts)                                         | Exports the reusable complete application assembly.                                                    |
 
 Start with `combined-server.ts` to see the fewest production-shaped processes.
 Read `multi-process-app.ts` when learning how one machine uses several CPU cores.
@@ -105,11 +99,11 @@ Prebuilt production commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`,
 require `BROWSER_ORIGIN`, while the
 standalone gateway uses `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`
 in Kubernetes; local Compose alone uses comma-separated `BACKEND_URLS` as an
-explicit static fixture and accepts legacy `BACKEND_URL`. Application data uses
+explicit static fixture. Application data uses
 application Datastore storage. Public browser subscription state is local to the
 Gateway process, so a Gateway restart makes the browser reconnect, query the
 current board, and resume live updates.
-The public-demo Gateway has no browser credential configuration.
+The public mode has no browser credential. Signed mode uses the protected configuration above.
 Each entrypoint constructs one Datastore client from
 `DATASTORE_PROJECT_ID` and hands that exact client to the storage factory.
 It also gives the storage factory the application's generated Protobuf type

@@ -12,12 +12,18 @@
  * the License.
  */
 
-import { clone, type Message, type MessageShape } from "@bufbuild/protobuf";
-import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
+import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { type MessageSchema, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
+import { registeredProtoModules } from "@spine-event-engine/proto/codegen";
 import {
+  ActorContextSchema,
+  EventSchema,
   TenantIdSchema,
   VersionSchema,
   type TenantId,
+  type ActorContext,
+  type Event,
   type Version,
 } from "@spine-event-engine/proto";
 import {
@@ -33,6 +39,7 @@ import type { StorageFactory } from "@spine-event-engine/storage";
 import type { EntityRecordStorage, EntityStorageInput } from "@spine-event-engine/storage/provider";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
+  EntityIds,
   EntityRecords,
   standEntityStorageDescriptor,
 } from "../entity/entity-storage-descriptor.js";
@@ -40,8 +47,26 @@ import type { EntityMetadata } from "../entity/entity-metadata.js";
 import { SubscriptionObservers, type StandObservedState } from "./subscription-observer.js";
 import type { EventBus, EventSubscription } from "../bus/event-bus.js";
 import type { Subscription, SubscriptionUpdate } from "@spine-event-engine/proto/client";
+import { ReadSideFilterEngine } from "./read-side-filter-engine.js";
+import { SubscriptionReadFilters } from "./subscription-read-filters.js";
+import { ReadSideMessages } from "./read-side-message.js";
+import {
+  StandDirectDelivery,
+  type StandObserver,
+  type StandSourceUpdate,
+} from "./stand-direct-delivery.js";
+import type { ReadSideContext, ReadSideFilter, ReadSideOperation } from "./read-side-filter.js";
+import type { BoundedContext } from "../context/bounded-context.js";
+import { ServerEnvironment } from "../server/server-environment.js";
+import {
+  snapshotTrustedReader,
+  type TrustedReaderContext,
+} from "@spine-event-engine/core/spi/trusted-reader";
 
 const HANDLE_CLOSE_ERROR_LIMIT = 16;
+
+export { StandSubscriptionCapacityError } from "./stand-direct-delivery.js";
+export type { StandObserver, StandUpdate } from "./stand-direct-delivery.js";
 
 /**
  * Options for constructing a direct read-side Stand.
@@ -104,6 +129,28 @@ export interface StandReadOptions {
    * Tenant slice for multitenant stands.
    */
   readonly tenantId?: TenantId;
+
+  /**
+   * Actor and tenant metadata supplied by a trusted in-process caller.
+   */
+  readonly actorContext?: ActorContext;
+
+  /**
+   * Verified reader and authority facts supplied by a trusted in-process caller.
+   */
+  readonly reader?: TrustedReaderContext;
+
+  /**
+   * Cancellation of this read.
+   */
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * Stand read options with the effective policy context captured at admission.
+ */
+interface CapturedStandRead extends StandReadOptions {
+  readonly readSide?: ReadSideContext;
 }
 
 /**
@@ -128,50 +175,8 @@ export interface StandReadResult<Schema extends MessageSchema = MessageSchema> {
 /**
  * Tenant metadata accepted when subscribing to entity updates.
  */
-export interface StandSubscribeOptions {
+export interface StandSubscribeOptions extends StandReadOptions {
   // prettier-ignore
-
-  /**
-   * Tenant slice for multitenant stands.
-   */
-  readonly tenantId?: TenantId;
-}
-
-/**
- * Direct in-process entity state update delivered by the Stand.
- *
- * @typeParam Schema The updated state message schema.
- */
-export interface StandUpdate<Schema extends MessageSchema = MessageSchema> {
-  // prettier-ignore
-
-  /**
-   * Type URL of the entity state schema.
-   */
-  readonly typeUrl: string;
-
-  /**
-   * Entity ID extracted from the state.
-   */
-  readonly id: unknown;
-
-  /**
-   * Cloned snapshot of the stored state before this update.
-   *
-   * Omitted when no previous state existed. Safe for subscribers to retain or
-   * mutate after delivery.
-   */
-  readonly previousState?: MessageShape<Schema>;
-
-  /**
-   * Updated entity state.
-   */
-  readonly state: MessageShape<Schema>;
-
-  /**
-   * Version associated with the updated state when supplied.
-   */
-  readonly version?: Version;
 
   /**
    * Tenant slice for multitenant stands.
@@ -186,7 +191,8 @@ export interface StandSubscription {
   // prettier-ignore
 
   /**
-   * Whether this subscription has already been unsubscribed.
+   * Whether this subscription has closed by unsubscribe, cancellation, overflow,
+   * policy or callback fault, or Stand close.
    */
   readonly closed: boolean;
 
@@ -234,7 +240,7 @@ export class StandStateTypeError extends Error {
  */
 interface Subscriber<Schema extends MessageSchema = MessageSchema> {
   readonly tenantKey: string;
-  readonly callback: (update: StandUpdate<Schema>) => void;
+  readonly delivery: StandDirectDelivery<Schema>;
 }
 
 /**
@@ -270,13 +276,22 @@ interface Registration<Schema extends MessageSchema = MessageSchema> {
 export class Stand {
   readonly #context: StorageMode;
 
+  readonly #subscriptionQueueCapacity: number;
+
   readonly #storageFactory: StorageFactory;
 
   readonly #registrations = new Map<string, Registration>();
 
   readonly #entityHandles = new Map<
     string,
-    { readonly current: EntityRecordStorage<unknown>; close(): void }
+    {
+      readonly current: EntityRecordStorage<unknown>;
+
+      /**
+       * Releases the provider's Entity-record handle.
+       */
+      close(): void;
+    }
   >();
 
   readonly #handleCloseErrors: unknown[] = [];
@@ -284,6 +299,8 @@ export class Stand {
   #omittedHandleCloseErrors = 0;
 
   readonly #inFlight = new Set<Promise<void>>();
+
+  readonly #pendingUpdates = new Map<string, Promise<void>>();
 
   #closing = false;
 
@@ -297,12 +314,16 @@ export class Stand {
    * @param options The storage context and factory used for state records.
    */
   constructor(options: StandOptions) {
+    this.#subscriptionQueueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
     this.#context = Stand.#cloneContext(options.context);
     this.#storageFactory = options.storageFactory;
     deferredUpdates.set(this, (schema, state, updateOptions, metadata) =>
       this.#deferUpdate(schema, state, updateOptions, metadata),
     );
     currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
+    routedQueryPlans.set(this, (schema, plan, readOptions, readSide) =>
+      this.#queryPlanVersioned(schema, plan, readOptions, readSide),
+    );
   }
 
   /**
@@ -402,22 +423,51 @@ export class Stand {
     options: StandReadOptions = {},
   ): Promise<StandReadResult<Schema> | undefined> {
     const finish = this.#beginPublicOperation();
-
     try {
+      const captured = Stand.#snapshotRead(options);
+      const copiedId = ReadSideMessages.copy(id);
       const registration = this.#registration(schema, "read");
-      const tenantId = await this.#checkedTenantId(options.tenantId);
-      const storage = this.#leaseCurrent(registration, tenantId);
-      try {
-        const stored = await storage.current.read(id);
-        if (stored === undefined || EntityRecords.unpack(registration.schema, stored).deleted) {
-          return undefined;
-        }
-        return this.#currentResult(registration, stored);
-      } finally {
-        storage.release();
-      }
+      const tenantId = await this.#checkedTenantId(captured.tenantId);
+      const result = await this.#readStored(registration, copiedId, tenantId);
+      return await this.#filteredResult(
+        registration.schema,
+        result,
+        {
+          ...captured,
+          ...(tenantId === undefined ? {} : { tenantId }),
+        },
+        {
+          kind: "direct",
+          read: { typeUrl: registration.typeUrl, id: copiedId },
+        },
+      );
     } finally {
       finish();
+    }
+  }
+
+  /**
+   * Captures a current record and releases its provider lease before policy awaits.
+   *
+   * @typeParam Schema Registered state schema.
+   * @param registration State metadata and storage descriptor.
+   * @param id Detached Entity identifier.
+   * @param tenantId Admitted tenant, if multitenant.
+   * @returns Detached live state and version, or undefined.
+   */
+  async #readStored<Schema extends MessageSchema>(
+    registration: Registration<Schema>,
+    id: unknown,
+    tenantId: TenantId | undefined,
+  ): Promise<StandReadResult<Schema> | undefined> {
+    const storage = this.#leaseCurrent(registration, tenantId);
+    try {
+      const stored = await storage.current.read(id);
+      if (stored === undefined || EntityRecords.unpack(registration.schema, stored).deleted)
+        return undefined;
+      return this.#currentResult(registration, stored);
+    } finally {
+      storage.release();
     }
   }
 
@@ -451,18 +501,30 @@ export class Stand {
     options: StandReadOptions = {},
   ): Promise<readonly StandReadResult<Schema>[]> {
     const finish = this.#beginPublicOperation();
-
     try {
+      const captured = Stand.#snapshotRead(options);
+      const copiedQuery = ReadSideMessages.copy(query);
       const registration = this.#registration(schema, "read");
-      const tenantId = await this.#checkedTenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(captured.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
+      let results: StandReadResult<Schema>[];
       try {
-        const stored = await storage.current.query(Stand.#legacyPlan(query));
-        const results = stored.map((entry) => this.#entryResult(registration, entry.record));
-        return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
+        const stored = await storage.current.query(Stand.#legacyPlan(copiedQuery));
+        results = stored
+          .map((entry) => this.#entryResult(registration, entry.record))
+          .filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.release();
       }
+      return await this.#filteredResults(
+        registration.schema,
+        results,
+        {
+          ...captured,
+          ...(tenantId === undefined ? {} : { tenantId }),
+        },
+        { kind: "direct", query: copiedQuery },
+      );
     } finally {
       finish();
     }
@@ -482,21 +544,134 @@ export class Stand {
     plan: NormalizedQueryPlan<unknown>,
     options: StandReadOptions = {},
   ): Promise<readonly StandReadResult<Schema>[]> {
+    return this.#queryPlanVersioned(schema, plan, options);
+  }
+
+  /**
+   * Reads stored rows and applies the context's outward policy in one operation lifetime.
+   * @typeParam Schema Registered state schema.
+   * @param schema Registered Entity state schema.
+   * @param plan Normalized storage query plan.
+   * @param options Trusted read facts and tenant.
+   * @param readSide Actual routed Query context, if supplied internally.
+   * @returns Surviving versioned state records.
+   */
+  async #queryPlanVersioned<Schema extends MessageSchema>(
+    schema: Schema,
+    plan: NormalizedQueryPlan<unknown>,
+    options: StandReadOptions,
+    readSide?: ReadSideContext,
+  ): Promise<readonly StandReadResult<Schema>[]> {
     const finish = this.#beginPublicOperation();
     try {
+      const captured = Stand.#snapshotRead(options, readSide);
+      const copiedPlan = ReadSideMessages.copy(plan);
       const registration = this.#registration(schema, "read");
-      const tenantId = await this.#checkedTenantId(options.tenantId);
+      const tenantId = await this.#checkedTenantId(captured.tenantId);
       const storage = this.#leaseCurrent(registration, tenantId);
+      let results: StandReadResult<Schema>[];
       try {
-        const stored = await storage.current.query(plan);
-        const results = stored.map((entry) => this.#entryResult(registration, entry.record));
-        return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
+        const stored = await storage.current.query(copiedPlan);
+        results = stored
+          .map((entry) => this.#entryResult(registration, entry.record))
+          .filter((result): result is StandReadResult<Schema> => result !== undefined);
       } finally {
         storage.release();
       }
+      return await this.#filteredResults(
+        registration.schema,
+        results,
+        {
+          ...captured,
+          ...(tenantId === undefined ? {} : { tenantId }),
+        },
+        { kind: "direct", plan: copiedPlan },
+      );
     } finally {
       finish();
     }
+  }
+
+  /**
+   * Detaches mutable caller facts before storage admission can await.
+   *
+   * @param options Direct or service read options.
+   * @returns Stable tenant and invocation facts, retaining the live cancellation signal.
+   */
+  static #snapshotRead(options: StandReadOptions, side?: ReadSideContext): CapturedStandRead {
+    const { signal, producingContext, effectiveTenant, parent, field, ...facts } = side ?? {};
+    void producingContext;
+    void effectiveTenant;
+    void parent;
+    void field;
+    return {
+      ...(options.tenantId === undefined
+        ? {}
+        : { tenantId: clone(TenantIdSchema, options.tenantId) }),
+      readSide: {
+        ...(side === undefined ? {} : ReadSideMessages.copy(facts)),
+        ...(options.actorContext === undefined
+          ? {}
+          : { actorContext: clone(ActorContextSchema, options.actorContext) }),
+        ...(options.reader === undefined ? {} : snapshotTrustedReader(options.reader)),
+        ...((signal ?? options.signal) === undefined ? {} : { signal: signal ?? options.signal }),
+      } as ReadSideContext,
+    };
+  }
+
+  /**
+   * Applies this context's outward read policy after storage has been released.
+   *
+   * @typeParam Schema Registered state schema.
+   * @param schema State schema selected by the read.
+   * @param result Captured state and durable version.
+   * @param options Tenant and service read facts.
+   * @param operation Actual direct operation when no service request is present.
+   * @returns Detached visible state with its unchanged version, or no state.
+   */
+  async #filteredResult<Schema extends MessageSchema>(
+    schema: Schema,
+    result: StandReadResult<Schema> | undefined,
+    options: CapturedStandRead,
+    operation: ReadSideOperation,
+  ): Promise<StandReadResult<Schema> | undefined> {
+    if (result === undefined) return undefined;
+    const filters = standReadFilters.get(this);
+    if (filters === undefined) return result;
+    const producer = standProducingContexts.get(this);
+    const context: ReadSideContext = {
+      ...(options.readSide ?? {}),
+      operation: options.readSide?.operation ?? operation,
+      ...(producer === undefined ? {} : { producingContext: producer }),
+      ...(options.tenantId === undefined ? {} : { effectiveTenant: options.tenantId }),
+    };
+    const state = await filters.apply(schema, result.state, context);
+    return state === null ? undefined : { ...result, state };
+  }
+
+  /**
+   * Applies outward policy in stored query order without replenishing removed records.
+   *
+   * @typeParam Schema Registered state schema.
+   * @param schema State schema selected by the read.
+   * @param results Captured stored states and durable versions.
+   * @param options Tenant and service read facts.
+   * @param operation Actual direct query when no service request is present.
+   * @returns Surviving visible records in their original order.
+   */
+  async #filteredResults<Schema extends MessageSchema>(
+    schema: Schema,
+    results: readonly StandReadResult<Schema>[],
+    options: CapturedStandRead,
+    operation: ReadSideOperation,
+  ): Promise<readonly StandReadResult<Schema>[]> {
+    if (!standReadFilters.has(this)) return results;
+    const visible: StandReadResult<Schema>[] = [];
+    for (const result of results) {
+      const next = await this.#filteredResult(schema, result, options, operation);
+      if (next !== undefined) visible.push(next);
+    }
+    return visible;
   }
 
   /**
@@ -602,16 +777,17 @@ export class Stand {
     options: StandUpdateOptions,
     metadata?: EntityMetadata,
   ): Promise<PreparedStandUpdate> {
-    const finish = this.#beginOperation();
+    const onFinish = this.#beginOperation();
     let storage: CurrentStorageLease | undefined;
+    let releaseUpdate: (() => void) | undefined;
     try {
       const registration = this.#registration(schema, "update");
-      if (metadata !== undefined && metadata.schema !== registration.schema)
-        throw new Error("Repository metadata does not match the Entity state schema.");
+      Stand.#requireUpdateMetadata(registration, metadata);
       const snapshot = Stand.#snapshotUpdateOptions(options);
       const stateCopy = clone(schema, state);
       const tenantId = await this.#checkedTenantId(options.tenantId);
       const id = Stand.#readStateId(stateCopy, registration);
+      releaseUpdate = await this.#reserveUpdate(registration, tenantId, id, metadata);
       storage = this.#leaseCurrent(registration, tenantId);
       const previousState = await this.#previousUpdateState(registration, tenantId, id, storage);
       return this.#preparedUpdate(
@@ -620,13 +796,71 @@ export class Stand {
         snapshot,
         metadata,
         storage,
-        finish,
+        () => {
+          Stand.#finishUpdate(releaseUpdate, onFinish);
+        },
       );
     } catch (error) {
       storage?.release();
-      finish();
+      Stand.#finishUpdate(releaseUpdate, onFinish);
       throw error;
     }
+  }
+
+  /**
+   * Checks repository metadata before preparing the state update.
+   *
+   * @param registration Registered state metadata.
+   * @param metadata Repository metadata, when supplied.
+   */
+  static #requireUpdateMetadata(registration: Registration, metadata?: EntityMetadata): void {
+    if (metadata !== undefined && metadata.schema !== registration.schema)
+      throw new Error("Repository metadata does not match the Entity state schema.");
+  }
+
+  /**
+   * Releases the update reservation and completes its tracked Stand operation.
+   *
+   * @param onReleaseUpdate Per-Entity reservation release, when acquired.
+   * @param onFinish Completes the tracked Stand operation.
+   */
+  static #finishUpdate(onReleaseUpdate: (() => void) | undefined, onFinish: () => void): void {
+    onReleaseUpdate?.();
+    onFinish();
+  }
+
+  /**
+   * Keeps one Entity's previous-state read and commit in notification order.
+   *
+   * @param registration State metadata.
+   * @param tenantId Tenant for the state.
+   * @param id Entity identifier.
+   * @param metadata Repository-validated identifier metadata, when available.
+   * @returns A release action for notification or cancellation.
+   */
+  async #reserveUpdate(
+    registration: Registration,
+    tenantId: TenantId | undefined,
+    id: unknown,
+    metadata?: EntityMetadata,
+  ): Promise<() => void> {
+    const packed =
+      metadata === undefined
+        ? EntityIds.pack(registration.schema, id)
+        : EntityIds.packField(metadata.idField.descriptor, id);
+    const key = JSON.stringify([
+      registration.typeUrl,
+      this.#tenantKey(tenantId),
+      Buffer.from(toBinary(AnySchema, packed)).toString("base64"),
+    ]);
+    const previous = this.#pendingUpdates.get(key);
+    const settled = Promise.withResolvers<undefined>();
+    this.#pendingUpdates.set(key, settled.promise);
+    await previous;
+    return () => {
+      if (this.#pendingUpdates.get(key) === settled.promise) this.#pendingUpdates.delete(key);
+      settled.resolve(undefined);
+    };
   }
 
   /**
@@ -767,33 +1001,96 @@ export class Stand {
    *
    * @typeParam Schema The registered state schema.
    * @param schema The registered entity state schema.
-   * @param callback The function receiving matching state updates.
-   * @param options The tenant slice to subscribe to.
-   * @returns A handle that stops future callback delivery.
+   * @param observer Receives serial visible updates and one terminal local fault.
+   * @param options Tenant, trusted facts, and cancellation.
+   * @returns A handle that invalidates pending and active delivery.
    */
   subscribe<Schema extends MessageSchema>(
     schema: Schema,
-    callback: (update: StandUpdate<Schema>) => void,
+    observer: StandObserver<Schema>,
     options: StandSubscribeOptions = {},
   ): StandSubscription {
     this.#requireOpen();
+    Stand.#requireObserver(observer);
     const registration = this.#registration(schema, "subscribe");
     const tenantKey = this.#tenantKey(options.tenantId);
-    const subscriber: Subscriber<Schema> = Object.freeze({ tenantKey, callback });
-    let closed = false;
-    registration.subscribers.add(subscriber);
+    const delivery = this.#subscribeDelivery(schema, observer, options, registration, tenantKey);
 
     return Object.freeze({
+      /**
+       * Reports whether this subscription handle has stopped delivering.
+       */
       get closed() {
-        return closed;
+        return delivery.closed;
       },
+
+      /**
+       * Detaches the subscriber and stops future local deliveries.
+       */
       unsubscribe() {
-        if (!closed) {
-          closed = true;
-          registration.subscribers.delete(subscriber);
-        }
+        delivery.close();
       },
     });
+  }
+
+  /**
+   * Rejects a raw callback or malformed JavaScript observer before registration.
+   *
+   * @param observer The runtime value supplied for direct delivery.
+   */
+  static #requireObserver(observer: unknown): void {
+    if (
+      typeof observer !== "object" ||
+      observer === null ||
+      !("next" in observer) ||
+      typeof observer.next !== "function" ||
+      !("error" in observer) ||
+      typeof observer.error !== "function"
+    )
+      throw new TypeError("Stand.subscribe requires an observer with next and error callbacks.");
+  }
+
+  /**
+   * Captures the subscriber's read facts and attaches its independent delivery queue.
+   *
+   * @typeParam Schema The registered state schema.
+   * @param schema The state schema selected by the caller.
+   * @param observer Receives visible updates or one terminal local fault.
+   * @param options Trusted reader, tenant, and cancellation at subscribe time.
+   * @param registration The Stand registration for this state schema.
+   * @param tenantKey The normalized tenant slice for delivery.
+   * @returns The subscriber's serial delivery queue.
+   */
+  #subscribeDelivery<Schema extends MessageSchema>(
+    schema: Schema,
+    observer: StandObserver<Schema>,
+    options: StandSubscribeOptions,
+    registration: Registration<Schema>,
+    tenantKey: string,
+  ): StandDirectDelivery<Schema> {
+    const captured = Stand.#snapshotRead(options);
+    const producingContext = standProducingContexts.get(this);
+    const attachment: { subscriber?: Subscriber<Schema> } = {};
+    const delivery = new StandDirectDelivery(
+      schema,
+      observer,
+      standReadFilters.get(this),
+      {
+        ...captured.readSide,
+        operation: { kind: "direct", subscription: { typeUrl: registration.typeUrl } },
+        ...(captured.tenantId === undefined ? {} : { effectiveTenant: captured.tenantId }),
+        ...(producingContext === undefined ? {} : { producingContext }),
+      },
+      this.#subscriptionQueueCapacity,
+      () => {
+        if (attachment.subscriber !== undefined)
+          registration.subscribers.delete(attachment.subscriber);
+      },
+      options.signal,
+    );
+    attachment.subscriber = Object.freeze({ tenantKey, delivery });
+    if (!delivery.closed) registration.subscribers.add(attachment.subscriber);
+    return delivery;
   }
 
   /**
@@ -811,10 +1108,14 @@ export class Stand {
     return this.#closedPromise;
   }
 
+  /**
+   * Drains accepted Stand work, closes subscriptions, and releases Entity handles.
+   */
   async #closeOnce(): Promise<void> {
     this.#closing = true;
     await Promise.all([...this.#inFlight]);
     for (const registration of this.#registrations.values()) {
+      for (const subscriber of registration.subscribers) subscriber.delivery.close();
       registration.subscribers.clear();
     }
     const errors: unknown[] = this.#handleCloseErrors.splice(0);
@@ -858,6 +1159,9 @@ export class Stand {
     return registration as Registration<Schema>;
   }
 
+  /**
+   * Reuses single-tenant storage or opens a temporary multitenant Entity handle.
+   */
   #leaseCurrent(registration: Registration, tenantId: TenantId | undefined): CurrentStorageLease {
     if (this.#context.multitenant) {
       return this.#lease(
@@ -887,8 +1191,18 @@ export class Stand {
     return this.#lease(handle, false);
   }
 
+  /**
+   * Returns a release callback for a current-state storage handle.
+   */
   #lease(
-    handle: { readonly current: EntityRecordStorage<unknown>; close(): void },
+    handle: {
+      readonly current: EntityRecordStorage<unknown>;
+
+      /**
+       * Releases this provider storage handle when the read ends.
+       */
+      close(): void;
+    },
     releaseAfterOperation: boolean,
   ): CurrentStorageLease {
     let released = false;
@@ -971,31 +1285,25 @@ export class Stand {
     },
     captured?: readonly Subscriber<Schema>[],
   ): void {
-    const errors: unknown[] = [];
     const tenantKey = this.#tenantKey(input.tenantId);
     const subscribers = captured ?? this.#tenantSubscribers(registration, tenantKey);
 
     for (const subscriber of subscribers) {
-      try {
-        subscriber.callback(Stand.#createUpdate(registration, input));
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-
-    if (errors.length === 1) {
-      throw errors[0];
-    }
-    if (errors.length > 1) {
-      throw new AggregateError(errors, "Stand subscriber delivery failed.");
+      subscriber.delivery.admit(Stand.#createUpdate(registration, input));
     }
   }
 
+  /**
+   * Creates the subscription partition key for the selected tenant.
+   */
   #tenantKey(tenantId: TenantId | undefined): string {
     const selected = this.#tenantId(tenantId);
     return selected === undefined ? "__single__" : String(TenantBoundary.from(selected).key);
   }
 
+  /**
+   * Checks whether a registered Entity state has subscribers in this tenant slice.
+   */
   #hasTenantSubscribers(registration: Registration, tenantId: TenantId | undefined): boolean {
     const tenantKey = this.#tenantKey(tenantId);
 
@@ -1023,6 +1331,9 @@ export class Stand {
     return [...registration.subscribers].filter((subscriber) => subscriber.tenantKey === tenantKey);
   }
 
+  /**
+   * Validates and detaches the tenant ID required by this Stand's tenancy mode.
+   */
   #tenantId(tenantId: TenantId | undefined): TenantId | undefined {
     if (!this.#context.multitenant) {
       if (tenantId !== undefined) {
@@ -1050,6 +1361,9 @@ export class Stand {
     return selected;
   }
 
+  /**
+   * Builds the provider storage scope for a validated tenant selection.
+   */
   #storageContext(tenantId: TenantId | undefined): StorageContext {
     if (!this.#context.multitenant) {
       this.#tenantId(tenantId);
@@ -1065,12 +1379,18 @@ export class Stand {
     });
   }
 
+  /**
+   * Rejects a new operation once Stand closing has begun.
+   */
   #requireOpen(): void {
     if (this.#closing || this.#closed) {
       throw new Error("Stand is closed.");
     }
   }
 
+  /**
+   * Tracks an accepted operation and returns its completion callback.
+   */
   #beginOperation(): () => void {
     this.#requireOpen();
     let finish: (() => void) | undefined;
@@ -1112,7 +1432,7 @@ export class Stand {
       readonly tenantId: TenantId | undefined;
       readonly version: Version | undefined;
     },
-  ): StandUpdate<Schema> {
+  ): StandSourceUpdate<Schema> {
     const version = input.version === undefined ? undefined : clone(VersionSchema, input.version);
     return Object.freeze({
       typeUrl: registration.typeUrl,
@@ -1126,6 +1446,9 @@ export class Stand {
     });
   }
 
+  /**
+   * Extracts the registered Entity ID field from a state update.
+   */
   static #readStateId(
     state: Message,
     registration: Pick<Registration, "schema" | "typeUrl" | "idField">,
@@ -1137,10 +1460,16 @@ export class Stand {
     return id;
   }
 
+  /**
+   * Detaches a structured storage value before returning it to a caller.
+   */
   static #cloneValue(value: unknown): unknown {
     return typeof value === "object" && value !== null ? globalThis.structuredClone(value) : value;
   }
 
+  /**
+   * Translates a supported RecordQuery into the normalized storage query plan.
+   */
   static #legacyPlan(query: RecordQuery<unknown>): NormalizedQueryPlan<unknown> {
     RecordQuery.validate(query);
     if (query.after !== undefined) {
@@ -1186,7 +1515,14 @@ export class Stand {
   static #openStorage<I, S extends Message>(
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
-  ): { readonly current: EntityRecordStorage<I>; close(): void } {
+  ): {
+    readonly current: EntityRecordStorage<I>;
+
+    /**
+     * Closes the provider's Entity-record storage handle.
+     */
+    close(): void;
+  } {
     const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
     if (candidate.createEntityStorage === undefined) {
       throw new Error("StorageFactory does not provide the required entity-record storage seam.");
@@ -1194,6 +1530,9 @@ export class Stand {
     return candidate.createEntityStorage(input);
   }
 
+  /**
+   * Freezes a detached name and tenancy mode for storage configuration.
+   */
   static #cloneContext(context: StorageMode): StorageMode {
     return Object.freeze({ name: context.name, multitenant: context.multitenant });
   }
@@ -1289,6 +1628,81 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
  */
 interface StandAccess {
   /**
+   * Reads a framework-routed Query with its actual operation metadata.
+   * @typeParam Schema Registered state schema.
+   * @param stand Producing context's Stand.
+   * @param schema Registered state schema.
+   * @param plan Normalized routed query plan.
+   * @param options Admitted tenant and trusted facts.
+   * @param readSide Actual service or handler Query context.
+   * @returns Surviving versioned states.
+   */
+  queryPlanVersioned<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    plan: NormalizedQueryPlan<unknown>,
+    options: StandReadOptions,
+    readSide: ReadSideContext,
+  ): Promise<readonly StandReadResult<Schema>[]>;
+
+  /**
+   * Binds the Bounded Context that built this outward Stand.
+   *
+   * @param stand Outward read facade.
+   * @param context Actual producing Bounded Context.
+   */
+  bindProducingContext(stand: Stand, context: BoundedContext): void;
+
+  /**
+   * Applies this context's outward policy to a retained domain state.
+   *
+   * @typeParam Schema Declared domain state schema.
+   * @param stand Context whose policies apply.
+   * @param schema Registered state schema.
+   * @param state Detached state returned by history storage.
+   * @param context Actual history request and trusted invocation facts.
+   * @returns Visible state or null when removed.
+   */
+  filterState<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    state: MessageShape<Schema>,
+    context: ReadSideContext,
+  ): Promise<MessageShape<Schema> | null>;
+
+  /**
+   * Applies this context's outward policy to a retained Event's domain payload.
+   *
+   * @param stand Context whose policies apply.
+   * @param event Retained framework envelope.
+   * @param context Actual history request and trusted invocation facts.
+   * @returns Envelope with visible payload, or null when removed.
+   */
+  filterEvent(stand: Stand, event: Event, context: ReadSideContext): Promise<Event | null>;
+
+  /**
+   * Processes one already-matched native delivery using this Stand's BC policies.
+   *
+   * @param stand Producing context's Stand.
+   * @param update Original matched delivery update.
+   * @param context Verified current subscription context.
+   * @returns Visible update, or null when all domain data was removed.
+   */
+  filterSubscription(
+    stand: Stand,
+    update: SubscriptionUpdate,
+    context: ReadSideContext,
+  ): Promise<SubscriptionUpdate | null>;
+
+  /**
+   * Attaches this context's ordered read policies before public reads begin.
+   *
+   * @param stand Context read facade.
+   * @param filters Application policies selected by its builder.
+   */
+  installReadFilters(stand: Stand, filters: readonly ReadSideFilter<MessageSchema>[]): void;
+
+  /**
    * Sets the immediate external read admission check.
    *
    * @param stand Context Stand.
@@ -1374,6 +1788,120 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
+  /**
+   * Forwards trusted routed Query context to the private Stand read path.
+   * @typeParam Schema Registered state schema.
+   * @param stand Producing context's Stand.
+   * @param schema Registered state schema.
+   * @param plan Normalized routed query plan.
+   * @param options Admitted tenant and trusted facts.
+   * @param readSide Actual service or handler Query context.
+   * @returns Surviving versioned states.
+   */
+  queryPlanVersioned<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    plan: NormalizedQueryPlan<unknown>,
+    options: StandReadOptions,
+    readSide: ReadSideContext,
+  ): Promise<readonly StandReadResult<Schema>[]> {
+    const read = routedQueryPlans.get(stand);
+    if (read === undefined) throw new Error("Stand routed read is unavailable.");
+    return read(schema, plan, options, readSide);
+  },
+
+  /**
+   * Associates actual context identity with direct and historical outward reads.
+   *
+   * @param stand Context Stand.
+   * @param context Built Bounded Context.
+   */
+  bindProducingContext(stand: Stand, context: BoundedContext): void {
+    standProducingContexts.set(stand, context);
+  },
+
+  /**
+   * Applies a history state policy after the physical history read.
+   *
+   * @typeParam Schema Registered domain schema.
+   * @param stand Context read facade.
+   * @param schema Historical state schema.
+   * @param state Captured state.
+   * @param context Actual history call.
+   * @returns Filtered state or null.
+   */
+  filterState<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    state: MessageShape<Schema>,
+    context: ReadSideContext,
+  ): Promise<MessageShape<Schema> | null> {
+    const filters = standReadFilters.get(stand);
+    const producer = standProducingContexts.get(stand);
+    return filters === undefined
+      ? Promise.resolve(state)
+      : filters.apply(schema, state, {
+          ...context,
+          ...(producer === undefined ? {} : { producingContext: producer }),
+        });
+  },
+
+  /**
+   * Filters a retained Event payload while retaining envelope identity and metadata.
+   *
+   * @param stand Context read facade.
+   * @param event Retained Event envelope.
+   * @param context Actual history call.
+   * @returns Event with filtered payload, or null when removed.
+   */
+  async filterEvent(stand: Stand, event: Event, context: ReadSideContext): Promise<Event | null> {
+    const filters = standReadFilters.get(stand);
+    if (filters === undefined) return event;
+    if (event.message === undefined) throw new TypeError("Retained Event payload is missing.");
+    const producer = standProducingContexts.get(stand);
+    const message = await filters.applyPacked(event.message, {
+      ...context,
+      ...(producer === undefined ? {} : { producingContext: producer }),
+    });
+    return message === null ? null : create(EventSchema, { ...clone(EventSchema, event), message });
+  },
+
+  /**
+   * Applies Bounded Context policy to one subscription update before delivery.
+   *
+   * @param stand Context read facade.
+   * @param update Subscription update awaiting delivery.
+   * @param context Actual subscription read facts.
+   * @returns Visible update, or null when policy removes it.
+   */
+  filterSubscription(
+    stand: Stand,
+    update: SubscriptionUpdate,
+    context: ReadSideContext,
+  ): Promise<SubscriptionUpdate | null> {
+    const producer = standProducingContexts.get(stand);
+    return SubscriptionReadFilters.apply(update, standReadFilters.get(stand), {
+      ...context,
+      ...(producer === undefined ? {} : { producingContext: producer }),
+    });
+  },
+
+  /**
+   * Attaches registered policies to this Stand without changing persistence reads.
+   *
+   * @param stand Context read facade.
+   * @param filters Policies in registration order.
+   */
+  installReadFilters(stand: Stand, filters: readonly ReadSideFilter<MessageSchema>[]): void {
+    if (!(stand instanceof Stand)) throw new TypeError("Read filters require a Stand instance.");
+    if (standReadFilters.has(stand))
+      throw new TypeError("Stand read filters are already installed.");
+    standReadFilters.set(
+      stand,
+      new ReadSideFilterEngine(filters, TypeRegistry.from(...registeredProtoModules())),
+    );
+  },
+
   /**
    * Sets the immediate external read admission check.
    *
@@ -1512,9 +2040,24 @@ type CurrentReadCall = <Schema extends MessageSchema>(
   options: StandReadOptions,
 ) => Promise<StandCurrentRecord<Schema> | undefined>;
 
+/**
+ * Invokes one internally attributed Query without accepting caller operation overrides.
+ *
+ * @typeParam Schema Registered state schema.
+ */
+type RoutedQueryPlanCall = <Schema extends MessageSchema>(
+  schema: Schema,
+  plan: NormalizedQueryPlan<unknown>,
+  options: StandReadOptions,
+  readSide: ReadSideContext,
+) => Promise<readonly StandReadResult<Schema>[]>;
+
 const deferredUpdates = new WeakMap<Stand, DeferredUpdateCall>();
 
 const standAdmissions = new WeakMap<Stand, (tenantId: TenantId | undefined) => Promise<void>>();
 const standPublicAdmissions = new WeakMap<Stand, () => void>();
+const standReadFilters = new WeakMap<Stand, ReadSideFilterEngine>();
+const standProducingContexts = new WeakMap<Stand, BoundedContext>();
 
 const currentReads = new WeakMap<Stand, CurrentReadCall>();
+const routedQueryPlans = new WeakMap<Stand, RoutedQueryPlanCall>();

@@ -22,6 +22,8 @@ import {
 } from "@spine-event-engine/proto/client";
 
 import type { StandSubscriptionEntry } from "./subscription-registry.js";
+import { SubscriptionReaderBindings } from "./subscription-reader-binding.js";
+import type { ReaderIdentity } from "@spine-event-engine/core/spi/trusted-reader";
 
 const maximumBytes = 1_048_576;
 
@@ -30,13 +32,54 @@ const maximumBytes = 1_048_576;
  */
 export const StandSubscriptionRecords: {
   readonly schema: typeof SubscriptionRecordSchema;
-  read(record: SubscriptionRecord, expectedId?: string): StandSubscriptionEntry;
-  write(entry: StandSubscriptionEntry): SubscriptionRecord;
-  decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry;
+
+  /**
+   * Validates and decodes a retained Stand subscription record.
+   *
+   * @param record The durable subscription record.
+   * @param expectedId Expected canonical subscription ID.
+   * @returns The detached subscription entry with its stable reader binding.
+   */ read(record: SubscriptionRecord, expectedId?: string): StandSubscriptionEntry;
+
+  /**
+   * Encodes a validated reader-bound entry as the maintained Proto record.
+   *
+   * @param entry Retained subscription entry.
+   * @returns The serialized record ready for storage.
+   */ write(entry: StandSubscriptionEntry): SubscriptionRecord;
+
+  /**
+   * Decodes a bounded wire record and validates its stored subscription fields.
+   *
+   * @param bytes The serialized message bytes.
+   * @param expectedId Expected canonical subscription ID.
+   * @returns The validated detached subscription entry.
+   */ decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry;
+
+  /**
+   * Validates the pending phase and its activation expiry.
+   *
+   * @param record The durable subscription record.
+   * @param subscription The subscription definition being processed.
+   * @param createdAt The record creation time in milliseconds.
+   * @param reader The verified reader facts for this operation.
+   * @returns The pending subscription entry.
+   */ pending(
+    record: SubscriptionRecord,
+    subscription: SubscriptionRecord["subscription"],
+    createdAt: number,
+    reader: ReaderIdentity | undefined,
+  ): StandSubscriptionEntry;
 } = Object.freeze({
   schema: SubscriptionRecordSchema,
 
-  read(record: SubscriptionRecord, expectedId?: string): StandSubscriptionEntry {
+  /**
+   * Validates and decodes a retained Stand subscription record.
+   *
+   * @param record The durable subscription record.
+   * @param expectedId Expected canonical subscription ID.
+   * @returns The detached subscription entry with its stable reader binding.
+   */ read(record: SubscriptionRecord, expectedId?: string): StandSubscriptionEntry {
     try {
       const id = record.id?.value;
       const subscription = record.subscription;
@@ -49,29 +92,54 @@ export const StandSubscriptionRecords: {
       )
         throw Error();
       const createdAt = milliseconds(record.whenCreated);
-      if (record.status === SubscriptionStatus.PENDING) {
-        const pendingUntil = milliseconds(record.whenActivationExpires);
-        if (pendingUntil < createdAt) throw Error();
-        return Object.freeze({
-          subscription: clone(SubscriptionSchema, subscription),
-          phase: "pending" as const,
-          createdAt,
-          pendingUntil,
-        });
-      }
+      const reader = SubscriptionReaderBindings.read(record.reader);
+      if (record.status === SubscriptionStatus.PENDING)
+        return this.pending(record, subscription, createdAt, reader);
       if (record.status !== SubscriptionStatus.ACTIVE || record.whenActivationExpires !== undefined)
         throw Error();
       return Object.freeze({
         subscription: clone(SubscriptionSchema, subscription),
         phase: "active" as const,
         createdAt,
+        ...(reader === undefined ? {} : { reader }),
       });
     } catch {
       throw new Error("Stand subscription record is invalid.");
     }
   },
 
-  write(entry: StandSubscriptionEntry): SubscriptionRecord {
+  /**
+   * Reads a pending row only when its activation deadline follows creation.
+   *
+   * @param record The durable subscription record.
+   * @param subscription The subscription definition being processed.
+   * @param createdAt The record creation time in milliseconds.
+   * @param reader The verified reader facts for this operation.
+   * @returns The pending subscription entry.
+   */
+  pending(
+    record: SubscriptionRecord,
+    subscription: SubscriptionRecord["subscription"],
+    createdAt: number,
+    reader: ReaderIdentity | undefined,
+  ): StandSubscriptionEntry {
+    const pendingUntil = milliseconds(record.whenActivationExpires);
+    if (pendingUntil < createdAt || subscription === undefined) throw Error();
+    return Object.freeze({
+      subscription: clone(SubscriptionSchema, subscription),
+      phase: "pending" as const,
+      createdAt,
+      pendingUntil,
+      ...(reader === undefined ? {} : { reader }),
+    });
+  },
+
+  /**
+   * Encodes a validated reader-bound entry as the maintained Proto record.
+   *
+   * @param entry Retained subscription entry.
+   * @returns The serialized record ready for storage.
+   */ write(entry: StandSubscriptionEntry): SubscriptionRecord {
     const id = entry.subscription.id;
     if (id === undefined) throw new TypeError("Stand subscription ID must be non-blank.");
     const record = create(SubscriptionRecordSchema, {
@@ -79,6 +147,9 @@ export const StandSubscriptionRecords: {
       subscription: clone(SubscriptionSchema, entry.subscription),
       status: entry.phase === "pending" ? SubscriptionStatus.PENDING : SubscriptionStatus.ACTIVE,
       whenCreated: timestamp(entry.createdAt),
+      ...(entry.reader === undefined
+        ? {}
+        : { reader: SubscriptionReaderBindings.write(entry.reader) }),
       ...(entry.phase === "pending"
         ? { whenActivationExpires: timestamp(entry.pendingUntil) }
         : {}),
@@ -89,7 +160,13 @@ export const StandSubscriptionRecords: {
     return record;
   },
 
-  decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry {
+  /**
+   * Decodes a bounded wire record and validates its stored subscription fields.
+   *
+   * @param bytes The serialized message bytes.
+   * @param expectedId Expected canonical subscription ID.
+   * @returns The validated detached subscription entry.
+   */ decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry {
     if (bytes.byteLength > maximumBytes) throw new Error("Malformed Stand subscription record.");
     try {
       return this.read(fromBinary(SubscriptionRecordSchema, bytes), expectedId);
@@ -99,7 +176,12 @@ export const StandSubscriptionRecords: {
   },
 });
 
-function milliseconds(
+/**
+ * Converts a Proto timestamp to epoch milliseconds.
+ *
+ * @param value Stored Proto timestamp, if present.
+ * @returns The timestamp in milliseconds.
+ */ function milliseconds(
   value: { readonly seconds: bigint; readonly nanos: number } | undefined,
 ): number {
   if (value === undefined || value.seconds < 0n || value.nanos < 0 || value.nanos >= 1_000_000_000)
@@ -109,7 +191,12 @@ function milliseconds(
   return result;
 }
 
-function timestamp(value: number): { readonly seconds: bigint; readonly nanos: number } {
+/**
+ * Creates a Proto timestamp from epoch milliseconds.
+ *
+ * @param value Validated epoch milliseconds.
+ * @returns The Proto timestamp.
+ */ function timestamp(value: number): { readonly seconds: bigint; readonly nanos: number } {
   if (!Number.isSafeInteger(value) || value < 0)
     throw new RangeError("Stand subscription time is invalid.");
   return { seconds: BigInt(Math.floor(value / 1000)), nanos: (value % 1000) * 1_000_000 };

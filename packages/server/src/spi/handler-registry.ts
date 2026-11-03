@@ -29,3 +29,6 @@ export type {
   GeneratedReceiver,
   GeneratedStandaloneHandlerGroup,
 } from "../handler/generated-handler-registry.js";
+
+export { registerSpineMetadata } from "../handler/spine-metadata-inventory.js";
+export type { SpineMetadata } from "../handler/spine-metadata-inventory.js";

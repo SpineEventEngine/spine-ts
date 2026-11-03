@@ -229,7 +229,7 @@ const AgentHistoryColumnTypes = Object.freeze({
 });
 
 /**
- * Returns the Entity column default expected by legacy table layouts.
+ * Returns the canonical default for an Entity column.
  *
  * @param recordType Stored record message descriptor.
  * @param groupName Optional storage group.

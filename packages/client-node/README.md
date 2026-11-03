@@ -96,6 +96,13 @@ TaskList Projection. Run it using the [Todo instructions](https://github.com/Spi
 
 ## 🔎 Query generated entities
 
+`request.query(generatedQ)` also executes an application-defined query. Import
+the model package's ordinary Proto-module entry first so its generated Query
+and Response schemas are registered. The result contains the wire `Response`
+and a readonly array with zero or one decoded paired response. The shared
+[browser client reference](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/client-web/REFERENCE.md) describes the same
+type inference, protocol errors, and cancellation behavior for Node.
+
 Generate entity columns from the model package, register them once, and build
 queries with those declared columns. The `./codegen` entry point is for model
 generation; applications use the generated definition and `EntityQuery`.

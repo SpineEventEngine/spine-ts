@@ -28,6 +28,8 @@ import { describe, expect, it } from "vitest";
 
 import { AnyPacker } from "@spine-event-engine/core";
 import { CommandContextSchema, CommandIdSchema, CommandSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { CommandBus, type CommandDispatcher } from "../../src/index.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { ImplicitRequiredIds } from "../../src/entity/implicit-required-id.js";
@@ -243,8 +245,13 @@ describe("implicit declaration-first ID validation", () => {
     ]);
     const command = create(CommandSchema, {
       id: create(CommandIdSchema, { uuid: "explicit-false-command" }),
-      context: create(CommandContextSchema),
-      message: AnyPacker.pack(explicitFalse, create(explicitFalse)),
+      context: create(CommandContextSchema, {
+        actorContext: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "implicit-id-tester" }),
+          timestamp: create(TimestampSchema, { seconds: 1n }),
+        }),
+      }),
+      message: AnyPacker.pack(explicitFalse, create(explicitFalse, { later: "payload" })),
     });
 
     await expect(bus.post(command)).resolves.toBeUndefined();

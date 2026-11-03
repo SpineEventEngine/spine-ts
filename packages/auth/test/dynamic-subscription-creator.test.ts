@@ -43,6 +43,99 @@ import {
 } from "../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 describe("DynamicSubscriptionCreator", () => {
+  it("passes the admitted reader through child creation and cancellation", async () => {
+    const seen: string[] = [];
+    const owner = new DynamicUnaryForwarder({
+      create: () =>
+        Promise.resolve({
+          ...client("a", []),
+          subscribe: (wire) => {
+            seen.push(`subscribe:${wire.reader?.principal?.id ?? "missing"}`);
+            return Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: toBinary(
+                SubscriptionSchema,
+                create(SubscriptionSchema, {
+                  id: { value: "backend-issued-id" },
+                  topic: fromBinary(SubscriptionSchema, wire.bytes).topic,
+                }),
+              ),
+            });
+          },
+          dispose: (wire) => {
+            seen.push(`dispose:${wire.reader?.principal?.id ?? "missing"}`);
+            return Promise.resolve();
+          },
+        }),
+    });
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    const wire = { ...subscription(), reader: { principal: { id: "reader-a" } } };
+    await owner.subscribeDefinition(wire, new AbortController().signal);
+    await owner.cancelDefinition(wire, new AbortController().signal);
+    expect(seen).toEqual(["subscribe:reader-a", "dispose:reader-a"]);
+  });
+
+  it("retires distinct departed child IDs while refreshing only current reader facts", async () => {
+    const children = new Map<string, { initial: Uint8Array; produced: Uint8Array }>();
+    const owner = new DynamicUnaryForwarder({
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: (wire) => {
+            const child = fromBinary(SubscriptionSchema, wire.bytes);
+            if (child.id === undefined) throw new Error("Expected child subscription ID.");
+            child.id.value = `${child.id.value}/backend`;
+            const produced = toBinary(SubscriptionSchema, child);
+            children.set(node.id, { initial: wire.bytes.slice(), produced });
+            return Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: produced,
+            });
+          },
+        }),
+    });
+    const wire = {
+      ...subscription(),
+      reader: { principal: { id: "reader-a" }, authorityFacts: { role: "old" } },
+    };
+    const nodes = ["a", "b", "c"].map(
+      (id) => new ApplicationNode({ id, endpoint: `http://10.0.0.${String(id.charCodeAt(0))}` }),
+    );
+    const readerFor = (bytes: Uint8Array) =>
+      (
+        owner as unknown as {
+          readerField(bytes: Uint8Array): { reader?: { authorityFacts?: { role?: string } } };
+        }
+      ).readerField(bytes).reader;
+    const firstNode = nodes[0];
+    if (firstNode === undefined) throw new Error("Expected first application node.");
+    await owner.reconcile([firstNode]);
+    await owner.subscribeDefinition(wire, new AbortController().signal);
+    for (let index = 1; index < nodes.length; index++) {
+      const currentNode = nodes[index];
+      const retiredNode = nodes[index - 1];
+      if (currentNode === undefined || retiredNode === undefined)
+        throw new Error("Expected application nodes.");
+      await owner.reconcile([currentNode]);
+      const current = children.get(currentNode.id);
+      const retired = children.get(retiredNode.id);
+      if (current === undefined || retired === undefined)
+        throw new Error("Expected child definitions.");
+      await owner.rehydrateDefinition({
+        ...wire,
+        reader: {
+          principal: { id: "reader-a" },
+          authorityFacts: { role: `current-${String(index)}` },
+        },
+      });
+      expect(readerFor(current.initial)?.authorityFacts?.role).toBe(`current-${String(index)}`);
+      expect(readerFor(current.produced)?.authorityFacts?.role).toBe(`current-${String(index)}`);
+      expect(readerFor(retired.initial)).toBeUndefined();
+      expect(readerFor(retired.produced)).toBeUndefined();
+    }
+    await owner.close();
+  });
+
   it("keeps native children inactive until the public activation request", async () => {
     const starts: string[] = [];
     const owner = new DynamicUnaryForwarder({

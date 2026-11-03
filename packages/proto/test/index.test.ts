@@ -69,6 +69,7 @@ interface ProtoSourceManifest {
     readonly sourceUrl: string;
     readonly rawUrl: string;
     readonly sha256: string;
+    readonly localAdaptation?: { readonly kind: string; readonly sha256: string };
   }[];
 }
 
@@ -90,7 +91,13 @@ describe("@spine-event-engine/proto", () => {
       expect(source.upstreamPath).toMatch(/\.proto$/);
       expect(source.sourceUrl).toContain(source.commit);
       expect(source.rawUrl).toContain(source.commit);
-      expect(actual).toBe(source.sha256);
+      expect(actual).toBe(source.localAdaptation?.sha256 ?? source.sha256);
+      if (source.localAdaptation !== undefined) {
+        expect(source.localAdaptation.kind).toMatch(
+          /^(target-filters-require|query-service-execute)$/u,
+        );
+        expect(source.localAdaptation.sha256).not.toBe(source.sha256);
+      }
     }
   });
 
