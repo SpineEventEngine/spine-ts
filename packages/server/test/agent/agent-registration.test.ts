@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { clone, create, toBinary } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
 import { Code } from "@connectrpc/connect";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AiModel, AiRegistry, ModelRef, type HistoryPage } from "@spine-event-engine/ai";
@@ -47,10 +47,13 @@ import {
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
 import { AgentHistoryStorageFactories } from "@spine-event-engine/storage/provider";
 import type {
+  AgentCommitInput,
   AgentHistoryStorage,
   AgentHistoryStorageInput,
+  EntityCommitStorage,
+  EntityStorageInput,
 } from "@spine-event-engine/storage/provider";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import { TenantIndexes } from "../../src/context/tenant-index.js";
@@ -182,12 +185,39 @@ class GatedProtectedAgentHistoryFactory extends CountingAgentHistoryFactory {
   armed = false;
   #entered!: () => void;
   #release!: () => void;
+  #domainEventAppended!: () => void;
+
+  /**
+   * Resolves after the handler's domain Event is committed to Agent history.
+   */
+  readonly domainEventAppended = new Promise<void>((resolve) => {
+    this.#domainEventAppended = resolve;
+  });
+
   readonly entered = new Promise<void>((resolve) => {
     this.#entered = resolve;
   });
   readonly gate = new Promise<void>((resolve) => {
     this.#release = resolve;
   });
+
+  /**
+   * Signals the test only after the atomic Agent commit includes its domain Event.
+   */
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    const commitAgent = storage.commitAgent.bind(storage);
+    storage.commitAgent = async <Id, State extends Message>(
+      transition: AgentCommitInput<Id, State>,
+    ) => {
+      await commitAgent(transition);
+      if (transition.historyEntries?.some((entry) => entry.item.case === "domainEvent"))
+        this.#domainEventAppended();
+    };
+    return storage;
+  }
 
   protected override createAgentHistoryStorage<Id>(
     input: AgentHistoryStorageInput<Id>,
@@ -335,9 +365,7 @@ describe("Agent registration readiness", () => {
         context: create(CommandContextSchema, { actorContext: create(ActorContextSchema) }),
       }),
     );
-    await vi.waitFor(() => {
-      expect(WaitingSupportAgent.latest).toBeDefined();
-    });
+    await factory.domainEventAppended;
     factory.armed = true;
     const agent = WaitingSupportAgent.latest;
     if (agent === undefined) throw new Error("Expected live Agent.");
