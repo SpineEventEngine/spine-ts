@@ -70,6 +70,33 @@ and `spine-proto.json`; import the other model's canonical package path. The
 tool keeps package boundaries explicit and does not duplicate the dependency's source or
 generated output.
 
+## App Query files
+
+Normal model generation recognizes files ending in `_queries.proto`. Each
+top-level message with nested messages named `Query` and `Response` declares
+one App Query. A message with neither nested name remains an ordinary Proto
+message, including its normal generated types, schemas, and registry entries.
+A message with only one of the two names is rejected as an incomplete App Query.
+
+One file can contain several App Queries and ordinary helper messages. A module
+can contain several query files. Each file containing an App Query produces one
+`_app_query.ts` companion; a file containing only ordinary messages produces no
+App Query companion.
+
+Relative folders are preserved in generated output:
+
+```text
+proto/issues/app_queries.proto   → generated/issues/app_queries_app_query.ts
+proto/projects/app_queries.proto → generated/projects/app_queries_app_query.ts
+```
+
+The example uses `protoRoot: "proto"` and `generatedRoot: "generated"`.
+Identical filenames in different folders do not collide. Query/response
+associations use fully qualified Proto message names, so operation names may
+also repeat in different Proto packages. Duplicate fully qualified Proto
+message names remain invalid. Import aliases distinguish repeated operation
+names in TypeScript source.
+
 ## Application configuration
 
 `ApplicationConfig` requires `formatVersion: 1`, `mode: "application"`, direct

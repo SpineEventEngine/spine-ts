@@ -343,10 +343,17 @@ state, a reconnect, a possible best-effort gap, malformed data, or recovery
 after posting while disconnected; those recovery paths do not make ordinary
 stream termination acceptable.
 
-An application query declares nested `Query` and `Response` messages in its
-model Proto. Normal generation emits grouped aliases and the response pairing.
+An application query declares nested `Query` and `Response` messages in a
+top-level message in a `_queries.proto` file. Normal generation emits grouped
+aliases and the response pairing. Ordinary helper messages may appear alongside
+the operations; they must have neither nested name. A declaration with only
+`Query` or only `Response` is rejected. Several query files may appear in one
+module, including identically named files in different folders. Generated
+companions preserve those folders; see the
+[query-file rules](../packages/proto-tools/REFERENCE.md#app-query-files).
+
 Register a concrete `AppQueryHandler<Q, R>` instance with `Server`, then use
-`client.query(generatedQ)` for a typed decoded result or `server.query(generatedQ,
+`request.query(generatedQ)` on a client request for a typed decoded result or `server.query(generatedQ,
 executionContext)` from trusted in-process code. The
 [composed Message Board](../examples/message-board/composed-app/README.md) runs
 both paths and applies Bounded Context and Server read policies. A successful

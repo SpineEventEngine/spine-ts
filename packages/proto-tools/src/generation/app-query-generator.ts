@@ -39,9 +39,9 @@ export const AppQueryGenerator: Readonly<{
   generate(schema: Schema): void;
 
   /**
-   * Resolves the nested Query and Response messages for one operation.
+   * Resolves a complete nested Query and Response pair, or skips a helper message.
    */
-  pair(operation: DescMessage): QueryPair;
+  pair(operation: DescMessage): QueryPair | undefined;
 
   /**
    * Writes the generated aliases and request-to-result association.
@@ -57,7 +57,12 @@ export const AppQueryGenerator: Readonly<{
     for (const file of schema.files) {
       if (!file.proto.name.endsWith("_queries.proto")) continue;
       if (file.messages.length === 0) continue;
-      const pairs = file.messages.map((operation) => AppQueryGenerator.pair(operation));
+      const pairs: QueryPair[] = [];
+      for (const operation of file.messages) {
+        const pair = AppQueryGenerator.pair(operation);
+        if (pair !== undefined) pairs.push(pair);
+      }
+      if (pairs.length === 0) continue;
       const output = schema.generateFile(`${file.name}_app_query.ts`);
       output.preamble(file);
       for (const pair of pairs) AppQueryGenerator.emit(output, pair);
@@ -65,14 +70,15 @@ export const AppQueryGenerator: Readonly<{
   },
 
   /**
-   * Finds the exact nested Query/Response pair in one operation.
+   * Finds a complete nested Query/Response pair, skipping messages with neither declaration.
    *
-   * @param operation Top-level application query declaration.
-   * @returns Its generated nested request and result descriptors.
+   * @param operation Top-level application query or helper declaration.
+   * @returns Its nested request/result descriptors, or undefined for a helper message.
    */
-  pair(operation: DescMessage): QueryPair {
+  pair(operation: DescMessage): QueryPair | undefined {
     const query = operation.nestedMessages.find((message) => message.name === "Query");
     const response = operation.nestedMessages.find((message) => message.name === "Response");
+    if (query === undefined && response === undefined) return undefined;
     if (query === undefined || response === undefined) {
       throw new Error(
         `spine-proto: ${operation.typeName} requires nested Query and Response messages`,
