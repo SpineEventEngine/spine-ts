@@ -18,71 +18,128 @@ package example.project;
 import "google/protobuf/any.proto";
 import "spine/options.proto";
 
+// A project search request used to exercise nested criteria validation.
 message FindProjects {
+  // Packed primary search criteria.
   google.protobuf.Any criteria = 1 [(validate) = true];
+
+  // Domain project identifiers that limit the search.
   repeated string project_id = 2 [(required) = true];
+
+  // Required project labels keyed by name.
   map<string, string> tags = 3 [(required) = true];
+
+  // Unvalidated extension data for the search.
   google.protobuf.Any opaque = 4;
+
+  // Additional packed criteria validated one by one.
   repeated google.protobuf.Any alternatives = 5 [(validate) = true];
+
+  // Packed criteria addressed by a caller-selected name.
   map<string, google.protobuf.Any> named_criteria = 6 [(validate) = true];
+
+  // A recursively nested group of project filters.
   ProjectFilterGroup group = 7 [(validate) = true];
 
+  // Selects one advanced criteria representation.
   oneof advanced {
+    // Packed advanced criteria requiring nested validation.
     google.protobuf.Any advanced_criteria = 8 [(validate) = true];
+
+    // Directly typed advanced search term.
     ProjectSearchTerm selected_criteria = 9 [(validate) = true];
   }
 }
 
+// One keyword and its source in a project search.
 message ProjectSearchTerm {
+  // Required word used to match projects.
   string keyword = 1 [(required) = true];
+
+  // Origin of the selected keyword.
   string source = 2;
 }
 
+// A project selection by keyword or category.
 message ProjectSelection {
   option (require).fields = "keyword";
 
+  // Selects one type of project search term.
   oneof term {
+    // Lowercase keyword required by the selection rule.
     string keyword = 1 [(pattern).regex = "^[a-z]+$"];
+
+    // Named category offered as an alternate term.
     string category = 2;
   }
 }
 
+// Container that requires validated packed project criteria.
 message ProjectAnyEnvelope {
+  // Packed criteria that must be present and valid.
   google.protobuf.Any required_criteria = 1 [
     (required) = true,
     (validate) = true
   ];
 }
 
+// Group of packed criteria nested inside a project search.
 message ProjectFilterGroup {
+  // Criteria whose packed message is validated recursively.
   google.protobuf.Any criteria = 1 [(validate) = true];
 }
 
+// Relative priority assigned to a project.
 enum ProjectTier {
+  // No priority has been selected.
   PROJECT_TIER_UNSPECIFIED = 0;
+
+  // Basic project priority.
   BASIC = 1;
 }
 
+// One project metadata label.
 message ProjectLabel {
+  // Human-readable label text.
   string value = 1;
 }
 
+// Batch of scalar, enum, message, and map values for required-field checks.
 message ProjectBatch {
+  // Binary project fingerprints.
   repeated bytes fingerprints = 1 [(required) = true];
+
+  // Priority values for projects in the batch.
   repeated ProjectTier tiers = 2 [(required) = true];
+
+  // Labels for projects in the batch.
   repeated ProjectLabel labels = 3 [(required) = true];
+
+  // Binary assets keyed by project name.
   map<string, bytes> assets = 4 [(required) = true];
+
+  // Priority values keyed by project name.
   map<string, ProjectTier> ranks = 5 [(required) = true];
+
+  // Labels keyed by project name.
   map<string, ProjectLabel> metadata = 6 [(required) = true];
+
+  // Numeric counts associated with the batch.
   repeated int32 counts = 7 [(required) = true];
+
+  // Boolean markers associated with the batch.
   repeated bool flags = 8 [(required) = true];
 }
 
+// Collection of alternative packed criteria for nested validation.
 message ProjectCriteriaSet {
+  // Required packed alternatives.
   repeated google.protobuf.Any alternatives = 1 [
     (required) = true,
     (validate) = true
   ];
+
+  // Required packed criteria indexed by name.
   map<string, google.protobuf.Any> named_criteria = 2 [
     (required) = true,
     (validate) = true

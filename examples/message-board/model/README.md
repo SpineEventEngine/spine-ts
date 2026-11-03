@@ -3,7 +3,7 @@
 This package contains the vocabulary shared by the Message Board server and
 browser: user, board, and message IDs; commands that request posting; events
 that record postings; visible query-side state; the paired
-`ReadBoardMessage.Query` / `.Response` application messages; and domain
+`ReadBoardStats.Query` / `.Response` application messages; and domain
 rejections. Normal generation emits the grouped App Query companion and the
 query-to-response type association. A browser imports this model without
 loading the application Server or handlers.

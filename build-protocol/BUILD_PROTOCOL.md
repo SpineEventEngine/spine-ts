@@ -255,6 +255,15 @@ work, never from weakening correctness or review requirements.
    including commands, links, prohibited internal wording, beginner sections,
    README-to-REFERENCE links, package names, and example paths. Human-like
    review then focuses on accuracy, teaching quality, and clarity.
+   Documentation is part of implementation, including example code. Inventory
+   every new or modified authored Proto and TypeScript file before review.
+   Document each Proto message and field, and each TypeScript type and method,
+   with its domain meaning or behavior. Check declaration spacing against
+   `CODE_QUALITY.md` and original Spine JVM Proto sources. Apply the same rules
+   to code snippets in README files, tutorials, and PR descriptions; omitted
+   imports do not excuse undocumented declarations. Record a disposition for
+   every affected file. Generated and manifest-declared frozen copied sources
+   remain excluded. Passing a checker does not replace this semantic review.
 9. Return the complete accepted finding batch to the same implementation owner
    while that context is available. Do not dispatch a fresh fixer merely to
    rediscover the changed design.
@@ -499,6 +508,10 @@ focused, not a full project gate. It must check for common late-round findings:
 - docs that overclaim future policy, production behavior, monitor actions,
   scheduler/backoff behavior, topology, catch-up semantics, or adapters beyond
   the task's accepted scope.
+- missing or stale documentation for Proto messages and fields, TypeScript
+  types and methods, and their examples in human-facing text;
+- declarations without a separating blank line, including consecutive Proto
+  fields and nested messages, and undocumented code snippets in the PR draft.
 
 Run this docs/status lint before reviewer sub-agents receive the review
 package. Use targeted `rg`, `git diff`, and task-log checks. Reserve heavier

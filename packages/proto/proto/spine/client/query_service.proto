@@ -44,5 +44,7 @@ service QueryService {
 
     // Reads certain data from the read-side by setting the criteria via Query.
     rpc Read(Query) returns (QueryResponse);
+
+    // Executes an application-defined Query and returns its paired Response.
     rpc Execute(AppQuery) returns (AppQueryResponse);
 }

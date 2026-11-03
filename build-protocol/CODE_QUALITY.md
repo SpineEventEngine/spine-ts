@@ -164,14 +164,28 @@ and frozen sources are excluded.
 
 Every class and every method in a new or modified authored production file
 requires semantic TSDoc, including non-exported and private declarations. Every
+authored type declaration in those files also requires semantic TSDoc. Example
+code follows the same rule. Comments explain the represented concept, accepted
+input, returned value, or relevant behavior; repeating the declaration name is
+insufficient. README, tutorial, and PR snippets must document the types and
+methods they declare, even when unrelated imports and setup are omitted. Every
 generic declaration covered by this rule requires one meaningful `@typeParam`
 entry for each type parameter. Separate consecutive declarations and class
 members with a blank line so that their boundaries remain visible;
 Prettier compatibility is necessary but is not sufficient evidence of readable
 layout.
 
-Authored example Proto uses meaningful domain documentation with a blank line
-between a field or declaration and its following documentation block. Its
+Every authored Proto message and field requires a comment explaining its domain
+meaning, including nested messages and fields in framework, example, and test
+fixture sources. Separate consecutive declarations and fields with a blank
+line before the next documentation block. Use original Spine JVM Proto files
+as the reference for this layout and comment style, while retaining the
+repository's Buf formatting. Apply the same documentation and spacing rules to
+Proto snippets in README files, tutorials, and PR descriptions. Reviewers must
+check meaning as well as formatting; generated comments do not substitute for
+documentation in the authored Proto source.
+
+Authored example Proto follows these rules. Its
 package is `spine.examples.<domain>` and its type URL prefix is
 `type.spine.examples.<domain>`, where `<domain>` is exactly `messageboard`, `projects`,
 `orders`, `todo`, or `releasenotes`. Authored example paths, packages, and imports contain no

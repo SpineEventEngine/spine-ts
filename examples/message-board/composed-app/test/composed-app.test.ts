@@ -30,10 +30,8 @@ import { ServerTests } from "@spine-event-engine/server/testing";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  ReadBoardMessage,
-  ReadBoardStats,
-} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
+import { ReadBoardStats } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
+import { BoardMessageViewQuery } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_query.js";
 import {
   AnnouncementBoardViewSchema,
   BoardIdSchema,
@@ -46,7 +44,7 @@ import { UserIdSchema } from "@spine-event-engine/example-message-board-model/ge
 import { PostMessageSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
 import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 import { ComposedBoardApplication } from "../src/index.js";
-import { ReadBoardMessageHandler } from "../src/board-query-handler.js";
+import { ReadBoardStatsHandler } from "../src/board-query-handler.js";
 
 describe("multi-package Message Board", () => {
   beforeEach(async () => {
@@ -234,7 +232,7 @@ describe("multi-package Message Board", () => {
     }
   });
 
-  it("assembles handlers from separate packages and applies BC then Server policy to typed App Queries", async () => {
+  it("reads an individual Entity with public name redaction", async () => {
     const application = await new ComposedBoardApplication().create();
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
@@ -262,19 +260,14 @@ describe("multi-package Message Board", () => {
           postedAt: create(TimestampSchema, { seconds: 1n }),
         }),
       );
-      const query = create(ReadBoardMessage.querySchema, { message: id });
-      const internal: ReadBoardMessage.Response = await application.server.query(query, {
-        actorContext: create(ActorContextSchema, {
-          actor: { value: "reader-1" },
-          timestamp: create(TimestampSchema, { seconds: 1n }),
-        }),
+      const external = await client.asGuest().send(BoardMessageViewQuery.create().byId(id).build());
+      expect(external.message).toHaveLength(1);
+      const view = external.message[0]?.state;
+      if (view === undefined) throw new Error("Expected an individual message view.");
+      expect(AnyPacker.unpack(view, BoardMessageViewSchema)).toMatchObject({
+        text: "Hello",
+        username: "Anonymous",
       });
-      expect(internal.message?.text).toBe("Hello");
-      expect(internal.message?.username).toBe("A writer");
-
-      const external = await client.asGuest().query(query);
-      expect(external.message[0]?.message?.text).toBe("Hello");
-      expect(external.message[0]?.message?.username).toBe("Anonymous");
       const aggregate = await client.asGuest().send(
         create(QuerySchema, {
           id: create(QueryIdSchema, { value: "public-aggregate" }),
@@ -407,30 +400,8 @@ describe("multi-package Message Board", () => {
           postedAt: create(TimestampSchema, { seconds: 1n }),
         }),
       );
-      const query = create(ReadBoardMessage.querySchema, { message: id });
-      const actorContext = create(ActorContextSchema, {
-        actor: { value: "reader-1" },
-        timestamp: create(TimestampSchema, { seconds: 1n }),
-      });
-      expect((await application.server.query(query, { actorContext })).message).toBeUndefined();
-      const trusted = await application.server.query(query, {
-        actorContext,
-        principal: { id: "reader-1" },
-        authorityFacts: { canReadRestricted: true },
-      });
-      expect(trusted.message?.text).toBe("Restricted details");
-      expect(trusted.message?.username).toBe("A writer");
-      const publicResult = await client.asGuest().query(query);
-      expect(publicResult.message).toHaveLength(1);
-      expect(publicResult.message[0]?.message).toBeUndefined();
       const entityResult = await client.asGuest().send(
-        create(QuerySchema, {
-          id: create(QueryIdSchema, { value: "restricted-rows" }),
-          target: create(TargetSchema, {
-            type: TypeUrls.derive(BoardMessageViewSchema),
-            criterion: { case: "includeAll", value: true },
-          }),
-        }),
+        BoardMessageViewQuery.create().byId(id).build(),
       );
       expect(entityResult.message).toHaveLength(0);
       const aggregateResult = await client.asGuest().send(
@@ -453,11 +424,11 @@ describe("multi-package Message Board", () => {
     const application = await new ComposedBoardApplication().create();
     const running = await application.server.start();
     const client = Client.connectTo(running.baseUrl);
-    const execute = vi.spyOn(ReadBoardMessageHandler.prototype, "execute");
+    const execute = vi.spyOn(ReadBoardStatsHandler.prototype, "execute");
     try {
       const result = await client
         .asGuest()
-        .query(create(ReadBoardMessage.querySchema))
+        .query(create(ReadBoardStats.querySchema))
         .catch((error: unknown) => error);
       expect(result).toBeInstanceOf(ConnectError);
       expect((result as ConnectError).code).toBe(Code.InvalidArgument);
@@ -514,7 +485,7 @@ describe("multi-package Message Board", () => {
     }
   });
 
-  it("uses a fixture native authentication port for restricted Event and App Query reads", async () => {
+  it("uses native authentication for restricted Events, Entity reads, and App Queries", async () => {
     const authenticate = vi.fn(() => ({
       principal: { id: "fixture-reader" },
       authorityFacts: { canReadRestricted: true },
@@ -553,11 +524,23 @@ describe("multi-package Message Board", () => {
       if (payload === undefined) throw new Error("Expected the restricted Event payload.");
       expect(AnyPacker.unpack(payload, MessagePostedSchema).username).toBe("A writer");
       await vi.waitFor(async () => {
-        const result = await client
-          .asGuest()
-          .query(create(ReadBoardMessage.querySchema, { message: id }));
-        expect(result.message[0]?.message?.text).toBe("For verified readers");
+        const result = await client.asGuest().send(BoardMessageViewQuery.create().byId(id).build());
+        const state = result.message[0]?.state;
+        if (state === undefined) throw new Error("Expected authenticated message state.");
+        expect(AnyPacker.unpack(state, BoardMessageViewSchema)).toMatchObject({
+          text: "For verified readers",
+          username: "A writer",
+        });
       });
+      await vi.waitFor(async () => {
+        const result = await client.asGuest().query(
+          create(ReadBoardStats.querySchema, {
+            board: create(BoardIdSchema, { value: "restricted" }),
+          }),
+        );
+        expect(result.message[0]?.board?.messageCount).toBe(1n);
+      });
+      expect(authenticate).toHaveBeenCalledWith(expect.objectContaining({ method: "Read" }));
       expect(authenticate).toHaveBeenCalledWith(expect.objectContaining({ method: "Execute" }));
     } finally {
       await events.cancel();

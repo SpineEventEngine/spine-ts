@@ -87,7 +87,12 @@ describe("verify-proto-sources", () => {
       )
       .replace(
         "    rpc Read(Query) returns (QueryResponse);",
-        "    rpc Read(Query) returns (QueryResponse);\n    rpc Execute(AppQuery) returns (AppQueryResponse);",
+        [
+          "    rpc Read(Query) returns (QueryResponse);",
+          "",
+          "    // Executes an application-defined Query and returns its paired Response.",
+          "    rpc Execute(AppQuery) returns (AppQueryResponse);",
+        ].join("\n"),
       );
     mkdirSync(join(repoRoot, "packages/proto/proto/spine/client"), { recursive: true });
     writeFileSync(join(repoRoot, localPath), adapted);

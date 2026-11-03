@@ -14,13 +14,9 @@
 
 import { create } from "@bufbuild/protobuf";
 import { AppQueryHandler, type AppQueryContext } from "@spine-event-engine/server";
-import {
-  ReadBoardMessage,
-  ReadBoardStats,
-} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
+import { ReadBoardStats } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
 import {
   AnnouncementBoardViewQuery,
-  BoardMessageViewQuery,
   BoardStatisticsViewQuery,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_query.js";
 import {
@@ -29,32 +25,6 @@ import {
   type AnnouncementBoardView,
   type BoardStatisticsView,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
-
-/**
- * Reads one message through the Server's scoped Bounded Context read route.
- */
-export class ReadBoardMessageHandler extends AppQueryHandler<
-  ReadBoardMessage.Query,
-  ReadBoardMessage.Response
-> {
-  /**
-   * Resolves the requested message and returns the paired response type.
-   *
-   * @param query The validated domain query.
-   * @param context The active Server read capability.
-   * @returns The visible message, when present.
-   */
-  async execute(
-    query: ReadBoardMessage.Query,
-    context: AppQueryContext,
-  ): Promise<ReadBoardMessage.Response> {
-    const states = await context
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Server validates the required field before dispatch.
-      .select(BoardMessageViewQuery.create().byId(query.message!).build())
-      .read();
-    return create(ReadBoardMessage.responseSchema, { message: states[0] });
-  }
-}
 
 /**
  * Combines visible lifetime statistics from the two supplying Bounded Contexts.

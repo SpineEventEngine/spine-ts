@@ -28,6 +28,9 @@ import {
   type MessagePosted,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 
+/**
+ * Admits public boards and restricted boards when verified authority permits them.
+ */
 const visible = (board: string | undefined, context: ReadSideContext): boolean => {
   if (board === "general" || board === "announcements") return true;
   return (
@@ -76,7 +79,7 @@ export class BoardVisibility extends ReadSideFilter<typeof BoardMessageViewSchem
    *
    * @param message Message view to inspect.
    * @param context Verified reader context.
-   * @returns The filtered or redacted value.
+   * @returns The visible message view, or null when its board is restricted.
    */
   filter(message: BoardMessageView, context: ReadSideContext): BoardMessageView | null {
     return visible(message.board?.value, context) ? message : null;
@@ -99,7 +102,7 @@ export class BoardStatisticsVisibility extends ReadSideFilter<typeof BoardStatis
    *
    * @param view Projection view to inspect.
    * @param context Verified reader context.
-   * @returns The filtered or redacted value.
+   * @returns The visible statistics view, or null when its board is restricted.
    */
   filter(view: BoardStatisticsView, context: ReadSideContext): BoardStatisticsView | null {
     return visible(view.id?.value, context) ? view : null;
@@ -121,7 +124,7 @@ export class AnnouncementVisibility extends ReadSideFilter<typeof AnnouncementBo
    * Checks announcement board visibility.
    *
    * @param view Projection view to inspect.
-   * @returns The filtered or redacted value.
+   * @returns The public announcement view, or null for another board.
    */
   filter(view: AnnouncementBoardView): AnnouncementBoardView | null {
     return view.id?.value === "announcements" ? view : null;
@@ -144,7 +147,7 @@ export class PublishedEventVisibility extends ReadSideFilter<typeof MessagePoste
    *
    * @param event Event payload to inspect.
    * @param context Verified reader context.
-   * @returns The filtered or redacted value.
+   * @returns The visible Event, or null when its board is restricted.
    */
   filter(event: MessagePosted, context: ReadSideContext): MessagePosted | null {
     return visible(event.board?.value, context) ? event : null;

@@ -18,11 +18,17 @@ package example.project;
 import "google/protobuf/any.proto";
 import "spine/options.proto";
 
+// Search criteria with a required keyword and optional structured detail.
 message ProjectCriteria {
+  // Keyword used to find projects.
   string keyword = 1 [(required) = true];
+
+  // Packed detail whose nested fields are validated when present.
   google.protobuf.Any detail = 2 [(validate) = true];
 }
 
+// Additional terms attached to project search criteria.
 message ProjectCriteriaDetail {
+  // Terms that narrow the project search.
   repeated string term = 1 [(required) = true];
 }

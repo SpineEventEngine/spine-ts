@@ -46,10 +46,7 @@ import {
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
 import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections_pb.js";
-import {
-  ReadBoardMessage,
-  ReadBoardStats,
-} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
+import { ReadBoardStats } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/board_queries_app_query.js";
 
 const MAX_AUTHORIZATION_COMPOSITE_FILTERS = 8;
 const MAX_AUTHORIZATION_SIMPLE_FILTERS = 16;
@@ -83,10 +80,10 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
       }
       if (request.kind === "app-query") {
         const message = request.query.message;
-        return Promise.resolve(message !== undefined && (
-          AnyPacker.tryUnpack(message, ReadBoardMessage.querySchema) !== undefined ||
-          AnyPacker.tryUnpack(message, ReadBoardStats.querySchema) !== undefined
-        ));
+        return Promise.resolve(
+          message !== undefined &&
+          AnyPacker.tryUnpack(message, ReadBoardStats.querySchema) !== undefined,
+        );
       }
       if (request.kind !== "query" && request.kind !== "subscribe") return Promise.resolve(false);
       if (request.kind === "subscribe" && this.authorizesPostOutcome(

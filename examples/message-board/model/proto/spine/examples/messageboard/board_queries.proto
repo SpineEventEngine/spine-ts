@@ -22,24 +22,6 @@ option java_outer_classname = "BoardQueriesProto";
 option java_package = "io.spine.examples.messageboard";
 option (type_url_prefix) = "type.spine.examples.messageboard";
 
-// Reads one message visible on the board.
-message ReadBoardMessage {
-  // Selects one message by its domain identifier.
-  message Query {
-    // The message to display.
-    MessageId message = 1 [
-      (required) = true,
-      (validate) = true
-    ];
-  }
-
-  // Returns the visible message, if it exists.
-  message Response {
-    // The matching message, when it remains visible.
-    BoardMessageView message = 1;
-  }
-}
-
 // Reads lifetime activity visible to the current reader.
 message ReadBoardStats {
   // Selects the message board to summarize.

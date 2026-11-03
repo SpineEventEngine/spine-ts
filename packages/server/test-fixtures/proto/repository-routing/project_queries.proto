@@ -22,15 +22,20 @@ import "spine/options.proto";
 
 option (type_url_prefix) = "type.spine.io";
 
+// Reads one project overview by its domain identifier.
 message GetProjectOverview {
+  // Selects the project whose overview is requested.
   message Query {
+    // Project to read.
     ProjectId project = 1 [
       (required) = true,
       (validate) = true
     ];
   }
 
+  // Returns the selected overview when it is visible.
   message Response {
+    // Matching project overview, if present.
     ProjectOverviewState project = 1;
   }
 }

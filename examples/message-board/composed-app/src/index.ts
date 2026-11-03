@@ -34,7 +34,7 @@ import {
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { MessagePostedSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 
-import { ReadBoardMessageHandler, ReadBoardStatsHandler } from "./board-query-handler.js";
+import { ReadBoardStatsHandler } from "./board-query-handler.js";
 import {
   AggregateAuthorRedaction,
   AggregateVisibility,
@@ -119,7 +119,7 @@ export class ComposedBoardApplication {
         ...(options.host === undefined ? {} : { host: options.host }),
         ...(options.port === undefined ? {} : { port: options.port }),
         contexts: [messages, announcements],
-        appQueries: [new ReadBoardMessageHandler(), new ReadBoardStatsHandler()],
+        appQueries: [new ReadBoardStatsHandler()],
         ...(this.readerAdmission === undefined
           ? {}
           : { services: { readerAdmission: this.readerAdmission } }),
@@ -182,4 +182,4 @@ const BoardContextBuilders = Object.freeze({
   },
 });
 
-export { ReadBoardMessageHandler, ReadBoardStatsHandler } from "./board-query-handler.js";
+export { ReadBoardStatsHandler } from "./board-query-handler.js";

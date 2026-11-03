@@ -29,11 +29,16 @@ option (type_url_prefix) = "type.spine.io";
 
 // One application-defined read request.
 message AppQuery {
+  // Identifies this read request for response correlation.
   QueryId id = 1 [
     (required) = true,
     (validate) = true
   ];
+
+  // Carries the application-defined Query message.
   google.protobuf.Any message = 2 [(required) = true];
+
+  // Records the actor and time admitted for this request.
   spine.core.ActorContext context = 3 [
     (required) = true,
     (validate) = true
@@ -42,6 +47,9 @@ message AppQuery {
 
 // The transport response for an application-defined read.
 message AppQueryResponse {
+  // Reports whether the application read completed or failed.
   spine.core.Response response = 1 [(required) = true];
+
+  // Contains the paired application Response after a successful read.
   repeated google.protobuf.Any message = 2;
 }

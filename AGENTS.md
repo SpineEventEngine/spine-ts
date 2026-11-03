@@ -52,6 +52,14 @@ person narratives or compress several concepts into dense summary paragraphs.
 Do not apply documentation-writing skills. Independent documentation review must
 assess reader comprehension as well as completeness and factual accuracy.
 
+Document every message and field in changed authored Proto files and every
+type and method in changed authored production/example TypeScript files.
+Separate declarations with blank lines. Apply the same rules to README,
+tutorial, and PR snippets. Use original Spine JVM Proto layout as the reference
+alongside Buf formatting. Check documentation during implementation and again
+during independent review; it is not a deferred cleanup step. See
+`build-protocol/CODE_QUALITY.md` for generated and frozen-source exclusions.
+
 ## Pull Request Descriptions
 
 Write pull request descriptions for human framework users. Explain the concrete

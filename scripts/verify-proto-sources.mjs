@@ -28,8 +28,12 @@ export const queryServiceAdaptation = Object.freeze({
   }),
   method: Object.freeze({
     before: "    rpc Read(Query) returns (QueryResponse);",
-    after:
-      "    rpc Read(Query) returns (QueryResponse);\n    rpc Execute(AppQuery) returns (AppQueryResponse);",
+    after: [
+      "    rpc Read(Query) returns (QueryResponse);",
+      "",
+      "    // Executes an application-defined Query and returns its paired Response.",
+      "    rpc Execute(AppQuery) returns (AppQueryResponse);",
+    ].join("\n"),
   }),
 });
 
