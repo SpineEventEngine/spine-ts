@@ -33,7 +33,8 @@ The package also exports `@spine-event-engine/proto/client`,
 `@spine-event-engine/proto/delivery-server` for the corresponding generated
 contracts. The client facet includes `SubscriptionRecord`; the auth facet
 includes `GatewayAuthenticatedSubscription`, `AuthenticatedPrincipal`,
-`PrincipalAttributes`, and `OpaqueSessionRecord`; and the deployment facet includes
+`PrincipalAttributes`, `OpaqueSessionRecord`, `OidcLoginTransaction`, and
+`OidcLoginGrant`; and the deployment facet includes
 the application-node discovery records. `@spine-event-engine/proto/generated/*.js`
 is supported for low-level generated schema subpaths. `./proto/*`,
 `spine-proto-manifest.json`, and the model metadata files are package assets

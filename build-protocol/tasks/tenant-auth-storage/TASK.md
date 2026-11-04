@@ -41,9 +41,10 @@
 
 ## Current implementation status
 
-M1, M2, M3, M3A and M4 are implemented and accepted after focused verification
-and independent review. M5 through M12 remain to be implemented and accepted. The M5 library composition
-is reviewed as a design decision; its runtime integration is still pending.
+M1, M2, M3, M3A, M4 and M5 are implemented and accepted after focused
+verification and independent review. M5 includes persistent OIDC state, the
+reviewed library composition, per-call cancellation and draining shutdown.
+M6 through M12 remain to be implemented and accepted; M6 is next.
 Final repository-wide release verification and security review remain in M12.
 
 ## Acceptance

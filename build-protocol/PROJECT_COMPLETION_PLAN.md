@@ -6,7 +6,9 @@ Implement in `feature/tenant-auth-storage` from official master `c3efab85c`,
 starting with per-handle preparation and the explicit tenant directory, then
 component authentication and optional Better Auth integration. Existing business
 storage lifecycle remains unchanged. Independent reviews and final release
-verification are required; GitHub publication requires explicit authorization.
+verification are required. Push feature-branch commits immediately to official
+origin under the current repository instructions; PR creation, merging and
+package publication still require explicit authorization.
 
 Previous implementation: [App Queries and read-side filtering](tasks/app-queries-read-filters/TASK.md).
 The approved proposal includes automatic metadata discovery, validation/status

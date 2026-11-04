@@ -13,6 +13,7 @@
  */
 
 import type { AuthenticatedPrincipal, RequestCredential, ResolvedSession } from "../index.js";
+import type { OidcFlowStore } from "./flow-store.js";
 
 /**
  * Clock used to evaluate finite OIDC transactions.
@@ -74,7 +75,7 @@ export interface ResolvedApplicationIdentity {
 }
 
 /**
- * Application-owned mapping from a verified external identity to a principal.
+ * Application-supplied mapping from a verified external identity to a principal.
  */
 export interface IdentityMapping {
   // prettier-ignore
@@ -174,9 +175,16 @@ export interface ApplicationSessionIssuer {
 
   /**
    * Creates an application session for a mapped principal.
+   *
+   * Await durable issuance and any conditional cancellation compensation.
+   * Return `undefined` only for ordinary declined issuance. A distinct failure
+   * rejects; rejection with the exact supplied reason after abort is ordinary
+   * cancellation. The flow waits for this promise even after a caller-facing
+   * timeout or abort and reports late distinct failures at close.
+   *
    * @param principal The mapped principal.
    * @param signal The operation cancellation signal.
-   * @returns The issued session, or undefined when issuance fails.
+   * @returns The issued session, or undefined for an ordinary decline.
    */
   issue(
     principal: AuthenticatedPrincipal,
@@ -231,6 +239,11 @@ export interface OidcFlowOptions {
   readonly sessionIssuer: ApplicationSessionIssuer;
 
   /**
+   * Atomic flow state; omission selects process-local memory.
+   */
+  readonly store?: OidcFlowStore;
+
+  /**
    * Provides the optional flow clock.
    */
   readonly clock?: OidcFlowClock;
@@ -251,12 +264,14 @@ export interface OidcFlowOptions {
   readonly grantTtlMilliseconds?: number;
 
   /**
-   * Limits retained transactions.
+   * Limits transactions in the default memory store.
+   * Supplying this option with an injected store is rejected.
    */
   readonly maxTransactions?: number;
 
   /**
-   * Limits retained grants.
+   * Limits grants in the default memory store.
+   * Supplying this option with an injected store is rejected.
    */
   readonly maxGrants?: number;
 

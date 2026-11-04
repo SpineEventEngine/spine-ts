@@ -14,6 +14,8 @@
 
 import { Time } from "@spine-event-engine/core/time";
 import { importJWK, jwtVerify } from "jose";
+import * as oauth from "oauth4webapi";
+import * as oidc from "openid-client";
 
 import type {
   ExternalIdentity,
@@ -196,19 +198,25 @@ export interface GitHubProviderOptions {
 }
 
 /**
+ * Trusted issuer and optional exact metadata URL for provider discovery.
+ */
+type DiscoveryOptions = Omit<
+  OidcProviderOptions,
+  "authorizationEndpoint" | "tokenEndpoint" | "jwksEndpoint"
+> & {
+  /**
+   * Trusted HTTPS discovery URL; defaults under the configured issuer.
+   */
+  readonly discoveryEndpoint?: string;
+};
+
+/**
  * Fetches and validates OpenID Connect discovery metadata before constructing an adapter.
  * @param options The trusted issuer and bounded discovery settings.
  * @returns The configured provider, or undefined when discovery cannot be trusted.
  */
 export async function discoverOidcProvider(
-  options: Omit<OidcProviderOptions, "authorizationEndpoint" | "tokenEndpoint" | "jwksEndpoint"> & {
-    // prettier-ignore
-
-    /**
-     * Trusted HTTPS discovery URL; defaults under the configured issuer.
-     */
-    readonly discoveryEndpoint?: string;
-  },
+  options: DiscoveryOptions,
 ): Promise<ConfiguredOidcProvider | undefined> {
   try {
     const issuer = ProviderValues.https(options.issuer);
@@ -218,10 +226,11 @@ export async function discoverOidcProvider(
       options.timeoutMilliseconds ?? DEFAULT_TIMEOUT,
       "timeoutMilliseconds",
     );
-    const document = await ProviderValues.boundedOperation(timeout, undefined, (signal) =>
-      ProviderValues.json(discoveryEndpoint, options.fetch ?? fetch, options, signal),
+    const configuration = await ProviderValues.boundedOperation(timeout, undefined, (signal) =>
+      OidcDiscovery.selected(issuer, discoveryEndpoint, options, signal),
     );
-    if (!ProviderValues.plain(document) || document.issuer !== issuer) return undefined;
+    const document = configuration.serverMetadata();
+    if (document.issuer !== issuer) return undefined;
     return createOidcProvider({
       ...options,
       issuer,
@@ -236,6 +245,73 @@ export async function discoverOidcProvider(
     return undefined;
   }
 }
+
+/**
+ * Keeps the selected discovery endpoint separate from normal provider transport.
+ */
+const OidcDiscovery = Object.freeze({
+  /**
+   * Loads metadata at exactly the selected URL and restores normal transport afterward.
+   * @param issuer Trusted issuer identifier.
+   * @param endpoint Exact selected discovery URL.
+   * @param options Bounded discovery settings and application fetch.
+   * @param signal Operation cancellation signal.
+   * @returns Configuration whose future requests use normal application transport.
+   */
+  async selected(
+    issuer: string,
+    endpoint: string,
+    options: Pick<OidcProviderOptions, "clientId" | "fetch" | "maxResponseBytes">,
+    signal: AbortSignal,
+  ): Promise<oidc.Configuration> {
+    const http = options.fetch ?? fetch;
+    const configuration = await oidc.discovery(
+      new URL(issuer),
+      options.clientId,
+      undefined,
+      undefined,
+      {
+        [oidc.customFetch]: async (_url, init) => {
+          const document = await ProviderValues.json(endpoint, http, options, signal, {
+            method: init.method,
+            headers: init.headers,
+            signal,
+            redirect: "error",
+          });
+          return new Response(JSON.stringify(document), {
+            headers: { "content-type": "application/json" },
+          });
+        },
+      },
+    );
+    configuration[oidc.customFetch] = (url, init) => OidcDiscovery.normalFetch(http, url, init);
+    return configuration;
+  },
+
+  /**
+   * Routes later requests to the ordinary application HTTP transport.
+   * @param http Application HTTP transport.
+   * @param url Actual provider destination.
+   * @param init Library request parameters.
+   * @returns Provider response.
+   */
+  normalFetch(
+    http: ProviderFetch,
+    url: string,
+    init: Parameters<oidc.CustomFetch>[1],
+  ): Promise<Response> {
+    return http(url, {
+      method: init.method,
+      headers: init.headers,
+      ...(init.body === undefined
+        ? {}
+        : {
+            body: init.body instanceof Uint8Array ? Buffer.from(init.body) : init.body,
+          }),
+      ...(init.signal === undefined ? {} : { signal: init.signal }),
+    });
+  },
+});
 
 /**
  * Creates an OIDC authorization-code verifier from explicitly trusted metadata.
@@ -315,13 +391,9 @@ class OidcVerifier {
    * @returns The verified identity, or undefined for an invalid token.
    */
   async exchangeBounded(input: OidcAuthorizationCodeExchange, signal: AbortSignal) {
-    const token = await ProviderValues.json(
-      this.settings.tokenEndpoint,
-      this.settings.http,
-      { maxResponseBytes: this.settings.limit },
-      signal,
-      this.tokenRequest(input, signal),
-    );
+    const response = await this.tokenResponse(input, signal);
+    const token = (await ProviderValues.readJsonResponse(response, this.settings.limit, signal))
+      .value;
     const idToken = ProviderValues.plain(token) ? ProviderValues.string(token.id_token) : undefined;
     if (idToken === undefined) return undefined;
     return ProviderValues.verifyToken(
@@ -335,32 +407,43 @@ class OidcVerifier {
   }
 
   /**
-   * Builds the authorization-code form and selected client-authentication header.
+   * Sends an authorization-code grant through oauth4webapi's client authentication.
    * @param input The accepted exchange request.
    * @param signal The operation cancellation signal.
-   * @returns The token endpoint request parameters.
+   * @returns The raw response for bounded JSON parsing and independent ID-token verification.
    */
-  tokenRequest(input: OidcAuthorizationCodeExchange, signal: AbortSignal): RequestInit {
+  tokenResponse(input: OidcAuthorizationCodeExchange, signal: AbortSignal): Promise<Response> {
     const { clientId, clientAuthentication, clientSecret } = this.settings;
-    const body = new URLSearchParams({
-      grant_type: "authorization_code",
-      code: input.code,
-      redirect_uri: input.callbackUri,
-      client_id: clientId,
-      code_verifier: input.providerCodeVerifier,
-    });
-    const headers = new Headers({
-      accept: "application/json",
-      "content-type": "application/x-www-form-urlencoded",
-    });
-    if (clientAuthentication === "client_secret_post")
-      body.set("client_secret", clientSecret ?? "");
-    if (clientAuthentication === "client_secret_basic")
-      headers.set(
-        "authorization",
-        `Basic ${Buffer.from(`${clientId}:${clientSecret ?? ""}`).toString("base64")}`,
-      );
-    return { method: "POST", redirect: "error", signal, headers, body };
+    const server: oauth.AuthorizationServer = {
+      issuer: this.settings.issuer,
+      token_endpoint: this.settings.tokenEndpoint,
+    };
+    const client: oauth.Client = { client_id: clientId };
+    const authentication =
+      clientAuthentication === "client_secret_basic"
+        ? oauth.ClientSecretBasic(clientSecret ?? "")
+        : clientAuthentication === "client_secret_post"
+          ? oauth.ClientSecretPost(clientSecret ?? "")
+          : oauth.None();
+    const callback = oauth.validateAuthResponse(
+      server,
+      client,
+      new URLSearchParams({ code: input.code }),
+      oauth.expectNoState,
+    );
+    return oauth.authorizationCodeGrantRequest(
+      server,
+      client,
+      authentication,
+      callback,
+      input.callbackUri,
+      input.providerCodeVerifier,
+      {
+        signal,
+        [oauth.customFetch]: (url, init) =>
+          this.settings.http(url, { ...init, redirect: "error", signal }),
+      },
+    );
   }
 
   /**
@@ -794,11 +877,29 @@ const ProviderValues = Object.freeze({
     if (signal !== undefined) request.signal = signal;
     if (signal?.aborted) throw new Error("response");
     const response = await http(ProviderValues.https(url), request);
+    return ProviderValues.readJsonResponse(
+      response,
+      limits.maxResponseBytes ?? DEFAULT_LIMIT,
+      signal,
+    );
+  },
+
+  /**
+   * Parses a preexisting HTTP response under the provider's byte and cancellation bounds.
+   * @param response The response returned by an OAuth or provider HTTP request.
+   * @param limit The maximum response bytes.
+   * @param signal The request cancellation signal.
+   * @returns The parsed JSON value and remaining cache lifetime.
+   */
+  async readJsonResponse(
+    response: Response,
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<{ readonly value: unknown; readonly cacheMilliseconds: number }> {
     if (signal?.aborted) {
       void response.body?.cancel().catch(() => undefined);
       throw new Error("response");
     }
-    const limit = limits.maxResponseBytes ?? DEFAULT_LIMIT;
     if (
       !response.ok ||
       !response.headers.get("content-type")?.toLowerCase().includes("application/json") ||
@@ -808,7 +909,27 @@ const ProviderValues = Object.freeze({
       throw new Error("response");
     }
     if (!response.body) throw new Error("response");
-    const reader = response.body.getReader();
+    const bytes = await ProviderValues.readBoundedBody(response.body, limit, signal);
+    if (signal?.aborted) throw new Error("response");
+    return Object.freeze({
+      value: JSON.parse(Buffer.from(bytes).toString("utf8")) as unknown,
+      cacheMilliseconds: ProviderValues.cacheMilliseconds(response.headers),
+    });
+  },
+
+  /**
+   * Reads a streaming JSON body without exceeding its byte bound.
+   * @param body Provider response stream.
+   * @param limit Maximum accepted bytes.
+   * @param signal Optional cancellation signal.
+   * @returns Complete response bytes.
+   */
+  async readBoundedBody(
+    body: ReadableStream<Uint8Array>,
+    limit: number,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
+    const reader = body.getReader();
     const chunks: Uint8Array[] = [];
     let size = 0;
     let complete = false;
@@ -831,14 +952,7 @@ const ProviderValues = Object.freeze({
         // A hostile stream may keep a read pending after cancellation.
       }
     }
-    if (signal?.aborted) throw new Error("response");
-    const value = JSON.parse(
-      Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"),
-    ) as unknown;
-    return Object.freeze({
-      value,
-      cacheMilliseconds: ProviderValues.cacheMilliseconds(response.headers),
-    });
+    return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
   },
 
   /**

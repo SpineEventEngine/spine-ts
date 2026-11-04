@@ -34,10 +34,14 @@ The server's `PersistentTenantIndex` persists this record through the selected
 storage factory. Memory storage keeps registrations only in that process.
 
 The `@spine-event-engine/proto/auth` facet exports `AuthenticatedPrincipal`
-with optional `PrincipalAttributes`, plus `OpaqueSessionRecord`. Presence of an
+with optional `PrincipalAttributes`, `OpaqueSessionRecord`,
+`OidcLoginTransaction`, and `OidcLoginGrant`. Presence of an
 empty attributes message differs from absent attributes. The session record
 retains a stable reference, credential generation, complete principal and exact
 Protobuf Timestamp deadline for the auth store.
+The OIDC transaction and application grant are separate one-use records. Each
+retains a flow-qualified lookup digest and exact expiry; the grant retains the
+typed principal without collapsing absent and empty attributes.
 
 ## TypeScript interface options
 

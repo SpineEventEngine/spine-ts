@@ -7262,3 +7262,40 @@ the existing clock semantics during network waits. The lower-level request API
 accepts the exact redirect URI and operation signal without introducing an
 earlier token-time check. The [M5 contract](tasks/tenant-auth-storage/M5.md)
 records the selected boundary and required provider acceptance.
+
+## Flow-specific OIDC cleanup (2026-11-04)
+
+OIDC transaction and grant families can share a configured storage group across
+login flows. Their maintenance query must select one flow through the database
+index, rather than read other flows and discard them in application code.
+The derived expiry property combines a 32-byte SHA-256 flow prefix with the
+existing exact 12-byte Timestamp ordering component. A range bounded by that
+prefix and the caller cutoff selects the flow; exact-key and ID paging retain
+the existing provider-supported query shape. Records keep their complete flow
+identity, which is checked after lookup.
+
+This specializes the accepted fixed-byte index representation without a new
+public option, per-flow table, input limit, or Datastore composite-index
+deployment. Actual provider acceptance remains part of M5 verification.
+
+## OIDC operation cancellation and draining (2026-11-04)
+
+The newly asynchronous flow methods accept an optional per-call AbortSignal,
+consistent with the session strategy API. A host request can stop its own login
+step without closing the flow used by other requests. Existing collaborator
+timeout scopes and defaults remain unchanged. Consumed one-time state is never
+restored, and only confirmed undisclosed writes can be compensated safely.
+
+Caller-facing timeout races do not establish that collaborator work has settled.
+The flow retains the actual promises until settlement, so close waits for late
+issuance and its compensation. Issuer failures remain observable through the
+pending exchange or through a draining close after that exchange has ended.
+Every issuer rejection except the exact supplied abort reason follows that rule;
+undefined represents ordinary declined issuance. A compensation failure takes
+precedence over cancellation and retains both causes. Storage cancellation is
+cooperative and does not establish rollback. Injected stores remain open.
+Custom issuers must honor cancellation and await their persistence/compensation;
+the framework does not add a generic rollback API or a forced drain deadline.
+
+The [M5 contract](tasks/tenant-auth-storage/M5.md) and proposal describe this
+clarification and its operation-boundary regressions.

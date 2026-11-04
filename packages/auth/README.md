@@ -142,9 +142,18 @@ for direct native authentication and managed forwarding configuration.
 
 The package does not provide HTTP routes, browser pages, users, permissions,
 TLS, or a production session database. An application can compose
-`OidcFlow` with Google, GitHub, or another verified provider, but it must own
-the start, callback, exchange, identity mapping, and session issuance routes.
+`OidcFlow` with Google, GitHub, or another verified provider. The application
+provides the start, callback, exchange, identity mapping, and session issuance routes.
 Keep provider access, refresh, and ID tokens server-side.
+
+`OidcFlow.start()` is asynchronous: await it before redirecting the browser.
+The default transaction and application-grant store is process-local. To share
+one login flow across processes, create `PersistentOidcFlowStore` with a
+`StorageFactory`, `StorageGroup`, and stable `flowId`, then pass it in
+`OidcFlowOptions.store`. The factory prepares both record families by default;
+`createMissingStructures: false` skips preparation. Close the flow, then its
+injected store and factory when the application shuts down. Call
+`purgeExpired(cutoff)` explicitly for expired records; no timer runs it.
 
 For browser-facing hosting, install the server browser entry point and use
 `BrowserServer` and `DurableSubscriptionBindings` from

@@ -1,16 +1,16 @@
 # Persistent tenant and authentication storage
 
-This is the implementation specification for this task. It supersedes earlier proposal revisions. The examples describe the target API; production implementation is still to follow. Implementation and review must use this document, including its acceptance criteria.
+This is the implementation specification for this task. It supersedes earlier proposal revisions. The examples describe the target API. [TASK.md](TASK.md) records which milestones are implemented, accepted or still pending. Implementation and review must use this document, including its acceptance criteria.
 
 The final preparation rule is: **new persistent-store factories create missing supported structures and check compatibility by default, before returning**. Set `createMissingStructures: false` to skip both. **Existing business-storage eager/lazy behavior is unchanged.** There is no remaining scope question about either rule.
 
 This proposal makes persistence an explicit application choice and uses maintained libraries for standard authentication mechanisms. It offers two authentication paths: Spine strategies assembled from focused libraries, and an optional Better Auth integration. The application selects one session engine for a given login flow.
 
-All new APIs below are proposed. Existing library calls are identified separately. Application configuration values in examples come from deployment configuration; example durations are not new framework defaults.
+APIs in accepted milestones are implemented contracts; later milestone APIs remain proposed until their implementation and review are complete. Existing library calls are identified separately. Application configuration values in examples come from deployment configuration; example durations are not new framework defaults.
 
 ## 1. The problem and the resulting behavior
 
-Today the environment can infer a tenant index from a storage-provider catalog. A catalog of configured databases or existing namespaces is not an application tenant-registration directory. Opaque sessions and OIDC login state live in process-local maps, and there is no standard persistent signed-token revocation implementation.
+Before this task, the environment could infer a tenant index from a storage-provider catalog. A catalog of configured databases or existing namespaces is not an application tenant-registration directory. Opaque sessions and OIDC login state live in process-local maps, and there is no standard persistent signed-token revocation implementation.
 
 After this change:
 
@@ -369,6 +369,23 @@ This division preserves clock behavior during network waits. For example, if the
 
 The adapter connects the existing `fetch`, timeout and response-size policy to the libraries' HTTP hooks and preserves cancellation. `OidcFlow` validates and consumes state before the provider exchange; the provider receives the accepted code, nonce and verifier. Issuer URLs and redirect policy are trusted configuration, never arbitrary request input. State, nonce and PKCE checks remain mandatory. Separate operation timeout and transaction lifetime: a short HTTP request deadline does not mean the user has only that long to complete login.
 
+`OidcFlow.start(input, signal?)`, `callback(input, signal?)` and
+`exchange(input, signal?)` accept the current request's optional `AbortSignal`.
+Aborting one call cancels only that invocation; the shared flow remains usable
+by other requests. Ordinary cancellation rejects with the signal's reason.
+A distinct storage or issuer failure remains observable; failed compensation
+takes precedence and preserves the cancellation and cleanup causes.
+Existing calls without a signal remain valid, and an already closed flow keeps
+its existing closed/rejected outcome.
+
+The signal covers that request's storage and collaborator steps cooperatively.
+Aborting it does not prove that an in-flight mutation stopped or rolled back.
+The flow checks cancellation after awaited storage calls, awaits mutation
+confirmation, and compensates only confirmed undisclosed writes as described
+below. It does not change transaction or grant lifetime. Each provider, identity-mapping and
+session-issuance call also retains the existing configured collaborator timeout;
+no new storage timer or timeout default is introduced.
+
 ## 6. Component scenarios from start to finish
 
 ### A. Existing company login, persistent browser sessions
@@ -459,30 +476,33 @@ sequenceDiagram
     G-->>B: Application credential
 ```
 
-Flow calls inside the application's admitted routes:
+Flow calls inside the application's admitted routes use the current `request.signal`:
 
 ```typescript
-const start = await login.start({
-  browserCodeChallenge: browserChallenge,
-  postLoginRedirect: config.applicationUrl,
-});
+const start = await login.start(
+  {
+    browserCodeChallenge: browserChallenge,
+    postLoginRedirect: config.applicationUrl,
+  },
+  request.signal,
+);
 if (start.kind === "started") {
   // Return start.authorizationUrl to the browser for navigation.
 }
 
-const callback = await login.callback({ state: callbackState, code: providerCode });
+const callback = await login.callback({ state: callbackState, code: providerCode }, request.signal);
 if (callback.kind === "granted") {
   // Redirect only to callback.postLoginRedirect with the one-time grant.
 }
 
-const exchange = await login.exchange({ grant, browserCodeVerifier });
+const exchange = await login.exchange({ grant, browserCodeVerifier }, request.signal);
 if (exchange.kind === "issued") {
   // Opaque strategy: issue cookies using credential and session expiry.
   // Signed strategy: return the bearer credential to the intended client.
 }
 ```
 
-The route parses validated input, preserves callback query parameters and handles provider-error callbacks separately. Browser-held proof material is not stored in a shared public URL. The application redirect handles the one-time grant without logging it and removes it from the visible URL after exchange.
+Each call uses the signal of its own HTTP request. Completing the start request does not cancel the stored transaction while the browser visits the identity provider. The route parses validated input, preserves callback query parameters and handles provider-error callbacks separately. Browser-held proof material is not stored in a shared public URL. The application redirect handles the one-time grant without logging it and removes it from the visible URL after exchange.
 
 `start()` becomes asynchronous even with memory storage. A failed transaction write returns no usable redirect. A repeated callback or grant exchange has at most one successful consumer. A crash after consuming state may require a new login; a database cannot atomically commit an external provider HTTP exchange.
 
@@ -536,6 +556,24 @@ Use iron-session's numeric key map for seal-key rotation: first deploy both keys
 Signed-key rotation uses the existing `signed.rotate(nextKey)` and retained public keys. Preserve the previous acceptance window, key IDs and configured tolerance. Neither iron-session nor jose operates the application's secret-distribution system.
 
 Issuance cancellation checks before persistence and before returning credentials. A late remote commit cannot be guaranteed undone by AbortSignal. When storage confirms an insert or replacement after cancellation, attempt conditional deletion of that undisclosed session and report any compensation failure. If storage throws without confirming the mutation, a matching record could be an earlier session; deleting it would risk revoking that session. Report the failure without claiming rollback or returning a successful credential. Close drains admitted work, including confirmed-write compensation.
+
+For OIDC, cancellation before one-time consumption leaves valid state available.
+Cancellation during or after a confirmed consume never restores it, retries the
+provider code, or starts the next external step. A confirmed transaction or grant
+insert that finishes after cancellation is conditionally removed before its
+operation drains. An unknown commit has the same limitation described above.
+
+The application session issuer must pass the supplied signal into durable
+issuance and await any compensation, as the `sessions.issue(principal, signal)`
+adapter above does. The flow cannot safely undo a custom issuer's hidden writes
+when that issuer ignores cancellation. It can suppress a late credential and
+wait for the issuer to settle. Every issuer rejection other than the exact
+supplied abort reason rejects an exchange still awaiting its result. If timeout
+or cancellation already ended that result, `close()` reports the late failure
+after draining. The flow cannot infer an error category from an arbitrary
+rejection. An issuer may return `undefined` for ordinary declined issuance; an
+ordinary rejection with the exact supplied abort reason is cancellation and
+does not introduce a drain failure.
 
 ### E. Existing external authentication without new framework records
 
@@ -1128,7 +1166,13 @@ That retention setting is application policy, not a framework default. The appli
 
 Cleanup traverses finite pages and uses conditional deletion so it cannot delete an extended row. Continuation must remain correct when earlier rows disappear. Repeat/concurrent calls are safe; cancellation/failure may leave partial progress and rejects the call. Revocations remain until the full token acceptance window ends. Tenant registrations have no expiry cleanup. Audit retention is a separate application policy.
 
-Stop listeners/active work, close strategies and flow instances, close their store handles, then close factories after all consumers finish. `close()` rejects new work and drains admitted work; it does not purge records or close an injected shared factory. `OidcFlow.close()` becomes awaitable to cover persistent work. A combined process coordinates this with environment shutdown.
+Stop listeners/active work, close strategies and flow instances, then have the host close injected store handles and factories after all consumers finish. A flow closes only its internally created memory store; injected stores and factories remain open. `close()` rejects new work and drains admitted work; it does not purge records or close an injected shared factory. `OidcFlow.close()` becomes awaitable to cover persistent work and actual
+collaborator promises, including work that settles after a caller-facing timeout.
+It waits for confirmed-write compensation and reports a retained late issuer
+failure. Custom collaborators must settle cooperatively; an abort signal does
+not forcibly stop remote work, and no new drain deadline is added. Repeated close
+calls keep the same completion or failure. A combined process coordinates this
+with environment shutdown.
 
 ## 11. Complete record inventory
 
@@ -1211,9 +1255,13 @@ Existing Bounded Context business-storage preparation remains unchanged.
 
 Auth records keep their full domain fields and Timestamp values. Derived lookup
 columns use `ColumnTypes.fixedBytes(byteLength)`: complete equality inputs produce
-32-byte SHA-256 candidate keys; expiry produces a reversible 12-byte key that
-preserves signed seconds and nanoseconds in sort order. These widths come from
-the encodings and impose no new length limit on user IDs, emails or other input.
+32-byte SHA-256 candidate keys; expiry produces a reversible 12-byte component
+that preserves signed seconds and nanoseconds in sort order. Flow-specific OIDC
+cleanup prefixes that component with the 32-byte flow digest in one indexed
+44-byte property. Its range is bounded by that flow prefix and the selected
+cutoff, so another flow's records are not scanned. The complete flow identity
+is still checked against the record. These widths come from the encodings and
+impose no new length limit on user IDs, emails or other input.
 Every equality candidate is checked against the complete original predicate;
 a digest is neither a uniqueness constraint nor sufficient authentication proof.
 

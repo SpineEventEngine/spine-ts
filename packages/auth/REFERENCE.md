@@ -116,6 +116,44 @@ explicit maintenance. This is a best-effort cleanup guarantee.
 
 `OidcFlow` is a bounded authorization-code and PKCE transaction manager. It works with `createGoogleProvider`, `createGitHubProvider`, or a discovered or configured OIDC provider. Applications expose start/callback/exchange endpoints, perform HTTP routing, map verified external identity through `IdentityMapping`, and issue an application session through `ApplicationSessionIssuer`. Provider access, refresh, and ID tokens remain sensitive server-side material; do not return them to browser application code.
 
+`OidcFlow.start()` awaits transaction persistence before returning an
+authorization URL. Callback binding and expiry are validated before the
+transaction is atomically consumed; provider exchange and identity mapping
+follow consumption. Browser PKCE proof and grant expiry are validated before
+the grant is consumed; application session issuance follows consumption. A
+trusted clock check after each confirmed consumption stops the next external
+step if the record reached expiry while storage was pending. A
+failed external step does not restore a consumed record. Independent flow
+instances select the same one-use records through their configured store.
+The optional second `AbortSignal` on start, callback, and exchange carries host
+request cancellation. Ordinary abort rejects with that reason; a distinct
+session issuer failure rejects the pending exchange or, after an abort or
+timeout has returned, is reported by `close()`. Close waits for admitted work
+and the original provider, mapping, and issuer promises to settle. A consumed
+transaction or grant is never restored after cancellation.
+
+The default `OidcFlow` store is process-local. `PersistentOidcFlowStore.create()`
+selects two record families from the supplied `StorageFactory` and `StorageGroup`;
+`flowId` qualifies state, grants, and indexed expiry queries. Preparation of
+both families completes by default. `createMissingStructures: false` returns
+non-preparing handles that do not probe for structures later. `OidcFlow.close()`
+drains admitted work and closes only its default memory store. Close an injected
+store and its factory separately. `purgeExpired(cutoff)` is explicit and uses a
+flow-scoped exact expiry index in persistent storage. A concurrent row change
+can leave eligible records for a later invocation. Cancellation or storage
+failure rejects with partial progress possible. A known confirmed late insert
+is conditionally removed after close; if another writer has replaced that
+record, the replacement remains. An ambiguous thrown storage result cannot be
+rolled back safely and may need later explicit maintenance.
+
+`discoverOidcProvider()` uses the exact selected discovery URL, including an
+application supplied path and query, and rejects a returned issuer mismatch.
+The selected URL does not replace token or JWKS destinations. Authorization
+URLs use S256 and replace reserved protocol parameters while retaining other
+provider query values. Token exchange uses the configured client authentication
+and exact callback URI; the provider returns an identity only after bounded
+response parsing and JOSE ID-token verification.
+
 ## Subscription and native adapters
 
 `SubscriptionGateway` and `InMemorySubscriptionBindings` compose subscription creation, activation, cancellation, and relaying at the gateway boundary. The Gateway accepts a logical `SubscriptionCoordinator`; native `SubscriptionCreator` instances remain a per-node implementation seam. This is an intentional replacement of the former public native-creator input, with no compatibility adapter because Spine TS has no deployed users. In-memory bindings are local to one process and have finite operation limits; they do not provide cross-machine propagation. `createNativeGatewayServices`, `NativeSubscriptionCreator`, and `SubscriptionUpdateRelay` adapt these public contracts to the native service layer. They do not make a deployment secure by themselves: applications choose how their listener accepts only gateway-routed traffic.

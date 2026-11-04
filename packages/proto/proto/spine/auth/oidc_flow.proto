@@ -1,0 +1,77 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.auth;
+
+import "google/protobuf/timestamp.proto";
+import "spine/auth/authenticated_principal.proto";
+import "spine/options.proto";
+
+option java_multiple_files = true;
+option (type_url_prefix) = "type.spine.io";
+
+// One flow-qualified authorization-code transaction, consumed before provider exchange.
+message OidcLoginTransaction {
+  // SHA-256 lookup digest bound to the flow and browser state.
+  string lookup_digest = 1;
+
+  // Application-selected identity of the login flow.
+  string flow_id = 2;
+
+  // Trusted issuer selected when the flow was started.
+  string provider_issuer = 3;
+
+  // OAuth client configured for the provider exchange.
+  string client_id = 4;
+
+  // Exact registered callback URI, including static query parameters.
+  string callback_uri = 5;
+
+  // Random nonce expected in the verified ID token.
+  string nonce = 6;
+
+  // Provider PKCE verifier retained only until callback consumption.
+  string provider_code_verifier = 7;
+
+  // Browser PKCE challenge required before application-session issuance.
+  string browser_code_challenge = 8;
+
+  // Application redirect selected from the flow allowlist.
+  string post_login_redirect = 9;
+
+  // Exact deadline for accepting the callback.
+  google.protobuf.Timestamp when_expires = 10;
+}
+
+// One flow-qualified application grant, consumed before session issuance.
+message OidcLoginGrant {
+  // SHA-256 lookup digest bound to the flow and random grant.
+  string lookup_digest = 1;
+
+  // Application-selected identity of the login flow.
+  string flow_id = 2;
+
+  // Complete mapped principal with optional attributes presence.
+  AuthenticatedPrincipal principal = 3;
+
+  // Browser PKCE challenge copied from the consumed transaction.
+  string browser_code_challenge = 4;
+
+  // Allowlisted application redirect from the consumed transaction.
+  string post_login_redirect = 5;
+
+  // Exact deadline for exchanging the application grant.
+  google.protobuf.Timestamp when_expires = 6;
+}
