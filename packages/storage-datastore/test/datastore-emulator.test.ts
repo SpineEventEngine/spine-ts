@@ -13,6 +13,7 @@
  */
 
 import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { createHash } from "node:crypto";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { EventIdSchema, EventSchema, TenantIdSchema, type Event } from "@spine-event-engine/proto";
@@ -42,11 +43,83 @@ import { ProjectCreatedSchema } from "../../core/test-fixtures/generated/project
 import { ProjectStateSchema } from "../../core/test-fixtures/generated/project_states_pb.js";
 import { ProjectIdSchema } from "../../server/test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 import { DatastoreQueryLimitError, DatastoreStorageFactory } from "../src/index.js";
+import { DatastoreRecordStorage } from "../src/datastore/record-storage.js";
 
 const emulatorHost = process.env.DATASTORE_EMULATOR_HOST;
 const projectId = process.env.DATASTORE_PROJECT_ID ?? "spine-t0135-emulator";
 
 describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
+  it("pages indexed fixed bytes and equality buckets at the exact provider boundary", async () => {
+    const client = datastore();
+    const kind = unique("IndexedBytes");
+    const key = (record: ReturnType<typeof message>) => {
+      const bytes = new Uint8Array(12);
+      bytes[11] = Number(record.value.split(":", 1)[0]);
+      return bytes;
+    };
+    const bucket = (record: ReturnType<typeof message>) =>
+      createHash("sha256")
+        .update(record.value.split(":", 1)[0] ?? "")
+        .digest();
+    const spec = new RecordSpec<string, ReturnType<typeof message>>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [
+        new RecordColumn("lookup", ColumnTypes.fixedBytes(12), key),
+        new RecordColumn("bucket", ColumnTypes.fixedBytes(32), bucket),
+      ],
+      indexes: [
+        { name: "expiry", columns: ["lookup", "id"] },
+        { name: "bucket", columns: ["bucket", "id"] },
+      ],
+    });
+    const records = new DatastoreRecordStorage(
+      { name: kind, multitenant: false },
+      spec,
+      client,
+      2,
+      undefined,
+      kind,
+    );
+    try {
+      const values = ["1:a", "2:a", "2:b", "2:c", "3:a"].map(message);
+      await records.writeAll(values);
+      const firstRecord = values[0];
+      if (firstRecord === undefined) throw new Error("Expected first indexed record.");
+      expect(records.transactionEntity(firstRecord).excludeFromIndexes).toEqual(["bytes"]);
+      const equality = await records.queryEntries({
+        filters: [{ column: "bucket", value: bucket(message("2:a")) }],
+        sort: [{ field: "id", direction: "asc" }],
+        limit: 3,
+      });
+      expect(equality.map(({ id }) => id)).toEqual(["2:a", "2:b", "2:c"]);
+      const after = await records.queryEntries({
+        filters: [{ column: "bucket", value: bucket(message("2:a")) }],
+        sort: [{ field: "id", direction: "asc" }],
+        after: { id: "2:a", values: [{ field: "id", value: "2:a" }] },
+        limit: 2,
+      });
+      expect(after.map(({ id }) => id)).toEqual(["2:b", "2:c"]);
+      const first = await records.queryProviderPage({
+        filters: [{ property: "lookup", operator: "<=", value: key(message("2:a")) }],
+        order: [{ property: "lookup", direction: "asc" }],
+        limit: 2,
+      });
+      expect(first.entries.map(({ id }) => id)).toEqual(["1:a", "2:a"]);
+      if (first.cursor === undefined) throw new Error("Expected indexed continuation.");
+      const second = await records.queryProviderPage({
+        filters: [{ property: "lookup", operator: "<=", value: key(message("2:a")) }],
+        order: [{ property: "lookup", direction: "asc" }],
+        cursor: first.cursor,
+        limit: 2,
+      });
+      expect(second.entries.map(({ id }) => id)).toEqual(["2:b", "2:c"]);
+    } finally {
+      records.close();
+      await deleteKind(client, kind);
+    }
+  }, 30_000);
   it("checks shared metadata and prepares a missing native kind without writing records", async () => {
     const client = datastore();
     const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();

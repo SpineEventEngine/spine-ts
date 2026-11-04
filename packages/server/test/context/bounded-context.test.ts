@@ -80,7 +80,8 @@ import {
   type EntityOptions,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
-import { TenantIndexes } from "../../src/context/tenant-index.js";
+import { SINGLE_TENANT, type TenantIndexSetting } from "../../src/context/tenant-index.js";
+import { TestTenantIndex, requireTenantDirectory } from "../tenant-index-fixture.js";
 import { StandaloneHandlerRuntime } from "../../src/runtime/standalone-handler-runtime.js";
 import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import { Inbox, type InboxMessage } from "../../src/delivery/inbox.js";
@@ -121,6 +122,7 @@ import { tenant } from "../tenant-fixture.js";
 beforeEach(async () => {
   spineMetadataTestAccess.clear();
   registeredReceiverClasses.clear();
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
   await ServerEnvironment.instance().completeSetup();
 });
 
@@ -132,7 +134,10 @@ afterEach(async () => {
 
 async function configureStorage(storageFactory: StorageFactory): Promise<void> {
   await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    storageFactory,
+    tenantIndex: new TestTenantIndex(),
+  });
   await ServerEnvironment.instance().completeSetup();
 }
 
@@ -141,7 +146,11 @@ async function configureDelivery(
   strategy: DeliveryStrategy,
 ): Promise<void> {
   await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory, deliveryStrategy: strategy });
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    storageFactory,
+    deliveryStrategy: strategy,
+    tenantIndex: new TestTenantIndex(),
+  });
   await ServerEnvironment.instance().completeSetup();
 }
 
@@ -155,12 +164,6 @@ interface InternalSystemPairing {
     readonly multitenant: boolean;
     readonly storesEvents: boolean;
   };
-}
-
-interface InternalTenantIndex {
-  all(): Promise<readonly TenantId[]>;
-  contains(tenantId: TenantId): Promise<boolean>;
-  keep(tenantId: TenantId): Promise<void>;
 }
 
 interface InternalDeliveryEndpoint {
@@ -414,12 +417,8 @@ function internalSystemPairing(context: BoundedContext): InternalSystemPairing {
   ).systemPairing(context);
 }
 
-function internalTenantIndex(context: BoundedContext): InternalTenantIndex {
-  return (
-    boundedContextAccess as unknown as {
-      tenantIndex(context: BoundedContext): InternalTenantIndex;
-    }
-  ).tenantIndex(context);
+function internalTenantIndex(context: BoundedContext): TenantIndexSetting {
+  return boundedContextAccess.tenantIndex(context);
 }
 
 function internalDeliveryDescriptor(context: BoundedContext): InternalDeliveryDescriptor {
@@ -564,16 +563,16 @@ describe("BoundedContext assembly", () => {
 
   it("does not register a synthetic tenant for a single-tenant context", async () => {
     const context = await BoundedContext.singleTenant("Tasks").build();
-    const tenantIndex = internalTenantIndex(context);
 
     expect(context.tenantMode).toBe("single-tenant");
-    expect(context.tenantIndex).toBe(ServerEnvironment.instance().tenantIndex);
-    await expect(tenantIndex.contains(tenant("tenant-a"))).resolves.toBe(false);
+    expect(context.tenantIndex).toBe(SINGLE_TENANT);
+    expect(internalTenantIndex(context)).toBe(SINGLE_TENANT);
   });
 
   it("keeps the shared index usable after context close", async () => {
-    const context = await BoundedContext.singleTenant("Tasks").build();
-    const tenantIndex = internalTenantIndex(context);
+    const context = await BoundedContext.multitenant("Tasks").build();
+    const tenantIndex = ServerEnvironment.instance().tenantIndex;
+    if (tenantIndex === SINGLE_TENANT) throw new Error("Expected configured test index.");
 
     await context.close();
 
@@ -584,11 +583,11 @@ describe("BoundedContext assembly", () => {
   it("stores multitenant index entries through the configured storage factory", async () => {
     const storageFactory = new InMemoryStorageFactory();
     await configureStorage(storageFactory);
-    const selectedIndex = TenantIndexes.fromFactory(storageFactory);
+    const selectedIndex = new TestTenantIndex();
     const first = await BoundedContext.multitenant("Customers")
       .withTenantIndex(selectedIndex)
       .build();
-    const firstIndex = internalTenantIndex(first);
+    const firstIndex = requireTenantDirectory(internalTenantIndex(first));
 
     expect(firstIndex).toBe(selectedIndex);
 
@@ -601,7 +600,7 @@ describe("BoundedContext assembly", () => {
     const recovered = await BoundedContext.multitenant("Customers")
       .withTenantIndex(selectedIndex)
       .build();
-    const recoveredIndex = internalTenantIndex(recovered);
+    const recoveredIndex = requireTenantDirectory(internalTenantIndex(recovered));
 
     await expect(recoveredIndex.all()).resolves.toEqual([tenant("tenant-a"), tenant("tenant-b")]);
   });
@@ -609,18 +608,18 @@ describe("BoundedContext assembly", () => {
   it("uses the environment delivery and tenant index across sibling contexts", async () => {
     const storageFactory = new InMemoryStorageFactory();
     await configureStorage(storageFactory);
-    const selectedIndex = TenantIndexes.fromFactory(storageFactory);
+    const selectedIndex = new TestTenantIndex();
     const single = await BoundedContext.singleTenant("Tasks").build();
     const multitenant = await BoundedContext.multitenant("Customers")
       .withTenantIndex(selectedIndex)
       .build();
 
-    await internalTenantIndex(multitenant).keep(tenant("tenant-b"));
-    await internalTenantIndex(multitenant).keep(tenant("tenant-a"));
+    await requireTenantDirectory(internalTenantIndex(multitenant)).keep(tenant("tenant-b"));
+    await requireTenantDirectory(internalTenantIndex(multitenant)).keep(tenant("tenant-a"));
 
     expect(ServerEnvironment.instance().storageFactory).toBe(storageFactory);
-    expect(single.tenantIndex).toBe(ServerEnvironment.instance().tenantIndex);
-    await expect(multitenant.tenantIndex.all()).resolves.toEqual([
+    expect(single.tenantIndex).toBe(SINGLE_TENANT);
+    await expect(requireTenantDirectory(multitenant.tenantIndex).all()).resolves.toEqual([
       tenant("tenant-a"),
       tenant("tenant-b"),
     ]);
@@ -1452,7 +1451,7 @@ describe("BoundedContext assembly", () => {
   it("retains a dynamic-tenant row after an Inbox read fault for fresh-runtime recovery", async () => {
     const storageFactory = new FailingInboxReadStorageFactory();
     await configureDelivery(storageFactory, UniformAcrossAllShards.singleShard());
-    const selectedIndex = TenantIndexes.fromFactory(storageFactory);
+    const selectedIndex = new TestTenantIndex();
     const tenantId = tenant("tenant-first-row");
     const contextName = "FreshRecoveryTasks";
     createGeneratedRegistryFixture([processManagerRegistry(FreshRecoveryProcessManager)]);
@@ -1519,7 +1518,7 @@ describe("BoundedContext assembly", () => {
 
   it("rejects blank multitenant index entries", async () => {
     const context = await BoundedContext.multitenant("Customers").build();
-    const tenantIndex = internalTenantIndex(context);
+    const tenantIndex = requireTenantDirectory(internalTenantIndex(context));
 
     await expect(tenantIndex.keep(tenant(" \t "))).rejects.toThrow(/non-empty/);
   });
@@ -1528,9 +1527,9 @@ describe("BoundedContext assembly", () => {
     const storageFactory = new ObservingStorageFactory([]);
     await configureStorage(storageFactory);
     const customers = await BoundedContext.multitenant("Customers")
-      .withTenantIndex(TenantIndexes.fromFactory(storageFactory))
+      .withTenantIndex(new TestTenantIndex())
       .build();
-    const tenantIndex = internalTenantIndex(customers);
+    const tenantIndex = requireTenantDirectory(internalTenantIndex(customers));
 
     await tenantIndex.keep(tenant("tenant-a"));
 
@@ -1599,7 +1598,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("checks the live receiving tenant before direct command or event dispatch", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const commands: string[] = [];
     const events: string[] = [];
     const context = await BoundedContext.multitenant("Tasks")
@@ -1647,7 +1646,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("does not consult a configured company index for single-tenant work", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const lookup = vi.spyOn(index, "contains").mockRejectedValue(new Error("unexpected lookup"));
     const observed: string[] = [];
     const context = await BoundedContext.singleTenant("Tasks")
@@ -2273,7 +2272,7 @@ describe("BoundedContext assembly", () => {
   it("validates every explicit tenant before preparing any context structure", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("known"));
     const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
     const context = await BoundedContext.multitenant("ExplicitTenantValidation")
@@ -2314,8 +2313,8 @@ describe("BoundedContext assembly", () => {
   it("validates every environment tenant before preparing matching override contexts", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const firstIndex = TenantIndexes.fromFactory({} as StorageFactory);
-    const secondIndex = TenantIndexes.fromFactory({} as StorageFactory);
+    const firstIndex = new TestTenantIndex();
+    const secondIndex = new TestTenantIndex();
     await firstIndex.keep(tenant("first"));
     await secondIndex.keep(tenant("second"));
     const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
@@ -2365,7 +2364,7 @@ describe("BoundedContext assembly", () => {
   it("skips single-tenant siblings for an explicit tenant and includes them in default preparation", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("selected"));
     const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
     const multitenant = await BoundedContext.multitenant("SelectedTenant")
@@ -2469,7 +2468,7 @@ describe("BoundedContext assembly", () => {
   it("captures explicit tenant identity before caller mutation", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("captured"));
     const context = await BoundedContext.multitenant("CapturedExplicitTenant")
       .withTenantIndex(index)
@@ -2489,7 +2488,7 @@ describe("BoundedContext assembly", () => {
   it("returns a rejected promise for a malformed explicit tenant", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("valid"));
     const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
     const context = await BoundedContext.multitenant("MalformedExplicitTenant")
@@ -2515,7 +2514,7 @@ describe("BoundedContext assembly", () => {
   it("rechecks selected tenant membership after shared preparation waits", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("departing"));
     const contains = index.contains.bind(index);
     let present = true;
@@ -2550,7 +2549,7 @@ describe("BoundedContext assembly", () => {
   it("checks every current tenant through finite index pages", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     for (let number = 0; number < 65; number += 1)
       await index.keep(tenant(`paged-${String(number)}`));
     const pages = vi.spyOn(index, "page");
@@ -2572,7 +2571,7 @@ describe("BoundedContext assembly", () => {
   it("starts monitoring explicitly without preparing every tenant", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("monitor-only"));
     const registry = new ObservingSubscriptionRegistry();
     const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
@@ -2593,7 +2592,7 @@ describe("BoundedContext assembly", () => {
   it("retains a selected context during environment membership lookup and preparation", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("held"));
     const contains = index.contains.bind(index);
     const entered = Promise.withResolvers<undefined>();
@@ -2678,7 +2677,7 @@ describe("BoundedContext assembly", () => {
   it("prepares only the first selected tenant after lazy multitenant build", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("tenant-a"));
     await index.keep(tenant("tenant-b"));
     const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
@@ -2944,7 +2943,7 @@ describe("BoundedContext assembly", () => {
   it("does not start a later eager tenant after another build sets the fatal fence", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("tenant-a"));
     await index.keep(tenant("tenant-b"));
     const page = index.page.bind(index);
@@ -2992,7 +2991,7 @@ describe("BoundedContext assembly", () => {
   it("does not start an eager tenant page after shared readiness crosses the fatal fence", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("tenant-a"));
     const page = vi.spyOn(index, "page");
     const preparation = StoragePreparations.for(factory);
@@ -3261,7 +3260,7 @@ describe("BoundedContext assembly", () => {
   it("keeps a directory enumeration failure local to its eager build", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenant("known"));
     const failure = new Error("tenant directory page failed");
     vi.spyOn(index, "page").mockRejectedValueOnce(failure);
@@ -3836,10 +3835,10 @@ describe("BoundedContext assembly", () => {
     });
 
     const context = await BoundedContext.multitenant("Tasks")
-      .withTenantIndex(TenantIndexes.fromFactory(storageFactory))
+      .withTenantIndex(new TestTenantIndex())
       .add(repository)
       .build();
-    const tenantIndex = internalTenantIndex(context);
+    const tenantIndex = requireTenantDirectory(internalTenantIndex(context));
 
     await tenantIndex.keep(tenant("tenant-a"));
     await expect(tenantIndex.all()).resolves.toEqual([tenant("tenant-a")]);
@@ -4198,7 +4197,7 @@ describe("BoundedContext assembly", () => {
       .build();
 
     try {
-      await context.tenantIndex.keep(tenant("tenant-a"));
+      await requireTenantDirectory(context.tenantIndex).keep(tenant("tenant-a"));
       const command = context
         .commandBus()
         .post(createProjectionCommand("terminal-command", "task-1", tenant("tenant-a")));

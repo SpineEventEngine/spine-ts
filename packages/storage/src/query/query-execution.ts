@@ -25,6 +25,9 @@ export const defaultQueryCandidateLimit = 10_000;
 
 /**
  * One materialized storage row accepted by the shared normalized evaluator.
+ *
+ * @typeParam Id Record identifier type.
+ * @typeParam Record Stored record type.
  */
 export interface NormalizedQueryEntry<Id, Record> {
   // prettier-ignore
@@ -66,11 +69,23 @@ export class QueryCandidateLimitError extends Error {
  * Shared complete in-process semantics for one validated normalized query plan.
  */
 export const StorageQueryEvaluator: Readonly<{
+  /**
+   * Applies one normalized plan to materialized rows.
+   *
+   * @typeParam Id Record identifier type.
+   * @typeParam Record Stored record type.
+   */
   evaluate<Id, Record>(
     entries: readonly NormalizedQueryEntry<Id, Record>[],
     plan: NormalizedQueryPlan<Id>,
   ): readonly NormalizedQueryEntry<Id, Record>[];
 }> = Object.freeze({
+  /**
+   * Applies one normalized plan to materialized rows.
+   *
+   * @typeParam Id Record identifier type.
+   * @typeParam Record Stored record type.
+   */
   evaluate<Id, Record>(
     entries: readonly NormalizedQueryEntry<Id, Record>[],
     plan: NormalizedQueryPlan<Id>,
@@ -111,6 +126,12 @@ const QueryPredicateMatcher = {
 
   /**
    * Matches a row against one normalized predicate.
+   *
+   * @param entry Materialized storage row.
+   * @param predicate Normalized query predicate.
+   * @returns Whether the row matches the predicate.
+   * @typeParam Id Record identifier type.
+   * @typeParam Record Stored record type.
    */
   matches<Id, Record>(
     entry: NormalizedQueryEntry<Id, Record>,
@@ -133,7 +154,12 @@ const QueryPredicateMatcher = {
   },
 
   /**
-   * Evaluates one normalized comparison predicate.
+   * Matches one normalized comparison predicate.
+   *
+   * @param actual Materialized column value.
+   * @param expected Required comparison value.
+   * @param operator Normalized comparison operator.
+   * @returns Whether the comparison matches.
    */
   comparePredicate(
     actual: unknown,
@@ -151,6 +177,10 @@ const QueryPredicateMatcher = {
 
   /**
    * Compares values using normalized query equality semantics.
+   *
+   * @param left Left value in the comparison.
+   * @param right Right value in the comparison.
+   * @returns Whether the normalized values are equal.
    */
   equalValues(left: unknown, right: unknown): boolean {
     if (QueryOrdering.isMissing(left) || QueryOrdering.isMissing(right)) {
@@ -168,6 +198,13 @@ const QueryOrdering = {
 
   /**
    * Compares two rows by requested ordering and stable ID tie-breaker.
+   *
+   * @param left Left value in the comparison.
+   * @param plan Validated normalized query plan.
+   * @param right Right value in the comparison.
+   * @returns Requested row order with an ID tie-breaker.
+   * @typeParam Id Record identifier type.
+   * @typeParam Record Stored record type.
    */
   compareEntries<Id, Record>(
     left: NormalizedQueryEntry<Id, Record>,
@@ -186,6 +223,10 @@ const QueryOrdering = {
 
   /**
    * Compares values while placing missing values before present values.
+   *
+   * @param left Left value in the comparison.
+   * @param right Right value in the comparison.
+   * @returns Order with missing values first.
    */
   compareWithMissing(left: unknown, right: unknown): number {
     if (QueryOrdering.isMissing(left) || QueryOrdering.isMissing(right)) {
@@ -197,8 +238,14 @@ const QueryOrdering = {
 
   /**
    * Compares values supported by normalized query ordering.
+   *
+   * @param left Left value in the comparison.
+   * @param right Right value in the comparison.
+   * @returns Order of supported normalized values.
    */
   compareOrdered(left: unknown, right: unknown): number {
+    if (left instanceof Uint8Array && right instanceof Uint8Array)
+      return QueryOrdering.compareBytes(left, right);
     if (typeof left === "number" && typeof right === "number")
       return QueryOrdering.compareNumber(left, right);
     if (typeof left === "bigint" && typeof right === "bigint") {
@@ -220,7 +267,28 @@ const QueryOrdering = {
   },
 
   /**
+   * Compares byte arrays by unsigned lexicographic value and then length.
+   *
+   * @param left Left value in the comparison.
+   * @param right Right value in the comparison.
+   * @returns Unsigned lexicographic order.
+   */
+  compareBytes(left: Uint8Array, right: Uint8Array): number {
+    for (let index = 0; index < Math.min(left.length, right.length); index++) {
+      const difference = (left[index] ?? 0) - (right[index] ?? 0);
+      if (difference !== 0) return difference < 0 ? -1 : 1;
+    }
+    return Math.sign(left.length - right.length);
+  },
+
+  /**
    * Compares ordered-message major and minor components.
+   *
+   * @param leftMajor Major component of the left value.
+   * @param leftMinor Minor component of the left value.
+   * @param rightMajor Major component of the right value.
+   * @param rightMinor Minor component of the right value.
+   * @returns Major and minor component order.
    */
   comparePair(
     leftMajor: unknown,
@@ -234,10 +302,16 @@ const QueryOrdering = {
 
   /**
    * Compares values with a deterministic fallback for distinct shapes.
+   *
+   * @param left Left value in the comparison.
+   * @param right Right value in the comparison.
+   * @returns Deterministic order of both values.
    */
   compareStable(left: unknown, right: unknown): number {
     if (QueryOrdering.isMissing(left) || QueryOrdering.isMissing(right))
       return QueryOrdering.compareWithMissing(left, right);
+    if (left instanceof Uint8Array && right instanceof Uint8Array)
+      return QueryOrdering.compareBytes(left, right);
     if (typeof left === typeof right && ["number", "bigint", "string"].includes(typeof left)) {
       return QueryOrdering.compareOrdered(left, right);
     }
@@ -246,6 +320,9 @@ const QueryOrdering = {
 
   /**
    * Creates a deterministic value representation for equality and tie-breaking.
+   *
+   * @param value Value to inspect or clone.
+   * @returns Deterministic equality representation.
    */
   stableKey(value: unknown): string {
     if (value instanceof Uint8Array) return `bytes:${[...value].join(".")}`;
@@ -260,7 +337,10 @@ const QueryOrdering = {
   },
 
   /**
-   * Identifies ordered Protobuf timestamp and version values.
+   * Determines whether a value is an ordered Protobuf timestamp or version.
+   *
+   * @param value Value to inspect or clone.
+   * @returns Whether the value is an ordered Protobuf message.
    */
   isOrderedMessage(value: unknown): value is {
     readonly $typeName: "google.protobuf.Timestamp" | "spine.core.Version";
@@ -279,6 +359,10 @@ const QueryOrdering = {
 
   /**
    * Compares finite numeric values.
+   *
+   * @param left Left value in the comparison.
+   * @param right Right value in the comparison.
+   * @returns Numeric order.
    */
   compareNumber(left: number, right: number): number {
     if (!Number.isFinite(left) || !Number.isFinite(right)) {
@@ -289,13 +373,20 @@ const QueryOrdering = {
 
   /**
    * Compares text values in code-unit order.
+   *
+   * @param left Left value in the comparison.
+   * @param right Right value in the comparison.
+   * @returns Code-unit text order.
    */
   compareText(left: string, right: string): number {
     return left < right ? -1 : left > right ? 1 : 0;
   },
 
   /**
-   * Identifies absent normalized query values.
+   * Determines whether a normalized query value is absent.
+   *
+   * @param value Value to inspect or clone.
+   * @returns Whether the value is absent.
    */
   isMissing(value: unknown): boolean {
     return value === undefined || value === null;

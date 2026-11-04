@@ -80,6 +80,7 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
     StoragePreparations.register(this, {
+      supportsRecordIndexes: true,
       prepareRecord: (context, spec, group) => this.prepareRecord(context, spec, group),
       prepareEntity: (input) => this.prepareEntity(input),
       prepareAgentHistory: (input) => this.prepareAgentHistory(input),
@@ -394,6 +395,26 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     group?: StorageGroup,
   ): RecordStorage<I, R> {
     this.declareRecord(context, recordSpec, group);
+    return new InMemoryRecordStorage(context, recordSpec, () =>
+      this.tenantRecords(context, recordSpec, group),
+    );
+  }
+
+  /**
+   * Opens a memory handle without declaring or checking its family.
+   *
+   * @param context Complete storage context.
+   * @param recordSpec Record layout and source type.
+   * @param group Optional physical record family.
+   * @returns Independently closeable memory records.
+   * @typeParam I Typed record identifier.
+   * @typeParam R Stored Protobuf message.
+   */
+  protected override onCreateUnprepared<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
     return new InMemoryRecordStorage(context, recordSpec, () =>
       this.tenantRecords(context, recordSpec, group),
     );

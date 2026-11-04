@@ -56,6 +56,7 @@ import {
   type OpenEntityRecords,
 } from "./entity-history.js";
 import { DatastoreRecordStorage } from "./record-storage.js";
+import { DatastoreRecordIndexes } from "./record-indexes.js";
 import { RecordKinds } from "./record-kind.js";
 import { DatastoreIdColumn } from "./id-column.js";
 import { DatastoreAgentHistory, AgentHistoryHash } from "./agent-history.js";
@@ -506,6 +507,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     this.#eventStoreKinds = eventStoreKinds;
     this.#catalog = new DatastoreTenantCatalog(client, this.#namespaceConverter);
     StoragePreparations.register(this, {
+      supportsRecordIndexes: true,
       prepareRecord: (context, spec, group, mode) => this.prepareRecord(context, spec, group, mode),
       prepareEntity: (input, mode) => this.prepareEntity(input, mode),
       prepareAgentHistory: (input) => this.prepareAgentHistory(input),
@@ -865,6 +867,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     explicitKind?: string,
     mapping?: { readonly namespace: string | undefined; readonly kind: string },
   ): { namespace: string; kind: string; signature: string } {
+    DatastoreRecordIndexes.validate(spec.indexes);
     const namespace =
       mapping === undefined ? this.nativeNamespace(context) : (mapping.namespace ?? "");
     const kind = mapping?.kind ?? this.selectedKind(spec, group, explicitKind);
@@ -881,6 +884,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       spec.recordType.typeName,
       typeof spec.idType === "string" ? spec.idType : spec.idType.typeName,
       this.columnSignature(spec.columns),
+      spec.indexes.map(({ name, columns }) => [name, columns]),
     ]);
     return { namespace, kind, signature };
   }
@@ -940,7 +944,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
           name,
           type.kind,
           type.kind === "scalar"
-            ? `${String(type.scalar)}:${String(type.longAsString)}`
+            ? `${String(type.scalar)}:${String(type.longAsString)}:${String(type.byteLength ?? "")}`
             : type.kind === "enum"
               ? type.enum.typeName
               : type.message.typeName,
@@ -1126,6 +1130,32 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     const creator = resolved.creator;
     if (creator !== undefined)
       return creator(context, recordSpec, this.#client, maxClientSideScan) as RecordStorage<I, R>;
+    return this.openNative(context, recordSpec, group, resolved.layout?.kind);
+  }
+
+  /**
+   * Opens a native record handle without a remote metadata probe. Local mapping,
+   * declaration, and collision validation still apply.
+   *
+   * Custom registered creators cannot promise this policy and reject explicitly.
+   *
+   * @param context The storage context.
+   * @param recordSpec The physical record declaration.
+   * @param group The optional physical family.
+   * @returns The native record handle.
+   * @typeParam I Record identifier type.
+   * @typeParam R Stored Protobuf message type.
+   */
+  protected override onCreateUnprepared<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    const resolved = this.resolve(recordSpec, group, true);
+    if (resolved.creator !== undefined)
+      throw new Error(
+        "Custom Datastore record providers do not support handles without preparation.",
+      );
     return this.openNative(context, recordSpec, group, resolved.layout?.kind);
   }
 

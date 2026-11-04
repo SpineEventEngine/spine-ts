@@ -13,416 +13,241 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 
-import {
-  OpaqueSessionCookies,
-  OpaqueSessions,
-  type AuthenticatedPrincipal,
-} from "../../src/index.js";
+import { OpaqueSessionCookies, OpaqueSessions, MemoryOpaqueSessionStore } from "../../src/index.js";
 
-function clock(start = 1_000) {
+const password = "opaque session test password is at least 32 characters";
+
+function clock(start = Date.now()) {
   let now = start;
   return { now: () => now, advance: (milliseconds: number) => (now += milliseconds) };
 }
 
-function random(...values: number[]) {
-  return () => new Uint8Array(32).fill(values.shift() ?? 0);
+function options(time = clock()) {
+  return { scope: "orders-browser", password, ttlMilliseconds: 60_000, clock: time };
 }
 
 describe("OpaqueSessions", () => {
-  it("creates an opaque cookie credential and resolves defensive identity copies", async () => {
-    const time = clock();
-    const sessions = new OpaqueSessions({ clock: time, randomBytes: random(1) });
-    const attributes = { role: "writer" };
-    const created = await sessions.create({ id: "principal-1", attributes });
-
-    expect(created).toMatchObject({ kind: "created", credential: { kind: "cookie" } });
-    if (created.kind !== "created") throw new Error("expected a created session");
-    expect(created.credential.value).toHaveLength(43);
-    attributes.role = "reader";
-    const resolved = await sessions.resolve(created.credential);
-    expect(resolved?.principal).toEqual({ id: "principal-1", attributes: { role: "writer" } });
-    expect(Object.isFrozen(resolved?.principal.attributes)).toBe(true);
+  it("requires valid sealing policy before constructing", async () => {
+    await expect(OpaqueSessions.create({ ...options(), password: "short" })).rejects.toThrow(
+      "32 characters",
+    );
+    await expect(OpaqueSessions.create({ ...options(), scope: "" })).rejects.toThrow("scope");
+    await expect(OpaqueSessions.create({ ...options(), ttlMilliseconds: 0 })).rejects.toThrow(
+      "positive safe integer",
+    );
+    await expect(
+      OpaqueSessions.create({ ...options(), password: { alpha: password } }),
+    ).rejects.toThrow("numeric integers");
+    await expect(
+      OpaqueSessions.create({ ...options(), password: { "1": "short" } }),
+    ).rejects.toThrow("32 characters");
+    await expect(
+      OpaqueSessions.create({ ...options(), clock: undefined as never }),
+    ).rejects.toThrow("Session clock is required");
+    await expect(
+      OpaqueSessions.create({
+        ...options(),
+        maxSessions: 1,
+        store: new MemoryOpaqueSessionStore(),
+      }),
+    ).rejects.toThrow("memory store");
   });
 
-  it("expires, bounds capacity, rejects exhausted entropy, and closes terminally", async () => {
-    const time = clock();
-    const sessions = new OpaqueSessions({
-      clock: time,
-      randomBytes: random(1, 1, 1, 1),
+  it("keeps the memory-only capacity until explicit expiry maintenance", async () => {
+    const time = clock(1_000);
+    const sessions = await OpaqueSessions.create({
+      ...options(time),
       ttlMilliseconds: 10,
       maxSessions: 1,
-      collisionAttempts: 3,
     });
-    const first = await sessions.create({ id: "one" });
-    expect(await sessions.create({ id: "two" })).toEqual({
+    const first = await sessions.issue({ id: "one" });
+    expect(first.kind).toBe("created");
+    time.advance(10);
+    expect(await sessions.issue({ id: "two" })).toEqual({
       kind: "rejected",
       reason: "capacity-exceeded",
     });
-    time.advance(10);
     expect(
-      await sessions.resolve(
-        first.kind === "created" ? first.credential : { kind: "cookie", value: "" },
-      ),
-    ).toBeUndefined();
-    expect(await sessions.create({ id: "two" })).toMatchObject({ kind: "created" });
+      await sessions.purgeExpired(create(TimestampSchema, { seconds: 1n, nanos: 10_000_000 })),
+    ).toBe(1);
+    expect((await sessions.issue({ id: "two" })).kind).toBe("created");
+    await sessions.close();
+  });
 
-    const collisions = new OpaqueSessions({ randomBytes: random(2, 2, 2), collisionAttempts: 2 });
-    await collisions.create({ id: "one" });
-    expect(await collisions.create({ id: "two" })).toEqual({
+  it("bounds entropy failures and clears each mutable random buffer", async () => {
+    const generated = new Uint8Array(32).fill(9);
+    const sessions = await OpaqueSessions.create({
+      ...options(),
+      randomBytes: () => generated,
+      collisionAttempts: 1,
+    });
+    expect((await sessions.issue({ id: "one" })).kind).toBe("created");
+    expect(generated).toEqual(new Uint8Array(32));
+    const short = await OpaqueSessions.create({
+      ...options(),
+      randomBytes: () => new Uint8Array(31),
+      collisionAttempts: 1,
+    });
+    expect(await short.issue({ id: "two" })).toEqual({
       kind: "rejected",
       reason: "entropy-exhausted",
     });
-    await collisions.close();
-    expect(await collisions.create({ id: "three" })).toEqual({
-      kind: "rejected",
-      reason: "closed",
+    const collided = await OpaqueSessions.create({
+      ...options(),
+      randomBytes: () => new Uint8Array(32).fill(1),
+      collisionAttempts: 1,
     });
+    expect((await collided.issue({ id: "first" })).kind).toBe("created");
+    expect(await collided.issue({ id: "second" })).toEqual({
+      kind: "rejected",
+      reason: "entropy-exhausted",
+    });
+    await sessions.close();
+    await short.close();
+    await collided.close();
   });
 
-  it("rejects unsupported and expired rotation while zeroing generated random bytes", async () => {
+  it("rejects unsupported and expired rotations", async () => {
     const time = clock();
-    const generated = new Uint8Array(32).fill(9);
-    const sessions = new OpaqueSessions({
-      clock: time,
-      randomBytes: () => generated,
-      ttlMilliseconds: 1,
-    });
+    const sessions = await OpaqueSessions.create({ ...options(time), ttlMilliseconds: 10 });
     expect(await sessions.rotate({ kind: "bearer", value: "token" })).toEqual({
       kind: "rejected",
       reason: "unsupported-credential",
     });
-    const created = await sessions.create({ id: "principal" });
-    expect(generated).toEqual(new Uint8Array(32));
-    if (created.kind !== "created") throw new Error("expected a created session");
-    time.advance(1);
-    expect(await sessions.rotate(created.credential)).toEqual({
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    time.advance(10);
+    expect(await sessions.rotate(issued.credential)).toEqual({
       kind: "rejected",
       reason: "expired",
     });
-  });
-
-  it("rotates atomically and makes stale cookie replay and logout harmless", async () => {
-    const sessions = new OpaqueSessions({ randomBytes: random(3, 4) });
-    const created = await sessions.create({ id: "principal" });
-    if (created.kind !== "created") throw new Error("expected a created session");
-    const rotated = await sessions.rotate(created.credential);
-    expect(rotated).toMatchObject({ kind: "rotated", credential: { kind: "cookie" } });
-    if (rotated.kind !== "rotated") throw new Error("expected a rotated session");
-    expect(await sessions.resolve(created.credential)).toBeUndefined();
-    expect(await sessions.resolve(rotated.credential)).toMatchObject({
-      principal: { id: "principal" },
-    });
-    expect(await sessions.logout(created.credential)).toEqual({ kind: "logged-out" });
-    expect(await sessions.resolve(rotated.credential)).toBeDefined();
-    expect(await sessions.logout(rotated.credential)).toEqual({ kind: "logged-out" });
-    expect(await sessions.logout(rotated.credential)).toEqual({ kind: "logged-out" });
-  });
-
-  it("preserves the old session when rotation cannot obtain a distinct ID and closes every outcome", async () => {
-    const sessions = new OpaqueSessions({ randomBytes: random(5, 5), collisionAttempts: 1 });
-    const created = await sessions.create({ id: "principal" });
-    if (created.kind !== "created") throw new Error("expected a created session");
-    expect(await sessions.rotate(created.credential)).toEqual({
-      kind: "rejected",
-      reason: "entropy-exhausted",
-    });
-    expect(await sessions.resolve(created.credential)).toBeDefined();
     await sessions.close();
-    expect(await sessions.resolve(created.credential)).toBeUndefined();
-    expect(await sessions.rotate(created.credential)).toEqual({
-      kind: "rejected",
-      reason: "closed",
-    });
-    expect(await sessions.logout(created.credential)).toEqual({ kind: "logged-out" });
   });
 
-  it("validates finite positive construction inputs and fixed random byte length", async () => {
-    for (const options of [
-      { ttlMilliseconds: 0 },
-      { maxSessions: Number.POSITIVE_INFINITY },
-      { collisionAttempts: -1 },
-    ]) {
-      expect(() => new OpaqueSessions(options)).toThrow("positive safe integer");
-    }
-    const shortBuffer = new Uint8Array(31).fill(9);
-    const sessions = new OpaqueSessions({ randomBytes: () => shortBuffer });
-    await expect(sessions.create({ id: "principal" })).resolves.toEqual({
+  it("keeps the prior generation when replacement entropy repeats", async () => {
+    const sessions = await OpaqueSessions.create({
+      ...options(),
+      randomBytes: () => new Uint8Array(32).fill(4),
+      collisionAttempts: 1,
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    expect(await sessions.rotate(issued.credential)).toEqual({
       kind: "rejected",
       reason: "entropy-exhausted",
     });
-    expect(shortBuffer).toEqual(new Uint8Array(31));
+    expect(await sessions.resolve(issued.credential)).toBeDefined();
+    await sessions.close();
   });
 
-  it("fails closed on invalid clocks and bounded entropy failures, including pre-epoch expiry", async () => {
-    const throwing = new OpaqueSessions({
-      clock: {
-        now: () => {
-          throw new Error("clock");
-        },
-      },
+  it("fails closed after an invalid trusted-clock reading", async () => {
+    const sessions = await OpaqueSessions.create({
+      ...options(),
+      clock: { now: () => Number.NaN },
     });
-    expect(await throwing.create({ id: "principal" })).toEqual({
+    expect(await sessions.issue({ id: "one" })).toEqual({
       kind: "rejected",
       reason: "clock-failure",
     });
-    expect(await throwing.resolve({ kind: "cookie", value: "a".repeat(43) })).toBeUndefined();
-    const entropy = new OpaqueSessions({
-      randomBytes: () => {
-        throw new Error("entropy");
-      },
-    });
-    expect(await entropy.create({ id: "principal" })).toEqual({
-      kind: "rejected",
-      reason: "entropy-exhausted",
-    });
-    const preEpoch = new OpaqueSessions({ clock: { now: () => -1 }, randomBytes: random(8) });
-    const created = await preEpoch.create({ id: "principal" });
-    expect(created).toMatchObject({
-      kind: "created",
-      session: { expiresAt: { nanos: 999_000_000 } },
-    });
+    expect(await sessions.issue({ id: "two" })).toEqual({ kind: "rejected", reason: "closed" });
+    await sessions.close();
   });
 
-  it("fails closed when the second create clock read throws", async () => {
-    let reads = 0;
-    const sessions = new OpaqueSessions({
+  it("fails closed when the trusted clock throws after prior issuance", async () => {
+    let fails = false;
+    const sessions = await OpaqueSessions.create({
+      ...options(),
       clock: {
         now: () => {
-          reads += 1;
-          if (reads === 4) throw new Error("second create read failed");
-          return 1_000;
+          if (fails) throw new Error("clock unavailable");
+          return Date.now();
         },
       },
-      randomBytes: random(9, 10),
     });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    fails = true;
+    expect(await sessions.resolve(issued.credential)).toBeUndefined();
+    expect(await sessions.issue({ id: "new" })).toEqual({ kind: "rejected", reason: "closed" });
+    await sessions.close();
+  });
 
-    const created = await sessions.create({ id: "principal" });
-    if (created.kind !== "created") throw new Error("expected a created session");
-    expect(await sessions.create({ id: "clock-failure" })).toEqual({
+  it("rejects deadlines beyond the full Timestamp range without issuing a seal", async () => {
+    const maximum = 253_402_300_799_999;
+    const time = clock(maximum - 500);
+    const sessions = await OpaqueSessions.create({ ...options(time), ttlMilliseconds: 1_000 });
+    expect(await sessions.issue({ id: "principal" })).toEqual({
       kind: "rejected",
       reason: "clock-failure",
     });
-    expect(await sessions.resolve(created.credential)).toBeUndefined();
-    expect(await sessions.rotate(created.credential)).toEqual({
-      kind: "rejected",
-      reason: "closed",
-    });
-    expect(await sessions.create({ id: "after-clock-failure" })).toEqual({
-      kind: "rejected",
-      reason: "closed",
-    });
+    await sessions.close();
   });
 
-  it("fails closed when a maximum Timestamp clock plus TTL exceeds its range", async () => {
-    let reads = 0;
-    const sessions = new OpaqueSessions({
-      clock: {
-        now: () => {
-          reads += 1;
-          return reads <= 2 ? 253_402_300_799_997 : 253_402_300_799_998;
-        },
-      },
-      randomBytes: random(11, 12),
-      ttlMilliseconds: 2,
-    });
-
-    const created = await sessions.create({ id: "principal" });
-    if (created.kind !== "created") throw new Error("expected a created session");
-    expect(await sessions.create({ id: "clock-failure" })).toEqual({
+  it("rejects a rotation whose new deadline exceeds the Timestamp range", async () => {
+    const maximum = 253_402_300_799_999;
+    const time = clock(maximum - 1_500);
+    const sessions = await OpaqueSessions.create({ ...options(time), ttlMilliseconds: 1_000 });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    time.advance(600);
+    expect(await sessions.rotate(issued.credential)).toEqual({
       kind: "rejected",
       reason: "clock-failure",
     });
-    expect(await sessions.resolve(created.credential)).toBeUndefined();
-    expect(await sessions.rotate(created.credential)).toEqual({
-      kind: "rejected",
-      reason: "closed",
-    });
-    expect(await sessions.create({ id: "after-clock-failure" })).toEqual({
-      kind: "rejected",
-      reason: "closed",
-    });
+    expect(await sessions.resolve(issued.credential)).toBeDefined();
+    await sessions.close();
   });
 
-  it("revalidates create and rotate state after reentrant randomness", async () => {
-    let calls = 0;
-    const sessions: OpaqueSessions = new OpaqueSessions({
-      maxSessions: 1,
-      randomBytes: () => {
-        calls += 1;
-        if (calls === 1) void sessions.create({ id: "nested" });
-        return new Uint8Array(32).fill(calls);
-      },
+  it("copies principal attributes and refuses a tampered or unsupported credential", async () => {
+    const sessions = await OpaqueSessions.create(options());
+    const attributes = { role: "writer" };
+    const issued = await sessions.issue({ id: "principal", attributes });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    attributes.role = "reader";
+    expect((await sessions.resolve(issued.credential))?.principal).toEqual({
+      id: "principal",
+      attributes: { role: "writer" },
     });
-    expect(await sessions.create({ id: "outer" })).toEqual({
-      kind: "rejected",
-      reason: "capacity-exceeded",
-    });
-
-    let rotationCalls = 0;
-    const rotating: OpaqueSessions = new OpaqueSessions({
-      randomBytes: () => {
-        rotationCalls += 1;
-        if (rotationCalls === 2) void rotating.logout(credential);
-        return new Uint8Array(32).fill(rotationCalls);
-      },
-    });
-    const created = await rotating.create({ id: "principal" });
-    if (created.kind !== "created") throw new Error("expected a created session");
-    const credential = created.credential;
-    expect(await rotating.rotate(created.credential)).toEqual({
-      kind: "rejected",
-      reason: "not-found",
-    });
+    const tampered = `X${issued.credential.value.slice(1)}`;
+    expect(await sessions.resolve({ kind: "cookie", value: tampered })).toBeUndefined();
+    expect(
+      await sessions.resolve({ kind: "bearer", value: issued.credential.value }),
+    ).toBeUndefined();
+    await sessions.close();
   });
 
-  it("does not insert a copied record when a reentrant principal getter closes the store", async () => {
-    const sessions = new OpaqueSessions({ randomBytes: random(15) });
-    const principal: AuthenticatedPrincipal = {
-      get id(): string {
-        void sessions.close();
-        return "principal";
-      },
-    };
-
-    await expect(sessions.create(principal)).resolves.toEqual({
-      kind: "rejected",
-      reason: "closed",
-    });
-  });
-
-  it("rechecks capacity and expiry when random callbacks advance the clock", async () => {
+  it("uses the exact deadline and keeps old expired logout from revoking a fresh login", async () => {
     const time = clock();
-    let calls = 0;
-    let nested: ReturnType<OpaqueSessions["create"]> | undefined;
-    const creating: OpaqueSessions = new OpaqueSessions({
-      clock: time,
-      maxSessions: 1,
-      ttlMilliseconds: 1,
-      randomBytes: () => {
-        calls += 1;
-        if (calls === 1) {
-          nested = creating.create({ id: "nested" });
-          time.advance(1);
-        }
-        return new Uint8Array(32).fill(calls);
-      },
-    });
-    const outer = await creating.create({ id: "outer" });
-    expect(outer).toMatchObject({
-      kind: "created",
-      session: { principal: { id: "outer" } },
-    });
-    if (nested === undefined || outer.kind !== "created")
-      throw new Error("expected created sessions");
-    const nestedResult = await nested;
-    if (nestedResult.kind !== "created") throw new Error("expected a nested session");
-    expect(await creating.resolve(nestedResult.credential)).toBeUndefined();
-    expect(await creating.resolve(outer.credential)).toMatchObject({
-      principal: { id: "outer" },
-    });
-
-    const rotationTime = clock();
-    let rotationCalls = 0;
-    const rotating: OpaqueSessions = new OpaqueSessions({
-      clock: rotationTime,
-      ttlMilliseconds: 1,
-      randomBytes: () => {
-        rotationCalls += 1;
-        if (rotationCalls === 2) rotationTime.advance(1);
-        return new Uint8Array(32).fill(rotationCalls);
-      },
-    });
-    const created = await rotating.create({ id: "principal" });
-    if (created.kind !== "created") throw new Error("expected a created session");
-    expect(await rotating.rotate(created.credential)).toEqual({
-      kind: "rejected",
-      reason: "expired",
-    });
-    expect(await rotating.resolve(created.credential)).toBeUndefined();
+    const sessions = await OpaqueSessions.create({ ...options(time), ttlMilliseconds: 10 });
+    const old = await sessions.issue({ id: "principal" });
+    if (old.kind !== "created") throw new Error("expected issuance");
+    time.advance(10);
+    const fresh = await sessions.issue({ id: "principal" });
+    if (fresh.kind !== "created") throw new Error("expected issuance");
+    await sessions.logout(old.credential);
+    expect(await sessions.resolve(fresh.credential)).toBeDefined();
+    await sessions.close();
   });
 
-  it("rejects create and rotation after reentrant randomness closes the terminal store", async () => {
-    const creating: OpaqueSessions = new OpaqueSessions({
-      randomBytes: () => {
-        void creating.close();
-        return new Uint8Array(32).fill(11);
-      },
-    });
-    expect(await creating.create({ id: "outer" })).toEqual({ kind: "rejected", reason: "closed" });
-    expect(await creating.create({ id: "after-close" })).toEqual({
+  it("closes terminally and clears internally selected memory", async () => {
+    const sessions = await OpaqueSessions.create(options());
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    await sessions.close();
+    expect(await sessions.issue({ id: "other" })).toEqual({ kind: "rejected", reason: "closed" });
+    expect(await sessions.resolve(issued.credential)).toBeUndefined();
+    expect(await sessions.rotate(issued.credential)).toEqual({
       kind: "rejected",
       reason: "closed",
     });
-
-    let calls = 0;
-    const rotating: OpaqueSessions = new OpaqueSessions({
-      randomBytes: () => {
-        calls += 1;
-        if (calls === 2) void rotating.close();
-        return new Uint8Array(32).fill(calls);
-      },
-    });
-    const created = await rotating.create({ id: "principal" });
-    if (created.kind !== "created") throw new Error("expected a created session");
-
-    expect(await rotating.rotate(created.credential)).toEqual({
-      kind: "rejected",
-      reason: "closed",
-    });
-    expect(await rotating.resolve(created.credential)).toBeUndefined();
-    expect(await rotating.create({ id: "after-close" })).toEqual({
-      kind: "rejected",
-      reason: "closed",
-    });
-  });
-
-  it("uses synchronous call order for non-awaited rotation, logout, and resolution", async () => {
-    const rotateTwice = new OpaqueSessions({ randomBytes: random(12, 13, 14) });
-    const firstCreated = await rotateTwice.create({ id: "rotate-twice" });
-    if (firstCreated.kind !== "created") throw new Error("expected a created session");
-    const firstRotation = rotateTwice.rotate(firstCreated.credential);
-    const secondRotation = rotateTwice.rotate(firstCreated.credential);
-    const firstRotated = await firstRotation;
-    expect(firstRotated).toMatchObject({ kind: "rotated", credential: { kind: "cookie" } });
-    expect(await secondRotation).toEqual({ kind: "rejected", reason: "not-found" });
-    if (firstRotated.kind !== "rotated") throw new Error("expected a rotated session");
-    expect(await rotateTwice.resolve(firstCreated.credential)).toBeUndefined();
-    expect(await rotateTwice.resolve(firstRotated.credential)).toMatchObject({
-      principal: { id: "rotate-twice" },
-    });
-
-    const logoutThenRotate = new OpaqueSessions({ randomBytes: random(15, 16) });
-    const secondCreated = await logoutThenRotate.create({ id: "logout-rotate" });
-    if (secondCreated.kind !== "created") throw new Error("expected a created session");
-    const logout = logoutThenRotate.logout(secondCreated.credential);
-    const rejectedRotation = logoutThenRotate.rotate(secondCreated.credential);
-    expect(await logout).toEqual({ kind: "logged-out" });
-    expect(await rejectedRotation).toEqual({ kind: "rejected", reason: "not-found" });
-    expect(await logoutThenRotate.resolve(secondCreated.credential)).toBeUndefined();
-
-    const resolveThenRotate = new OpaqueSessions({ randomBytes: random(17, 18) });
-    const thirdCreated = await resolveThenRotate.create({ id: "resolve-rotate" });
-    if (thirdCreated.kind !== "created") throw new Error("expected a created session");
-    const resolvedBeforeRotate = resolveThenRotate.resolve(thirdCreated.credential);
-    const rotatedAfterResolve = resolveThenRotate.rotate(thirdCreated.credential);
-    expect(await resolvedBeforeRotate).toMatchObject({ principal: { id: "resolve-rotate" } });
-    const thirdRotated = await rotatedAfterResolve;
-    expect(thirdRotated).toMatchObject({ kind: "rotated", credential: { kind: "cookie" } });
-    if (thirdRotated.kind !== "rotated") throw new Error("expected a rotated session");
-    expect(await resolveThenRotate.resolve(thirdCreated.credential)).toBeUndefined();
-    expect(await resolveThenRotate.resolve(thirdRotated.credential)).toMatchObject({
-      principal: { id: "resolve-rotate" },
-    });
-
-    const resolveThenLogout = new OpaqueSessions({ randomBytes: random(19) });
-    const fourthCreated = await resolveThenLogout.create({ id: "resolve-logout" });
-    if (fourthCreated.kind !== "created") throw new Error("expected a created session");
-    const resolvedBeforeLogout = resolveThenLogout.resolve(fourthCreated.credential);
-    const logoutAfterResolve = resolveThenLogout.logout(fourthCreated.credential);
-    expect(await resolvedBeforeLogout).toMatchObject({ principal: { id: "resolve-logout" } });
-    expect(await logoutAfterResolve).toEqual({ kind: "logged-out" });
-    expect(await resolveThenLogout.resolve(fourthCreated.credential)).toBeUndefined();
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "logged-out" });
+    await expect(sessions.purgeExpired(create(TimestampSchema, { seconds: 1n }))).rejects.toThrow(
+      "closed",
+    );
+    await sessions.close();
   });
 });
 

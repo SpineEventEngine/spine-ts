@@ -191,6 +191,32 @@ describe("PostgreSQL table foundation", () => {
     expect(table.primaryKey).toEqual(["ID"]);
   });
 
+  it("resolves fixed bytes and schema-scoped ordered lookup indexes", () => {
+    const declaration = {
+      schema: "spine",
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string" as const,
+      declaredColumns: [
+        new RecordColumn("lookup", ColumnTypes.fixedBytes(12), () => new Uint8Array(12)),
+      ],
+      declaredIndexes: [{ name: "expiry", columns: ["lookup", "id"] }],
+    };
+    const first = PostgresTableSpecs.resolvedPostgresTableSpec({
+      tableName: "first",
+      ...declaration,
+    });
+    const second = PostgresTableSpecs.resolvedPostgresTableSpec({
+      tableName: "second",
+      ...declaration,
+    });
+    expect(first.columns.find(({ name }) => name === "lookup")?.postgresType).toBe("BYTEA");
+    expect(first.columns.find(({ name }) => name === "lookup")?.byteLength).toBe(12);
+    expect(typeof first.indexes?.[0]?.name).toBe("string");
+    expect(first.indexes?.[0]?.columns).toEqual(["lookup", "ID"]);
+    expect(first.indexes?.[0]?.name).not.toBe(second.indexes?.[0]?.name);
+  });
+
   it("defaults ungrouped current Entity status columns without changing grouped history columns", () => {
     const columns = [
       new RecordColumn("archived", ColumnTypes.scalar(ScalarType.BOOL), () => false),

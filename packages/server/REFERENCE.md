@@ -208,16 +208,30 @@ contexts share one in-memory factory, including in production. Local and test
 environments default storage in memory and use the core registry only as a
 fallback; those defaults are not production configuration.
 
-`tenantIndex` selects a live application membership directory. When omitted,
-the environment uses its storage factory's native catalog where available, or
-a transient in-memory index for a custom factory without a catalog. The
-transient index lasts only for this environment instance. `contains()` checks
-membership without preparing storage; `keep()` makes a registration visible to
-later reads and may reject for a read-only catalog. PostgreSQL and MySQL
-catalogs expose only configured tenant entries: `keep()` is idempotent for
-those entries and rejects unknown IDs. A dynamic SQL tenant resolver does not
-register or enumerate tenants. Single-tenant contexts do not insert a synthetic
-member into this directory.
+`tenantIndex` is optional and defaults to `SINGLE_TENANT`, a marker that creates
+no directory and never consults a provider catalog. The environment getter
+returns `TenantIndexSetting`, either that marker or an application-supplied
+`TenantIndex`. Narrow against the marker before calling `contains()`, `keep()`,
+`page()`, or `all()`. A multitenant Bounded Context requires a real environment
+index before business storage opens. A single-tenant Bounded Context always returns the
+marker, including inside a multitenant environment. Provider catalogs remain
+separate storage-provider APIs and do not select application membership.
+
+`PersistentTenantIndex.create({ storageFactory, group })` opens a separate,
+storage-backed registration directory without constructing a Bounded Context or
+`ServerEnvironment`. It creates and checks supported storage structures before
+returning. Set `createMissingStructures: false` to skip preparation on creation
+and on later reads or writes. A skipped directory needs structures prepared by
+the application before data access; missing structures cause provider errors.
+Memory storage remains process-local. The injected factory remains usable after the
+index closes. `keep()` registers a complete `TenantId` atomically and retains
+the first registration time; `contains()` reads its primary key. `page()` uses
+finite keyset traversal with an abort signal and a continuation accepted only
+by that index instance. `all()` traverses the complete current directory, so
+its result can be large. Traversal does not promise a snapshot while other
+writers register tenants. Registration does not provision tenant databases or
+authorize users. The current environment default remains unchanged in this
+slice; explicit single-tenant selection is introduced separately.
 
 Multitenant receiving contexts check current index membership before Command,
 Event, query, direct repository/history, and subscription work. Inbox persistence
@@ -607,9 +621,11 @@ Create a context with `BoundedContext.singleTenant(name)` or
 `BoundedContext.multitenant(name)`. Names are immutable. Use
 `ServerEnvironment.when(type).use({ storageFactory: factory })` before explicit
 environment setup to supply record/event storage to all contexts.
-`withTenantIndex(index)` selects a different live membership directory for one
-context; `context.tenantIndex` and `ServerEnvironment.instance().tenantIndex`
-return the configured objects. Closing a context does not close either index.
+`withTenantIndex(index)` selects a different live membership directory for a
+multitenant Bounded Context after its environment has a real index. The Bounded Context getter
+returns its captured selection; single-tenant Bounded Contexts return `SINGLE_TENANT`.
+Both getters have type `TenantIndexSetting` and require narrowing before index
+methods. Closing a Bounded Context does not close the configured directory.
 The application imports its generated `spine-bootstrap.js` before registering
 classes with `add(EntityClass)`; `build()` then selects passive descriptions
 by exact constructor and performs assembly, including

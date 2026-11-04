@@ -14,7 +14,7 @@
 
 import type { TenantId } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage/provider";
-import type { TenantIndex } from "./tenant-index.js";
+import { SINGLE_TENANT, type TenantIndexSetting } from "./tenant-index.js";
 
 /**
  * Identifies a complete tenant absent from a receiving Bounded Context's live index.
@@ -61,7 +61,7 @@ export class TenantUnknownError extends Error {
  */
 export const TenantAdmissions: Readonly<{
   require(
-    index: TenantIndex,
+    index: TenantIndexSetting,
     contextName: string,
     multitenant: boolean,
     tenantId?: TenantId,
@@ -70,7 +70,7 @@ export const TenantAdmissions: Readonly<{
   /**
    * Requires live membership before tenant-specific work.
    *
-   * @param index Receiving Bounded Context's effective index.
+   * @param index Receiving Bounded Context's marker or effective directory.
    * @param contextName Diagnostic context name.
    * @param multitenant Whether a tenant identity applies.
    * @param tenantId Complete supplied tenant identity, when applicable.
@@ -84,6 +84,8 @@ export const TenantAdmissions: Readonly<{
     }
     if (tenantId === undefined)
       throw new Error(`Multitenant storage "${contextName}" requires context.tenantId.`);
+    if (index === SINGLE_TENANT)
+      throw new Error(`Multitenant storage "${contextName}" requires a tenant index.`);
     const boundary = TenantBoundary.from(tenantId);
     if (!(await index.contains(boundary.tenantId)))
       throw new TenantUnknownError(boundary.tenantId, contextName);

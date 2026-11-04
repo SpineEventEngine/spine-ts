@@ -102,7 +102,6 @@ import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/ser
 import {
   EventStore,
   InMemoryStorageFactory,
-  StorageFactory,
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
 import { StoragePreparations, TenantBoundary } from "@spine-event-engine/storage/provider";
@@ -125,7 +124,7 @@ import {
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
-import { TenantIndexes } from "../../src/context/tenant-index.js";
+import { TestTenantIndex, requireTenantDirectory } from "../tenant-index-fixture.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { TransitionValidationError } from "../../src/repository/command-errors.js";
@@ -172,6 +171,8 @@ import { ReviewProjectStateSchema } from "../../test-fixtures/generated/validati
 
 beforeEach(async () => {
   const { ServerEnvironment } = await import("../../src/server/server-environment.js");
+  const { EnvironmentType } = await import("../../src/server/environment.js");
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
   await ServerEnvironment.instance().completeSetup();
 });
 
@@ -188,7 +189,10 @@ async function configureStorage(storageFactory: InMemoryStorageFactory): Promise
     await import("../../src/server/server-environment.js");
   const { EnvironmentType } = await import("../../src/server/environment.js");
   await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    storageFactory,
+    tenantIndex: new TestTenantIndex(),
+  });
   await ServerEnvironment.instance().completeSetup();
 }
 
@@ -197,7 +201,10 @@ async function configureSubscriptionCapacity(capacity: number): Promise<void> {
     await import("../../src/server/server-environment.js");
   const { EnvironmentType } = await import("../../src/server/environment.js");
   await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ subscriptionQueueCapacity: capacity });
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    subscriptionQueueCapacity: capacity,
+    tenantIndex: new TestTenantIndex(),
+  });
   await ServerEnvironment.instance().completeSetup();
 }
 
@@ -2620,7 +2627,7 @@ describe("SpineServices", () => {
         createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
-    await multitenant.tenantIndex.keep(tenantEmail("tenant@example.test"));
+    await requireTenantDirectory(multitenant.tenantIndex).keep(tenantEmail("tenant@example.test"));
     const singleServer = await startServices(singleTenant);
 
     try {
@@ -2662,7 +2669,7 @@ describe("SpineServices", () => {
   });
 
   it("returns structured NotFound for an unknown tenant before command or query work", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const dispatched: string[] = [];
     const context = await BoundedContext.multitenant("Tasks")
       .withTenantIndex(index)
@@ -2698,7 +2705,7 @@ describe("SpineServices", () => {
   });
 
   it("checks live membership for subscription creation, activation, and cancellation", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const contains = index.contains.bind(index);
     let removed = false;
     const lookup = vi
@@ -2729,7 +2736,7 @@ describe("SpineServices", () => {
   });
 
   it("sends structured unknown-tenant details on native subscription transport", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const registry = new InMemorySubscriptionRegistry();
     const createSubscription = vi.spyOn(registry, "create");
     const context = await BoundedContext.multitenant("NativeSubscriptionTenants")
@@ -2792,7 +2799,7 @@ describe("SpineServices", () => {
   it("drains an admitted subscription membership check and rejects fresh checks", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const index = TenantIndexes.fromFactory(factory);
+    const index = new TestTenantIndex();
     await index.keep(tenantValue("tenant-a"));
     const contains = index.contains.bind(index);
     const entered = Promise.withResolvers<undefined>();
@@ -2999,7 +3006,7 @@ describe("SpineServices", () => {
         createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
       )
       .build();
-    await multitenant.tenantIndex.keep(tenantEmail("tenant@example.test"));
+    await requireTenantDirectory(multitenant.tenantIndex).keep(tenantEmail("tenant@example.test"));
     const singleServer = await startServices(singleTenant);
 
     try {
@@ -3149,7 +3156,7 @@ describe("SpineServices", () => {
     } finally {
       await single.close();
     }
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const email = tenantEmail("tenant@example.test");
     const multitenant = await BoundedContext.multitenant("MultiTenantVariants")
       .withTenantIndex(index)
@@ -4918,7 +4925,7 @@ describe("SpineServices", () => {
   });
 
   it("keeps returned subscription mutation from changing activation tenant or topic", async () => {
-    const index = TenantIndexes.fromFactory({} as StorageFactory);
+    const index = new TestTenantIndex();
     const context = await BoundedContext.multitenant("ClonedSubscriptionTenant")
       .withTenantIndex(index)
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
@@ -6598,7 +6605,9 @@ function tenantValue(value: string): TenantId {
 }
 
 async function admitTenants(context: BoundedContext, ...values: string[]): Promise<void> {
-  await Promise.all(values.map((value) => context.tenantIndex.keep(tenantValue(value))));
+  await Promise.all(
+    values.map((value) => requireTenantDirectory(context.tenantIndex).keep(tenantValue(value))),
+  );
 }
 
 function tenantDomain(value: string): TenantId {

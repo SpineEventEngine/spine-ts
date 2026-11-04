@@ -1,7 +1,7 @@
 /* global AbortController, clearTimeout, setTimeout */
 
 import { Time } from "@spine-event-engine/core/time";
-import { BoundedContext } from "@spine-event-engine/server";
+import { BoundedContext, SINGLE_TENANT } from "@spine-event-engine/server";
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyPacker } from "@spine-event-engine/core";
@@ -988,8 +988,11 @@ async function capturingContext(name, contexts, multitenant, tenants = ["tenant-
     })
     .build();
   if (multitenant) {
+    const directory = context.tenantIndex;
+    if (directory === SINGLE_TENANT)
+      throw new Error("Multitenant BlackBox fixture requires a tenant directory.");
     for (const value of tenants)
-      await context.tenantIndex.keep(create(TenantIdSchema, { kind: { case: "value", value } }));
+      await directory.keep(create(TenantIdSchema, { kind: { case: "value", value } }));
   }
   return context;
 }
@@ -1004,9 +1007,10 @@ async function externalCapturingContext(name, contexts) {
       },
     })
     .build();
-  await context.tenantIndex.keep(
-    create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
-  );
+  const directory = context.tenantIndex;
+  if (directory === SINGLE_TENANT)
+    throw new Error("External BlackBox fixture requires a tenant directory.");
+  await directory.keep(create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }));
   return context;
 }
 function query(id) {

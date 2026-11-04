@@ -22,6 +22,33 @@ import { describe, expect, it } from "vitest";
 import { DatastoreRecordStorage } from "../src/datastore/record-storage.js";
 
 describe("DatastoreRecordStorage", () => {
+  it.each([
+    ["two properties", ["initial", "value"]],
+    ["ID before property", ["id", "initial"]],
+    ["three components", ["initial", "value", "id"]],
+  ])("rejects unsupported %s index declarations before provider work", (_name, columns) => {
+    const client = new FlatDatastore();
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [
+        new RecordColumn(
+          "initial",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record) => record.value[0],
+        ),
+        new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+      ],
+      indexes: [{ name: "unsupported", columns }],
+    });
+    expect(
+      () =>
+        new DatastoreRecordStorage({ name: "test", multitenant: false }, spec, client as never, 2),
+    ).toThrow(/requires a property and optional id/);
+    expect(client.queries).toEqual([]);
+  });
+
   it("writes, reads, deletes, and batches flat records", async () => {
     const client = new FlatDatastore();
     const records = storage(client);
@@ -192,6 +219,15 @@ describe("DatastoreRecordStorage", () => {
     ]);
 
     await records.query({
+      ids: ["alpha"],
+      filters: [{ column: "id", value: "alpha" }],
+    });
+    expect(client.lastQuery?.filters).toMatchObject([
+      { name: "__key__", op: "=" },
+      { name: "__key__", op: "=" },
+    ]);
+
+    await records.query({
       sort: [{ field: "id", direction: "asc" }],
       after: { values: [{ field: "id", value: "alpha" }], id: "alpha" },
       limit: 1,
@@ -199,6 +235,45 @@ describe("DatastoreRecordStorage", () => {
     expect(client.lastQuery?.limitValue).toBe(1);
     expect(client.lastQuery?.filters.at(-1)).toMatchObject({ name: "__key__", op: ">" });
   });
+
+  it.each([false, true])(
+    "accepts a full exact provider keyset page with equality=%s",
+    async (filtered) => {
+      const client = new FlatDatastore();
+      const spec = new RecordSpec<string, StringValue>({
+        recordType: StringValueSchema,
+        idKind: "string",
+        extractId: (record) => record.value,
+        columns: [
+          new RecordColumn(
+            "initial",
+            ColumnTypes.scalar(ScalarType.STRING),
+            (record) => record.value[0],
+          ),
+        ],
+        indexes: [{ name: "by_initial", columns: ["initial", "id"] }],
+      });
+      const records = new DatastoreRecordStorage(
+        { name: "test", multitenant: false },
+        spec,
+        client as never,
+        2,
+      );
+      await records.writeAll(["alpha", "apple", "apricot"].map(message));
+      const query = {
+        ...(filtered ? { filters: [{ column: "initial", value: "a" }] } : {}),
+        sort: [{ field: "id", direction: "asc" as const }],
+        limit: 3,
+      };
+      await expect(records.queryEntries(query)).resolves.toHaveLength(3);
+      expect(client.lastQuery?.limitValue).toBe(3);
+      await records.queryEntries({
+        ...query,
+        after: { values: [{ field: "id", value: "alpha" }], id: "alpha" },
+      });
+      expect(client.lastQuery?.filters.at(-1)).toMatchObject({ name: "__key__", op: ">" });
+    },
+  );
 
   it("applies offset, limits, and continued windows after local reconciliation", async () => {
     const records = storage(new FlatDatastore());

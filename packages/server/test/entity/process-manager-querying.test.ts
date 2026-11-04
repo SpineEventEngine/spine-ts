@@ -59,6 +59,7 @@ import {
   SingleProcessServerRuntime,
 } from "../../src/index.js";
 import { processManagerQueryAccess } from "../../src/entity/entity.js";
+import { TestTenantIndex } from "../tenant-index-fixture.js";
 import {
   registerSpineMetadata,
   spineMetadataTestAccess,
@@ -158,9 +159,11 @@ afterEach(async () => {
 
 beforeEach(async () => {
   const { ServerEnvironment } = await import("../../src/server/server-environment.js");
+  const { EnvironmentType } = await import("../../src/server/environment.js");
+  const index = new TestTenantIndex();
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: index });
   const environment = ServerEnvironment.instance();
   await environment.completeSetup();
-  const index = environment.tenantIndex;
   for (const value of ["tenant-a", "tenant-b", "SINGLE_TENANT"]) {
     await index.keep(create(TenantIdSchema, { kind: { case: "value", value } }));
   }

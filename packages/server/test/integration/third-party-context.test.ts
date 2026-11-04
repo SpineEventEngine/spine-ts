@@ -39,6 +39,7 @@ import {
   HandlerRegistryIngestor,
   Projection,
   ServerEnvironment,
+  SINGLE_TENANT,
 } from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import { registerSpineMetadata } from "@spine-event-engine/server/spi/handler-registry";
@@ -47,6 +48,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ThirdPartyContext as DirectSourceThirdPartyContext } from "../../src/integration/third-party-context.js";
 import { BoundedContext as DirectSourceBoundedContext } from "../../src/context/bounded-context.js";
 import { ServerEnvironment as DirectSourceServerEnvironment } from "../../src/server/server-environment.js";
+import { TestTenantIndex, requireTenantDirectory } from "../tenant-index-fixture.js";
 import { resetServerEnvironmentForTest as resetDirectSourceServerEnvironment } from "../../src/testing/index.js";
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 import { expectWave13ContractToCompile } from "./wave13-compile-contract.js";
@@ -189,6 +191,7 @@ describe("Wave 13 ThirdPartyContext", () => {
     await resetDirectSourceServerEnvironment();
     DirectSourceServerEnvironment.when(EnvironmentType.Local).use({
       typeRegistry: new TypeRegistry([ReviewTaskAssignedSchema]),
+      tenantIndex: new TestTenantIndex(),
     });
     await DirectSourceServerEnvironment.instance().completeSetup();
     const received: Event[] = [];
@@ -211,7 +214,7 @@ describe("Wave 13 ThirdPartyContext", () => {
       actor: user,
       tenantId,
     });
-    await receiver.tenantIndex.keep(tenantId);
+    await requireTenantDirectory(receiver.tenantIndex).keep(tenantId);
     const actorWithoutTenant = create(ActorContextSchema, { actor: user });
     const missingTenantEvent = create(EventSchema, {
       id: create(EventIdSchema, { value: "missing-tenant" }),
@@ -299,6 +302,7 @@ describe("Wave 13 ThirdPartyContext", () => {
     ServerEnvironment.when(EnvironmentType.Local).use({
       integrationChannelFactory: factory,
       typeRegistry: new TypeRegistry([ReviewTaskAssignedSchema]),
+      tenantIndex: new TestTenantIndex(),
     });
     await ServerEnvironment.instance().completeSetup();
     const stateRegistry = generatedStateRegistryRoot();
@@ -386,7 +390,9 @@ describe("Wave 13 ThirdPartyContext", () => {
           },
         })
         .build();
-      await multiReceiver.tenantIndex.keep(multiTenantId);
+      const receivingIndex = multiReceiver.tenantIndex;
+      if (receivingIndex === SINGLE_TENANT) throw new Error("Expected multitenant directory.");
+      await receivingIndex.keep(multiTenantId);
       await multi.emittedEvent(imported, multiActor);
       expect(received).toHaveLength(3);
       expect(received.every((event) => event.context?.external === true)).toBe(true);

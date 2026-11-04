@@ -42,6 +42,11 @@ export type EntityStoragePreparationInput<I, S extends Message> = Omit<
  */
 export interface StoragePreparation {
   /**
+   * Attests that record preparation verifies declared physical indexes.
+   */
+  readonly supportsRecordIndexes?: boolean;
+
+  /**
    * Prepares one ordinary record family.
    *
    * @typeParam I Record identifier type.
@@ -134,7 +139,33 @@ export const StoragePreparations: StoragePreparationAccess = Object.freeze({
    * @param preparation Its preparation implementation.
    */
   register(factory: StorageFactory, preparation: StoragePreparation): void {
-    preparations.set(factory, preparation);
+    const supportsRecordIndexes = preparation.supportsRecordIndexes === true;
+    preparations.set(
+      factory,
+      Object.freeze({
+        supportsRecordIndexes,
+
+        /**
+         * Rejects indexed record requirements without provider attestation.
+         *
+         * @typeParam I Record identifier type.
+         * @typeParam R Stored Protobuf record type.
+         */
+        prepareRecord<I, R extends Message>(
+          context: StorageContext,
+          spec: RecordSpec<I, R>,
+          group: StorageGroup | undefined,
+          mode: StoragePreparationMode,
+        ): Promise<void> {
+          if (spec.indexes.length > 0 && !supportsRecordIndexes)
+            return Promise.reject(new Error("Storage provider does not support record indexes."));
+          return preparation.prepareRecord(context, spec, group, mode);
+        },
+        prepareEntity: preparation.prepareEntity.bind(preparation),
+        prepareAgentHistory: preparation.prepareAgentHistory.bind(preparation),
+        prepareAgentCommit: preparation.prepareAgentCommit.bind(preparation),
+      }),
+    );
   },
 
   /**

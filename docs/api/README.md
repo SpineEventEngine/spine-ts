@@ -273,13 +273,13 @@ the context repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
-built-in system-pairing metadata and use the live `TenantIndex` selected by
-`ServerEnvironment`, or the builder's `withTenantIndex()` override. Both
-`environment.tenantIndex` and `context.tenantIndex` return that exact object.
-Single-tenant contexts do not register a synthetic directory member. A default
-provider catalog exposes explicit memory registrations, configured SQL tenants,
-or Datastore native namespaces; a custom factory without a catalog gets a
-transient in-memory index. No generic `TenantId` record is persisted. The full
+built-in system-pairing metadata. An omitted `tenantIndex` setting selects
+`SINGLE_TENANT` without constructing a directory or consulting a provider catalog.
+Multitenant Bounded Contexts require an application-supplied environment index and may
+select another through `withTenantIndex()`. Both public getters return
+`TenantIndexSetting`; callers narrow against the marker before directory methods.
+A single-tenant Bounded Context returns the marker even inside an indexed environment.
+Provider catalogs remain separate provider APIs. The full
 system-context runtime,
 command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
 broader JVM production runtime remain outside this public surface.
@@ -1106,13 +1106,18 @@ validator, service, transport, or handler invocation.
 
 Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 `StorageGroup`,
-`RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
-`RecordContinuation`, `RecordContinuationValue`, `RecordFilter`,
+`RecordStorage`, `RecordStorageOptions`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
+`RecordContinuation`, `RecordContinuationValue`, `RecordFilter`, `RecordIndex`,
 `RecordOrder`, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, `InMemoryRecordStorage`, `EventStore`,
 `OnEventAccepted`, `EntityStateHistoryStorage`, and `EntityEventStorage`.
 `StorageFactory` defines one mandatory adapter seam,
-`createRecordStorage(context, spec, group?)`.
+`createRecordStorage(context, spec, group?, options?)`. A handle prepares its
+record family on access by default. Pass `{ prepareOnAccess: false }` in
+`RecordStorageOptions` when the application prepares that family explicitly;
+the choice stays with that handle, and missing structures cause ordinary data
+operation failures. Custom factories reject the option until they implement
+the protected `onCreateUnprepared` hook.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, stable continuations after sorted row keys,
 non-negative offsets, positive limits, and complete cloned

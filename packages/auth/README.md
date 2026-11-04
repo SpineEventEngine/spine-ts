@@ -24,15 +24,25 @@ is native-only and treats auth as an optional peer.
 
 ## First success: create and resolve a local session
 
-`OpaqueSessions` is a bounded, process-local store for local development or a
-single process. This creates a credential, resolves it, and closes the store.
+Omitting a store selects process-local memory for development. Configure a seal
+secret and explicit session policy before issuing credentials. A
+`PersistentOpaqueSessionStore` can instead share the same atomic sessions across
+processes; its asynchronous factory prepares selected structures by default.
 
 ```ts
 import { OpaqueSessions } from "@spine-event-engine/auth";
+import { Time } from "@spine-event-engine/core/time";
 
-const sessions = new OpaqueSessions({ ttlMilliseconds: 60 * 60 * 1_000, maxSessions: 100 });
+const password = process.env.SESSION_SEAL_PASSWORD;
+if (!password) throw new Error("Configure SESSION_SEAL_PASSWORD");
+const sessions = await OpaqueSessions.create({
+  scope: "local-browser",
+  password,
+  clock: { now: Time.currentTimeMillis },
+  ttlMilliseconds: 60 * 60 * 1_000,
+});
 try {
-  const created = await sessions.create({ id: "local-user" });
+  const created = await sessions.issue({ id: "local-user" });
   if (created.kind !== "created") throw new Error(`Session creation failed: ${created.reason}`);
   const resolved = await sessions.resolve(created.credential);
   if (resolved === undefined) throw new Error("New local session was not resolvable");
@@ -41,6 +51,54 @@ try {
   await sessions.close();
 }
 ```
+
+## Share opaque sessions through PostgreSQL
+
+Install `@spine-event-engine/storage-postgres` alongside the auth package. Give
+the session family a dedicated storage group. The database and schema must
+already exist.
+
+```ts
+import { OpaqueSessions, PersistentOpaqueSessionStore } from "@spine-event-engine/auth";
+import { Time } from "@spine-event-engine/core/time";
+import { StorageGroup } from "@spine-event-engine/storage";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+
+const url = process.env.DATABASE_URL;
+const password = process.env.SESSION_SEAL_PASSWORD;
+if (!url || !password) throw new Error("Configure database and session credentials");
+const factory = await PostgresStorageFactory.newBuilder().setOptions({ url }).build();
+let store: PersistentOpaqueSessionStore | undefined;
+try {
+  store = await PersistentOpaqueSessionStore.create({
+    storageFactory: factory,
+    group: new StorageGroup("auth_sessions"),
+  });
+  const sessions = await OpaqueSessions.create({
+    store,
+    scope: "orders-browser",
+    password,
+    clock: { now: Time.currentTimeMillis },
+    ttlMilliseconds: 60 * 60 * 1_000,
+  });
+  try {
+    const issued = await sessions.issue({ id: "user-42" });
+    if (issued.kind !== "created") throw new Error(`Session issue failed: ${issued.reason}`);
+    // Send issued.credential through the application's credential transport.
+  } finally {
+    await sessions.close();
+  }
+} finally {
+  try {
+    await store?.close();
+  } finally {
+    await factory.close();
+  }
+}
+```
+
+The strategy leaves an injected store open; close the strategy, store, and
+factory in that order. Use the same group and seal policy in each process.
 
 For a real gateway, construct `UnaryGateway` with exactly one admission mode:
 `sessions`, or deliberate `publicAccess: true`. It requires a finite request
@@ -96,8 +154,9 @@ durable authenticated bindings when applicable.
 
 ## Limits and next steps
 
-`OpaqueSessions` is not shared or durable. Signed-session revocation and OIDC
-identity provisioning are application responsibilities. A gateway protects
+Memory-selected `OpaqueSessions` is process-local; select durable shared storage
+for sessions that must survive process restart. Signed-session revocation and
+OIDC identity provisioning are application responsibilities. A gateway protects
 only traffic that operators route through it; do not expose a backend route
 around that boundary.
 

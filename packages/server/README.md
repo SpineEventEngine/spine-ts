@@ -232,12 +232,22 @@ override. Single-tenant execution uses `SINGLE_TENANT`, even when the request
 omits a tenant field. A named tenant cannot query a single-tenant context: that
 fails before reading. See the [query contract](REFERENCE.md#handler-routing-and-operations)
 for the complete tenant rules and empty-result behavior.
-For a multitenant receiving context, explicitly register each accepted tenant
-through `context.tenantIndex.keep(tenantId)` or the configured directory.
-Provider-backed indexes may only confirm existing membership: fixed SQL catalogs
-cannot add tenants, and the Datastore index requires native namespace metadata.
-Use an application-managed `TenantIndex` to register tenants before provider
-data exists or to add tenants dynamically.
+For a multitenant receiving Bounded Context, supply an application tenant directory and
+register each accepted tenant through its `keep(tenantId)` method before sending
+tenant-scoped work. The optional environment setting defaults to `SINGLE_TENANT`;
+that mode creates no directory or provider catalog. A multitenant Bounded Context
+requires an environment directory, and `withTenantIndex()` can select another one.
+Both public `tenantIndex` getters return `TenantIndexSetting`, so narrow against
+`SINGLE_TENANT` before calling directory methods. A single-tenant Bounded Context always
+returns the marker, even when its environment has a directory for other Bounded Contexts.
+Provider catalogs remain available as storage-provider APIs, but environment
+assembly does not infer membership from them.
+`PersistentTenantIndex.create({ storageFactory, group })` stores registrations
+through the selected factory. Remote providers can retain them across process
+restarts; memory storage remains process-local. Its async factory prepares supported structures by
+default; set `createMissingStructures: false` when the application prepares
+the selected record family separately before data access. Close the index after its admitted work
+finishes; it leaves the supplied storage factory open.
 Unknown tenants fail before reads or handlers run; input never registers them.
 
 Use `EntityQuery.all(...)` when every predicate must match and

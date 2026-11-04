@@ -473,6 +473,18 @@
     {
       "localPath": "packages/proto/proto/spine/ts/agent/model.proto",
       "sha256": "d69d290932e43d6932d70041b996cca1efd897e0e418c58462727de9c3ba97f7"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/server/tenant/tenant.proto",
+      "sha256": "f6d2785fd6dbeed03d40fcef4aec294e82df3557bac3d7e63c75d6344847462a"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/auth/opaque_session.proto",
+      "sha256": "04aa832423e9595cdaa73e0689276803ff749e56d4a8d963f30729fa8780dfe6"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/auth/authenticated_principal.proto",
+      "sha256": "09a4c8d755293fd522e1ff4c8305d49ef6bdb681e0de6a4e1bf311db1c9412db"
     }
   ]
 }

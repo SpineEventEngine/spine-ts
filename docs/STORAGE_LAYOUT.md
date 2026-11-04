@@ -4144,11 +4144,13 @@ first valid input can trigger lazy preparation instead.
 
 ```ts
 import type { TenantId } from "@spine-event-engine/proto";
-import { ServerEnvironment } from "@spine-event-engine/server";
+import { SINGLE_TENANT, ServerEnvironment } from "@spine-event-engine/server";
 
 declare const initech: TenantId;
 const environment = ServerEnvironment.instance();
-await environment.tenantIndex.keep(initech);
+const index = environment.tenantIndex;
+if (index === SINGLE_TENANT) throw new Error("Configure a multitenant TenantIndex first");
+await index.keep(initech);
 await environment.createStorageStructures(initech);
 await environment.checkStructureCompatibility(initech);
 ```

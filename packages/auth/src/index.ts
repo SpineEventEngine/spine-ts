@@ -682,6 +682,10 @@ const TransportFactsValues = Object.freeze({
 export { UnaryGateway } from "./gateway/index.js";
 export { OpaqueSessionCookies } from "./sessions/cookies.js";
 export { OpaqueSessions } from "./sessions/opaque.js";
+export { MemoryOpaqueSessionStore } from "./sessions/opaque-session-store.js";
+export type { OpaqueSessionStore } from "./sessions/opaque-session-store.js";
+export { PersistentOpaqueSessionStore } from "./sessions/persistent-opaque-session-store.js";
+export type { PersistentOpaqueStoreOptions } from "./sessions/persistent-opaque-session-store.js";
 export { SignedSessions } from "./sessions/signed.js";
 export { OidcFlow } from "./oidc/index.js";
 export {

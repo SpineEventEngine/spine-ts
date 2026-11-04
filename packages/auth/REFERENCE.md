@@ -83,7 +83,34 @@ receiving boundary. Credentials and provider tokens are not forwarding fields.
 
 ## Sessions and sign-in
 
-`OpaqueSessions` implements a bounded, process-local `SessionResolver` with random cookie credentials. Defaults are an eight-hour lifetime, 10,000 retained sessions, and three identifier attempts. It lazily removes expired entries and is terminal after `close()`. It suits local development and the supported single-Gateway shape; choose an application session strategy that meets that gateway's restart and revocation requirements.
+`OpaqueSessions.create` requires an application scope, iron-session password
+configuration, trusted clock, and positive lifetime. `issue` seals a random
+stable reference and generation before atomic absent insertion. `resolve`
+checks the current stored generation and exact deadline without renewal.
+The authenticated application deadline is authoritative: any grace period in
+iron-session's seal validation cannot extend it. Rotation seals before
+compare-and-set. An old unexpired seal can revoke the current generation, but
+an expired seal cannot resolve or revoke.
+
+Omitting the store selects process-local memory. `PersistentOpaqueSessionStore.create`
+accepts a common storage factory and group; it prepares the indexed session
+family before returning by default. `createMissingStructures: false` opens a
+non-preparing handle for already prepared structures. The strategy leaves an
+injected store open, so the application closes the strategy, store, and factory
+separately. Explicit `purgeExpired(cutoff, signal)` traverses finite indexed
+pages with conditional removal in the persistent store; process-local memory
+scans its own records. If a row changes during conditional removal, the pass
+finishes that expiry group and returns its removed count. The changed row and
+other eligible rows in later groups can remain for another explicit purge.
+Storage errors and cancellation reject, possibly after partial removal. No
+timer calls maintenance automatically.
+
+For cancellation after a confirmed insertion or replacement, the strategy
+attempts conditional compensation and returns no credential. A storage error
+that does not confirm whether a commit occurred cannot safely authorize removal:
+another session may already occupy the same stable reference. The operation
+fails without returning a credential, but a committed row may require later
+explicit maintenance. This is a best-effort cleanup guarantee.
 
 `SignedSessions` provides signed application session tokens. Local signature validation can delay revocation; shared revocation requires an explicit `SignedTokenRevocation` implementation. `OpaqueSessionCookies` supplies strict cookie parsing and serialization helpers. Neither strategy provisions users nor grants permissions.
 

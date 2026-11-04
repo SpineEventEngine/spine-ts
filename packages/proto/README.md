@@ -27,6 +27,18 @@ const commandId = create(CommandIdSchema, { uuid: "command-42" });
 console.log(commandId.uuid);
 ```
 
+The root also exports `Tenant`, `TenantSchema`, and `tenantFile` for the
+application tenant-registration record. `Tenant.id` carries the complete
+`TenantId`; `Tenant.whenCreated` records the first successful registration.
+The server's `PersistentTenantIndex` persists this record through the selected
+storage factory. Memory storage keeps registrations only in that process.
+
+The `@spine-event-engine/proto/auth` facet exports `AuthenticatedPrincipal`
+with optional `PrincipalAttributes`, plus `OpaqueSessionRecord`. Presence of an
+empty attributes message differs from absent attributes. The session record
+retains a stable reference, credential generation, complete principal and exact
+Protobuf Timestamp deadline for the auth store.
+
 ## TypeScript interface options
 
 Use `(every_is).ts_type = "TaskEvent"` with `(every_is).generate = true` to

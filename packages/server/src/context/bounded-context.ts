@@ -59,7 +59,7 @@ import { type DeliveryEndpoint, DeliveryReadiness } from "./local-inbox-handoff.
 import { LocalEntityInbox } from "./entity-inbox.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
 import { TenantAdmissions } from "./tenant-unknown-error.js";
-import type { TenantIndex } from "./tenant-index.js";
+import { SINGLE_TENANT, type TenantIndex, type TenantIndexSetting } from "./tenant-index.js";
 import {
   AgentExecutionCapacity,
   type AgentCapacityReservation,
@@ -551,7 +551,7 @@ const eventSubscribers = new WeakMap<
   (typeUrl: string, subscriber: EventSubscriber) => EventSubscription
 >();
 const contextSystemPairings = new WeakMap<BoundedContext, SystemPairingSnapshot>();
-const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
+const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndexSetting>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
 const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
@@ -750,12 +750,12 @@ interface BoundedContextAccess {
   systemPairing(context: BoundedContext): SystemPairingSnapshot;
 
   /**
-   * Returns the context tenant index.
+   * Returns the captured marker or directory for a built Bounded Context.
    *
-   * @param context Context whose index is read.
-   * @returns Tenant index for the built context.
+   * @param context Bounded Context whose tenant setting is read.
+   * @returns SINGLE_TENANT in single mode or the captured directory in multitenant mode.
    */
-  tenantIndex(context: BoundedContext): TenantIndex;
+  tenantIndex(context: BoundedContext): TenantIndexSetting;
 
   /**
    * Returns the storage factory configured for a built context.
@@ -828,9 +828,9 @@ interface BoundedContextAssembly {
   readonly snapshot: BoundedContextSnapshot;
 
   /**
-   * Effective live tenant membership index.
+   * Captured marker for single mode or directory for multitenant admission.
    */
-  readonly tenantIndex: TenantIndex;
+  readonly tenantIndex: TenantIndexSetting;
 
   /**
    * Command dispatch for this context.
@@ -910,9 +910,9 @@ interface ContextDeliveryParts {
   readonly deliveryReadiness: DeliveryReadiness;
 
   /**
-   * Effective tenant index for delivery scopes.
+   * Captured tenant setting for delivery admission.
    */
-  readonly tenantIndex: TenantIndex;
+  readonly tenantIndex: TenantIndexSetting;
 
   /**
    * Inbox for Entity messages.
@@ -1284,10 +1284,13 @@ export class BoundedContext {
   async #prepareCurrentTenants(mode: StoragePreparationMode): Promise<void> {
     if (!this.isMultitenant)
       return this.#requiredPrepare(() => this.#prepareTenant(undefined, mode));
+    const index = this.tenantIndex;
+    if (index === SINGLE_TENANT)
+      throw new Error("Multitenant preparation requires a tenant index.");
     let after: import("./tenant-index.js").TenantIndexCursor | undefined;
     do {
       serverEnvironmentAccess.requireAvailable(this.#environment);
-      const page = await this.tenantIndex.page({
+      const page = await index.page({
         count: 64,
         signal: this.#preparationController.signal,
         ...(after === undefined ? {} : { after }),
@@ -1295,7 +1298,7 @@ export class BoundedContext {
       serverEnvironmentAccess.requireAvailable(this.#environment);
       for (const id of page.ids) {
         serverEnvironmentAccess.requireAvailable(this.#environment);
-        await TenantAdmissions.require(this.tenantIndex, this.name.value, true, id);
+        await TenantAdmissions.require(index, this.name.value, true, id);
         serverEnvironmentAccess.requireAvailable(this.#environment);
         await this.#requiredPrepare(() => this.#prepareTenant(id, mode));
       }
@@ -1389,10 +1392,10 @@ export class BoundedContext {
   /**
    * Creates tenant-aware Inboxes and their shared readiness signal.
    *
-   * @param tenantIndex Effective membership index for this context.
-   * @returns Inboxes, tenant index, and readiness signal.
+   * @param tenantIndex Captured marker or directory for this Bounded Context.
+   * @returns Inboxes, tenant setting, and readiness signal.
    */
-  #createDelivery(tenantIndex: TenantIndex): ContextDeliveryParts {
+  #createDelivery(tenantIndex: TenantIndexSetting): ContextDeliveryParts {
     const deliveryReadiness = this.#createReadiness();
     const onAdmit = (tenantId?: TenantId) => this.#admitTenant(tenantId);
     const entityInbox = new LocalEntityInbox(
@@ -1670,11 +1673,12 @@ export class BoundedContext {
   }
 
   /**
-   * Returns the live index configured for this Bounded Context.
+   * Returns the captured tenant setting for this Bounded Context.
    *
-   * @returns The effective configured index.
+   * @returns SINGLE_TENANT in single mode, even when the environment has an index;
+   * otherwise the effective directory. Narrow before calling index methods.
    */
-  get tenantIndex(): TenantIndex {
+  get tenantIndex(): TenantIndexSetting {
     return ContextParts.requireTenantIndex(this);
   }
 
@@ -2234,9 +2238,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   },
 
   /**
-   * Returns the live tenant membership index configured for this context.
+   * Returns the captured marker or directory for this Bounded Context.
    */
-  tenantIndex(context: BoundedContext): TenantIndex {
+  tenantIndex(context: BoundedContext): TenantIndexSetting {
     return ContextParts.requireTenantIndex(context);
   },
 
@@ -2648,7 +2652,8 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets a live tenant index for this Bounded Context.
+   * Sets a live directory for this multitenant Bounded Context.
+   * A real environment directory is still required at build time.
    *
    * @param tenantIndex Application membership index.
    * @returns This builder.
@@ -2741,6 +2746,7 @@ export class BoundedContextBuilder {
     options: BoundedContextBuildOptions,
     environment: ServerEnvironment,
   ): Promise<BoundedContext> {
+    const tenantIndex = this.#selectTenantIndex(environment);
     const generated = this.#loadGeneratedArtifacts([...this.#entityTypes]);
     serverEnvironmentAccess.requireAvailable(environment);
     const repositories = [...this.#repositories, ...generated.repositories];
@@ -2750,6 +2756,7 @@ export class BoundedContextBuilder {
       environment.storageFactory,
       generated.standalone,
       this.#aiRegistry ?? environment.ai,
+      tenantIndex,
     );
     try {
       await this.#integrateBuiltContext(context, options, environment);
@@ -2757,6 +2764,20 @@ export class BoundedContextBuilder {
       return this.#closeFailedBuild(context, environment, error);
     }
     return context;
+  }
+
+  /**
+   * Captures tenant selection before acquiring business storage.
+   *
+   * @param environment Process facilities selected for this build.
+   * @returns Marker for single mode or the effective directory for multi mode.
+   */
+  #selectTenantIndex(environment: ServerEnvironment): TenantIndexSetting {
+    if (!this.#specSnapshot.multitenant) return SINGLE_TENANT;
+    const configured = environment.tenantIndex;
+    if (configured === SINGLE_TENANT)
+      throw new Error("Multitenant Bounded Context requires an environment tenant index.");
+    return this.#tenantIndex ?? configured;
   }
 
   /**
@@ -2815,6 +2836,7 @@ export class BoundedContextBuilder {
    * @param storageFactory Storage factory for the context.
    * @param standalone Generated standalone handler groups.
    * @param ai Optional AI registry.
+   * @param tenantIndex Captured marker or directory for admission.
    * @returns The assembled context.
    */
   async #buildWithResources(
@@ -2822,6 +2844,7 @@ export class BoundedContextBuilder {
     storageFactory: StorageFactory,
     standalone: readonly GeneratedStandaloneHandlerGroup[],
     ai: AiRegistry | undefined,
+    tenantIndex: TenantIndexSetting,
   ): Promise<BoundedContext> {
     const resources: ContextBuildResources =
       this.#subscriptionRegistry === undefined ? {} : { registry: this.#subscriptionRegistry };
@@ -2834,6 +2857,7 @@ export class BoundedContextBuilder {
         standalone,
         resources,
         ai,
+        tenantIndex,
       );
     } catch (error) {
       return await this.#failBuild(resources, error);
@@ -2843,13 +2867,22 @@ export class BoundedContextBuilder {
   /**
    * Assembles dispatchers, buses, Stand, subscription runtime, and integration hooks, registering
    * the completed context with its environment.
+   *
+   * @param repositories Registered repository views.
+   * @param storageFactory Provider for business records.
+   * @param standalone Generated standalone handlers.
+   * @param resources Partial resources to close if assembly fails.
+   * @param ai Selected AI registry, when configured.
+   * @param tenantIndex Captured marker or directory.
+   * @returns Assembled Bounded Context.
    */
   #assembleContext(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
     standalone: readonly GeneratedStandaloneHandlerGroup[],
     resources: ContextBuildResources,
-    ai?: AiRegistry,
+    ai: AiRegistry | undefined,
+    tenantIndex: TenantIndexSetting,
   ): BoundedContext {
     ContextParts.preflightRepositories(repositories);
     this.#preflightAgents(repositories, storageFactory, ai);
@@ -2862,12 +2895,37 @@ export class BoundedContextBuilder {
       ...ContextParts.repositoryProducedEventSchemas(repositories),
       ...ContextParts.standaloneProducedEventSchemas(standalone),
     ]);
-    const running = this.#buildRuntime(storageFactory, buses, resources);
-    const context = this.#createContext(repositories, storageFactory, buses, running, ai);
+    const running = this.#buildRuntime(storageFactory, buses, resources, tenantIndex);
+    const context = this.#createContext(
+      repositories,
+      storageFactory,
+      buses,
+      running,
+      tenantIndex,
+      ai,
+    );
     resources.context = context;
     if (registerBoundedContext === undefined)
       throw new Error("Context registration is unavailable.");
     registerBoundedContext(context, repositories);
+    this.#attachIntegration(context, buses, dispatchers, standaloneEvent);
+    return context;
+  }
+
+  /**
+   * Registers external Event routes after Bounded Context construction.
+   *
+   * @param context Completed Bounded Context.
+   * @param buses Signal buses and System metadata.
+   * @param dispatchers Repository dispatchers.
+   * @param standaloneEvent Generated standalone Event dispatcher, when present.
+   */
+  #attachIntegration(
+    context: BoundedContext,
+    buses: ContextBuildBuses,
+    dispatchers: ContextBuildDispatchers,
+    standaloneEvent: EventDispatcher | undefined,
+  ): void {
     ContextParts.attachIntegration(
       context,
       buses.eventBus,
@@ -2877,7 +2935,6 @@ export class BoundedContextBuilder {
         ...(standaloneEvent === undefined ? [] : [standaloneEvent]),
       ]),
     );
-    return context;
   }
 
   /**
@@ -3027,13 +3084,20 @@ export class BoundedContextBuilder {
 
   /**
    * Creates the context Stand, subscription registry, and runtime that observes domain and System events.
+   *
+   * @param storageFactory Provider for business records.
+   * @param buses Assembled signal buses.
+   * @param resources Partial resources to close if assembly fails.
+   * @param tenantIndex Captured marker or directory.
+   * @returns Assembled Stand and subscription runtime.
    */
   #buildRuntime(
     storageFactory: StorageFactory,
     buses: ContextBuildBuses,
     resources: ContextBuildResources,
+    tenantIndex: TenantIndexSetting,
   ): ContextBuildRuntime {
-    const stand = this.#buildStand(storageFactory);
+    const stand = this.#buildStand(storageFactory, tenantIndex);
     resources.stand = stand;
     const registry =
       resources.registry ??
@@ -3055,13 +3119,13 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Builds the context Stand with a captured live membership directory.
+   * Builds the Bounded Context Stand with captured tenant admission.
    *
    * @param storageFactory Provider used for Entity records.
+   * @param tenantIndex Captured marker or directory.
    * @returns Direct read-side Stand.
    */
-  #buildStand(storageFactory: StorageFactory): Stand {
-    const tenantIndex = this.#tenantIndex ?? ServerEnvironment.instance().tenantIndex;
+  #buildStand(storageFactory: StorageFactory, tenantIndex: TenantIndexSetting): Stand {
     const stand = new Stand({
       context: ContextParts.createStorageMode(this.#specSnapshot),
       storageFactory,
@@ -3080,13 +3144,22 @@ export class BoundedContextBuilder {
 
   /**
    * Constructs the immutable BoundedContext using assembled buses, runtime parts, environment
-   * delivery strategy, and tenant index.
+   * delivery strategy, and tenant setting.
+   *
+   * @param repositories Registered repository views.
+   * @param storageFactory Provider for business records.
+   * @param buses Assembled signal buses.
+   * @param running Prepared Stand and subscription runtime.
+   * @param tenantIndex Captured marker or directory.
+   * @param ai Selected AI registry, when configured.
+   * @returns Immutable Bounded Context.
    */
   #createContext(
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
     buses: ContextBuildBuses,
     running: ContextBuildRuntime,
+    tenantIndex: TenantIndexSetting,
     ai?: AiRegistry,
   ): BoundedContext {
     return ContextParts.createBoundedContext(
@@ -3097,7 +3170,7 @@ export class BoundedContextBuilder {
       buses,
       running,
       ai,
-      this.#tenantIndex ?? ServerEnvironment.instance().tenantIndex,
+      tenantIndex,
     );
   }
 
@@ -3505,7 +3578,7 @@ const ContextParts = Object.freeze({
    * @param buses Prepared domain and System buses.
    * @param running Prepared Stand and subscription runtime.
    * @param ai Effective AI registry when Agent repositories are present.
-   * @param tenantIndex Effective live membership index.
+   * @param tenantIndex Captured marker or directory.
    * @returns Constructed bounded context.
    */
   createBoundedContext(
@@ -3515,8 +3588,8 @@ const ContextParts = Object.freeze({
     deliveryStrategy: DeliveryStrategy,
     buses: ContextBuildBuses,
     running: ContextBuildRuntime,
-    ai?: AiRegistry,
-    tenantIndex?: TenantIndex,
+    ai: AiRegistry | undefined,
+    tenantIndex: TenantIndexSetting,
   ): BoundedContext {
     const context = constructBoundedContext({
       snapshot: ContextParts.snapshotFor(specSnapshot),
@@ -3529,7 +3602,7 @@ const ContextParts = Object.freeze({
       subscriptionRuntime: running.runtime,
       systemSpec: buses.systemSpec,
       storageFactory,
-      tenantIndex: tenantIndex ?? ServerEnvironment.instance().tenantIndex,
+      tenantIndex,
       repositories,
       deliveryStrategy,
       ...(ai === undefined ? {} : { ai }),
@@ -3905,12 +3978,12 @@ const ContextParts = Object.freeze({
   },
 
   /**
-   * Reads the tenant index recorded for a built context.
+   * Reads the marker or directory recorded for a built Bounded Context.
    *
-   * @param context Context to inspect.
-   * @returns Tenant index; throws if unavailable.
+   * @param context Bounded Context to inspect.
+   * @returns Captured marker or directory; throws if unavailable.
    */
-  requireTenantIndex(context: BoundedContext): TenantIndex {
+  requireTenantIndex(context: BoundedContext): TenantIndexSetting {
     const tenantIndex = contextTenantIndexes.get(context);
 
     if (tenantIndex === undefined) {

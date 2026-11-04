@@ -18,6 +18,7 @@ import { EventSchema } from "@spine-event-engine/proto";
 import { defaultStringifierRegistry, StringifierRegistry } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
+  EventStoreGroups,
   eventHistorySpec,
   stateHistorySpec,
   type EntityStorageInput,
@@ -47,6 +48,7 @@ export function mysqlRecordTableName<I, R extends Message>(
     group?.name,
     undefined,
     spec.recordType.typeName,
+    group === undefined ? undefined : EventStoreGroups.identity(group),
   ).tableName;
 }
 

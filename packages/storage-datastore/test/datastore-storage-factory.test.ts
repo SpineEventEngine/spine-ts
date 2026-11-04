@@ -47,6 +47,48 @@ import {
 import { DatastoreQueryLimitError, DatastoreStorageFactory } from "../src/index.js";
 
 describe("DatastoreStorageFactory", () => {
+  it("opens a skipped native handle without metadata checks and preserves explicit checks", async () => {
+    const client = new MetadataClient();
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient(client as never)
+      .build();
+    const context = { name: "test", multitenant: false } as const;
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const skipped = factory.createRecordStorage(context, spec, undefined, {
+      prepareOnAccess: false,
+    });
+    expect(client.queries).toHaveLength(0);
+    await StoragePreparations.for(factory).prepareRecord(context, spec, undefined, "check");
+    expect(client.queries).toHaveLength(1);
+    skipped.close();
+    await factory.close();
+  });
+
+  it("rejects skipped preparation before calling an unverified custom creator", () => {
+    let created = false;
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient({} as never)
+      .useRecordStorage(StringValueSchema, (() => {
+        created = true;
+        throw new Error("Unexpected custom creation.");
+      }) as never)
+      .build();
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    expect(() =>
+      factory.createRecordStorage({ name: "test", multitenant: false }, spec, undefined, {
+        prepareOnAccess: false,
+      }),
+    ).toThrow(/custom Datastore record providers do not support/i);
+    expect(created).toBe(false);
+  });
   it("uses readable Event Store kinds and isolates a System role through a precise override", async () => {
     const client = new MetadataClient();
     const context = { name: "Support_System", multitenant: false } as const;

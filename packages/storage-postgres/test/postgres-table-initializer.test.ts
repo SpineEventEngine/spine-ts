@@ -24,6 +24,38 @@ interface TableQueryResult {
 type TableQuery = (sql: string, values?: readonly unknown[]) => Promise<TableQueryResult>;
 
 describe("PostgresTableInitializer", () => {
+  it("rejects a missing declared index in read-only check mode", async () => {
+    const fixture = client(catalog());
+    const initializer = new PostgresTableInitializer(fixture, "spine", {
+      tableName: "records",
+      columns: [
+        { name: "ID", postgresType: "VARCHAR(512)", nullable: false },
+        { name: "bytes", postgresType: "BYTEA", nullable: false },
+      ],
+      primaryKey: ["ID"],
+      indexes: [{ name: "ix_records_bytes", columns: ["bytes", "ID"] }],
+    } as never);
+    await expect(initializer.prepare("check")).rejects.toThrow(/index.*missing|missing.*index/i);
+    expect(fixture.calls).not.toContain("BEGIN");
+  });
+
+  it.each([
+    ["wrong order", { column_name: "bytes" }],
+    ["unique", { unique: true }],
+    ["invalid", { valid: false }],
+    ["not ready", { ready: false }],
+    ["not live", { live: false }],
+    ["partial", { partial: true }],
+    ["expression", { expression: true }],
+    ["included column", { total_count: 2 }],
+    ["hash method", { method: "hash" }],
+    ["descending", { direction: 1 }],
+    ["custom operator", { default_operator: false }],
+    ["different collation", { column_collation: false }],
+  ])("rejects a %s index definition", async (_name, change) => {
+    const fixture = client(catalog({ indexes: [{ ...indexRow(), ...change }] }));
+    await expect(indexed(fixture).prepare("check")).rejects.toThrow(/index is incompatible/i);
+  });
   it.each([
     ["missing column", catalog({ columns: columns().slice(0, 1) })],
     ["extra column", catalog({ columns: [...columns(), column("extra")] })],
@@ -72,6 +104,7 @@ describe("PostgresTableInitializer", () => {
       "spine",
       "records",
     ]);
+    expect(fixture.calls.some((sql) => sql.includes("pg_index"))).toBe(false);
   });
 
   it("accepts PostgreSQL information_schema integer for a declared INT column", async () => {
@@ -149,6 +182,38 @@ function initialize(
   } as never);
 }
 
+function indexed(lifecycle: TableLifecycle): PostgresTableInitializer {
+  return new PostgresTableInitializer(lifecycle, "spine", {
+    tableName: "records",
+    columns: [
+      { name: "ID", postgresType: "VARCHAR(512)", nullable: false },
+      { name: "bytes", postgresType: "BYTEA", nullable: false },
+    ],
+    primaryKey: ["ID"],
+    indexes: [{ name: "ix_records_id", columns: ["ID"] }],
+  } as never);
+}
+
+function indexRow() {
+  return {
+    column_name: "ID",
+    ordinal: 1,
+    unique: false,
+    valid: true,
+    ready: true,
+    live: true,
+    partial: false,
+    expression: false,
+    key_count: 1,
+    total_count: 1,
+    method: "btree",
+    kind: "i",
+    direction: 0,
+    default_operator: true,
+    column_collation: true,
+  };
+}
+
 function client(layout: Catalog, failure?: { readonly code: string }) {
   const calls: string[] = [];
   const release = vi.fn();
@@ -165,6 +230,8 @@ function client(layout: Catalog, failure?: { readonly code: string }) {
     if (sql.includes("constraint_type = 'PRIMARY KEY'"))
       return Promise.resolve({ rows: layout.primary });
     if (sql.includes("constraint_type = 'UNIQUE'")) return Promise.resolve({ rows: layout.unique });
+    if (sql.includes("FROM pg_class t JOIN pg_namespace"))
+      return Promise.resolve({ rows: layout.indexes });
     return Promise.resolve({ rows: [] });
   });
   return {
@@ -181,6 +248,7 @@ function catalog(overrides: Partial<Catalog> = {}): Catalog {
     columns: columns(),
     primary: [{ column_name: "ID", ordinal_position: 1 }],
     unique: [],
+    indexes: [],
     ...overrides,
   };
 }
@@ -208,6 +276,7 @@ function column(
 interface Catalog {
   readonly columns: ReturnType<typeof columns>;
   readonly primary: readonly { readonly column_name: string; readonly ordinal_position: number }[];
+  readonly indexes: readonly ReturnType<typeof indexRow>[];
   readonly unique: readonly {
     readonly constraint_name: string;
     readonly column_name: string;

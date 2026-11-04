@@ -7188,3 +7188,77 @@ retain each public metadata export's actual TypeScript type. Bootstrap treats
 dependency values as unvalidated input, validates the complete metadata graph,
 and publishes its registrations only after all descriptions and conflicts pass.
 A missing or malformed dependency export is an error rather than an omission.
+
+## Persistent tenant and authentication storage (2026-11-04)
+
+The accepted [implementation specification](tasks/tenant-auth-storage/PROPOSAL.md)
+selects explicit tenant and authentication persistence. Single-tenant execution
+uses `SINGLE_TENANT` without a tenant index. Multi-tenant applications supply
+an index; `PersistentTenantIndex` is the standard implementation. Authentication
+stores are provided by the existing auth package, with optional Better Auth
+integration through its dedicated subpath.
+
+New persistent stores have private constructors and async factories. Their
+optional `createMissingStructures` setting defaults to `true`: creation and
+compatibility checking finish before the factory returns. Explicit `false`
+skips both preparation and later lazy preparation. Existing Bounded Context
+and business-storage preparation behavior stays unchanged.
+
+The common record-handle seam supports an immutable preparation choice for
+each handle. Built-in providers implement the explicit skip path; unsupported
+custom factories reject it rather than silently ignoring it. This avoids a
+factory-global setting that could change another consumer's behavior. Explicit
+preparation continues through the existing storage preparation mechanism.
+
+The implementation uses maintained authentication libraries and the supported
+Better Auth profile established by the disposable integration experiment.
+Application-supplied identity/session sources remain replaceable. Cleanup is
+explicitly invoked by the application. The task introduces no migration,
+audit-log subsystem, or Gateway replication.
+
+Production Better Auth integration targets exact version `1.7.16` after the
+upstream security patch review. The disposable experiment used `1.7.15`; its
+results do not transfer automatically. Replay adapter, session/revocation,
+cookie and native OIDC acceptance against the production pin before acceptance.
+
+## Declared record indexes (2026-11-04)
+
+Persistent authentication lookup and cleanup require physical secondary indexes.
+Generic record specifications declare these through optional non-unique ascending
+`RecordIndex` entries. Existing specifications without indexes retain their
+behavior. Preparation creates missing indexes and verifies complete definitions;
+incompatible structures are rejected without repair. Explicit preparation skip
+continues to suppress all schema and index probes and creation.
+
+`ColumnTypes.fixedBytes()` describes exact derived encodings without imposing
+new length restrictions on domain fields. Auth equality candidates use SHA-256
+keys and retain full-predicate checks; expiry uses a reversible signed-seconds
+and nanoseconds ordering key. The complete domain values remain in Protobuf
+records. These representations avoid native index-size and timestamp-precision
+limitations without truncation or extra lookup record families.
+
+The provider preparation interface explicitly advertises index support so an
+older custom implementation cannot silently ignore declared requirements.
+Datastore uses built-in indexes for the selected equality and range shapes;
+cloud resource or composite-index administration is not introduced. Exact
+provider pages remain distinct from bounded client-side scans.
+
+The [index prerequisite](tasks/tenant-auth-storage/M3A.md) specifies this bounded
+extension, its preparation and query behavior, and required acceptance tests.
+
+## OIDC request and verification libraries (2026-11-04)
+
+The component provider uses openid-client for discovery, authorization URLs and
+PKCE, and oauth4webapi's public request API for the authorization-code exchange.
+JOSE verification and the existing provider key cache retain the configured
+clock, HTTP cache freshness, key rotation and shared-fetch cancellation behavior.
+The request helper does not authenticate its response; verified identity is
+returned only after the existing signature and claim checks succeed.
+
+This composition replaces handwritten token-request assembly while preserving
+the provider API. openid-client's high-level grant captures a numeric wall-clock
+offset and checks time before awaited key verification, so it cannot represent
+the existing clock semantics during network waits. The lower-level request API
+accepts the exact redirect URI and operation signal without introducing an
+earlier token-time check. The [M5 contract](tasks/tenant-auth-storage/M5.md)
+records the selected boundary and required provider acceptance.

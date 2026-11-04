@@ -38,6 +38,7 @@ import {
   EventRouting,
   Projection,
   ServerEnvironment,
+  SINGLE_TENANT,
 } from "@spine-event-engine/server";
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import {
@@ -53,6 +54,7 @@ import {
   requireContractMember,
 } from "./wave13-red-support.js";
 import { Wave13OriginStateSchema } from "./wave13-origin-repository.js";
+import { TestTenantIndex } from "../tenant-index-fixture.js";
 import {
   ReviewStartedSchema,
   ReviewTaskAssignedSchema,
@@ -462,6 +464,7 @@ describe("Wave 13 IntegrationBroker", () => {
   });
   it("RED-15 validates the existing tenant boundary and isolates imported tenants", async () => {
     await broker("tenant-aware imported intake");
+    ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
     await ServerEnvironment.instance().completeSetup();
     createEntityGeneratedRegistryRoot([
       {
@@ -488,10 +491,14 @@ describe("Wave 13 IntegrationBroker", () => {
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } });
     try {
-      await p.tenantIndex.keep(tenantA);
-      await p.tenantIndex.keep(tenantB);
-      await c.tenantIndex.keep(tenantA);
-      await c.tenantIndex.keep(tenantB);
+      const producerIndex = p.tenantIndex;
+      const consumerIndex = c.tenantIndex;
+      if (producerIndex === SINGLE_TENANT || consumerIndex === SINGLE_TENANT)
+        throw new Error("Expected multitenant directories.");
+      await producerIndex.keep(tenantA);
+      await producerIndex.keep(tenantB);
+      await consumerIndex.keep(tenantA);
+      await consumerIndex.keep(tenantB);
       await p.eventBus().post(event(ReviewTaskAssignedSchema, "a", "tenant-a"));
       await p.eventBus().post(event(ReviewTaskAssignedSchema, "b", "tenant-b"));
       expect(ReviewTaskAssignedOriginProjection.externalContexts.map(tenantValue)).toEqual([

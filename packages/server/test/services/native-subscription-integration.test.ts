@@ -54,6 +54,8 @@ import {
   ServerEnvironmentLifecycle,
   serverEnvironmentAccess,
 } from "../../src/server/server-environment.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import { TestTenantIndex, requireTenantDirectory } from "../tenant-index-fixture.js";
 import {
   NativeProjectStateSchema,
   NativeProcessManagerStateSchema,
@@ -80,6 +82,7 @@ import {
 } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 beforeEach(async () => {
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
   await ServerEnvironment.instance().completeSetup();
 });
 
@@ -173,7 +176,7 @@ describe("native service subscriptions", () => {
       .build();
 
     try {
-      await context.tenantIndex.keep(
+      await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
       const handlers = registeredSubscriptionHandlers(context);
@@ -206,7 +209,7 @@ describe("native service subscriptions", () => {
       .build();
 
     try {
-      await context.tenantIndex.keep(
+      await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
       const handlers = registeredSubscriptionHandlers(context);
@@ -248,7 +251,7 @@ describe("native service subscriptions", () => {
       .build();
 
     try {
-      await context.tenantIndex.keep(
+      await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
       const handlers = registeredSubscriptionHandlers(context);
@@ -279,7 +282,7 @@ describe("native service subscriptions", () => {
     const context = await createProcessManagerContext("NativeProcessManagerCommand");
 
     try {
-      await context.tenantIndex.keep(
+      await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
       const handlers = registeredSubscriptionHandlers(context);
@@ -309,7 +312,7 @@ describe("native service subscriptions", () => {
     const context = await createProcessManagerContext("NativeProcessManagerEvent");
 
     try {
-      await context.tenantIndex.keep(
+      await requireTenantDirectory(context.tenantIndex).keep(
         create(TenantIdSchema, { kind: { case: "value", value: "tenant-native" } }),
       );
       const handlers = registeredSubscriptionHandlers(context);

@@ -21,12 +21,19 @@ extensions. It includes command/event envelopes and contexts, actor/tenant/user
 identities, validation messages, time/network/UI support types, and options
 such as `type_url_prefix`, `entity`, `column`, and `set_once`.
 
+The root exports `Tenant`, `TenantSchema`, and `tenantFile` for
+`spine.server.tenant.Tenant`. The message contains a complete `TenantId` and
+the first registration `Timestamp`. `PersistentTenantIndex` in the server
+package uses this record as its tenant directory entry. The message alone
+does not register a tenant, provision storage, or grant access.
+
 The package also exports `@spine-event-engine/proto/client`,
 `@spine-event-engine/proto/auth`, `@spine-event-engine/proto/deployment`,
 `@spine-event-engine/proto/delivery`, and
 `@spine-event-engine/proto/delivery-server` for the corresponding generated
 contracts. The client facet includes `SubscriptionRecord`; the auth facet
-includes `GatewayAuthenticatedSubscription`; and the deployment facet includes
+includes `GatewayAuthenticatedSubscription`, `AuthenticatedPrincipal`,
+`PrincipalAttributes`, and `OpaqueSessionRecord`; and the deployment facet includes
 the application-node discovery records. `@spine-event-engine/proto/generated/*.js`
 is supported for low-level generated schema subpaths. `./proto/*`,
 `spine-proto-manifest.json`, and the model metadata files are package assets

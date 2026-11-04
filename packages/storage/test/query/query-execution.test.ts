@@ -15,6 +15,7 @@
 import { describe, expect, it } from "vitest";
 
 import { StorageQueryEvaluator, type NormalizedQueryEntry } from "../../src/index.js";
+import { StorageQueryValues } from "../../src/query/query-execution.js";
 
 interface Row {
   readonly id: string;
@@ -28,6 +29,30 @@ const rows: readonly NormalizedQueryEntry<string, Row>[] = [
 ];
 
 describe("StorageQueryEvaluator", () => {
+  it("compares byte values in unsigned order through the stable provider entrypoint", () => {
+    expect(StorageQueryValues.compare(new Uint8Array([0xff]), new Uint8Array([0x01]))).toBe(1);
+    expect(StorageQueryValues.compare(new Uint8Array([0x01]), new Uint8Array([0xff]))).toBe(-1);
+    expect(StorageQueryValues.compare(new Uint8Array([0x01]), new Uint8Array([0x01, 0x00]))).toBe(
+      -1,
+    );
+    expect(
+      StorageQueryValues.compare(new Uint8Array([0x01, 0x00]), new Uint8Array([0x01, 0x00])),
+    ).toBe(0);
+  });
+
+  it("orders bytes by unsigned lexicographic value and prefix length", () => {
+    const entries = [
+      entry("ten", { key: new Uint8Array([0x10]) }),
+      entry("two", { key: new Uint8Array([0x02]) }),
+      entry("long", { key: new Uint8Array([0x02, 0x01]) }),
+      entry("same", { key: new Uint8Array([0x02]) }),
+    ];
+    expect(
+      StorageQueryEvaluator.evaluate(entries, {
+        order: [{ column: "key", direction: "asc" }],
+      }).map(({ id }) => id),
+    ).toEqual(["same", "two", "long", "ten"]);
+  });
   it("compares literal arrays as values in normalized plans", () => {
     const entries = [entry("array", { tags: ["red", "blue"] }), entry("scalar", { tags: "red" })];
 

@@ -639,12 +639,40 @@ importers:
       '@spine-event-engine/proto':
         specifier: 2.0.0-snapshot.26
         version: link:../proto
+      '@spine-event-engine/storage':
+        specifier: 2.0.0-snapshot.26
+        version: link:../storage
+      iron-session:
+        specifier: 9.0.1
+        version: 9.0.1
       jose:
         specifier: 6.2.4
         version: 6.2.4
       loglayer:
         specifier: 9.4.0
         version: 9.4.0
+    devDependencies:
+      '@google-cloud/datastore':
+        specifier: 10.1.1
+        version: 10.1.1
+      '@spine-event-engine/storage-datastore':
+        specifier: 2.0.0-snapshot.26
+        version: link:../storage-datastore
+      '@spine-event-engine/storage-mysql':
+        specifier: 2.0.0-snapshot.26
+        version: link:../storage-mysql
+      '@spine-event-engine/storage-postgres':
+        specifier: 2.0.0-snapshot.26
+        version: link:../storage-postgres
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
+      mysql2:
+        specifier: 3.23.1
+        version: 3.23.1(@types/node@24.13.2)
+      pg:
+        specifier: 8.23.0
+        version: 8.23.0
 
   packages/client-node:
     dependencies:
@@ -959,9 +987,15 @@ importers:
       '@spine-event-engine/storage-postgres':
         specifier: 2.0.0-snapshot.26
         version: link:../storage-postgres
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
       mysql2:
         specifier: 3.23.1
         version: 3.23.1(@types/node@24.13.2)
+      pg:
+        specifier: 8.23.0
+        version: 8.23.0
 
   packages/server-blackbox-tests:
     dependencies:
@@ -2716,6 +2750,10 @@ packages:
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
+  cookie@2.0.1:
+    resolution: {integrity: sha512-yuToqVvRrj6pfDXREyQAAv8SkAEk/8GS3jQRTiUMm66TVtBYmqQeoEjL2Lmq8Rpo6271vH76InTChTitEAm65w==}
+    engines: {node: '>=22'}
+
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
@@ -3089,6 +3127,13 @@ packages:
 
   inline-style-parser@0.2.7:
     resolution: {integrity: sha512-Nb2ctOyNR8DqQoR0OwRG95uNWIC0C1lCgf5Naz5H6Ji72KZ8OcFZLz2P5sNgwlyoJ8Yif11oMuYs5pBQa86csA==}
+
+  iron-session@9.0.1:
+    resolution: {integrity: sha512-ELSZdcLvA0AMhxUCY+rwKCh42UV88SqEb1ia/bHLF9G+6kScikO6mShtlIq+OtF2UlkZP0dmI2dMdG9vh4rebA==}
+    engines: {node: '>=22.13.0'}
+
+  iron-webcrypto@2.0.0:
+    resolution: {integrity: sha512-rtffZKDUHciZElM8mjFCufBC7nVhCxHYyWHESqs89OioEDz4parOofd8/uhrejh/INhQFfYQfByS22LlezR9sQ==}
 
   is-alphabetical@2.0.1:
     resolution: {integrity: sha512-FWyyY60MeTNyeSRpkM2Iry0G9hpr7/9kD40mD/cGQEuilcZYS4okz8SN2Q6rLCJ8gbCt6fN+rC+6tMGS99LaxQ==}
@@ -3974,6 +4019,10 @@ packages:
 
   uc.micro@2.1.0:
     resolution: {integrity: sha512-ARDJmphmdvUk6Glw7y9DQ2bFkKBHwQHLi2lsaH6PPmz/Ka9sFOBsBluozhDltWmnv9u/cF6Rt87znRTPV+yp/A==}
+
+  uint8array-extras@1.6.0:
+    resolution: {integrity: sha512-8iAasVS4wUx0gPLjH8Xtz2PeDzTSiy8QiLGu2DT3X5GU+egFEQhpnbtkehbAwjvDcxIERmCYcysiODFmE3Ud0Q==}
+    engines: {node: '>=18'}
 
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
@@ -5610,6 +5659,8 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
+  cookie@2.0.1: {}
+
   cross-spawn@7.0.6:
     dependencies:
       path-key: 3.1.1
@@ -6064,6 +6115,15 @@ snapshots:
   inherits@2.0.4: {}
 
   inline-style-parser@0.2.7: {}
+
+  iron-session@9.0.1:
+    dependencies:
+      cookie: 2.0.1
+      iron-webcrypto: 2.0.0
+
+  iron-webcrypto@2.0.0:
+    dependencies:
+      uint8array-extras: 1.6.0
 
   is-alphabetical@2.0.1: {}
 
@@ -7101,6 +7161,8 @@ snapshots:
   typescript@6.0.3: {}
 
   uc.micro@2.1.0: {}
+
+  uint8array-extras@1.6.0: {}
 
   undici-types@7.18.2: {}
 

@@ -17,13 +17,24 @@ import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 
 import { RecordColumn } from "./record-column.js";
+import type { RecordIndex } from "./record-index.js";
 
 const storageHost = globalThis as typeof globalThis & {
+  /**
+   * Copies a value at the storage boundary.
+   *
+   * @param value Value to inspect or clone.
+   * @returns Cloned value.
+   * @typeParam Value Value accepted by structured cloning.
+   */
   structuredClone<Value>(value: Value): Value;
 };
 
 /**
  * Configures one direct Protobuf record family and its identity.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf record type.
  */
 // prettier-ignore
 export type RecordSpecOptions<I, R extends Message> = {
@@ -50,6 +61,11 @@ export type RecordSpecOptions<I, R extends Message> = {
    * Declared query columns materialized from each record.
    */
   readonly columns?: readonly RecordColumn<R>[];
+
+  /**
+   * Optional complete non-unique ascending physical lookup requirements.
+   */
+  readonly indexes?: readonly RecordIndex[];
 } & ([I] extends [Message]
   ? {
 
@@ -75,19 +91,29 @@ interface RuntimeRecordSpecInput {
 
 /**
  * Declarative specification for one identified Protobuf record type.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf record type.
  */
 export class RecordSpec<I, R extends Message> {
   readonly #columns: readonly RecordColumn<R>[];
+
+  readonly #indexes: readonly RecordIndex[];
+
   readonly #extractId: (record: R) => I;
+
   readonly #idSchema: (I extends Message ? GenMessage<I> : undefined) | undefined;
+
   readonly #idKind: string;
+
   readonly #recordType: GenMessage<R>;
+
   readonly #sourceType: GenMessage<Message>;
 
   /**
    * Creates a record specification.
    *
-   * @throws Error if the ID type is invalid or two declared columns have the same name.
+   * @throws Error if the ID type, declared columns, or index requirements are invalid.
    * @param input The source, record, identity, and column definitions.
    */
   constructor(input: RecordSpecOptions<I, R>) {
@@ -102,6 +128,7 @@ export class RecordSpec<I, R extends Message> {
       }
       names.add(column.name);
     }
+    this.#indexes = RecordIndexes.capture(input.indexes ?? [], names);
     this.#extractId = input.extractId;
     if (
       runtimeInput.idSchema === undefined &&
@@ -150,6 +177,14 @@ export class RecordSpec<I, R extends Message> {
    */
   get columns(): readonly RecordColumn<R>[] {
     return this.#columns;
+  }
+
+  /**
+   * Returns detached immutable physical lookup requirements.
+   * @returns Complete ascending index declarations.
+   */
+  get indexes(): readonly RecordIndex[] {
+    return this.#indexes;
   }
 
   /**
@@ -207,9 +242,54 @@ export class RecordSpec<I, R extends Message> {
   }
 }
 
+/**
+ * Validates and detaches physical index declarations.
+ */
+const RecordIndexes = Object.freeze({
+  /**
+   * Validates and detaches physical lookup requirements.
+   *
+   * @param columns Available declared column names.
+   * @param indexes Declared lookup index requirements.
+   * @returns Detached immutable index requirements.
+   */
+  capture(indexes: readonly RecordIndex[], columns: ReadonlySet<string>): readonly RecordIndex[] {
+    const names = new Set<string>();
+    const result = indexes.map((index) => {
+      if (index.name.trim().length === 0 || names.has(index.name))
+        throw new Error("Record indexes require distinct non-blank names.");
+      names.add(index.name);
+      if (index.columns.length === 0)
+        throw new Error(`Record index "${index.name}" requires at least one column.`);
+      const components = new Set<string>();
+      for (const component of index.columns) {
+        if (
+          components.has(component) ||
+          (component !== "id" && !columns.has(component)) ||
+          (component === "id" && columns.has("id"))
+        )
+          throw new Error(
+            `Record index "${index.name}" has an invalid or ambiguous column "${component}".`,
+          );
+        components.add(component);
+      }
+      return Object.freeze({ name: index.name, columns: Object.freeze([...index.columns]) });
+    });
+    return Object.freeze(result);
+  },
+});
+
 type CloneMethod = (this: object) => unknown;
 
 const RecordCloner = Object.freeze({
+  /**
+   * Copies a stored Protobuf record.
+   *
+   * @param record Stored Protobuf record.
+   * @param schema Generated Protobuf record schema.
+   * @returns Cloned Protobuf record.
+   * @typeParam R Stored Protobuf record type.
+   */
   message<R extends Message>(schema: GenMessage<R>, record: R): R {
     const cloneMethod = this.findCloneMethod(record);
 
@@ -224,6 +304,13 @@ const RecordCloner = Object.freeze({
     }
   },
 
+  /**
+   * Copies a stored or queried value.
+   *
+   * @param value Value to inspect or clone.
+   * @returns Cloned stored or queried value.
+   * @typeParam T Value type preserved through cloning.
+   */
   value<T>(value: T): T {
     const cloneMethod = this.findCloneMethod(value);
 
@@ -238,6 +325,12 @@ const RecordCloner = Object.freeze({
     }
   },
 
+  /**
+   * Finds a record-supplied clone operation.
+   *
+   * @param value Value to inspect or clone.
+   * @returns Available record clone method, if any.
+   */
   findCloneMethod(value: unknown): CloneMethod | undefined {
     if (typeof value !== "object" || value === null) return undefined;
     const candidate: unknown = Reflect.get(value, "clone");

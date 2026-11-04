@@ -23,10 +23,13 @@ import {
   Repository,
   Server,
   ServerEnvironment,
+  EnvironmentType,
+  PersistentTenantIndex,
 } from "@spine-event-engine/server";
+import { InMemoryStorageFactory, StorageGroup } from "@spine-event-engine/storage";
 import { BrowserServer } from "@spine-event-engine/server/browser";
 import { ServerTests } from "@spine-event-engine/server/testing";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 
 import { CreateProjectSchema } from "../generated/spine/server/testing/project_commands_pb.js";
 import { ProjectCreatedSchema } from "../generated/spine/server/testing/project_events_pb.js";
@@ -39,6 +42,12 @@ import { projectWorkflowIds } from "../test-fixtures/project-workflow.js";
 afterEach(async () => ServerTests.resetEnvironment());
 
 it("preserves unknown-tenant details through browser gateway and Connect client", async () => {
+  const tenantIndex = await PersistentTenantIndex.create({
+    storageFactory: new InMemoryStorageFactory(),
+    group: new StorageGroup("browser-tenants"),
+  });
+  onTestFinished(() => tenantIndex.close());
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex });
   const environment = ServerEnvironment.instance();
   await environment.completeSetup();
   const tenant = create(TenantIdSchema, { kind: { case: "value", value: "absent-browser" } });
@@ -93,11 +102,18 @@ it("preserves unknown-tenant details through browser gateway and Connect client"
       () => running?.close(),
       () => native?.close(),
       () => context.close(),
+      () => tenantIndex.close(),
     ]);
   }
 });
 
 it("preserves unknown-tenant details for browser subscription activation", async () => {
+  const tenantIndex = await PersistentTenantIndex.create({
+    storageFactory: new InMemoryStorageFactory(),
+    group: new StorageGroup("browser-subscription-tenants"),
+  });
+  onTestFinished(() => tenantIndex.close());
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex });
   const environment = ServerEnvironment.instance();
   await environment.completeSetup();
   const tenant = create(TenantIdSchema, { kind: { case: "value", value: "absent-browser-sub" } });
@@ -152,6 +168,7 @@ it("preserves unknown-tenant details for browser subscription activation", async
       () => running?.close(),
       () => native?.close(),
       () => context.close(),
+      () => tenantIndex.close(),
     ]);
   }
 });
