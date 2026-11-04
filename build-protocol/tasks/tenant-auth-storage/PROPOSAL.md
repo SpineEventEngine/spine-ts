@@ -1349,17 +1349,57 @@ The combined replay of prior component/host experiments and this adapter suite p
 The browser host gains a replaceable `BrowserCredentialReader`. It receives a duplicate-preserving header view, method and URL, but cannot consume the RPC body. The host captures this immutable view before converting the incoming request to WHATWG `Headers` or `Request`:
 
 ```typescript
-/** Extracts one admitted credential without consuming the RPC body. */
+/**
+ * Names inspected before invoking a browser credential reader or auth route.
+ */
+export interface BrowserCredentialAdmission {
+  /**
+   * HTTP CSRF field names; comparison is case-insensitive.
+   */
+  readonly csrfHeaderNames: readonly string[];
+
+  /**
+   * Cookie names that each select an alternative primary credential.
+   * Supporting proofs for a selected credential use stateCookieNames.
+   */
+  readonly credentialCookieNames: readonly string[];
+
+  /**
+   * Supporting authentication-state cookies, including CSRF and login state.
+   * These are duplicate-sensitive but do not independently select a login.
+   */
+  readonly stateCookieNames: readonly string[];
+}
+
+/**
+ * Extracts one admitted credential without consuming the RPC body.
+ */
 export interface BrowserCredentialReader {
-  /** Returns absence, rejection, or a credential; errors mean unavailable. */
+  /**
+   * Fixed names from the same configuration used to read credentials.
+   */
+  readonly admission: BrowserCredentialAdmission;
+
+  /**
+   * Returns absence, rejection, or a credential; errors mean unavailable.
+   *
+   * @param request Immutable raw headers, method and a request-local parsed URL.
+   * @returns The extracted credential, absence or rejection.
+   */
   read(request: {
-    /** Raw header values, preserving repeated fields for strict admission. */
+    /**
+     * Lowercase field names with original values and multiplicity.
+     */
     readonly headers: Readonly<Record<string, string | readonly string[] | undefined>>;
 
-    /** HTTP method used to apply route policy. */
+    /**
+     * HTTP method used for admission.
+     */
     readonly method: string;
 
-    /** Parsed URL retaining callback query parameters. */
+    /**
+     * Parsed request URL retaining query parameters.
+     */
     readonly url: URL;
   }): Promise<RequestCredential | undefined | { readonly kind: "rejected" }>;
 }
@@ -1368,6 +1408,18 @@ export interface BrowserCredentialReader {
 `undefined` means absent, `rejected` means malformed/ambiguous input without fallback, and an exception means unavailable rather than anonymous admission. Supplying both `credentials` and legacy `cookies` is a configuration error. The revised standard cookie helper implements the interface. External/Better Auth readers retain their engine's native credential format.
 
 Header names are normalized to lowercase; individual values and their multiplicity are preserved. The host rejects repeated Authorization, Origin and configured CSRF header fields before invoking any reader or auth route. Cookie fields are inspected without losing field boundaries or duplicate cookie names: ambiguous repeated authentication/CSRF cookies are rejected, while protocol-permitted split Cookie fields may be combined only after that inspection. The same admission rules apply to standard, external and Better Auth readers; normalized `Headers` alone is not sufficient evidence that the original request was unambiguous. For example, two Authorization fields are rejected even if a platform would combine them into one string.
+
+Before this change, the host cannot discover a custom reader's cookie or CSRF names without calling it. After this change, every reader and every `BrowserAuthRoute` supplies the required `admission: BrowserCredentialAdmission` value. The same declaration describes both boundaries, including an auth route that calls a different engine from the RPC reader. The types are exported from `@spine-event-engine/server/browser`. Required empty arrays explicitly mean that a category is unused; missing metadata is a startup error, including for JavaScript callers.
+
+`credentialCookieNames` lists alternative primary credentials. `stateCookieNames` lists supporting cookies, such as CSRF proofs and login state, which cannot independently identify a session. The standard helper derives its immutable declaration from its actual configured session and CSRF names plus `x-spine-csrf`. It satisfies the reader structurally without an auth-to-server package dependency. Do not repeat its names in a separate host policy.
+
+Before its first asynchronous startup step, the host validates and copies each declaration, its arrays and the selected route configuration into one immutable host policy. It uses that same snapshot for preflight, listener setup and request handling, including when combined startup awaits the native server. A reader receives a separate parsed URL value; its mutable URL methods cannot change the host's selected route or configuration. HTTP names are valid tokens and normalized to lowercase; cookie names are valid tokens and remain case-sensitive. Reject missing or sparse arrays, non-string or invalid/empty names, duplicate header names after normalization, duplicate cookie names within a declaration, and overlap between its credential and state cookies. `authorization`, `origin` and `cookie` cannot be configured as CSRF headers because the host handles them directly. Reusing names across declarations is valid. Later caller mutation cannot change host admission; integrations must also keep their effective engine configuration fixed.
+
+Early duplicate rejection uses the union of the reader and all route declarations. Inspect Cookie pairs across and within raw fields before the library's first-value parser can hide repetition. Equal repeated selected values also reject. Malformed Cookie syntax rejects; repeated unrelated cookie names alone do not. Preserve legal split Cookie fields and combine them only after this inspection.
+
+Simultaneous-credential rejection uses only the active RPC reader or the selected auth route. Reject Authorization together with any of that declaration's primary cookies, or more than one distinct primary cookie. Even an empty primary cookie counts as present: an invalid credential cannot trigger fallback. Supporting state cookies alone are not a second credential. A cookie used solely by another mounted engine does not become an RPC credential.
+
+When neither `credentials` nor `cookies` is supplied, the default reader accepts a single valid Bearer field or absence and rejects malformed Authorization. Its three declaration arrays are empty. Fixed Authorization/Origin checks still apply, as do duplicate checks contributed by mounted routes. A callback must declare the state cookie it consumes even on a bearer-only Gateway. The host never invokes a reader or route to discover names. These declarations are a contract with trusted application code; they cannot prove that arbitrary executable code truthfully lists every name it uses.
 
 The host matches exact admitted auth route pathnames while retaining query parameters for callbacks. It forwards every Set-Cookie separately. Existing route-specific method, origin, body-size and timeout rules remain. Origin-less navigation is allowed only on explicitly configured login callback routes that validate their protocol state, not on password login, logout or RPC routes. Routes must not collide with reserved RPC paths.
 
@@ -1386,20 +1438,88 @@ flowchart LR
 The Gateway constructs auth storage/strategies directly. It needs no `ServerEnvironment` or Bounded Context for that purpose. The application process configures its environment and Bounded Contexts, verifies forwarding proof and executes business work.
 
 ```typescript
+const loginRoute: BrowserAuthRoute = {
+  path: "/auth/login",
+  method: "POST",
+  origins: [config.browserOrigin],
+  maxRequestBytes: config.loginMaxBytes,
+  timeoutMs: config.loginTimeoutMs,
+  admission: cookies.admission,
+  onRequest: applicationLogin,
+};
+
 const gateway = await BrowserServer.run({
   ...transportOptions,
   backend: { baseUrl: config.applicationBackendUrl },
   origins: [config.browserOrigin],
   sessions,
   credentials: cookies,
-  authRoutes: applicationLoginRoutes,
+  authRoutes: [loginRoute],
   authorize: policy.authorize.bind(policy),
   contexts: contextResolver,
   bindings: subscriptionBindings,
 });
 ```
 
-`transportOptions` contains the existing registry, listener, clock and forwarding-proof configuration. `applicationLoginRoutes` wraps the scenario calls above with explicit HTTP validation. Subscription bindings are not login records.
+`transportOptions` contains the existing registry, listener, clock and forwarding-proof configuration. `applicationLogin` wraps the scenario calls above with explicit HTTP validation and uses the same cookie helper. A callback that also consumes a separate state cookie must include that configured name in its route declaration. Subscription bindings are not login records.
+
+### External reader and independent callback
+
+This example keeps an existing authentication service and mounts a separate directory callback. `externalConfig` is the same fixed configuration used by `externalAuth`; `externalCallback` validates its protocol state before any exchange. Its state cookie is checked before the callback runs, even though it is not an RPC session credential.
+
+```typescript
+const externalPolicy: BrowserCredentialAdmission = Object.freeze({
+  csrfHeaderNames: Object.freeze([externalConfig.csrfHeaderName]),
+  credentialCookieNames: Object.freeze([externalConfig.sessionCookieName]),
+  stateCookieNames: Object.freeze([externalConfig.csrfCookieName]),
+});
+
+const credentials: BrowserCredentialReader = Object.freeze({
+  admission: externalPolicy,
+  read: externalAuth.read.bind(externalAuth),
+});
+
+const callbackPolicy: BrowserCredentialAdmission = Object.freeze({
+  csrfHeaderNames: Object.freeze([]),
+  credentialCookieNames: Object.freeze([]),
+  stateCookieNames: Object.freeze([externalCallback.config.stateCookieName]),
+});
+
+const callbackRoute: BrowserAuthRoute = {
+  path: "/directory/callback",
+  method: "GET",
+  origins: [config.browserOrigin],
+  allowMissingOrigin: true,
+  maxRequestBytes: config.callbackMaxBytes,
+  timeoutMs: config.callbackTimeoutMs,
+  admission: callbackPolicy,
+  onRequest: externalCallback.handle.bind(externalCallback),
+};
+
+const gateway = await BrowserServer.run({
+  ...transportOptions,
+  backend: { baseUrl: config.applicationBackendUrl },
+  origins: [config.browserOrigin],
+  sessions: externalAuth.sessions,
+  credentials,
+  authRoutes: [callbackRoute],
+  authorize: policy.authorize.bind(policy),
+  contexts: contextResolver,
+  bindings: subscriptionBindings,
+});
+```
+
+The missing-Origin exception applies only to this explicitly configured callback. It does not bypass duplicate, method, body, deadline or protocol-state checks. Omitting `credentials` selects bearer-only RPC admission while retaining the callback's declared checks.
+
+### Better Auth admission names
+
+The existing assembly remains `credentials: auth.credentials` and `authRoutes: auth.routes`. `BetterAuthIntegration.create()` derives their immutable declarations from the same validated, copied native options used by the engine. Applications do not duplicate Better Auth cookie names in Gateway settings.
+
+At the pinned library version, use the public `better-auth/cookies` exports internally: `getCookies(effectiveOptions).sessionToken.name` supplies the primary name, and `createCookieGetter(effectiveOptions)("state").name` supplies the database-backed OAuth callback state name. Include the resolved `dontRememberToken.name` where the selected native endpoints consume that flag. The native library resolves custom role names, cookie prefixes and secure prefixes; do not reconstruct names by hand. The database flow uses the role `state`; `oauth_state` is a different cookie-backed flow. Reject collisions between selected credential and state roles before listening.
+
+The accepted Better Auth profile uses its native origin/CSRF policy, so it does not invent the standard helper's `x-spine-csrf` header. Declare only CSRF headers actually used by an admitted configuration. Every selected route must enumerate its consumed credential and protocol-state cookies. Verify the declarations against real incoming and outgoing cookies, including custom names and secure prefixes, during M10–M11.
+
+Cookie caching remains disabled. Native cleanup may read cache-shaped cookies to clear them, but those values must never authenticate a request or bypass authoritative session reads. Dynamically chunked credential or protocol-state cookie families are outside this fixed-name profile; supporting one would require a reviewed extension. The source-level name-resolution probe establishes the public library seam, not production browser acceptance.
 
 ### Combined process and two-process deployments
 
@@ -1415,11 +1535,160 @@ Instances serving the same application share storage placement, credential keys/
 
 A stream can outlive its admission request. Revoking storage prevents later validation; it does not by itself stop output already being forwarded.
 
-Extend `SessionResolver.resolve(credential, lifetime?)` with an optional operation signal and `ResolvedSession` with `invalidated?: AbortSignal`. No lifetime means one validation and no retained monitor. Supplying a lifetime registers only until rejection/error, operation end, session invalidation or strategy close.
+Extend `SessionResolver.resolve(credential, lifetime?)` with an optional operation signal and `ResolvedSession` with `invalidated?: AbortSignal`. No lifetime means one validation and no retained monitor. Supplying a lifetime registers only until rejection/error, operation end, session expiry, invalidation or strategy close.
 
 The subscription Gateway must pass its operation signal, link it to cancellation/expiry/shutdown, and abort/release it in `finally` on normal completion and every failure path. Register before the authoritative validity read and recheck cancellation before forwarding. Component opaque monitors use stable session ID; signed-token monitors use scoped token ID; Better Auth uses its authenticated session identity. Logout routes and admission share the same integration instance.
 
 Successful durable logout signals local monitors before returning. Stop forwarding immediately/best effort through the existing backend abort path. Bytes already sent cannot be recalled and already-admitted commands may finish. Failure to revoke is reported even if local streams were stopped. Cross-process stream cancellation requires future notification work.
+
+### Monitored session validity
+
+With a lifetime signal, every successful standard-strategy resolution returns an `invalidated` signal. It aborts on local logout, the captured resolved session deadline, or strategy close. Register by authenticated stable identity before the authoritative record/revocation read. Check already-aborted signals on attachment and recheck lifetime and invalidation after awaited work before returning authority. This closes the race where a read captured valid data just before logout.
+
+Use the strategy's existing configured clock and returned session deadline. Schedule that expiry only; release its timer and listeners on every earlier exit. Platform timer-range handling must not shorten the session. A rotated opaque credential does not extend a stream's captured deadline. Signed-token clock tolerance still governs token verification and revocation retention, while the returned `expiresAt` governs the operation's expiry. Do not start a monitored operation whose returned deadline has passed, and do not lengthen it to the revocation retention deadline. One-shot verification without a lifetime retains its existing acceptance rules and creates no monitor or timer.
+
+Strategy close aborts monitors before draining short admitted work, so active streams do not keep close waiting for their own invalidation. Operation completion releases its monitor without logging out other operations. Custom external resolvers may omit invalidation, but then provide no local revocation guarantee. For the native guarantees below, an external integration must provide a signal covering its expiry and invalidation. The Gateway retains its own explicit expiry checks for external resolvers. Better Auth follows the same monitored-lifetime contract using its authenticated native session identity.
+
+### Direct native admission
+
+Before this change, a direct native authenticator returns only trusted identity and authority facts. It can observe transport cancellation but cannot return session invalidation to an active native stream. After this change, the host supplies an explicit operation `signal`, and authentication returns those facts plus an optional process-local invalidation signal:
+
+```typescript
+/**
+ * Verified native admission facts and optional process-local invalidation.
+ */
+export interface ReaderAdmissionResult {
+  /**
+   * Identity and authority facts, detached by the receiving ingress.
+   */
+  readonly reader: TrustedReaderContext;
+
+  /**
+   * Ends this invocation when its authentication ceases to be valid.
+   * The host observes an already-aborted signal before dispatching work.
+   */
+  readonly invalidated?: AbortSignal;
+}
+
+/**
+ * Authenticates a direct native invocation through a configured port.
+ *
+ * @typeParam Peer Transport-specific peer facts.
+ */
+export interface DirectReaderAuthenticator<Peer> {
+  /**
+   * Verifies admission and returns invalidation when the integration can signal it.
+   *
+   * @param request Canonical operation, peer and host-managed lifetime.
+   * @returns Verified admission, or undefined to deny admission.
+   */
+  authenticate(request: {
+    /**
+     * Canonical RPC service.
+     */
+    readonly service: string;
+
+    /**
+     * Canonical RPC method.
+     */
+    readonly method: string;
+
+    /**
+     * Serialized Protobuf request.
+     */
+    readonly value: Uint8Array;
+
+    /**
+     * Incoming transport headers.
+     */
+    readonly headers: ReaderHeaders;
+
+    /**
+     * Transport-specific peer facts; its signal is not the lifetime API.
+     */
+    readonly peer: Peer;
+
+    /**
+     * Aborts on cancellation and every terminal invocation exit, including
+     * successful completion. For Activate it spans the entire iterator.
+     */
+    readonly signal: AbortSignal;
+  }): ReaderAdmissionResult | undefined | Promise<ReaderAdmissionResult | undefined>;
+}
+```
+
+Export both types from `@spine-event-engine/server`. The existing `TrustedReaderAdmission` input also receives the required `signal`. Ingress returns this result shape for every path: direct authentication supplies it; verified forwarded admission wraps its verified reader facts; deliberately public admission wraps empty reader facts. Failed forwarding assertions never fall back to direct authentication. Update maintained callers directly to the result shape.
+
+At ingress, read the result properties once, detach trusted reader facts using the existing snapshot, capture the invalidation signal separately, and freeze a new wrapper. Later replacement of caller properties cannot change the admitted facts or linked signal. Malformed results/signals fail as sanitized authentication errors. Neither signal enters `TrustedReaderContext`, Protobuf records, retained subscription identity, child forwarding proofs or another process.
+
+The host creates the operation signal before authentication, links transport cancellation and the captured invalidation signal, and aborts/releases it in an outer `finally`. Check cancellation before dispatch and immediately before output after asynchronous work. This signal ends on normal completion too; it does not assume that the transport peer signal aborts when a handler returns. Pending admission must also receive host shutdown. A custom collaborator must cooperate with cancellation; no new watchdog or forced termination is implied.
+
+| Native operation    | Lifetime and resulting behavior                                                                                                                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Post, Read, Execute | Starts before authentication and ends after the handler settles. Pass effective cancellation through read filtering and child I/O; check before dispatch. Already-admitted Commands may complete.                                                             |
+| Subscribe           | A unary lifetime covers authentication, definition creation and response. Release its monitor when it ends; retain the existing subscription definition and reader facts only. Clean up a newly created definition if cancellation prevents returning its ID. |
+| Activate            | Authenticate again and check the existing principal binding. The lifetime spans the entire iterator, including admission, ACK and every update. Exhaustion, iterator return, failure, expiry, logout and disconnect all release it.                           |
+| Cancel              | Fresh unary authentication and binding check last through cancellation. Existing subscription cancellation stops active delivery; invalidation of an Activate independently stops its output even when a revoked credential cannot issue Cancel.              |
+
+Standalone services and the Coordinator both use this lifetime. Coordinator fan-out receives the effective signal through existing child operations. Guard ACKs, queued/dequeued updates and child callbacks against cancellation; a value already queued must not escape after invalidation. Keep only reader facts in retained bindings. Existing cleanup cancels all created child definitions with its independent cleanup signal, preserving reader proof material and reporting cleanup failure even though local output has stopped. Do not reuse an already-aborted authentication signal for those required cleanup calls.
+
+For example, this native application creates its auth components alongside its Bounded Contexts and uses the same `sessions` object for admission and logout. It needs no BrowserServer or Gateway:
+
+```typescript
+import type { SignedSessions } from "@spine-event-engine/auth";
+import { Server, type ReaderAdmissionResult, type ServerOptions } from "@spine-event-engine/server";
+
+/**
+ * Composes native RPC admission with the application's session strategy.
+ *
+ * @param sessions Shared local instance used for resolution and logout.
+ * @param contexts Application Bounded Contexts exposed by the Server.
+ * @returns A native server ready to start.
+ */
+function nativeServer(
+  sessions: SignedSessions,
+  contexts: NonNullable<ServerOptions["contexts"]>,
+): Server {
+  return new Server({
+    contexts,
+    services: {
+      readerAdmission: {
+        direct: {
+          /**
+           * Resolves a native bearer credential for this invocation.
+           *
+           * @param request Native peer and host-managed lifetime.
+           * @returns Admission facts and local invalidation, or denial.
+           */
+          async authenticate(request): Promise<ReaderAdmissionResult | undefined> {
+            const authorization = request.peer.requestHeader.get("authorization");
+            const match = /^Bearer ([^\s,]+)$/i.exec(authorization ?? "");
+            const token = match?.[1];
+            if (token === undefined) return undefined;
+            const session = await sessions.resolve(
+              { kind: "bearer", value: token },
+              request.signal,
+            );
+            if (session?.invalidated === undefined) return undefined;
+            return {
+              reader: { principal: session.principal },
+              invalidated: session.invalidated,
+            };
+          },
+        },
+      },
+    },
+  });
+}
+```
+
+The standard `SignedSessions` strategy must return invalidation when given `request.signal`. This example denies admission if that required signal is missing. The result property is optional for custom authenticators with the limitations described above; it is not permission for a monitored standard strategy to omit expiry/logout cancellation.
+
+The application calls `await sessions.logout(credential)` on that same strategy and checks the existing `revoked`, `unavailable` or `expiryOnly` outcome. The latter two do not establish durable logout. Application-specific authority facts require their own policy check inside the same lifetime; credential transport fields do not imply tenant membership. The example's narrow native Bearer parser does not replace browser raw-header admission.
+
+Acceptance must observe real native Subscribe/Activate output and backend cancellation after logout and expiry, including Coordinator fan-out. Test logout during a paused authoritative read; invalidation before linking; paused proof/filter/backend work; buffered ACKs and updates; normal unary completion with a still-live peer signal; iterator exhaustion/return; rejection, malformed results, backend failure and shutdown during admission. Assert monitor/listener/timer release on every exit and no lifecycle signals in serialized proofs. Compile the maintained native example against public exports. A signal in one process does not cancel streams in another process.
+
+### Explicit storage maintenance
 
 All proposed persistent adapters expose explicit application-invoked expiry maintenance:
 

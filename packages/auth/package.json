@@ -31,6 +31,7 @@
     "@spine-event-engine/deployment": "2.0.0-snapshot.26",
     "@spine-event-engine/proto": "2.0.0-snapshot.26",
     "@spine-event-engine/storage": "2.0.0-snapshot.26",
+    "cookie": "2.0.1",
     "iron-session": "9.0.1",
     "jose": "6.2.15",
     "loglayer": "9.4.0",

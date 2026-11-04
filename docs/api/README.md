@@ -659,6 +659,11 @@ tenancy, and publishes through the private broker. `close()` releases that
 context and its broker resources.
 `DurableSubscriptionBindings` and `DurableSubscriptionBindingsOptions` configure
 the gateway storage registry used by production browser access.
+`BrowserCredentialAdmission` declares raw-header and cookie names consumed by
+one browser reader or auth route; `BrowserCredentialReader` reads admitted raw
+request facts before application service handling. Connect stops waiting and
+does not forward a late result after request cancellation or deadline expiry;
+the reader receives no abort signal to stop its underlying work.
 `isDurableSubscriptionBindings` lets hosting code check that a supplied
 `SubscriptionBindings` implementation declares this durable capability.
 `@spine-event-engine/testing` exports exactly `BlackBox`, `BlackBoxOptions`,

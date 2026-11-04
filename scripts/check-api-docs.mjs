@@ -910,6 +910,8 @@ const expectedBrowserServerExports = [
   "BrowserAdmission",
   "BrowserAuthRoute",
   "BrowserBackend",
+  "BrowserCredentialAdmission",
+  "BrowserCredentialReader",
   "BrowserServer",
   "BrowserServerCollaborators",
   "BrowserServerOptions",

@@ -7342,3 +7342,51 @@ reference from the later detached copy, reject invalid client authentication
 combinations before listening, and name the pinned native fields ignored during
 reconstruction. This accepts the design; M9–M11 workspace, packed-consumer and
 runtime verification remain required.
+
+## Browser admission names before credential extraction (2026-11-04)
+
+A reader's executable read method cannot tell the host which names to check
+before that method runs. The canonical proposal therefore adds required data-only
+BrowserCredentialAdmission metadata to readers and auth routes. Its three arrays
+separate CSRF headers, primary credential cookies and supporting state cookies.
+The host validates and copies declarations and route configuration before its
+first asynchronous startup step, reuses that policy throughout startup and request
+handling, unions names for
+duplicate checks, and uses only the active reader or route for simultaneous
+credential rejection. Standard and optional native integrations derive names
+from their actual effective configuration. External implementations declare
+their trusted configuration; metadata cannot certify arbitrary executable code.
+
+The pinned Better Auth public cookie helpers resolve native names, including the
+database OAuth state role. No private import, host policy override or auth-to-server
+dependency is introduced. Source inspection/probe establishes the seam; actual
+HTTP/native production tests remain required. This material public amendment
+requires independent review before its M7 implementation.
+
+Independent no-memory API, reliability and documentation review accepted this
+admission amendment after clarifying the startup snapshot order and request-local
+mutable URL value. The required startup-mutation and actual HTTP tests remain
+implementation acceptance; source-level native name resolution is not that proof.
+
+## Native authentication lifetime outside trusted reader facts (2026-11-04)
+
+The direct native authentication port cannot currently return session invalidation
+through its facts-only result. The canonical proposal adds host-managed request.signal
+and ReaderAdmissionResult { reader, invalidated? }, exported with the existing port
+from server. Runtime signals stay outside core trusted facts, Protobuf, subscription
+identity and forwarding proofs. The host lifetime spans authentication through unary
+completion or full activation iteration and releases on every exit. Coordinator
+fan-out/output guards and independent cleanup use existing paths.
+
+Standard monitored resolvers signal expiry, local logout and close using their
+existing clock and captured deadline; one-shot resolution retains no resources.
+Signed-token verification tolerance/retention remains distinct from operation expiry.
+Custom native integrations must provide equivalent signaling for these guarantees.
+The material amendment requires independent review before M8 runtime changes; source
+tracing is not proof of actual output cancellation or resource release.
+
+Independent no-memory API, reliability and documentation review accepted this
+native lifetime amendment after tightening the standard-strategy example to deny
+admission without its required invalidation signal and clarifying the port's
+one-time admission decision. Actual native/Coordinator output, cleanup and expiry
+behavior remain M8 runtime acceptance; no implementation success is inferred.

@@ -13,8 +13,11 @@
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { parseCookie, stringifySetCookie } from "cookie";
 
 import type { RequestCredential } from "../index.js";
+import { SessionRecords } from "./session-record.js";
 
 /**
  * Header input whose own-property arrays preserve observable duplicate values.
@@ -61,6 +64,16 @@ export interface OpaqueSessionCookiesOptions {
    * Maximum cookie pairs. Defaults to 64.
    */
   readonly maxCookiePairs?: number;
+
+  /**
+   * Browser SameSite policy; defaults to `lax`. Secure and CSRF rules still apply to `none`.
+   */
+  readonly sameSite?: "lax" | "strict" | "none";
+
+  /**
+   * Whether issued cookies carry the supplied session deadline; defaults to false.
+   */
+  readonly persistent?: boolean;
 }
 
 /**
@@ -80,6 +93,7 @@ export interface OpaqueCredentialRejection {
   readonly reason:
     | "missing-credential"
     | "duplicate-authorization"
+    | "simultaneous-credential"
     | "malformed-authorization"
     | "malformed-cookie"
     | "ambiguous-cookie"
@@ -102,13 +116,33 @@ export type OpaqueCredentialExtraction = RequestCredential | OpaqueCredentialRej
  * Strict, framework-neutral helper whose `close()` zeroes the copied CSRF secret.
  */
 export class OpaqueSessionCookies {
+  /**
+   * Immutable header and cookie names used by the browser host's raw admission.
+   */
+  readonly admission: Readonly<{
+    readonly csrfHeaderNames: readonly string[];
+    readonly credentialCookieNames: readonly string[];
+    readonly stateCookieNames: readonly string[];
+  }>;
+
   private readonly secret: Uint8Array;
+
   private readonly origins: ReadonlySet<string>;
+
   private readonly sessionName: string;
+
   private readonly csrfName: string;
+
   private readonly maxHeaderValues: number;
+
   private readonly maxHeaderCharacters: number;
+
   private readonly maxCookiePairs: number;
+
+  private readonly sameSite: "lax" | "strict" | "none";
+
+  private readonly persistent: boolean;
+
   private closed = false;
 
   /**
@@ -131,6 +165,7 @@ export class OpaqueSessionCookies {
     );
     if (this.sessionName === this.csrfName)
       throw new Error("sessionCookieName and csrfCookieName must be distinct");
+    this.admission = CookieValues.admission(this.sessionName, this.csrfName);
     this.maxHeaderValues = CookieValues.positiveSafeInteger(
       options.maxHeaderValues ?? 32,
       "maxHeaderValues",
@@ -143,31 +178,52 @@ export class OpaqueSessionCookies {
       options.maxCookiePairs ?? 64,
       "maxCookiePairs",
     );
+    this.sameSite = options.sameSite ?? "lax";
+    if (!["lax", "strict", "none"].includes(this.sameSite))
+      throw new Error("sameSite must be lax, strict, or none");
+    this.persistent = options.persistent ?? false;
+    if (typeof this.persistent !== "boolean") throw new Error("persistent must be a boolean");
   }
 
   /**
-   * Creates the fixed-length unpadded base64url CSRF value for one session ID.
-   * @param sessionId The session identifier protected by the CSRF value.
+   * Creates the CSRF value bound to the entire issued opaque credential.
+   * @param credential The complete sealed credential protected by the CSRF value.
    * @returns The derived CSRF value.
    */
-  csrf(sessionId: string): string {
+  csrf(credential: string): string {
     this.open();
-    if (!CookieValues.validSessionId(sessionId)) {
-      throw new Error("sessionId must be a 43-character unpadded base64url session ID");
-    }
-    return createHmac("sha256", this.secret).update(sessionId, "utf8").digest("base64url");
+    if (!CookieValues.validCredential(credential))
+      throw new Error("credential must be a nonempty sealed value without control characters");
+    return createHmac("sha256", this.secret).update(credential, "utf8").digest("base64url");
   }
 
   /**
-   * Creates the immutable pair of host-only cookies for a newly issued session.
-   * @param sessionId The issued opaque session identifier.
+   * Creates the immutable pair of host-only cookies for an issued or rotated session.
+   * @param credential The complete issued opaque credential.
+   * @param expiresAt The actual authoritative session deadline.
    * @returns The session and CSRF Set-Cookie values.
    */
-  issue(sessionId: string): readonly string[] {
-    const csrf = this.csrf(sessionId);
+  issue(credential: string, expiresAt: Timestamp): readonly string[] {
+    const csrf = this.csrf(credential);
+    const expires = this.persistent ? CookieValues.expiryDate(expiresAt) : undefined;
     return Object.freeze([
-      `${this.sessionName}=${sessionId}; Path=/; Secure; HttpOnly; SameSite=Lax`,
-      `${this.csrfName}=${csrf}; Path=/; Secure; SameSite=Lax`,
+      stringifySetCookie({
+        name: this.sessionName,
+        value: credential,
+        path: "/",
+        secure: true,
+        httpOnly: true,
+        sameSite: this.sameSite,
+        ...(expires === undefined ? {} : { expires }),
+      }),
+      stringifySetCookie({
+        name: this.csrfName,
+        value: csrf,
+        path: "/",
+        secure: true,
+        sameSite: this.sameSite,
+        ...(expires === undefined ? {} : { expires }),
+      }),
     ]);
   }
 
@@ -178,13 +234,28 @@ export class OpaqueSessionCookies {
   clear(): readonly string[] {
     this.open();
     return Object.freeze([
-      `${this.sessionName}=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0`,
-      `${this.csrfName}=; Path=/; Secure; SameSite=Lax; Max-Age=0`,
+      stringifySetCookie({
+        name: this.sessionName,
+        value: "",
+        path: "/",
+        secure: true,
+        httpOnly: true,
+        sameSite: this.sameSite,
+        maxAge: 0,
+      }),
+      stringifySetCookie({
+        name: this.csrfName,
+        value: "",
+        path: "/",
+        secure: true,
+        sameSite: this.sameSite,
+        maxAge: 0,
+      }),
     ]);
   }
 
   /**
-   * Reads bearer credentials first, otherwise a fully checked cookie credential.
+   * Rejects simultaneous primary credentials, then reads a bearer or checked cookie credential.
    * @param headers The request headers to inspect.
    * @returns The admitted credential or its rejection reason.
    */
@@ -198,8 +269,29 @@ export class OpaqueSessionCookies {
     if (values === undefined) return CookieValues.rejection("request-too-large");
     const authorization = values.get("authorization") ?? [];
     if (authorization.length > 1) return CookieValues.rejection("duplicate-authorization");
+    if (
+      authorization.length === 1 &&
+      CookieValues.primaryPresent(values.get("cookie") ?? [], this.sessionName)
+    )
+      return CookieValues.rejection("simultaneous-credential");
     if (authorization.length === 1) return CookieValues.bearer(CookieValues.only(authorization));
     return this.cookieCredential(values);
+  }
+
+  /**
+   * Reads a browser credential while representing no primary credential as absence.
+   * @param request Immutable raw headers with method and request-local parsed URL.
+   * @returns A credential, terminal rejection, or undefined absence.
+   */
+  read(request: {
+    readonly headers: OpaqueSessionHeaders;
+    readonly method: string;
+    readonly url: URL;
+  }): Promise<RequestCredential | OpaqueCredentialRejection | undefined> {
+    const result = this.extract(request.headers);
+    return Promise.resolve(
+      result.kind === "rejected" && result.reason === "missing-credential" ? undefined : result,
+    );
   }
 
   /**
@@ -213,6 +305,11 @@ export class OpaqueSessionCookies {
     return Promise.resolve();
   }
 
+  /**
+   * Validates origin and CSRF after the selected cookie pair has been parsed.
+   * @param values Duplicate-preserving normalized request headers.
+   * @returns Admitted cookie credential or a terminal rejection.
+   */
   private cookieCredential(
     values: ReadonlyMap<string, readonly string[]>,
   ): OpaqueCredentialExtraction {
@@ -240,15 +337,62 @@ export class OpaqueSessionCookies {
     return Object.freeze({ kind: "cookie" as const, value: parsed.session });
   }
 
+  /**
+   * Rejects methods that require the copied CSRF key after closure.
+   */
   private open(): void {
     if (this.closed) throw new Error("OpaqueSessionCookies is closed");
   }
 }
 
 /**
+ * Reasons a duplicate-preserving cookie parse can reject a request.
+ */
+type CookieParseReason =
+  "missing-credential" | "malformed-cookie" | "ambiguous-cookie" | "request-too-large";
+
+/**
+ * Parsed authentication and CSRF cookie pair or its terminal rejection.
+ */
+type CookiePair =
+  { readonly session: string; readonly csrf: string } | { readonly reason: CookieParseReason };
+
+/**
  * Parses and validates cookie values used by {@link OpaqueSessionCookies}.
  */
 const CookieValues = Object.freeze({
+  /**
+   * Captures the validated standard browser admission names as immutable data.
+   * @param sessionName Configured primary cookie name.
+   * @param csrfName Configured supporting CSRF cookie name.
+   * @returns Frozen data declaration for the host's raw admission.
+   */
+  admission(sessionName: string, csrfName: string) {
+    return Object.freeze({
+      csrfHeaderNames: Object.freeze(["x-spine-csrf"]),
+      credentialCookieNames: Object.freeze([sessionName]),
+      stateCookieNames: Object.freeze([csrfName]),
+    });
+  },
+
+  /**
+   * Checks whether any Cookie field contains the selected primary credential.
+   * @param headers Raw Cookie fields that may be legally split.
+   * @param sessionName Configured authentication cookie name.
+   * @returns Whether a primary cookie is present, including an empty value.
+   */
+  primaryPresent(headers: readonly string[], sessionName: string): boolean {
+    return headers.some((header) => Object.hasOwn(parseCookie(header), sessionName));
+  },
+
+  /**
+   * Collects own request header fields without losing duplicate values.
+   *
+   * @param headers Original header object.
+   * @param maxValues Existing field and value count limit.
+   * @param maxCharacters Existing total character limit.
+   * @returns Normalized duplicate-preserving values, or undefined when a limit is exceeded.
+   */
   headerValues(
     headers: OpaqueSessionHeaders,
     maxValues: number,
@@ -284,6 +428,12 @@ const CookieValues = Object.freeze({
     return result;
   },
 
+  /**
+   * Reads one Bearer authorization field without accepting malformed syntax.
+   *
+   * @param value One Authorization field value.
+   * @returns Bearer credential or terminal malformed-authorization rejection.
+   */
   bearer(value: string): OpaqueCredentialExtraction {
     const match = /^bearer ([\x21-\x7e]+)$/i.exec(value);
     return match === null
@@ -291,50 +441,92 @@ const CookieValues = Object.freeze({
       : Object.freeze({ kind: "bearer" as const, value: CookieValues.only(match.slice(1)) });
   },
 
+  /**
+   * Reads an unambiguous credential and CSRF pair across Cookie fields.
+   * @param headers Raw Cookie field values in arrival order.
+   * @param sessionName Selected authentication cookie name.
+   * @param csrfName Selected CSRF cookie name.
+   * @param maxPairs Existing total cookie-pair limit.
+   * @returns Decoded pair or a terminal parsing rejection.
+   */
   parseCookies(
     headers: readonly string[],
     sessionName: string,
     csrfName: string,
     maxPairs: number,
-  ):
-    | { readonly session: string; readonly csrf: string }
-    | {
-        readonly reason:
-          "missing-credential" | "malformed-cookie" | "ambiguous-cookie" | "request-too-large";
-      } {
-    const found = new Map<string, string[]>();
+  ): CookiePair {
+    const found = new Map<string, string>();
     let count = 0;
     for (const header of headers) {
-      if (CookieValues.hasForbiddenCookieCharacter(header)) return { reason: "malformed-cookie" };
-      for (const pair of header.split(";")) {
-        count += 1;
-        if (count > maxPairs) return { reason: "request-too-large" };
-        const index = pair.indexOf("=");
-        if (index <= 0) return { reason: "malformed-cookie" };
-        const name = pair.slice(0, index).trim();
-        const value = pair.slice(index + 1).trim();
-        if (!CookieValues.validCookiePair(name, value)) return { reason: "malformed-cookie" };
-        if (name === sessionName || name === csrfName) {
-          if (found.has(name)) return { reason: "ambiguous-cookie" };
-          found.set(name, [value]);
-        }
-      }
+      const result = CookieValues.readCookieHeader(
+        header,
+        found,
+        sessionName,
+        csrfName,
+        maxPairs - count,
+      );
+      if ("reason" in result) return result;
+      count += result.count;
     }
-    const session = found.get(sessionName) ?? [];
-    const csrf = found.get(csrfName) ?? [];
-    if (session.length === 0 && csrf.length === 0) return { reason: "missing-credential" };
-    if (session.length > 1 || csrf.length > 1) return { reason: "ambiguous-cookie" };
+    const session = found.get(sessionName);
+    const csrf = found.get(csrfName);
+    if (session === undefined && csrf === undefined) return { reason: "missing-credential" };
     if (
-      session.length !== 1 ||
-      csrf.length !== 1 ||
-      !CookieValues.validSessionId(CookieValues.only(session)) ||
-      !CookieValues.validCsrf(CookieValues.only(csrf))
+      session === undefined ||
+      csrf === undefined ||
+      !CookieValues.validCredential(session) ||
+      !CookieValues.validCsrf(csrf)
     ) {
       return { reason: "malformed-cookie" };
     }
-    return { session: CookieValues.only(session), csrf: CookieValues.only(csrf) };
+    return { session, csrf };
   },
 
+  /**
+   * Validates one raw Cookie field before using cookie v2 decoded values.
+   * @param header One original Cookie field.
+   * @param found Selected names already seen in this request.
+   * @param sessionName Selected authentication cookie name.
+   * @param csrfName Selected CSRF cookie name.
+   * @param remaining Remaining count under the existing pair limit.
+   * @returns Count accepted from the field or a terminal rejection.
+   */
+  readCookieHeader(
+    header: string,
+    found: Map<string, string>,
+    sessionName: string,
+    csrfName: string,
+    remaining: number,
+  ): { readonly count: number } | { readonly reason: CookieParseReason } {
+    if (CookieValues.hasForbiddenCookieCharacter(header)) return { reason: "malformed-cookie" };
+    const decoded = parseCookie(header);
+    let count = 0;
+    for (const pair of header.split(";")) {
+      count += 1;
+      if (count > remaining) return { reason: "request-too-large" };
+      const index = pair.indexOf("=");
+      if (index <= 0) return { reason: "malformed-cookie" };
+      const name = pair.slice(0, index).trim();
+      const value = pair.slice(index + 1).trim();
+      if (!CookieValues.validCookiePair(name, value)) return { reason: "malformed-cookie" };
+      if (name === sessionName || name === csrfName) {
+        if (found.has(name)) return { reason: "ambiguous-cookie" };
+        found.set(name, decoded[name] ?? "");
+      }
+    }
+    return { count };
+  },
+
+  /**
+   * Reads exactly one value for a required request header.
+   *
+   * @typeParam T Specific rejection reason.
+   * @param values Normalized duplicate-preserving fields.
+   * @param name Lowercase header name.
+   * @param missing Rejection when the header is absent.
+   * @param duplicate Rejection when the header repeats.
+   * @returns Selected value or the configured rejection.
+   */
   one<T extends OpaqueCredentialRejection["reason"]>(
     values: ReadonlyMap<string, readonly string[]>,
     name: string,
@@ -347,12 +539,24 @@ const CookieValues = Object.freeze({
     return { value: CookieValues.only(entries) };
   },
 
+  /**
+   * Gets the required first value from a validated singleton field.
+   *
+   * @param values Values already known to contain one entry.
+   * @returns The single field value.
+   */
   only(values: readonly string[]): string {
     const value = values[0];
     if (value === undefined) throw new Error("expected one header value");
     return value;
   },
 
+  /**
+   * Checks raw Cookie fields for controls and commas.
+   *
+   * @param value Raw Cookie field.
+   * @returns Whether the field has forbidden characters.
+   */
   hasForbiddenCookieCharacter(value: string): boolean {
     for (const character of value) {
       const code = character.charCodeAt(0);
@@ -361,6 +565,12 @@ const CookieValues = Object.freeze({
     return false;
   },
 
+  /**
+   * Validates an exact canonical request Origin.
+   *
+   * @param origin Candidate Origin.
+   * @returns The canonical Origin or an error for malformed input.
+   */
   validOrigin(origin: string): string {
     try {
       const url = new URL(origin);
@@ -381,6 +591,13 @@ const CookieValues = Object.freeze({
     }
   },
 
+  /**
+   * Validates a secure host-prefixed cookie name.
+   *
+   * @param value Candidate name.
+   * @param name Option name for errors.
+   * @returns The validated host cookie name.
+   */
   validCookieName(value: string, name: string): string {
     if (!value.startsWith("__Host-") || !/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(value)) {
       throw new Error(`${name} must be a valid __Host- cookie name`);
@@ -388,6 +605,13 @@ const CookieValues = Object.freeze({
     return value;
   },
 
+  /**
+   * Validates an existing finite request limit.
+   *
+   * @param value Candidate limit.
+   * @param name Option name for errors.
+   * @returns The positive safe integer.
+   */
   positiveSafeInteger(value: number, name: string): number {
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new Error(`${name} must be a positive safe integer`);
@@ -395,27 +619,80 @@ const CookieValues = Object.freeze({
     return value;
   },
 
+  /**
+   * Checks one raw Cookie name and value for safe field syntax.
+   *
+   * @param name Raw cookie name.
+   * @param value Raw cookie value.
+   * @returns Whether both components contain allowed field characters.
+   */
   validCookiePair(name: string, value: string): boolean {
     return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name) && /^[\x21-\x7e]+$/.test(value);
   },
 
+  /**
+   * Checks the unpadded base64url alphabet for CSRF tokens.
+   *
+   * @param value Candidate CSRF encoding.
+   * @returns Whether the characters and length can represent unpadded base64url.
+   */
   base64url(value: string): boolean {
     return /^[A-Za-z0-9_-]+$/.test(value) && value.length % 4 !== 1;
   },
 
+  /**
+   * Checks the fixed SHA-256 CSRF encoding.
+   *
+   * @param value Candidate CSRF value.
+   * @returns Whether it is a 43-character unpadded base64url digest.
+   */
   validCsrf(value: string): boolean {
     return value.length === 43 && CookieValues.base64url(value);
   },
 
-  validSessionId(value: string): boolean {
-    return value.length === 43 && CookieValues.base64url(value);
+  /**
+   * Checks an opaque credential without assuming a fixed sealed length.
+   *
+   * @param value Candidate complete credential.
+   * @returns Whether it is nonempty and free of control characters.
+   */
+  validCredential(value: string): boolean {
+    if (value.length === 0) return false;
+    for (const character of value) {
+      const code = character.charCodeAt(0);
+      if (code <= 31 || code === 127) return false;
+    }
+    return true;
   },
 
+  /**
+   * Converts the authoritative exact deadline to cookie date precision.
+   * @param expiresAt Issued session deadline.
+   * @returns Browser cookie expiry derived from that deadline.
+   */
+  expiryDate(expiresAt: Timestamp): Date {
+    const deadline = SessionRecords.deadline(expiresAt);
+    return new Date(Number(deadline.seconds) * 1_000 + Math.floor(deadline.nanos / 1_000_000));
+  },
+
+  /**
+   * Compares equal-length CSRF values in constant time.
+   *
+   * @param expected Derived CSRF digest.
+   * @param supplied Browser-supplied CSRF digest.
+   * @returns Whether the values match.
+   */
   sameCsrf(expected: string, supplied: string): boolean {
     if (expected.length !== supplied.length) return false;
     return timingSafeEqual(Buffer.from(expected), Buffer.from(supplied));
   },
 
+  /**
+   * Creates a frozen terminal credential rejection.
+   *
+   * @param reason Specific rejection reason.
+   * @returns The rejected extraction outcome.
+   */
   rejection(reason: OpaqueCredentialRejection["reason"]): OpaqueCredentialRejection {
     return Object.freeze({ kind: "rejected" as const, reason });
   },

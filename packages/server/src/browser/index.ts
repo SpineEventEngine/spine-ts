@@ -32,6 +32,8 @@ export {
 } from "./durable-subscription-bindings.js";
 export type {
   BrowserAdmission,
+  BrowserCredentialAdmission,
+  BrowserCredentialReader,
   BrowserAuthRoute,
   BrowserBackend,
   BrowserServerCollaborators,

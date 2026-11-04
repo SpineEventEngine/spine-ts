@@ -126,7 +126,36 @@ even before maintenance. Explicit `purgeExpired(cutoff, signal)` removes only
 records strictly before a cutoff no later than the store's trusted clock. It
 uses scoped indexed pages and conditional deletion; a concurrent change can
 leave eligible rows for a later invocation. No automatic cleanup runs.
-`OpaqueSessionCookies` supplies strict cookie parsing and serialization helpers.
+`OpaqueSessionCookies` binds its CSRF value to the complete sealed credential,
+parses Cookie fields with cookie 2.0.1 after duplicate checks, and emits separate
+secure `__Host-` session and CSRF `Set-Cookie` fields. Pass the actual issued
+deadline to `issue`; `persistent: true` gives both cookies that deadline while
+the default keeps them as browser-session cookies. `sameSite` accepts `lax`,
+`strict`, or `none`; the session cookie remains `HttpOnly` and the CSRF cookie
+remains readable by the browser.
+
+```ts
+import { OpaqueSessionCookies, type OpaqueSessions } from "@spine-event-engine/auth";
+
+declare const sessions: OpaqueSessions;
+const cookies = new OpaqueSessionCookies({
+  csrfSecret: crypto.getRandomValues(new Uint8Array(32)),
+  origins: ["https://app.example"],
+  sameSite: "strict",
+  persistent: true,
+});
+const issued = await sessions.issue({ id: "example-user" });
+if (issued.kind === "created") {
+  const setCookieFields = cookies.issue(issued.credential.value, issued.session.expiresAt);
+  // Append each field separately to the HTTP response.
+  void setCookieFields;
+}
+```
+
+After rotation, call `issue` again with the new sealed value and its deadline;
+`clear()` emits matching host-only removal fields. `read` distinguishes missing
+credentials from terminal rejection so browser hosting does not fall back to a
+different reader after invalid input.
 Neither strategy provisions users nor grants permissions.
 
 `OidcFlow` is a bounded authorization-code and PKCE transaction manager. It works with `createGoogleProvider`, `createGitHubProvider`, or a discovered or configured OIDC provider. Applications expose start/callback/exchange endpoints, perform HTTP routing, map verified external identity through `IdentityMapping`, and issue an application session through `ApplicationSessionIssuer`. Provider access, refresh, and ID tokens remain sensitive server-side material; do not return them to browser application code.

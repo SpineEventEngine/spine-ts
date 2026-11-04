@@ -1321,6 +1321,11 @@ For `BrowserServer` from `@spine-event-engine/server/browser`, origins must be u
 fragment, or trailing slash. Requests without an allowed exact `Origin` receive
 403 before RPC handling. Allowed responses include credentialed exact-origin
 CORS, `Vary: Origin`, protocol request headers, and exposed gRPC status headers.
+RPC and auth-route preflight completes before credential extraction. The host
+allows configured CSRF headers alongside Connect and gRPC-Web protocol headers;
+actual responses, including permitted-origin terminal errors, retain exact-origin
+credentialed CORS. Callback responses cannot replace that host policy with a
+wildcard origin.
 
 Supplying `browser.backend.baseUrl` selects standalone mode. It is one canonical
 HTTP(S) origin for a Spine TS or JVM backend; the gateway never closes
@@ -1340,7 +1345,8 @@ re-query authoritative state after duplicate updates or generic loss notices.
 Each registration has one exact `GET` or `POST` canonical path, one method per
 path, exact canonical origins, finite request bytes, and a finite timeout. A
 missing Origin is rejected unless that route explicitly permits it for an OAuth
-callback. Unknown paths, method/origin failures, body overflow, timeout, and
+callback and validates the protocol state in its handler.
+Unknown paths, method/origin failures, body overflow, timeout, and
 handler failure return fixed 404, 405, 403, 413, 504, and 500 responses without
 calling application code on rejected input. The 404 unknown-path result applies
 only after framework Origin admission. Auth admission is bounded to 64 active
@@ -1351,10 +1357,18 @@ transfer. Response bodies use `writeMaxBytes`; overflow returns 413 before any
 application status or headers are committed. Listener close ultimately aborts
 an active request through its disconnect signal.
 
-With `cookies`, `OpaqueSessionCookies` performs strict bearer-first or
-CSRF-protected cookie extraction. A strict rejection becomes an unusable
-credential and never falls back to permissive header parsing. Without cookies,
-the host accepts exactly one non-whitespace bearer token. Credentials and raw
+Every credential reader and auth route declares CSRF header names, primary
+credential-cookie names, and supporting state-cookie names. The host snapshots
+these declarations before startup, rejects repeated raw Authorization, Origin,
+configured CSRF headers, and selected cookies, and checks simultaneous primary
+credentials only for the active reader or selected route. Legal split Cookie
+fields and repeated unrelated cookies remain available to the reader.
+`OpaqueSessionCookies` provides a strict reader for a sealed opaque session or
+bearer credential, including CSRF checks; a primary cookie and bearer field
+together are rejected. The legacy `cookies` option cannot be combined with
+`credentials`. Without either, the host reads one valid Bearer field. A reader
+returns a credential, absence, or terminal rejection; a thrown read is terminal
+unavailability. Credentials and raw
 transport metadata do not reach the private backend. The application-supplied
 context resolver replaces caller actor and tenant facts before forwarding.
 

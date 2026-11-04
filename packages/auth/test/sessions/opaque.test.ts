@@ -15,6 +15,7 @@
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { parseCookie, parseSetCookie } from "cookie";
 
 import { OpaqueSessionCookies, OpaqueSessions, MemoryOpaqueSessionStore } from "../../src/index.js";
 
@@ -254,19 +255,148 @@ describe("OpaqueSessions", () => {
 describe("OpaqueSessionCookies", () => {
   const secret = new Uint8Array(32).fill(7);
   const origin = "https://app.example.test";
+  const cookieDeadline = create(TimestampSchema, { seconds: 1_700_000_060n });
+
+  it("binds CSRF to the whole sealed credential and round-trips cookie v2 syntax", async () => {
+    const time = clock(1_700_000_000_000);
+    const sessions = await OpaqueSessions.create(options(time));
+    const issued = await sessions.issue({ id: "browser-user" });
+    if (issued.kind !== "created") throw new Error("expected issued session");
+    const cookies = new OpaqueSessionCookies({ csrfSecret: secret, origins: [origin] });
+    const pair = cookies.issue(issued.credential.value, issued.session.expiresAt);
+    const session = parseSetCookie(pair[0] ?? "");
+    const csrf = parseSetCookie(pair[1] ?? "");
+    expect(issued.credential.value.length).toBeGreaterThan(43);
+    expect(session).toMatchObject({
+      name: "__Host-spine-session",
+      path: "/",
+      secure: true,
+      httpOnly: true,
+      sameSite: "lax",
+    });
+    expect(csrf).toMatchObject({
+      name: "__Host-spine-csrf",
+      path: "/",
+      secure: true,
+      sameSite: "lax",
+    });
+    expect(session.expires).toBeUndefined();
+    expect(csrf.expires).toBeUndefined();
+    expect(csrf.httpOnly).toBeUndefined();
+    expect(session.domain).toBeUndefined();
+    const sessionField = pair[0]?.split(";")[0];
+    const csrfField = pair[1]?.split(";")[0];
+    if (sessionField === undefined || csrfField === undefined)
+      throw new Error("cookie pair missing");
+    expect(parseCookie(sessionField)["__Host-spine-session"]).toBe(issued.credential.value);
+    expect(
+      cookies.extract({
+        cookie: [sessionField, csrfField],
+        origin,
+        "x-spine-csrf": cookies.csrf(issued.credential.value),
+      }),
+    ).toEqual({ kind: "cookie", value: issued.credential.value });
+    await cookies.close();
+    await sessions.close();
+  });
+
+  it("uses the issued deadline for persistent cookies and changes both values on reissue", async () => {
+    const time = clock(1_700_000_000_000);
+    const sessions = await OpaqueSessions.create(options(time));
+    const first = await sessions.issue({ id: "one" });
+    const second = await sessions.issue({ id: "two" });
+    if (first.kind !== "created" || second.kind !== "created") throw new Error("expected sessions");
+    const cookies = new OpaqueSessionCookies({
+      csrfSecret: secret,
+      origins: [origin],
+      persistent: true,
+      sameSite: "strict",
+    });
+    const firstPair = cookies.issue(first.credential.value, first.session.expiresAt);
+    const secondPair = cookies.issue(second.credential.value, second.session.expiresAt);
+    const expected = new Date(Number(first.session.expiresAt.seconds) * 1_000).toUTCString();
+    for (const value of firstPair) {
+      expect(value).toContain(`Expires=${expected}`);
+      expect(value).toContain("SameSite=Strict");
+      expect(value).not.toContain("Domain=");
+    }
+    expect(firstPair[0]).not.toBe(secondPair[0]);
+    expect(firstPair[1]).not.toBe(secondPair[1]);
+    const oldCsrf = cookies.csrf(first.credential.value);
+    const mixedCookie = `__Host-spine-session=${second.credential.value}; __Host-spine-csrf=${oldCsrf}`;
+    expect(
+      cookies.extract({
+        cookie: mixedCookie,
+        origin,
+        "x-spine-csrf": oldCsrf,
+      }),
+    ).toEqual({ kind: "rejected", reason: "csrf-mismatch" });
+    const cleared = cookies.clear();
+    expect(parseSetCookie(cleared[0] ?? "")).toMatchObject({
+      name: "__Host-spine-session",
+      path: "/",
+      secure: true,
+      httpOnly: true,
+      maxAge: 0,
+    });
+    expect(parseSetCookie(cleared[1] ?? "")).toMatchObject({
+      name: "__Host-spine-csrf",
+      path: "/",
+      secure: true,
+      maxAge: 0,
+    });
+    await cookies.close();
+    await sessions.close();
+  });
+
+  it("supports explicit SameSite=None while retaining Secure and rejects invalid policy", () => {
+    const cookies = new OpaqueSessionCookies({
+      csrfSecret: secret,
+      origins: [origin],
+      sameSite: "none",
+    });
+    const deadline = create(TimestampSchema, { seconds: 1_700_000_060n });
+    const pair = cookies.issue("Fe26.2.test.sealed.reference", deadline);
+    expect(pair.every((value) => value.includes("Secure") && value.includes("SameSite=None"))).toBe(
+      true,
+    );
+    expect(
+      () =>
+        new OpaqueSessionCookies({
+          csrfSecret: secret,
+          origins: [origin],
+          sameSite: "invalid" as never,
+        }),
+    ).toThrow("sameSite");
+    expect(
+      () =>
+        new OpaqueSessionCookies({
+          csrfSecret: secret,
+          origins: [origin],
+          persistent: "yes" as never,
+        }),
+    ).toThrow("persistent");
+  });
 
   it("serializes frozen host-only cookies and accepts a valid CSRF-protected cookie request", () => {
     const cookies = new OpaqueSessionCookies({ csrfSecret: secret, origins: [origin] });
     const id = "a".repeat(43);
-    const issued = cookies.issue(id);
+    const issued = cookies.issue(id, cookieDeadline);
     const cleared = cookies.clear();
     expect(issued).toEqual([
-      `__Host-spine-session=${id}; Path=/; Secure; HttpOnly; SameSite=Lax`,
+      `__Host-spine-session=${id}; Path=/; HttpOnly; Secure; SameSite=Lax`,
       `__Host-spine-csrf=${cookies.csrf(id)}; Path=/; Secure; SameSite=Lax`,
     ]);
-    expect(cleared).toEqual([
-      "__Host-spine-session=; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=0",
-      "__Host-spine-csrf=; Path=/; Secure; SameSite=Lax; Max-Age=0",
+    expect(cleared.map((value) => parseSetCookie(value))).toMatchObject([
+      {
+        name: "__Host-spine-session",
+        path: "/",
+        secure: true,
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 0,
+      },
+      { name: "__Host-spine-csrf", path: "/", secure: true, sameSite: "lax", maxAge: 0 },
     ]);
     expect(Object.isFrozen(issued)).toBe(true);
     expect(Object.isFrozen(cleared)).toBe(true);
@@ -279,17 +409,18 @@ describe("OpaqueSessionCookies", () => {
     ).toEqual({ kind: "cookie", value: id });
   });
 
-  it("requires exact session ID length for derivation, issuance, and extraction", () => {
+  it("rejects empty and control-bearing credentials without imposing the old ID length", () => {
     const cookies = new OpaqueSessionCookies({ csrfSecret: secret, origins: [origin] });
-    for (const id of ["a".repeat(42), "a".repeat(44), "=".repeat(43)]) {
-      expect(() => cookies.csrf(id)).toThrow("43-character unpadded base64url session ID");
-      expect(() => cookies.issue(id)).toThrow("43-character unpadded base64url session ID");
+    for (const invalid of ["", "Fe26\nvalue", "Fe26\u0000value"]) {
+      expect(() => cookies.csrf(invalid)).toThrow("nonempty sealed value");
+      expect(() => cookies.issue(invalid, cookieDeadline)).toThrow("nonempty sealed value");
     }
     expect(
       cookies.extract({
-        cookie: `__Host-spine-session=${"a".repeat(42)}; __Host-spine-csrf=${"a".repeat(43)}`,
+        cookie: `__Host-spine-session=%0A; __Host-spine-csrf=${"a".repeat(43)}`,
       }),
     ).toEqual({ kind: "rejected", reason: "malformed-cookie" });
+    expect(cookies.csrf("a".repeat(42))).toHaveLength(43);
   });
 
   it("copies its secret, validates canonical custom configuration, and rejects terminal methods", async () => {
@@ -304,7 +435,7 @@ describe("OpaqueSessionCookies", () => {
     const beforeMutation = cookies.csrf(id);
     copiedSecret.fill(9);
     expect(cookies.csrf(id)).toBe(beforeMutation);
-    expect(cookies.issue(id)[0]).toMatch(/^__Host-session=/);
+    expect(cookies.issue(id, cookieDeadline)[0]).toMatch(/^__Host-session=/);
     expect(
       () => new OpaqueSessionCookies({ csrfSecret: new Uint8Array(31), origins: [origin] }),
     ).toThrow("at least 32 bytes");
@@ -322,7 +453,7 @@ describe("OpaqueSessionCookies", () => {
     await cookies.close();
     for (const operation of [
       () => cookies.csrf(id),
-      () => cookies.issue(id),
+      () => cookies.issue(id, cookieDeadline),
       () => cookies.clear(),
     ]) {
       expect(operation).toThrow("closed");
@@ -351,6 +482,12 @@ describe("OpaqueSessionCookies", () => {
       kind: "rejected",
       reason: "malformed-cookie",
     });
+    for (const cookie of ["missing-equals", "bad name=value"]) {
+      expect(cookies.extract({ cookie })).toEqual({
+        kind: "rejected",
+        reason: "malformed-cookie",
+      });
+    }
     expect(cookies.extract({})).toEqual({ kind: "rejected", reason: "missing-credential" });
     const id = "a".repeat(43);
     expect(
@@ -363,12 +500,51 @@ describe("OpaqueSessionCookies", () => {
     });
   });
 
-  it("rejects invalid session encodings and duplicate Origins before resolving a cookie credential", () => {
+  it("rejects bearer together with a primary session cookie, including an empty one", () => {
+    const cookies = new OpaqueSessionCookies({ csrfSecret: secret, origins: [origin] });
+    for (const value of ["sealed-value", ""]) {
+      expect(
+        cookies.extract({
+          authorization: "Bearer bearer-value",
+          cookie: `__Host-spine-session=${value}`,
+        }),
+      ).toEqual({ kind: "rejected", reason: "simultaneous-credential" });
+    }
+    expect(
+      cookies.extract({
+        authorization: "Bearer bearer-value",
+        cookie: "__Host-spine-csrf=supporting-state",
+      }),
+    ).toEqual({ kind: "bearer", value: "bearer-value" });
+  });
+
+  it("exposes immutable configured admission names and reader absence separately", async () => {
+    const cookies = new OpaqueSessionCookies({
+      csrfSecret: secret,
+      origins: [origin],
+      sessionCookieName: "__Host-orders-session",
+      csrfCookieName: "__Host-orders-csrf",
+    });
+    expect(cookies.admission).toEqual({
+      csrfHeaderNames: ["x-spine-csrf"],
+      credentialCookieNames: ["__Host-orders-session"],
+      stateCookieNames: ["__Host-orders-csrf"],
+    });
+    expect(Object.isFrozen(cookies.admission)).toBe(true);
+    expect(Object.isFrozen(cookies.admission.credentialCookieNames)).toBe(true);
+    const request = { headers: {}, method: "POST", url: new URL("https://app.example.test/rpc") };
+    await expect(cookies.read(request)).resolves.toBeUndefined();
+    await expect(
+      cookies.read({ ...request, headers: { authorization: ["Bearer a", "Bearer b"] } }),
+    ).resolves.toEqual({ kind: "rejected", reason: "duplicate-authorization" });
+  });
+
+  it("rejects decoded control characters and duplicate Origins before resolving a cookie credential", () => {
     const cookies = new OpaqueSessionCookies({ csrfSecret: secret, origins: [origin] });
     expect(
       cookies.extract({
         cookie:
-          "__Host-spine-session=a; __Host-spine-csrf=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "__Host-spine-session=%0A; __Host-spine-csrf=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       }),
     ).toEqual({ kind: "rejected", reason: "malformed-cookie" });
     const id = "a".repeat(43);

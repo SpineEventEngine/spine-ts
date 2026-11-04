@@ -421,6 +421,21 @@ and backend forwarding. Authenticated durable bindings are browser-host
 infrastructure, not native `Server` state. See the [browser/auth extension guide](https://github.com/SpineEventEngine/spine-ts/blob/master/docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 before exposing a backend to a browser.
 
+For a standalone Gateway, call `BrowserServer.run` with a canonical
+`backend.baseUrl` (or discovery), `origins`, `sessions`, `authorize`, `contexts`,
+`clock`, and explicit `bindings`. Supply `credentials` with a
+`BrowserCredentialReader` to select a browser auth engine. The reader and each
+`authRoutes` entry declare `csrfHeaderNames`, `credentialCookieNames`, and
+`stateCookieNames`; empty arrays state that a category is unused. The Gateway
+validates those names before it starts listening, then checks raw headers before
+calling the reader or a route. Preflight never calls the credential reader;
+permitted origins receive credentialed CORS headers covering the configured CSRF
+fields and Connect protocol headers. Connect stops waiting for a reader and
+does not forward its late result when the request is cancelled or its deadline
+passes. The reader receives no abort signal, so its underlying work may continue.
+This setup does not construct a
+`ServerEnvironment` or Bounded Context. Close the returned server at shutdown.
+
 ## Native reader admission
 
 Native authentication is configured through `ServerOptions.services.readerAdmission`.
