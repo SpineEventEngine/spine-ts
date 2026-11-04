@@ -41,10 +41,10 @@
 
 ## Current implementation status
 
-M1, M2, M3, M3A, M4 and M5 are implemented and accepted after focused
-verification and independent review. M5 includes persistent OIDC state, the
-reviewed library composition, per-call cancellation and draining shutdown.
-M6 through M12 remain to be implemented and accepted; M6 is next.
+M1, M2, M3, M3A, M4, M5 and M6 are implemented and accepted after focused
+verification and independent review. Persistent opaque sessions, OIDC state and
+signed-token revocations use the reviewed library composition and factory lifecycle.
+M7 is in bounded API preparation. M7 through M12 remain to be implemented and accepted.
 Final repository-wide release verification and security review remain in M12.
 
 ## Acceptance

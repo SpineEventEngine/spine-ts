@@ -49,6 +49,125 @@ function headerOf(credential: { readonly value: string }) {
 }
 
 describe("SignedSessions", () => {
+  it("retains logout through the full inclusive skew window", async () => {
+    const time = clock();
+    const key = keys();
+    let retained: { seconds: bigint; nanos: number } | undefined;
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: time,
+      ttlSeconds: 2,
+      clockSkewSeconds: 1,
+      revocation: {
+        kind: "supported",
+        isRevoked: () => Promise.resolve(false),
+        revoke: (_jti, expiresAt) => {
+          retained = expiresAt;
+          return Promise.resolve();
+        },
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected token");
+    time.advance(3_000);
+    expect(await sessions.resolve(issued.credential)).toBeDefined();
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "revoked" });
+    expect(retained).toMatchObject({ seconds: 1003n, nanos: 0 });
+    time.advance(1);
+    expect(await sessions.resolve(issued.credential)).toBeUndefined();
+  });
+
+  it("retains through the last representable clock millisecond when skew exceeds Timestamp", async () => {
+    const maxSeconds = 253_402_300_799;
+    let now = (maxSeconds - 2) * 1_000;
+    const key = keys();
+    let retained: { seconds: bigint; nanos: number } | undefined;
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: { now: () => now },
+      ttlSeconds: 1,
+      clockSkewSeconds: Number.MAX_SAFE_INTEGER,
+      revocation: {
+        kind: "supported",
+        isRevoked: () => Promise.resolve(false),
+        revoke: (_jti, expiresAt) => {
+          retained = expiresAt;
+          return Promise.resolve();
+        },
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected token");
+    now = maxSeconds * 1_000 + 999;
+    expect(await sessions.resolve(issued.credential)).toBeDefined();
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "revoked" });
+    expect(retained).toMatchObject({ seconds: BigInt(maxSeconds), nanos: 999_999_999 });
+    now += 1;
+    expect(await sessions.resolve(issued.credential)).toBeUndefined();
+  });
+
+  it("rejects issuance when the second clock fails or expiry exceeds Timestamp", async () => {
+    const key = keys();
+    let reads = 0;
+    const faulty = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: { now: () => (++reads === 2 ? Number.NaN : 1_000_000) },
+    });
+    expect(await faulty.issue({ id: "principal" })).toEqual({
+      kind: "rejected",
+      reason: "clock-failure",
+    });
+    const nearMax = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: { now: () => 253_402_300_799_000 },
+      ttlSeconds: 2,
+    });
+    expect(await nearMax.issue({ id: "principal" })).toEqual({
+      kind: "rejected",
+      reason: "clock-failure",
+    });
+    await faulty.close();
+    await nearMax.close();
+  });
+
+  it("withholds credentials after signing or verification crosses close or expiry", async () => {
+    const key = keys();
+    const time = clock();
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: time,
+      ttlSeconds: 1,
+      clockSkewSeconds: 0,
+    });
+    const late = sessions.issue({ id: "principal" });
+    time.advance(1_001);
+    expect(await late).toEqual({ kind: "rejected", reason: "clock-failure" });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected token");
+    const resolving = sessions.resolve(issued.credential);
+    await sessions.close();
+    expect(await resolving).toBeUndefined();
+
+    const closing = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+    });
+    const pending = closing.issue({ id: "principal" });
+    await closing.close();
+    expect(await pending).toEqual({ kind: "rejected", reason: "closed" });
+  });
+
   it("issues an exact ES256 bearer JWT and resolves defensive principal copies", async () => {
     const time = clock();
     const key = keys();
@@ -458,6 +577,44 @@ describe("SignedSessions", () => {
     await expect(loggingOut.close()).resolves.toBeUndefined();
   });
 
+  it("rechecks expiry after a delayed revocation read before returning authority", async () => {
+    const time = clock();
+    const key = keys();
+    let release!: () => void;
+    let entered!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: time,
+      ttlSeconds: 2,
+      clockSkewSeconds: 1,
+      revocation: {
+        kind: "supported",
+        isRevoked: async () => {
+          entered();
+          await pending;
+          return false;
+        },
+        revoke: () => Promise.resolve(),
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected token");
+    const resolving = sessions.resolve(issued.credential);
+    await waiting;
+    time.advance(3_001);
+    release();
+    await expect(resolving).resolves.toBeUndefined();
+    await sessions.close();
+  });
+
   it("validates construction, principals, entropy, clocks, and issuance bounds", async () => {
     const key = keys();
     for (const options of [
@@ -755,6 +912,45 @@ describe("SignedSessions", () => {
         sessions.resolve({ kind: "bearer", value: token(key.privateKey, header, claims) }),
       ).resolves.toBeDefined();
     }
+  });
+
+  it("keeps the exact old expiry endpoint while rejecting jose-permissive header and audience forms", async () => {
+    const key = keys();
+    const time = clock();
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: time,
+      ttlSeconds: 10,
+      clockSkewSeconds: 1,
+    });
+    const header = { alg: "ES256", typ: "JWT", kid: "key" };
+    const claims = {
+      iss: "issuer",
+      aud: "aud",
+      sub: "principal",
+      iat: 989,
+      nbf: 989,
+      exp: 999,
+      jti: "abcdefghijklmnopqrstuv",
+    };
+    const exact = token(key.privateKey, header, claims);
+    await expect(sessions.resolve({ kind: "bearer", value: exact })).resolves.toBeDefined();
+    await expect(
+      sessions.resolve({
+        kind: "bearer",
+        value: token(key.privateKey, { ...header, typ: "application/jwt" }, claims),
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      sessions.resolve({
+        kind: "bearer",
+        value: token(key.privateKey, header, { ...claims, aud: ["aud", "other"] }),
+      }),
+    ).resolves.toBeUndefined();
+    time.advance(1);
+    await expect(sessions.resolve({ kind: "bearer", value: exact })).resolves.toBeUndefined();
   });
 
   it("enforces token output size and exact skew boundaries", async () => {

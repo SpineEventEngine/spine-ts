@@ -688,6 +688,8 @@ export { PersistentOpaqueSessionStore } from "./sessions/persistent-opaque-sessi
 export type { PersistentOpaqueStoreOptions } from "./sessions/persistent-opaque-session-store.js";
 export { PersistentOidcFlowStore } from "./oidc/persistent-flow-store.js";
 export type { PersistentOidcFlowOptions } from "./oidc/persistent-flow-store.js";
+export { PersistentTokenRevocations } from "./sessions/persistent-token-revocations.js";
+export type { PersistentTokenRevocationsOptions } from "./sessions/persistent-token-revocations.js";
 export type { OidcFlowStore } from "./oidc/flow-store.js";
 export { SignedSessions } from "./sessions/signed.js";
 export { OidcFlow } from "./oidc/index.js";

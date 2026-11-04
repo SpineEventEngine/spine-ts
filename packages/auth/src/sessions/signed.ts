@@ -19,10 +19,9 @@ import {
   createPrivateKey,
   createPublicKey,
   randomBytes as nodeRandomBytes,
-  sign,
-  verify,
 } from "node:crypto";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { SignJWT, decodeProtectedHeader, jwtVerify } from "jose";
 
 import type {
   AuthenticatedPrincipal,
@@ -106,10 +105,10 @@ export interface SignedTokenRevocation {
   isRevoked(jti: string): Promise<boolean>;
 
   /**
-   * Stores the exact token ID through its Protobuf Timestamp expiry.
-   * The application owns persistence, cleanup, availability, and atomicity.
+   * Stores the exact token ID through the inclusive last acceptance instant.
+   * The strategy includes its configured clock tolerance before calling this port.
    * @param jti The token identifier to retain.
-   * @param expiresAt The expiry after which retention may end.
+   * @param expiresAt The full last-acceptance deadline, including clock tolerance.
    * @returns Completes after the token ID is retained.
    */
   revoke(jti: string, expiresAt: Timestamp): Promise<void>;
@@ -380,15 +379,23 @@ export class SignedSessions implements SessionResolver {
    * @param principal The authenticated principal to encode.
    * @returns The issuance outcome and, when accepted, credential and session.
    */
-  issue(principal: AuthenticatedPrincipal): Promise<SignedSessionIssueResult> {
-    if (this.#isClosed()) return Promise.resolve(SignedSessionValues.rejected("closed"));
+  async issue(principal: AuthenticatedPrincipal): Promise<SignedSessionIssueResult> {
+    if (this.#isClosed()) return SignedSessionValues.rejected("closed");
     const now = this.#now();
     if (typeof now !== "number")
-      return Promise.resolve(
-        SignedSessionValues.rejected(now.kind === "closed" ? "closed" : "clock-failure"),
-      );
-    if (this.#isClosed()) return Promise.resolve(SignedSessionValues.rejected("closed"));
+      return SignedSessionValues.rejected(now.kind === "closed" ? "closed" : "clock-failure");
+    if (this.#isClosed()) return SignedSessionValues.rejected("closed");
     this.#sweep(now);
+    return this.#issuePrepared(principal);
+  }
+
+  /**
+   * Copies the principal and constructs bounded claims before signing.
+   *
+   * @param principal Authenticated principal supplied for issuance.
+   * @returns Issuance outcome after signing or a specific input failure.
+   */
+  async #issuePrepared(principal: AuthenticatedPrincipal): Promise<SignedSessionIssueResult> {
     let copied: AuthenticatedPrincipal | undefined;
     try {
       copied = SignedSessionValues.principalCopy(
@@ -398,51 +405,99 @@ export class SignedSessions implements SessionResolver {
         this.#maxAttributeChars,
       );
     } catch {
-      return Promise.resolve(SignedSessionValues.rejected("principal-invalid"));
+      return SignedSessionValues.rejected("principal-invalid");
     }
-    if (copied === undefined)
-      return Promise.resolve(SignedSessionValues.rejected("principal-invalid"));
+    if (copied === undefined) return SignedSessionValues.rejected("principal-invalid");
     const jti = this.#jti();
     if (jti === undefined)
-      return Promise.resolve(
-        this.#isClosed()
-          ? SignedSessionValues.rejected("closed")
-          : SignedSessionValues.rejected("entropy-failure"),
-      );
-    if (this.#isClosed()) return Promise.resolve(SignedSessionValues.rejected("closed"));
+      return this.#isClosed()
+        ? SignedSessionValues.rejected("closed")
+        : SignedSessionValues.rejected("entropy-failure");
+    if (this.#isClosed()) return SignedSessionValues.rejected("closed");
     const again = this.#now();
     if (typeof again !== "number")
-      return Promise.resolve(
-        SignedSessionValues.rejected(again.kind === "closed" ? "closed" : "clock-failure"),
-      );
-    if (this.#isClosed()) return Promise.resolve(SignedSessionValues.rejected("closed"));
-    const iat = Math.floor(again / 1000);
+      return SignedSessionValues.rejected(again.kind === "closed" ? "closed" : "clock-failure");
+    if (this.#isClosed()) return SignedSessionValues.rejected("closed");
+    const claims = this.#issueClaims(copied, jti, again);
+    if (claims === undefined) return SignedSessionValues.rejected("clock-failure");
+    return this.#signIssued(claims, copied);
+  }
+
+  /**
+   * Builds exact signed claims when their expiry fits the trusted clock domain.
+   *
+   * @param principal Detached authenticated principal.
+   * @param jti Fresh token identifier.
+   * @param now Trusted issuance time in milliseconds.
+   * @returns Claims, or undefined when expiry exceeds the Timestamp range.
+   */
+  #issueClaims(principal: AuthenticatedPrincipal, jti: string, now: number): Claims | undefined {
+    const iat = Math.floor(now / 1000);
     const exp = iat + this.#ttl;
-    if (!Number.isSafeInteger(exp) || !SignedSessionValues.timeValid(exp * 1000))
-      return Promise.resolve(SignedSessionValues.rejected("clock-failure"));
-    const claims: Claims = {
+    if (!Number.isSafeInteger(exp) || !SignedSessionValues.timeValid(exp * 1000)) return undefined;
+    return {
       iss: this.#issuer,
       aud: this.#audience,
-      sub: copied.id,
+      sub: principal.id,
       iat,
       nbf: iat,
       exp,
       jti,
-      ...(copied.attributes === undefined ? {} : { attributes: copied.attributes }),
+      ...(principal.attributes === undefined ? {} : { attributes: principal.attributes }),
     };
+  }
+
+  /**
+   * Signs claims and rechecks closure and time after the awaited signature.
+   *
+   * @param claims Validated claims to sign.
+   * @param principal Detached authenticated principal.
+   * @returns Issued credential or a failure without exposing a late token.
+   */
+  async #signIssued(
+    claims: Claims,
+    principal: AuthenticatedPrincipal,
+  ): Promise<SignedSessionIssueResult> {
     try {
-      const token = this.#token(claims);
-      if (token.length > this.#maxToken)
-        return Promise.resolve(SignedSessionValues.rejected("signing-failure"));
-      if (this.#isClosed()) return Promise.resolve(SignedSessionValues.rejected("closed"));
-      return Promise.resolve({
+      const token = await this.#token(claims);
+      if (token.length > this.#maxToken) return SignedSessionValues.rejected("signing-failure");
+      if (this.#isClosed()) return SignedSessionValues.rejected("closed");
+      if (!this.#signedTimeValid(claims)) return SignedSessionValues.rejected("clock-failure");
+      if (this.#isClosed()) return SignedSessionValues.rejected("closed");
+      return {
         kind: "issued",
         credential: Object.freeze({ kind: "bearer", value: token }),
-        session: SignedSessionValues.session(copied, exp),
-      });
+        session: SignedSessionValues.session(principal, claims.exp),
+      };
     } catch {
-      return Promise.resolve(SignedSessionValues.rejected("signing-failure"));
+      return this.#isClosed()
+        ? SignedSessionValues.rejected("closed")
+        : SignedSessionValues.rejected("signing-failure");
     }
+  }
+
+  /**
+   * Checks issued claims against a fresh trusted clock reading.
+   *
+   * @param claims Claims signed by the active key.
+   * @returns Whether they still satisfy the exact application time policy.
+   */
+  #signedTimeValid(claims: Claims): boolean {
+    const signedAt = this.#now();
+    return (
+      typeof signedAt === "number" &&
+      SignedSessionValues.validClaims(
+        claims,
+        this.#issuer,
+        this.#audience,
+        this.#ttl,
+        this.#skew,
+        signedAt,
+        this.#maxId,
+        this.#maxAttributes,
+        this.#maxAttributeChars,
+      ) !== undefined
+    );
   }
 
   /**
@@ -455,7 +510,7 @@ export class SignedSessions implements SessionResolver {
    */
   async resolve(credential: RequestCredential): Promise<ResolvedSession | undefined> {
     if (this.#isClosed() || credential.kind !== "bearer") return undefined;
-    const claims = this.#verifiedClaims(credential.value);
+    const claims = await this.#verifiedClaims(credential.value);
     if (claims === undefined) return undefined;
     if (this.#revocation !== undefined)
       try {
@@ -463,7 +518,22 @@ export class SignedSessions implements SessionResolver {
       } catch {
         return undefined;
       }
-    if (this.#isClosed()) return undefined;
+    const checkedAt = this.#now();
+    if (typeof checkedAt !== "number" || this.#isClosed()) return undefined;
+    if (
+      SignedSessionValues.validClaims(
+        claims,
+        this.#issuer,
+        this.#audience,
+        this.#ttl,
+        this.#skew,
+        checkedAt,
+        this.#maxId,
+        this.#maxAttributes,
+        this.#maxAttributeChars,
+      ) === undefined
+    )
+      return undefined;
     return SignedSessionValues.session(
       {
         id: claims.sub,
@@ -536,7 +606,10 @@ export class SignedSessions implements SessionResolver {
     if (resolved === undefined) return { kind: "expiryOnly" };
     if (this.#revocation === undefined) return { kind: "expiryOnly" };
     try {
-      await this.#revocation.revoke(resolved.jti, SignedSessionValues.timestamp(resolved.exp));
+      await this.#revocation.revoke(
+        resolved.jti,
+        SignedSessionValues.lastAcceptance(resolved.exp, this.#skew),
+      );
       return this.#closed ? { kind: "expiryOnly" } : { kind: "revoked" };
     } catch {
       return this.#closed ? { kind: "expiryOnly" } : { kind: "unavailable" };
@@ -558,10 +631,16 @@ export class SignedSessions implements SessionResolver {
 
   #claimsForLogout(credential: RequestCredential): Promise<Claims | undefined> {
     if (credential.kind !== "bearer" || this.#isClosed()) return Promise.resolve(undefined);
-    return Promise.resolve(this.#verifiedClaims(credential.value));
+    return this.#verifiedClaims(credential.value);
   }
 
-  #verifiedClaims(value: string): Claims | undefined {
+  /**
+   * Verifies a compact token and checks current key and claim policy again.
+   *
+   * @param value Compact bearer token.
+   * @returns Trusted claims, or undefined on any verification failure.
+   */
+  async #verifiedClaims(value: string): Promise<Claims | undefined> {
     const parsed = this.#parse(value);
     if (parsed === undefined) return undefined;
     const now = this.#now();
@@ -569,44 +648,71 @@ export class SignedSessions implements SessionResolver {
     this.#sweep(now);
     const key = this.#keys.get(parsed.kid);
     if (key === undefined || (key.expiresAt !== undefined && now > key.expiresAt)) return undefined;
-    try {
-      if (
-        !verify(
-          "sha256",
-          Buffer.from(parsed.input),
-          { key: key.publicKey, dsaEncoding: "ieee-p1363" },
-          parsed.signature,
-        )
-      )
-        return undefined;
-    } catch {
+    const verified = await this.#verifyToken(value, key.publicKey, now);
+    if (verified === undefined) return undefined;
+    const checkedAt = this.#now();
+    if (typeof checkedAt !== "number" || this.#isClosed()) return undefined;
+    this.#sweep(checkedAt);
+    if (!this.#keys.has(parsed.kid) || (key.expiresAt !== undefined && checkedAt > key.expiresAt))
       return undefined;
-    }
     return SignedSessionValues.validClaims(
-      parsed.claims,
+      verified,
       this.#issuer,
       this.#audience,
       this.#ttl,
       this.#skew,
-      now,
+      checkedAt,
       this.#maxId,
       this.#maxAttributes,
       this.#maxAttributeChars,
     );
   }
 
-  #token(claims: Claims): string {
+  /**
+   * Runs jose JWT verification with preliminary time tolerance.
+   *
+   * @param value Compact bearer token.
+   * @param key Selected public verification key.
+   * @param now Trusted time sampled before verification.
+   * @returns Verified payload, or undefined when jose rejects the token.
+   */
+  async #verifyToken(value: string, key: KeyObject, now: number): Promise<unknown> {
+    try {
+      const result = await jwtVerify(value, key, {
+        algorithms: ["ES256"],
+        typ: "JWT",
+        issuer: this.#issuer,
+        audience: this.#audience,
+        requiredClaims: ["sub", "iat", "nbf", "exp", "jti"],
+        maxTokenAge: this.#ttl,
+        clockTolerance: this.#skew + 1,
+        currentDate: new Date(now),
+      });
+      return result.payload;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Signs the exact JWT header and claims with the active P-256 key.
+   *
+   * @param claims Validated application claims.
+   * @returns Compact ES256 JWT from jose.
+   */
+  #token(claims: Claims): Promise<string> {
     const active = this.#active;
     if (active === undefined) throw new Error("SignedSessions is closed");
-    const header = SignedSessionValues.encode({ alg: "ES256", typ: "JWT", kid: active.kid });
-    const payload = SignedSessionValues.encode(claims);
-    const input = `${header}.${payload}`;
-    const signature = sign("sha256", Buffer.from(input), {
-      key: active.privateKey,
-      dsaEncoding: "ieee-p1363",
-    });
-    if (signature.byteLength !== 64) throw new Error("invalid ES256 signature");
-    return `${input}.${Buffer.from(signature).toString("base64url")}`;
+    return new SignJWT(claims.attributes === undefined ? {} : { attributes: claims.attributes })
+      .setProtectedHeader({ alg: "ES256", typ: "JWT", kid: active.kid })
+      .setIssuer(claims.iss)
+      .setAudience(claims.aud)
+      .setSubject(claims.sub)
+      .setIssuedAt(claims.iat)
+      .setNotBefore(claims.nbf)
+      .setExpirationTime(claims.exp)
+      .setJti(claims.jti)
+      .sign(active.privateKey);
   }
 
   #jti(): string | undefined {
@@ -643,9 +749,13 @@ export class SignedSessions implements SessionResolver {
       if (key.expiresAt !== undefined && now > key.expiresAt) this.#keys.delete(kid);
   }
 
-  #parse(
-    value: string,
-  ): { kid: string; input: string; signature: Buffer; claims: unknown } | undefined {
+  /**
+   * Checks compact encoding bounds and reads the exact protected header with jose.
+   *
+   * @param value Candidate compact bearer token.
+   * @returns Validated key ID, or undefined for an unsupported encoding or header.
+   */
+  #parse(value: string): { kid: string } | undefined {
     if (typeof value !== "string" || value.length === 0 || value.length > this.#maxToken)
       return undefined;
     const segments = value.split(".");
@@ -656,9 +766,13 @@ export class SignedSessions implements SessionResolver {
       return undefined;
     const [encodedHeader, encodedClaims, encodedSignature] = segments as [string, string, string];
     try {
-      const header = SignedSessionValues.json(encodedHeader);
       if (
-        !SignedSessionValues.plain(header) ||
+        Buffer.byteLength(encodedHeader, "base64url") > 16_384 ||
+        Buffer.byteLength(encodedClaims, "base64url") > 16_384
+      )
+        return undefined;
+      const header = decodeProtectedHeader(value);
+      if (
         header.alg !== "ES256" ||
         header.typ !== "JWT" ||
         typeof header.kid !== "string" ||
@@ -669,12 +783,7 @@ export class SignedSessions implements SessionResolver {
       const signature = Buffer.from(encodedSignature, "base64url");
       if (signature.byteLength !== 64 || signature.toString("base64url") !== encodedSignature)
         return undefined;
-      return {
-        kid: header.kid,
-        input: `${encodedHeader}.${encodedClaims}`,
-        signature,
-        claims: SignedSessionValues.json(encodedClaims),
-      };
+      return { kid: header.kid };
     } catch {
       return undefined;
     }
@@ -684,6 +793,8 @@ export class SignedSessions implements SessionResolver {
 /**
  * Validates, serializes, and constructs finite signed-session values.
  */
+const maxTimestampSecond = 253_402_300_799n;
+
 const SignedSessionValues = Object.freeze({
   /**
    * Validates the issuer, audience, and finite token limits before key installation.
@@ -855,26 +966,6 @@ const SignedSessionValues = Object.freeze({
   },
 
   /**
-   * Encodes a JSON value as URL-safe base64.
-   * @param value The JSON value to encode.
-   * @returns The encoded JSON string.
-   */
-  encode(value: unknown): string {
-    return Buffer.from(JSON.stringify(value)).toString("base64url");
-  },
-
-  /**
-   * Decodes bounded URL-safe base64 JSON.
-   * @param value The URL-safe base64 JSON string to decode.
-   * @returns The decoded JSON value.
-   */
-  json(value: string): unknown {
-    const decoded = Buffer.from(value, "base64url");
-    if (decoded.byteLength > 16_384) throw new Error();
-    return JSON.parse(decoded.toString("utf8"));
-  },
-
-  /**
    * Checks whether a value is a plain object.
    * @param value The unknown value to test for plain-record shape.
    * @returns Whether the value is a plain record.
@@ -1002,6 +1093,20 @@ const SignedSessionValues = Object.freeze({
   },
 
   /**
+   * Calculates the final representable acceptance instant without unsafe addition.
+   *
+   * @param expiry Signed token expiry in epoch seconds.
+   * @param skew Accepted clock tolerance in seconds.
+   * @returns Exact inclusive deadline within the configured clock's Timestamp domain.
+   */
+  lastAcceptance(expiry: number, skew: number): Timestamp {
+    const endpoint = BigInt(expiry) + BigInt(skew);
+    return endpoint > maxTimestampSecond
+      ? create(TimestampSchema, { seconds: maxTimestampSecond, nanos: 999_999_999 })
+      : create(TimestampSchema, { seconds: endpoint });
+  },
+
+  /**
    * Creates a resolved session with a detached principal.
    * @param principal The principal to copy.
    * @param seconds The timestamp seconds.
@@ -1028,7 +1133,7 @@ const SignedSessionValues = Object.freeze({
    */
   timeValid(milliseconds: number): boolean {
     const seconds = Math.floor(milliseconds / 1000);
-    return seconds >= -62_135_596_800 && seconds <= 253_402_300_799;
+    return seconds >= -62_135_596_800 && seconds <= Number(maxTimestampSecond);
   },
 
   /**

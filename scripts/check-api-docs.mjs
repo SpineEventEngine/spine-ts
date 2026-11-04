@@ -244,6 +244,8 @@ const expectedAuthExports = [
   "SignedSessions",
   "SignedSessionsOptions",
   "SignedTokenRevocation",
+  "PersistentTokenRevocations",
+  "PersistentTokenRevocationsOptions",
   "SubscriptionCoordinator",
   "SubscriptionGatewayCollaborators",
   "OnSubscriptionDefinition",

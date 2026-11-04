@@ -112,7 +112,22 @@ another session may already occupy the same stable reference. The operation
 fails without returning a credential, but a committed row may require later
 explicit maintenance. This is a best-effort cleanup guarantee.
 
-`SignedSessions` provides signed application session tokens. Local signature validation can delay revocation; shared revocation requires an explicit `SignedTokenRevocation` implementation. `OpaqueSessionCookies` supplies strict cookie parsing and serialization helpers. Neither strategy provisions users nor grants permissions.
+`SignedSessions` issues and verifies ES256 application bearer tokens using jose.
+Without a `SignedTokenRevocation` source, logout is expiry-only. For shared
+revocation, create `PersistentTokenRevocations` with a storage factory, group,
+issuer, and audience, then inject it as `revocation`. Its asynchronous factory
+prepares the indexed record family by default; `createMissingStructures: false`
+opens a non-preparing handle with no physical schema checks or DDL at creation
+or during later operations. If structures are missing, ordinary storage
+operations fail. Close the strategy, revocation store, and shared
+factory separately. The strategy passes the full inclusive acceptance deadline,
+including clock skew, to the store. Reads ignore records after that deadline
+even before maintenance. Explicit `purgeExpired(cutoff, signal)` removes only
+records strictly before a cutoff no later than the store's trusted clock. It
+uses scoped indexed pages and conditional deletion; a concurrent change can
+leave eligible rows for a later invocation. No automatic cleanup runs.
+`OpaqueSessionCookies` supplies strict cookie parsing and serialization helpers.
+Neither strategy provisions users nor grants permissions.
 
 `OidcFlow` is a bounded authorization-code and PKCE transaction manager. It works with `createGoogleProvider`, `createGitHubProvider`, or a discovered or configured OIDC provider. Applications expose start/callback/exchange endpoints, perform HTTP routing, map verified external identity through `IdentityMapping`, and issue an application session through `ApplicationSessionIssuer`. Provider access, refresh, and ID tokens remain sensitive server-side material; do not return them to browser application code.
 

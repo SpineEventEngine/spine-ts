@@ -9,6 +9,7 @@
     "spine/auth/authentication_service.proto",
     "spine/auth/oidc_flow.proto",
     "spine/auth/opaque_session.proto",
+    "spine/auth/token_revocation.proto",
     "spine/base/error.proto",
     "spine/base/field_path.proto",
     "spine/client/app_query.proto",
@@ -73,6 +74,7 @@
     "spine/auth/authentication_service.proto": "generated/spine/auth/authentication_service_pb.js",
     "spine/auth/oidc_flow.proto": "generated/spine/auth/oidc_flow_pb.js",
     "spine/auth/opaque_session.proto": "generated/spine/auth/opaque_session_pb.js",
+    "spine/auth/token_revocation.proto": "generated/spine/auth/token_revocation_pb.js",
     "spine/base/error.proto": "generated/spine/base/error_pb.js",
     "spine/base/field_path.proto": "generated/spine/base/field_path_pb.js",
     "spine/client/app_query.proto": "generated/spine/client/app_query_pb.js",
@@ -132,5 +134,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "81846e15-2e7c-4da1-9a03-a74c847c9485"
+  "generationId": "382b125f-6582-46d3-bd17-1a83bdc1576e"
 }

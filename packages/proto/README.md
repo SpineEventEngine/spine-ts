@@ -39,6 +39,8 @@ with optional `PrincipalAttributes`, `OpaqueSessionRecord`,
 empty attributes message differs from absent attributes. The session record
 retains a stable reference, credential generation, complete principal and exact
 Protobuf Timestamp deadline for the auth store.
+`TokenRevocation` retains the scoped issuer, audience, token ID and inclusive
+last-acceptance deadline for persistent signed-token revocation.
 The OIDC transaction and application grant are separate one-use records. Each
 retains a flow-qualified lookup digest and exact expiry; the grant retains the
 typed principal without collapsing absent and empty attributes.

@@ -100,6 +100,19 @@ try {
 The strategy leaves an injected store open; close the strategy, store, and
 factory in that order. Use the same group and seal policy in each process.
 
+## Signed bearer sessions
+
+`SignedSessions` issues and verifies ES256 bearer tokens with an application
+P-256 key pair. Without a revocation source, logout reports expiry-only.
+`PersistentTokenRevocations.create` supplies shared scoped revocation through
+the selected storage factory and group; pass the resulting store as the
+strategy's `revocation`. The store prepares its indexed record family by
+default. Its explicit `purgeExpired` method removes records only after their
+full inclusive acceptance deadline, including configured clock skew. The
+application closes the strategy, store, and factory separately. See the
+[signed session reference](REFERENCE.md) for exact retention and maintenance
+behavior.
+
 For a real gateway, construct `UnaryGateway` with exactly one admission mode:
 `sessions`, or deliberate `publicAccess: true`. It requires a finite request
 limit, policy, trusted-context resolver, clock, and forwarder. Every approved

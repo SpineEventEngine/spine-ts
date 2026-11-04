@@ -32,7 +32,7 @@
     "@spine-event-engine/proto": "2.0.0-snapshot.26",
     "@spine-event-engine/storage": "2.0.0-snapshot.26",
     "iron-session": "9.0.1",
-    "jose": "6.2.4",
+    "jose": "6.2.15",
     "loglayer": "9.4.0",
     "oauth4webapi": "3.8.8",
     "openid-client": "6.8.9"

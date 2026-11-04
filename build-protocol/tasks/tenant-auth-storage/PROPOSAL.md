@@ -672,87 +672,372 @@ const gateway = await BrowserServer.run({
 
 The outer factories and their returned `sessions`, `credentials`, and `routes` are proposed Spine APIs. Fields inside `options` retain Better Auth names. The integration supplies `database` and its strict logout/identity bridge plugins. It validates the selected native options and model requirements before accepting traffic. It does not expose an unrestricted handler that lets clients reach unsupported routes.
 
-The exported `SupportedBetterAuthOptions` is an allowlist, not `BetterAuthOptions`. For example, its public shape is:
+`SupportedBetterAuthOptions` describes the supported native fields through local structural declarations. This keeps strict Node applications from inheriting Better Auth 1.7.16's Bun declaration dependency. The optional subpath also exports `genericOAuth`: it calls the actual Better Auth factory with native option names and exposes the returned identifier and configuration.
+
+Before this amendment, application examples imported `genericOAuth` directly from Better Auth and the public types referenced its large declaration graph. After it, the maintained import is `@spine-event-engine/auth/better-auth`; the native configuration call remains the same. The demonstrated strict Node example needs no Bun types or relaxed compiler setting.
+
+The supported public shape is:
 
 ```typescript
-import type { BetterAuthOptions } from "better-auth";
-import { genericOAuth } from "better-auth/plugins/generic-oauth";
-
-/** Native session policy fields used by the integration. */
-type NativeSession = NonNullable<BetterAuthOptions["session"]>;
-
-/** Native password policy and hashing fields used by the integration. */
-type NativePassword = NonNullable<BetterAuthOptions["emailAndPassword"]>;
-
-/** Native cookie options used by the integration. */
-type NativeAdvanced = NonNullable<BetterAuthOptions["advanced"]>;
-
-/** Native process-local rate-limit options used by the integration. */
-type NativeRateLimit = NonNullable<BetterAuthOptions["rateLimit"]>;
-
-/** Native options supported by the first Spine storage integration. */
+/**
+ * Native options accepted by the bounded integration.
+ */
 export interface SupportedBetterAuthOptions {
-  /** Externally visible authentication service URL. */
+  /**
+   * Externally visible authentication service URL.
+   */
   readonly baseURL: string;
 
-  /** Native authentication route prefix. */
+  /**
+   * Native authentication route prefix.
+   */
   readonly basePath?: string;
 
-  /** Native signing secret from application configuration. */
-  readonly secret?: BetterAuthOptions["secret"];
+  /**
+   * Native signing secret supplied by the application.
+   */
+  readonly secret?: string;
 
-  /** Native versioned secrets, subject to the documented cookie-rotation limits. */
-  readonly secrets?: BetterAuthOptions["secrets"];
+  /**
+   * Native versioned secrets; each entry has a numeric version and secret value.
+   */
+  readonly secrets?: { version: number; value: string }[];
 
-  /** Browser origins admitted by the authentication routes. */
+  /**
+   * Browser origins admitted by authentication routes.
+   */
   readonly trustedOrigins: string[];
 
-  /** Supported native lifetime and renewal policy. */
-  readonly session?: Pick<
-    NativeSession,
-    "expiresIn" | "updateAge" | "disableSessionRefresh" | "freshAge"
-  > & {
+  /**
+   * Native session lifetime and renewal policy.
+   */
+  readonly session?: {
+    /**
+     * Session lifetime in seconds.
+     */
+    expiresIn?: number;
+
+    /**
+     * Seconds before a session becomes eligible for renewal.
+     */
+    updateAge?: number;
+
+    /**
+     * Whether native session renewal is disabled.
+     */
+    disableSessionRefresh?: boolean;
+
+    /**
+     * Age in seconds used for native fresh-session checks.
+     */
+    freshAge?: number;
+
+    /**
+     * Keeps authoritative session reads enabled by disabling cookie caching.
+     */
     cookieCache?: { enabled: false };
   };
 
-  /** Preprovisioned password login; public signup is disabled. */
-  readonly emailAndPassword?: Pick<
-    NativePassword,
-    "minPasswordLength" | "maxPasswordLength" | "password"
-  > & {
+  /**
+   * Preprovisioned password login; public signup remains disabled.
+   */
+  readonly emailAndPassword?: {
+    /**
+     * Enables the selected native feature.
+     */
     enabled: true;
+
+    /**
+     * Rejects creation of new users through login routes.
+     */
     disableSignUp: true;
+
+    /**
+     * Native minimum accepted password length.
+     */
+    minPasswordLength?: number;
+
+    /**
+     * Native maximum accepted password length.
+     */
+    maxPasswordLength?: number;
+
+    /**
+     * Optional native password hashing and verification callbacks.
+     */
+    password?: {
+      /**
+       * Hashes a supplied password using application-selected native policy.
+       */
+      hash?: (password: string) => Promise<string>;
+
+      /**
+       * Checks the supplied password against its stored hash.
+       */
+      verify?: (data: { hash: string; password: string }) => Promise<boolean>;
+    };
   };
 
-  /** Prelinked account policy without automatic linking. */
+  /**
+   * Prelinked account policy without automatic mutation or linking.
+   */
   readonly account?: {
+    /**
+     * Prevents sign-in from updating preprovisioned account data.
+     */
     updateAccountOnSignIn?: false;
+
+    /**
+     * Disables automatic linking of identities.
+     */
     accountLinking?: { enabled: false };
   };
 
-  /** Disables automatic expiry cleanup of selected verification records. */
+  /**
+   * Disables automatic cleanup of persisted verification records.
+   */
   readonly verification?: { disableCleanup: true };
 
-  /** Supported cookie configuration and disabled native schema validation. */
-  readonly advanced?: Pick<
-    NativeAdvanced,
-    "cookiePrefix" | "cookies" | "defaultCookieAttributes"
-  > & {
+  /**
+   * Native cookie configuration and disabled native schema validation.
+   */
+  readonly advanced?: {
+    /**
+     * Prefix used when forming native cookie names.
+     */
+    cookiePrefix?: string;
+
+    /**
+     * Overrides named native cookie roles with a name and attributes.
+     */
+    cookies?: Record<string, { name?: string; attributes?: CookieAttributes }>;
+
+    /**
+     * Default attributes for native cookies, subject to browser policy checks.
+     */
+    defaultCookieAttributes?: CookieAttributes;
+
+    /**
+     * Requires secure cookie handling.
+     */
     useSecureCookies?: true;
+
+    /**
+     * Leaves structure preparation to the Spine store factory.
+     */
     database?: { validateSchema: false };
   };
 
-  /** Application-configured process-local request-rate policy. */
-  readonly rateLimit?: Pick<NativeRateLimit, "enabled" | "window" | "max" | "customRules"> & {
+  /**
+   * Optional native process-local request-rate policy.
+   */
+  readonly rateLimit?: {
+    /**
+     * Enables the selected native feature.
+     */
+    enabled?: boolean;
+
+    /**
+     * Rate-counting window in seconds.
+     */
+    window?: number;
+
+    /**
+     * Maximum requests admitted during that window.
+     */
+    max?: number;
+
+    /**
+     * Native path-specific rules or request-dependent rule callbacks.
+     */
+    customRules?: Record<
+      string,
+      | RateLimitRule
+      | false
+      | ((
+          request: Request,
+          currentRule: RateLimitRule,
+        ) => RateLimitRule | false | Promise<RateLimitRule | false>)
+    >;
+
+    /**
+     * Selects native process-local rate-limit memory.
+     */
     storage?: "memory";
   };
 
-  /** Native genericOAuth plugins accepted only after runtime capability validation. */
+  /**
+   * Supported native configurations; arbitrary executable plugins are not accepted.
+   */
   readonly plugins?: readonly ReturnType<typeof genericOAuth>[];
+}
+
+/**
+ * Calls the native generic OAuth factory with the supported configuration.
+ *
+ * @param options Native provider settings validated before integration startup.
+ * @returns The native plugin viewed through its supported identifier and options.
+ */
+export declare function genericOAuth(options: GenericOAuthOptions): {
+  /**
+   * Native generic OAuth plugin identifier.
+   */
+  readonly id: "generic-oauth";
+
+  /**
+   * Supplied native configuration; the integration later validates and copies it.
+   */
+  readonly options: GenericOAuthOptions;
+};
+
+/**
+ * Native provider configuration admitted by the integration.
+ */
+interface GenericOAuthOptions {
+  /**
+   * Registered discovery-based OIDC providers.
+   */
+  config: {
+    /**
+     * Stable native identifier for this configured provider.
+     */
+    providerId: string;
+
+    /**
+     * Trusted provider discovery URL.
+     */
+    discoveryUrl: string;
+
+    /**
+     * Client identifier registered at the provider.
+     */
+    clientId: string;
+
+    /**
+     * Secret for the selected confidential-client method, when required.
+     */
+    clientSecret?: string;
+
+    /**
+     * Explicit native public or client-secret authentication method.
+     */
+    tokenEndpointAuth?: { method: "none" | "client_secret_basic" | "client_secret_post" };
+
+    /**
+     * Native legacy client-secret method; conflicting selections reject.
+     */
+    authentication?: "basic" | "post";
+
+    /**
+     * Requested provider scopes.
+     */
+    scopes?: string[];
+
+    /**
+     * Registered provider callback URI when explicitly configured.
+     */
+    redirectURI?: string;
+
+    /**
+     * Requires proof-key binding for the authorization-code exchange.
+     */
+    pkce: true;
+
+    /**
+     * Requires native signed ID-token verification.
+     */
+    requireIdTokenVerification: true;
+
+    /**
+     * Rejects creation of new users through login routes.
+     */
+    disableSignUp: true;
+
+    /**
+     * Prevents provider login from overwriting the existing user profile.
+     */
+    overrideUserInfo: false;
+
+    /**
+     * Native verified-email policy for the prelinked user.
+     */
+    requireEmailVerification?: boolean;
+  }[];
+}
+
+/**
+ * Native cookie attributes admitted by the integration.
+ */
+interface CookieAttributes {
+  /**
+   * Cookie domain, subject to host-cookie restrictions.
+   */
+  domain?: string;
+
+  /**
+   * Absolute native cookie expiry.
+   */
+  expires?: Date;
+
+  /**
+   * Controls script access subject to required authentication-cookie policy.
+   */
+  httpOnly?: boolean;
+
+  /**
+   * Cookie lifetime in seconds.
+   */
+  maxAge?: number;
+
+  /**
+   * Cookie path.
+   */
+  path?: string;
+
+  /**
+   * Requires secure transport where policy mandates it.
+   */
+  secure?: boolean;
+
+  /**
+   * Native SameSite value, subject to the supported browser policy.
+   */
+  sameSite?: "Strict" | "Lax" | "None" | "strict" | "lax" | "none";
+
+  /**
+   * Native partitioned-cookie attribute.
+   */
+  partitioned?: boolean;
+
+  /**
+   * Native host or secure cookie prefix.
+   */
+  prefix?: "host" | "secure";
+}
+
+/**
+ * Native rate-limit rule.
+ */
+interface RateLimitRule {
+  /**
+   * Rate-counting window in seconds.
+   */
+  window: number;
+
+  /**
+   * Maximum requests admitted during that window.
+   */
+  max: number;
 }
 ```
 
-TypeDoc must enumerate the construction-time constraints as well. TypeScript's native plugin return type cannot prove which provider settings or custom hooks are safe. Runtime acceptance is intentionally narrower: accept only the pinned genericOAuth plugin's tested redirect-based OIDC configuration; reject disabled PKCE/token verification, implicit signup/linking, unsupported hooks, extra models/fields, remapping, duplicate provider IDs, or a required model absent from `models`. Reject arbitrary plugins, secondary storage, caller-supplied database adapters, schema validators, unsafe cookie settings and bypasses of origin/CSRF checks. A valid secret configuration is required. Values arriving from JavaScript receive the same validation; errors occur before listening.
+TypeDoc must describe these construction constraints. The return view is structural; it does not prove executable provenance. The integration validates and copies the supported `options.config` before its first asynchronous initialization step, then constructs the native plugin it installs. It never executes caller-provided plugin implementations. For the pinned native factory result, `version`, `init`, `hooks` and `$ERROR_CODES` are known implementation fields and are ignored; only `id` and `options` supply the admitted configuration. Unknown top-level plugin fields and unsupported configuration fields reject. Later mutation of the supplied configuration cannot change admitted providers.
+
+This preserves native configuration and the actual library engine without a plugin registry or a new plugin class. A direct upstream factory result can receive the same runtime validation, but its broader inferred type and upstream declaration dependencies are not a promised strict TypeScript shortcut. Maintained examples use the forwarding import. Native callback property names such as `password.hash`, `password.verify` and `customRules` remain unchanged.
+
+Accept only the pinned generic OAuth plugin's tested redirect-based OIDC configuration. Reject disabled PKCE or ID-token verification, implicit signup/linking, unsupported hooks, extra models/fields, remapping, duplicate provider IDs, or a required model absent from `models`. Reject arbitrary plugins, secondary storage, caller-supplied database adapters, schema validators, unsafe cookies and origin/CSRF bypasses. JavaScript callers receive the same validation before listening. Reject `client_secret_basic` or `client_secret_post` without a nonempty `clientSecret`, and reject conflicting legacy `authentication` and `tokenEndpointAuth` selections. Preserve the public-client `none` configuration. Test each admitted method and these invalid combinations before accepting the profile. The listed public/client-secret authentication methods require actual provider tests; listing a method does not establish that it has passed.
+
+For framework development, the disposable strict build passes with the genuine `bun-types@1.3.14/sqlite.d.ts` declaration and Node types. Loading the full Bun global declarations fails against the repository's Node types. Use only that upstream SQLite declaration as a development input; add no local ambient stub, global Bun overrides, emitted Bun reference or consumer dependency. Final workspace builds, packed declarations and runtime profile tests remain acceptance gates.
 
 The initial `users` collaborator supports `findById(id, signal)` and, when the selected profile requires email lookup, `findByEmail(email, signal)`. Both return a complete native User or absence. Email normalization and uniqueness follow the configured identity source. Supplying both persisted User and external `users` is a configuration error. These types and `BetterAuthIntegration.create()` receive generated API documentation in the auth subpath.
 
@@ -882,7 +1167,7 @@ A company has an OIDC provider and prelinked provider identities. Better Auth's 
 The directory supplies User. Spine stores prelinked Account, Session and one-time Verification records:
 
 ```typescript
-import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import { genericOAuth } from "@spine-event-engine/auth/better-auth";
 
 const betterAuthStore = await PersistentBetterAuthStore.create({
   storageFactory: authStorage,
@@ -909,6 +1194,7 @@ const auth = await BetterAuthIntegration.create({
             discoveryUrl: config.oidcDiscoveryUrl,
             clientId: config.oidcClientId,
             clientSecret: config.oidcClientSecret,
+            tokenEndpointAuth: { method: "client_secret_basic" },
             scopes: ["openid", "email", "profile"],
             pkce: true,
             requireIdTokenVerification: true,
@@ -921,6 +1207,8 @@ const auth = await BetterAuthIntegration.create({
   },
 });
 ```
+
+Install the optional peer `better-auth@1.7.16` to execute this subpath. The forwarding import keeps the native factory/configuration while allowing strict Node declaration checking without Bun types in the application. Direct upstream imports require that version's upstream declaration environment.
 
 `nativeSessionOptions` contains the same explicitly configured URL, origins, secrets, cookie/session policy and enforced settings as the password example. Register `${gatewayPublicUrl}/auth/callback/company` with the provider. The lab used a public test client (`tokenEndpointAuth: { method: "none" }`); confidential production-client authentication must be configured for the actual provider and covered by its integration test.
 
@@ -973,7 +1261,7 @@ Replay, wrong state, wrong token audience, token validation failure, missing acc
 
 The selected verification profile uses one immutable record per purpose-qualified identifier. Its callback must validate the native state cookie, then successfully delete that record with compare-and-set before proceeding. A callback that loses this race must fail before token exchange. The stock read-then-delete path is insufficient; this gate is part of the supported integration. The experiment implements it for the pinned callback's `auth-state:` deletion only. The losing callback currently receives a generic error redirect; production should present a safe restart-login result. Recheck the callback ordering on every supported Better Auth upgrade. General Better Auth verification supports broader histories; plugins needing multiple values for one identifier are not enabled by this profile.
 
-Native genericOAuth options provide provider metadata, client authentication, scopes, profile mapping and explicit custom hooks. They do not expose the component wrapper's `timeoutMilliseconds`/`maxResponseBytes` settings. The host can limit the HTTP operation, but that alone does not abort every provider request or prevent a late session commit. Before production acceptance, implement/test the selected provider hooks' cancellation and late-result compensation or document a narrower supported provider configuration. Do not advertise equivalent network controls based solely on a passing happy-path OIDC test.
+This declaration boundary does not establish network cancellation or late-result compensation. Native genericOAuth options provide provider metadata, client authentication, scopes, profile mapping and explicit custom hooks. They do not expose the component wrapper's `timeoutMilliseconds`/`maxResponseBytes` settings. The host can limit the HTTP operation, but that alone does not abort every provider request or prevent a late session commit. Before production acceptance, implement/test the selected provider hooks' cancellation and late-result compensation or document a narrower supported provider configuration. Do not advertise equivalent network controls based solely on a passing happy-path OIDC test.
 
 ### I. Better Auth renewal, logout and cleanup
 
@@ -1214,7 +1502,7 @@ The experiment informs the architecture; production implementation still needs t
 - Supported Better Auth profile operations, unsupported-option rejection, native cookies, strict logout, expiry retention, identity-source failures and no hidden storage fallback.
 - PostgreSQL, MySQL/MariaDB and Datastore adapter tests, plus memory. An emulator does not prove cloud IAM/index deployment.
 - Package exports, dependency boundaries, TypeDoc, reference docs and executable configuration examples match actual APIs.
-- The optional `auth/better-auth` export includes declarations and optional peer metadata; imports and declarations are checked both with and without Better Auth installed.
+- Check packed auth root/component imports without Better Auth. Check optional-subpath declarations with and without the peer in isolated strict Node consumers without Bun types; execute the optional runtime only with exact Better Auth 1.7.16 installed. Compile the maintained password and OIDC forwarding-import examples with `skipLibCheck: false`. The framework build may include only the genuine upstream SQLite declaration as a development input; it must not leak to consumers.
 
 ## 13. Implementation sequence
 

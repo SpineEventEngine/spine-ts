@@ -7299,3 +7299,46 @@ the framework does not add a generic rollback API or a forced drain deadline.
 
 The [M5 contract](tasks/tenant-auth-storage/M5.md) and proposal describe this
 clarification and its operation-boundary regressions.
+
+## Signed revocation retention at the clock-domain boundary (2026-11-04)
+
+SignedSessions supplies its revocation source with the full last-acceptance
+deadline, including configured tolerance. A persistent revocation remains active
+at that endpoint; explicit cleanup removes only earlier deadlines. Expired rows
+may remain physically present without continuing to revoke a later token.
+
+The pre-existing clock contract admits only safe millisecond instants inside the
+Protobuf Timestamp range. When mathematical expiry plus tolerance exceeds that
+range, the representable full acceptance window ends at the maximum Timestamp.
+Retain through that complete value, including its final nanoseconds; do not cap
+at the start of its final second. Exact arithmetic avoids overflow for large
+configured tolerance. This derives from the existing clock domain and does not
+change clock, lifetime or tolerance settings, retired-key behavior, or introduce
+a retention default. The M6 temporal tests and reliability review cover this edge.
+
+## Better Auth declaration and plugin configuration boundary (2026-11-04)
+
+The proposed optional integration preserves native option names using local
+structural declarations. A same-name genericOAuth export forwards to the actual
+native factory while exposing only its supported id/options view. Integration
+validates and copies configuration before asynchronous initialization, then builds
+the installed native plugin from those validated options. Caller-provided plugin
+implementations are not executed. No plugin registry, brand or second engine is
+introduced. This narrow forwarding function preserves the library API despite
+the general preference for class/object helpers.
+
+Strict disposable source and consumer checks with Better Auth1.7.16 establish
+the declaration approach. The development build uses only the genuine upstream
+bun-types1.3.14/sqlite.d.ts declaration with Node types; full Bun globals conflict
+with the repository Node declarations. No ambient stub, skipLibCheck relaxation,
+public Bun reference or consumer Bun dependency is introduced. Actual workspace
+and packed-package verification remain required, as do native runtime validation
+and cancellation tests. The affected proposal amendment requires independent
+review before implementation in M9–M11.
+
+The Better Auth declaration amendment passed independent no-memory API,
+reliability and documentation review. Corrections distinguish the supplied options
+reference from the later detached copy, reject invalid client authentication
+combinations before listening, and name the pinned native fields ignored during
+reconstruction. This accepts the design; M9–M11 workspace, packed-consumer and
+runtime verification remain required.

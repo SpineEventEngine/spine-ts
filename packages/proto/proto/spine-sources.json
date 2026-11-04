@@ -447,6 +447,10 @@
       "sha256": "04aa832423e9595cdaa73e0689276803ff749e56d4a8d963f30729fa8780dfe6"
     },
     {
+      "localPath": "packages/proto/proto/spine/auth/token_revocation.proto",
+      "sha256": "a13278fd19469a5e3cd542edf29ba7015570d4dc03e176ab2a365485b4e9982c"
+    },
+    {
       "localPath": "packages/proto/proto/spine/client/app_query.proto",
       "sha256": "b5b334232dc724f7de606e6655aefde7856a8be1e9742311aa3c23a3ae206140"
     },
