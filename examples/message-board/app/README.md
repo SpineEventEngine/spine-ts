@@ -66,6 +66,42 @@ try {
 
 Signed Gateway admission derives `canReadRestricted` from the verified principal and sends an operation-bound HMAC assertion to the application node. Native direct Query and subscription readers require the same verified admission. The native endpoint remains private/trusted; this example does not claim that every native Command RPC authenticates a bearer. The HMAC key minimum of 32 decoded bytes is the SHA-256 security-strength choice; a SHA-256 digest encodes as 43 base64url characters. These are cryptographic format requirements, not queue or request-size limits.
 
+The maintained [signed admission source](src/signed-admission.ts) supplies both
+the browser Gateway session resolver and the direct native reader adapter.
+`application-server.ts` passes that direct adapter to private native services;
+`gateway-server.ts` passes the same session strategy and forwarding proof to a
+standalone `BrowserServer` without constructing a `ServerEnvironment` or
+Bounded Context. `combined-server.ts` puts both parts in one process. Run the
+documented [local multi-process launcher](../README.md#start-locally) for a
+separate Gateway and application, or the
+[combined Compose profile](../deploy/container/README.md) for the combined
+alternative. The launchers create the local Datastore/Delivery dependencies;
+`start:application`, `start:gateway`, and `start:combined` are direct process
+entrypoints when those dependencies and protected settings are supplied.
+To start only the application with its private native reader, use:
+
+```bash
+pnpm --dir examples/message-board/app start:application
+```
+
+Supply the runtime values in [Local-only defaults](#local-only-defaults) and
+the signed-admission settings above. A separately configured private native
+client connects directly to this application; the command does not start the
+browser Gateway. [`deployment-config.ts`](src/deployment-config.ts) validates
+the application's storage, Delivery, and admission settings.
+Issue an offline signed credential with `pnpm --dir examples/message-board/app
+session:issue` after setting the account and signed-admission variables above.
+An invalid bearer is refused before native reader work; a valid principal is
+resolved before the Gateway forwards Commands, Queries, or subscriptions.
+
+The new [`tenant:demo`](src/tenant-scenarios-cli.ts),
+[`auth:demo`](src/component-auth-cli.ts),
+[`native-auth:demo`](src/better-auth-cli.ts), and
+[`native-oidc:demo`](src/better-auth-oidc-cli.ts) commands run small local
+public-API lifecycles in fresh Node processes. The latter two fixture modes
+and local OIDC provider are test-only; see the [user guide](../../../docs/USER_GUIDE.md)
+for exact commands, failure checks, maintenance, and close order.
+
 ## 🧪 Test the application
 
 ```bash

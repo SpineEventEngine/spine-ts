@@ -54,9 +54,13 @@ invalidation are implemented and reviewed. Native OIDC now initializes all
 configured providers before publishing routes, consumes cookie-validated state
 atomically, and carries callback cancellation through provider and directory work.
 Both concurrent state-consumption schedules and isolated callback cancellation
-are verified. M12 final acceptance is in progress: executable public examples,
-provider/process consolidation, package consumers, final security review and
-repository-wide release verification remain to be completed.
+are verified. M12 adds executable tenant and authentication examples, documented
+Gateway/native process placement, the native Verification provider matrix and a
+separate-process callback-state race. Its implementation and independent reviews,
+including the final security review, are complete. Release acceptance requires
+repository-wide verification and exact-archive consumer checks, followed by green
+Build CI for the final feature commit. Build CI is triggered by a pull request;
+creating that pull request requires explicit human authorization.
 
 ## Acceptance
 

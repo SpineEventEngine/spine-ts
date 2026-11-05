@@ -1132,6 +1132,20 @@ email lookup.
 
 A company has an administrator-controlled account process and wants Better Auth's password login. Users and credential accounts are provisioned before the public listener starts. A credential account contains a password hash compatible with the selected Better Auth password implementation, never plaintext.
 
+For the default password implementation, the maintained provisioning example
+imports `hashPassword` from the public `@better-auth/utils/password` subpath and
+declares `@better-auth/utils@0.5.1` directly. Better Auth 1.7.16 delegates its native
+password hashing to this same helper. This import compiles in a strict Node
+application without the Bun declarations pulled in by its broader crypto barrel.
+When configuring a custom `emailAndPassword.password` implementation, provision
+hashes with that implementation instead.
+
+```typescript
+import { hashPassword } from "@better-auth/utils/password";
+
+const passwordHash = await hashPassword(administratorSuppliedPassword);
+```
+
 ```mermaid
 sequenceDiagram
     participant B as Browser

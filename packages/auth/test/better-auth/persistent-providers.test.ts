@@ -205,14 +205,39 @@ async function exercise(
         updatedAt: early,
       },
     });
+    const stateWhere = [{ field: "identifier", value: "auth-state:cross-factory" }];
+    const nativeState = {
+      model: "verification" as const,
+      where: stateWhere,
+      sortBy: { field: "createdAt" as const, direction: "desc" as const },
+      limit: 1,
+    };
+    expect(await a.findMany(nativeState)).toHaveLength(1);
+    expect(await b.findMany(nativeState)).toHaveLength(1);
+    const consumed = await Promise.all([
+      a.consumeOne({ model: "verification", where: stateWhere }),
+      b.consumeOne({ model: "verification", where: stateWhere }),
+    ]);
+    expect(consumed.filter((row) => row !== null)).toHaveLength(1);
+    expect(await a.findMany(nativeState)).toHaveLength(0);
+    await a.create({
+      model: "verification",
+      data: {
+        identifier: "auth-state:delete-check",
+        value: "state-value",
+        expiresAt: new Date("2025-03-01T00:00:00.000Z"),
+        createdAt: early,
+        updatedAt: early,
+      },
+    });
     await b.delete({
       model: "verification",
-      where: [{ field: "identifier", value: "auth-state:cross-factory" }],
+      where: [{ field: "identifier", value: "auth-state:delete-check" }],
     });
     await expect(
       a.delete({
         model: "verification",
-        where: [{ field: "identifier", value: "auth-state:cross-factory" }],
+        where: [{ field: "identifier", value: "auth-state:delete-check" }],
       }),
     ).rejects.toThrow(/consumed/u);
   } finally {

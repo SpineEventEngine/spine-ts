@@ -170,6 +170,14 @@ one login flow across processes, create `PersistentOidcFlowStore` with a
 injected store and factory when the application shuts down. Call
 `purgeExpired(cutoff)` explicitly for expired records; no timer runs it.
 
+The maintained Message Board [component scenario](../../examples/message-board/app/src/component-auth-scenarios.ts)
+shows opaque and signed sessions plus a component OIDC flow. Its OIDC handoff
+receives the authorization URL **after** the transaction is persisted and
+returns the provider callback parameters. The runnable `oidc-fixture` mode uses
+a local test-only provider; the [focused local HTTP test](../../examples/message-board/app/test/component-auth-scenarios.test.ts)
+uses `createOidcProvider()`, a signed ID token, and JWKS. The application must
+send the real authorization URL to the browser and supply the actual callback.
+
 For browser-facing hosting, install the server browser entry point and use
 `BrowserServer` and `DurableSubscriptionBindings` from
 `@spine-event-engine/server/browser`. That boundary requires exact origins,
@@ -245,6 +253,17 @@ bounds. See [browser hosting](../server/REFERENCE.md#browser-hosting) for the
 maintained host contract and required options.
 See the [auth reference](REFERENCE.md#selected-better-auth-records) for the
 provisioning and query profile.
+
+The maintained Message Board [native password and external-verifier scenario](../../examples/message-board/app/src/better-auth-scenarios.ts)
+uses exact native login and logout routes after provisioning. Its external
+verifier must validate application proof before returning a stable User ID;
+the `external-fixture` CLI uses only a local test proof. The
+[prelinked OIDC scenario](../../examples/message-board/app/src/better-auth-oidc-scenario.ts)
+starts authorization before handing its URL to the browser, retains the state
+cookie for the callback, and checks one-use state and strict logout. The
+`native-oidc:demo` command runs against a local HTTP test provider with
+discovery, PKCE, token exchange, and JWKS. Neither example enables signup,
+account linking, or background cleanup.
 
 ## Limits and next steps
 
