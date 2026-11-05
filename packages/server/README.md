@@ -448,7 +448,10 @@ public and supplies no authenticated principal or authority facts.
 
 Subscription activation and cancellation also check the admitted principal
 against the stored reader binding. A different principal cannot reuse a
-subscription even with the same ActorContext. See [native reader admission](REFERENCE.md#native-reader-admission)
+subscription even with the same ActorContext. The host supplies an operation
+signal before authentication and closes it after unary work or the complete
+Activate stream. A direct authenticator can return a separately captured
+`invalidated` signal for local logout and session expiry. See [native reader admission](REFERENCE.md#native-reader-admission)
 for adapter signatures, public admission, and managed application configuration.
 
 ## Limits

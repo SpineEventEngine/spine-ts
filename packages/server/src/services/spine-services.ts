@@ -28,7 +28,6 @@ import {
 import type { ReaderProofVerifier } from "@spine-event-engine/core/spi/reader-forwarding";
 import {
   ReaderIdentities,
-  snapshotTrustedReader,
   type ReaderIdentity,
   type TrustedReaderContext,
 } from "@spine-event-engine/core/spi/trusted-reader";
@@ -114,7 +113,12 @@ import { type StandReadResult } from "../stand/stand.js";
 import { QueryReader } from "./query-reader.js";
 import { AppQueryExecution } from "./app-query-execution.js";
 import { ReadRequestStatus } from "./read-request-status.js";
-import { TrustedReaderIngress, type DirectReaderAuthenticator } from "./trusted-reader-ingress.js";
+import {
+  TrustedReaderIngress,
+  type DirectReaderAuthenticator,
+  type ReaderAdmissionResult,
+} from "./trusted-reader-ingress.js";
+import { NativeOperation } from "./native-operation.js";
 import { RegisteredTargets } from "./registered-targets.js";
 import { emitServerError, emitServerWarning } from "../server/server-log.js";
 import { ServerEnvironment } from "../server/server-environment.js";
@@ -134,11 +138,19 @@ const serviceLoggers = new WeakMap<SpineServices, ILogLayer>();
 const serviceInstances = new WeakSet<SpineServices>();
 const serviceAppQueries = new WeakMap<SpineServices, AppQueryExecution>();
 const serviceReadFilters = new WeakMap<SpineServices, ReadSideFilterEngine>();
+const serviceAdmissions = new WeakMap<SpineServices, AbortController>();
 
 /**
  * Framework-only hooks for installing service read policies and App Query routing.
  */
 interface SpineServicesAccess {
+  /**
+   * Stops all native operation lifetimes before listener shutdown.
+   *
+   * @param services Local service adapter.
+   */
+  stopAdmissions(services: SpineServices): void;
+
   /**
    * Attaches one Server's gRPC read policy before accepting requests.
    *
@@ -235,6 +247,8 @@ export class SpineServices {
 
   readonly #readMaxBytes: number;
 
+  readonly #admissionShutdown = new AbortController();
+
   /**
    * Creates service adapters over built bounded contexts.
    *
@@ -242,6 +256,7 @@ export class SpineServices {
    */
   constructor(options: SpineServicesOptions) {
     serviceInstances.add(this);
+    serviceAdmissions.set(this, this.#admissionShutdown);
     this.#contexts = Object.freeze([...options.contexts]);
     this.#queueCapacity = ServerEnvironment.instance().subscriptionQueueCapacity;
     this.#subscriptionLimit = ServiceValues.subscriptionLimit(
@@ -319,36 +334,35 @@ export class SpineServices {
    */
   #registerUnary(router: ConnectRouter): void {
     router.service(CommandService, {
-      post: async (command, context) => {
-        await this.#admit(
+      post: (command, context) =>
+        this.#runAdmitted(
           "spine.client.CommandService",
           "Post",
           toBinary(CommandService.method.post.input, command),
           context,
-        );
-        return this.#post(command);
-      },
+          () => this.#post(command),
+        ),
     });
     router.service(QueryService, {
-      read: async (query, context) => {
+      read: (query, context) => {
         const detached = clone(QuerySchema, query);
-        const reader = await this.#admit(
+        return this.#runAdmitted(
           "spine.client.QueryService",
           "Read",
           toBinary(QuerySchema, detached),
           context,
+          (reader, signal) => this.#read(detached, reader, signal),
         );
-        return this.#read(detached, reader, (context as typeof context | undefined)?.signal);
       },
-      execute: async (query, context) => {
+      execute: (query, context) => {
         const detached = clone(QueryService.method.execute.input, query);
-        const reader = await this.#admit(
+        return this.#runAdmitted(
           "spine.client.QueryService",
           "Execute",
           toBinary(QueryService.method.execute.input, detached),
           context,
+          (reader, signal) => this.#executeAppQuery(detached, reader, signal),
         );
-        return this.#executeAppQuery(detached, reader, context.signal);
       },
     });
   }
@@ -396,12 +410,65 @@ export class SpineServices {
    */
   #subscribeAdmitted(topic: Topic, context?: HandlerContext): Subscription | Promise<Subscription> {
     if (context === undefined) return this.#subscribe(topic, { kind: "anonymous" });
-    return this.#admit(
-      "spine.client.SubscriptionService",
-      "Subscribe",
-      toBinary(TopicSchema, topic),
-      context,
-    ).then((reader) => this.#subscribe(topic, ReaderIdentities.from(reader)));
+    return this.#subscribeNative(topic, context);
+  }
+
+  /**
+   * Compensates a native Subscribe if its reader ends after registry creation.
+   *
+   * @param topic Requested subscription topic.
+   * @param context Native transport context.
+   * @returns Created subscription only while admission remains live.
+   */
+  async #subscribeNative(topic: Topic, context: HandlerContext): Promise<Subscription> {
+    const operation = new NativeOperation(
+      // Direct test contexts can omit the transport signal.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      context.signal ?? new AbortController().signal,
+      this.#admissionShutdown.signal,
+    );
+    try {
+      const admission = await this.#admit(
+        "spine.client.SubscriptionService",
+        "Subscribe",
+        toBinary(TopicSchema, topic),
+        context,
+        operation.signal,
+      );
+      operation.link(admission.invalidated);
+      operation.check();
+      const reader = ReaderIdentities.from(admission.reader);
+      const subscription = await this.#subscribe(topic, reader);
+      try {
+        operation.check();
+      } catch (error) {
+        return await this.#compensateSubscribe(subscription, reader, error);
+      }
+      return subscription;
+    } finally {
+      operation.close();
+    }
+  }
+
+  /**
+   * Removes a committed definition after a failed final admission check.
+   *
+   * @param subscription Created definition.
+   * @param reader Admitted reader identity.
+   * @param error Final admission failure.
+   * @returns Rejected completion after conditional cleanup.
+   */
+  async #compensateSubscribe(
+    subscription: Subscription,
+    reader: ReaderIdentity,
+    error: unknown,
+  ): Promise<never> {
+    try {
+      await this.#cancel(subscription, reader);
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "Native Subscribe cleanup failed.");
+    }
+    throw error;
   }
 
   /**
@@ -416,12 +483,13 @@ export class SpineServices {
     context?: HandlerContext,
   ): Response | Promise<Response> {
     if (context === undefined) return this.#cancel(subscription, { kind: "anonymous" });
-    return this.#admit(
+    return this.#runAdmitted(
       "spine.client.SubscriptionService",
       "Cancel",
       toBinary(SubscriptionSchema, subscription),
       context,
-    ).then((reader) => this.#cancel(subscription, ReaderIdentities.from(reader)));
+      (reader) => Promise.resolve(this.#cancel(subscription, ReaderIdentities.from(reader))),
+    );
   }
 
   /**
@@ -430,25 +498,64 @@ export class SpineServices {
    * @param service Canonical RPC service.
    * @param method Canonical RPC method.
    * @param bytes Canonical request bytes.
-   * @param context Native transport context when called through Connect.
-   * @returns Detached trusted reader facts.
+   * @param context Native transport context admitted through Connect.
+   * @param signal Host-managed operation lifetime.
+   * @returns Captured admission facts and invalidation.
    */
   async #admit(
     service: string,
     method: string,
     bytes: Uint8Array,
-    context?: HandlerContext,
-  ): Promise<TrustedReaderContext> {
-    if (context === undefined) return Object.freeze({});
+    context: HandlerContext,
+    signal: AbortSignal,
+  ): Promise<ReaderAdmissionResult> {
     return TrustedReaderIngress.admit({
       service,
       method,
       request: bytes,
       headers: context.requestHeader,
       peer: context,
+      signal,
       maxBytes: this.#readMaxBytes,
       ...this.#readerAdmission,
     });
+  }
+
+  /**
+   * Keeps one native unary operation alive through authentication and work.
+   *
+   * @typeParam T Service result.
+   * @param service Canonical RPC service.
+   * @param method Canonical RPC method.
+   * @param bytes Canonical request bytes.
+   * @param context Native transport context.
+   * @param work Admitted service action.
+   * @returns Result while the admission remains valid.
+   */
+  async #runAdmitted<T>(
+    service: string,
+    method: string,
+    bytes: Uint8Array,
+    context: HandlerContext | undefined,
+    work: (reader: TrustedReaderContext, signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    if (context === undefined) return work(Object.freeze({}), new AbortController().signal);
+    const operation = new NativeOperation(
+      // Direct test contexts can omit the transport signal.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      context.signal ?? new AbortController().signal,
+      this.#admissionShutdown.signal,
+    );
+    try {
+      const admission = await this.#admit(service, method, bytes, context, operation.signal);
+      operation.link(admission.invalidated);
+      operation.check();
+      const result = await work(admission.reader, operation.signal);
+      operation.check();
+      return result;
+    } finally {
+      operation.close();
+    }
   }
 
   /**
@@ -463,14 +570,30 @@ export class SpineServices {
     context?: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
     const captured = clone(SubscriptionSchema, subscription);
-    const signal = context?.signal;
-    const reader = await this.#admit(
-      "spine.client.SubscriptionService",
-      "Activate",
-      toBinary(SubscriptionSchema, captured),
-      context,
+    if (context === undefined) {
+      yield* this.#activate(captured, Object.freeze({}));
+      return;
+    }
+    const operation = new NativeOperation(
+      // Direct test contexts can omit the transport signal.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      context.signal ?? new AbortController().signal,
+      this.#admissionShutdown.signal,
     );
-    yield* this.#activate(captured, snapshotTrustedReader(reader), signal);
+    try {
+      const admission = await this.#admit(
+        "spine.client.SubscriptionService",
+        "Activate",
+        toBinary(SubscriptionSchema, captured),
+        context,
+        operation.signal,
+      );
+      operation.link(admission.invalidated);
+      operation.check();
+      yield* this.#activate(captured, admission.reader, operation.signal);
+    } finally {
+      operation.close();
+    }
   }
 
   /**
@@ -1290,6 +1413,17 @@ export class SpineServices {
  * @internal
  */
 export const spineServicesAccess: SpineServicesAccess = Object.freeze({
+  /**
+   * Aborts pending native admission before the listener waits for requests.
+   *
+   * @param services Local service adapter.
+   */
+  stopAdmissions(services: SpineServices): void {
+    const controller = serviceAdmissions.get(services);
+    if (controller === undefined) throw new TypeError("Expected SpineServices instance.");
+    controller.abort();
+  },
+
   /**
    * Attaches Server-only outward read policies to its service adapter.
    *

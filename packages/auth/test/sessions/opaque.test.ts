@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { parseCookie, parseSetCookie } from "cookie";
@@ -31,6 +31,129 @@ function options(time = clock()) {
 }
 
 describe("OpaqueSessions", () => {
+  it("does not admit a monitored stale generation after rotation", async () => {
+    const sessions = await OpaqueSessions.create(options());
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    const rotated = await sessions.rotate(issued.credential);
+    if (rotated.kind !== "rotated") throw new Error("expected rotation");
+    const lifetime = new AbortController();
+    expect(await sessions.resolve(issued.credential, lifetime.signal)).toBeUndefined();
+    expect((await sessions.resolve(rotated.credential, lifetime.signal))?.principal.id).toBe(
+      "principal",
+    );
+    lifetime.abort();
+    await sessions.close();
+  });
+
+  it("registers a lifetime before the authoritative read and stops it after logout", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    class PausedStore extends MemoryOpaqueSessionStore {
+      override async read(id: string, signal?: AbortSignal) {
+        const captured = await super.read(id, signal);
+        entered.resolve(undefined);
+        await release.promise;
+        return captured;
+      }
+    }
+    const sessions = await OpaqueSessions.create({ ...options(), store: new PausedStore() });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    const lifetime = new AbortController();
+    const pending = sessions.resolve(issued.credential, lifetime.signal);
+    await entered.promise;
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "logged-out" });
+    release.resolve(undefined);
+    expect(await pending).toBeUndefined();
+    await sessions.close();
+  });
+
+  it("stops local output while preserving a durable logout failure", async () => {
+    class FailingRevoke extends MemoryOpaqueSessionStore {
+      override revoke(): Promise<boolean> {
+        return Promise.reject(new Error("store unavailable"));
+      }
+    }
+    const sessions = await OpaqueSessions.create({ ...options(), store: new FailingRevoke() });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    const operation = new AbortController();
+    const resolved = await sessions.resolve(issued.credential, operation.signal);
+    await expect(sessions.logout(issued.credential)).rejects.toThrow("store unavailable");
+    expect(resolved?.invalidated?.aborted).toBe(true);
+    expect(await sessions.resolve(issued.credential)).toBeDefined();
+    await sessions.close();
+  });
+
+  it("invalidates existing operations before close drains a paused authoritative read", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let pause = false;
+    class PausedStore extends MemoryOpaqueSessionStore {
+      override async read(id: string, signal?: AbortSignal) {
+        const captured = await super.read(id, signal);
+        if (pause) {
+          entered.resolve(undefined);
+          await release.promise;
+        }
+        return captured;
+      }
+    }
+    const sessions = await OpaqueSessions.create({ ...options(), store: new PausedStore() });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "created") throw new Error("expected issuance");
+    const operation = new AbortController();
+    const first = await sessions.resolve(issued.credential, operation.signal);
+    pause = true;
+    const pending = sessions.resolve(issued.credential, new AbortController().signal);
+    await entered.promise;
+    const closing = sessions.close();
+    expect(first?.invalidated?.aborted).toBe(true);
+    let settled = false;
+    void closing.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release.resolve(undefined);
+    expect(await pending).toBeUndefined();
+    await closing;
+  });
+
+  it("invalidates a monitored session on logout and exact expiry, without monitoring one-shot reads", async () => {
+    vi.useFakeTimers();
+    try {
+      const time = clock(1_000);
+      const sessions = await OpaqueSessions.create({ ...options(time), ttlMilliseconds: 20 });
+      const issued = await sessions.issue({ id: "principal" });
+      if (issued.kind !== "created") throw new Error("expected issuance");
+      expect((await sessions.resolve(issued.credential))?.invalidated).toBeUndefined();
+      expect(vi.getTimerCount()).toBe(0);
+      const lifetime = new AbortController();
+      const resolved = await sessions.resolve(issued.credential, lifetime.signal);
+      expect(resolved?.invalidated?.aborted).toBe(false);
+      expect(vi.getTimerCount()).toBe(1);
+      await sessions.logout(issued.credential);
+      expect(resolved?.invalidated?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      const second = await sessions.issue({ id: "second" });
+      if (second.kind !== "created") throw new Error("expected issuance");
+      const secondLifetime = new AbortController();
+      const active = await sessions.resolve(second.credential, secondLifetime.signal);
+      if (active === undefined) throw new Error("expected monitored session");
+      expect(vi.getTimerCount()).toBe(1);
+      active.expiresAt.seconds += 10_000n;
+      time.advance(20);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(active.invalidated?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      await sessions.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("requires valid sealing policy before constructing", async () => {
     await expect(OpaqueSessions.create({ ...options(), password: "short" })).rejects.toThrow(
       "32 characters",

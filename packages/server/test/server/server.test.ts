@@ -20,7 +20,11 @@ import * as net from "node:net";
 
 import { create, type Message } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
-import { connectNodeAdapter, createConnectTransport } from "@connectrpc/connect-node";
+import {
+  connectNodeAdapter,
+  createConnectTransport,
+  createGrpcTransport,
+} from "@connectrpc/connect-node";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import {
   InMemorySubscriptionBindings,
@@ -810,6 +814,43 @@ describe("Server", () => {
     expect(closed).toBe(false);
     await native.start().then((running) => running.close());
     expect(closed).toBe(true);
+  });
+
+  it("ends pending direct native authentication before standalone listener shutdown", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    let stopped = false;
+    const native = new Server({
+      services: {
+        readerAdmission: {
+          direct: {
+            authenticate: async ({ signal }) => {
+              entered.resolve(undefined);
+              await new Promise<void>((resolve) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    stopped = true;
+                    resolve();
+                  },
+                  { once: true },
+                );
+              });
+              return undefined;
+            },
+          },
+        },
+      },
+    });
+    const running = await native.start();
+    const client = createClient(QueryService, createGrpcTransport({ baseUrl: running.baseUrl }));
+    const pending = client.read(create(QuerySchema)).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await entered.promise;
+    await running.close();
+    expect(stopped).toBe(true);
+    expect(await pending).toBeInstanceOf(Error);
   });
 
   it("requires a named durable binding registry before admitting a production standalone gateway", () => {

@@ -7390,3 +7390,24 @@ native lifetime amendment after tightening the standard-strategy example to deny
 admission without its required invalidation signal and clarifying the port's
 one-time admission decision. Actual native/Coordinator output, cleanup and expiry
 behavior remain M8 runtime acceptance; no implementation success is inferred.
+
+## Explicit host policy for generated Better Auth routes (2026-11-04)
+
+The integration examples return ready-to-mount routes but did not supply the
+body-size and deadline values already required by BrowserAuthRoute. Add required
+outer routePolicy with maxRequestBytes and timeoutMs, both supplied by the
+application. One copied pair populates every generated admitted route. Native
+Better Auth options retain their names and purpose; no default or numerical
+bound is added, and no per-path policy mechanism is introduced.
+
+Capture and validate the pair before initialization awaits, return immutable
+structural route declarations, and retain the host's independent validation.
+The auth package does not depend on server. Native provider cancellation remains
+separately required in M11; a host deadline is not that proof. This bounded
+public amendment requires independent review before M10 implementation.
+
+Independent no-memory API, reliability and documentation review accepted this
+route-policy amendment. M10 must prove construction-time validation and immutable
+snapshots, direct host compatibility, configured body boundaries and deadlines.
+M11 still requires actual provider cancellation and late-result evidence. No
+runtime implementation result is inferred from the design review.

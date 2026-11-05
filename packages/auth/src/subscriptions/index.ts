@@ -194,6 +194,16 @@ interface PreparedOperation {
   readonly reader: TrustedReaderContext;
   readonly expiresAtMs: number | undefined;
   readonly nowMs: number;
+  readonly invalidated?: AbortSignal;
+}
+
+/**
+ * Session facts retained only while the Gateway prepares one operation.
+ */
+interface GatewaySession {
+  readonly principal: Parameters<AuthorizationPolicy["authorize"]>[0];
+  readonly expiresAt?: { readonly seconds: bigint; readonly nanos: number };
+  readonly invalidated?: AbortSignal;
 }
 
 /**
@@ -1021,6 +1031,8 @@ export class SubscriptionGateway {
 
   #closed = false;
 
+  readonly #operations = new Set<AbortController>();
+
   /**
    * Creates the subscription gateway.
    *
@@ -1057,6 +1069,7 @@ export class SubscriptionGateway {
    */
   async close(): Promise<void> {
     this.#closed = true;
+    for (const operation of this.#operations) operation.abort();
     for (const timer of this.#expiryTimers) clearTimeout(timer);
     this.#expiryTimers.clear();
     for (const timer of this.#publicPendingTimers.values()) clearTimeout(timer);
@@ -1070,6 +1083,16 @@ export class SubscriptionGateway {
    * @param whenExpires Supplies the retained expiry in epoch milliseconds.
    */
   scheduleExpiry(whenExpires: number): void {
+    this.#scheduleExpiry(whenExpires);
+  }
+
+  /**
+   * Retains one finite cleanup timer and exposes its handle for admission rollback.
+   *
+   * @param whenExpires Retained definition expiry in epoch milliseconds.
+   * @returns Scheduled timer, or nothing when scheduling is unavailable.
+   */
+  #scheduleExpiry(whenExpires: number): (() => void) | undefined {
     const nowMs = this.#nowMs();
     if (nowMs === undefined || this.#closed) return;
     const timer = setTimeout(
@@ -1081,6 +1104,10 @@ export class SubscriptionGateway {
       Math.max(0, whenExpires - nowMs),
     );
     this.#expiryTimers.add(timer);
+    return () => {
+      clearTimeout(timer);
+      this.#expiryTimers.delete(timer);
+    };
   }
 
   /**
@@ -1091,6 +1118,141 @@ export class SubscriptionGateway {
    */ async #handleOperation(
     request: SubscriptionGatewayRequest,
   ): Promise<SubscriptionGatewayResult> {
+    const operation = new AbortController();
+    const onAbort = () => {
+      operation.abort();
+    };
+    request.signal?.addEventListener("abort", onAbort, { once: true });
+    if (request.signal?.aborted) onAbort();
+    this.#operations.add(operation);
+    let invalidated: AbortSignal | undefined;
+    try {
+      const prepared = await this.#prepareOperation(request, operation.signal);
+      if ("kind" in prepared) return prepared;
+      invalidated = prepared.invalidated;
+      invalidated?.addEventListener("abort", onAbort, { once: true });
+      if (invalidated?.aborted) onAbort();
+      if (operation.signal.aborted) return SubscriptionGatewayValues.rejected("denied");
+      const result = await this.#perform(prepared, request.updates, operation.signal);
+      // The admitted operation can end while #perform settles.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (operation.signal.aborted) return await this.#rejectLate(prepared, result);
+      if (result.kind === "subscribed") {
+        const finished = this.#finishCreated(prepared, result, operation.signal);
+        return finished instanceof Promise ? await finished : finished;
+      }
+      return result;
+    } finally {
+      operation.abort();
+      this.#operations.delete(operation);
+      request.signal?.removeEventListener("abort", onAbort);
+      invalidated?.removeEventListener("abort", onAbort);
+    }
+  }
+
+  /**
+   * Schedules a confirmed result and returns it without an additional success await.
+   *
+   * @param prepared Captured actor, reader and expiry facts.
+   * @param result Confirmed created definition.
+   * @param signal Effective operation lifetime.
+   * @returns Result, denial or failure after any required cleanup.
+   */
+  #finishCreated(
+    prepared: PreparedOperation,
+    result: Extract<SubscriptionGatewayResult, { kind: "subscribed" }>,
+    signal: AbortSignal,
+  ): SubscriptionGatewayResult | Promise<SubscriptionGatewayResult> {
+    try {
+      this.#scheduleCreated(prepared, result, signal);
+    } catch (error) {
+      return this.#failCreated(prepared, result, error);
+    }
+    if (signal.aborted) return this.#rejectLate(prepared, result);
+    return result;
+  }
+
+  /**
+   * Starts local maintenance only after a Subscribe result passes final admission.
+   *
+   * @param prepared Captured actor, reader and expiry facts.
+   * @param result Confirmed created definition.
+   * @param signal Effective operation lifetime.
+   */
+  #scheduleCreated(
+    prepared: PreparedOperation,
+    result: Extract<SubscriptionGatewayResult, { kind: "subscribed" }>,
+    signal: AbortSignal,
+  ): void {
+    const id = fromBinary(SubscriptionSchema, result.wire.bytes).id?.value;
+    if (id === undefined || id.length === 0) throw new Error("retained subscription has no ID");
+    if (this.#options.publicAccess === true) this.#schedulePublicPending(id, prepared.context);
+    if (prepared.expiresAtMs !== undefined) {
+      const cancelTimer = this.#scheduleExpiry(prepared.expiresAtMs);
+      if (signal.aborted) cancelTimer?.();
+    }
+    if (signal.aborted) this.#clearPublicPending(id);
+  }
+
+  /**
+   * Preserves a scheduling failure and any subsequent definition cleanup failure.
+   *
+   * @param prepared Captured actor and reader facts.
+   * @param result Confirmed created definition.
+   * @param error Scheduling failure.
+   * @returns Rejected completion after cleanup is attempted.
+   */
+  async #failCreated(
+    prepared: PreparedOperation,
+    result: SubscriptionGatewayResult,
+    error: unknown,
+  ): Promise<never> {
+    try {
+      await this.#rejectLate(prepared, result);
+    } catch (cleanup) {
+      throw new AggregateError([error, cleanup], "Subscription scheduling cleanup failed.");
+    }
+    throw error;
+  }
+
+  /**
+   * Denies an outcome completed after operation invalidation and clears confirmed creation.
+   *
+   * @param prepared Captured actor and reader facts.
+   * @param result Completed operation outcome.
+   * @returns Denial after any confirmed definition is removed.
+   */
+  async #rejectLate(
+    prepared: PreparedOperation,
+    result: SubscriptionGatewayResult,
+  ): Promise<SubscriptionGatewayResult> {
+    if (result.kind === "subscribed") {
+      const id = fromBinary(SubscriptionSchema, result.wire.bytes).id?.value;
+      if (id === undefined || id.length === 0) throw new Error("retained subscription has no ID");
+      await this.#discardCreated(
+        id,
+        prepared.context,
+        prepared.reader,
+        this.#nowMs() ?? prepared.nowMs,
+        { ...result.wire, reader: prepared.reader },
+        new AbortController(),
+      );
+      this.#clearPublicPending(id);
+    }
+    return SubscriptionGatewayValues.rejected("denied");
+  }
+
+  /**
+   * Validates request and security before the selected operation mutates state.
+   *
+   * @param request Copied admission facts.
+   * @param signal Host-managed operation cancellation.
+   * @returns Prepared operation or rejection.
+   */
+  async #prepareOperation(
+    request: SubscriptionGatewayRequest,
+    signal: AbortSignal,
+  ): Promise<PreparedOperation | SubscriptionGatewayResult> {
     const kind = SubscriptionGatewayValues.operationFor(request);
     if (kind === undefined) return SubscriptionGatewayValues.rejected("unknown-operation");
     const nowMs = this.#nowMs();
@@ -1102,9 +1264,8 @@ export class SubscriptionGateway {
         return SubscriptionGatewayValues.rejected("binding-busy");
       throw error;
     }
-    const prepared = await this.#prepareSecurity(kind, request);
-    if ("kind" in prepared) return prepared;
-    return this.#perform(prepared, request.updates, request.signal);
+    if (signal.aborted) return SubscriptionGatewayValues.rejected("denied");
+    return this.#prepareSecurity(kind, request, signal);
   }
 
   /**
@@ -1112,10 +1273,12 @@ export class SubscriptionGateway {
    *
    * @param kind Requested subscription operation.
    * @param request The request being processed.
+   * @param signal Host-managed operation cancellation.
    * @returns Prepared operation or an authentication/policy rejection.
    */ async #prepareSecurity(
     kind: SubscriptionOperation,
     request: SubscriptionGatewayRequest,
+    signal: AbortSignal,
   ): Promise<PreparedOperation | SubscriptionGatewayResult> {
     const source = SubscriptionGatewayValues.decode(kind, request.wire.bytes, request.transport);
     if (source === undefined) return SubscriptionGatewayValues.rejected("malformed-request");
@@ -1124,8 +1287,11 @@ export class SubscriptionGateway {
         ? { principal: SubscriptionGatewayValues.publicPrincipal }
         : request.credential === undefined
           ? undefined
-          : await this.#options.sessions.resolve(request.credential);
+          : await this.#options.sessions.resolve(request.credential, signal);
     if (session === undefined) return SubscriptionGatewayValues.rejected("unauthenticated");
+    const verified = this.#snapshotSession(session);
+    if (signal.aborted || verified.invalidated?.aborted)
+      return SubscriptionGatewayValues.rejected("denied");
     const authorization = SubscriptionGatewayValues.decode(
       kind,
       request.wire.bytes,
@@ -1133,10 +1299,34 @@ export class SubscriptionGateway {
     );
     if (
       authorization === undefined ||
-      !(await this.#options.authorize(session.principal, authorization))
+      !(await this.#options.authorize(verified.principal, authorization))
     )
       return SubscriptionGatewayValues.rejected("forbidden");
-    return this.#resolveTrusted(kind, request, source, session);
+    // Authorization can suspend while either signal changes.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (signal.aborted || verified.invalidated?.aborted)
+      return SubscriptionGatewayValues.rejected("denied");
+    return this.#resolveTrusted(kind, request, source, verified);
+  }
+
+  /**
+   * Captures session identity, expiry and invalidation before downstream awaits.
+   *
+   * @param session Resolver result or explicit public session.
+   * @returns Detached immutable admission facts with the original signal.
+   */
+  #snapshotSession(session: GatewaySession): GatewaySession {
+    const principal = snapshotTrustedReader({ principal: session.principal }).principal;
+    if (principal === undefined) throw new Error("Resolved session has no principal.");
+    const expiresAt = session.expiresAt;
+    const invalidated = session.invalidated;
+    return Object.freeze({
+      principal,
+      ...(expiresAt === undefined
+        ? {}
+        : { expiresAt: Object.freeze({ seconds: expiresAt.seconds, nanos: expiresAt.nanos }) }),
+      ...(invalidated === undefined ? {} : { invalidated }),
+    });
   }
 
   /**
@@ -1151,10 +1341,7 @@ export class SubscriptionGateway {
     kind: SubscriptionOperation,
     request: SubscriptionGatewayRequest,
     source: Extract<IncomingRequest, { readonly kind: SubscriptionOperation }>,
-    session: {
-      readonly principal: Parameters<AuthorizationPolicy["authorize"]>[0];
-      readonly expiresAt?: { readonly seconds: bigint; readonly nanos: number };
-    },
+    session: GatewaySession,
   ): Promise<PreparedOperation | SubscriptionGatewayResult> {
     const contextRequest = SubscriptionGatewayValues.decode(
       kind,
@@ -1180,6 +1367,7 @@ export class SubscriptionGateway {
       reader,
       expiresAtMs,
       nowMs,
+      ...(session.invalidated === undefined ? {} : { invalidated: session.invalidated }),
     };
   }
 
@@ -1255,25 +1443,30 @@ export class SubscriptionGateway {
    */ async #perform(
     prepared: PreparedOperation,
     updates: SubscriptionUpdateSink | undefined,
-    signal: AbortSignal | undefined,
+    signal: AbortSignal,
   ): Promise<SubscriptionGatewayResult> {
     const { source, context, reader, expiresAtMs, nowMs } = prepared;
     const rewritten = SubscriptionGatewayValues.rewrite(source, context);
+    if (signal.aborted) return SubscriptionGatewayValues.rejected("denied");
     if (source.kind === "subscribe")
-      return this.#subscribe(rewritten, context, reader, expiresAtMs);
+      return this.#subscribe(rewritten, context, reader, expiresAtMs, signal);
     const id = source.subscription.id?.value;
     if (id === undefined || id.length === 0) return SubscriptionGatewayValues.rejected("denied");
-    return source.kind === "activate"
-      ? this.#activate(
-          id,
-          context,
-          reader,
-          nowMs,
-          expiresAtMs,
-          updates ?? SubscriptionGatewayValues.discardUpdate,
-          signal,
-        )
-      : this.#cancel(id, context, nowMs, reader);
+    if (source.kind === "cancel") {
+      const result = await this.#cancel(id, context, nowMs, reader);
+      // Binding cleanup can finish after this invocation is invalidated.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      return signal.aborted ? SubscriptionGatewayValues.rejected("denied") : result;
+    }
+    return this.#activate(
+      id,
+      context,
+      reader,
+      nowMs,
+      expiresAtMs,
+      updates ?? SubscriptionGatewayValues.discardUpdate,
+      signal,
+    );
   }
 
   /**
@@ -1547,12 +1740,14 @@ export class SubscriptionGateway {
    * @param context The trusted context for this operation.
    * @param reader The verified reader facts for this operation.
    * @param expiresAtMs The session expiry in milliseconds, when present.
+   * @param signal The admitted operation lifetime.
    * @returns The new subscription definition.
    */ async #subscribe(
     bytes: Uint8Array,
     context: ActorContext,
     reader: TrustedReaderContext,
     expiresAtMs: number | undefined,
+    signal: AbortSignal,
   ): Promise<SubscriptionGatewayResult> {
     const wire = await this.#options.bindings.create({
       topic: { kind: "subscription-topic", bytes: bytes.slice() },
@@ -1563,24 +1758,100 @@ export class SubscriptionGateway {
     const id = fromBinary(SubscriptionSchema, wire.bytes).id?.value;
     if (id === undefined || id.length === 0) throw new Error("retained subscription has no ID");
     const controller = new AbortController();
+    if (signal.aborted) {
+      await this.#discardBinding(id, context, reader, this.#nowMs() ?? 0);
+      return SubscriptionGatewayValues.rejected("denied");
+    }
+    return this.#deliverCreated(id, context, reader, expiresAtMs, admittedWire, controller, signal);
+  }
+
+  /**
+   * Completes backend Subscribe and checks the same operation after each await.
+   *
+   * @param id Stable created definition ID.
+   * @param context Trusted actor context.
+   * @param reader Verified reader facts.
+   * @param expiresAtMs Session expiry, when present.
+   * @param wire Created definition bytes.
+   * @param controller Backend operation controller.
+   * @param signal Admitted operation lifetime.
+   * @returns Definition only while its reader remains admitted.
+   */
+  async #deliverCreated(
+    id: string,
+    context: ActorContext,
+    reader: TrustedReaderContext,
+    expiresAtMs: number | undefined,
+    wire: PublicSubscriptionWire,
+    controller: AbortController,
+    signal: AbortSignal,
+  ): Promise<SubscriptionGatewayResult> {
     try {
-      await this.#receiveBackend(admittedWire, controller);
-      return await this.#confirmCreated(id, context, reader, expiresAtMs, admittedWire, controller);
+      await this.#receiveBackend(wire, controller);
     } catch (error) {
-      try {
-        await this.#discardCreated(
-          id,
-          context,
-          reader,
-          this.#nowMs() ?? expiresAtMs ?? 0,
-          admittedWire,
-          controller,
-        );
-        // spine-log-boundary: auth.subscription_recovered_cleanup
-      } catch {
-        // Retain the row: a later request can retry backend cleanup.
-      }
+      await this.#discardFailed(id, context, reader, expiresAtMs, wire, controller);
       throw error;
+    }
+    if (signal.aborted) return this.#rejectCreated(id, context, reader, wire, controller);
+    const result = await this.#confirmCreated(id, context, reader, expiresAtMs, wire, controller);
+    // Confirmation can suspend in expiry cleanup while admission ends.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (!signal.aborted || result.kind !== "subscribed") return result;
+    return this.#rejectCreated(id, context, reader, wire, controller);
+  }
+
+  /**
+   * Clears a created definition after admission ends without returning a credential.
+   *
+   * @param id Created definition ID.
+   * @param context Trusted actor context.
+   * @param reader Verified reader facts.
+   * @param wire Created definition bytes.
+   * @param controller Backend operation controller.
+   * @returns Rejection after required cleanup completes.
+   */
+  async #rejectCreated(
+    id: string,
+    context: ActorContext,
+    reader: TrustedReaderContext,
+    wire: PublicSubscriptionWire,
+    controller: AbortController,
+  ): Promise<SubscriptionGatewayResult> {
+    await this.#discardCreated(id, context, reader, this.#nowMs() ?? 0, wire, controller);
+    return SubscriptionGatewayValues.rejected("denied");
+  }
+
+  /**
+   * Retains the original backend failure while attempting conditional cleanup.
+   *
+   * @param id Created definition ID.
+   * @param context Trusted actor context.
+   * @param reader Verified reader facts.
+   * @param expiresAtMs Session expiry, when present.
+   * @param wire Created definition bytes.
+   * @param controller Backend operation controller.
+   * @returns Completion after cleanup is attempted.
+   */
+  async #discardFailed(
+    id: string,
+    context: ActorContext,
+    reader: TrustedReaderContext,
+    expiresAtMs: number | undefined,
+    wire: PublicSubscriptionWire,
+    controller: AbortController,
+  ): Promise<void> {
+    try {
+      await this.#discardCreated(
+        id,
+        context,
+        reader,
+        this.#nowMs() ?? expiresAtMs ?? 0,
+        wire,
+        controller,
+      );
+      // spine-log-boundary: auth.subscription_recovered_cleanup
+    } catch {
+      // Retain the row: a later request can retry backend cleanup.
     }
   }
 
@@ -1608,8 +1879,6 @@ export class SubscriptionGateway {
       await this.#discardCreated(id, context, reader, nowMs ?? expiresAtMs ?? 0, wire, controller);
       return SubscriptionGatewayValues.rejected("denied");
     }
-    if (expiresAtMs !== undefined) this.scheduleExpiry(expiresAtMs);
-    if (this.#options.publicAccess === true) this.#schedulePublicPending(id, context);
     return {
       kind: "subscribed",
       wire: { kind: "public-subscription", bytes: wire.bytes.slice() },
@@ -1636,6 +1905,24 @@ export class SubscriptionGateway {
     controller: AbortController,
   ): Promise<void> {
     await this.#compensateDefinition(wire, controller);
+    await this.#discardBinding(id, context, reader, nowMs);
+  }
+
+  /**
+   * Clears a created local binding without assuming backend Subscribe began.
+   *
+   * @param id Created definition ID.
+   * @param context Trusted actor context.
+   * @param reader Verified reader facts.
+   * @param nowMs Trusted cleanup time.
+   * @returns Completion after local removal.
+   */
+  async #discardBinding(
+    id: string,
+    context: ActorContext,
+    reader: TrustedReaderContext,
+    nowMs: number,
+  ): Promise<void> {
     await this.#options.bindings.cancel({
       id,
       context,
@@ -1746,6 +2033,7 @@ export class SubscriptionGateway {
           wire: privateWire,
           updates: async (update) => {
             try {
+              if (signal.aborted) return;
               const decoded = fromBinary(SubscriptionUpdateSchema, update.bytes);
               decoded.subscription = clone(SubscriptionSchema, publicSubscription);
               await updates({

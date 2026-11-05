@@ -196,6 +196,22 @@ async function configureStorage(storageFactory: InMemoryStorageFactory): Promise
   await ServerEnvironment.instance().completeSetup();
 }
 
+/**
+ * Registers a test delegate that observes provider Entity preparation.
+ */
+function observeEntityPreparation(factory: InMemoryStorageFactory) {
+  const preparation = StoragePreparations.for(factory);
+  const prepareEntity = vi.fn(() => Promise.resolve());
+  StoragePreparations.register(factory, {
+    ...preparation,
+    async prepareEntity(input, mode) {
+      await prepareEntity();
+      await preparation.prepareEntity(input, mode);
+    },
+  });
+  return prepareEntity;
+}
+
 async function configureSubscriptionCapacity(capacity: number): Promise<void> {
   const { ServerEnvironment, ServerEnvironmentLifecycle } =
     await import("../../src/server/server-environment.js");
@@ -342,7 +358,7 @@ describe("SpineServices", () => {
             seen.push(
               headers instanceof Headers ? (headers.get("x-reader") ?? "missing") : "not Headers",
             );
-            return { principal: { id: seen.at(-1) ?? "" } };
+            return { reader: { principal: { id: seen.at(-1) ?? "" } } };
           },
         },
       },
@@ -376,6 +392,12 @@ describe("SpineServices", () => {
     expect(() => {
       spineServicesAccess.clearLogger(foreign);
     }).toThrow("SpineServices logger requires a SpineServices instance.");
+  });
+
+  it("rejects foreign package-private native admission shutdown", () => {
+    expect(() => {
+      spineServicesAccess.stopAdmissions({} as SpineServices);
+    }).toThrow("Expected SpineServices instance.");
   });
 
   it("uses the current Todo descriptor type names in routing fixtures", () => {
@@ -2766,7 +2788,7 @@ describe("SpineServices", () => {
   it("prepares a lazy context before creating a native subscription", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
+    const prepareEntity = observeEntityPreparation(factory);
     const context = await BoundedContext.singleTenant("LazySubscription")
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
@@ -2782,7 +2804,7 @@ describe("SpineServices", () => {
   it("rejects new native subscription preparation after the context close fence", async () => {
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const prepareEntity = vi.spyOn(StoragePreparations.for(factory), "prepareEntity");
+    const prepareEntity = observeEntityPreparation(factory);
     const context = await BoundedContext.singleTenant("ClosingLazySubscription")
       .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
       .build({ createStorageStructures: false, startSubscriptionMonitoring: false });
@@ -2858,7 +2880,7 @@ describe("SpineServices", () => {
     const acceptedResult = expect(accepted).resolves.toBeDefined();
     await entered.promise;
     const failure = new Error("other eager model failed");
-    vi.spyOn(StoragePreparations.for(factory), "prepareEntity").mockRejectedValueOnce(failure);
+    observeEntityPreparation(factory).mockRejectedValueOnce(failure);
     const failing = BoundedContext.singleTenant("TriggersSubscriptionClose")
       .add(new Repository({ entityType: RejectingTaskAggregate, schema: ProjectStateSchema }))
       .build();
@@ -3520,8 +3542,10 @@ describe("SpineServices", () => {
       readerAdmission: {
         direct: {
           authenticate: () => ({
-            principal: { id: "reader/alice" },
-            authorityFacts: { roles: ["reader"] },
+            reader: {
+              principal: { id: "reader/alice" },
+              authorityFacts: { roles: ["reader"] },
+            },
           }),
         },
       },
@@ -3554,6 +3578,213 @@ describe("SpineServices", () => {
     await context.close();
   });
 
+  it("stops a native activation and removes its backend binding after reader invalidation", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("InvalidatedNativeReader")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const invalidation = new AbortController();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader/alice" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+    });
+    const peer = { requestHeader: new Headers() } as HandlerContext;
+    const subscription = await handlers.subscribe(createTopic(), peer);
+    const iterator = handlers.activate(subscription, peer)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    const pending = iterator.next();
+    await awaitSubscriptionAttachment(context, subscription);
+    invalidation.abort();
+    await expect(withTimeout(pending, "invalidated reader stream")).resolves.toMatchObject({
+      done: true,
+    });
+    expect(await registry.get(subscription.id ?? create(SubscriptionIdSchema))).toBeUndefined();
+    await context.close();
+  });
+
+  it("removes a native Subscribe committed just before reader invalidation", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const original = registry.create.bind(registry);
+    const invalidation = new AbortController();
+    let createdId: string | undefined;
+    registry.create = async (subscription, reader) => {
+      const outcome = await original(subscription, reader);
+      createdId = subscription.id?.value;
+      invalidation.abort();
+      return outcome;
+    };
+    const context = await BoundedContext.singleTenant("InvalidatedNativeSubscribe")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader/alice" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+    });
+    const peer = { requestHeader: new Headers() } as HandlerContext;
+    await expect(handlers.subscribe(createTopic(), peer)).rejects.toMatchObject({
+      code: Code.Canceled,
+    });
+    if (createdId === undefined) throw new Error("Expected created native subscription ID.");
+    expect(await registry.get(create(SubscriptionIdSchema, { value: createdId }))).toBeUndefined();
+    await context.close();
+  });
+
+  it("reports cleanup failure after a committed native Subscribe is invalidated", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const createRecord = registry.create.bind(registry);
+    const invalidation = new AbortController();
+    let createdId: string | undefined;
+    registry.create = async (subscription, reader) => {
+      const outcome = await createRecord(subscription, reader);
+      createdId = subscription.id?.value;
+      invalidation.abort();
+      return outcome;
+    };
+    const failure = new Error("registry cleanup failed");
+    registry.delete = () => Promise.reject(failure);
+    const context = await BoundedContext.singleTenant("InvalidatedNativeCleanup")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader/alice" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+    });
+    const peer = { requestHeader: new Headers() } as HandlerContext;
+    await expect(handlers.subscribe(createTopic(), peer)).rejects.toMatchObject({
+      errors: [expect.objectContaining({ code: Code.Canceled }), failure],
+    });
+    if (createdId === undefined) throw new Error("Expected created native subscription ID.");
+    expect(await registry.get(create(SubscriptionIdSchema, { value: createdId }))).toBeDefined();
+    await context.close();
+  });
+
+  it("checks native Subscribe completion before returning a committed definition", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const createRecord = registry.create.bind(registry);
+    const invalidation = new AbortController();
+    let operation: AbortSignal | undefined;
+    let liveAtInvalidation: boolean | undefined;
+    let createdId: string | undefined;
+    registry.create = async (subscription, reader) => {
+      const outcome = await createRecord(subscription, reader);
+      createdId = subscription.id?.value;
+      queueMicrotask(() => {
+        queueMicrotask(() => {
+          liveAtInvalidation = operation?.aborted === false;
+          invalidation.abort();
+        });
+      });
+      return outcome;
+    };
+    const context = await BoundedContext.singleTenant("NativeSubscribeCompletion")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: ({ signal }) => {
+            operation = signal;
+            return {
+              reader: { principal: { id: "reader/alice" } },
+              invalidated: invalidation.signal,
+            };
+          },
+        },
+      },
+    });
+    const peer = { requestHeader: new Headers() } as HandlerContext;
+    const outcome = await Promise.resolve(handlers.subscribe(createTopic(), peer)).then(
+      (value) => ({ kind: "created" as const, value }),
+      (error: unknown) => ({ kind: "failed" as const, error }),
+    );
+    expect(liveAtInvalidation).toBe(true);
+    if (createdId === undefined) throw new Error("Expected committed native subscription ID.");
+    if (liveAtInvalidation) {
+      expect(outcome).toMatchObject({ kind: "failed", error: { code: Code.Canceled } });
+      expect(
+        await registry.get(create(SubscriptionIdSchema, { value: createdId })),
+      ).toBeUndefined();
+    } else {
+      expect(outcome.kind).toBe("created");
+    }
+    await context.close();
+  });
+
+  it("releases a native activation after ACK when its handler iterator returns", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const context = await BoundedContext.singleTenant("NativeIteratorReturn")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    let activation: AbortSignal | undefined;
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: ({ method, signal }) => {
+            if (method === "Activate") activation = signal;
+            return { reader: { principal: { id: "reader/alice" } } };
+          },
+        },
+      },
+    });
+    const peer = new AbortController();
+    const native = { requestHeader: new Headers(), signal: peer.signal } as HandlerContext;
+    const subscription = await handlers.subscribe(createTopic(), native);
+    const iterator = handlers.activate(subscription, native)[Symbol.asyncIterator]();
+    await expectActivationAcknowledgement(iterator, subscription);
+    await iterator.return?.();
+    expect(activation?.aborted).toBe(true);
+    expect(peer.signal.aborted).toBe(false);
+    expect(await registry.get(subscription.id ?? create(SubscriptionIdSchema))).toBeUndefined();
+    await context.close();
+  });
+
+  it("ends a successful unary native lifetime while its peer stays connected", async () => {
+    const context = await BoundedContext.singleTenant("NativeUnaryLifetime")
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectOverviewStateSchema }))
+      .build();
+    let operation: AbortSignal | undefined;
+    const handlers = registeredSubscriptionHandlers(context, {
+      readerAdmission: {
+        direct: {
+          authenticate: ({ signal }) => {
+            operation = signal;
+            return { reader: { principal: { id: "reader/alice" } } };
+          },
+        },
+      },
+    });
+    const peer = new AbortController();
+    const native = { requestHeader: new Headers(), signal: peer.signal } as HandlerContext;
+    const subscription = await handlers.subscribe(createTopic(), native);
+    expect(subscription.id?.value).toBeTruthy();
+    expect(operation?.aborted).toBe(true);
+    expect(peer.signal.aborted).toBe(false);
+    await context.close();
+  });
+
   it("lets a peer reader progress while another reader's policy waits", async () => {
     await import("../../test-fixtures/generated/proto-module.js");
     let enter!: () => void;
@@ -3582,7 +3813,9 @@ describe("SpineServices", () => {
       readerAdmission: {
         direct: {
           authenticate: ({ headers }) => ({
-            principal: { id: headers instanceof Headers ? (headers.get("x-reader") ?? "") : "" },
+            reader: {
+              principal: { id: headers instanceof Headers ? (headers.get("x-reader") ?? "") : "" },
+            },
           }),
         },
       },

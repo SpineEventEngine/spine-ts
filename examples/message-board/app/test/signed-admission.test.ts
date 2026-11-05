@@ -82,11 +82,14 @@ describe("Message Board signed admission", () => {
       value: bytes,
       headers: { authorization: `Bearer ${issued.credential.value}` },
       peer: {} as never,
+      signal: new AbortController().signal,
     });
     expect(direct).toMatchObject({
-      principal: { id: "ada" },
-      authorityFacts: {
-        canReadRestricted: true,
+      reader: {
+        principal: { id: "ada" },
+        authorityFacts: {
+          canReadRestricted: true,
+        },
       },
     });
     const directRequest = (headers: Headers | Readonly<Record<string, string>>) => ({
@@ -95,12 +98,15 @@ describe("Message Board signed admission", () => {
       value: bytes,
       headers,
       peer: {} as never,
+      signal: new AbortController().signal,
     });
     expect(
       await admission.readerAdmission.direct.authenticate(
         directRequest(new Headers({ authorization: `Bearer ${issued.credential.value}` })),
       ),
-    ).toMatchObject({ principal: { id: "ada" }, authorityFacts: { canReadRestricted: true } });
+    ).toMatchObject({
+      reader: { principal: { id: "ada" }, authorityFacts: { canReadRestricted: true } },
+    });
     expect(
       await admission.readerAdmission.direct.authenticate(
         directRequest({ authorization: "Basic x" }),

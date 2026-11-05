@@ -24,6 +24,23 @@ import {
 } from "@spine-event-engine/core/spi/trusted-reader";
 
 /**
+ * Verified native reader facts and optional process-local invalidation.
+ */
+export interface ReaderAdmissionResult {
+  // prettier-ignore
+
+  /**
+   * Detached identity and authority facts for this invocation.
+   */
+  readonly reader: TrustedReaderContext;
+
+  /**
+   * Ends this invocation when its authentication ceases to be valid.
+   */
+  readonly invalidated?: AbortSignal;
+}
+
+/**
  * Direct native authentication port; an undefined result denies admission.
  *
  * @typeParam Peer Transport-specific peer context authenticated by this port.
@@ -32,8 +49,8 @@ export interface DirectReaderAuthenticator<Peer> {
   /**
    * Verifies one direct native request using its transport peer and credentials.
    *
-   * @param request Canonical operation and transport peer.
-   * @returns Verified identity and authority facts, or undefined to deny.
+   * @param request Canonical operation, transport peer, and host lifetime.
+   * @returns One admission with optional invalidation, or undefined to deny.
    */
   authenticate(request: {
     readonly service: string;
@@ -41,7 +58,8 @@ export interface DirectReaderAuthenticator<Peer> {
     readonly value: Uint8Array;
     readonly headers: ReaderHeaders;
     readonly peer: Peer;
-  }): TrustedReaderContext | undefined | Promise<TrustedReaderContext | undefined>;
+    readonly signal: AbortSignal;
+  }): ReaderAdmissionResult | undefined | Promise<ReaderAdmissionResult | undefined>;
 }
 
 /**
@@ -76,6 +94,11 @@ export interface TrustedReaderAdmission<Peer> {
   readonly peer: Peer;
 
   /**
+   * Host-managed lifetime beginning before authentication.
+   */
+  readonly signal: AbortSignal;
+
+  /**
    * Existing native request size limit.
    */
   readonly maxBytes: number;
@@ -103,7 +126,7 @@ export const TrustedReaderIngress: Readonly<{
    * @returns Detached reader facts after admission.
    * @typeParam Peer Receiving transport's peer context.
    */
-  admit<Peer>(input: TrustedReaderAdmission<Peer>): Promise<TrustedReaderContext>;
+  admit<Peer>(input: TrustedReaderAdmission<Peer>): Promise<ReaderAdmissionResult>;
 
   /**
    * Authenticates a direct native request through the configured port.
@@ -112,7 +135,7 @@ export const TrustedReaderIngress: Readonly<{
    * @returns Detached verified reader facts.
    * @typeParam Peer Receiving transport's peer context.
    */
-  directReader<Peer>(input: TrustedReaderAdmission<Peer>): Promise<TrustedReaderContext>;
+  directReader<Peer>(input: TrustedReaderAdmission<Peer>): Promise<ReaderAdmissionResult>;
 
   /**
    * Sanitizes port failures while preserving known transport status classes.
@@ -129,10 +152,11 @@ export const TrustedReaderIngress: Readonly<{
    * @returns Detached trusted reader, including an empty public reader when allowed.
    * @typeParam Peer Receiving transport's peer context.
    */
-  async admit<Peer>(input: TrustedReaderAdmission<Peer>): Promise<TrustedReaderContext> {
+  async admit<Peer>(input: TrustedReaderAdmission<Peer>): Promise<ReaderAdmissionResult> {
+    input.signal.throwIfAborted();
     if (ReaderForwarding.hasAssertion(input.headers)) {
       try {
-        return await ReaderForwarding.open(
+        const reader = await ReaderForwarding.open(
           input.headers,
           input.service,
           input.method,
@@ -141,7 +165,11 @@ export const TrustedReaderIngress: Readonly<{
           input.peer,
           input.maxBytes,
         );
+        input.signal.throwIfAborted();
+        return Object.freeze({ reader: snapshotTrustedReader(reader) });
       } catch (error) {
+        if (input.signal.aborted)
+          throw new ConnectError("Reader authentication cancelled.", Code.Canceled);
         if (error instanceof Error && error.message === "Invalid forwarding proof.")
           throw new ConnectError("Reader authentication failed.", Code.Unauthenticated);
         throw TrustedReaderIngress.portFailure(error);
@@ -150,7 +178,7 @@ export const TrustedReaderIngress: Readonly<{
     if (input.direct === undefined) {
       if (input.forwarded !== undefined)
         throw new ConnectError("Reader authentication failed.", Code.Unauthenticated);
-      return Object.freeze({});
+      return Object.freeze({ reader: Object.freeze({}) });
     }
     return TrustedReaderIngress.directReader(input);
   },
@@ -162,19 +190,27 @@ export const TrustedReaderIngress: Readonly<{
    * @returns Detached verified reader facts.
    * @typeParam Peer Receiving transport's peer context.
    */
-  async directReader<Peer>(input: TrustedReaderAdmission<Peer>): Promise<TrustedReaderContext> {
+  async directReader<Peer>(input: TrustedReaderAdmission<Peer>): Promise<ReaderAdmissionResult> {
     try {
-      const reader = await input.direct?.authenticate({
+      const admission = await input.direct?.authenticate({
         service: input.service,
         method: input.method,
         value: input.request,
         headers: input.headers,
         peer: input.peer,
+        signal: input.signal,
       });
-      if (reader === undefined)
+      input.signal.throwIfAborted();
+      if (admission === undefined)
         throw new ConnectError("Reader authentication failed.", Code.Unauthenticated);
-      return snapshotTrustedReader(reader);
+      const reader = snapshotTrustedReader(admission.reader);
+      const invalidated = admission.invalidated;
+      if (invalidated !== undefined && !(invalidated instanceof AbortSignal))
+        throw new TypeError("Invalid reader invalidation signal.");
+      return Object.freeze({ reader, ...(invalidated === undefined ? {} : { invalidated }) });
     } catch (error) {
+      if (input.signal.aborted)
+        throw new ConnectError("Reader authentication cancelled.", Code.Canceled);
       throw TrustedReaderIngress.portFailure(error);
     }
   },

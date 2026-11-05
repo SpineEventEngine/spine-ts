@@ -632,6 +632,10 @@ const betterAuthStore = await PersistentBetterAuthStore.create({
 
 const auth = await BetterAuthIntegration.create({
   store: betterAuthStore,
+  routePolicy: {
+    maxRequestBytes: config.authMaxRequestBytes,
+    timeoutMs: config.authTimeoutMs,
+  },
   onPrincipal: async (user, signal) => companyPrincipals.find(user.id, signal),
   options: {
     baseURL: config.gatewayPublicUrl,
@@ -671,6 +675,31 @@ const gateway = await BrowserServer.run({
 ```
 
 The outer factories and their returned `sessions`, `credentials`, and `routes` are proposed Spine APIs. Fields inside `options` retain Better Auth names. The integration supplies `database` and its strict logout/identity bridge plugins. It validates the selected native options and model requirements before accepting traffic. It does not expose an unrestricted handler that lets clients reach unsupported routes.
+
+Before this addition, the factory examples left the generated routes' required body limits and deadlines without a configuration source. After it, the application supplies one required `routePolicy` beside native `options`. `maxRequestBytes` limits the request body; `timeoutMs` is the complete route operation deadline in milliseconds. The same pair applies to every generated route, including enabled login, renewal, strict logout and selected OIDC callbacks. The integration supplies no defaults, and these values are separate from session lifetime and native rate limiting.
+
+```typescript
+/**
+ * Application-selected browser host bounds for generated Better Auth routes.
+ */
+export interface BetterAuthRoutePolicy {
+  /**
+   * Maximum request body bytes for each generated route, within the existing
+   * browser host's accepted range.
+   */
+  readonly maxRequestBytes: number;
+
+  /**
+   * Complete route operation deadline in milliseconds, within the existing
+   * browser host's accepted range.
+   */
+  readonly timeoutMs: number;
+}
+```
+
+`BetterAuthIntegration.create()` requires `routePolicy: BetterAuthRoutePolicy`. Before its first initialization await, it captures, validates and copies both fields together with the admitted native configuration. Missing, invalid and unsupported policy fields reject construction, including for JavaScript callers. Both numbers must satisfy the existing `BrowserAuthRoute` validation; this adds no numerical bound. The returned route array, route objects, origins and admission arrays are immutable snapshots. The factory copies input objects rather than freezing them, and later caller mutation cannot change effective configuration.
+
+The policy controls body admission and the host deadline. The integration continues to select exact paths, methods, origins and callback exceptions from the supported native profile. The auth subpath declares its policy and route shapes locally, with no server dependency. The host still validates and snapshots complete routes at startup. A host deadline alone does not prove cancellation of native provider work; M11's network cancellation and late-result tests remain required.
 
 `SupportedBetterAuthOptions` describes the supported native fields through local structural declarations. This keeps strict Node applications from inheriting Better Auth 1.7.16's Bun declaration dependency. The optional subpath also exports `genericOAuth`: it calls the actual Better Auth factory with native option names and exposes the returned identifier and configuration.
 
@@ -1045,6 +1074,7 @@ The initial `users` collaborator supports `findById(id, signal)` and, when the s
 
 | Application choice             | Configuration and handling                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Generated HTTP route policy    | Required outer `routePolicy.maxRequestBytes` and `routePolicy.timeoutMs` supply body admission and the complete host deadline for every generated route. Values come from application configuration, with no defaults. Native engine configuration remains under `options`.                                                                                                                                                                              |
 | Public URL and route prefix    | Better Auth `baseURL` / `basePath`; callback paths use the externally visible URL. Trust proxy metadata only through the host's configured proxy policy.                                                                                                                                                                                                                                                                                                 |
 | Permitted browser origins      | Better Auth `trustedOrigins` plus Gateway RPC origins. Use the same intended browser origins; callback navigation uses a dedicated state-validated route.                                                                                                                                                                                                                                                                                                |
 | Session duration and renewal   | Native `session.expiresIn`, `updateAge`, `disableSessionRefresh` and `freshAge`, in seconds. No new Spine lifetime defaults.                                                                                                                                                                                                                                                                                                                             |
@@ -1121,6 +1151,10 @@ const betterAuthStore = await PersistentBetterAuthStore.create({
 
 const auth = await BetterAuthIntegration.create({
   store: betterAuthStore,
+  routePolicy: {
+    maxRequestBytes: config.authMaxRequestBytes,
+    timeoutMs: config.authTimeoutMs,
+  },
   options: nativeSessionOptions,
   onPrincipal: async (user, signal) => companyPrincipals.find(user.id, signal),
   login: {
@@ -1178,6 +1212,10 @@ const betterAuthStore = await PersistentBetterAuthStore.create({
 
 const auth = await BetterAuthIntegration.create({
   store: betterAuthStore,
+  routePolicy: {
+    maxRequestBytes: config.authMaxRequestBytes,
+    timeoutMs: config.authTimeoutMs,
+  },
   onPrincipal: async (user, signal) => companyPrincipals.find(user.id, signal),
   options: {
     ...nativeSessionOptions,
@@ -1512,6 +1550,8 @@ const gateway = await BrowserServer.run({
 The missing-Origin exception applies only to this explicitly configured callback. It does not bypass duplicate, method, body, deadline or protocol-state checks. Omitting `credentials` selects bearer-only RPC admission while retaining the callback's declared checks.
 
 ### Better Auth admission names
+
+Each generated route carries the validated, copied `routePolicy` values supplied at integration construction. Pass `auth.routes` directly to the host; no extra route construction is needed to supply body limits or deadlines. The host continues to validate and snapshot these complete declarations.
 
 The existing assembly remains `credentials: auth.credentials` and `authRoutes: auth.routes`. `BetterAuthIntegration.create()` derives their immutable declarations from the same validated, copied native options used by the engine. Applications do not duplicate Better Auth cookie names in Gateway settings.
 

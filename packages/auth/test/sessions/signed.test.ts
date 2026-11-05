@@ -13,7 +13,7 @@
  */
 
 import { generateKeyPairSync, sign, type KeyObject } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { SignedSessions, type AuthenticatedPrincipal } from "../../src/index.js";
 
@@ -49,6 +49,118 @@ function headerOf(credential: { readonly value: string }) {
 }
 
 describe("SignedSessions", () => {
+  it("rejects monitored admission if its trusted clock fails after revocation read", async () => {
+    const key = keys();
+    let afterRead = false;
+    let laterReads = 0;
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: { now: () => (afterRead && ++laterReads > 1 ? Number.NaN : 1_000_000) },
+      revocation: {
+        kind: "supported",
+        isRevoked: () => {
+          afterRead = true;
+          return Promise.resolve(false);
+        },
+        revoke: () => Promise.resolve(),
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected issuance");
+    const lifetime = new AbortController();
+    expect(await sessions.resolve(issued.credential, lifetime.signal)).toBeUndefined();
+    await sessions.close();
+  });
+
+  it("registers a scoped token lifetime before a paused revocation read", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    let revoked = false;
+    const key = keys();
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      clock: clock(),
+      revocation: {
+        kind: "supported",
+        async isRevoked() {
+          const captured = revoked;
+          entered.resolve(undefined);
+          await release.promise;
+          return captured;
+        },
+        revoke() {
+          revoked = true;
+          return Promise.resolve();
+        },
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected issuance");
+    const lifetime = new AbortController();
+    const pending = sessions.resolve(issued.credential, lifetime.signal);
+    await entered.promise;
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "revoked" });
+    release.resolve(undefined);
+    expect(await pending).toBeUndefined();
+    await sessions.close();
+  });
+
+  it("reports unavailable durable revocation while stopping local output", async () => {
+    const key = keys();
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      revocation: {
+        kind: "supported",
+        isRevoked: () => Promise.resolve(false),
+        revoke: () => Promise.reject(new Error("revocation unavailable")),
+      },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected issuance");
+    const operation = new AbortController();
+    const resolved = await sessions.resolve(issued.credential, operation.signal);
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "unavailable" });
+    expect(resolved?.invalidated?.aborted).toBe(true);
+    expect(await sessions.resolve(issued.credential)).toBeDefined();
+    await sessions.close();
+  });
+
+  it("expires monitored output at its session deadline without changing one-shot skew", async () => {
+    vi.useFakeTimers();
+    try {
+      const time = clock();
+      const key = keys();
+      const sessions = new SignedSessions({
+        issuer: "issuer",
+        audience: "aud",
+        activeKey: { kid: "key", privateKey: key.privateKey },
+        clock: time,
+        ttlSeconds: 1,
+        clockSkewSeconds: 1,
+      });
+      const issued = await sessions.issue({ id: "principal" });
+      if (issued.kind !== "issued") throw new Error("expected issuance");
+      const lifetime = new AbortController();
+      const resolved = await sessions.resolve(issued.credential, lifetime.signal);
+      expect(resolved?.invalidated?.aborted).toBe(false);
+      expect(vi.getTimerCount()).toBe(1);
+      time.advance(1_000);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(resolved?.invalidated?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(await sessions.resolve(issued.credential)).toBeDefined();
+      await sessions.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("retains logout through the full inclusive skew window", async () => {
     const time = clock();
     const key = keys();

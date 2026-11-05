@@ -792,6 +792,8 @@ const expectedServerExports = [
   "SingleProcessServerRuntime",
   "SpineServices",
   "SpineServicesOptions",
+  "DirectReaderAuthenticator",
+  "ReaderAdmissionResult",
   "SignalIntakeAccepted",
   "SignalIntakeAcceptedFor",
   "SignalIntakeFailure",

@@ -23,6 +23,7 @@ import {
 
 import { MemoryOpaqueSessionStore, type OpaqueSessionStore } from "./opaque-session-store.js";
 import { SessionRecords } from "./session-record.js";
+import { SessionLifetimes } from "./session-lifetime.js";
 import type {
   AuthenticatedPrincipal,
   CookieCredential,
@@ -212,6 +213,8 @@ export class OpaqueSessions implements SessionResolver {
 
   readonly #collisionAttempts: number;
 
+  readonly #lifetimes = new SessionLifetimes(() => this.#now());
+
   #closed = false;
 
   #active = 0;
@@ -308,16 +311,26 @@ export class OpaqueSessions implements SessionResolver {
       signal?.throwIfAborted();
       if (this.#closed) return undefined;
       if (seal === undefined || this.#expired(seal.expires)) return undefined;
-      const record = await this.#store.read(seal.id, signal);
-      signal?.throwIfAborted();
-      if (this.#isClosed()) return undefined;
-      if (
-        record === undefined ||
-        !this.#matches(record, seal) ||
-        this.#expired(SessionRecords.expiry(record))
-      )
-        return undefined;
-      return this.#resolved(record);
+      const monitor = signal === undefined ? undefined : this.#lifetimes.register(seal.id, signal);
+      let retained = false;
+      try {
+        const record = await this.#store.read(seal.id, signal);
+        signal?.throwIfAborted();
+        if (this.#isClosed() || monitor?.signal.aborted) return undefined;
+        if (
+          record === undefined ||
+          !this.#matches(record, seal) ||
+          this.#expired(SessionRecords.expiry(record))
+        )
+          return undefined;
+        const resolved = this.#resolved(record);
+        if (monitor === undefined) return resolved;
+        if (!monitor.ready(resolved.expiresAt)) return undefined;
+        retained = true;
+        return { ...resolved, invalidated: monitor.signal };
+      } finally {
+        if (!retained) monitor?.release();
+      }
     });
   }
 
@@ -356,8 +369,12 @@ export class OpaqueSessions implements SessionResolver {
       const seal = await this.#unseal(credentialInput.value);
       signal?.throwIfAborted();
       if (seal !== undefined && !this.#expired(seal.expires)) {
-        await this.#store.revoke(seal.id, signal);
-        signal?.throwIfAborted();
+        try {
+          await this.#store.revoke(seal.id, signal);
+          signal?.throwIfAborted();
+        } finally {
+          this.#lifetimes.invalidate(seal.id);
+        }
       }
       return { kind: "logged-out" };
     });
@@ -383,6 +400,7 @@ export class OpaqueSessions implements SessionResolver {
   close(): Promise<void> {
     if (this.#closing !== undefined) return this.#closing;
     this.#closed = true;
+    this.#lifetimes.close();
     this.#closing = this.#finishClose();
     return this.#closing;
   }
@@ -668,6 +686,7 @@ export class OpaqueSessions implements SessionResolver {
       return value;
     } catch {
       this.#closed = true;
+      this.#lifetimes.close();
       return undefined;
     }
   }

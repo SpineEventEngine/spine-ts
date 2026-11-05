@@ -355,6 +355,11 @@ export interface ResolvedSession {
    * Specifies when the resolved session expires.
    */
   readonly expiresAt: Timestamp;
+
+  /**
+   * Ends this monitored operation on local logout, expiry, or strategy close.
+   */
+  readonly invalidated?: AbortSignal;
 }
 
 /**
@@ -380,9 +385,10 @@ export interface SessionResolver {
   /**
    * Resolves a presented credential into a valid session.
    * @param credential Supplies the credential to resolve.
+   * @param lifetime Optional operation signal; omission retains no monitor.
    * @returns Returns the resolved session or `undefined` when it is invalid.
    */
-  resolve(credential: RequestCredential): Promise<ResolvedSession | undefined>;
+  resolve(credential: RequestCredential, lifetime?: AbortSignal): Promise<ResolvedSession | undefined>;
 }
 
 /**

@@ -664,6 +664,11 @@ one browser reader or auth route; `BrowserCredentialReader` reads admitted raw
 request facts before application service handling. Connect stops waiting and
 does not forward a late result after request cancellation or deadline expiry;
 the reader receives no abort signal to stop its underlying work.
+`DirectReaderAuthenticator` receives a host operation signal and returns
+`ReaderAdmissionResult` with detached reader facts and optional local
+invalidation. The operation spans unary work or the full native Activate
+stream. Standard monitored `SessionResolver` results signal local logout,
+captured expiry, and strategy close; one-shot resolution retains no monitor.
 `isDurableSubscriptionBindings` lets hosting code check that a supplied
 `SubscriptionBindings` implementation declares this durable capability.
 `@spine-event-engine/testing` exports exactly `BlackBox`, `BlackBoxOptions`,

@@ -126,6 +126,19 @@ even before maintenance. Explicit `purgeExpired(cutoff, signal)` removes only
 records strictly before a cutoff no later than the store's trusted clock. It
 uses scoped indexed pages and conditional deletion; a concurrent change can
 leave eligible rows for a later invocation. No automatic cleanup runs.
+
+`SessionResolver.resolve(credential, lifetime?)` accepts an optional operation
+signal. Omitting it performs one validation without a retained monitor. With
+one, standard opaque and signed strategies register by stable authenticated
+identity before the authoritative storage or revocation read and return
+`ResolvedSession.invalidated`. Local logout, the captured resolved deadline,
+or strategy close aborts that signal. The supplied operation ending releases
+the listener and expiry timer. Opaque rotation does not extend an existing
+operation's captured deadline; signed token verification skew and durable
+revocation retention do not extend it either. The Gateway links invalidation
+to its backend cancellation and suppresses late updates. Logout errors remain
+visible even when local forwarding has stopped. Another process receives no
+local abort signal and must validate against shared durable state separately.
 `OpaqueSessionCookies` binds its CSRF value to the complete sealed credential,
 parses Cookie fields with cookie 2.0.1 after duplicate checks, and emits separate
 secure `__Host-` session and CSRF `Set-Cookie` fields. Pass the actual issued

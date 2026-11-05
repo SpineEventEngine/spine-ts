@@ -36,7 +36,11 @@ import {
   SubscriptionUpdateRelay,
   TransportFacts,
 } from "../../src/index.js";
-import type { SessionResolver, SubscriptionGatewayOptions } from "../../src/index.js";
+import type {
+  ResolvedSession,
+  SessionResolver,
+  SubscriptionGatewayOptions,
+} from "../../src/index.js";
 
 type AuthenticatedSubscriptionGatewayOptions = Extract<
   SubscriptionGatewayOptions,
@@ -218,6 +222,372 @@ function trustedContext() {
 }
 
 describe("SubscriptionGateway", () => {
+  it("does not forward a definition created after request cancellation", async () => {
+    const fixture = setup();
+    let backendCancels = 0;
+    fixture.options.creator.cancel = () => {
+      backendCancels++;
+      return Promise.reject(new Error("unknown backend definition"));
+    };
+    const original = fixture.bindings.create.bind(fixture.bindings);
+    let release: (() => void) | undefined;
+    fixture.bindings.create = async (input) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return original(input);
+    };
+    const controller = new AbortController();
+    const subscriptionGateway = gateway(fixture);
+    const pending = subscriptionGateway.handle({
+      ...request("Subscribe", topic),
+      signal: controller.signal,
+    });
+    await tick();
+    controller.abort();
+    defined(release, "expected pending binding creation")();
+
+    await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.calls).toEqual([]);
+    expect(backendCancels).toBe(0);
+    expect(fixture.bindings.size).toBe(0);
+    await subscriptionGateway.close();
+  });
+
+  it("compensates a backend Subscribe completed after request cancellation", async () => {
+    const fixture = setup();
+    let release: (() => void) | undefined;
+    fixture.options.creator.subscribe = () => {
+      fixture.calls.push("subscribe");
+      return new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    };
+    const controller = new AbortController();
+    const subscriptionGateway = gateway(fixture);
+    const pending = subscriptionGateway.handle({
+      ...request("Subscribe", topic),
+      signal: controller.signal,
+    });
+    await tick();
+    controller.abort();
+    defined(release, "expected pending backend Subscribe")();
+
+    await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.calls).toEqual(["subscribe", "cancel"]);
+    expect(fixture.bindings.size).toBe(0);
+    await subscriptionGateway.close();
+  });
+
+  it("compensates invalidation between Subscribe confirmation and result delivery", async () => {
+    const fixture = setup();
+    const invalidation = new AbortController();
+    let reads = 0;
+    fixture.options.clock = {
+      now: () => {
+        if (++reads === 3)
+          queueMicrotask(() => {
+            invalidation.abort();
+          });
+        return create(TimestampSchema, { seconds: 10n });
+      },
+    };
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 100n }),
+        invalidated: invalidation.signal,
+      });
+    const subscriptionGateway = gateway(fixture);
+
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
+      kind: "rejected",
+      reason: "denied",
+    });
+    expect(fixture.calls).toEqual(["subscribe", "cancel"]);
+    expect(fixture.bindings.size).toBe(0);
+    await subscriptionGateway.close();
+  });
+
+  it("does not deliver a Subscribe result after late invalidation", async () => {
+    const depth = 5;
+    const fixture = setup();
+    const requestAbort = new AbortController();
+    let operation: AbortSignal | undefined;
+    let liveAtAbort: boolean | undefined;
+    fixture.options.sessions.resolve = (_credential, signal) => {
+      operation = signal;
+      return Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 100n }),
+      });
+    };
+    fixture.options.creator.subscribe = () => {
+      const abortAfter = (remaining: number): void => {
+        if (remaining === 0) {
+          liveAtAbort = operation?.aborted === false;
+          requestAbort.abort();
+        } else
+          queueMicrotask(() => {
+            abortAfter(remaining - 1);
+          });
+      };
+      queueMicrotask(() => {
+        abortAfter(depth);
+      });
+      return Promise.resolve();
+    };
+    const subscriptionGateway = gateway(fixture);
+    const originalTimeout = globalThis.setTimeout;
+    let expirySchedules = 0;
+    const schedule = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation((callback, delay, ...args) => {
+        if (delay === 90_000) expirySchedules++;
+        return originalTimeout(callback, delay, ...args);
+      });
+    try {
+      const result = await subscriptionGateway.handle({
+        ...request("Subscribe", topic),
+        signal: requestAbort.signal,
+      });
+      expect(liveAtAbort).toBe(true);
+      expect(result).toEqual({ kind: "rejected", reason: "denied" });
+      expect(fixture.bindings.size).toBe(0);
+      expect(expirySchedules).toBe(0);
+    } finally {
+      schedule.mockRestore();
+      await subscriptionGateway.close();
+    }
+  });
+
+  it("clears a timer if the trusted scheduling clock invalidates admission", async () => {
+    const fixture = setup();
+    const invalidation = new AbortController();
+    let reads = 0;
+    fixture.options.clock = {
+      now: () => {
+        if (++reads === 4) invalidation.abort();
+        return create(TimestampSchema, { seconds: 10n });
+      },
+    };
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 100n }),
+        invalidated: invalidation.signal,
+      });
+    const originalTimeout = globalThis.setTimeout;
+    const originalClear = globalThis.clearTimeout;
+    let scheduled: ReturnType<typeof setTimeout> | undefined;
+    let cleared = false;
+    const schedule = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation((callback, delay, ...args) => {
+        const timer = originalTimeout(callback, delay, ...args);
+        if (delay === 90_000) scheduled = timer;
+        return timer;
+      });
+    const clear = vi.spyOn(globalThis, "clearTimeout").mockImplementation((timer) => {
+      if (timer === scheduled) cleared = true;
+      originalClear(timer);
+    });
+    const subscriptionGateway = gateway(fixture);
+    try {
+      await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
+        kind: "rejected",
+        reason: "denied",
+      });
+      expect(scheduled).toBeDefined();
+      expect(cleared).toBe(true);
+      expect(fixture.bindings.size).toBe(0);
+    } finally {
+      schedule.mockRestore();
+      clear.mockRestore();
+      await subscriptionGateway.close();
+    }
+  });
+
+  it("clears a confirmed Subscribe when scheduling reads fail", async () => {
+    const fixture = setup();
+    const failure = new Error("trusted scheduling clock failed");
+    let reads = 0;
+    fixture.options.clock = {
+      now: () => {
+        if (++reads === 4) throw failure;
+        return create(TimestampSchema, { seconds: 10n });
+      },
+    };
+    const subscriptionGateway = gateway(fixture);
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).rejects.toBe(failure);
+    expect(fixture.calls).toEqual(["subscribe", "cancel"]);
+    expect(fixture.bindings.size).toBe(0);
+    await subscriptionGateway.close();
+  });
+
+  it("treats an explicitly undefined optional invalidation as absent", async () => {
+    const fixture = setup();
+    const session: ResolvedSession = {
+      principal: { id: "owner-a" },
+      expiresAt: create(TimestampSchema, { seconds: 100n }),
+    };
+    Object.defineProperty(session, "invalidated", { value: undefined, enumerable: true });
+    fixture.options.sessions.resolve = () => Promise.resolve(session);
+    const subscriptionGateway = gateway(fixture);
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
+      kind: "subscribed",
+    });
+    await subscriptionGateway.close();
+  });
+
+  it("keeps the original session invalidation through awaited authorization", async () => {
+    const fixture = setup();
+    const original = new AbortController();
+    const replacement = new AbortController();
+    const session = {
+      principal: { id: "owner-a", attributes: { role: "reader" } },
+      expiresAt: create(TimestampSchema, { seconds: 100n }),
+      invalidated: original.signal,
+    };
+    fixture.options.sessions.resolve = () => Promise.resolve(session);
+    let release: (() => void) | undefined;
+    fixture.options.authorize = () =>
+      new Promise<boolean>((resolve) => {
+        release = () => {
+          resolve(true);
+        };
+      });
+    const subscriptionGateway = gateway(fixture);
+    const pending = subscriptionGateway.handle(request("Subscribe", topic));
+    await tick();
+    session.principal.id = "attacker";
+    session.principal.attributes.role = "admin";
+    session.expiresAt.seconds = 200n;
+    session.invalidated = replacement.signal;
+    original.abort();
+    defined(release, "expected pending authorization")();
+
+    await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.calls).toEqual([]);
+    expect(fixture.bindings.size).toBe(0);
+    await subscriptionGateway.close();
+  });
+
+  it("uses detached principal and expiry after awaited context resolution", async () => {
+    const fixture = setup();
+    const session = {
+      principal: { id: "owner-a", attributes: { role: "reader" } },
+      expiresAt: create(TimestampSchema, { seconds: 100n }),
+    };
+    fixture.options.sessions.resolve = () => Promise.resolve(session);
+    const resolveContext = fixture.options.contexts.resolve.bind(fixture.options.contexts);
+    let release: (() => void) | undefined;
+    fixture.options.contexts.resolve = async (...args) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return resolveContext(...args);
+    };
+    let forwarded: unknown;
+    fixture.options.creator.subscribe = (wire) => {
+      forwarded = wire.reader?.principal;
+      return Promise.resolve();
+    };
+    const subscriptionGateway = gateway(fixture);
+    const pending = subscriptionGateway.handle(request("Subscribe", topic));
+    await tick();
+    session.principal.id = "attacker";
+    session.principal.attributes.role = "admin";
+    session.expiresAt.seconds = 1n;
+    defined(release, "expected pending context resolution")();
+
+    await expect(pending).resolves.toMatchObject({ kind: "subscribed" });
+    expect(forwarded).toEqual({ id: "owner-a", attributes: { role: "reader" } });
+    await subscriptionGateway.close();
+  });
+
+  it("does not begin Cancel after operation cancellation", async () => {
+    const fixture = setup();
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      subscriptionGateway.handle({ ...request("Cancel", wire), signal: controller.signal }),
+    ).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.calls).toEqual(["subscribe"]);
+    expect(fixture.bindings.size).toBe(1);
+    await subscriptionGateway.close();
+  });
+
+  it("finishes started Cancel cleanup but does not acknowledge after invalidation", async () => {
+    let release: (() => void) | undefined;
+    const fixture = setup({
+      cancel: () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    });
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const controller = new AbortController();
+    const pending = subscriptionGateway.handle({
+      ...request("Cancel", wire),
+      signal: controller.signal,
+    });
+    await tick();
+    controller.abort();
+    defined(release, "expected started Cancel")();
+
+    await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.calls).toEqual(["subscribe", "cancel"]);
+    expect(fixture.bindings.size).toBe(0);
+    await subscriptionGateway.close();
+  });
+
+  it("does not acknowledge Cancel after late invalidation", async () => {
+    const depth = 9;
+    const fixture = setup();
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const requestAbort = new AbortController();
+    let operation: AbortSignal | undefined;
+    let liveAtAbort: boolean | undefined;
+    fixture.options.sessions.resolve = (_credential, signal) => {
+      operation = signal;
+      return Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 100n }),
+      });
+    };
+    const cancelBackend = fixture.options.creator.cancel.bind(fixture.options.creator);
+    fixture.options.creator.cancel = (...args) => {
+      const result = cancelBackend(...args);
+      const abortAfter = (remaining: number): void => {
+        if (remaining === 0) {
+          liveAtAbort = operation?.aborted === false;
+          requestAbort.abort();
+        } else
+          queueMicrotask(() => {
+            abortAfter(remaining - 1);
+          });
+      };
+      queueMicrotask(() => {
+        abortAfter(depth);
+      });
+      return result;
+    };
+    const result = await subscriptionGateway.handle({
+      ...request("Cancel", wire),
+      signal: requestAbort.signal,
+    });
+    expect(liveAtAbort).toBe(true);
+    expect(result).toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.bindings.size).toBe(0);
+    await subscriptionGateway.close();
+  });
+
   it("keeps verified reader facts private when a binding returns them", async () => {
     const fixture = setup();
     const original = fixture.bindings.create.bind(fixture.bindings);
@@ -854,6 +1224,121 @@ describe("SubscriptionGateway", () => {
     expect(fixture.bindings.size).toBe(1);
   });
 
+  it("stops backend activation and suppresses late updates on session invalidation", async () => {
+    const fixture = setup();
+    const invalidation = new AbortController();
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 100n }),
+        invalidated: invalidation.signal,
+      });
+    let backendAborted = false;
+    let forwarded = 0;
+    fixture.options.creator.activate = async ({ updates }, signal) => {
+      await new Promise<void>((resolve) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            backendAborted = true;
+            resolve();
+          },
+          { once: true },
+        );
+      });
+      await updates({
+        kind: "subscription-update",
+        bytes: toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema)),
+      });
+    };
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const pending = subscriptionGateway.handle({
+      ...request("Activate", wire),
+      updates: () => {
+        forwarded++;
+        return Promise.resolve();
+      },
+    });
+    await tick();
+    invalidation.abort();
+    await pending.catch(() => undefined);
+    expect(backendAborted).toBe(true);
+    expect(forwarded).toBe(0);
+    await subscriptionGateway.close();
+  });
+
+  it("rejects a session invalidated during context resolution before subscription creation", async () => {
+    const fixture = setup();
+    const invalidation = new AbortController();
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 100n }),
+        invalidated: invalidation.signal,
+      });
+    const resolveContext = fixture.options.contexts.resolve.bind(fixture.options.contexts);
+    fixture.options.contexts.resolve = async (...args) => {
+      entered.resolve(undefined);
+      await release.promise;
+      return resolveContext(...args);
+    };
+    const subscriptionGateway = gateway(fixture);
+    const pending = subscriptionGateway.handle(request("Subscribe", topic));
+    await entered.promise;
+    invalidation.abort();
+    release.resolve(undefined);
+    await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.calls).toEqual([]);
+    expect(fixture.bindings.size).toBe(0);
+    await subscriptionGateway.close();
+  });
+
+  it("rejects a session already invalidated by the time resolution returns", async () => {
+    const fixture = setup();
+    const invalidation = new AbortController();
+    invalidation.abort();
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 100n }),
+        invalidated: invalidation.signal,
+      });
+    const subscriptionGateway = gateway(fixture);
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
+      kind: "rejected",
+      reason: "denied",
+    });
+    expect(fixture.calls).toEqual([]);
+    await subscriptionGateway.close();
+  });
+
+  it("rejects a request aborted while expiry maintenance is pending", async () => {
+    const fixture = setup();
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const purge = fixture.bindings.purgeExpired.bind(fixture.bindings);
+    fixture.bindings.purgeExpired = async (cutoff) => {
+      entered.resolve(undefined);
+      await release.promise;
+      return purge(cutoff);
+    };
+    const subscriptionGateway = gateway(fixture);
+    const requestAbort = new AbortController();
+    const pending = subscriptionGateway.handle({
+      ...request("Subscribe", topic),
+      signal: requestAbort.signal,
+    });
+    await entered.promise;
+    requestAbort.abort();
+    release.resolve(undefined);
+    await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.calls).toEqual([]);
+    await subscriptionGateway.close();
+  });
+
   it("rejects terminal, invalid, and unauthorized gateway requests", async () => {
     const closed = gateway(setup());
     await closed.close();
@@ -1205,6 +1690,12 @@ describe("SubscriptionGateway", () => {
     const wire = await subscribe(subscriptionGateway);
     const id = fromBinary(SubscriptionSchema, wire).id?.value;
     if (id === undefined) throw new Error("Expected a subscription ID.");
+    const originalCancel = fixture.bindings.cancel.bind(fixture.bindings);
+    let attemptedCancels = 0;
+    fixture.bindings.cancel = (input) => {
+      attemptedCancels++;
+      return originalCancel(input);
+    };
     const authorized = subscriptionGateway.handle(request("Cancel", wire));
     await vi.waitFor(() => {
       expect(fixture.calls).toContain("cancel");
@@ -1217,6 +1708,9 @@ describe("SubscriptionGateway", () => {
         timestamp: create(TimestampSchema, { seconds: 10n }),
       });
     const foreign = subscriptionGateway.handle(request("Cancel", subscriptionWire(id, "owner-b")));
+    await vi.waitFor(() => {
+      expect(attemptedCancels).toBe(2);
+    });
     defined(release, "expected cancellation release")();
 
     await expect(authorized).resolves.toEqual({ kind: "cancelled" });

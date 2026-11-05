@@ -1279,11 +1279,14 @@ transport responses independently.
 
 Configure app-node admission at `ServerOptions.services.readerAdmission`:
 
-- `direct.authenticate({ service, method, value, headers, peer })` authenticates
-  a direct native request. It returns verified `{ principal, authorityFacts }`,
-  an empty object for deliberate public access, or `undefined` to deny access.
+- `direct.authenticate({ service, method, value, headers, peer, signal })` authenticates
+  a direct native request. It returns `{ reader, invalidated? }` with verified
+  `{ principal, authorityFacts }` in `reader`, `{ reader: {} }` for deliberate
+  public access, or `undefined` to deny access. `signal` begins before
+  authentication and ends on terminal unary or complete stream exit.
   The request value contains canonical Proto bytes; `peer` is the Connect
-  `HandlerContext` for that invocation.
+  `HandlerContext` for that invocation. `invalidated` is a separate local
+  AbortSignal captured by the host; it never enters reader facts or proofs.
 - `forwarded.verify(bytes, proof, peer)` verifies an assertion from a trusted
   forwarding peer. It must authenticate that peer and validate the supplied
   proof over the exact bytes. `BrowserServerOptions.forwardingProof.issue(bytes)`
@@ -1309,6 +1312,69 @@ and `forwardingProof` for Coordinator-to-child requests. Configure the receiving
 child Servers with their verifier as well. Each hop verifies its incoming
 assertion and issues a new proof for the actual outgoing operation and payload.
 Loopback placement alone does not authenticate a forwarding peer.
+
+A standard session strategy accepts the host signal during `resolve` and
+returns an invalidation signal for local logout, its captured session deadline,
+and strategy close. A custom direct authenticator may omit invalidation, but
+then the host cannot stop an active stream on local logout or expiry. A
+successful unary request releases its operation even while the transport peer
+stays connected. Subscribe releases its operation after definition creation;
+Activate authenticates again and holds its operation through ACK and every
+update. Normal completion, host handler iterator return, cancellation, and host
+close stop the operation. Raw Connect clients must abort an explicit
+`AbortSignal` or call `SubscriptionService.Cancel` to stop remote stream work;
+returning from the client iterator alone does not signal transport cancellation.
+An active stream in another process receives no local signal.
+
+```ts
+import type { SignedSessions } from "@spine-event-engine/auth";
+import { Server, type ReaderAdmissionResult, type ServerOptions } from "@spine-event-engine/server";
+
+/**
+ * Configures direct native bearer admission with the local session strategy.
+ *
+ * @param sessions Strategy also used by the application's logout action.
+ * @param contexts Application Bounded Contexts exposed by this Server.
+ * @returns Server configured for native authentication.
+ */
+function nativeServer(
+  sessions: SignedSessions,
+  contexts: NonNullable<ServerOptions["contexts"]>,
+): Server {
+  return new Server({
+    contexts,
+    services: {
+      readerAdmission: {
+        direct: {
+          /**
+           * Resolves the bearer credential within the host operation.
+           *
+           * @param request Native peer and lifetime facts.
+           * @returns Verified reader and invalidation, or denial.
+           */
+          async authenticate(request): Promise<ReaderAdmissionResult | undefined> {
+            const authorization = request.peer.requestHeader.get("authorization");
+            const token = /^Bearer ([^\s,]+)$/i.exec(authorization ?? "")?.[1];
+            if (token === undefined) return undefined;
+            const session = await sessions.resolve(
+              { kind: "bearer", value: token },
+              request.signal,
+            );
+            if (session?.invalidated === undefined) return undefined;
+            return { reader: { principal: session.principal }, invalidated: session.invalidated };
+          },
+        },
+      },
+    },
+  });
+}
+```
+
+The admitted logout action checks `await sessions.logout(credential)` on that
+same strategy. It reports durable success only for `revoked`; `unavailable`
+and `expiryOnly` remain distinct. Application shutdown closes both Server and
+strategy. A custom authenticator still enforces its own credential and policy
+checks; a token in a header alone does not establish authority.
 
 Authenticated forwarding now requires an issuer; configure both gateway and
 receiving node when updating an existing authenticated deployment. The native

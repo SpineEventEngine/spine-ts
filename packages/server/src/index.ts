@@ -73,6 +73,10 @@ export {
 } from "./stand/subscription-registry.js";
 
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
+export type {
+  DirectReaderAuthenticator,
+  ReaderAdmissionResult,
+} from "./services/trusted-reader-ingress.js";
 export {
   Server,
   type ListenerLifecycle,

@@ -41,15 +41,17 @@
 
 ## Current implementation status
 
-M1, M2, M3, M3A, M4, M5, M6 and M7 are implemented and accepted after focused
-verification and independent review. Persistent opaque sessions, OIDC state and
-signed-token revocations use the reviewed library composition and factory lifecycle.
-M7 browser admission, cookies, callback routing and Connect cancellation passed
-focused verification and independent review. M8 is the next implementation
-milestone; M8 through M12 remain to be implemented and accepted. M8 native admission lifetime and the
-Better Auth public declaration amendments have accepted designs; their runtime
-implementation remains in the corresponding milestones.
-Final repository-wide release verification and security review remain in M12.
+M1, M2, M3, M3A, M4, M5, M6, M7 and M8 are implemented and accepted after
+focused verification and independent review. Persistent opaque sessions, OIDC
+state and signed-token revocations use the reviewed library composition and
+factory lifecycle. Browser admission and native reader operations now capture
+session facts and stop local forwarding on logout, expiry or shutdown, with
+cleanup and failure visibility verified at asynchronous completion boundaries.
+M9 Better Auth selected persistence is next; M9 through M12 remain to be accepted.
+The Better Auth public declaration and generated-route policy amendments have
+accepted designs; their runtime implementation remains in the corresponding
+milestones. Final repository-wide release verification and security review
+remain in M12.
 
 ## Acceptance
 

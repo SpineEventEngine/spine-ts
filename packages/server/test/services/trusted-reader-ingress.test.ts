@@ -19,7 +19,12 @@ import { TrustedReaderIngress } from "../../src/services/trusted-reader-ingress.
 
 describe("trusted native reader ingress", () => {
   const request = new Uint8Array([1, 2]);
-  const operation = { service: "spine.client.QueryService", method: "Read", request };
+  const operation = {
+    service: "spine.client.QueryService",
+    method: "Read",
+    request,
+    signal: new AbortController().signal,
+  };
 
   it("requires a configured peer verifier for internal assertions", async () => {
     const headers = new Headers(
@@ -54,9 +59,9 @@ describe("trusted native reader ingress", () => {
         peer: {},
         maxBytes: 1024,
         forwarded: { verify: () => true },
-        direct: { authenticate: () => ({}) },
+        direct: { authenticate: () => ({ reader: {} }) },
       }),
-    ).toEqual({});
+    ).toEqual({ reader: {} });
   });
 
   it("verifies peer and request, then snapshots its trusted reader", async () => {
@@ -77,7 +82,9 @@ describe("trusted native reader ingress", () => {
       maxBytes: 1024,
       forwarded: { verify: (_bytes, proof, peer) => peer === "gateway" && proof === "proof" },
     });
-    expect(admitted).toEqual({ principal: { id: "alice" }, authorityFacts: { enabled: true } });
+    expect(admitted).toEqual({
+      reader: { principal: { id: "alice" }, authorityFacts: { enabled: true } },
+    });
     await expect(
       TrustedReaderIngress.admit({
         ...operation,
@@ -98,9 +105,9 @@ describe("trusted native reader ingress", () => {
         headers,
         peer: {},
         maxBytes: 1024,
-        direct: { authenticate: () => ({ principal: { id: "direct" } }) },
+        direct: { authenticate: () => ({ reader: { principal: { id: "direct" } } }) },
       }),
-    ).toEqual({ principal: { id: "direct" } });
+    ).toEqual({ reader: { principal: { id: "direct" } } });
     expect(
       await TrustedReaderIngress.admit({
         ...operation,
@@ -108,7 +115,7 @@ describe("trusted native reader ingress", () => {
         peer: {},
         maxBytes: 1024,
       }),
-    ).toEqual({});
+    ).toEqual({ reader: {} });
     await expect(
       TrustedReaderIngress.admit({
         ...operation,
@@ -129,7 +136,7 @@ describe("trusted native reader ingress", () => {
         headers: new Headers(),
         peer: {},
         maxBytes: 1024,
-        direct: { authenticate: () => ({ authorityFacts: { privileged: true } }) },
+        direct: { authenticate: () => ({ reader: { authorityFacts: { privileged: true } } }) },
       }),
     ).rejects.toMatchObject({ code: Code.Internal });
   });
@@ -168,5 +175,90 @@ describe("trusted native reader ingress", () => {
         },
       }),
     ).rejects.toMatchObject({ code: Code.Canceled });
+  });
+
+  it("captures direct reader facts and invalidation separately before caller mutation", async () => {
+    const invalidation = new AbortController();
+    const original = { reader: { principal: { id: "alice" } }, invalidated: invalidation.signal };
+    const operation = new AbortController();
+    const result = await TrustedReaderIngress.admit({
+      service: "spine.client.QueryService",
+      method: "Read",
+      request,
+      headers: new Headers(),
+      peer: {},
+      signal: operation.signal,
+      maxBytes: 1024,
+      direct: { authenticate: () => original },
+    });
+    original.reader.principal.id = "mallory";
+    expect(result.reader).toEqual({ principal: { id: "alice" } });
+    expect(result.invalidated).toBe(invalidation.signal);
+  });
+
+  it("treats a lifetime aborted during direct authentication as cancellation", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const lifetime = new AbortController();
+    const pending = TrustedReaderIngress.admit({
+      ...operation,
+      signal: lifetime.signal,
+      headers: new Headers(),
+      peer: {},
+      maxBytes: 1024,
+      direct: {
+        authenticate: async () => {
+          entered.resolve(undefined);
+          await release.promise;
+          return { reader: { principal: { id: "too-late" } } };
+        },
+      },
+    });
+    await entered.promise;
+    lifetime.abort();
+    release.resolve(undefined);
+    await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+  });
+
+  it("stops forwarded admission when the peer ends during proof verification", async () => {
+    const lifetime = new AbortController();
+    const headers = new Headers(
+      await ReaderForwarding.seal(
+        operation.service,
+        operation.method,
+        request,
+        { principal: { id: "alice" } },
+        { issue: () => "proof" },
+        1024,
+      ),
+    );
+    await expect(
+      TrustedReaderIngress.admit({
+        ...operation,
+        signal: lifetime.signal,
+        headers,
+        peer: "gateway",
+        maxBytes: 1024,
+        forwarded: {
+          verify: () => {
+            lifetime.abort();
+            return true;
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: Code.Canceled });
+  });
+
+  it("rejects a direct port that returns a malformed invalidation signal", async () => {
+    const malformed: unknown = { reader: { principal: { id: "alice" } }, invalidated: {} };
+    await expect(
+      TrustedReaderIngress.admit({
+        ...operation,
+        headers: new Headers(),
+        peer: {},
+        maxBytes: 1024,
+        direct: { authenticate: () => malformed as never },
+      }),
+    ).rejects.toMatchObject({ code: Code.Internal });
   });
 });

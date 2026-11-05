@@ -30,6 +30,7 @@ import type {
   ResolvedSession,
   SessionResolver,
 } from "../index.js";
+import { SessionLifetimes } from "./session-lifetime.js";
 
 /**
  * Clock used by signed sessions; values are Unix epoch milliseconds.
@@ -335,6 +336,11 @@ export class SignedSessions implements SessionResolver {
 
   #closed = false;
 
+  readonly #lifetimes = new SessionLifetimes(() => {
+    const now = this.#now();
+    return typeof now === "number" ? now : undefined;
+  });
+
   /**
    * Creates signed sessions with copied finite configuration and P-256 keys.
    * @param options The issuer, key ring, limits, clock, entropy, and revocation settings.
@@ -506,12 +512,40 @@ export class SignedSessions implements SessionResolver {
    * Cookie credentials and every malformed, invalid, expired, revoked, or
    * unavailable-revocation result return `undefined`.
    * @param credential The credential to resolve.
+   * @param lifetime Optional host operation; omission retains no monitor.
    * @returns The verified session, or undefined when it cannot be trusted.
    */
-  async resolve(credential: RequestCredential): Promise<ResolvedSession | undefined> {
+  async resolve(
+    credential: RequestCredential,
+    lifetime?: AbortSignal,
+  ): Promise<ResolvedSession | undefined> {
     if (this.#isClosed() || credential.kind !== "bearer") return undefined;
+    lifetime?.throwIfAborted();
     const claims = await this.#verifiedClaims(credential.value);
-    if (claims === undefined) return undefined;
+    if (claims === undefined || this.#isClosed()) return undefined;
+    const monitor =
+      lifetime === undefined
+        ? undefined
+        : this.#lifetimes.register(this.#identity(claims.jti), lifetime);
+    let retained = false;
+    try {
+      const resolved = await this.#resolveClaims(claims);
+      if (resolved === undefined || monitor === undefined) return resolved;
+      if (!monitor.ready(resolved.expiresAt)) return undefined;
+      retained = true;
+      return { ...resolved, invalidated: monitor.signal };
+    } finally {
+      if (!retained) monitor?.release();
+    }
+  }
+
+  /**
+   * Checks authoritative revocation and time after monitored registration.
+   *
+   * @param claims Verified token claims.
+   * @returns Detached session if still valid.
+   */
+  async #resolveClaims(claims: Claims): Promise<ResolvedSession | undefined> {
     if (this.#revocation !== undefined)
       try {
         if (await this.#revocation.isRevoked(claims.jti)) return undefined;
@@ -541,6 +575,16 @@ export class SignedSessions implements SessionResolver {
       },
       claims.exp,
     );
+  }
+
+  /**
+   * Scopes a token ID to this strategy's issuer and audience.
+   *
+   * @param jti Authenticated token ID.
+   * @returns Local monitor key.
+   */
+  #identity(jti: string): string {
+    return `${this.#issuer}\u0000${this.#audience}\u0000${jti}`;
   }
 
   /**
@@ -604,7 +648,10 @@ export class SignedSessions implements SessionResolver {
   async logout(credential: RequestCredential): Promise<SignedSessionLogoutResult> {
     const resolved = await this.#claimsForLogout(credential);
     if (resolved === undefined) return { kind: "expiryOnly" };
-    if (this.#revocation === undefined) return { kind: "expiryOnly" };
+    if (this.#revocation === undefined) {
+      this.#lifetimes.invalidate(this.#identity(resolved.jti));
+      return { kind: "expiryOnly" };
+    }
     try {
       await this.#revocation.revoke(
         resolved.jti,
@@ -613,6 +660,8 @@ export class SignedSessions implements SessionResolver {
       return this.#closed ? { kind: "expiryOnly" } : { kind: "revoked" };
     } catch {
       return this.#closed ? { kind: "expiryOnly" } : { kind: "unavailable" };
+    } finally {
+      this.#lifetimes.invalidate(this.#identity(resolved.jti));
     }
   }
 
@@ -623,6 +672,7 @@ export class SignedSessions implements SessionResolver {
    */
   close(): Promise<void> {
     this.#closed = true;
+    this.#lifetimes.close();
     this.#keys.clear();
     this.#active = undefined;
     this.#revocation = undefined;
