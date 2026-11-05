@@ -231,7 +231,12 @@ Treat official `master` as protected, coordination-only history:
 
 - start every task from a freshly fetched `origin/master` in a separate feature
   branch and worktree;
-- never create a branch whose name begins with `codex/`;
+- branch names must not contain `/`;
+- use the descriptive task name directly, such as `tenant-auth-storage`;
+  do not prepend generic category, tool, or agent labels such as `feature`,
+  `codex`, `fix`, `chore`, or `task`, regardless of separator. For example,
+  `feature/tenant-auth-storage`, `feature-tenant-auth-storage`, and
+  `codex-tenant-auth-storage` are invalid;
 - push every feature-branch commit to `origin` immediately, including
   checkpoint and review-correction commits;
 - never commit, merge, or push directly to `master` unless the human explicitly
