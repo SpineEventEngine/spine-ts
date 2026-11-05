@@ -165,9 +165,18 @@ class NativeOperations {
           if (join !== undefined) return this.#joinedOne(selected, where, select, join);
           return this.findOne(selected, where);
         }),
-      findMany: ({ model, modelKey, where, limit, offset, sortBy, join }) =>
+      findMany: ({ model, modelKey, where, limit, offset, sortBy, select, join }) =>
         this.#access.run(() => {
-          if (join !== undefined) throw new Error("Better Auth joins are not supported.");
+          if (join !== undefined)
+            return this.#joinedMany(
+              NativePredicates.selectedModel(model, modelKey),
+              where,
+              limit,
+              offset,
+              sortBy,
+              select,
+              join,
+            );
           return this.findMany(
             NativePredicates.selectedModel(model, modelKey),
             where,
@@ -241,6 +250,44 @@ class NativeOperations {
     this.#access.requireOpen();
     if (signal?.aborted) return null;
     return { ...user, account };
+  }
+
+  /**
+   * Reads one prelinked Account and its complete User through native's fixed join.
+   *
+   * @param model Selected base family.
+   * @param where Exact provider and subject equality.
+   * @param limit Native collision-defense page size.
+   * @param offset Optional native offset, which must be absent.
+   * @param sortBy Optional native sort, which must be absent.
+   * @param select Native projection, which is unsupported for joined reads.
+   * @param join Effective User relation.
+   * @returns Matching Account rows with explicit User or null.
+   */
+  async #joinedMany(
+    model: BetterAuthModel,
+    where: readonly CleanedWhere[] | undefined,
+    limit: number,
+    offset: number | undefined,
+    sortBy: { field: string; direction: "asc" | "desc" } | undefined,
+    select: readonly string[] | undefined,
+    join: NativeJoin,
+  ): Promise<Record<string, unknown>[]> {
+    NativeRelations.accountUser(model, where, limit, offset, sortBy, select, join);
+    const signal = NativeSignalContext.current();
+    if (signal?.aborted) return [];
+    if (this.#access.users() === undefined) this.#access.storage("user");
+    const accounts = await this.findMany("account", where, 2);
+    const result: Record<string, unknown>[] = [];
+    for (const account of accounts) {
+      if (signal?.aborted) return [];
+      if (typeof account.userId !== "string") throw new Error("Stored Account has no User ID.");
+      const user = await this.findOne("user", [NativePredicates.equality("id", account.userId)]);
+      this.#access.requireOpen();
+      if (signal?.aborted) return [];
+      result.push({ ...account, user });
+    }
+    return result;
   }
 
   /**
@@ -349,7 +396,19 @@ class NativeOperations {
   ): Promise<Record<string, unknown>[]> {
     if (!Number.isSafeInteger(limit) || limit < 0 || !Number.isSafeInteger(offset) || offset < 0)
       throw new RangeError("Better Auth page bounds must be nonnegative safe integers.");
-    if (sortBy !== undefined && (sortBy.field !== "id" || sortBy.direction !== "asc"))
+    const singletonVerification =
+      model === "verification" &&
+      limit === 1 &&
+      offset === 0 &&
+      where?.length === 1 &&
+      where[0]?.field === "identifier" &&
+      (where[0].operator ?? "eq") === "eq" &&
+      typeof where[0].value === "string";
+    if (
+      sortBy !== undefined &&
+      !(sortBy.field === "id" && sortBy.direction === "asc") &&
+      !(singletonVerification && sortBy.field === "createdAt" && sortBy.direction === "desc")
+    )
       throw new Error("Unsupported Better Auth sort order.");
     if (limit === 0) return [];
     const result: Record<string, unknown>[] = [];
@@ -441,13 +500,16 @@ class NativeOperations {
     remove: boolean,
   ): Promise<Record<string, unknown> | null> {
     const storage = this.#access.storage(model);
+    const oauthState = model === "verification" && NativePredicates.isOAuthState(where);
     for (;;) {
       this.#access.requireOpen();
       const current = await storage.read(id);
+      if (oauthState) NativePredicates.requireLiveState();
       if (current === undefined) return null;
       const row = BetterAuthRecords.decode(model, current);
       if (!NativePredicates.matches(row, where) || !this.#visible(model, row)) return null;
       const next = remove ? undefined : BetterAuthRecords.encode(model, { ...row, ...update });
+      if (oauthState) NativePredicates.requireLiveState();
       if (await storage.compareAndSet(id, current, next))
         return next === undefined ? row : BetterAuthRecords.decode(model, next);
     }
@@ -624,9 +686,56 @@ class NativeOperations {
 type NativeJoin = NonNullable<Parameters<CustomAdapter["findOne"]>[0]["join"]>;
 
 /**
- * Validates the two native related reads used by selected M10 sessions.
+ * Validates the selected native Session, User, and Account relation reads.
  */
 const NativeRelations = Object.freeze({
+  /**
+   * Validates the exact native prelinked Account→User relation before any read.
+   *
+   * @param model Selected base family.
+   * @param where Native provider and subject predicates.
+   * @param limit Native duplicate-account defense.
+   * @param offset Native offset, which must be absent.
+   * @param sortBy Native sort, which must be absent.
+   * @param select Native projection, which must be absent for joined reads.
+   * @param join Effective User relation.
+   */
+  accountUser(
+    model: BetterAuthModel,
+    where: readonly CleanedWhere[] | undefined,
+    limit: number,
+    offset: number | undefined,
+    sortBy: { field: string; direction: "asc" | "desc" } | undefined,
+    select: readonly string[] | undefined,
+    join: NativeJoin,
+  ): void {
+    if (select !== undefined && select.length > 0)
+      throw new Error("Unsupported Better Auth Account join projection.");
+    if (model !== "account" || where === undefined || limit !== 2 || offset || sortBy)
+      throw new Error("Unsupported Better Auth Account join page.");
+    const fields = new Set(where.map((term) => term.field));
+    if (
+      where.length !== 2 ||
+      fields.size !== 2 ||
+      !fields.has("providerId") ||
+      !fields.has("accountId")
+    )
+      throw new Error("Unsupported Better Auth Account join predicate.");
+    NativePredicates.validateWhere(model, where);
+    for (const term of where)
+      if (
+        typeof term.value !== "string" ||
+        (term.operator ?? "eq") !== "eq" ||
+        (term.connector ?? "AND") !== "AND" ||
+        (term.mode ?? "sensitive") !== "sensitive"
+      )
+        throw new Error("Unsupported Better Auth Account join predicate.");
+    const names = Object.keys(join);
+    if (names.length !== 1 || names[0] !== "user" || join.user === undefined)
+      throw new Error("Unsupported Better Auth Account join.");
+    this.relation(join.user, "user", "userId", "id", "one-to-one", 1);
+  },
+
   /**
    * Determines one exact Session→User or User→Account operation before data reads.
    *
@@ -721,6 +830,14 @@ const NativeRelations = Object.freeze({
  * Validates and evaluates the admitted native predicate and mutation profile.
  */
 const NativePredicates = Object.freeze({
+  /**
+   * Rejects an aborted admitted OAuth state consumption before destructive CAS.
+   */
+  requireLiveState(): void {
+    const signal = NativeSignalContext.current();
+    if (signal?.aborted) throw signal.reason ?? new Error("OIDC callback cancelled.");
+  },
+
   /**
    * Builds the exact sensitive equality term used for a related indexed read.
    *

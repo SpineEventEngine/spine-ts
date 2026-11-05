@@ -54,20 +54,7 @@ export class BetterAuthSettings {
    * @returns Detached options with required safe native settings.
    */
   static options(input: unknown): SupportedBetterAuthOptions {
-    const value = this.record(input, "Better Auth options", [
-      "baseURL",
-      "basePath",
-      "secret",
-      "secrets",
-      "trustedOrigins",
-      "session",
-      "emailAndPassword",
-      "account",
-      "verification",
-      "advanced",
-      "rateLimit",
-      "plugins",
-    ]);
+    const value = this.record(input, "Better Auth options", supportedOptionKeys);
     this.urlsAndSecrets(value);
     this.session(value.session);
     this.password(value.emailAndPassword);
@@ -83,6 +70,11 @@ export class BetterAuthSettings {
       ...captured,
       ...(plugins === undefined ? {} : { plugins }),
       session: { ...captured.session, cookieCache: { enabled: false } },
+      account: {
+        ...captured.account,
+        updateAccountOnSignIn: false,
+        accountLinking: { enabled: false },
+      },
       verification: { disableCleanup: true },
       advanced: { ...captured.advanced, database: { validateSchema: false } },
     };
@@ -97,7 +89,15 @@ export class BetterAuthSettings {
   static plugins(input: unknown): SupportedBetterAuthOptions["plugins"] {
     if (input === undefined) return undefined;
     if (!Array.isArray(input)) throw new TypeError("Unsupported Better Auth plugins.");
-    return input.map((entry) => this.plugin(entry));
+    const plugins = input.map((entry) => this.plugin(entry));
+    const ids = new Set<string>();
+    for (const plugin of plugins)
+      for (const provider of plugin.options.config) {
+        if (ids.has(provider.providerId))
+          throw new TypeError("Duplicate generic OAuth providerId.");
+        ids.add(provider.providerId);
+      }
+    return plugins;
   }
 
   /**
@@ -213,7 +213,7 @@ export class BetterAuthSettings {
         ? undefined
         : this.record(value.tokenEndpointAuth, "tokenEndpointAuth", ["method"]).method;
     if (
-      method !== undefined &&
+      value.tokenEndpointAuth !== undefined &&
       !["none", "client_secret_basic", "client_secret_post"].includes(method as string)
     )
       throw new TypeError("Unsupported generic OAuth client authentication.");
@@ -591,3 +591,21 @@ export class BetterAuthSettings {
     return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, this.copy(value)]));
   }
 }
+
+/**
+ * Application-supplied Better Auth keys admitted before native initialization.
+ */
+const supportedOptionKeys = [
+  "baseURL",
+  "basePath",
+  "secret",
+  "secrets",
+  "trustedOrigins",
+  "session",
+  "emailAndPassword",
+  "account",
+  "verification",
+  "advanced",
+  "rateLimit",
+  "plugins",
+] as const;

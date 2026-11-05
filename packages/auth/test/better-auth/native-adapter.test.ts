@@ -104,6 +104,14 @@ describe("selected native adapter operations", () => {
           createdAt: now,
           updatedAt: now,
         },
+        {
+          id: "user-3",
+          name: "Grace",
+          email: "grace@example.test",
+          emailVerified: true,
+          createdAt: now,
+          updatedAt: now,
+        },
       ],
       accounts: [
         {
@@ -111,6 +119,13 @@ describe("selected native adapter operations", () => {
           accountId: "user-1",
           providerId: "credential",
           password: "hashed",
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          userId: "user-2",
+          accountId: "subject-2",
+          providerId: "company",
           createdAt: now,
           updatedAt: now,
         },
@@ -164,10 +179,43 @@ describe("selected native adapter operations", () => {
       expect(user?.account.map((item) => item.accountId)).toEqual(["user-1"]);
       const accountless = await native.findOne<{ account: unknown[] }>({
         model: "user",
-        where: [{ field: "email", value: "lin@example.test" }],
+        where: [{ field: "email", value: "grace@example.test" }],
         join: { account: true },
       });
       expect(accountless?.account).toEqual([]);
+      const accountStorage = acquired.mock.results[1]?.value as
+        RecordStorage<string, Message> | undefined;
+      if (accountStorage === undefined) throw new Error("Account storage was not acquired.");
+      const accountReads = vi.spyOn(accountStorage, "read");
+      try {
+        const linked = await native.findMany<{ user: { id: string } | null }>({
+          model: "account",
+          where: [
+            { field: "providerId", value: "company" },
+            { field: "accountId", value: "subject-2" },
+          ],
+          limit: 2,
+          join: { user: true },
+        });
+        expect(linked.map((item) => item.user?.id)).toEqual(["user-2"]);
+        expect(accountReads).toHaveBeenCalled();
+        accountReads.mockClear();
+        await expect(
+          native.findMany({
+            model: "account",
+            where: [
+              { field: "providerId", value: "company" },
+              { field: "accountId", value: "subject-2" },
+            ],
+            limit: 2,
+            join: { user: true },
+            select: ["accountId"],
+          }),
+        ).rejects.toThrow(/projection/u);
+        expect(accountReads).not.toHaveBeenCalled();
+      } finally {
+        accountReads.mockRestore();
+      }
       const sessionStorage = acquired.mock.results[2]?.value as
         RecordStorage<string, Message> | undefined;
       if (sessionStorage === undefined) throw new Error("Session storage was not acquired.");
@@ -187,6 +235,25 @@ describe("selected native adapter operations", () => {
           join: { user: true },
         }),
       ).rejects.toThrow(/predicate/u);
+      await expect(
+        native.findMany({
+          model: "account",
+          where: [{ field: "providerId", value: "company" }],
+          limit: 2,
+          join: { user: true },
+        }),
+      ).rejects.toThrow(/predicate/u);
+      await expect(
+        native.findMany({
+          model: "account",
+          where: [
+            { field: "providerId", value: "company" },
+            { field: "accountId", value: "subject-2" },
+          ],
+          limit: 3,
+          join: { user: true },
+        }),
+      ).rejects.toThrow(/page/u);
       expect(queries.mock.calls).toHaveLength(0);
     } finally {
       await store.close();
@@ -267,6 +334,29 @@ describe("selected native adapter operations", () => {
       };
       await native.create({ model: "verification", data });
       await expect(native.create({ model: "verification", data })).rejects.toThrow(/Duplicate/u);
+      expect(
+        await native.findMany<{ identifier: string }>({
+          model: "verification",
+          where: [{ field: "identifier", value: data.identifier }],
+          sortBy: { field: "createdAt", direction: "desc" },
+          limit: 1,
+        }),
+      ).toHaveLength(1);
+      await expect(
+        native.findMany({
+          model: "verification",
+          limit: 1,
+          sortBy: { field: "createdAt", direction: "desc" },
+        }),
+      ).rejects.toThrow(/sort/u);
+      await expect(
+        native.findMany({
+          model: "verification",
+          limit: 2,
+          where: [{ field: "identifier", value: data.identifier }],
+          sortBy: { field: "createdAt", direction: "desc" },
+        }),
+      ).rejects.toThrow(/sort/u);
       expect(
         (
           await native.consumeOne<{ value: string }>({

@@ -13,7 +13,6 @@
  */
 
 import { betterAuth } from "better-auth";
-import { genericOAuth as nativeGenericOAuth } from "better-auth/plugins/generic-oauth";
 import {
   createCookieGetter,
   deleteSessionCookie,
@@ -36,6 +35,7 @@ import {
 import { BetterAuthRecords } from "./record-codec.js";
 import { NativeSignalContext } from "./native-adapter.js";
 import { BetterAuthSettings } from "./settings.js";
+import { OidcNetwork } from "./oidc-network.js";
 import type { genericOAuth } from "./generic-oauth.js";
 import type { AuthenticatedPrincipal, RequestCredential, ResolvedSession } from "../index.js";
 import { SessionLifetimes, type SessionMonitor } from "../sessions/session-lifetime.js";
@@ -50,7 +50,9 @@ export interface BetterAuthRoutePolicy {
   readonly maxRequestBytes: number;
 
   /**
-   * Complete route deadline in milliseconds within the host's supported range.
+   * Complete admitted-route deadline in milliseconds within the host's supported range.
+   * Native provider initialization occurs before routes exist and has no caller
+   * cancellation or bounded startup guarantee.
    */
   readonly timeoutMs: number;
 }
@@ -441,7 +443,12 @@ export class BetterAuthIntegration {
   }
 
   /**
-   * Validates and copies configuration before native asynchronous initialization.
+   * Validates and copies configuration, then initializes every native provider.
+   * No routes are published until trusted discovery and native initialization
+   * complete. This factory has no caller AbortSignal or bounded startup promise;
+   * routePolicy.timeoutMs applies only after a route is admitted.
+   * Admitted callbacks pass their effective cancellation signal to provider and
+   * external User work. Consumed OIDC state is not restored on failure.
    *
    * @param input Application store, policy and native configuration.
    * @returns Bounded integration with exact immutable routes.
@@ -451,12 +458,15 @@ export class BetterAuthIntegration {
     const options = BetterAuthSettings.options(input.options);
     const collaborators = NativeIntegrationSetup.collaborators(input);
     NativeIntegrationSetup.validate(collaborators, options);
+    const network = await OidcNetwork.create(
+      options.plugins?.flatMap((plugin) => plugin.options.config) ?? [],
+    );
     const nativeOptions = options as Parameters<typeof betterAuth>[0];
     const { cookies, admission } = NativeIntegrationSetup.admission(nativeOptions);
     // Assigned only after the native engine has initialized its private endpoints.
     // eslint-disable-next-line prefer-const
     let onInvalidate: ((token: string) => void) | undefined;
-    const native = NativeIntegrationSetup.engine(collaborators.store, options, (token) => {
+    const native = NativeIntegrationSetup.engine(collaborators.store, options, network, (token) => {
       onInvalidate?.(token);
     });
     await native.$context;
@@ -465,6 +475,7 @@ export class BetterAuthIntegration {
       options,
       policy,
       native,
+      network,
       cookies.sessionToken.name,
       admission,
     );
@@ -490,13 +501,14 @@ export class BetterAuthIntegration {
     options: SupportedBetterAuthOptions,
     policy: BetterAuthRoutePolicy,
     native: ReturnType<typeof NativeIntegrationSetup.engine>,
+    network: OidcNetwork,
     cookieName: string,
     admission: CredentialAdmission,
   ): BetterAuthIntegration {
     // The route callback starts only after this integration has been constructed.
     // eslint-disable-next-line prefer-const
     let integration!: BetterAuthIntegration;
-    const actions = NativeIntegrationSetup.actions(native);
+    const actions = NativeIntegrationSetup.actions(native, network, options, cookieName);
     const routes = this.#routeSet(
       collaborators.login,
       options,
@@ -526,7 +538,8 @@ export class BetterAuthIntegration {
    * @param actions Selected private native operations.
    * @param cookieName Resolved primary native cookie name.
    * @param current Returns the initialized integration when a route runs.
-   * @returns Immutable exact browser routes.
+   * @returns Immutable exact browser routes with callback cancellation and
+   * confirmed late Session compensation.
    */
   static #routeSet(
     login: BetterAuthVerifiedLogin | undefined,
@@ -538,28 +551,58 @@ export class BetterAuthIntegration {
     current: () => BetterAuthIntegration,
   ): readonly BetterAuthRoute[] {
     const prefix = options.basePath ?? "/api/auth";
+    const providerIds =
+      options.plugins?.flatMap((plugin) =>
+        plugin.options.config.map((entry) => entry.providerId),
+      ) ?? [];
+    const run = (path: string, request: Request, signal: AbortSignal): Promise<Response> => {
+      const integration = current();
+      return integration.#runRoute(
+        path,
+        `${prefix}${path}`,
+        request,
+        signal,
+        login,
+        actions,
+        cookieName,
+      );
+    };
     return NativeIntegrationSetup.routes(
       policy,
       options,
       admission,
       login !== undefined,
-      (path, request, signal) => {
-        const integration = current();
-        const effective = AbortSignal.any([signal, integration.#closedSignal.signal]);
-        return NativeSignalContext.run(effective, () =>
-          integration.#run(() =>
-            integration.#handleRoute(
-              path,
-              `${prefix}${path}`,
-              request,
-              effective,
-              login,
-              actions,
-              cookieName,
-            ),
-          ),
-        );
-      },
+      providerIds,
+      run,
+    );
+  }
+
+  /**
+   * Applies integration closure and cancellation to an admitted native route.
+   *
+   * @param path Selected native operation path.
+   * @param fullPath Exact admitted browser path.
+   * @param request Admitted browser request.
+   * @param signal Host route cancellation.
+   * @param login Optional trusted external verifier.
+   * @param actions Private native operations.
+   * @param cookieName Resolved primary native cookie name.
+   * @returns Native response or safe terminal response.
+   */
+  #runRoute(
+    path: string,
+    fullPath: string,
+    request: Request,
+    signal: AbortSignal,
+    login: BetterAuthVerifiedLogin | undefined,
+    actions: NativeRouteActions,
+    cookieName: string,
+  ): Promise<Response> {
+    const effective = AbortSignal.any([signal, this.#closedSignal.signal]);
+    return NativeSignalContext.run(effective, () =>
+      this.#run(() =>
+        this.#handleRoute(path, fullPath, request, effective, login, actions, cookieName),
+      ),
     );
   }
 
@@ -585,7 +628,8 @@ export class BetterAuthIntegration {
     cookieName: string,
   ): Promise<Response> {
     if (
-      request.method !== (path === "/get-session" ? "GET" : "POST") ||
+      request.method !==
+        (path === "/get-session" || path.startsWith("/callback/") ? "GET" : "POST") ||
       new URL(request.url).pathname !== fullPath
     )
       return new Response("Not found", { status: 404 });
@@ -629,7 +673,7 @@ export class BetterAuthIntegration {
         return new Response("Authentication rejected", { status: 401 });
       return actions.external(id);
     }
-    return path === "/sign-out" ? actions.logout(request.headers) : actions.handle(request);
+    return path === "/sign-out" ? actions.logout(request.headers) : actions.handle(request, signal);
   }
 
   /**
@@ -646,7 +690,8 @@ export class BetterAuthIntegration {
     cookieName: string,
     actions: NativeRouteActions,
   ): Promise<void> {
-    if (path !== "/sign-in/email" && path !== "/sign-in/external") return;
+    if (path !== "/sign-in/email" && path !== "/sign-in/external" && !path.startsWith("/callback/"))
+      return;
     const signed = NativeResponses.sessionCookie(result, cookieName);
     if (signed !== undefined) await actions.compensate(new Headers({ cookie: signed }));
   }
@@ -794,7 +839,7 @@ interface NativeRouteActions {
   /**
    * Calls the native password or renewal handler behind an exact route.
    */
-  readonly handle: (request: Request) => Promise<Response>;
+  readonly handle: (request: Request, signal: AbortSignal) => Promise<Response>;
 
   /**
    * Performs strict validated-cookie durable logout.
@@ -823,12 +868,14 @@ class NativeIntegrationSetup {
    *
    * @param store Selected prepared Spine record store.
    * @param options Detached supported native options.
+   * @param network Trusted discovery and callback-local OIDC transport.
    * @param onInvalidate Invalidates local monitors during strict logout.
    * @returns Actual native engine pending its asynchronous context initialization.
    */
   static engine(
     store: PersistentBetterAuthStore,
     options: SupportedBetterAuthOptions,
+    network: OidcNetwork,
     onInvalidate: (token: string) => void,
   ) {
     const nativeOptions = options as Parameters<typeof betterAuth>[0];
@@ -838,7 +885,7 @@ class NativeIntegrationSetup {
       logger: { disabled: true },
       onAPIError: { throw: true },
       plugins: [
-        ...(options.plugins?.map((plugin) => nativeGenericOAuth(plugin.options)) ?? []),
+        ...(options.plugins?.map((plugin) => network.plugin(plugin.options.config)) ?? []),
         this.plugin(onInvalidate),
       ],
     });
@@ -848,11 +895,27 @@ class NativeIntegrationSetup {
    * Binds only selected native routes and confirmed cancellation cleanup.
    *
    * @param native Actual initialized native engine.
+   * @param network Callback-local OIDC transport and key resolver.
+   * @param options Captured native URL settings.
+   * @param cookieName Resolved primary native cookie name.
    * @returns Private native route operations.
    */
-  static actions(native: ReturnType<typeof NativeIntegrationSetup.engine>): NativeRouteActions {
+  static actions(
+    native: ReturnType<typeof NativeIntegrationSetup.engine>,
+    network: OidcNetwork,
+    options: SupportedBetterAuthOptions,
+    cookieName: string,
+  ): NativeRouteActions {
     return {
-      handle: (request) => native.handler(request),
+      handle: (request, signal) => {
+        const callback = new URL(request.url).pathname.startsWith(
+          `${options.basePath ?? "/api/auth"}/callback/`,
+        );
+        const defaultErrorURL = callback
+          ? new URL(`${options.basePath ?? "/api/auth"}/error`, options.baseURL).href
+          : undefined;
+        return network.run(signal, () => native.handler(request), defaultErrorURL, cookieName);
+      },
       logout: (headers) => native.api.spineStrictLogout({ headers, asResponse: true }),
       external: (id) =>
         native.api.spineExternalSession({
@@ -920,6 +983,15 @@ class NativeIntegrationSetup {
     if (!selection.models.has("session"))
       throw new TypeError("Better Auth Session must be selected.");
     if (
+      options.plugins?.some((plugin) => plugin.options.config.length > 0) &&
+      (!selection.models.has("account") ||
+        !selection.models.has("verification") ||
+        (!selection.models.has("user") && !selection.externalUsers))
+    )
+      throw new TypeError(
+        "OIDC login requires selected Account and Verification records and a complete User source.",
+      );
+    if (
       options.emailAndPassword !== undefined &&
       (!selection.models.has("account") ||
         (!selection.models.has("user") && !selection.externalEmail))
@@ -967,6 +1039,7 @@ class NativeIntegrationSetup {
    * @param options Detached supported native options.
    * @param admission Derived native cookie declarations.
    * @param external Whether a trusted external verifier was supplied.
+   * @param providerIds Initialized OIDC provider identifiers.
    * @param onRoute Runs one selected native operation.
    * @returns Exact immutable browser routes.
    */
@@ -975,15 +1048,17 @@ class NativeIntegrationSetup {
     options: SupportedBetterAuthOptions,
     admission: CredentialAdmission,
     external: boolean,
+    providerIds: readonly string[],
     onRoute: (path: string, request: Request, signal: AbortSignal) => Promise<Response>,
   ): readonly BetterAuthRoute[] {
     const prefix = options.basePath ?? "/api/auth";
     const origins = Object.freeze([...options.trustedOrigins]);
     const route = (path: string): BetterAuthRoute =>
       Object.freeze({
-        method: path === "/get-session" ? "GET" : "POST",
+        method: path === "/get-session" || path.startsWith("/callback/") ? "GET" : "POST",
         path: `${prefix}${path}`,
         origins,
+        ...(path.startsWith("/callback/") ? { allowMissingOrigin: true } : {}),
         admission,
         maxRequestBytes: policy.maxRequestBytes,
         timeoutMs: policy.timeoutMs,
@@ -992,6 +1067,8 @@ class NativeIntegrationSetup {
     return Object.freeze([
       ...(options.emailAndPassword === undefined ? [] : [route("/sign-in/email")]),
       ...(external ? [route("/sign-in/external")] : []),
+      ...(providerIds.length === 0 ? [] : [route("/sign-in/social")]),
+      ...providerIds.map((id) => route(`/callback/${id}`)),
       route("/get-session"),
       route("/sign-out"),
     ]);
@@ -1120,7 +1197,7 @@ const NativeResponses = Object.freeze({
    * @returns Reusable Cookie field only after confirmed successful issuance.
    */
   sessionCookie(response: Response, name: string): string | undefined {
-    if (!response.ok) return undefined;
+    if (response.status < 200 || response.status >= 400) return undefined;
     for (const header of response.headers.getSetCookie()) {
       const value = parseSetCookieHeader(header).get(name)?.value;
       if (value !== undefined) return `${name}=${encodeURIComponent(value)}`;

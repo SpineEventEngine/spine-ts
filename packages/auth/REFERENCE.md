@@ -242,9 +242,10 @@ Better Auth 1.7.16 engine. It requires application-supplied `routePolicy` body
 and deadline bounds, supported native options, and an explicit principal
 mapper. Its `sessions` resolver verifies the native signed cookie and calls
 native `getSession` without renewal or cookie cache. The generated exact routes
-admit password login, explicit GET renewal, strict POST logout, and optional
-trusted external login. Mount them through `BrowserServer`; do not expose the
-unrestricted native handler. Close the integration, store, and shared factory
+admit password login, selected social start and provider callback, explicit GET
+renewal, strict POST logout, and optional trusted external login. Mount them
+through `BrowserServer`; do not expose the unrestricted native handler. Close the
+integration, store, and shared factory
 separately. External User sources replace stored Users and require both ID and
 email lookup for password login. Trusted external login additionally requires a
 verifier that returns a proven stable User ID, a complete external User-by-ID
@@ -254,8 +255,38 @@ ID alone is not proof of login. On signing-secret rotation, a cookie signed by
 the old active secret is rejected by an integration with a new active secret,
 even if that integration retains the former secret in its configuration.
 
-The private adapter supplies only Session-to-User and User-to-Account native
-related reads, using selected ID and digest equality lookups. It returns an
+All configured native OIDC providers initialize from their trusted discovery
+URLs before the factory returns routes. A pending discovery response keeps
+creation pending; the factory offers no caller signal or startup deadline.
+Configure a `genericOAuth({ config: [...] })` plugin with a stable `providerId`,
+`discoveryUrl`, and `clientId`. Each provider requires `pkce: true`,
+`requireIdTokenVerification: true`, `disableSignUp: true`, and
+`overrideUserInfo: false`. When supplied, `tokenEndpointAuth.method` must be
+`none`, `client_secret_basic`, or `client_secret_post`; the two confidential
+methods require a nonempty `clientSecret`. The legacy `authentication` selector
+(`basic` or `post`) also requires a secret and cannot be combined with
+`tokenEndpointAuth`. OIDC additionally requires selected Session, Account, and
+Verification records plus either selected User records or a complete external
+User-by-ID source. An empty provider list adds no OIDC record requirement.
+`routePolicy.timeoutMs` applies only to admitted browser requests. Native
+state-cookie, PKCE, nonce, issuer, audience and ID-token checks remain active.
+The integration uses one key resolver per callback, so simultaneous callbacks
+do not share a pending JWKS fetch; this can increase provider key traffic.
+Only one callback can consume a native state after its signed cookie is checked.
+Replay and failed provider callbacks return a plain 401 or 503 when native would
+otherwise redirect to its unexposed default error route. The response retains
+native state-cookie expiry headers without returning that default Location;
+admitted application success and error redirects keep their destinations.
+Only prelinked Account identities can issue a Session. Consumed state is never
+restored after a provider failure. Callback cancellation reaches token, JWKS,
+userinfo, and external directory work without canceling other callbacks. A
+confirmed late Session write is conditionally removed after cancellation;
+an ambiguous throwing storage outcome has no guaranteed rollback. Application
+code still invokes indexed expiry cleanup explicitly.
+
+The private adapter supplies Session-to-User, User-to-Account and prelinked
+Account-to-User native related reads, using selected ID and digest equality
+lookups. It returns an
 explicit null User or empty Account list for true absence. Directory and
 storage errors reject; a related read is admitted as one operation, but its
 separate record reads are not a cross-record transaction. The admitted signal

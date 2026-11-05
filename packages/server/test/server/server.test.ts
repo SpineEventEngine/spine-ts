@@ -1542,6 +1542,17 @@ describe("Server", () => {
         (
           await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
             ...base,
+            "Cookie",
+            "__Host-state=first",
+            "Cookie",
+            "__Host-state=second",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
             "X-Flow-CSRF",
             "one",
             "x-flow-csrf",
@@ -3888,7 +3899,13 @@ describe("Server", () => {
             directorySignal = signal;
             await new Promise<void>((resolve) => {
               releaseUser = resolve;
-              signal?.addEventListener("abort", resolve, { once: true });
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
             });
           }
           return id === user.id ? user : undefined;

@@ -232,8 +232,12 @@ try {
 ```
 
 Provision complete Users and prelinked Accounts before accepting password
-traffic. The integration exposes exact browser routes, verified session reads,
-and credential metadata. For a listener, pass `auth.routes` as
+or selected OIDC traffic. OIDC provider discovery and native initialization
+finish before `create()` returns; a pending provider has no factory timeout or
+caller cancellation, and the route deadline begins only after route admission.
+Each admitted callback uses a separate JWKS resolver, which may increase key
+requests to the provider. The integration exposes exact browser routes,
+verified session reads, and credential metadata. For a listener, pass `auth.routes` as
 `BrowserServerOptions.authRoutes`, `auth.sessions` as `sessions`, and
 `auth.credentials` as `credentials`, alongside the host's origin, clock,
 authorization, and context collaborators. The host applies the selected route

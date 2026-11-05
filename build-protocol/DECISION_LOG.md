@@ -7480,4 +7480,21 @@ Independent API, reliability and documentation review accepted the bounded
 amendment after adding canonical exact request/result matrices, clarifying
 external-User password admission and preserving the native two-match OIDC
 Account check. The public options remain unchanged. Runtime implementation and
-acceptance remain in M10/M11; existing M9 evidence does not establish these reads.
+acceptance are recorded per milestone; existing M9 evidence does not establish these reads.
+
+## Native OIDC atomic consumption (2026-11-05)
+
+An actual native Better Auth 1.7.16 callback race with the Spine adapter allowed
+two token exchanges. The native deletion helper silently skips its raw delete
+when its preliminary read finds no record, and the parser ignores the return.
+Raw conditional-deletion tests therefore do not establish callback exclusivity.
+
+A callback-local public before hook replaces only OAuth-state deletion with
+public adapter `consumeOne` and requires a non-null result. Native cookie
+validation remains before consumption and token exchange remains after it.
+The hook returns a fresh request context; it does not mutate the shared adapter
+or return stale state from reads. Cancellation checks around state CAS preserve
+pre-write cancellation and drain writes already issued, without restoring state
+or disabling late Session compensation. Refusal must produce a usable safe
+restart-login outcome without exposing credentials or an unavailable error route.
+This adds no public option, record family, index, lock or transaction.

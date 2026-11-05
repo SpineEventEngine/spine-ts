@@ -41,6 +41,11 @@ const baseOptions = {
   advanced: { database: { validateSchema: false } },
 } as const;
 
+const { emailAndPassword: passwordOptions, ...noPasswordOptions } = baseOptions;
+void passwordOptions;
+const { secret: defaultSecret, ...noSecretOptions } = baseOptions;
+void defaultSecret;
+
 const unsupportedCookieRole: SupportedBetterAuthOptions["advanced"] = {
   cookies: {
     // @ts-expect-error Unsupported native roles are rejected in the public declaration.
@@ -169,10 +174,9 @@ describe("bounded Better Auth integration", () => {
       overrideUserInfo: false as const,
     };
     const native = genericOAuth({ config: [config] });
-    const originalInit: unknown = native.init;
     const accepted = BetterAuthSettings.options({ ...baseOptions, plugins: [native] });
     expect(accepted.plugins?.[0]?.id).toBe("generic-oauth");
-    expect(accepted.plugins?.[0]?.init).not.toBe(originalInit);
+    expect(Object.hasOwn(accepted.plugins?.[0] ?? {}, "init")).toBe(false);
     config.scopes[0] = "changed";
     expect(accepted.plugins?.[0]?.options.config[0]?.scopes).toEqual(["openid", "email"]);
     expect(() =>
@@ -301,8 +305,31 @@ describe("bounded Better Auth integration", () => {
       ["provider PKCE", withProvider({ ...provider, pkce: false })],
       ["provider email policy", withProvider({ ...provider, requireEmailVerification: "yes" })],
       ["provider auth", withProvider({ ...provider, tokenEndpointAuth: { method: "unsafe" } })],
+      ["provider auth empty", withProvider({ ...provider, tokenEndpointAuth: {} })],
+      [
+        "provider auth missing method",
+        withProvider({ ...provider, tokenEndpointAuth: { method: undefined } }),
+      ],
       ["provider auth conflict", withProvider({ ...provider, authentication: "basic" })],
       ["provider missing secret", withProvider({ ...provider, clientSecret: undefined })],
+      [
+        "provider post missing secret",
+        withProvider({
+          ...provider,
+          clientSecret: undefined,
+          tokenEndpointAuth: { method: "client_secret_post" },
+        }),
+      ],
+      [
+        "duplicate provider across plugins",
+        {
+          ...baseOptions,
+          plugins: [
+            { id: "generic-oauth", options: { config: [provider] } },
+            { id: "generic-oauth", options: { config: [provider] } },
+          ],
+        },
+      ],
     ];
     for (const [label, value] of invalid)
       expect(() => BetterAuthSettings.options(value), label).toThrow();
@@ -362,10 +389,57 @@ describe("bounded Better Auth integration", () => {
           store,
           routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
           options: baseOptions,
-          onPrincipal: (user) => Promise.resolve({ id: user.id }),
+          onPrincipal: (user: { id: string }) => Promise.resolve({ id: user.id }),
         }),
       ).rejects.toThrow(/User and Account/u);
     } finally {
+      await store.close();
+      await factory.close();
+    }
+  });
+
+  it.each([
+    ["Account", ["user", "session", "verification"]],
+    ["Verification", ["user", "account", "session"]],
+    ["User", ["account", "session", "verification"]],
+  ] as const)("rejects OIDC without selected %s before discovery", async (_missing, models) => {
+    const factory = new InMemoryStorageFactory();
+    const store = await PersistentBetterAuthStore.create({
+      storageFactory: factory,
+      group: new StorageGroup("better_auth_oidc_missing_family"),
+      models: [...models],
+    });
+    const discovery = vi.spyOn(globalThis, "fetch");
+    try {
+      await expect(
+        BetterAuthIntegration.create({
+          store,
+          routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
+          options: {
+            ...noPasswordOptions,
+            plugins: [
+              genericOAuth({
+                config: [
+                  {
+                    providerId: "company",
+                    discoveryUrl: "https://issuer.example.test/.well-known/openid-configuration",
+                    clientId: "client",
+                    tokenEndpointAuth: { method: "none" },
+                    pkce: true,
+                    requireIdTokenVerification: true,
+                    disableSignUp: true,
+                    overrideUserInfo: false,
+                  },
+                ],
+              }),
+            ],
+          },
+          onPrincipal: (user) => Promise.resolve({ id: user.id }),
+        }),
+      ).rejects.toThrow(/OIDC|Account|Verification|User/u);
+      expect(discovery).not.toHaveBeenCalled();
+    } finally {
+      discovery.mockRestore();
       await store.close();
       await factory.close();
     }
@@ -442,7 +516,7 @@ describe("bounded Better Auth integration", () => {
     const input = {
       store,
       routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
-      options: { ...baseOptions, emailAndPassword: undefined },
+      options: { ...noPasswordOptions },
       login: verifier,
       onPrincipal: (value: typeof user) => Promise.resolve({ id: value.id }),
     };
@@ -500,7 +574,7 @@ describe("bounded Better Auth integration", () => {
     const auth = await BetterAuthIntegration.create({
       store,
       routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
-      options: { ...baseOptions, emailAndPassword: undefined },
+      options: { ...noPasswordOptions },
       onPrincipal: (value) => Promise.resolve({ id: value.id }),
       login: {
         verify: async (_request, signal) => {
@@ -508,7 +582,13 @@ describe("bounded Better Auth integration", () => {
           entered();
           await new Promise<void>((resolve) => {
             release = resolve;
-            signal.addEventListener("abort", resolve, { once: true });
+            signal.addEventListener(
+              "abort",
+              () => {
+                resolve();
+              },
+              { once: true },
+            );
           });
           return user.id;
         },
@@ -584,7 +664,13 @@ describe("bounded Better Auth integration", () => {
             entered();
             await new Promise<void>((resolve) => {
               release = resolve;
-              received?.addEventListener("abort", resolve, { once: true });
+              received?.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
             });
           }
           return user;
@@ -594,7 +680,7 @@ describe("bounded Better Auth integration", () => {
     const auth = await BetterAuthIntegration.create({
       store,
       routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
-      options: { ...baseOptions, emailAndPassword: undefined },
+      options: { ...noPasswordOptions },
       onPrincipal: (value) => Promise.resolve({ id: value.id }),
       login: { verify: () => Promise.resolve(user.id) },
     });
@@ -654,8 +740,8 @@ describe("bounded Better Auth integration", () => {
         BetterAuthIntegration.create({
           store,
           options: baseOptions,
-          onPrincipal: (user) => Promise.resolve({ id: user.id }),
-        } as Parameters<typeof BetterAuthIntegration.create>[0]),
+          onPrincipal: (user: { id: string }) => Promise.resolve({ id: user.id }),
+        } as unknown as Parameters<typeof BetterAuthIntegration.create>[0]),
       ).rejects.toThrow(/routePolicy/u);
       for (const routePolicy of [
         { maxRequestBytes: 0, timeoutMs: 5_000 },
@@ -710,8 +796,7 @@ describe("bounded Better Auth integration", () => {
         store,
         routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
         options: {
-          ...baseOptions,
-          secret: undefined,
+          ...noSecretOptions,
           secrets: [{ version: 0, value: baseOptions.secret }],
         },
         onPrincipal: (user) => Promise.resolve({ id: user.id }),
@@ -946,7 +1031,7 @@ describe("bounded Better Auth integration", () => {
     const input = (secrets: { version: number; value: string }[]) => ({
       store,
       routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
-      options: { ...baseOptions, secret: undefined, secrets },
+      options: { ...noSecretOptions, secrets },
       onPrincipal: (user: { id: string }) => Promise.resolve({ id: user.id }),
     });
     const before = await BetterAuthIntegration.create(input([active]));
@@ -1011,7 +1096,7 @@ describe("bounded Better Auth integration", () => {
       BetterAuthIntegration.create({
         store,
         routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
-        options: { ...baseOptions, emailAndPassword: undefined },
+        options: { ...noPasswordOptions },
         onPrincipal: (value) => Promise.resolve({ id: value.id }),
         login: { verify: () => Promise.resolve(user.id) },
       });
@@ -1099,7 +1184,7 @@ describe("bounded Better Auth integration", () => {
     const auth = await BetterAuthIntegration.create({
       store,
       routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
-      options: { ...baseOptions, emailAndPassword: undefined },
+      options: { ...noPasswordOptions },
       login: { verify: () => Promise.resolve(user.id) },
       onPrincipal: async (resolved) => {
         entered();
@@ -1260,8 +1345,7 @@ describe("bounded Better Auth integration", () => {
       store,
       routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
       options: {
-        ...baseOptions,
-        emailAndPassword: undefined,
+        ...noPasswordOptions,
         session: { cookieCache: { enabled: false }, expiresIn: 60, updateAge: 0 },
       },
       login: { verify: () => Promise.resolve(user.id) },
@@ -1385,7 +1469,7 @@ describe("bounded Better Auth integration", () => {
     const auth = await BetterAuthIntegration.create({
       store,
       routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
-      options: { ...baseOptions, emailAndPassword: undefined },
+      options: { ...noPasswordOptions },
       onPrincipal: (resolved) => Promise.resolve({ id: resolved.id }),
       login: {
         verify: (request) =>
@@ -1573,8 +1657,7 @@ describe("bounded Better Auth integration", () => {
       store,
       routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
       options: {
-        ...baseOptions,
-        emailAndPassword: undefined,
+        ...noPasswordOptions,
         session: {
           expiresIn: 1,
           updateAge: 1,
@@ -1652,7 +1735,13 @@ describe("bounded Better Auth integration", () => {
             entered();
             await new Promise<void>((resolve) => {
               releaseCooperative = resolve;
-              signal?.addEventListener("abort", resolve, { once: true });
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
             });
           }
           if (pause) {
@@ -1667,7 +1756,7 @@ describe("bounded Better Auth integration", () => {
     const auth = await BetterAuthIntegration.create({
       store,
       routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
-      options: { ...baseOptions, emailAndPassword: undefined },
+      options: { ...noPasswordOptions },
       onPrincipal: (value) => Promise.resolve({ id: value.id }),
       login: { verify: () => Promise.resolve(user.id) },
     });

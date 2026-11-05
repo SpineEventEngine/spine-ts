@@ -1333,7 +1333,31 @@ The integration permits only configured providers, redirect destinations and the
 
 Replay, wrong state, wrong token audience, token validation failure, missing account or directory failure creates no session. An interrupted login restarts; consumed state is not restored after an external HTTP failure.
 
-The selected verification profile uses one immutable record per purpose-qualified identifier. Its callback must validate the native state cookie, then successfully delete that record with compare-and-set before proceeding. A callback that loses this race must fail before token exchange. The stock read-then-delete path is insufficient; this gate is part of the supported integration. The experiment implements it for the pinned callback's `auth-state:` deletion only. The losing callback currently receives a generic error redirect; production should present a safe restart-login result. Recheck the callback ordering on every supported Better Auth upgrade. General Better Auth verification supports broader histories; plugins needing multiple values for one identifier are not enabled by this profile.
+The selected verification profile uses one immutable record per purpose-qualified
+identifier. General Better Auth verification supports broader histories; plugins
+requiring multiple values for one identifier are outside this profile.
+
+The integration installs a request-local public native callback hook that
+replaces only OAuth-state deletion with an awaited public adapter `consumeOne`
+and rejects an absent result. Native signed-cookie validation precedes this
+call, and token exchange follows only successful atomic consumption. The adapter
+does not synthesize deleted state in reads. The losing callback receives a safe
+restart-login response. Cancellation observed before issuing the state CAS
+preserves the record; an in-flight CAS is drained and a consumed record is never
+restored. Recheck the public context hook and native ordering for every supported
+Better Auth upgrade.
+
+The native deletion helper can skip its delete when a preliminary read finds no
+record. Requiring an atomic consumption result closes that race while retaining
+the native parser. These checks apply to OAuth state; strict logout and late
+Session compensation still perform their required deletion after cancellation.
+
+Native callback failures use the existing callback response boundary to provide
+safe restart-login responses instead of an unavailable default error route.
+Atomic-state refusal returns 401 and state-storage unavailability returns 503.
+The same boundary handles pre-consumption failures that use the native default
+error redirect, preserving successful session cookies and application redirects.
+The application does not configure a new error-routing policy.
 
 Native discovery and the integration's trusted metadata read complete during
 `BetterAuthIntegration.create()`, before routes are exposed. Creation requires
