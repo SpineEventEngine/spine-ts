@@ -13,10 +13,15 @@
  */
 
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
-import { InMemoryStorageFactory, StorageGroup } from "@spine-event-engine/storage";
+import {
+  InMemoryStorageFactory,
+  StorageGroup,
+  type RecordStorage,
+} from "@spine-event-engine/storage";
+import type { Message } from "@bufbuild/protobuf";
 import { betterAuth } from "better-auth";
 import type { AdapterFactory } from "better-auth/adapters";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { PersistentBetterAuthStore } from "../../src/better-auth/index.js";
 import { nativeFactoryFor } from "../../src/better-auth/persistent-store.js";
@@ -72,6 +77,123 @@ async function session(
 }
 
 describe("selected native adapter operations", () => {
+  it("returns explicit selected Session User and User Account relations through the native factory", async () => {
+    const factory = new InMemoryStorageFactory();
+    const acquired = vi.spyOn(factory, "createRecordStorage");
+    const store = await PersistentBetterAuthStore.create({
+      storageFactory: factory,
+      group: new StorageGroup("better_auth_selected_joins"),
+      models: ["user", "account", "session"],
+      clock: () => timestampFromDate(now),
+    });
+    await store.provision({
+      users: [
+        {
+          id: "user-1",
+          name: "Ada",
+          email: "ada@example.test",
+          emailVerified: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: "user-2",
+          name: "Lin",
+          email: "lin@example.test",
+          emailVerified: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      accounts: [
+        {
+          userId: "user-1",
+          accountId: "user-1",
+          providerId: "credential",
+          password: "hashed",
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    });
+    const auth = betterAuth({
+      database: nativeFactoryFor(store) as AdapterFactory<Parameters<typeof betterAuth>[0]>,
+      secret: "selected-join-secret-at-least-32-characters",
+      baseURL: "http://localhost:3000",
+      advanced: { database: { validateSchema: false } },
+    });
+    try {
+      const native = (await auth.$context).adapter;
+      await native.create({
+        model: "session",
+        data: {
+          token: "joined-token",
+          userId: "user-1",
+          expiresAt: later,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+      await native.create({
+        model: "session",
+        data: {
+          token: "orphan-token",
+          userId: "missing",
+          expiresAt: later,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+      const session = await native.findOne<{ user: { id: string } }>({
+        model: "session",
+        where: [{ field: "token", value: "joined-token" }],
+        join: { user: true },
+      });
+      expect(session?.user.id).toBe("user-1");
+      const orphan = await native.findOne<{ user: null }>({
+        model: "session",
+        where: [{ field: "token", value: "orphan-token" }],
+        join: { user: true },
+      });
+      expect(orphan?.user).toBeNull();
+      const user = await native.findOne<{ account: { accountId: string }[] }>({
+        model: "user",
+        where: [{ field: "email", value: "ada@example.test" }],
+        join: { account: true },
+      });
+      expect(user?.account.map((item) => item.accountId)).toEqual(["user-1"]);
+      const accountless = await native.findOne<{ account: unknown[] }>({
+        model: "user",
+        where: [{ field: "email", value: "lin@example.test" }],
+        join: { account: true },
+      });
+      expect(accountless?.account).toEqual([]);
+      const sessionStorage = acquired.mock.results[2]?.value as
+        RecordStorage<string, Message> | undefined;
+      if (sessionStorage === undefined) throw new Error("Session storage was not acquired.");
+      const queries = vi.spyOn(sessionStorage, "queryEntries");
+      await expect(
+        native.findOne({
+          model: "session",
+          where: [{ field: "token", value: "joined-token" }],
+          join: { user: true },
+          select: ["token"],
+        }),
+      ).rejects.toThrow(/projection/u);
+      await expect(
+        native.findOne({
+          model: "session",
+          where: [{ field: "userId", value: "user-1" }],
+          join: { user: true },
+        }),
+      ).rejects.toThrow(/predicate/u);
+      expect(queries.mock.calls).toHaveLength(0);
+    } finally {
+      await store.close();
+      await factory.close();
+    }
+  });
+
   it("counts, pages and conditionally changes only matching sessions", async () => {
     const { factory, store, native } = await harness();
     try {

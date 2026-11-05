@@ -7460,3 +7460,24 @@ Allocate 6 GiB of Node old-space memory to the API-check command. Keep every
 entry point, strict type check and export assertion. Scope this setting to the
 documentation build; it changes no application resource policy or runtime limit.
 The normal command and final release profile must exercise this setting.
+
+## Selected Better Auth related reads (2026-11-05)
+
+Native getSession uses a Session-to-User join. Better Auth core 1.7.16's fallback
+logs a failed related read directly to console before rethrowing, bypassing its
+logger settings. A real directory-outage test reproduced this behavior.
+
+The proposed bounded remedy enables `advanced.database.joins` privately and
+returns the selected related records through the existing adapter. M10 needs
+Session-to-User and User-to-Account; M11 additionally needs Account-to-User for
+prelinked OIDC. Explicit null/empty related properties prevent fallback. All
+other effective shapes reject before I/O. Reuse indexed storage, complete User
+sources and native limits, without a public option, generic join engine, new
+record family or cross-record transaction. Failures remain failures and emit
+no log record; shutdown and cancellation cover the complete admitted read.
+
+Independent API, reliability and documentation review accepted the bounded
+amendment after adding canonical exact request/result matrices, clarifying
+external-User password admission and preserving the native two-match OIDC
+Account check. The public options remain unchanged. Runtime implementation and
+acceptance remain in M10/M11; existing M9 evidence does not establish these reads.

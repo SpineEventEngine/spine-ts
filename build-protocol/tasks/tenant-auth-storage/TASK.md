@@ -41,15 +41,17 @@
 
 ## Current implementation status
 
-M1, M2, M3, M3A, M4, M5, M6, M7, M8 and M9 are implemented and accepted after
+M1, M2, M3, M3A, M4, M5, M6, M7, M8, M9 and M10 are implemented and accepted after
 focused verification and independent review. Persistent opaque sessions, OIDC
 state and signed-token revocations use the reviewed library composition and
 factory lifecycle. Browser admission and native reader operations now capture
 session facts and stop local forwarding on logout, expiry or shutdown, with
 cleanup and failure visibility verified at asynchronous completion boundaries.
-Selected Better Auth persistence now supports controlled provisioning, native
-adapter operations and explicit maintenance. M10 native login and sessions is
-next; M10 through M12 remain to be accepted.
+Selected Better Auth persistence supports controlled provisioning, native
+adapter operations and explicit maintenance. Native password and trusted external
+login, authoritative session reads, renewal, strict logout and local stream
+invalidation are implemented and reviewed. M11 native OIDC and M12 final
+acceptance remain to be completed.
 The Better Auth public declaration and generated-route policy amendments have
 accepted designs; their runtime implementation remains in the corresponding
 milestones. Final repository-wide release verification and security review

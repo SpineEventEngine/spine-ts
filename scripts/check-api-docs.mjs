@@ -276,6 +276,15 @@ const expectedBetterAuthExports = [
   "BetterAuthUser",
   "BetterAuthUsers",
   "BetterAuthStoreOptions",
+  "BetterAuthIntegration",
+  "BetterAuthIntegrationOptions",
+  "BetterAuthRoutePolicy",
+  "SupportedBetterAuthOptions",
+  "BetterAuthCredentialReader",
+  "BetterAuthRoute",
+  "BetterAuthVerifiedLogin",
+  "genericOAuth",
+  "GenericOAuthOptions",
 ];
 const expectedCoreExports = [
   "AppQueryResponses",

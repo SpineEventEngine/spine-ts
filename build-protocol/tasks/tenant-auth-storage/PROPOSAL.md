@@ -1092,6 +1092,40 @@ The initial `users` collaborator supports `findById(id, signal)` and, when the s
 
 The integration sets and enforces `advanced.database.validateSchema: false`, `session.cookieCache.enabled: false`, and, when applicable, `verification.disableCleanup: true`. Repeated explicit values in examples make the behavior visible; incompatible overrides are errors. The Spine store factory performs the default creation/check work before the native engine starts. Better Auth schema validation stays disabled to avoid a second preparation mechanism and to preserve the explicit `false` guarantee. No Better Auth migration or schema validator may bypass the store's preparation setting.
 
+The adapter supplies the related records needed by the selected native flows.
+Its private native configuration enables `advanced.database.joins`; this is not
+a new application option. The reads still use the existing record handles and
+indexes, without a SQL adapter or a cross-record transaction.
+
+| Native flow                             | Related records read by the adapter                                                                                                            |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session resolution and explicit renewal | One Session by token, followed by its complete User by ID.                                                                                     |
+| Password login                          | One User by email, followed by its indexed Account list.                                                                                       |
+| Prelinked OIDC login                    | A bounded Account match lookup by provider and subject, with native limit 2, followed by each matched User by ID. This is an M11 prerequisite. |
+
+A missing related User is returned as explicit absence; an empty Account list
+is returned as an empty list. A directory or storage failure rejects the read
+and cannot become an anonymous result. The adapter supplies these results
+directly so the native fallback cannot log the underlying exception. Other
+joins, projections and relation shapes remain unsupported. Password lookup
+retains the native Account page size of 100 at this pin; this adds no quota to
+administrator provisioning.
+
+These are separate indexed reads. A session's expiry and operation lifetime
+are checked after User lookup; normal reads retain expired records for explicit
+cleanup. Store shutdown drains the complete admitted read. The existing CAS,
+renewal, logout and cancellation rules remain necessary between these reads.
+No generic join or transactional snapshot is promised.
+
+The exact native requests and result keys are specified in the committed
+[M10 related-read matrix](M10.md#selected-native-related-reads) and
+[M11 Account/User contract](M11.md#prelinked-account-and-user-lookup).
+Password login requires selected Account storage and either stored Users or an
+external User source with both `findById` and `findByEmail`. The factory rejects
+an incomplete source configuration before exposing routes. External verified
+login without native password checking does not require Account storage or
+email lookup.
+
 `secondaryStorage` is not a substitute for this adapter: it is a separate Better Auth interface, not a full User/Account/Session/Verification database. No native database fallback is configured.
 
 ### F. Preprovisioned email/password accounts

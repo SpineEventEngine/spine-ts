@@ -22,3 +22,21 @@ export {
   type BetterAuthUsers,
   type BetterAuthStoreOptions,
 } from "./persistent-store.js";
+
+/**
+ * Bounded native Better Auth sessions and exact browser routes.
+ */
+export {
+  BetterAuthIntegration,
+  type BetterAuthIntegrationOptions,
+  type BetterAuthRoutePolicy,
+  type SupportedBetterAuthOptions,
+  type BetterAuthCredentialReader,
+  type BetterAuthRoute,
+  type BetterAuthVerifiedLogin,
+} from "./integration.js";
+
+/**
+ * Native generic OAuth factory with bounded configuration declarations.
+ */
+export { genericOAuth, type GenericOAuthOptions } from "./generic-oauth.js";

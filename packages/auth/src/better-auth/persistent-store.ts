@@ -255,6 +255,15 @@ export class PersistentBetterAuthStore {
       run: (operation) => this.#run(operation),
     };
     nativeFactories.set(this, nativeAdapter(access));
+    nativeSelections.set(this, {
+      models: new Set(
+        (["user", "account", "session", "verification"] as const).filter(
+          (model) => handles[model] !== undefined,
+        ),
+      ),
+      externalUsers: users !== undefined,
+      externalEmail: users?.findByEmail !== undefined,
+    });
   }
 
   /**
@@ -675,6 +684,18 @@ const specs = {
 const nativeFactories = new WeakMap<PersistentBetterAuthStore, unknown>();
 
 /**
+ * Selected native family names and external User replacement for construction checks.
+ */
+const nativeSelections = new WeakMap<
+  PersistentBetterAuthStore,
+  {
+    readonly models: ReadonlySet<BetterAuthModel>;
+    readonly externalUsers: boolean;
+    readonly externalEmail: boolean;
+  }
+>();
+
+/**
  * Returns the internal native database factory to the later bounded integration.
  *
  * @param store Selected prepared store.
@@ -684,6 +705,22 @@ export function nativeFactoryFor(store: PersistentBetterAuthStore): unknown {
   const factory = nativeFactories.get(store);
   if (factory === undefined) throw new Error("Better Auth native factory is unavailable.");
   return factory;
+}
+
+/**
+ * Returns the selected store profile without exposing it on the optional public entry.
+ *
+ * @param store Selected prepared store.
+ * @returns Captured model set and external User choice.
+ */
+export function nativeSelectionFor(store: PersistentBetterAuthStore): {
+  readonly models: ReadonlySet<BetterAuthModel>;
+  readonly externalUsers: boolean;
+  readonly externalEmail: boolean;
+} {
+  const selection = nativeSelections.get(store);
+  if (selection === undefined) throw new Error("Better Auth store selection is unavailable.");
+  return selection;
 }
 
 /**

@@ -237,6 +237,31 @@ completes. The selected Account stores only immutable provider/subject/User
 facts and an optional password hash. Native schema fields for provider tokens,
 token deadlines, and scope may be absent or null; defined values are rejected.
 
+`BetterAuthIntegration.create()` uses that selected store with the actual
+Better Auth 1.7.16 engine. It requires application-supplied `routePolicy` body
+and deadline bounds, supported native options, and an explicit principal
+mapper. Its `sessions` resolver verifies the native signed cookie and calls
+native `getSession` without renewal or cookie cache. The generated exact routes
+admit password login, explicit GET renewal, strict POST logout, and optional
+trusted external login. Mount them through `BrowserServer`; do not expose the
+unrestricted native handler. Close the integration, store, and shared factory
+separately. External User sources replace stored Users and require both ID and
+email lookup for password login. Trusted external login additionally requires a
+verifier that returns a proven stable User ID, a complete external User-by-ID
+source, and selected Session storage. The supplied source replaces the User
+family; selecting stored User records alongside it is invalid. A caller-supplied
+ID alone is not proof of login. On signing-secret rotation, a cookie signed by
+the old active secret is rejected by an integration with a new active secret,
+even if that integration retains the former secret in its configuration.
+
+The private adapter supplies only Session-to-User and User-to-Account native
+related reads, using selected ID and digest equality lookups. It returns an
+explicit null User or empty Account list for true absence. Directory and
+storage errors reject; a related read is admitted as one operation, but its
+separate record reads are not a cross-record transaction. The admitted signal
+reaches external User lookups; a late directory result cannot authenticate
+after cancellation, close, or Session expiry.
+
 Native reads use stable identity slots or declared fixed-width digest equality
 indexes and recheck every original predicate. Session expiry and Verification
 expiry use the exact twelve-byte Timestamp order index. `purgeExpired(cutoff)`

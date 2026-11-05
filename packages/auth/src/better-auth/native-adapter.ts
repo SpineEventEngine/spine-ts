@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Message } from "@bufbuild/protobuf";
 import { timestampFromDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
@@ -24,6 +25,36 @@ import { createAdapterFactory, type CleanedWhere, type CustomAdapter } from "bet
 import { BetterAuthRecords } from "./record-codec.js";
 import type { BetterAuthModel, BetterAuthUsers } from "./persistent-store.js";
 import { SessionRecords } from "../sessions/session-record.js";
+
+/**
+ * Carries an admitted operation lifetime through native adapter callbacks.
+ */
+// This static context passes a signal through the native callback stack without an API option.
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
+export class NativeSignalContext {
+  /**
+   * Executes native work with its caller's cancellation signal.
+   *
+   * @typeParam T Result of the admitted work.
+   * @param signal Current browser or session lifetime.
+   * @param work Native work to execute.
+   * @returns Settled work result.
+   */
+  static run<T>(signal: AbortSignal, work: () => Promise<T>): Promise<T> {
+    return nativeSignals.run(signal, work);
+  }
+
+  /**
+   * Returns the current admitted native operation signal, when supplied.
+   *
+   * @returns Current signal or absence for standalone store calls.
+   */
+  static current(): AbortSignal | undefined {
+    return nativeSignals.getStore();
+  }
+}
+
+const nativeSignals = new AsyncLocalStorage<AbortSignal>();
 
 /**
  * Internal selected record access without leaking native types in public declarations.
@@ -74,10 +105,18 @@ export interface NativeRecordAccess {
  */
 export function nativeAdapter(access: NativeRecordAccess): ReturnType<typeof createAdapterFactory> {
   const records = new NativeOperations(access);
-  return createAdapterFactory({
+  const factory = createAdapterFactory({
     config: { adapterId: "spine-record", supportsNumericIds: false, transaction: false },
     adapter: ({ schema }) => records.adapter(schema),
   });
+  return (options) =>
+    factory({
+      ...options,
+      advanced: {
+        ...options.advanced,
+        database: { ...options.advanced?.database, joins: true },
+      },
+    });
 }
 
 /**
@@ -120,10 +159,11 @@ class NativeOperations {
     return {
       create: ({ model, modelKey, data }) =>
         this.#access.run(() => this.create(NativePredicates.selectedModel(model, modelKey), data)),
-      findOne: ({ model, modelKey, where, join }) =>
+      findOne: ({ model, modelKey, where, select, join }) =>
         this.#access.run(() => {
-          if (join !== undefined) throw new Error("Better Auth joins are not supported.");
-          return this.findOne(NativePredicates.selectedModel(model, modelKey), where);
+          const selected = NativePredicates.selectedModel(model, modelKey);
+          if (join !== undefined) return this.#joinedOne(selected, where, select, join);
+          return this.findOne(selected, where);
         }),
       findMany: ({ model, modelKey, where, limit, offset, sortBy, join }) =>
         this.#access.run(() => {
@@ -139,6 +179,68 @@ class NativeOperations {
       count: ({ model, modelKey, where }) =>
         this.#access.run(() => this.count(NativePredicates.selectedModel(model, modelKey), where)),
     } as Pick<CustomAdapter, "create" | "findOne" | "findMany" | "count">;
+  }
+
+  /**
+   * Reads one selected native relation using existing indexed model readers.
+   *
+   * @param model Selected base family.
+   * @param where Exact indexed base predicate.
+   * @param select Native projection, which is unsupported for joined reads.
+   * @param join Effective native relation configuration.
+   * @returns Base row with an explicit related member, or absence.
+   */
+  async #joinedOne(
+    model: BetterAuthModel,
+    where: readonly CleanedWhere[],
+    select: readonly string[] | undefined,
+    join: NativeJoin,
+  ): Promise<Record<string, unknown> | null> {
+    const kind = NativeRelations.kind(model, where, select, join);
+    return kind === "session-user" ? this.#sessionUser(where) : this.#userAccount(where);
+  }
+
+  /**
+   * Reads the complete User related to one visible Session.
+   *
+   * @param where Validated Session token equality.
+   * @returns Session with explicit User or null relation.
+   */
+  async #sessionUser(where: readonly CleanedWhere[]): Promise<Record<string, unknown> | null> {
+    const signal = NativeSignalContext.current();
+    if (signal?.aborted) return null;
+    if (this.#access.users() === undefined) this.#access.storage("user");
+    const session = await this.findOne("session", where);
+    if (session === null || signal?.aborted) return null;
+    if (typeof session.userId !== "string") throw new Error("Stored Session has no User ID.");
+    const user = await this.findOne("user", [NativePredicates.equality("id", session.userId)]);
+    this.#access.requireOpen();
+    if (signal?.aborted || !this.#visible("session", session)) return null;
+    return { ...session, user };
+  }
+
+  /**
+   * Reads the native Account page related to one complete User.
+   *
+   * @param where Validated User email equality.
+   * @returns User with explicit Account page or empty relation.
+   */
+  async #userAccount(where: readonly CleanedWhere[]): Promise<Record<string, unknown> | null> {
+    const signal = NativeSignalContext.current();
+    if (signal?.aborted) return null;
+    if (this.#access.users() === undefined) this.#access.storage("user");
+    this.#access.storage("account");
+    const user = await this.findOne("user", where);
+    if (user === null || signal?.aborted) return null;
+    if (typeof user.id !== "string") throw new Error("Stored User has no ID.");
+    const account = await this.findMany(
+      "account",
+      [NativePredicates.equality("userId", user.id)],
+      100,
+    );
+    this.#access.requireOpen();
+    if (signal?.aborted) return null;
+    return { ...user, account };
   }
 
   /**
@@ -503,8 +605,10 @@ class NativeOperations {
       throw new Error("External User email lookup was not configured.");
     const value =
       id !== undefined
-        ? await users.findById(String(id.value))
-        : await users.findByEmail?.(String(email?.value));
+        ? await users.findById(String(id.value), NativeSignalContext.current())
+        : await users.findByEmail?.(String(email?.value), NativeSignalContext.current());
+    this.#access.requireOpen();
+    if (NativeSignalContext.current()?.aborted) return;
     if (value === undefined) return;
     const row = BetterAuthRecords.decode(
       "user",
@@ -515,9 +619,119 @@ class NativeOperations {
 }
 
 /**
+ * Effective transformed relation supplied by the pinned native adapter factory.
+ */
+type NativeJoin = NonNullable<Parameters<CustomAdapter["findOne"]>[0]["join"]>;
+
+/**
+ * Validates the two native related reads used by selected M10 sessions.
+ */
+const NativeRelations = Object.freeze({
+  /**
+   * Determines one exact Session→User or User→Account operation before data reads.
+   *
+   * @param model Selected base family.
+   * @param where Effective native predicate.
+   * @param select Optional native field projection.
+   * @param join Effective transformed relation.
+   * @returns Selected bounded relation kind.
+   */
+  kind(
+    model: BetterAuthModel,
+    where: readonly CleanedWhere[],
+    select: readonly string[] | undefined,
+    join: NativeJoin,
+  ): "session-user" | "user-account" {
+    if (select !== undefined && select.length > 0)
+      throw new Error("Joined Better Auth projections are unsupported.");
+    const names = Object.keys(join);
+    if (names.length !== 1) throw new Error("Unsupported Better Auth join.");
+    const name = names[0];
+    const config = name === undefined ? undefined : join[name];
+    if (config === undefined) throw new Error("Unsupported Better Auth join.");
+    if (model === "session" && name === "user") {
+      this.relation(config, "user", "userId", "id", "one-to-one", 1);
+      this.predicate(model, where, "token");
+      return "session-user";
+    }
+    if (model === "user" && name === "account") {
+      this.relation(config, "account", "id", "userId", "one-to-many", 100);
+      this.predicate(model, where, "email");
+      return "user-account";
+    }
+    throw new Error("Unsupported Better Auth join.");
+  },
+
+  /**
+   * Validates one exact indexed equality predicate for a joined base row.
+   *
+   * @param model Selected base family.
+   * @param where Effective native predicate.
+   * @param field Required indexed field.
+   */
+  predicate(model: BetterAuthModel, where: readonly CleanedWhere[], field: string): void {
+    NativePredicates.validateWhere(model, where);
+    const term = where[0];
+    if (
+      where.length !== 1 ||
+      term?.field !== field ||
+      typeof term.value !== "string" ||
+      (term.operator ?? "eq") !== "eq" ||
+      (term.connector ?? "AND") !== "AND" ||
+      (term.mode ?? "sensitive") !== "sensitive"
+    )
+      throw new Error("Unsupported Better Auth joined predicate.");
+  },
+
+  /**
+   * Validates the native relation keys, fields, cardinality and page size.
+   *
+   * @param value Effective native relation.
+   * @param model Related family.
+   * @param from Base join field.
+   * @param to Related join field.
+   * @param cardinality Native relation cardinality.
+   * @param limit Native relation page size.
+   */
+  relation(
+    value: NativeJoin[string],
+    model: string,
+    from: string,
+    to: string,
+    cardinality: "one-to-one" | "one-to-many",
+    limit: number,
+  ): void {
+    const link: unknown = value.on;
+    if (
+      link === null ||
+      typeof link !== "object" ||
+      Object.keys(value).some((key) => !["modelKey", "on", "relation", "limit"].includes(key)) ||
+      value.modelKey !== model ||
+      (link as Record<string, unknown>).from !== from ||
+      (link as Record<string, unknown>).to !== to ||
+      value.relation !== cardinality ||
+      value.limit !== limit ||
+      Object.keys(link).length !== 2
+    )
+      throw new Error("Unsupported Better Auth relation shape.");
+  },
+});
+
+/**
  * Validates and evaluates the admitted native predicate and mutation profile.
  */
 const NativePredicates = Object.freeze({
+  /**
+   * Builds the exact sensitive equality term used for a related indexed read.
+   *
+   * @param field Related indexed field.
+   * @param value Stable relation identifier.
+   * @returns Complete native equality term.
+   */
+  equality(field: string, value: string): CleanedWhere {
+    return { field, value, operator: "eq", connector: "AND", mode: "sensitive" };
+  },
+
   /**
    * Checks the pinned native callback's state-consumption predicate.
    *

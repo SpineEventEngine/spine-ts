@@ -153,10 +153,12 @@ for direct native authentication and managed forwarding configuration.
 
 ## Browser and OIDC extensions
 
-The package does not provide HTTP routes, browser pages, users, permissions,
-TLS, or a production session database. An application can compose
-`OidcFlow` with Google, GitHub, or another verified provider. The application
-provides the start, callback, exchange, identity mapping, and session issuance routes.
+`OidcFlow` is a component flow: the application provides its start, callback,
+exchange, identity mapping, and session issuance routes. The optional
+`BetterAuthIntegration` below exposes exact native authentication routes.
+Neither component supplies browser pages, users, permissions, TLS, or a
+production session database. An application can compose `OidcFlow` with
+Google, GitHub, or another verified provider.
 Keep provider access, refresh, and ID tokens server-side.
 
 `OidcFlow.start()` is asynchronous: await it before redirecting the browser.
@@ -184,10 +186,14 @@ by default; an explicit `createMissingStructures: false` skips physical checks
 and DDL at creation and later operations. For durable persistence, the application
 supplies an existing database and a provider-valid storage group. This example
 uses process-local memory; use a durable storage provider to preserve records
-across restarts.
+across restarts. The following configuration-only example initializes and
+closes the integration; it does not start a browser listener.
 
 ```ts
-import { PersistentBetterAuthStore } from "@spine-event-engine/auth/better-auth";
+import {
+  BetterAuthIntegration,
+  PersistentBetterAuthStore,
+} from "@spine-event-engine/auth/better-auth";
 import { Time } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory, StorageGroup } from "@spine-event-engine/storage";
 
@@ -195,18 +201,44 @@ const factory = new InMemoryStorageFactory();
 const store = await PersistentBetterAuthStore.create({
   storageFactory: factory,
   group: new StorageGroup("orders_better_auth"),
-  models: ["session", "verification"],
+  models: ["user", "account", "session", "verification"],
 });
 try {
-  await store.purgeExpired(Time.currentTime());
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (secret === undefined) throw new Error("BETTER_AUTH_SECRET is required.");
+  const auth = await BetterAuthIntegration.create({
+    store,
+    routePolicy: { maxRequestBytes: 8_192, timeoutMs: 5_000 },
+    options: {
+      baseURL: "https://app.example.test",
+      basePath: "/auth",
+      secret,
+      trustedOrigins: ["https://app.example.test"],
+      emailAndPassword: { enabled: true, disableSignUp: true },
+      account: { accountLinking: { enabled: false } },
+      session: { cookieCache: { enabled: false } },
+    },
+    onPrincipal: async (user) => ({ id: user.id }),
+  });
+  try {
+    await store.purgeExpired(Time.currentTime());
+  } finally {
+    await auth.close();
+  }
 } finally {
   await store.close();
   await factory.close();
 }
 ```
 
-The store provides selected record persistence and explicit maintenance.
-Application integration with Better Auth routes is a separate boundary.
+Provision complete Users and prelinked Accounts before accepting password
+traffic. The integration exposes exact browser routes, verified session reads,
+and credential metadata. For a listener, pass `auth.routes` as
+`BrowserServerOptions.authRoutes`, `auth.sessions` as `sessions`, and
+`auth.credentials` as `credentials`, alongside the host's origin, clock,
+authorization, and context collaborators. The host applies the selected route
+bounds. See [browser hosting](../server/REFERENCE.md#browser-hosting) for the
+maintained host contract and required options.
 See the [auth reference](REFERENCE.md#selected-better-auth-records) for the
 provisioning and query profile.
 
