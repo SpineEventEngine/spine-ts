@@ -24,6 +24,8 @@ import ordinaryConfig from "../vitest.config.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const expectedInfrastructureFiles = [
+  "packages/auth/test/sessions/persistent-opaque-providers.test.ts",
+  "packages/auth/test/sessions/persistent-opaque-preparation.test.ts",
   "packages/storage-datastore/test/datastore-cloud.test.ts",
   "packages/storage-datastore/test/datastore-emulator.test.ts",
   "packages/storage-datastore/test/datastore-agent-history.test.ts",

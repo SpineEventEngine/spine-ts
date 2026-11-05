@@ -32,7 +32,7 @@ import {
   type RecordStorage,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import { StoragePreparations } from "@spine-event-engine/storage/provider";
+import { StoragePreparations, type StoragePreparation } from "@spine-event-engine/storage/provider";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   InMemorySubscriptionRegistry,
@@ -46,6 +46,20 @@ function id(value: string) {
 }
 function subscription(value: string) {
   return create(SubscriptionSchema, { id: id(value), topic: { id: { value: "topic" } } });
+}
+
+function recordPreparationProbe(factory: InMemoryStorageFactory) {
+  const provider = StoragePreparations.for(factory);
+  const delegate: StoragePreparation = {
+    supportsRecordIndexes: provider.supportsRecordIndexes === true,
+    prepareRecord: provider.prepareRecord.bind(provider),
+    prepareEntity: provider.prepareEntity.bind(provider),
+    prepareAgentHistory: provider.prepareAgentHistory.bind(provider),
+    prepareAgentCommit: provider.prepareAgentCommit.bind(provider),
+  };
+  const prepareRecord = vi.spyOn(delegate, "prepareRecord");
+  StoragePreparations.register(factory, delegate);
+  return prepareRecord;
 }
 
 describe("SubscriptionRecord codec", () => {
@@ -348,7 +362,7 @@ describe("storage subscription context boundaries", () => {
     const context = { name: "initial", multitenant: true as const, tenantId };
     const group = new StorageGroup("subscriptions_first");
     const registry = new StorageSubscriptionRegistry(context, factory, group);
-    const prepare = vi.spyOn(StoragePreparations.for(factory), "prepareRecord");
+    const prepare = recordPreparationProbe(factory);
     context.name = "changed";
     tenantId.kind = { case: "value", value: "second" };
     try {
@@ -372,7 +386,7 @@ describe("storage subscription context boundaries", () => {
     const context = { name: "injected:subscriptions", multitenant: false as const };
     const group = new StorageGroup("injected_subscriptions");
     const registry = new StorageSubscriptionRegistry(context, factory, group);
-    const prepare = vi.spyOn(StoragePreparations.for(factory), "prepareRecord");
+    const prepare = recordPreparationProbe(factory);
     try {
       await registry.prepare("create");
       expect(prepare).toHaveBeenCalledWith(context, expect.anything(), group, "create");

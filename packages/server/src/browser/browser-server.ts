@@ -421,6 +421,8 @@ export const browserServerImplementation: Readonly<{
    * @returns Normalized listener options after all preflight checks pass.
    */
   preflight(mode, input): BrowserHostOptions {
+    const production = Environment.instance().type === EnvironmentType.Production;
+    BrowserServer.requireDurableBindings(input, production);
     const admission = BrowserServerValues.snapshotAdmission(input);
     const options: BrowserHostOptions = {
       ...input,
@@ -430,7 +432,7 @@ export const browserServerImplementation: Readonly<{
       port: input.port ?? 0,
       readMaxBytes: input.readMaxBytes ?? 4_194_304,
       writeMaxBytes: input.writeMaxBytes ?? 4_194_304,
-      production: Environment.instance().type === EnvironmentType.Production,
+      production,
     };
     if (!options.host.trim()) throw new Error("Browser server host must not be blank.");
     if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65_535)
@@ -441,7 +443,6 @@ export const browserServerImplementation: Readonly<{
       throw new Error("Browser server writeMaxBytes must be a positive integer.");
     if (mode === "standalone" && options.backend === undefined && options.discovery === undefined)
       throw new Error("Standalone browser server requires a backend or discovery.");
-    BrowserServer.requireDurableBindings(options, options.production);
     BrowserServer.origins(options.origins);
     const capacity = options.maxActiveAuthRequests ?? 64;
     if (!Number.isSafeInteger(capacity) || capacity < 1)
