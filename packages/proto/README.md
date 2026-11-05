@@ -136,6 +136,12 @@ Spine definitions preserve their original versioned Proto packages.
 
 ## Integration wire contracts
 
+The curated `@spine-event-engine/proto/auth` subpath includes the selected
+`BetterAuthUserRecord`, `BetterAuthAccountRecord`, `BetterAuthSessionRecord`,
+and `BetterAuthVerificationRecord` schemas. They represent persisted native
+authentication records; the Account record has no unused provider token or
+scope fields. Their authored source is `spine/auth/better_auth_record.proto`.
+
 Generated root exports include the frozen external-event broker and typed
 message-channel Protobuf contracts. `ExternalMessage`, `ExternalEventsWanted`,
 `ExternalEventType`, `BoundedContextOnline`, `ChannelId`, and

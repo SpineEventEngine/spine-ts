@@ -211,6 +211,41 @@ provider query values. Token exchange uses the configured client authentication
 and exact callback URI; the provider returns an identity only after bounded
 response parsing and JOSE ID-token verification.
 
+## Selected Better Auth records
+
+`@spine-event-engine/auth/better-auth` exports `PersistentBetterAuthStore`
+and its selected model, User source, and options types. Its `provision()` method
+accepts complete User and Account definitions. The subpath uses
+the exact optional `better-auth@1.7.16` peer only through this subpath; the
+auth root has no Better Auth declaration dependency. The selected profile
+supports native Session and purpose-qualified Verification transitions,
+read-only complete User lookup, and administrator-provisioned immutable User
+and Account definitions. It does not offer signup, linking, Account updates,
+provider token storage, native SQL access, or a second database engine.
+
+`PersistentBetterAuthStore.create()` requires an explicit `StorageFactory`,
+`StorageGroup`, and selected model list. It awaits physical preparation by
+default. `createMissingStructures: false` makes no schema checks or DDL at
+construction or later operations; ordinary operations fail if structures are
+absent. Every selected handle requires atomic per-slot compare-and-set.
+The application closes the store and its shared factory separately.
+An external `BetterAuthUsers` source supplies complete User records instead
+of selecting stored User. Controlled `provision()` accepts complete Users and
+prelinked Accounts before traffic. One administrator process serializes
+provisioning; a partial write fences native traffic until an identical retry
+completes. The selected Account stores only immutable provider/subject/User
+facts and an optional password hash. Native schema fields for provider tokens,
+token deadlines, and scope may be absent or null; defined values are rejected.
+
+Native reads use stable identity slots or declared fixed-width digest equality
+indexes and recheck every original predicate. Session expiry and Verification
+expiry use the exact twelve-byte Timestamp order index. `purgeExpired(cutoff)`
+is explicit, accepts no future cutoff relative to its trusted clock, and
+returns confirmed conditional removals. Concurrently changed records can
+remain for a later call. No timer runs maintenance. Indexed queries use finite
+pages from the storage batch mechanism; unsupported unindexed predicates
+reject before scanning a selected family.
+
 ## Subscription and native adapters
 
 `SubscriptionGateway` and `InMemorySubscriptionBindings` compose subscription creation, activation, cancellation, and relaying at the gateway boundary. The Gateway accepts a logical `SubscriptionCoordinator`; native `SubscriptionCreator` instances remain a per-node implementation seam. This is an intentional replacement of the former public native-creator input, with no compatibility adapter because Spine TS has no deployed users. In-memory bindings are local to one process and have finite operation limits; they do not provide cross-machine propagation. `createNativeGatewayServices`, `NativeSubscriptionCreator`, and `SubscriptionUpdateRelay` adapt these public contracts to the native service layer. They do not make a deployment secure by themselves: applications choose how their listener accepts only gateway-routed traffic.

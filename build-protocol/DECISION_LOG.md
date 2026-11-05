@@ -7411,3 +7411,52 @@ route-policy amendment. M10 must prove construction-time validation and immutabl
 snapshots, direct host compatibility, configured body boundaries and deadlines.
 M11 still requires actual provider cancellation and late-result evidence. No
 runtime implementation result is inferred from the design review.
+
+## Better Auth callback network isolation and startup (2026-11-05)
+
+Accepted bounded design after independent no-memory API, reliability and
+documentation review and a revised disposable native proof. Production M11
+implementation and acceptance remain pending. Exact Better Auth 1.7.16 and jose 6.2.15 experiments showed that
+cancelling a shared JWKS fetch fails a concurrent callback. Give each callback
+and configured provider a separate jose resolver through the original native
+provider's public ID-token configuration. Use supported native token/profile
+hooks with the same operation lifetime, and retain native cryptographic and
+state verification. Do not share mutable key caches between callbacks.
+
+Read trusted discovery metadata during factory construction, provide native
+endpoint overrides from that snapshot, and check agreement with the initialized
+native issuer, audience and algorithms before installing the resolver. Every
+configured provider must initialize before publication; partial initialization
+and native request-time discovery retry are excluded. Missing ID tokens reject.
+No public input or storage contract changes.
+
+Earlier research incorrectly assigned the request-time retry timeout to startup.
+Native genericOAuth.init supplies no explicit discovery timeout at 1.7.16. The
+factory has no startup cancellation signal or bounded startup guarantee; route
+policy limits apply to admitted routes. This limitation is explicit in the
+proposal and M11. No new timeout, cache policy, private import, global fetch
+replacement or second OIDC engine is introduced. Actual provider callback,
+concurrency, body-stream, late-commit and confidential-client tests remain M11
+acceptance requirements.
+
+The revised native probe demonstrates separate callback JWKS requests, isolated
+cancellation in either order, body-stream cancellation, discovery metadata
+binding and complete initialization, with native verification retained. It uses
+a disposable native memory adapter and public-client configuration; it does not
+establish the Spine production adapter, confidential-client methods, directory
+behavior, late session-write compensation or production logging. These remain
+M11 gates. Per-callback key fetching increases provider traffic; application
+rate policy remains explicit. No new cache or concurrency policy is added.
+
+## API documentation build memory (2026-11-05)
+
+The optional Better Auth implementation expands the TypeScript program loaded
+by TypeDoc. TypeDoc 0.28.19 loads every referenced project in the solution
+configuration; removing an entry point does not remove that project's dependency
+graph. The complete API check exhausted Node's default 4 GiB heap. A measured
+run with 6 GiB completed conversion, validation and export assertions.
+
+Allocate 6 GiB of Node old-space memory to the API-check command. Keep every
+entry point, strict type check and export assertion. Scope this setting to the
+documentation build; it changes no application resource policy or runtime limit.
+The normal command and final release profile must exercise this setting.

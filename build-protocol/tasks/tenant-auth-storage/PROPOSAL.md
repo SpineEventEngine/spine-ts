@@ -95,7 +95,7 @@ For a hosted application, register Acme before Acme creates its first order:
 ```typescript
 const tenants = await PersistentTenantIndex.create({
   storageFactory: directoryStorage,
-  group: new StorageGroup("orders-tenants"),
+  group: new StorageGroup("orders_tenants"),
   createMissingStructures: true,
 });
 
@@ -119,6 +119,8 @@ Remove the internal `StorageTenantIndex` and inferred `TenantIndexes.fromFactory
 
 ## 4. Factories, storage providers and preparation
 
+Choose a storage-group name accepted by the selected provider. These examples use underscores so they also work with the MySQL provider's default table naming.
+
 | Type                                                           | Public package                                |
 | -------------------------------------------------------------- | --------------------------------------------- |
 | `PersistentTenantIndex`, `SINGLE_TENANT`, `TenantIndexSetting` | `@spine-event-engine/server`                  |
@@ -133,7 +135,7 @@ New persistent classes have private constructors, asynchronous `create()` factor
 ```typescript
 const store = await PersistentOpaqueSessionStore.create({
   storageFactory: authStorage,
-  group: new StorageGroup("orders-auth"),
+  group: new StorageGroup("orders_auth"),
   // createMissingStructures defaults to true.
 });
 ```
@@ -156,7 +158,7 @@ Normal startup prepares the selected store directly:
 ```typescript
 const sessionStore = await PersistentOpaqueSessionStore.create({
   storageFactory: authStorage,
-  group: new StorageGroup("orders-auth"),
+  group: new StorageGroup("orders_auth"),
 });
 // Supported missing structures now exist and compatibility checks completed.
 ```
@@ -166,7 +168,7 @@ An application that prepares structures separately explicitly opts out on its ru
 ```typescript
 const sessionStore = await PersistentOpaqueSessionStore.create({
   storageFactory: authStorage,
-  group: new StorageGroup("orders-auth"),
+  group: new StorageGroup("orders_auth"),
   createMissingStructures: false,
 });
 // No schema checks or creation now or on later session operations.
@@ -284,7 +286,7 @@ The proposed `issue(value, expiresAt)` receives the issued session's deadline. I
 ```typescript
 const revoked = await PersistentTokenRevocations.create({
   storageFactory: authStorage,
-  group: new StorageGroup("orders-auth"),
+  group: new StorageGroup("orders_auth"),
   issuer: config.tokenIssuer,
   audience: config.tokenAudience,
 });
@@ -324,7 +326,7 @@ if (discovered === undefined) throw new Error("Identity provider unavailable");
 
 const loginStore = await PersistentOidcFlowStore.create({
   storageFactory: authStorage,
-  group: new StorageGroup("orders-auth"),
+  group: new StorageGroup("orders_auth"),
   flowId: "employee-login",
 });
 
@@ -625,7 +627,7 @@ import {
 
 const betterAuthStore = await PersistentBetterAuthStore.create({
   storageFactory: authStorage,
-  group: new StorageGroup("orders-better-auth"),
+  group: new StorageGroup("orders_better_auth"),
   models: ["user", "account", "session"],
   // Creates/checks only these selected record families before returning.
 });
@@ -1082,7 +1084,7 @@ The initial `users` collaborator supports `findById(id, signal)` and, when the s
 | Cookie policy                  | Native `advanced.useSecureCookies`, `cookiePrefix`, `cookies` and default cookie attributes where supported. The integration rejects insecure or ambiguous combinations for its browser profile and uses the configured names when reading/clearing.                                                                                                                                                                                                     |
 | Password checking              | Native `emailAndPassword`, including supported password-hash/verify callbacks. Signup remains disabled; reset/verification-email workflows are separate unverified features.                                                                                                                                                                                                                                                                             |
 | OIDC provider                  | Native `genericOAuth` configuration shown below. Permit only registered providers and approved callback URLs.                                                                                                                                                                                                                                                                                                                                            |
-| Hooks                          | The initial integration accepts the explicit `onPrincipal` and verified-login collaborators. General native hooks are outside the initial allowlist; selected provider hooks require a tested extension.                                                                                                                                                                                                                                                 |
+| Hooks                          | The initial integration accepts the explicit `onPrincipal` and verified-login collaborators. General native hooks are outside the initial allowlist. The integration supplies the internal token/profile and JWKS transport adaptation described in H; caller-supplied provider hooks remain rejected.                                                                                                                                                   |
 | Rate limiting                  | Native rate-limit policy may use memory for this single-Gateway task. Its thresholds come from application configuration. Database/secondary-storage rate limiting requires an explicitly supported shared store before replica deployment.                                                                                                                                                                                                              |
 | RPC session reads              | Call native `getSession` with `disableRefresh: true` and `disableCookieCache: true`; do not renew a cookie through an RPC path that cannot forward its auth response.                                                                                                                                                                                                                                                                                    |
 | Explicit renewal               | Admit a native session endpoint, forward its full response and every Set-Cookie header. Better Auth decides renewal using the configured policy.                                                                                                                                                                                                                                                                                                         |
@@ -1144,7 +1146,7 @@ A company already authenticates users elsewhere and must not copy its user direc
 ```typescript
 const betterAuthStore = await PersistentBetterAuthStore.create({
   storageFactory: authStorage,
-  group: new StorageGroup("orders-better-auth"),
+  group: new StorageGroup("orders_better_auth"),
   models: ["session"],
   users: companyBetterAuthUsers,
 });
@@ -1205,7 +1207,7 @@ import { genericOAuth } from "@spine-event-engine/auth/better-auth";
 
 const betterAuthStore = await PersistentBetterAuthStore.create({
   storageFactory: authStorage,
-  group: new StorageGroup("orders-better-auth"),
+  group: new StorageGroup("orders_better_auth"),
   models: ["account", "session", "verification"],
   users: companyBetterAuthUsers,
 });
@@ -1299,7 +1301,47 @@ Replay, wrong state, wrong token audience, token validation failure, missing acc
 
 The selected verification profile uses one immutable record per purpose-qualified identifier. Its callback must validate the native state cookie, then successfully delete that record with compare-and-set before proceeding. A callback that loses this race must fail before token exchange. The stock read-then-delete path is insufficient; this gate is part of the supported integration. The experiment implements it for the pinned callback's `auth-state:` deletion only. The losing callback currently receives a generic error redirect; production should present a safe restart-login result. Recheck the callback ordering on every supported Better Auth upgrade. General Better Auth verification supports broader histories; plugins needing multiple values for one identifier are not enabled by this profile.
 
-This declaration boundary does not establish network cancellation or late-result compensation. Native genericOAuth options provide provider metadata, client authentication, scopes, profile mapping and explicit custom hooks. They do not expose the component wrapper's `timeoutMilliseconds`/`maxResponseBytes` settings. The host can limit the HTTP operation, but that alone does not abort every provider request or prevent a late session commit. Before production acceptance, implement/test the selected provider hooks' cancellation and late-result compensation or document a narrower supported provider configuration. Do not advertise equivalent network controls based solely on a passing happy-path OIDC test.
+Native discovery and the integration's trusted metadata read complete during
+`BetterAuthIntegration.create()`, before routes are exposed. Creation requires
+every configured provider to initialize with matching issuer, client and
+signing-algorithm settings; partial initialization and request-time discovery
+retry are unsupported. The factory currently has no caller AbortSignal or
+bounded startup guarantee. A pending discovery response leaves creation
+pending and cannot produce a callback success. `routePolicy.timeoutMs` applies
+to admitted routes, not startup.
+
+During admitted callbacks, the integration supplies internal public native
+token/profile hooks and a jose JWKS resolver for each callback through the
+original generated provider's public ID-token configuration. Trusted endpoint
+and JWKS metadata comes from the configured discovery URL at construction;
+callers cannot supply custom hooks or replace verification. Keep native state,
+PKCE, nonce and ID-token verification mandatory. Token, JWKS, userinfo and User
+directory work receives the operation lifetime. Cancelling one callback must
+not cancel another callback's network work. A host timeout alone is
+insufficient: late session writes require compensation and no cancelled
+success may escape. Do not share mutable JWKS resolvers or caches across
+callbacks in this initial profile.
+
+The integration fetches and captures trusted discovery metadata, uses the
+corresponding native endpoint overrides, and compares native issuer,
+audience and algorithms during initialization, before installing the dispatcher
+that creates a resolver for each callback.
+Native discovery runs separately during initialization; its private resolver
+metadata is not extracted. This initial profile performs no caching of JWKS
+across callbacks, so callbacks may each fetch keys. A JSON Web Key Set (JWKS)
+contains the provider's public signing keys. Separate callback resolvers can
+increase traffic to that provider endpoint; applications can use their configured
+native login rate policy described above to manage login traffic. This adds no
+cache, timeout or concurrency limit. The factory may remain pending
+on startup network work; it supplies neither a new timeout nor cancellable
+initialization. Component OIDC timeout and response-size controls do not apply here.
+
+Before this clarification, discovery and callback network work were grouped
+together even though the factory exposes no startup signal. After it, startup
+must finish for every provider before the application receives routes, and each
+admitted callback has independent network cancellation. The production tests
+must prove this through the real native engine, including rejection of missing
+ID tokens and compensation after a late session write.
 
 ### I. Better Auth renewal, logout and cleanup
 

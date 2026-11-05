@@ -9,6 +9,7 @@
     "packages/deployment-gke/src/index.ts",
     "packages/deployment-gce/src/index.ts",
     "packages/auth/src/index.ts",
+    "packages/auth/src/better-auth/index.ts",
     "packages/ai/src/index.ts",
     "packages/ai/src/spi/adapter.ts",
     "packages/ai/src/spi/runtime.ts",

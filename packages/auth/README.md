@@ -174,6 +174,42 @@ For browser-facing hosting, install the server browser entry point and use
 finite request limits, authorization and trusted-context collaborators, and
 durable authenticated bindings when applicable.
 
+## Selected Better Auth persistence
+
+Install the exact optional `better-auth` peer when using
+`@spine-event-engine/auth/better-auth`. The selected store persists native
+Session and Verification records, and optionally provisioned User and Account
+records, through Spine storage. Its factory prepares only selected structures
+by default; an explicit `createMissingStructures: false` skips physical checks
+and DDL at creation and later operations. For durable persistence, the application
+supplies an existing database and a provider-valid storage group. This example
+uses process-local memory; use a durable storage provider to preserve records
+across restarts.
+
+```ts
+import { PersistentBetterAuthStore } from "@spine-event-engine/auth/better-auth";
+import { Time } from "@spine-event-engine/core/time";
+import { InMemoryStorageFactory, StorageGroup } from "@spine-event-engine/storage";
+
+const factory = new InMemoryStorageFactory();
+const store = await PersistentBetterAuthStore.create({
+  storageFactory: factory,
+  group: new StorageGroup("orders_better_auth"),
+  models: ["session", "verification"],
+});
+try {
+  await store.purgeExpired(Time.currentTime());
+} finally {
+  await store.close();
+  await factory.close();
+}
+```
+
+The store provides selected record persistence and explicit maintenance.
+Application integration with Better Auth routes is a separate boundary.
+See the [auth reference](REFERENCE.md#selected-better-auth-records) for the
+provisioning and query profile.
+
 ## Limits and next steps
 
 Memory-selected `OpaqueSessions` is process-local; select durable shared storage
