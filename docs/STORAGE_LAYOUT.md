@@ -182,7 +182,7 @@ the startup calls that prepare the application.
 - [5. Gateway and authentication storage](#5-gateway-and-authentication-storage)
   - [A browser subscription after authentication](#a-browser-subscription-after-authentication)
   - [Node discovery](#node-discovery)
-  - [Sessions do not add these tables](#sessions-do-not-add-these-tables)
+  - [Selected tenant and authentication records](#selected-tenant-and-authentication-records)
   - [OIDC and trusted identity](#oidc-and-trusted-identity)
 - [6. Startup sequence](#6-startup-sequence)
   - [Build and preparation order](#build-and-preparation-order)
@@ -4078,12 +4078,20 @@ The current environment index is `ServerEnvironment.instance().tenantIndex`;
 a Bounded Context exposes its effective `boundedContext.tenantIndex` and may
 configure a different implementation through `withTenantIndex()`.
 
-A fixed SQL tenant list can supply the default index's catalogue. A dynamic
-resolver cannot enumerate tenants, so configure an application index with
-membership/list operations. Its persistence is application-defined: Spine does
-not create a hidden SQL TenantIndex table. Datastore can discover persisted
-namespaces, but a durable directory is needed if tenants must exist independently
-of whether their namespaces already contain data.
+Omitting `tenantIndex` selects `SINGLE_TENANT`; that mode constructs no index
+and performs no tenant-catalog lookup. Every multitenant Bounded Context needs
+an explicitly supplied `TenantIndex`, either through the environment or
+`withTenantIndex()`. Fixed SQL tenant destinations, a dynamic database resolver,
+and existing Datastore namespaces do not supply that index automatically.
+
+Use `PersistentTenantIndex.create({ storageFactory, group })` from
+`@spine-event-engine/server` for a standard record-backed directory. Its async
+factory creates missing supported structures and checks compatibility before
+returning. `createMissingStructures: false` skips both at construction and later
+data operations. `keep()` registers a complete Tenant ID independently of its
+business-storage destination. The application can instead supply an index backed
+by an existing directory; then no framework tenant-directory records are created.
+An in-memory storage factory keeps registration only for that factory lifetime.
 
 Here is an application-provided persistent directory and dynamic PostgreSQL
 resolver. The declarations represent application implementations, not new Spine
@@ -4125,9 +4133,9 @@ To add `initech`, run these steps in order:
    `support_initech` database and its chosen schema; for MySQL, the database.
    For Datastore, assign a distinct namespace through the converter.
 2. Make the database resolver return that destination's connection settings.
-3. Add the Tenant ID to the persistent TenantIndex. If the implementation
-   supports `keep()`, the call below performs that registration. Otherwise,
-   update the application directory that the index reads.
+3. Register the complete Tenant ID through the selected `TenantIndex.keep()`
+   implementation. If an external directory controls registration, update that
+   directory through its supported administration procedure before admission.
 4. Prepare the already-built Bounded Contexts that admit the tenant.
    `createStorageStructures()` creates missing structures and verifies their
    layouts. A separate `checkStructureCompatibility()` is optional; use it when
@@ -5143,40 +5151,75 @@ retains the endpoint, expiry and registration ID. There is no separate expiry
 search column. The registry's first storage operation prepares its SQL table.
 Its `namespace` argument is also a diagnostic label, not physical isolation.
 
-### Sessions do not add these tables
+### Selected tenant and authentication records
 
-Authentication itself creates no user, password, signing-key, refresh-token or
-permissions table in this inventory. The following table shows what happens to login data after a process restart:
+The application selects which stores to construct. Importing authentication
+components does not prepare all record families. Each selected persistent store
+accepts the application's `StorageFactory` and `StorageGroup`. Its asynchronous
+`create()` factory prepares supported missing structures and checks compatibility
+before returning by default. `createMissingStructures: false` skips physical
+checks and creation both at construction and during later operations; missing
+structures can then cause ordinary storage operations to fail.
 
-| Component               | Where the login data is kept                                 | Consequence for this inventory                                                                                           |
-| ----------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `OpaqueSessions`        | Credentials and session records in process memory.           | No SQL table or Datastore kind. Choose another implementation if sessions must survive restart or work across instances. |
-| `SignedSessions`        | Session claims inside signed credentials held by the client. | No session table. The application supplies signing and verification keys, rotation, and any revocation store it needs.   |
-| Browser session wrapper | Client memory and browser state.                             | No server storage table.                                                                                                 |
+The following record types supplement the business-storage inventory above.
+Their physical table or kind names follow the selected provider and storage group.
+
+| Selected implementation        | Record families                                                                                                                  | When they are needed                                                                                                                                                                                                              |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PersistentTenantIndex`        | `spine.server.tenant.Tenant`                                                                                                     | Explicit stored multitenant registration. Single-tenant mode and an external index need no such records.                                                                                                                          |
+| `PersistentOpaqueSessionStore` | `spine.auth.OpaqueSessionRecord`                                                                                                 | Authoritative opaque sessions that use record storage. Omitting the store from `OpaqueSessions.create()` selects process-local memory.                                                                                            |
+| `PersistentOidcFlowStore`      | `spine.auth.OidcLoginTransaction`, `spine.auth.OidcLoginGrant`                                                                   | Shared component OIDC transactions and one-use application grants. Omitting the flow store selects process-local memory.                                                                                                          |
+| `PersistentTokenRevocations`   | `spine.auth.TokenRevocation`                                                                                                     | Shared signed-token revocation. Signed tokens themselves remain client credentials; without a revocation source, logout is expiry-only.                                                                                           |
+| `PersistentBetterAuthStore`    | Selected `spine.auth.BetterAuthUserRecord`, `BetterAuthAccountRecord`, `BetterAuthSessionRecord`, `BetterAuthVerificationRecord` | The optional Better Auth profile prepares only its explicit model list. An external User source replaces stored Users; password login needs credential Accounts, and native OIDC needs prelinked Accounts and Verification state. |
+
+The tenant implementation is exported by `@spine-event-engine/server`.
+Component auth stores are exported by `@spine-event-engine/auth`; the optional
+Better Auth store is exported by `@spine-event-engine/auth/better-auth`.
+An existing session service can supply `SessionResolver` without selecting any
+of these auth stores. User directories, passwords, permissions and provider-token
+storage are not implied by component sessions. The selected Better Auth Account
+profile can retain a provisioned password hash, but does not store provider tokens.
+
+These stores can be constructed directly in a standalone Gateway. They need no
+Bounded Context or `ServerEnvironment` to trigger preparation. The application
+supplies the existing database/project and appropriate access. Datastore composite
+indexes remain deployment prerequisites. An in-memory provider retains records
+only within its backend lifetime even when used with a persistent-store class.
 
 ### OIDC and trusted identity
 
-During an OIDC login, `OidcFlow` keeps the pending nonce, PKCE
-verifier, redirect and one-time grant in process memory. Its provider JWKS
-cache is local too; keys are fetched again after expiry or restart. These
-pieces do not create a framework SQL table or Datastore kind. Arrange login
-completion so a process can find the pending flow state.
+`OidcFlow.start()` persists its transaction before returning the provider
+authorization URL. With `PersistentOidcFlowStore`, another process configured
+with the same storage group and `flowId` can consume the transaction and later
+the one-use application grant. Callback and grant consumption are atomic. With
+the default memory store, the process holding the state must complete those
+steps. Durable flow state alone does not make the issued application session
+durable; configure its session strategy separately.
+
+The optional Better Auth flow instead uses native Verification and Session
+records. Its selected integration admits administrator-prelinked identities.
+The provider's verification keys and active sockets remain process-local;
+shared records do not implement distributed Gateway coordination or cancellation.
 
 The application supplies trusted Actor/Tenant resolution and authorization
-policies. If those collaborators use a directory, permissions database, token
-store or shared revocation store, the application provisions and secures that
-storage separately. A trusted Tenant in a session does not create a tenant
-session table. Live subscription streams remain network/process state; the
-saved gateway binding can restore a subscription definition, not its socket.
+policies. Those collaborators can consult an existing directory or permissions
+service without duplicating it in framework records. A trusted Tenant in a
+session does not create a tenant-specific session table. A saved Gateway
+subscription binding can restore a definition, not a socket or replay history.
 
+- [ ] Await each selected persistent-store factory before accepting traffic,
+      or prepare structures separately before choosing the explicit opt-out.
 - [ ] Include the first binding and node-registry storage operations in startup
       when those components are enabled; handle restoration and registration failures.
 - [ ] Supply identity-provider settings, signing/verification keys, rotation,
       Actor/Tenant mapping and authorization collaborators.
-- [ ] Decide whether sessions and revocation need shared durable storage, and
-      provision any application-specific stores they require.
-- [ ] Route OIDC completion and live subscriptions to processes that can finish
-      those operations.
+- [ ] Configure shared groups, flow IDs and keys consistently in processes
+      that must read the same authentication records.
+- [ ] Invoke `purgeExpired(cutoff)` explicitly when ready to remove expired
+      authentication records; no automatic maintenance schedule is supplied.
+- [ ] Close flows/session integrations, their injected stores and the storage
+      factory separately during shutdown. Keep live-subscription routing aligned
+      with the Gateway's current process-local lifecycle.
 
 Sources: [authentication package](../packages/auth/README.md),
 [session implementations](../packages/auth/src),
