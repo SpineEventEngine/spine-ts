@@ -421,9 +421,9 @@ export const browserServerImplementation: Readonly<{
    * @returns Normalized listener options after all preflight checks pass.
    */
   preflight(mode, input): BrowserHostOptions {
+    const admission = BrowserServerValues.snapshotAdmission(input);
     const production = Environment.instance().type === EnvironmentType.Production;
     BrowserServer.requireDurableBindings(input, production);
-    const admission = BrowserServerValues.snapshotAdmission(input);
     const options: BrowserHostOptions = {
       ...input,
       origins: Object.freeze([...input.origins]),
