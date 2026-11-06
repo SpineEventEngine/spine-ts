@@ -58,8 +58,12 @@ session. Application expiry is explicit configuration, not an invented hidden
 limit. Logout revokes this app session, clears cookies/SDK state and stops local
 protected streams best effort. No distributed-logout claim. One long-lived Spine
 host behind a same-origin Next-facing proxy; private downstream services cannot
-be bypassed by a browser. Author authorization covers commands, reads, updates
-and outcomes, including inaccessible-ID collision/replay cases.
+be bypassed by a browser. Configure authenticated reader forwarding explicitly.
+Author authorization covers commands, reads, updates and outcomes, including
+inaccessible-ID collision/replay cases. Entity subscriptions must use the
+canonical author-scoped PlaceView target: output filtering alone can leave IDs
+in removal controls. Reject broad, foreign-author and alternative subscription
+filters; test foreign creation, modification and deletion without identifier leaks.
 
 ### Message Board
 
