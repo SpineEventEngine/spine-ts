@@ -13,15 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import {
-  BoundedContext,
-  EnvironmentType,
-  EventRouting,
-  Projection,
-  ServerEnvironment,
-  Subscribe,
-} from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
+import { BoundedContext, EventRouting, Projection, Subscribe } from "@spine-event-engine/server";
 
 import { OrderAggregate, SkuAggregate } from "./orders-domain.js";
 import {
@@ -80,19 +72,16 @@ export class OrderCard extends Projection<string, typeof OrderCardSchema> {
  */
 export const OrderCardContext: Readonly<{
   /**
-   * Builds the order-card Bounded Context with the supplied storage.
+   * Builds the order-card Bounded Context using the configured environment.
    */
-  create(storageFactory: StorageFactory): Promise<BoundedContext>;
+  create(): Promise<BoundedContext>;
 }> = Object.freeze({
   /**
    * Registers the order-card route separately from the fixed load topology.
    *
-   * @param storageFactory Storage for the demonstration context.
    * @returns A context ready for server registration or local commands.
    */
-  async create(storageFactory) {
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
-    await ServerEnvironment.instance().completeSetup();
+  async create() {
     const routes = EventRouting.create(OrderCard)
       .route(OrderCreatedSchema, (event) => [event.id])
       .route(SkuRegisteredSchema, async (event, _context, repository) => {
@@ -102,7 +91,7 @@ export const OrderCardContext: Readonly<{
         // find() returns application Entities, so this method can skip unchanged cards.
         return cards.filter((card) => card.needsSkuName(event.displayName)).map((card) => card.id);
       });
-    return BoundedContext.singleTenant("Order cards")
+    return BoundedContext.multitenant("Order cards")
 
       .add(OrderAggregate)
       .add(SkuAggregate)

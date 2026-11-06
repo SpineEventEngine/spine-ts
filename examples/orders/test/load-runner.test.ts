@@ -35,10 +35,12 @@ import {
 import { CommandService } from "@spine-event-engine/proto/client";
 import { QueryService } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
+import { ordersTenants } from "../src/orders-environment.js";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { ServerTests } from "@spine-event-engine/server/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { datastoreOrdersLoadLevels, runDatastoreOrdersLoad } from "../src/load-runner.js";
+import { ordersLoadLevels, runOrdersLoad } from "../src/load-runner.js";
 import { LatencyDistribution } from "../src/internal/latency-distribution.js";
 import { OrderSummarySchema } from "../generated/spine/examples/orders/read_models_pb.js";
 
@@ -56,15 +58,22 @@ describe("datastore-orders load runner", () => {
   it("runs ten users over real gRPC and reports command, query, subscription, and metrics", async () => {
     const modulePath = fileURLToPath(new URL("../dist/src/index.js", import.meta.url));
     expect(existsSync(modulePath)).toBe(true);
-    const { startDatastoreOrdersServer } = await import("../dist/src/index.js");
-    const { InMemoryStorageFactory } = await import("@spine-event-engine/storage");
-    const server = await startDatastoreOrdersServer(new InMemoryStorageFactory(), {
+    const { configureOrdersEnvironment, startOrdersServer } = await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const server = await startOrdersServer({
       host: "127.0.0.1",
       port: 0,
     });
     try {
-      const result = await runDatastoreOrdersLoad({ baseUrl: server.baseUrl, users: 10 });
-      expect(datastoreOrdersLoadLevels).toEqual([10, 100, 1000]);
+      const result = await runOrdersLoad({
+        baseUrl: server.baseUrl,
+        users: 10,
+        tenants: [ordersTenants.northwind, ordersTenants.contoso],
+      });
+      expect(ordersLoadLevels).toEqual([10, 100, 1000]);
       expect(result).toMatchObject({
         users: 10,
         failedUsers: 0,
@@ -73,15 +82,33 @@ describe("datastore-orders load runner", () => {
         subscriptionDeliveries: 10,
       });
       expect(result.throughputPerSecond).toBeGreaterThan(0);
+      expect(result.perTenant).toEqual({
+        northwind: {
+          users: 5,
+          failedUsers: 0,
+          commandAcknowledgements: 5,
+          queryVisibilities: 5,
+          subscriptionDeliveries: 5,
+        },
+        contoso: {
+          users: 5,
+          failedUsers: 0,
+          commandAcknowledgements: 5,
+          queryVisibilities: 5,
+          subscriptionDeliveries: 5,
+        },
+      });
     } finally {
       await server.close();
+      await setup.close();
     }
   }, 30_000);
 
   it("reports failed users and zeroed metrics when the gRPC endpoint is unavailable", async () => {
-    const result = await runDatastoreOrdersLoad({
+    const result = await runOrdersLoad({
       baseUrl: "http://127.0.0.1:1",
       users: 10,
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
       visibilityTimeoutMs: 100,
     });
     expect(result).toMatchObject({
@@ -96,19 +123,27 @@ describe("datastore-orders load runner", () => {
   }, 10_000);
 
   it("reports zero throughput when the real gRPC load completes within one clock tick", async () => {
-    const { startDatastoreOrdersServer } = await import("../dist/src/index.js");
-    const { InMemoryStorageFactory } = await import("@spine-event-engine/storage");
-    const server = await startDatastoreOrdersServer(new InMemoryStorageFactory(), {
+    const { configureOrdersEnvironment, startOrdersServer } = await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const server = await startOrdersServer({
       host: "127.0.0.1",
       port: 0,
     });
     const now = vi.spyOn(performance, "now").mockReturnValue(1);
     try {
-      const result = await runDatastoreOrdersLoad({ baseUrl: server.baseUrl, users: 10 });
+      const result = await runOrdersLoad({
+        baseUrl: server.baseUrl,
+        users: 10,
+        tenants: [ordersTenants.northwind, ordersTenants.contoso],
+      });
       expect(result).toMatchObject({ users: 10, failedUsers: 0, throughputPerSecond: 0 });
     } finally {
       now.mockRestore();
       await server.close();
+      await setup.close();
     }
   }, 30_000);
 
@@ -120,9 +155,10 @@ describe("datastore-orders load runner", () => {
     ] as const) {
       const server = await startProtocolOutcomeServer(outcome);
       try {
-        const result = await runDatastoreOrdersLoad({
+        const result = await runOrdersLoad({
           baseUrl: server.baseUrl,
           users: 10,
+          tenants: [ordersTenants.northwind, ordersTenants.contoso],
           visibilityTimeoutMs: 100,
         });
         expect(result).toMatchObject({
@@ -174,9 +210,10 @@ async function expectStalledPhaseCanceled(outcome: ProtocolOutcome): Promise<voi
     },
   );
   try {
-    const result = await runDatastoreOrdersLoad({
+    const result = await runOrdersLoad({
       baseUrl: server.baseUrl,
       users: 10,
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
       visibilityTimeoutMs: stalledRpcTimeoutMs,
     });
     expect(result.failedUsers).toBe(10);

@@ -17,20 +17,15 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
-  EnvironmentType,
   ProcessManager,
   Projection,
   React,
   Server,
-  ServerEnvironment,
   Subscribe,
   type RunningServer,
 } from "@spine-event-engine/server";
 
 export { datastoreOrdersProtoModule } from "../generated/proto-module.js";
-import type { StorageFactory } from "@spine-event-engine/storage";
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import type { Datastore } from "@google-cloud/datastore";
 
 import {
   type CreateOrder,
@@ -326,7 +321,7 @@ export class SkuSalesManager extends ProcessManager<string, typeof SkuSalesManag
 /**
  * Lists the fixed datastore-orders registration topology.
  */
-export const datastoreOrdersTopology = {
+export const ordersTopology = {
   aggregates: ["OrderAggregate", "SkuAggregate"],
   processManagers: ["OrderSalesManager", "SkuSalesManager"],
   projections: [
@@ -344,17 +339,12 @@ export const datastoreOrdersTopology = {
 } as const;
 
 /**
- * Builds the domain with a provider-neutral storage factory supplied at composition.
+ * Builds the fixed Orders domain using the configured environment.
  *
- * @param storageFactory The storage factory used by the bounded context.
- * @returns The assembled datastore-orders bounded context.
+ * @returns The assembled multitenant Orders Bounded Context.
  */
-export async function createDatastoreOrdersContext(
-  storageFactory: StorageFactory,
-): Promise<BoundedContext> {
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
-  await ServerEnvironment.instance().completeSetup();
-  return BoundedContext.singleTenant("DatastoreOrders")
+export async function createOrdersContext(): Promise<BoundedContext> {
+  return BoundedContext.multitenant("Orders")
 
     .add(OrderAggregate)
     .add(SkuAggregate)
@@ -376,7 +366,7 @@ export async function createDatastoreOrdersContext(
 /**
  * Configures the datastore-orders server binding.
  */
-export interface DatastoreOrdersServerOptions {
+export interface OrdersServerOptions {
   // prettier-ignore
 
   /**
@@ -391,38 +381,22 @@ export interface DatastoreOrdersServerOptions {
 }
 
 /**
- * Starts a datastore-orders server with the supplied storage factory.
+ * Starts an Orders server using the configured environment.
  *
- * @param storageFactory The storage factory used by the bounded context.
  * @param options The network binding options for the server.
- * @returns The running datastore-orders server.
+ * @returns The running Orders server.
  */
-export async function startDatastoreOrdersServer(
-  storageFactory: StorageFactory,
-  options: DatastoreOrdersServerOptions = {},
-): Promise<RunningServer> {
-  const context = await createDatastoreOrdersContext(storageFactory);
-  return Server.atPort(options.port ?? 0, {
-    host: options.host ?? "127.0.0.1",
-    services: { subscriptionLimit: 1_000 },
-  })
-    .add(context)
-    .start();
-}
-
-/**
- * Creates a Datastore-backed server without leaking provider types into domain handlers.
- *
- * @param client The caller-owned Datastore client used to create the factory.
- * @param options The network binding options for the server.
- * @returns The running Datastore-backed server.
- */
-export async function startOrdersDatastoreServer(
-  client: Datastore,
-  options: DatastoreOrdersServerOptions = {},
-): Promise<RunningServer> {
-  return startDatastoreOrdersServer(
-    DatastoreStorageFactory.newBuilder().setClient(client).build(),
-    options,
-  );
+export async function startOrdersServer(options: OrdersServerOptions = {}): Promise<RunningServer> {
+  const context = await createOrdersContext();
+  try {
+    return await Server.atPort(options.port ?? 0, {
+      host: options.host ?? "127.0.0.1",
+      services: { subscriptionLimit: 1_000 },
+    })
+      .add(context)
+      .start();
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
 }

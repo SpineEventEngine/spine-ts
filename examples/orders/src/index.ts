@@ -15,3 +15,4 @@
 import "../generated/spine-bootstrap.js";
 
 export * from "./orders-domain.js";
+export * from "./orders-environment.js";

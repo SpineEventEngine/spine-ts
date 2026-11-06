@@ -1,67 +1,70 @@
 # Orders example reference
 
-This reference is for coding agents and maintainers. Beginners should start
-with the [Orders README](README.md).
+This reference describes the current Orders code for agents and maintainers.
+The [README](README.md) starts with the runnable memory workflow.
 
-## Structure and responsibilities
+## Assemblies
 
-The fixed topology contains two Aggregates (`Order` and `Sku`), ten
-Projections, and two Process Managers: fourteen repositories in total.
-`createDatastoreOrdersContext` and `startDatastoreOrdersServer` accept a
-`StorageFactory` and remain provider-neutral. `startOrdersDatastoreServer` is
-the Datastore-specific composition entry point: its caller supplies the `Datastore`
-client and the function hands that same client to `DatastoreStorageFactory`.
-Domain handlers must not import provider types.
+`configureOrdersEnvironment({ storageFactory, tenants })` opens a
+`PersistentTenantIndex`, registers only the supplied complete `TenantId`
+messages, and configures `ServerEnvironment` once. Assemble Bounded Contexts
+after this call. Close a running server before calling `setup.close()`, which
+closes the index and environment facilities. `startOrdersServer(options)`
+returns a `RunningServer`; its close drains and closes the Orders Bounded
+Context. A failed server start closes the assembled context.
 
-`OrderReview` reads `SkuCatalogQuery` through its Process Manager `select(query)`
-method. The generated query import supplies its columns; the read resolves the
-handler tenant and can reach `Catalog` because both contexts join one Server.
-The separate `OrderCardContext` demonstrates receiving-repository routing.
-`SkuRegistered` searches saved `OrderCard` rows by the declared `skuId` column
-and uses `OrderCard.needsSkuName()` to select cards requiring an update. Its
-route reads only the receiving repository, with the Event's tenant. The focused
-test covers multiple matching cards, a nonmatching card, a repeated name with
-no handler update, and no matches. Cards created after a SKU registration start
-with an empty name until another matching registration; `OrderReview` separately
-reads the catalog when an order is reviewed. Neither example changes the fixed
-fourteen-repository load topology.
+`createOrdersContext()` registers two Aggregates, ten Projections, and two
+Process Managers. `OrderReviewContexts.create()` returns `Catalog` and
+`Ordering` as separate Bounded Contexts. `OrderCardContext.create()` registers
+the order-card routing demonstration. All four assemblies call
+`BoundedContext.multitenant` and consume the configured environment. None
+reconfigures the process singleton.
 
-`OrderSalesManager.onOrderCreated` is a state-only `@React` handler with an
-explicit `undefined` return. Generated metadata has no returned Event schemas
-for this method. The framework must still persist its counter and advance its
-Entity version. Other subscribers retain their `void` declarations.
+The supported stable tenant values are `ordersTenants.northwind` and
+`ordersTenants.contoso`. Membership and storage routing are separate. Commands,
+queries, and subscriptions require the complete tenant identity. Missing or
+unknown tenants fail without adding membership or writing order state.
 
-When this example is composed with Datastore, the provider boundary is native:
-the complete tenant selects a namespace, the record family selects a kind, and
-the record ID selects the key. Persisted bytes remain authoritative; only
-Proto-declared `(column)` fields become queryable properties. Bounded Context
-names do not add a namespace, kind, key prefix, or other physical partition.
+`OrderReview.onOrderCreated` reads `SkuCatalogQuery` through the Process Manager
+`select(query)` API. The read uses the triggering tenant. The catalog row is
+eventually consistent, so a missing row yields an empty captured name.
+`OrderCardContext` routes `SkuRegistered` by querying `OrderCard` rows within
+the Event tenant. `OrderCard.needsSkuName()` avoids unnecessary updates. Neither
+demonstration changes the fourteen-repository load topology.
+
+`OrderSalesManager.onOrderCreated` is a state-only `@React` handler returning
+`undefined`. The framework persists its counter without an outgoing Event.
+Other subscription handlers use `void`.
+
+## Load runner
+
+`runOrdersLoad` accepts exactly 10, 100, or 1000 users and a nonempty tenant
+list. It assigns users round robin across the supplied tenants. Each user has
+a fresh order ID and command/query/subscription identity. The actor context
+carries the selected tenant to all three gRPC services. The result includes
+aggregate counts, latency percentiles, throughput, failure classifications,
+and per-tenant counts. Existing client behavior shares at most 16 HTTP/2
+sessions and runs users in waves of at most 10; each visibility operation uses
+the existing deadline and abort controller.
+
+## Provider boundary
+
+The bootstrap accepts a `StorageFactory`; provider-specific construction stays
+outside domain handlers. For Datastore, a complete tenant selects its namespace,
+a record family selects a kind, and a record ID selects the key. The memory
+factory supports local execution but the memory directory is not durable.
+PostgreSQL runtime configuration and persisted-membership restart checks are
+pending the next slice.
 
 Generated Protobuf and handler files are build outputs. Regenerate them through
-the workspace scripts; never edit them directly.
+workspace scripts and do not edit them directly.
 
-## Load-runner behavior
-
-The runner accepts exactly 10, 100, or 1,000 users. Each user has a unique
-command/query/subscription identity and iterator. At most 16 HTTP/2 client
-sessions are shared, and users run in waves of at most 10.
-
-Command acknowledgement and query visibility are measured from command
-submission. Subscription delivery is measured from the first update wait.
-Each user has an `AbortController`; timeout aborts its RPCs and clears the
-timer. Cleanup waits at most 500 ms for `iterator.return()` and tolerates the
-expected cancellation race. The outer run finally aborts the shared session
-pool. It does not send a SubscriptionService cancellation RPC.
-
-## Verification
+## Focused verification
 
 ```bash
-pnpm --config.verify-deps-before-run=false exec vitest run \
-  examples/orders/test/proto-module.test.ts \
-  examples/orders/test/topology.test.ts \
-  examples/orders/test/load-runner.test.ts
+pnpm exec tsc -b examples/orders --pretty false
+pnpm exec vitest run examples/orders/test --maxWorkers=1
 ```
 
-The load and test commands use an in-memory loopback server. They do not prove
-Datastore emulator behavior, cloud credentials, indexes, quotas, or production
-consistency.
+The current focused tests use memory and loopback gRPC. They do not establish
+PostgreSQL restart persistence or Datastore emulator behavior.

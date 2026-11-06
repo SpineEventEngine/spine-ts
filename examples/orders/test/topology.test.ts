@@ -50,22 +50,32 @@ describe("datastore orders test app", () => {
   });
 
   it("registers exactly two aggregates, two process managers, and ten projections", async () => {
-    const { createDatastoreOrdersContext, datastoreOrdersTopology } =
+    const { createOrdersContext, ordersTopology, configureOrdersEnvironment, ordersTenants } =
       await import("../dist/src/index.js");
-    expect(datastoreOrdersTopology.aggregates).toHaveLength(2);
-    expect(datastoreOrdersTopology.processManagers).toHaveLength(2);
-    expect(datastoreOrdersTopology.projections).toHaveLength(10);
-    const context = await createDatastoreOrdersContext(new InMemoryStorageFactory());
+    expect(ordersTopology.aggregates).toHaveLength(2);
+    expect(ordersTopology.processManagers).toHaveLength(2);
+    expect(ordersTopology.projections).toHaveLength(10);
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const context = await createOrdersContext();
     try {
       expect(context.registeredRepositories()).toHaveLength(14);
     } finally {
       await context.close();
+      await setup.close();
     }
   });
 
   it("uses generic storage composition and real gRPC command, query, and subscription paths", async () => {
-    const { startDatastoreOrdersServer } = await import("../dist/src/index.js");
-    const server = await startDatastoreOrdersServer(new InMemoryStorageFactory(), {
+    const { configureOrdersEnvironment, ordersTenants, startOrdersServer } =
+      await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const server = await startOrdersServer({
       host: "127.0.0.1",
       port: 0,
     });
@@ -76,7 +86,10 @@ describe("datastore orders test app", () => {
     const subscriptions = createClient(SubscriptionService, transport);
     const id = "order-grpc";
     const actorContext = create(ActorContextSchema, {
-      ...metadata.actorContext({ actor: create(UserIdSchema, { value: "orders-user" }) }),
+      ...metadata.actorContext({
+        actor: create(UserIdSchema, { value: "orders-user" }),
+        tenantId: ordersTenants.northwind,
+      }),
       timestamp: metadata.timestamp(),
     });
     const subscription = await subscriptions.subscribe(topic(id, actorContext));
@@ -139,6 +152,7 @@ describe("datastore orders test app", () => {
       await updates.return?.();
       session.abort();
       await server.close();
+      await setup.close();
     }
   }, 15_000);
 
@@ -155,29 +169,44 @@ describe("datastore orders test app", () => {
   });
 
   it("starts the in-memory orders server with default network options", async () => {
-    const { startDatastoreOrdersServer } = await import("../dist/src/index.js");
-    const server = await startDatastoreOrdersServer(new InMemoryStorageFactory());
+    const { configureOrdersEnvironment, ordersTenants, startOrdersServer } =
+      await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const server = await startOrdersServer();
     await server.close();
+    await setup.close();
   });
 
-  it("builds a Datastore-backed server from the caller-owned client", async () => {
-    const { startOrdersDatastoreServer } = await import("../dist/src/index.js");
-    const server = await startOrdersDatastoreServer(disconnectedDatastore());
-    await server.close();
+  it("keeps Datastore composition available through the explicit environment bootstrap", async () => {
+    const { DatastoreStorageFactory } = await import("@spine-event-engine/storage-datastore");
+    expect(
+      DatastoreStorageFactory.newBuilder().setClient(disconnectedDatastore()).build(),
+    ).toBeDefined();
   });
 
   it("exposes exactly 10, 100, and 1000 independent-user load scenarios", async () => {
-    const { datastoreOrdersLoadLevels, runDatastoreOrdersLoad } =
-      await import("../dist/src/load-runner.js");
-    expect(datastoreOrdersLoadLevels).toEqual([10, 100, 1000]);
+    const { ordersLoadLevels, runOrdersLoad } = await import("../dist/src/load-runner.js");
+    expect(ordersLoadLevels).toEqual([10, 100, 1000]);
 
-    const { startDatastoreOrdersServer } = await import("../dist/src/index.js");
-    const server = await startDatastoreOrdersServer(new InMemoryStorageFactory(), {
+    const { configureOrdersEnvironment, ordersTenants, startOrdersServer } =
+      await import("../dist/src/index.js");
+    const setup = await configureOrdersEnvironment({
+      storageFactory: new InMemoryStorageFactory(),
+      tenants: [ordersTenants.northwind, ordersTenants.contoso],
+    });
+    const server = await startOrdersServer({
       host: "127.0.0.1",
       port: 0,
     });
     try {
-      const result = await runDatastoreOrdersLoad({ baseUrl: server.baseUrl, users: 10 });
+      const result = await runOrdersLoad({
+        baseUrl: server.baseUrl,
+        users: 10,
+        tenants: [ordersTenants.northwind, ordersTenants.contoso],
+      });
       expect(result.failedUsers).toBe(0);
       expect(result.commandAcknowledgements).toBe(10);
       expect(result.queryVisibilities).toBe(10);
@@ -185,6 +214,7 @@ describe("datastore orders test app", () => {
       expect(result.throughputPerSecond).toBeGreaterThan(0);
     } finally {
       await server.close();
+      await setup.close();
     }
   }, 30_000);
 });
