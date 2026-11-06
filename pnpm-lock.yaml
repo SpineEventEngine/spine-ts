@@ -156,21 +156,12 @@ importers:
         specifier: 9.4.0
         version: 9.4.0
     devDependencies:
-      '@better-auth/utils':
-        specifier: 0.5.1
-        version: 0.5.1
       '@spine-event-engine/client-web':
         specifier: 2.0.0-snapshot.27
         version: link:../../../packages/client-web
       '@spine-event-engine/proto-tools':
         specifier: 2.0.0-snapshot.27
         version: link:../../../packages/proto-tools
-      better-auth:
-        specifier: 1.7.16
-        version: 1.7.16(@opentelemetry/api@1.9.1)(mysql2@3.23.1(@types/node@24.13.2))(pg@8.23.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.12)
-      jose:
-        specifier: 6.2.15
-        version: 6.2.15
 
   examples/message-board/command-handlers:
     dependencies:

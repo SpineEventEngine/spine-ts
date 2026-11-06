@@ -6,14 +6,9 @@
   "scripts": {
     "start": "node dist/src/local-application-server.js",
     "start:application": "node dist/src/application-server.js",
-    "start:gateway": "node dist/src/gateway-server.js",
     "start:multi-process": "node dist/src/multi-process-app.js",
     "start:combined": "node dist/src/combined-server.js",
     "session:issue": "node dist/src/issue-board-session.js",
-    "tenant:demo": "node dist/src/tenant-scenarios-cli.js",
-    "auth:demo": "node dist/src/component-auth-cli.js",
-    "native-auth:demo": "node dist/src/better-auth-cli.js",
-    "native-oidc:demo": "node dist/src/better-auth-oidc-cli.js",
     "proto:compose": "spine-proto compose",
     "handlers:generate": "spine-proto handlers",
     "prepack": "pnpm handlers:generate && tsc -b"
@@ -54,10 +49,7 @@
     "loglayer": "9.4.0"
   },
   "devDependencies": {
-    "@better-auth/utils": "0.5.1",
     "@spine-event-engine/client-web": "2.0.0-snapshot.27",
-    "@spine-event-engine/proto-tools": "2.0.0-snapshot.27",
-    "better-auth": "1.7.16",
-    "jose": "6.2.15"
+    "@spine-event-engine/proto-tools": "2.0.0-snapshot.27"
   }
 }

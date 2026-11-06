@@ -44,12 +44,6 @@ Add generated entities with `BoundedContext.add(...)` and use
 `build()` to assemble the context and load generated repositories when configured. A
 context is single-tenant or multitenant by construction; select that mode
 before registering application handlers and storage.
-The [Message Board tenant scenario](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/message-board/app/src/tenant-scenarios.ts)
-has four runnable CLI modes for omitted and explicit `SINGLE_TENANT`, an
-application directory, and a record-backed `PersistentTenantIndex`. Its local
-factory is in memory; substitute a durable provider and shared group for
-cross-process membership.
-
 `build()` prepares the current model storage and awaits the first subscription
 registry pass. Set `createStorageStructures: false` or
 `startSubscriptionMonitoring: false` in `build({...})` to defer either phase

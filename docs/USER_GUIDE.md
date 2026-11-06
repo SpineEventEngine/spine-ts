@@ -95,72 +95,14 @@ Context requires a live `TenantIndex` in the environment or a local
 `keep()` before tenant-scoped work. An unknown tenant is rejected before
 business storage preparation.
 
-The maintained [tenant scenario](../examples/message-board/app/src/tenant-scenarios.ts)
-is executable through the Message Board app after building the workspace:
-
-```sh
-pnpm --filter @spine-event-engine/example-message-board-app tenant:demo single
-pnpm --filter @spine-event-engine/example-message-board-app tenant:demo single-explicit
-pnpm --filter @spine-event-engine/example-message-board-app tenant:demo external
-pnpm --filter @spine-event-engine/example-message-board-app tenant:demo persistent
-```
-
-Each command runs in a fresh process, closes its Bounded Context, and then
-closes the environment. The external example adapts an application-selected
-catalog; the persistent example uses `PersistentTenantIndex.create()` and
-closes its index before its factory. Both use memory storage to run locally.
 For cross-process membership, inject a durable `StorageFactory` and the same
-`StorageGroup` into the persistent index in each process. The provider's
-database must already exist; index creation prepares only the selected record
-family by default. `createMissingStructures: false` skips creation and checks
-both at construction and later operations. Application code still closes the
-index and factory separately. The [server reference](../packages/server/REFERENCE.md)
-describes exact tenant admission and preparation semantics.
-
-### Run component authentication lifecycles
-
-The maintained [component auth scenario](../examples/message-board/app/src/component-auth-scenarios.ts)
-issues and refuses opaque and signed credentials, runs explicit maintenance,
-and executes a one-use OIDC callback and grant exchange. After building the
-workspace, run its local modes with an application seal password of at least
-32 characters:
-
-```sh
-SESSION_SEAL_PASSWORD='<application-secret>' pnpm --filter @spine-event-engine/example-message-board-app auth:demo opaque
-pnpm --filter @spine-event-engine/example-message-board-app auth:demo signed
-SESSION_SEAL_PASSWORD='<application-secret>' pnpm --filter @spine-event-engine/example-message-board-app auth:demo oidc-fixture
-```
-
-`oidc-fixture` is a local test-only provider. For a real provider, call
-`createOidcProvider()` or `discoverOidcProvider()`, send the URL returned by
-`OidcFlow.start()` to the browser, and pass the received callback parameters
-back through the example's handoff. The
-[local HTTP test](../examples/message-board/app/test/component-auth-scenarios.test.ts)
-executes the same public flow with a signed ID token and JWKS. The example
-closes its flow, session strategy, store, and factory even if setup fails.
-
-### Run selected native authentication
-
-The [native password and external-verifier source](../examples/message-board/app/src/better-auth-scenarios.ts)
-provisions selected records, checks invalid proof refusal, resolves the native
-session after login, logs out, explicitly purges expired records, and closes
-the integration, store, and factory. The external CLI verifier uses a local
-test proof; replace it with application verification before deployment.
-
-```sh
-BETTER_AUTH_SECRET='<application-secret>' pnpm --filter @spine-event-engine/example-message-board-app native-auth:demo password
-BETTER_AUTH_SECRET='<application-secret>' pnpm --filter @spine-event-engine/example-message-board-app native-auth:demo external-fixture
-BETTER_AUTH_SECRET='<application-secret>' pnpm --filter @spine-event-engine/example-message-board-app native-oidc:demo
-```
-
-The [prelinked OIDC source](../examples/message-board/app/src/better-auth-oidc-scenario.ts)
-uses public `genericOAuth` configuration with a preprovisioned User and
-Account. Its runnable `native-oidc:demo` command starts a local HTTP test
-provider and executes discovery, browser handoff, PKCE, token/JWKS verification,
-one-use callback, session resolution, and logout. A deployed application must
-configure trusted HTTPS provider metadata and deliver the authorization URL
-and callback through its browser routes. No provider token is returned to the
-browser by these examples.
+`StorageGroup` into `PersistentTenantIndex.create()` in each process. The
+provider's database must already exist; index creation prepares only the
+selected record family by default. `createMissingStructures: false` skips
+creation and checks both at construction and later operations. Application
+code closes the index and factory separately. The
+[server reference](../packages/server/REFERENCE.md) describes exact tenant
+admission and preparation semantics.
 
 ## 3. Describe the model in Proto
 
