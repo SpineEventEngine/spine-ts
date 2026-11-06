@@ -422,6 +422,27 @@ avoid a gate.
   is merged and the worktree is clean. Do not force-remove a worktree with
   modified or untracked files unless the human explicitly approves that cleanup.
 
+## Commit Scope and Messages
+
+Prefer relatively small commits. Choose a scope that allows the commit message
+to describe the meaningful behavior, capability, or purpose of the change,
+rather than a low-level implementation detail. For example, prefer
+`Allow customers to request a purchase return` over `Add a proper for boundary`.
+For infrastructure and tooling work, describe its actual purpose without
+inventing a business scenario.
+
+Where practical, keep semantically different changes in separate commits.
+Related implementation, tests, and documentation can form one commit when they
+serve the same purpose. Stage individual hunks when that helps separate
+different purposes within one file.
+
+These are intentions, not hard rules or numerical size limits. Use judgment
+when a coherent change needs a larger commit, changes are interdependent, or
+the subject is necessarily technical. Do the best practical job without
+forcing artificial splits or vague messages. Apply these preferences when
+selecting staged changes and writing the commit message; then push each commit
+immediately as required below.
+
 ## Remote Synchronization
 
 The sole canonical remote is `origin` at

@@ -85,6 +85,11 @@ decisions, remaining work, and links useful for future maintenance. Include a
 short verification summary only when it is useful for future work. Superseded
 plans and progress reports should be removed rather than archived in Git.
 
+## Commit Scope and Messages
+
+Follow the [commit scope and message preferences](build-protocol/BUILD_PROTOCOL.md#commit-scope-and-messages).
+Apply them with judgment: they are intentions, not hard rules.
+
 ## Model Allocation
 
 Use Standard speed. Do not enable Fast/boost mode. Do not use Max or Ultra in
