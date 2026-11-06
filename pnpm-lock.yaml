@@ -96,6 +96,47 @@ importers:
 
   examples/distributed-message-board: {}
 
+  examples/fieldnotes/model:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/core':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/core
+      '@spine-event-engine/proto':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/proto
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/proto-tools
+
+  examples/fieldnotes/server:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/core':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/core
+      '@spine-event-engine/example-fieldnotes-model':
+        specifier: 2.0.0-snapshot.27
+        version: link:../model
+      '@spine-event-engine/proto':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/proto
+      '@spine-event-engine/server':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/server
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/proto-tools
+      '@spine-event-engine/testing':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/testing
+
   examples/message-board/app:
     dependencies:
       '@bufbuild/protobuf':

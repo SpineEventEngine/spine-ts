@@ -36,7 +36,11 @@ the same author. No separate NoteId, note collection, note count or Add note act
 Commands: AddPlace, RenamePlace, MovePlace, EditPlaceNote, DeletePlace. Corresponding
 Events: PlaceAdded, PlaceRenamed, PlaceMoved, PlaceNoteEdited, PlaceDeleted.
 Optimistic version checks preserve drafts on conflict; event subscriptions update
-PlaceView after the committed change. Delete hides current data and does not claim
+PlaceView after the committed change. Each distinct Event carries the complete
+post-command place details and creation/change times; the Projection replaces
+state only with a newer revision, keeps author/creation time immutable, and treats
+a removal marker as terminal. This preserves a coherent view under reordered
+Event delivery. Delete hides current data and does not claim
 physical erasure of immutable history/backups.
 
 Use MapLibre GL JS with OpenFreeMap (no map API key); Next.js App Router; reused
