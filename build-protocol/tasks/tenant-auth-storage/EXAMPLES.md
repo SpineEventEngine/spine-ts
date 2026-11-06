@@ -17,6 +17,11 @@ explicitly supplied to ServerEnvironment, using the selected StorageFactory.
 Membership and storage routing are separate; register only explicit configured
 tenants, reject unknown/missing tenant requests, validate persisted memberships
 against routing before listening, and prove restart persistence before reseeding.
+Restart acceptance includes recovery of pending durable delivery work from an
+interrupted launch, without blocking new commands or losing committed follow-up
+Events during normal recovery. Preserve existing acknowledgement, tracked
+best-effort publication, tenant selection and shutdown guarantees; this does not
+add durable Event republishing or historical Projection repair.
 Use provider-neutral Orders names, retain fixed topology and existing load levels,
 and add no browser UI or authentication to Orders. Fresh generated run identifiers
 prevent repeated loads from overwriting prior runs. No database-reset behavior.
@@ -110,9 +115,17 @@ if it still satisfies branch publication rules; do not make a gratuitous bump.
 
 ## Remaining sequence
 
-1. Update event-storming SVG to one PlaceView; freeze implementation architecture.
-2. Restore Message Board baseline behavior while retaining API adaptation.
-3. Implement and document always-multi-tenant Orders and PostgreSQL launch.
-4. Implement Fieldnotes domain, authentication, Next.js interface and docs.
-5. Run independent reviews, corrections, full acceptance and release checks.
-6. Push final changes and deliver preserved/revised PR description in chat.
+1. Complete Orders PostgreSQL and Datastore acceptance, durable restart checks
+   and documentation.
+2. Implement Fieldnotes persistent authenticated host, both login adapters,
+   Next.js interface, browser acceptance and documentation.
+3. Run fresh independent implementation/documentation reviews, corrections and
+   final security/release checks; close all participating agents.
+4. Push final changes and deliver the full preserved/revised PR description in
+   chat, with Orders and Fieldnotes README links and the revised SVG.
+
+The Message Board restoration, initial always-multitenant Orders behavior and
+Fieldnotes domain are implemented. Recovered publication uses the existing
+tracked follow-up queue, preserving source acknowledgement and shutdown tracking. The Fieldnotes domain diagram is recorded under
+`examples/fieldnotes/docs/event-storming.svg`; keep it aligned with the implemented
+contracts. Detailed execution evidence remains outside the repository.

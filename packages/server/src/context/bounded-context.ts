@@ -1968,9 +1968,9 @@ export class BoundedContext {
   }
 
   /**
-   * Registers an entered shared replay through its complete follow-up callback.
-   * @param onReplay Complete replay callback.
-   * @returns Completion of the captured callback.
+   * Registers an entered shared replay through handler processing and follow-up registration.
+   * @param onReplay Replays the message and registers any returned follow-up.
+   * @returns Completion after the replay callback returns.
    */
   #trackReplay(onReplay: () => Promise<void>): Promise<void> {
     const replay = Promise.resolve().then(onReplay);
