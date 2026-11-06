@@ -31,6 +31,14 @@ mode reads physical metadata without creating tables or indexes. Its `create`
 mode creates missing structures and verifies their complete layout. Both modes
 reuse a bound runtime pool or release temporary pools, and compatible results
 are shared with later ordinary use. A failed attempt remains retryable.
+
+Both preparation modes also verify declared `RecordSpec.indexes`: each is a complete non-unique,
+ascending B-tree index with no prefix, expression, or hidden component. Indexed
+fixed byte columns use the declared `VARBINARY(width)`; stored and queried byte
+values must have that exact width. An incompatible existing index rejects
+without alteration. A record handle with `prepareOnAccess: false` performs no
+index metadata probe or DDL on ordinary data operations.
+
 The default shared registry converts message-valued IDs and ordinary message
 columns using generated descriptors registered on module import.
 `setStringifierRegistry(registry)` accepts a custom registry; the builder

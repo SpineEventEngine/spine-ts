@@ -208,16 +208,29 @@ contexts share one in-memory factory, including in production. Local and test
 environments default storage in memory and use the core registry only as a
 fallback; those defaults are not production configuration.
 
-`tenantIndex` selects a live application membership directory. When omitted,
-the environment uses its storage factory's native catalog where available, or
-a transient in-memory index for a custom factory without a catalog. The
-transient index lasts only for this environment instance. `contains()` checks
-membership without preparing storage; `keep()` makes a registration visible to
-later reads and may reject for a read-only catalog. PostgreSQL and MySQL
-catalogs expose only configured tenant entries: `keep()` is idempotent for
-those entries and rejects unknown IDs. A dynamic SQL tenant resolver does not
-register or enumerate tenants. Single-tenant contexts do not insert a synthetic
-member into this directory.
+`tenantIndex` is optional and defaults to `SINGLE_TENANT`, a marker that creates
+no directory and never consults a provider catalog. The environment getter
+returns `TenantIndexSetting`, either that marker or an application-supplied
+`TenantIndex`. Narrow against the marker before calling `contains()`, `keep()`,
+`page()`, or `all()`. A multitenant Bounded Context requires a real environment
+index before business storage opens. A single-tenant Bounded Context always returns the
+marker, including inside a multitenant environment. Provider catalogs remain
+separate storage-provider APIs and do not select application membership.
+
+`PersistentTenantIndex.create({ storageFactory, group })` opens a separate,
+storage-backed registration directory without constructing a Bounded Context or
+`ServerEnvironment`. It creates and checks supported storage structures before
+returning. Set `createMissingStructures: false` to skip preparation on creation
+and on later reads or writes. A skipped directory needs structures prepared by
+the application before data access; missing structures cause provider errors.
+Memory storage remains process-local. The injected factory remains usable after the
+index closes. `keep()` registers a complete `TenantId` atomically and retains
+the first registration time; `contains()` reads its primary key. `page()` uses
+finite keyset traversal with an abort signal and a continuation accepted only
+by that index instance. `all()` traverses the complete current directory, so
+its result can be large. Traversal does not promise a snapshot while other
+writers register tenants. Registration does not provision tenant databases or
+authorize users. The environment defaults to the explicit `SINGLE_TENANT` marker.
 
 Multitenant receiving contexts check current index membership before Command,
 Event, query, direct repository/history, and subscription work. Inbox persistence
@@ -607,9 +620,11 @@ Create a context with `BoundedContext.singleTenant(name)` or
 `BoundedContext.multitenant(name)`. Names are immutable. Use
 `ServerEnvironment.when(type).use({ storageFactory: factory })` before explicit
 environment setup to supply record/event storage to all contexts.
-`withTenantIndex(index)` selects a different live membership directory for one
-context; `context.tenantIndex` and `ServerEnvironment.instance().tenantIndex`
-return the configured objects. Closing a context does not close either index.
+`withTenantIndex(index)` selects a different live membership directory for a
+multitenant Bounded Context after its environment has a real index. The Bounded Context getter
+returns its captured selection; single-tenant Bounded Contexts return `SINGLE_TENANT`.
+Both getters have type `TenantIndexSetting` and require narrowing before index
+methods. Closing a Bounded Context does not close the configured directory.
 The application imports its generated `spine-bootstrap.js` before registering
 classes with `add(EntityClass)`; `build()` then selects passive descriptions
 by exact constructor and performs assembly, including
@@ -1263,11 +1278,14 @@ transport responses independently.
 
 Configure app-node admission at `ServerOptions.services.readerAdmission`:
 
-- `direct.authenticate({ service, method, value, headers, peer })` authenticates
-  a direct native request. It returns verified `{ principal, authorityFacts }`,
-  an empty object for deliberate public access, or `undefined` to deny access.
+- `direct.authenticate({ service, method, value, headers, peer, signal })` authenticates
+  a direct native request. It returns `{ reader, invalidated? }` with verified
+  `{ principal, authorityFacts }` in `reader`, `{ reader: {} }` for deliberate
+  public access, or `undefined` to deny access. `signal` begins before
+  authentication and ends on terminal unary or complete stream exit.
   The request value contains canonical Proto bytes; `peer` is the Connect
-  `HandlerContext` for that invocation.
+  `HandlerContext` for that invocation. `invalidated` is a separate local
+  AbortSignal captured by the host; it never enters reader facts or proofs.
 - `forwarded.verify(bytes, proof, peer)` verifies an assertion from a trusted
   forwarding peer. It must authenticate that peer and validate the supplied
   proof over the exact bytes. `BrowserServerOptions.forwardingProof.issue(bytes)`
@@ -1294,6 +1312,69 @@ child Servers with their verifier as well. Each hop verifies its incoming
 assertion and issues a new proof for the actual outgoing operation and payload.
 Loopback placement alone does not authenticate a forwarding peer.
 
+A standard session strategy accepts the host signal during `resolve` and
+returns an invalidation signal for local logout, its captured session deadline,
+and strategy close. A custom direct authenticator may omit invalidation, but
+then the host cannot stop an active stream on local logout or expiry. A
+successful unary request releases its operation even while the transport peer
+stays connected. Subscribe releases its operation after definition creation;
+Activate authenticates again and holds its operation through ACK and every
+update. Normal completion, host handler iterator return, cancellation, and host
+close stop the operation. Raw Connect clients must abort an explicit
+`AbortSignal` or call `SubscriptionService.Cancel` to stop remote stream work;
+returning from the client iterator alone does not signal transport cancellation.
+An active stream in another process receives no local signal.
+
+```ts
+import type { SignedSessions } from "@spine-event-engine/auth";
+import { Server, type ReaderAdmissionResult, type ServerOptions } from "@spine-event-engine/server";
+
+/**
+ * Configures direct native bearer admission with the local session strategy.
+ *
+ * @param sessions Strategy also used by the application's logout action.
+ * @param contexts Application Bounded Contexts exposed by this Server.
+ * @returns Server configured for native authentication.
+ */
+function nativeServer(
+  sessions: SignedSessions,
+  contexts: NonNullable<ServerOptions["contexts"]>,
+): Server {
+  return new Server({
+    contexts,
+    services: {
+      readerAdmission: {
+        direct: {
+          /**
+           * Resolves the bearer credential within the host operation.
+           *
+           * @param request Native peer and lifetime facts.
+           * @returns Verified reader and invalidation, or denial.
+           */
+          async authenticate(request): Promise<ReaderAdmissionResult | undefined> {
+            const authorization = request.peer.requestHeader.get("authorization");
+            const token = /^Bearer ([^\s,]+)$/i.exec(authorization ?? "")?.[1];
+            if (token === undefined) return undefined;
+            const session = await sessions.resolve(
+              { kind: "bearer", value: token },
+              request.signal,
+            );
+            if (session?.invalidated === undefined) return undefined;
+            return { reader: { principal: session.principal }, invalidated: session.invalidated };
+          },
+        },
+      },
+    },
+  });
+}
+```
+
+The admitted logout action checks `await sessions.logout(credential)` on that
+same strategy. It reports durable success only for `revoked`; `unavailable`
+and `expiryOnly` remain distinct. Application shutdown closes both Server and
+strategy. A custom authenticator still enforces its own credential and policy
+checks; a token in a header alone does not establish authority.
+
 Authenticated forwarding now requires an issuer; configure both gateway and
 receiving node when updating an existing authenticated deployment. The native
 Server root still does not load the optional auth package. The forwarding ports
@@ -1305,6 +1386,11 @@ For `BrowserServer` from `@spine-event-engine/server/browser`, origins must be u
 fragment, or trailing slash. Requests without an allowed exact `Origin` receive
 403 before RPC handling. Allowed responses include credentialed exact-origin
 CORS, `Vary: Origin`, protocol request headers, and exposed gRPC status headers.
+RPC and auth-route preflight completes before credential extraction. The host
+allows configured CSRF headers alongside Connect and gRPC-Web protocol headers;
+actual responses, including permitted-origin terminal errors, retain exact-origin
+credentialed CORS. Callback responses cannot replace that host policy with a
+wildcard origin.
 
 Supplying `browser.backend.baseUrl` selects standalone mode. It is one canonical
 HTTP(S) origin for a Spine TS or JVM backend; the gateway never closes
@@ -1324,7 +1410,8 @@ re-query authoritative state after duplicate updates or generic loss notices.
 Each registration has one exact `GET` or `POST` canonical path, one method per
 path, exact canonical origins, finite request bytes, and a finite timeout. A
 missing Origin is rejected unless that route explicitly permits it for an OAuth
-callback. Unknown paths, method/origin failures, body overflow, timeout, and
+callback and validates the protocol state in its handler.
+Unknown paths, method/origin failures, body overflow, timeout, and
 handler failure return fixed 404, 405, 403, 413, 504, and 500 responses without
 calling application code on rejected input. The 404 unknown-path result applies
 only after framework Origin admission. Auth admission is bounded to 64 active
@@ -1335,10 +1422,18 @@ transfer. Response bodies use `writeMaxBytes`; overflow returns 413 before any
 application status or headers are committed. Listener close ultimately aborts
 an active request through its disconnect signal.
 
-With `cookies`, `OpaqueSessionCookies` performs strict bearer-first or
-CSRF-protected cookie extraction. A strict rejection becomes an unusable
-credential and never falls back to permissive header parsing. Without cookies,
-the host accepts exactly one non-whitespace bearer token. Credentials and raw
+Every credential reader and auth route declares CSRF header names, primary
+credential-cookie names, and supporting state-cookie names. The host snapshots
+these declarations before startup, rejects repeated raw Authorization, Origin,
+configured CSRF headers, and selected cookies, and checks simultaneous primary
+credentials only for the active reader or selected route. Legal split Cookie
+fields and repeated unrelated cookies remain available to the reader.
+`OpaqueSessionCookies` provides a strict reader for a sealed opaque session or
+bearer credential, including CSRF checks; a primary cookie and bearer field
+together are rejected. The legacy `cookies` option cannot be combined with
+`credentials`. Without either, the host reads one valid Bearer field. A reader
+returns a credential, absence, or terminal rejection; a thrown read is terminal
+unavailability. Credentials and raw
 transport metadata do not reach the private backend. The application-supplied
 context resolver replaces caller actor and tenant facts before forwarding.
 

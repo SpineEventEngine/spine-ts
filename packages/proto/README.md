@@ -27,6 +27,24 @@ const commandId = create(CommandIdSchema, { uuid: "command-42" });
 console.log(commandId.uuid);
 ```
 
+The root also exports `Tenant`, `TenantSchema`, and `tenantFile` for the
+application tenant-registration record. `Tenant.id` carries the complete
+`TenantId`; `Tenant.whenCreated` records the first successful registration.
+The server's `PersistentTenantIndex` persists this record through the selected
+storage factory. Memory storage keeps registrations only in that process.
+
+The `@spine-event-engine/proto/auth` facet exports `AuthenticatedPrincipal`
+with optional `PrincipalAttributes`, `OpaqueSessionRecord`,
+`OidcLoginTransaction`, and `OidcLoginGrant`. Presence of an
+empty attributes message differs from absent attributes. The session record
+retains a stable reference, credential generation, complete principal and exact
+Protobuf Timestamp deadline for the auth store.
+`TokenRevocation` retains the scoped issuer, audience, token ID and inclusive
+last-acceptance deadline for persistent signed-token revocation.
+The OIDC transaction and application grant are separate one-use records. Each
+retains a flow-qualified lookup digest and exact expiry; the grant retains the
+typed principal without collapsing absent and empty attributes.
+
 ## TypeScript interface options
 
 Use `(every_is).ts_type = "TaskEvent"` with `(every_is).generate = true` to
@@ -117,6 +135,12 @@ Spine definitions preserve their original versioned Proto packages.
 - [Reference for coding agents](REFERENCE.md)
 
 ## Integration wire contracts
+
+The curated `@spine-event-engine/proto/auth` subpath includes the selected
+`BetterAuthUserRecord`, `BetterAuthAccountRecord`, `BetterAuthSessionRecord`,
+and `BetterAuthVerificationRecord` schemas. They represent persisted native
+authentication records; the Account record has no unused provider token or
+scope fields. Their authored source is `spine/auth/better_auth_record.proto`.
 
 Generated root exports include the frozen external-event broker and typed
 message-channel Protobuf contracts. `ExternalMessage`, `ExternalEventsWanted`,

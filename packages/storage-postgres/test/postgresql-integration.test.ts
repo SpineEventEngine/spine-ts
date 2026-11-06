@@ -58,8 +58,8 @@ import {
   TaskSchema,
   type Task,
 } from "../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
-import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Pool, type PoolClient } from "pg";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { entityStorage } from "./postgres-entity-seam.js";
 import {
@@ -95,6 +95,233 @@ describe("PostgreSQL live storage acceptance", () => {
 
   afterAll(async () => {
     await factory.close();
+  });
+
+  it("prepares a complete fixed-byte lookup index usable for equality and range", async () => {
+    const scope = context("physical_index");
+    const physicalGroup = group("physical_index");
+    const key = (record: StringValue) => {
+      const bytes = new Uint8Array(12);
+      bytes[11] = Number(record.value.split(":", 1)[0]);
+      return bytes;
+    };
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [new RecordColumn("lookup", ColumnTypes.fixedBytes(12), key)],
+      indexes: [{ name: "lookup", columns: ["lookup", "id"] }],
+    });
+    const records = factory.createRecordStorage(scope, spec, physicalGroup);
+    const pool = new Pool({ connectionString: url });
+    try {
+      await StoragePreparations.for(factory).prepareRecord(scope, spec, physicalGroup, "create");
+      await StoragePreparations.for(factory).prepareRecord(scope, spec, physicalGroup, "check");
+      await records.writeAll(
+        Array.from({ length: 300 }, (_, i) =>
+          value(`${String(i % 3)}:${String(i).padStart(4, "0")}`),
+        ),
+      );
+      const equal = await records.queryEntries({
+        filters: [{ column: "lookup", value: key(value("2:0000")) }],
+        sort: [{ field: "id", direction: "asc" }],
+        limit: 2,
+      });
+      expect(equal.map(({ id }) => id)).toEqual(["2:0002", "2:0005"]);
+      const skippedFactory = await postgresBuilder().setOptions({ url }).build();
+      const statements: string[] = [];
+      const connect = Reflect.get(Pool.prototype, "connect") as (this: Pool) => Promise<PoolClient>;
+      const capture = vi.spyOn(Pool.prototype, "connect").mockImplementation(function (this: Pool) {
+        return connect.call(this).then((client) => {
+          const query = client.query.bind(client);
+          client.query = function (...args: unknown[]) {
+            if (typeof args[0] === "string") statements.push(args[0]);
+            return Reflect.apply(query, client, args) as unknown;
+          } as typeof client.query;
+          return client;
+        }) as never;
+      });
+      try {
+        const skipped = skippedFactory.createRecordStorage(scope, spec, physicalGroup, {
+          prepareOnAccess: false,
+        });
+        try {
+          const extra = value("2:9999");
+          await skipped.write(extra);
+          await skipped.read(extra.value);
+          await skipped.queryEntries({
+            filters: [{ column: "lookup", value: key(extra) }],
+            sort: [{ field: "id", direction: "asc" }],
+            limit: 1,
+          });
+          await skipped.compareAndSet(extra.value, extra, extra);
+          await skipped.delete(extra.value);
+        } finally {
+          skipped.close();
+        }
+        expect(statements.some(isPreparationSql)).toBe(false);
+      } finally {
+        capture.mockRestore();
+        await skippedFactory.close();
+      }
+      const table = (records as unknown as { tableName: string }).tableName;
+      const schema = (await pool.query<{ schema: string }>("SELECT current_schema() AS schema"))
+        .rows[0]?.schema;
+      if (schema === undefined) throw new Error("Expected PostgreSQL schema.");
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SET LOCAL enable_seqscan=off");
+        for (const operator of ["=", "<="]) {
+          const plan = await client.query<{ "QUERY PLAN": unknown }>(
+            `EXPLAIN (FORMAT JSON) SELECT "ID" FROM ${quoted(schema)}.${quoted(table)} ` +
+              `WHERE "lookup" ${operator} $1 ORDER BY "lookup", "ID" LIMIT 1`,
+            [Buffer.from(key(value("2:0000")))],
+          );
+          const evidence = JSON.stringify(plan.rows[0]?.["QUERY PLAN"]);
+          expect(evidence).toMatch(/ix_[0-9a-f]{32}/);
+          expect(evidence).toContain("Index Cond");
+        }
+      } finally {
+        await client.query("ROLLBACK");
+        client.release();
+      }
+      const index = (
+        await pool.query<{ indexname: string }>(
+          "SELECT indexname FROM pg_indexes WHERE schemaname=$1 AND tablename=$2 AND indexname LIKE 'ix_%'",
+          [schema, table],
+        )
+      ).rows[0]?.indexname;
+      if (index === undefined) throw new Error("Expected PostgreSQL lookup index.");
+      await pool.query(`DROP INDEX ${quoted(schema)}.${quoted(index)}`);
+      const first = await postgresBuilder().setOptions({ url }).build();
+      const second = await postgresBuilder().setOptions({ url }).build();
+      try {
+        await expect(
+          StoragePreparations.for(first).prepareRecord(scope, spec, physicalGroup, "check"),
+        ).rejects.toThrow(/index is missing/i);
+        await Promise.all(
+          [first, second].map((candidate) =>
+            StoragePreparations.for(candidate).prepareRecord(scope, spec, physicalGroup, "create"),
+          ),
+        );
+        await pool.query(`DROP INDEX ${quoted(schema)}.${quoted(index)}`);
+        await pool.query(
+          `CREATE INDEX ${quoted(index)} ON ${quoted(schema)}.${quoted(table)} ("ID", "lookup")`,
+        );
+        const incompatible = await postgresBuilder().setOptions({ url }).build();
+        try {
+          await expect(
+            StoragePreparations.for(incompatible).prepareRecord(
+              scope,
+              spec,
+              physicalGroup,
+              "check",
+            ),
+          ).rejects.toThrow(/index is incompatible/i);
+          await expect(
+            StoragePreparations.for(incompatible).prepareRecord(
+              scope,
+              spec,
+              physicalGroup,
+              "create",
+            ),
+          ).rejects.toThrow(/index is incompatible/i);
+        } finally {
+          await incompatible.close();
+        }
+      } finally {
+        await first.close();
+        await second.close();
+      }
+    } finally {
+      records.close();
+      await pool.end();
+    }
+  });
+
+  it("runs skipped access against real missing and prepared tables without schema SQL", async () => {
+    const statements: string[] = [];
+    const connect = Reflect.get(Pool.prototype, "connect") as (this: Pool) => Promise<PoolClient>;
+    const capture = vi.spyOn(Pool.prototype, "connect").mockImplementation(function (this: Pool) {
+      return connect.call(this).then((client) => {
+        const query = client.query.bind(client);
+        client.query = function (...args: unknown[]) {
+          if (typeof args[0] === "string") statements.push(args[0]);
+          return Reflect.apply(query, client, args) as unknown;
+        } as typeof client.query;
+        return client;
+      }) as never;
+    });
+    const scope = context("skipped-preparation");
+    const group = new StorageGroup(`pg_skip_${run}`);
+    const spec = new RecordSpec({
+      recordType: EventSchema,
+      idSchema: EventIdSchema,
+      extractId: (value: Event) => {
+        if (value.id === undefined) throw new Error("Event ID is required.");
+        return value.id;
+      },
+    });
+    const skipped = factory.createRecordStorage(scope, spec, group, {
+      prepareOnAccess: false,
+    });
+    const record = event(`skip-${run}`, "task");
+    if (record.id === undefined) throw new Error("Event ID is required.");
+    try {
+      await expect(skipped.read(record.id)).rejects.toThrow();
+      expect(statements.some((sql) => /^SELECT .* FROM/u.test(sql))).toBe(true);
+      expect(statements.some(isPreparationSql)).toBe(false);
+      await StoragePreparations.for(factory).prepareRecord(scope, spec, group, "create");
+      statements.length = 0;
+      await skipped.write(record);
+      await expect(skipped.read(record.id)).resolves.toEqual(record);
+      await expect(skipped.query()).resolves.toEqual([record]);
+      await expect(skipped.compareAndSet(record.id, record, record)).resolves.toBe(true);
+      await expect(skipped.delete(record.id)).resolves.toBe(true);
+      expect(statements.some(isPreparationSql)).toBe(false);
+
+      const mixed = await postgresBuilder().setOptions({ url }).build();
+      try {
+        const mixedGroup = new StorageGroup(`pg_mixed_${run}`);
+        const falseFirst = mixed.createRecordStorage(scope, spec, mixedGroup, {
+          prepareOnAccess: false,
+        });
+        await expect(falseFirst.read(record.id)).rejects.toThrow();
+        statements.length = 0;
+        const defaultSecond = mixed.createRecordStorage(scope, spec, mixedGroup);
+        await expect(defaultSecond.read(record.id)).resolves.toBeUndefined();
+        expect(statements.some((sql) => sql.includes("information_schema.schemata"))).toBe(true);
+        expect(statements.some((sql) => sql.startsWith("CREATE"))).toBe(true);
+        statements.length = 0;
+        await falseFirst.read(record.id);
+        expect(statements.some(isPreparationSql)).toBe(false);
+        defaultSecond.close();
+        const defaultFirst = mixed.createRecordStorage(
+          scope,
+          spec,
+          new StorageGroup(`pg_reverse_${run}`),
+        );
+        await defaultFirst.read(record.id);
+        const falseSecond = mixed.createRecordStorage(
+          scope,
+          spec,
+          new StorageGroup(`pg_reverse_${run}`),
+          { prepareOnAccess: false },
+        );
+        statements.length = 0;
+        await falseSecond.read(record.id);
+        expect(statements.some(isPreparationSql)).toBe(false);
+        falseFirst.close();
+        falseSecond.close();
+        defaultFirst.close();
+      } finally {
+        await mixed.close();
+      }
+    } finally {
+      skipped.close();
+      capture.mockRestore();
+    }
   });
 
   it("checks a physical family read-only and prepares the surviving Agent audit indexes", async () => {
@@ -807,6 +1034,12 @@ function event(id: string, entityId: string) {
       }),
     ),
   });
+}
+
+function isPreparationSql(sql: string): boolean {
+  return /information_schema|\bpg_(class|index|attribute|namespace|am|opclass)\b|^CREATE\b|^ALTER\b|^DROP\b/u.test(
+    sql,
+  );
 }
 
 function task(title: string, id: string) {

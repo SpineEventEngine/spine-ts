@@ -427,12 +427,8 @@
   ],
   "ownedSources": [
     {
-      "localPath": "packages/proto/proto/spine/client/app_query.proto",
-      "sha256": "b5b334232dc724f7de606e6655aefde7856a8be1e9742311aa3c23a3ae206140"
-    },
-    {
-      "localPath": "packages/proto/proto/spine/server/agent/acceptance_receipt.proto",
-      "sha256": "daa0f8e724849523cb539b9b6a7503aa8eab0de3f23d926d1aa9d117bd44f007"
+      "localPath": "packages/proto/proto/spine/auth/authenticated_principal.proto",
+      "sha256": "09a4c8d755293fd522e1ff4c8305d49ef6bdb681e0de6a4e1bf311db1c9412db"
     },
     {
       "localPath": "packages/proto/proto/spine/auth/authenticated_subscription.proto",
@@ -443,6 +439,26 @@
       "sha256": "dcd178e057a13d4d044ac9fb1ba487b5a27203b0686191d5955ee928852822d7"
     },
     {
+      "localPath": "packages/proto/proto/spine/auth/better_auth_record.proto",
+      "sha256": "ca9ce291c81eec063885c407aec7ff5760af72d0cd4628dd997a6f3c34a9ab0c"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/auth/oidc_flow.proto",
+      "sha256": "30f35a0b3cc4f3e84b91af49b632ad71067e54ac34b618cfdaca0c6ab509c07a"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/auth/opaque_session.proto",
+      "sha256": "04aa832423e9595cdaa73e0689276803ff749e56d4a8d963f30729fa8780dfe6"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/auth/token_revocation.proto",
+      "sha256": "a13278fd19469a5e3cd542edf29ba7015570d4dc03e176ab2a365485b4e9982c"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/client/app_query.proto",
+      "sha256": "b5b334232dc724f7de606e6655aefde7856a8be1e9742311aa3c23a3ae206140"
+    },
+    {
       "localPath": "packages/proto/proto/spine/client/subscription_record.proto",
       "sha256": "614caf2608bf3fc36a419f887305ae6b7b1cfad657800b5bc3a5d886d396bd86"
     },
@@ -451,12 +467,20 @@
       "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
     },
     {
+      "localPath": "packages/proto/proto/spine/server/agent/acceptance_receipt.proto",
+      "sha256": "daa0f8e724849523cb539b9b6a7503aa8eab0de3f23d926d1aa9d117bd44f007"
+    },
+    {
       "localPath": "packages/proto/proto/spine/server/agent/history_record.proto",
       "sha256": "24ed282bc0cd901a3b38748ea7b516e972a87b2a7f69db99a2b094458d48e38a"
     },
     {
       "localPath": "packages/proto/proto/spine/server/agent/model_preferences_record.proto",
       "sha256": "33b7f805be70c5435b6d2f7ef558e0fab5dfed34a699ce87734f3c9b2b6f00d5"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/server/tenant/tenant.proto",
+      "sha256": "f6d2785fd6dbeed03d40fcef4aec294e82df3557bac3d7e63c75d6344847462a"
     },
     {
       "localPath": "packages/proto/proto/spine/ts/agent/content.proto",

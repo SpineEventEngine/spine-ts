@@ -1032,6 +1032,7 @@ class RunningHttp2Server implements RunningServer {
    */
   close(): Promise<void> {
     this.#queries.beginClose();
+    spineServicesAccess.stopAdmissions(this.#services);
     this.#closed ??= this.#closeOnce().catch((error: unknown) => {
       this.#closed = undefined;
       throw error;

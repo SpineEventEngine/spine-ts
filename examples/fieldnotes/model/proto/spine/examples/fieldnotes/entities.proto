@@ -1,0 +1,96 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.examples.fieldnotes;
+
+import "google/protobuf/timestamp.proto";
+import "spine/core/user_id.proto";
+import "spine/examples/fieldnotes/types.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.fieldnotes";
+
+// Stores the authoritative private state of one place.
+message Place {
+  option (entity).kind = AGGREGATE;
+
+  // Identifies the place across later edits.
+  PlaceId id = 1 [
+    (required) = true,
+    (validate) = true,
+    (set_once) = true
+  ];
+
+  // Names the place while it is active.
+  string name = 2;
+
+  // Locates the place while it is active.
+  Coordinates coordinates = 3;
+
+  // Identifies the user who created the place.
+  spine.core.UserId author = 4;
+
+  // Stores the single Markdown note, which may be empty.
+  string markdown = 5;
+
+  // Counts accepted commands for this place.
+  int32 revision = 6;
+
+  // Records the host time at creation.
+  google.protobuf.Timestamp created_at = 7;
+
+  // Records the host time of the latest accepted change.
+  google.protobuf.Timestamp updated_at = 8;
+
+  // Prevents a deleted identifier from being reused.
+  bool removed = 9;
+}
+
+// Provides the author-scoped read model for one place.
+message PlaceView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the represented place.
+  PlaceId id = 1 [
+    (required) = true,
+    (validate) = true,
+    (set_once) = true
+  ];
+
+  // Names an active place.
+  string name = 2 [(column) = true];
+
+  // Locates an active place.
+  Coordinates coordinates = 3;
+
+  // Identifies the user permitted to read this place.
+  spine.core.UserId author = 4 [(column) = true];
+
+  // Stores the active place's single Markdown note.
+  string markdown = 5;
+
+  // Records the latest applied domain revision.
+  int32 revision = 6;
+
+  // Records the host time at creation.
+  google.protobuf.Timestamp created_at = 7;
+
+  // Records the host time of the latest accepted change.
+  google.protobuf.Timestamp updated_at = 8;
+
+  // Hides deleted places while preserving a replay barrier.
+  bool removed = 9 [(column) = true];
+}

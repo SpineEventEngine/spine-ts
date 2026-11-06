@@ -1,6 +1,20 @@
 # Spine TS Project Completion Plan
 
-Current human-authorized implementation: [App Queries and read-side filtering](tasks/app-queries-read-filters/TASK.md).
+Current example revision: [Orders and Fieldnotes](tasks/tenant-auth-storage/EXAMPLES.md).
+Implement both demonstrations in PR #22 and retain only required API adaptation
+in Message Board. Fresh independent reviews and final verification remain.
+
+Current human-authorized implementation: [Persistent tenant and authentication storage](tasks/tenant-auth-storage/TASK.md).
+The accepted specification is [PROPOSAL.md](tasks/tenant-auth-storage/PROPOSAL.md).
+Implement in `feature/tenant-auth-storage` from official master `c3efab85c`,
+starting with per-handle preparation and the explicit tenant directory, then
+component authentication and optional Better Auth integration. Existing business
+storage lifecycle remains unchanged. Independent reviews and final release
+verification are required. Push feature-branch commits immediately to official
+origin under the current repository instructions; PR creation, merging and
+package publication still require explicit authorization.
+
+Previous implementation: [App Queries and read-side filtering](tasks/app-queries-read-filters/TASK.md).
 The approved proposal includes automatic metadata discovery, validation/status
 corrections, trusted reader context, and Entity/Event read-side filters. This
 feature branch starts from official master3135caaa2. It includes one shared

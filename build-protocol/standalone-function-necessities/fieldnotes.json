@@ -1,0 +1,11 @@
+[
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/server/src/place-domain.ts",
+    "kind": "function-declaration",
+    "identity": "createFieldnotesContext()#1",
+    "name": "createFieldnotesContext",
+    "disposition": "necessity",
+    "reason": "TypeScript public composition boundary: createFieldnotesContext assembles the single-tenant domain for the host and isolated tests."
+  }
+]

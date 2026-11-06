@@ -1,0 +1,95 @@
+{
+  "fixtureKind": "TEST-ONLY signed-session compatibility baseline",
+  "formatVersion": 1,
+  "source": {
+    "package": "@spine-event-engine/auth",
+    "signedSessionsSourceSha256": "106d7e6977da67cc03f74f68019dbeb262014c185fbaba486c1531978a7fe87c",
+    "compiledSignedSessionsSha256": "709fd424e23d6f8e3793c746a590564fb5a4b5de76b10b03730b9b10b4e106ac",
+    "compiledPackageIndexSha256": "a4b99cb0680bd696330e91cc563fa5baf39eb1d632dea3ff083aff321e7f1382",
+    "packageManifestSha256": "cb8f8b270ae501b14e07456252d2af6f7b8d7dbf59cebfbcd39fcbfe77b0810"
+  },
+  "keyUse": "Ephemeral fixture key only; never use for deployed or user data.",
+  "privateKeyPkcs8Pem": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgg3g9033V2oHnNZcj\nCXh2leFiMVbq9pawaFj8BxkASaqhRANCAATlRmwIEQ0DT+jY24fXR/h9ACbMB3TV\nNNm0lZHreMG6D/19As5Nf4cCVik5S3BG6UFYhKqKeHw8uq2aMSv3Kh9I\n-----END PRIVATE KEY-----\n",
+  "publicKeySpkiPem": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE5UZsCBENA0/o2NuH10f4fQAmzAd0\n1TTZtJWR63jBug/9fQLOTX+HAlYpOUtwRulBWISqinh8PLqtmjEr9yofSA==\n-----END PUBLIC KEY-----\n",
+  "options": {
+    "issuer": "urn:spine:test:signed-baseline",
+    "audience": "spine-test-client",
+    "kid": "test-p256-v1",
+    "clockMilliseconds": 1700000000000,
+    "ttlSeconds": 3600,
+    "clockSkewSeconds": 30,
+    "maxTokenCharacters": 8192
+  },
+  "goldenTokens": [
+    {
+      "principal": {
+        "id": "principal-baseline-17",
+        "attributes": {
+          "displayName": "Casey",
+          "role": "reader"
+        }
+      },
+      "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3QtcDI1Ni12MSJ9.eyJpc3MiOiJ1cm46c3BpbmU6dGVzdDpzaWduZWQtYmFzZWxpbmUiLCJhdWQiOiJzcGluZS10ZXN0LWNsaWVudCIsInN1YiI6InByaW5jaXBhbC1iYXNlbGluZS0xNyIsImlhdCI6MTcwMDAwMDAwMCwibmJmIjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDM2MDAsImp0aSI6IkVSRVJFUkVSRVJFUkVSRVJFUkVSRVEiLCJhdHRyaWJ1dGVzIjp7ImRpc3BsYXlOYW1lIjoiQ2FzZXkiLCJyb2xlIjoicmVhZGVyIn19.VkeaQuCrupxp1yRV1jix2igGp86C5DB6WhO3tBZ0OnB505Knxyfpc-D73vn6_H1TxN77xlltrIw64V6WZ5QmFA",
+      "header": {
+        "alg": "ES256",
+        "typ": "JWT",
+        "kid": "test-p256-v1"
+      },
+      "claims": {
+        "iss": "urn:spine:test:signed-baseline",
+        "aud": "spine-test-client",
+        "sub": "principal-baseline-17",
+        "iat": 1700000000,
+        "nbf": 1700000000,
+        "exp": 1700003600,
+        "jti": "EREREREREREREREREREREQ",
+        "attributes": {
+          "displayName": "Casey",
+          "role": "reader"
+        }
+      },
+      "resolved": {
+        "principal": {
+          "id": "principal-baseline-17",
+          "attributes": {
+            "displayName": "Casey",
+            "role": "reader"
+          }
+        },
+        "expiresAt": {
+          "seconds": "1700003600",
+          "nanos": 0
+        }
+      }
+    },
+    {
+      "principal": {
+        "id": "principal-without-attributes"
+      },
+      "token": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3QtcDI1Ni12MSJ9.eyJpc3MiOiJ1cm46c3BpbmU6dGVzdDpzaWduZWQtYmFzZWxpbmUiLCJhdWQiOiJzcGluZS10ZXN0LWNsaWVudCIsInN1YiI6InByaW5jaXBhbC13aXRob3V0LWF0dHJpYnV0ZXMiLCJpYXQiOjE3MDAwMDAwMDAsIm5iZiI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDAzNjAwLCJqdGkiOiJJaUlpSWlJaUlpSWlJaUlpSWlJaUlnIn0.2XJDiB3esK5F_YDj-K2lxO2EoyEKQbb1IUJe1o1nawJBuKAfhkebM8L-_xxLKqSbITj_a6ggMV7P019Tum0Z8A",
+      "header": {
+        "alg": "ES256",
+        "typ": "JWT",
+        "kid": "test-p256-v1"
+      },
+      "claims": {
+        "iss": "urn:spine:test:signed-baseline",
+        "aud": "spine-test-client",
+        "sub": "principal-without-attributes",
+        "iat": 1700000000,
+        "nbf": 1700000000,
+        "exp": 1700003600,
+        "jti": "IiIiIiIiIiIiIiIiIiIiIg"
+      },
+      "resolved": {
+        "principal": {
+          "id": "principal-without-attributes"
+        },
+        "expiresAt": {
+          "seconds": "1700003600",
+          "nanos": 0
+        }
+      }
+    }
+  ]
+}

@@ -151,7 +151,7 @@ import {
 } from "../../test-fixtures/generated/entity-metadata/support_agent_states_pb.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { entityHistoryAccess } from "../../src/entity/entity.js";
-import { TenantIndexes } from "../../src/context/tenant-index.js";
+import { TestTenantIndex, requireTenantDirectory } from "../tenant-index-fixture.js";
 import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
@@ -266,6 +266,7 @@ import {
 } from "../../test-fixtures/generated/repository-routing/project_validation_states_pb.js";
 
 beforeEach(async () => {
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
   await ServerEnvironment.instance().completeSetup();
 });
 
@@ -298,7 +299,10 @@ async function expectMonitoredReception(
 
 async function configureStorage(factory: InMemoryStorageFactory): Promise<void> {
   await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    storageFactory: factory,
+    tenantIndex: new TestTenantIndex(),
+  });
   await ServerEnvironment.instance().completeSetup();
 }
 
@@ -2104,7 +2108,7 @@ describe("repository signal routing", () => {
   beforeEach(async () => {
     const environment = ServerEnvironment.instance();
     await environment.completeSetup();
-    const index = environment.tenantIndex;
+    const index = requireTenantDirectory(environment.tenantIndex);
     await Promise.all(
       [
         "first",
@@ -2769,7 +2773,7 @@ describe("repository signal routing", () => {
     await configureStorage(factory);
     const context = await BoundedContext.multitenant("TenantRepositoryReads")
       .add(repository)
-      .withTenantIndex(TenantIndexes.fromFactory(new InMemoryStorageFactory()))
+      .withTenantIndex(new TestTenantIndex())
       .build();
     try {
       expect(() => repositoryReadAccess.bind(repository)).toThrow("requires tenantId");
@@ -2782,8 +2786,8 @@ describe("repository signal routing", () => {
       });
       expect(creation).not.toHaveBeenCalled();
       unknown.close();
-      await context.tenantIndex.keep(firstTenant);
-      await context.tenantIndex.keep(secondTenant);
+      await requireTenantDirectory(context.tenantIndex).keep(firstTenant);
+      await requireTenantDirectory(context.tenantIndex).keep(secondTenant);
       for (const [tenantId, name] of [
         [firstTenant, "First"],
         [secondTenant, "Second"],
@@ -3085,7 +3089,7 @@ describe("repository signal routing", () => {
         return event;
       }
     }
-    const index = TenantIndexes.fromFactory(new InMemoryStorageFactory());
+    const index = new TestTenantIndex();
     const repository = createExecutingRepository();
     repository.setStateHistoryEnabled(true);
     const context = await BoundedContext.multitenant("TenantHistoryPolicies")
@@ -3185,7 +3189,7 @@ describe("repository signal routing", () => {
   });
 
   it("rejects a bound history read after its tenant leaves the live index", async () => {
-    const index = TenantIndexes.fromFactory(new InMemoryStorageFactory());
+    const index = new TestTenantIndex();
     const repository = createExecutingRepository();
     repository.setStateHistoryEnabled(true);
     const context = await BoundedContext.multitenant("HistoryMembers")
@@ -4570,7 +4574,7 @@ describe("repository signal routing", () => {
         },
       })
       .build();
-    await context.tenantIndex.keep(createTenantId("tenant-b"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
     const storage = new CurrentRecordTestStorage({
       context: {
         name: "Tasks",
@@ -5740,8 +5744,8 @@ describe("repository signal routing", () => {
     const context = await BoundedContext.multitenant("Tasks")
       .add(createExecutingRepository())
       .build();
-    await context.tenantIndex.keep(createTenantId("tenant-a"));
-    await context.tenantIndex.keep(createTenantId("tenant-b"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
     const tenantAStorage = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory: factory,
@@ -9585,8 +9589,8 @@ describe("repository signal routing", () => {
     await configureStorage(factory);
     const repository = createRoutingRepository();
     const context = await BoundedContext.multitenant("Tasks").add(repository).build();
-    await context.tenantIndex.keep(createTenantId("tenant-a"));
-    await context.tenantIndex.keep(createTenantId("tenant-b"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
 
@@ -9696,8 +9700,8 @@ describe("repository signal routing", () => {
       await configureStorage(factory);
       const repository = createRoutingRepository();
       const context = await BoundedContext.multitenant("Tasks").add(repository).build();
-      await context.tenantIndex.keep(createTenantId("tenant-a"));
-      await context.tenantIndex.keep(createTenantId("tenant-b"));
+      await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
+      await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
       const dispatcher = repositoryAccess.eventDispatcher(repository);
       if (dispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
       await dispatcher.dispatch(
@@ -9728,7 +9732,7 @@ describe("repository signal routing", () => {
   );
 
   it("checks current tenant membership before direct Agent audit history reads", async () => {
-    const index = TenantIndexes.fromFactory(new InMemoryStorageFactory());
+    const index = new TestTenantIndex();
     const agentId = create(SupportReplyAgentIdSchema, { ticketNumber: "T-tenant-history" });
     const repository = createGuardedSupportAgentRepository(agentId, false);
     const context = await BoundedContext.multitenant("SupportAudit")
@@ -10110,7 +10114,7 @@ describe("repository signal routing", () => {
     const repository = createProcessManagerReactRepository();
     const context = await BoundedContext.multitenant("Tasks").add(repository).build();
     const tenantA = createTenantId("tenant-a");
-    await context.tenantIndex.keep(tenantA);
+    await requireTenantDirectory(context.tenantIndex).keep(tenantA);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -12284,7 +12288,7 @@ describe("repository signal routing", () => {
     const context = await BoundedContext.multitenant("Tasks")
       .add(createExecutingProjectionRepository())
       .build();
-    await context.tenantIndex.keep(createTenantId("example.com", "domain"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("example.com", "domain"));
     const eventStore = new EventStore(
       { name: "Tasks", multitenant: true, tenantId: createTenantId("example.com", "domain") },
       storageFactory,
@@ -12324,7 +12328,9 @@ describe("repository signal routing", () => {
     const context = await BoundedContext.multitenant("Tasks")
       .add(createExecutingProjectionRepository())
       .build();
-    await context.tenantIndex.keep(createTenantId("owner@example.com", "email"));
+    await requireTenantDirectory(context.tenantIndex).keep(
+      createTenantId("owner@example.com", "email"),
+    );
     const eventStore = new EventStore(
       {
         name: "Tasks",
@@ -12368,8 +12374,8 @@ describe("repository signal routing", () => {
     const context = await BoundedContext.multitenant("Tasks")
       .add(createExecutingProjectionRepository())
       .build();
-    await context.tenantIndex.keep(createTenantId("tenant-a"));
-    await context.tenantIndex.keep(createTenantId("tenant-b"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
     const tenantBState = create(ProjectOverviewStateSchema, {
       id: "task-corrupt-tenant",
       name: "Tenant B before catch-up",
@@ -12415,7 +12421,7 @@ describe("repository signal routing", () => {
     const context = await BoundedContext.multitenant("Tasks")
       .add(createExecutingProjectionRepository())
       .build();
-    await context.tenantIndex.keep(createTenantId("tenant-a"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
     const eventStore = new EventStore(
       { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory,
@@ -12814,7 +12820,7 @@ describe("repository signal routing", () => {
     await configureStorage(factory);
     const repository = createExecutingProjectionRepository();
     const context = await BoundedContext.multitenant("Tasks").add(repository).build();
-    await context.tenantIndex.keep(createTenantId("tenant-a"));
+    await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -18124,8 +18130,8 @@ describe("Projection state-update routing", () => {
       .build();
 
     try {
-      await context.tenantIndex.keep(createTenantId("tenant-a"));
-      await context.tenantIndex.keep(createTenantId("tenant-b"));
+      await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-a"));
+      await requireTenantDirectory(context.tenantIndex).keep(createTenantId("tenant-b"));
       await boundedContextAccess.postSystemEvent(
         context,
         createStateChangedEvent(

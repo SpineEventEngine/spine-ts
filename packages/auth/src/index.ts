@@ -355,6 +355,11 @@ export interface ResolvedSession {
    * Specifies when the resolved session expires.
    */
   readonly expiresAt: Timestamp;
+
+  /**
+   * Ends this monitored operation on local logout, expiry, or strategy close.
+   */
+  readonly invalidated?: AbortSignal;
 }
 
 /**
@@ -380,9 +385,10 @@ export interface SessionResolver {
   /**
    * Resolves a presented credential into a valid session.
    * @param credential Supplies the credential to resolve.
+   * @param lifetime Optional operation signal; omission retains no monitor.
    * @returns Returns the resolved session or `undefined` when it is invalid.
    */
-  resolve(credential: RequestCredential): Promise<ResolvedSession | undefined>;
+  resolve(credential: RequestCredential, lifetime?: AbortSignal): Promise<ResolvedSession | undefined>;
 }
 
 /**
@@ -682,6 +688,15 @@ const TransportFactsValues = Object.freeze({
 export { UnaryGateway } from "./gateway/index.js";
 export { OpaqueSessionCookies } from "./sessions/cookies.js";
 export { OpaqueSessions } from "./sessions/opaque.js";
+export { MemoryOpaqueSessionStore } from "./sessions/opaque-session-store.js";
+export type { OpaqueSessionStore } from "./sessions/opaque-session-store.js";
+export { PersistentOpaqueSessionStore } from "./sessions/persistent-opaque-session-store.js";
+export type { PersistentOpaqueStoreOptions } from "./sessions/persistent-opaque-session-store.js";
+export { PersistentOidcFlowStore } from "./oidc/persistent-flow-store.js";
+export type { PersistentOidcFlowOptions } from "./oidc/persistent-flow-store.js";
+export { PersistentTokenRevocations } from "./sessions/persistent-token-revocations.js";
+export type { PersistentTokenRevocationsOptions } from "./sessions/persistent-token-revocations.js";
+export type { OidcFlowStore } from "./oidc/flow-store.js";
 export { SignedSessions } from "./sessions/signed.js";
 export { OidcFlow } from "./oidc/index.js";
 export {

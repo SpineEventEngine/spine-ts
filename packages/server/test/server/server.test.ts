@@ -16,10 +16,15 @@
 
 import * as http2 from "node:http2";
 import * as http from "node:http";
+import * as net from "node:net";
 
 import { create, type Message } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
-import { connectNodeAdapter, createConnectTransport } from "@connectrpc/connect-node";
+import {
+  connectNodeAdapter,
+  createConnectTransport,
+  createGrpcTransport,
+} from "@connectrpc/connect-node";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import {
   InMemorySubscriptionBindings,
@@ -51,13 +56,18 @@ import {
   SubscriptionUpdateSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import {
   InMemoryStorageFactory,
+  StorageGroup,
   type RecordSpec,
   type RecordStorage,
   type StorageContext,
 } from "@spine-event-engine/storage";
+import {
+  BetterAuthIntegration,
+  PersistentBetterAuthStore,
+} from "@spine-event-engine/auth/better-auth";
 import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,6 +94,12 @@ import { EnvironmentTests } from "../../src/server/environment.js";
 import { GetProjectOverview_QuerySchema } from "../../test-fixtures/generated/repository-routing/project_queries_pb.js";
 import { ProjectIdSchema } from "../../test-fixtures/generated/repository-routing/project_identifiers_pb.js";
 import type { ILogLayer } from "loglayer";
+
+const emptyBrowserAdmission = Object.freeze({
+  csrfHeaderNames: Object.freeze([]),
+  credentialCookieNames: Object.freeze([]),
+  stateCookieNames: Object.freeze([]),
+});
 
 const observeHttp2Server = vi.hoisted(() =>
   vi.fn<(server: import("node:http2").Http2Server) => void>(),
@@ -138,6 +154,45 @@ function openStandalone(options: StandaloneBrowserServerOptions) {
 
 function openCombined(native: Server, options: BrowserServerOptions) {
   return native.start().then((running) => BrowserHost.open(running, options));
+}
+
+async function rawBrowserResponse(
+  url: string,
+  fields: string[],
+): Promise<{ status: number; cookies: string[] }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const socket = net.connect(Number(parsed.port), parsed.hostname, () => {
+      const pairs: string[] = [];
+      for (let index = 0; index < fields.length; index += 2) {
+        const name = fields[index];
+        const value = fields[index + 1];
+        if (name === undefined || value === undefined)
+          throw new Error("Incomplete raw header pair.");
+        pairs.push(`${name}: ${value}`);
+      }
+      const request = [
+        `GET ${parsed.pathname}${parsed.search} HTTP/1.1`,
+        `Host: ${parsed.host}`,
+        "Connection: close",
+        ...pairs,
+        "",
+        "",
+      ].join("\r\n");
+      socket.write(request);
+    });
+    const chunks: Buffer[] = [];
+    socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+    socket.on("error", reject);
+    socket.on("end", () => {
+      const lines = Buffer.concat(chunks).toString("utf8").split("\r\n");
+      const status = Number(lines[0]?.split(" ")[1]);
+      const cookies = lines
+        .filter((line) => /^set-cookie:/i.test(line))
+        .map((line) => line.slice(11).trim());
+      resolve({ status, cookies });
+    });
+  });
 }
 
 async function configureEnvironment(
@@ -766,6 +821,43 @@ describe("Server", () => {
     expect(closed).toBe(true);
   });
 
+  it("ends pending direct native authentication before standalone listener shutdown", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    let stopped = false;
+    const native = new Server({
+      services: {
+        readerAdmission: {
+          direct: {
+            authenticate: async ({ signal }) => {
+              entered.resolve(undefined);
+              await new Promise<void>((resolve) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    stopped = true;
+                    resolve();
+                  },
+                  { once: true },
+                );
+              });
+              return undefined;
+            },
+          },
+        },
+      },
+    });
+    const running = await native.start();
+    const client = createClient(QueryService, createGrpcTransport({ baseUrl: running.baseUrl }));
+    const pending = client.read(create(QuerySchema)).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await entered.promise;
+    await running.close();
+    expect(stopped).toBe(true);
+    expect(await pending).toBeInstanceOf(Error);
+  });
+
   it("requires a named durable binding registry before admitting a production standalone gateway", () => {
     expect(() => {
       BrowserServer.requireDurableBindings(
@@ -1161,18 +1253,29 @@ describe("Server", () => {
       if (address === null || typeof address === "string")
         throw new Error("backend address missing");
       const actor = create(UserIdSchema, { value: "ada" });
+      const seenCredentials: string[] = [];
       const server = await openStandalone({
         port: 0,
         ...browserGateway(),
         forwardingProof: { issue: async () => "path-probe-peer-proof" },
         backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
         bindings: inMemoryBindings(),
+        credentials: {
+          admission: emptyBrowserAdmission,
+          read: async ({ headers }) => {
+            const authorization = headers.authorization;
+            if (typeof authorization !== "string") throw new Error("missing stream credential");
+            return { kind: "bearer" as const, value: authorization.slice("Bearer ".length) };
+          },
+        },
         sessions: {
-          resolve: () =>
-            Promise.resolve({
+          resolve: (credential) => {
+            seenCredentials.push(credential.value);
+            return Promise.resolve({
               principal: { id: "ada" },
               expiresAt: create(TimestampSchema, { seconds: 100n }),
-            }),
+            });
+          },
         },
         authorize: () => Promise.resolve(true),
         contexts: {
@@ -1185,7 +1288,7 @@ describe("Server", () => {
           ? createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" })
           : createGrpcWebTransport({ baseUrl: server.baseUrl });
       const client = createClient(SubscriptionService, transport);
-      const headers = { origin: "http://127.0.0.1:5173", authorization: "Bearer token" };
+      const headers = { origin: "http://127.0.0.1:5173", authorization: "Bearer stream-one" };
       const controller = new AbortController();
       let stage = "subscribe";
       try {
@@ -1205,11 +1308,21 @@ describe("Server", () => {
         expect(acknowledgement?.response?.status?.status.case).toBe("ok");
         expect(acknowledgement?.update.case).toBeUndefined();
         expect(childActivations).toBe(1);
+        await createClient(AuthenticationService, transport).resolveContext(
+          create(ResolveContextRequestSchema),
+          {
+            headers: { ...headers, authorization: "Bearer stream-two" },
+          },
+        );
         stage = "cancel";
         await client.cancel(subscription, { headers });
         controller.abort();
         await iterator.return?.();
         await expect.poll(() => childCancellations).toBe(1);
+        expect(
+          seenCredentials.filter((credential) => credential === "stream-one").length,
+        ).toBeGreaterThanOrEqual(3);
+        expect(seenCredentials.filter((credential) => credential === "stream-two")).toHaveLength(1);
       } catch (error) {
         throw new Error(`${protocol} ${stage} failed`, { cause: error });
       } finally {
@@ -1236,14 +1349,909 @@ describe("Server", () => {
           allowMissingOrigin: true,
           maxRequestBytes: 1024,
           timeoutMs: 1000,
-          onRequest: () => new Response("ok", { status: 200 }),
+          admission: emptyBrowserAdmission,
+          onRequest: (request) =>
+            new URL(request.url).searchParams.get("state") === "proof"
+              ? new Response("ok", { status: 200 })
+              : new Response("missing state", { status: 401 }),
         },
       ],
     });
     try {
-      const response = await fetch(`${server.baseUrl}/auth/callback`);
+      const response = await fetch(`${server.baseUrl}/auth/callback?state=proof`);
       await expect(response.text()).resolves.toBe("ok");
       expect(response.status).toBe(200);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("lets an originless custom callback validate state outside cookies", async () => {
+    let calls = 0;
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/without-state",
+          origins: ["http://127.0.0.1:5173"],
+          allowMissingOrigin: true,
+          admission: emptyBrowserAdmission,
+          maxRequestBytes: 1024,
+          timeoutMs: 1000,
+          onRequest: (request) => {
+            calls += 1;
+            return new Response(
+              new URL(request.url).searchParams.get("state") === "proof" ? "ok" : "missing state",
+              { status: new URL(request.url).searchParams.get("state") === "proof" ? 200 : 401 },
+            );
+          },
+        },
+      ],
+    });
+    try {
+      const refused = await fetch(`${server.baseUrl}/auth/without-state`);
+      const admitted = await fetch(`${server.baseUrl}/auth/without-state?state=proof`);
+      expect(refused.status).toBe(401);
+      expect(admitted.status).toBe(200);
+      expect(calls).toBe(2);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("retains auth callback query and forwards separate Set-Cookie fields", async () => {
+    let callbackUrl = "";
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/query",
+          origins: ["http://127.0.0.1:5173"],
+          admission: { csrfHeaderNames: [], credentialCookieNames: [], stateCookieNames: [] },
+          maxRequestBytes: 1024,
+          timeoutMs: 1000,
+          onRequest: (request) => {
+            callbackUrl = request.url;
+            if (new URL(request.url).searchParams.has("empty"))
+              return new Response(null, { status: 204 });
+            const headers = new Headers();
+            headers.append("Set-Cookie", "__Host-first=a; Path=/; Secure");
+            headers.append("Set-Cookie", "__Host-second=b; Path=/; Secure");
+            return new Response("ok", { headers });
+          },
+        },
+      ],
+    });
+    try {
+      const response = await fetch(`${server.baseUrl}/auth/query?code=one&state=two`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      expect(response.status).toBe(200);
+      expect(new URL(callbackUrl).search).toBe("?code=one&state=two");
+      expect(response.headers.getSetCookie()).toEqual([
+        "__Host-first=a; Path=/; Secure",
+        "__Host-second=b; Path=/; Secure",
+      ]);
+      const empty = await fetch(`${server.baseUrl}/auth/query?empty=1`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      expect(empty.status).toBe(204);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects repeated raw Origin before invoking an auth route", async () => {
+    let called = false;
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/raw",
+          origins: ["http://127.0.0.1:5173"],
+          admission: { csrfHeaderNames: [], credentialCookieNames: [], stateCookieNames: [] },
+          maxRequestBytes: 1024,
+          timeoutMs: 1000,
+          onRequest: () => {
+            called = true;
+            return new Response("unexpected");
+          },
+        },
+      ],
+    });
+    try {
+      const status = await new Promise<number>((resolve, reject) => {
+        const request = http.request(
+          `${server.baseUrl}/auth/raw`,
+          {
+            headers: ["Origin", "http://127.0.0.1:5173", "Origin", "http://127.0.0.1:5173"],
+          },
+          (response) => {
+            response.resume();
+            response.on("end", () => {
+              resolve(response.statusCode ?? 0);
+            });
+          },
+        );
+        request.on("error", reject);
+        request.end();
+      });
+      expect(status).toBe(400);
+      expect(called).toBe(false);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("checks split Cookie fields and duplicate selected names before the route", async () => {
+    let calls = 0;
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/split",
+          origins: ["http://127.0.0.1:5173"],
+          admission: {
+            csrfHeaderNames: ["X-Flow-CSRF"],
+            credentialCookieNames: ["__Host-flow"],
+            stateCookieNames: ["__Host-state"],
+          },
+          maxRequestBytes: 1024,
+          timeoutMs: 1000,
+          onRequest: () => {
+            calls += 1;
+            return new Response("ok");
+          },
+        },
+      ],
+    });
+    try {
+      const base = ["Origin", "http://127.0.0.1:5173"];
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "Cookie",
+            "theme=a; __Host-flow=one",
+            "Cookie",
+            "__Host-state=proof; theme=b",
+          ])
+        ).status,
+      ).toBe(200);
+      expect(calls).toBe(1);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "Cookie",
+            "__Host-flow=one",
+            "Cookie",
+            "__Host-flow=one",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "Cookie",
+            "__Host-state=first",
+            "Cookie",
+            "__Host-state=second",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "X-Flow-CSRF",
+            "one",
+            "x-flow-csrf",
+            "two",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "Origin",
+            "http://127.0.0.1:5173",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "Authorization",
+            "Bearer one",
+            "Authorization",
+            "Bearer two",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "Cookie",
+            "__Host-flow",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "Cookie",
+            "theme=one, theme=two",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "Cookie",
+            "bad name=value",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/split`, [
+            ...base,
+            "Cookie",
+            "theme=one",
+            "Cookie",
+            "theme=two",
+          ])
+        ).status,
+      ).toBe(200);
+      expect(calls).toBe(2);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("uses only the active declaration for simultaneous primary-cookie conflicts", async () => {
+    const read = vi.fn().mockResolvedValue({ kind: "bearer", value: "selected" });
+    let routeCalls = 0;
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      credentials: {
+        admission: {
+          csrfHeaderNames: [],
+          credentialCookieNames: ["__Host-rpc"],
+          stateCookieNames: [],
+        },
+        read,
+      },
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/other-engine",
+          origins: ["http://127.0.0.1:5173"],
+          admission: {
+            csrfHeaderNames: [],
+            credentialCookieNames: ["__Host-route"],
+            stateCookieNames: [],
+          },
+          maxRequestBytes: 1024,
+          timeoutMs: 1000,
+          onRequest: () => {
+            routeCalls += 1;
+            return new Response("ok");
+          },
+        },
+      ],
+    });
+    try {
+      const base = ["Origin", "http://127.0.0.1:5173", "Authorization", "Bearer token"];
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/other-engine`, [
+            ...base,
+            "Cookie",
+            "__Host-rpc=one",
+          ])
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/other-engine`, [
+            ...base,
+            "Reason",
+            "ordinary-client-field",
+          ])
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/other-engine`, [
+            ...base,
+            "Cookie",
+            "__Host-route=one",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/other-engine`, [
+            ...base,
+            "Cookie",
+            "__Host-route=",
+          ])
+        ).status,
+      ).toBe(400);
+      expect(routeCalls).toBe(2);
+      expect(read).not.toHaveBeenCalled();
+      const rpc = `${server.baseUrl}/spine.auth.AuthenticationService/ResolveContext`;
+      await fetch(rpc, {
+        method: "POST",
+        headers: {
+          origin: "http://127.0.0.1:5173",
+          authorization: "Bearer token",
+          cookie: "__Host-route=one",
+          "content-type": "application/json",
+          "connect-protocol-version": "1",
+        },
+        body: "{}",
+      });
+      expect(read).toHaveBeenCalledOnce();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects missing reader metadata before starting the native server", async () => {
+    const native = Server.atPort(0, { host: "127.0.0.1" });
+    const start = vi.spyOn(native, "start");
+    await expect(
+      BrowserHost.run(native, {
+        ...browserGateway(),
+        credentials: { read: () => Promise.resolve(undefined) } as never,
+      }),
+    ).rejects.toThrow("admission metadata is required");
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("rejects mixing the explicit reader with the legacy cookie reader", async () => {
+    const cookies = new OpaqueSessionCookies({
+      csrfSecret: new Uint8Array(32).fill(5),
+      origins: ["http://127.0.0.1:5173"],
+    });
+    try {
+      expect(() =>
+        BrowserServer.preflight("standalone", {
+          ...browserGateway(),
+          backend: { baseUrl: "http://127.0.0.1:65534" },
+          cookies,
+          credentials: { admission: emptyBrowserAdmission, read: () => Promise.resolve(undefined) },
+        }),
+      ).toThrow("cannot both be configured");
+    } finally {
+      await cookies.close();
+    }
+  });
+
+  it("uses the default bearer reader only for valid single Authorization fields", async () => {
+    const resolve = vi.fn().mockResolvedValue(undefined);
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      sessions: { resolve },
+    });
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    try {
+      const request = create(ResolveContextRequestSchema);
+      const origin = "http://127.0.0.1:5173";
+      await expect(
+        client.resolveContext(request, {
+          headers: { origin, authorization: "Basic no" },
+        }),
+      ).rejects.toMatchObject({ code: 16 });
+      expect(resolve).not.toHaveBeenCalled();
+      await expect(
+        client.resolveContext(request, {
+          headers: { origin, authorization: "Bearer token" },
+        }),
+      ).rejects.toMatchObject({ code: 16 });
+      expect(resolve).toHaveBeenCalledWith({ kind: "bearer", value: "token" });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each([
+    [{ credentialCookieNames: [], stateCookieNames: [] }, "csrfHeaderNames"],
+    [
+      {
+        csrfHeaderNames: Object.assign(new Array<string>(2), { 1: "x-csrf" }),
+        credentialCookieNames: [],
+        stateCookieNames: [],
+      },
+      "sparse",
+    ],
+    [
+      { csrfHeaderNames: ["x-csrf", "X-CSRF"], credentialCookieNames: [], stateCookieNames: [] },
+      "duplicate",
+    ],
+    [
+      { csrfHeaderNames: ["authorization"], credentialCookieNames: [], stateCookieNames: [] },
+      "reserved",
+    ],
+    [{ csrfHeaderNames: ["bad name"], credentialCookieNames: [], stateCookieNames: [] }, "invalid"],
+    [
+      {
+        csrfHeaderNames: [],
+        credentialCookieNames: ["__Host-a", "__Host-a"],
+        stateCookieNames: [],
+      },
+      "duplicate",
+    ],
+    [
+      { csrfHeaderNames: [], credentialCookieNames: ["__Host-a"], stateCookieNames: ["__Host-a"] },
+      "distinct",
+    ],
+  ])("rejects invalid browser admission metadata before listening: %s", (admission, message) => {
+    expect(() =>
+      BrowserServer.preflight("standalone", {
+        ...browserGateway(),
+        backend: { baseUrl: "http://127.0.0.1:65534" },
+        credentials: { admission, read: () => Promise.resolve(undefined) } as never,
+      }),
+    ).toThrow(message);
+  });
+
+  it("treats reader rejection and failure as terminal before session resolution", async () => {
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: "rejected" })
+      .mockRejectedValueOnce(new Error("unavailable"));
+    const resolve = vi.fn().mockResolvedValue(undefined);
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      credentials: { admission: emptyBrowserAdmission, read },
+      sessions: { resolve },
+    });
+    try {
+      const url = `${server.baseUrl}/spine.auth.AuthenticationService/ResolveContext`;
+      for (const status of [401, 503]) {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            origin: "http://127.0.0.1:5173",
+            "content-type": "application/json",
+            "connect-protocol-version": "1",
+          },
+          body: "{}",
+        });
+        expect(response.status).toBe(status);
+        expect(response.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5173");
+        expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+      }
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(resolve).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("answers RPC preflight before invoking an unavailable credential reader", async () => {
+    const read = vi.fn().mockRejectedValue(new Error("reader unavailable"));
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      credentials: {
+        admission: {
+          csrfHeaderNames: ["X-Flow-CSRF"],
+          credentialCookieNames: [],
+          stateCookieNames: [],
+        },
+        read,
+      },
+    });
+    try {
+      const response = await fetch(
+        `${server.baseUrl}/spine.auth.AuthenticationService/ResolveContext`,
+        {
+          method: "OPTIONS",
+          headers: {
+            origin: "http://127.0.0.1:5173",
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "x-flow-csrf,content-type",
+          },
+        },
+      );
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5173");
+      expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+      expect(response.headers.get("access-control-allow-headers")).toContain("x-flow-csrf");
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("keeps exact-origin credentialed CORS on auth preflight and terminal responses", async () => {
+    const read = vi.fn().mockRejectedValue(new Error("reader unavailable"));
+    const route = vi.fn((request: Request) => {
+      if (new URL(request.url).searchParams.has("throw")) throw new Error("callback failed");
+      return new Response("denied", {
+        status: 401,
+        headers: { "access-control-allow-origin": "*", vary: "Accept-Encoding" },
+      });
+    });
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      credentials: { admission: emptyBrowserAdmission, read },
+      authRoutes: [
+        {
+          method: "POST",
+          path: "/auth/cors",
+          origins: ["http://127.0.0.1:5173"],
+          admission: {
+            csrfHeaderNames: ["X-Auth-CSRF"],
+            credentialCookieNames: [],
+            stateCookieNames: [],
+          },
+          maxRequestBytes: 1024,
+          timeoutMs: 1000,
+          onRequest: route,
+        },
+      ],
+    });
+    try {
+      const origin = "http://127.0.0.1:5173";
+      const preflight = await fetch(`${server.baseUrl}/auth/cors`, {
+        method: "OPTIONS",
+        headers: {
+          origin,
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "x-auth-csrf",
+        },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-origin")).toBe(origin);
+      expect(preflight.headers.get("access-control-allow-credentials")).toBe("true");
+      expect(preflight.headers.get("access-control-allow-methods")).toContain("POST");
+      expect(preflight.headers.get("access-control-allow-headers")).toContain("x-auth-csrf");
+      expect(read).not.toHaveBeenCalled();
+      expect(route).not.toHaveBeenCalled();
+      const malformed = await fetch(`${server.baseUrl}/auth/cors`, {
+        method: "POST",
+        headers: { origin, cookie: "malformed" },
+      });
+      expect(malformed.status).toBe(400);
+      expect(malformed.headers.get("access-control-allow-origin")).toBe(origin);
+      expect(route).not.toHaveBeenCalled();
+      for (const suffix of ["", "?throw=1"]) {
+        const response = await fetch(`${server.baseUrl}/auth/cors${suffix}`, {
+          method: "POST",
+          headers: { origin },
+        });
+        expect(response.status).toBe(suffix === "" ? 401 : 500);
+        expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+        expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+        expect(response.headers.get("vary")).toContain("Origin");
+        if (suffix === "") expect(response.headers.get("vary")).toContain("Accept-Encoding");
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("uses Connect's deadline while an RPC credential reader is pending", async () => {
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const read = vi.fn(() => {
+      started();
+      return new Promise<RequestCredential>(() => undefined);
+    });
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      credentials: { admission: emptyBrowserAdmission, read },
+    });
+    let request: http.ClientRequest | undefined;
+    try {
+      const result = new Promise<number>((resolve) => {
+        request = http.request(
+          `${server.baseUrl}/spine.auth.AuthenticationService/ResolveContext`,
+          {
+            method: "POST",
+            headers: {
+              origin: "http://127.0.0.1:5173",
+              "content-type": "application/json",
+              "connect-protocol-version": "1",
+              "connect-timeout-ms": "30",
+            },
+          },
+          (response) => {
+            response.resume();
+            response.on("end", () => {
+              resolve(response.statusCode ?? 0);
+            });
+          },
+        );
+        request.on("error", () => {
+          resolve(0);
+        });
+        request.end("{}");
+      });
+      await reading;
+      expect(
+        await Promise.race([
+          result,
+          new Promise<number>((resolve) => {
+            setTimeout(() => {
+              resolve(0);
+            }, 150);
+          }),
+        ]),
+      ).toBe(504);
+    } finally {
+      request?.destroy();
+      await server.close();
+    }
+  });
+
+  it("closes after client abort and host drain with never-settling readers", async () => {
+    let entered!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const resolve = vi.fn().mockResolvedValue(undefined);
+    const read = vi.fn(() => {
+      entered();
+      return new Promise<RequestCredential>(() => undefined);
+    });
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      sessions: { resolve },
+      credentials: { admission: emptyBrowserAdmission, read },
+    });
+    const send = () => {
+      const request = http.request(
+        `${server.baseUrl}/spine.auth.AuthenticationService/ResolveContext`,
+        {
+          method: "POST",
+          headers: {
+            origin: "http://127.0.0.1:5173",
+            "content-type": "application/json",
+            "connect-protocol-version": "1",
+          },
+        },
+      );
+      request.on("error", () => undefined);
+      request.end("{}");
+      return request;
+    };
+    const first = send();
+    let second: http.ClientRequest | undefined;
+    try {
+      await reading;
+      first.destroy();
+      second = send();
+      await expect.poll(() => read.mock.calls.length).toBe(2);
+      await expect(server.close()).resolves.toBeUndefined();
+      expect(resolve).not.toHaveBeenCalled();
+    } finally {
+      first.destroy();
+      second?.destroy();
+      await server.close();
+    }
+  });
+
+  it("keeps interleaved reader credentials and request-local URLs separate", async () => {
+    const seen: string[] = [];
+    const views: URL[] = [];
+    let arrived = 0;
+    let both!: () => void;
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => (both = resolve));
+    const blocked = new Promise<void>((resolve) => (release = resolve));
+    const read = async (request: {
+      readonly headers: Readonly<Record<string, string | readonly string[] | undefined>>;
+      readonly method: string;
+      readonly url: URL;
+    }) => {
+      expect(Object.keys(request).sort()).toEqual(["headers", "method", "url"]);
+      expect(request.method).toBe("POST");
+      expect(Object.isFrozen(request.headers)).toBe(true);
+      const value = request.headers["x-test-credential"];
+      if (typeof value !== "string") throw new Error("missing test credential");
+      views.push(request.url);
+      arrived += 1;
+      if (arrived === 2) both();
+      await blocked;
+      request.url.pathname = "/auth/mutated";
+      return { kind: "bearer" as const, value };
+    };
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      credentials: { admission: emptyBrowserAdmission, read },
+      sessions: {
+        resolve: (credential) => {
+          seen.push(credential.value);
+          return Promise.resolve(undefined);
+        },
+      },
+    });
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    try {
+      const call = (value: string) =>
+        client.resolveContext(create(ResolveContextRequestSchema), {
+          headers: { origin: "http://127.0.0.1:5173", "x-test-credential": value },
+        });
+      const first = call("one");
+      const second = call("two");
+      await waiting;
+      expect(views[0]).not.toBe(views[1]);
+      release();
+      const results = await Promise.allSettled([first, second]);
+      expect(results.every((result) => result.status === "rejected")).toBe(true);
+      expect(seen.sort()).toEqual(["one", "two"]);
+    } finally {
+      release();
+      await server.close();
+    }
+  });
+
+  it("does not dispatch a credential returned after the RPC client disconnects", async () => {
+    let entered!: () => void;
+    let release!: () => void;
+    const reading = new Promise<void>((resolve) => (entered = resolve));
+    const blocked = new Promise<void>((resolve) => (release = resolve));
+    const resolve = vi.fn().mockResolvedValue(undefined);
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      credentials: {
+        admission: emptyBrowserAdmission,
+        read: async () => {
+          entered();
+          await blocked;
+          return { kind: "bearer" as const, value: "late" };
+        },
+      },
+      sessions: { resolve },
+    });
+    const controller = new AbortController();
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    try {
+      const call = client
+        .resolveContext(create(ResolveContextRequestSchema), {
+          headers: { origin: "http://127.0.0.1:5173" },
+          signal: controller.signal,
+        })
+        .catch(() => undefined);
+      await reading;
+      controller.abort();
+      await call;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(resolve).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await server.close();
+    }
+  });
+
+  it("does not dispatch a credential returned after browser host closure", async () => {
+    let entered!: () => void;
+    let release!: () => void;
+    const reading = new Promise<void>((resolve) => (entered = resolve));
+    const blocked = new Promise<void>((resolve) => (release = resolve));
+    const resolve = vi.fn().mockResolvedValue(undefined);
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      credentials: {
+        admission: emptyBrowserAdmission,
+        read: async () => {
+          entered();
+          await blocked;
+          return { kind: "bearer" as const, value: "late" };
+        },
+      },
+      sessions: { resolve },
+    });
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    const call = client
+      .resolveContext(create(ResolveContextRequestSchema), {
+        headers: { origin: "http://127.0.0.1:5173" },
+      })
+      .catch(() => undefined);
+    try {
+      await reading;
+      await server.close();
+      release();
+      await call;
+      expect(resolve).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await server.close();
+    }
+  });
+
+  it("uses one validated route and name snapshot across pending native startup", async () => {
+    const native = Server.atPort(0, { host: "127.0.0.1" });
+    const originalStart = native.start.bind(native);
+    let entered!: () => void;
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => (entered = resolve));
+    const blocked = new Promise<void>((resolve) => (release = resolve));
+    vi.spyOn(native, "start").mockImplementation(async () => {
+      entered();
+      await blocked;
+      return originalStart();
+    });
+    const admission = {
+      csrfHeaderNames: [] as string[],
+      credentialCookieNames: ["__Host-original"],
+      stateCookieNames: [] as string[],
+    };
+    const route = {
+      method: "GET" as const,
+      path: "/auth/original",
+      origins: ["http://127.0.0.1:5173"],
+      admission,
+      maxRequestBytes: 1024,
+      timeoutMs: 1000,
+      onRequest: () => new Response("ok"),
+    };
+    const running = BrowserHost.run(native, { ...browserGateway(), authRoutes: [route] });
+    await waiting;
+    route.path = "/auth/changed";
+    route.origins[0] = "https://other.example";
+    admission.credentialCookieNames[0] = "__Host-changed";
+    release();
+    const server = await running;
+    try {
+      const base = ["Origin", "http://127.0.0.1:5173"];
+      expect(
+        (
+          await rawBrowserResponse(`${server.baseUrl}/auth/original`, [
+            ...base,
+            "Cookie",
+            "__Host-original=one; __Host-original=two",
+          ])
+        ).status,
+      ).toBe(400);
+      expect((await rawBrowserResponse(`${server.baseUrl}/auth/original`, base)).status).toBe(200);
+      expect((await rawBrowserResponse(`${server.baseUrl}/auth/changed`, base)).status).toBe(404);
     } finally {
       await server.close();
     }
@@ -1260,6 +2268,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 2,
           timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
           onRequest: () => new Response(),
         },
       ],
@@ -1303,6 +2312,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 1024,
           timeoutMs: 5,
+          admission: emptyBrowserAdmission,
           onRequest: () => new Promise<Response>(() => undefined),
         },
       ],
@@ -1331,6 +2341,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 1024,
           timeoutMs: 10_000,
+          admission: emptyBrowserAdmission,
           onRequest: (_request, signal) => {
             start();
             return new Promise<Response>((resolve) => {
@@ -1368,6 +2379,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 1024,
           timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
           onRequest: () => ((calls += 1), new Response()),
         },
       ],
@@ -1408,6 +2420,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 1024,
           timeoutMs: 10_000,
+          admission: emptyBrowserAdmission,
           onRequest: (_request, signal) => {
             start();
             return new Promise<Response>((resolve) => {
@@ -1450,6 +2463,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 2,
           timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
           onRequest: () => ((calls += 1), new Response("unexpected")),
         },
       ],
@@ -1482,6 +2496,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 2,
           timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
           onRequest: () => {
             throw new Error("private");
           },
@@ -1528,6 +2543,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 16,
           timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
           onRequest: async (request) =>
             new Response(await request.text(), { status: 201, headers: { "x-auth": "ok" } }),
         },
@@ -1561,6 +2577,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 16,
           timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
           onRequest: () =>
             new Response(
               new ReadableStream<Uint8Array>({
@@ -1590,6 +2607,140 @@ describe("Server", () => {
     }
   });
 
+  it("finishes an oversized auth response when stream cancellation stalls past the deadline", async () => {
+    let releaseCancel!: () => void;
+    let cancelStarted!: () => void;
+    let cancellationSettled = false;
+    let pendingAtAbort: boolean | undefined;
+    const cancellation = new Promise<void>((resolve) => (releaseCancel = resolve));
+    void cancellation.then(() => (cancellationSettled = true));
+    const started = new Promise<void>((resolve) => (cancelStarted = resolve));
+    let calls = 0;
+    const server = await openCombined(new Server(), {
+      writeMaxBytes: 8,
+      maxActiveAuthRequests: 1,
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/stalled-cancel",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 20,
+          admission: emptyBrowserAdmission,
+          onRequest: (_request, signal) => {
+            calls += 1;
+            if (calls > 1) return new Response("ok");
+            signal.addEventListener(
+              "abort",
+              () => {
+                pendingAtAbort = !cancellationSettled;
+              },
+              { once: true },
+            );
+            return new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(new Uint8Array(9));
+                },
+                cancel() {
+                  cancelStarted();
+                  return cancellation;
+                },
+              }),
+            );
+          },
+        },
+      ],
+    });
+    let fallback: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const first = fetch(`${server.baseUrl}/auth/stalled-cancel`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      await started;
+      fallback = setTimeout(releaseCancel, 150);
+      const response = await first;
+      expect(response.status).toBe(504);
+      expect(pendingAtAbort).toBe(true);
+      await expect(response.text()).resolves.toBe("");
+      const next = await fetch(`${server.baseUrl}/auth/stalled-cancel`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      expect(next.status).toBe(200);
+      await expect(next.text()).resolves.toBe("ok");
+      releaseCancel();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(calls).toBe(2);
+    } finally {
+      if (fallback !== undefined) clearTimeout(fallback);
+      releaseCancel();
+      await server.close();
+    }
+  });
+
+  it("releases auth admission when a client disconnects during oversized response cancellation", async () => {
+    let cancelStarted!: () => void;
+    let releaseCancel!: () => void;
+    let reportAbort!: () => void;
+    const started = new Promise<void>((resolve) => (cancelStarted = resolve));
+    const aborted = new Promise<void>((resolve) => (reportAbort = resolve));
+    const cancellation = new Promise<void>((resolve) => (releaseCancel = resolve));
+    let calls = 0;
+    const server = await openCombined(new Server(), {
+      writeMaxBytes: 8,
+      maxActiveAuthRequests: 1,
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/disconnect-cancel",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
+          onRequest: (_request, signal) => {
+            calls += 1;
+            if (calls > 1) return new Response("ok");
+            signal.addEventListener("abort", reportAbort, { once: true });
+            return new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(new Uint8Array(9));
+                },
+                cancel() {
+                  cancelStarted();
+                  return cancellation;
+                },
+              }),
+            );
+          },
+        },
+      ],
+    });
+    try {
+      const request = http.request(`${server.baseUrl}/auth/disconnect-cancel`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      request.on("error", () => undefined);
+      request.end();
+      await started;
+      request.destroy();
+      await aborted;
+      const next = await fetch(`${server.baseUrl}/auth/disconnect-cancel`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      expect(next.status).toBe(200);
+      await expect(next.text()).resolves.toBe("ok");
+      expect(calls).toBe(2);
+    } finally {
+      releaseCancel();
+      await server.close();
+    }
+  });
+
   it("applies the auth deadline while response transfer is pending", async () => {
     let cancel!: () => void;
     const cancelled = new Promise<void>((resolve) => (cancel = resolve));
@@ -1603,6 +2754,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 16,
           timeoutMs: 5,
+          admission: emptyBrowserAdmission,
           onRequest: () =>
             new Response(
               new ReadableStream<Uint8Array>({
@@ -1637,6 +2789,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 16,
           timeoutMs: 5,
+          admission: emptyBrowserAdmission,
           onRequest: () => ((calls += 1), new Response()),
         },
       ],
@@ -1687,6 +2840,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 16,
           timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
           onRequest: () => {
             calls += 1;
             if (calls > 1) return new Response("ok");
@@ -1725,6 +2879,7 @@ describe("Server", () => {
       origins: ["http://127.0.0.1:5173"],
       maxRequestBytes: 16,
       timeoutMs: 1000,
+      admission: emptyBrowserAdmission,
       onRequest: () => new Response(),
     };
     expect(() => BrowserServer.authRoutes([{ ...route, path: "/" }])).toThrow("canonical non-root");
@@ -1764,6 +2919,7 @@ describe("Server", () => {
             origins: ["http://127.0.0.1:5173"],
             maxRequestBytes: 16,
             timeoutMs: 1000,
+            admission: emptyBrowserAdmission,
             onRequest: () => ((calls += 1), new Response()),
           },
         ],
@@ -1786,6 +2942,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 2,
           timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
           onRequest: () => ((calls += 1), new Response()),
         },
       ],
@@ -1824,6 +2981,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 16,
           timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
           onRequest: () => ((calls += 1), new Response()),
         },
       ],
@@ -2443,7 +3601,7 @@ describe("Server", () => {
           headers: {
             origin: "http://127.0.0.1:5173",
             cookie: cookies
-              .issue(sessionId)
+              .issue(sessionId, create(TimestampSchema, { seconds: 100n }))
               .map((value) => value.split(";", 1)[0])
               .join("; "),
             "x-spine-csrf": cookies.csrf(sessionId),
@@ -2479,19 +3637,22 @@ describe("Server", () => {
       createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
     );
     try {
-      for (const headers of [
-        { origin: "http://127.0.0.1:5173", authorization: "Bearer one two" },
+      for (const { headers, code } of [
+        { headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer one two" }, code: 16 },
         {
-          origin: "http://127.0.0.1:5173",
-          authorization: "Bearer valid, Bearer other",
-          cookie: "broken",
-          "x-spine-csrf": "bad",
+          headers: {
+            origin: "http://127.0.0.1:5173",
+            authorization: "Bearer valid, Bearer other",
+            cookie: "broken",
+            "x-spine-csrf": "bad",
+          },
+          code: 13,
         },
       ])
         await expect(
           client.resolveContext(create(ResolveContextRequestSchema), { headers }),
-        ).rejects.toMatchObject({ code: 16 });
-      expect(values).toEqual(["", ""]);
+        ).rejects.toMatchObject({ code });
+      expect(values).toEqual([]);
     } finally {
       await server.close();
       await cookies.close();
@@ -2830,6 +3991,7 @@ describe("Server", () => {
           origins: ["http://127.0.0.1:5173"],
           maxRequestBytes: 32,
           timeoutMs: 1,
+          admission: emptyBrowserAdmission,
           onRequest: () => new Promise<Response>(() => undefined),
         },
       ],
@@ -2843,6 +4005,324 @@ describe("Server", () => {
       expect(response.status).toBe(504);
     } finally {
       await server.close();
+    }
+  });
+
+  it("mounts bounded Better Auth routes through the actual browser listener", async () => {
+    const factory = new InMemoryStorageFactory();
+    const acquired = vi.spyOn(factory, "createRecordStorage");
+    const user = {
+      id: "external-host-1",
+      name: "Host User",
+      email: "host@example.test",
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    let delayProof = false;
+    let delayUser = false;
+    let directorySignal: AbortSignal | undefined;
+    let releaseUser: (() => void) | undefined;
+    const store = await PersistentBetterAuthStore.create({
+      storageFactory: factory,
+      group: new StorageGroup("better_auth_browser_host"),
+      models: ["session"],
+      users: {
+        findById: async (id, signal) => {
+          if (delayUser) {
+            directorySignal = signal;
+            await new Promise<void>((resolve) => {
+              releaseUser = resolve;
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+          }
+          return id === user.id ? user : undefined;
+        },
+      },
+    });
+    const auth = await BetterAuthIntegration.create({
+      store,
+      routePolicy: { maxRequestBytes: 256, timeoutMs: 100 },
+      options: {
+        baseURL: "http://localhost:3000",
+        basePath: "/auth",
+        secret: "native-host-secret-at-least-32-characters",
+        trustedOrigins: ["http://localhost:3000"],
+      },
+      onPrincipal: async (resolved) => ({ id: resolved.id }),
+      login: {
+        verify: async (request, signal) => {
+          if (delayProof)
+            return new Promise((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  resolve(undefined);
+                },
+                { once: true },
+              );
+            });
+          return request.headers.get("x-login-proof") === "trusted" ? user.id : undefined;
+        },
+      },
+    });
+    const server = await openCombined(new Server(), {
+      port: 0,
+      ...browserGateway(),
+      origins: ["http://localhost:3000"],
+      sessions: auth.sessions,
+      credentials: auth.credentials,
+      authRoutes: auth.routes,
+    });
+    try {
+      const denied = await fetch(`${server.baseUrl}/auth/sign-in/external`, {
+        method: "POST",
+        headers: { origin: "http://localhost:3000", "content-type": "text/plain" },
+        body: "x".repeat(257),
+      });
+      expect(denied.status).toBe(413);
+      const admitted = await fetch(`${server.baseUrl}/auth/sign-in/external`, {
+        method: "POST",
+        headers: { origin: "http://localhost:3000", "x-login-proof": "trusted" },
+      });
+      expect(admitted.status).toBe(200);
+      expect(admitted.headers.getSetCookie().length).toBeGreaterThan(0);
+      const cookie = admitted.headers.getSetCookie()[0]?.split(";")[0];
+      if (cookie === undefined) throw new Error("Native host login omitted its cookie.");
+      delayUser = true;
+      const overdueRenewal = await fetch(`${server.baseUrl}/auth/get-session`, {
+        headers: { origin: "http://localhost:3000", cookie },
+      });
+      expect(overdueRenewal.status).toBe(504);
+      expect(overdueRenewal.headers.getSetCookie()).toHaveLength(0);
+      expect(directorySignal?.aborted).toBe(true);
+      releaseUser?.();
+      delayUser = false;
+      const renewed = await fetch(`${server.baseUrl}/auth/get-session`, {
+        headers: { origin: "http://localhost:3000", cookie },
+      });
+      expect(renewed.status).toBe(200);
+      expect(((await renewed.json()) as { user?: { id?: string } } | null)?.user?.id).toBe(user.id);
+      const oversizedLogout = await fetch(`${server.baseUrl}/auth/sign-out`, {
+        method: "POST",
+        headers: { origin: "http://localhost:3000", cookie, "content-type": "text/plain" },
+        body: "x".repeat(257),
+      });
+      expect(oversizedLogout.status).toBe(413);
+      expect(await auth.sessions.resolve({ kind: "cookie", value: cookie })).toBeDefined();
+      const logout = await fetch(`${server.baseUrl}/auth/sign-out`, {
+        method: "POST",
+        headers: { origin: "http://localhost:3000", cookie },
+      });
+      expect(logout.status).toBe(200);
+      expect(await auth.sessions.resolve({ kind: "cookie", value: cookie })).toBeUndefined();
+      const sessionName = auth.credentials.admission.credentialCookieNames[0];
+      if (sessionName === undefined) throw new Error("Native session cookie name was absent.");
+      const duplicate = await fetch(`${server.baseUrl}/auth/get-session`, {
+        headers: {
+          origin: "http://localhost:3000",
+          cookie: `${sessionName}=one; ${sessionName}=two`,
+        },
+      });
+      expect(duplicate.status).toBe(400);
+      delayProof = true;
+      const overdue = await fetch(`${server.baseUrl}/auth/sign-in/external`, {
+        method: "POST",
+        headers: { origin: "http://localhost:3000", "x-login-proof": "trusted" },
+      });
+      expect(overdue.status).toBe(504);
+      delayProof = false;
+      const finalLogin = await fetch(`${server.baseUrl}/auth/sign-in/external`, {
+        method: "POST",
+        headers: { origin: "http://localhost:3000", "x-login-proof": "trusted" },
+      });
+      const finalCookie = finalLogin.headers.getSetCookie()[0]?.split(";")[0];
+      if (finalCookie === undefined) throw new Error("Final native login omitted its cookie.");
+      const sessionStorage = acquired.mock.results[0]?.value as RecordStorage<string, Message>;
+      const originalCas = sessionStorage.compareAndSet.bind(sessionStorage);
+      let enteredDelete!: () => void;
+      let releaseDelete!: () => void;
+      const deleting = new Promise<void>((resolve) => {
+        enteredDelete = resolve;
+      });
+      const deleteGate = new Promise<void>((resolve) => {
+        releaseDelete = resolve;
+      });
+      const delayedCas = vi
+        .spyOn(sessionStorage, "compareAndSet")
+        .mockImplementation(async (id, previous, next) => {
+          if (next === undefined) {
+            enteredDelete();
+            await deleteGate;
+          }
+          return originalCas(id, previous, next);
+        });
+      try {
+        const overdueLogout = fetch(`${server.baseUrl}/auth/sign-out`, {
+          method: "POST",
+          headers: { origin: "http://localhost:3000", cookie: finalCookie },
+        });
+        await deleting;
+        const refusedLogout = await overdueLogout;
+        expect(refusedLogout.status).toBe(504);
+        expect(refusedLogout.headers.getSetCookie()).toHaveLength(0);
+      } finally {
+        releaseDelete();
+        delayedCas.mockRestore();
+      }
+    } finally {
+      releaseUser?.();
+      await server.close();
+      await auth.close();
+      await store.close();
+      await factory.close();
+    }
+  });
+
+  it("stops an actual authenticated native stream after strict Better Auth logout", async () => {
+    let backendAborted = false;
+    const backend = http2.createServer(
+      connectNodeAdapter({
+        routes: (router) =>
+          router.service(SubscriptionService, {
+            subscribe: (topic) =>
+              create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "native-better-auth-child" }),
+                topic,
+              }),
+            activate: async function* (subscription, context) {
+              yield create(SubscriptionUpdateSchema, {
+                subscription,
+                response: create(ResponseSchema, {
+                  status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                }),
+              });
+              await new Promise<void>((resolve) => {
+                if (context.signal.aborted) resolve();
+                else
+                  context.signal.addEventListener(
+                    "abort",
+                    () => {
+                      resolve();
+                    },
+                    { once: true },
+                  );
+              });
+              backendAborted = context.signal.aborted;
+            },
+            cancel: () => create(ResponseSchema),
+          }),
+      }),
+    );
+    await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
+    const address = backend.address();
+    if (address === null || typeof address === "string")
+      throw new Error("Backend address missing.");
+    const factory = new InMemoryStorageFactory();
+    const user = {
+      id: "stream-user",
+      name: "Lin",
+      email: "stream@example.test",
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const store = await PersistentBetterAuthStore.create({
+      storageFactory: factory,
+      group: new StorageGroup("better_auth_active_stream"),
+      models: ["session"],
+      users: { findById: async (id) => (id === user.id ? user : undefined) },
+    });
+    const auth = await BetterAuthIntegration.create({
+      store,
+      routePolicy: { maxRequestBytes: 4_096, timeoutMs: 5_000 },
+      options: {
+        baseURL: "http://localhost:3000",
+        basePath: "/auth",
+        secret: "native-stream-secret-at-least-32-characters",
+        trustedOrigins: ["http://localhost:3000"],
+      },
+      onPrincipal: async (resolved) => ({ id: resolved.id }),
+      login: {
+        verify: async (request) =>
+          request.headers.get("x-login-proof") === "trusted" ? user.id : undefined,
+      },
+    });
+    const actor = create(UserIdSchema, { value: user.id });
+    const server = await openStandalone({
+      port: 0,
+      ...browserGateway(),
+      origins: ["http://localhost:3000"],
+      clock: { now: () => timestampFromDate(new Date()) },
+      forwardingProof: { issue: async () => "better-auth-stream-proof" },
+      backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
+      bindings: inMemoryBindings(),
+      sessions: auth.sessions,
+      credentials: auth.credentials,
+      authRoutes: auth.routes,
+      authorize: () => Promise.resolve(true),
+      contexts: {
+        resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+        resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+      },
+    });
+    const controller = new AbortController();
+    try {
+      const login = await fetch(`${server.baseUrl}/auth/sign-in/external`, {
+        method: "POST",
+        headers: { origin: "http://localhost:3000", "x-login-proof": "trusted" },
+      });
+      expect(login.status).toBe(200);
+      const cookie = login.headers.getSetCookie()[0]?.split(";")[0];
+      if (cookie === undefined) throw new Error("Native stream login omitted its cookie.");
+      const headers = { origin: "http://localhost:3000", cookie };
+      const client = createClient(
+        SubscriptionService,
+        createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+      );
+      const subscription = await client.subscribe(
+        create(TopicSchema, {
+          context: create(ActorContextSchema, { actor }),
+        }),
+        { headers },
+      );
+      const iterator = client
+        .activate(subscription, { headers, signal: controller.signal })
+        [Symbol.asyncIterator]();
+      const first = await iterator.next();
+      expect(first.done).toBe(false);
+      const acknowledgement = first.value as
+        import("@spine-event-engine/proto/client").SubscriptionUpdate | undefined;
+      expect(acknowledgement?.response?.status?.status.case).toBe("ok");
+      const pending = iterator.next().then(
+        (value) => value.done,
+        () => true,
+      );
+      const logout = await fetch(`${server.baseUrl}/auth/sign-out`, {
+        method: "POST",
+        headers,
+      });
+      expect(logout.status).toBe(200);
+      expect(await pending).toBe(true);
+      await expect.poll(() => backendAborted).toBe(true);
+      await iterator.return?.();
+    } finally {
+      controller.abort();
+      await server.close();
+      await auth.close();
+      await store.close();
+      await factory.close();
+      await new Promise<void>((resolve) =>
+        backend.close(() => {
+          resolve();
+        }),
+      );
     }
   });
 

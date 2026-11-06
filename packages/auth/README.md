@@ -24,15 +24,25 @@ is native-only and treats auth as an optional peer.
 
 ## First success: create and resolve a local session
 
-`OpaqueSessions` is a bounded, process-local store for local development or a
-single process. This creates a credential, resolves it, and closes the store.
+Omitting a store selects process-local memory for development. Configure a seal
+secret and explicit session policy before issuing credentials. A
+`PersistentOpaqueSessionStore` can instead share the same atomic sessions across
+processes; its asynchronous factory prepares selected structures by default.
 
 ```ts
 import { OpaqueSessions } from "@spine-event-engine/auth";
+import { Time } from "@spine-event-engine/core/time";
 
-const sessions = new OpaqueSessions({ ttlMilliseconds: 60 * 60 * 1_000, maxSessions: 100 });
+const password = process.env.SESSION_SEAL_PASSWORD;
+if (!password) throw new Error("Configure SESSION_SEAL_PASSWORD");
+const sessions = await OpaqueSessions.create({
+  scope: "local-browser",
+  password,
+  clock: { now: Time.currentTimeMillis },
+  ttlMilliseconds: 60 * 60 * 1_000,
+});
 try {
-  const created = await sessions.create({ id: "local-user" });
+  const created = await sessions.issue({ id: "local-user" });
   if (created.kind !== "created") throw new Error(`Session creation failed: ${created.reason}`);
   const resolved = await sessions.resolve(created.credential);
   if (resolved === undefined) throw new Error("New local session was not resolvable");
@@ -41,6 +51,67 @@ try {
   await sessions.close();
 }
 ```
+
+## Share opaque sessions through PostgreSQL
+
+Install `@spine-event-engine/storage-postgres` alongside the auth package. Give
+the session family a dedicated storage group. The database and schema must
+already exist.
+
+```ts
+import { OpaqueSessions, PersistentOpaqueSessionStore } from "@spine-event-engine/auth";
+import { Time } from "@spine-event-engine/core/time";
+import { StorageGroup } from "@spine-event-engine/storage";
+import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
+
+const url = process.env.DATABASE_URL;
+const password = process.env.SESSION_SEAL_PASSWORD;
+if (!url || !password) throw new Error("Configure database and session credentials");
+const factory = await PostgresStorageFactory.newBuilder().setOptions({ url }).build();
+let store: PersistentOpaqueSessionStore | undefined;
+try {
+  store = await PersistentOpaqueSessionStore.create({
+    storageFactory: factory,
+    group: new StorageGroup("auth_sessions"),
+  });
+  const sessions = await OpaqueSessions.create({
+    store,
+    scope: "orders-browser",
+    password,
+    clock: { now: Time.currentTimeMillis },
+    ttlMilliseconds: 60 * 60 * 1_000,
+  });
+  try {
+    const issued = await sessions.issue({ id: "user-42" });
+    if (issued.kind !== "created") throw new Error(`Session issue failed: ${issued.reason}`);
+    // Send issued.credential through the application's credential transport.
+  } finally {
+    await sessions.close();
+  }
+} finally {
+  try {
+    await store?.close();
+  } finally {
+    await factory.close();
+  }
+}
+```
+
+The strategy leaves an injected store open; close the strategy, store, and
+factory in that order. Use the same group and seal policy in each process.
+
+## Signed bearer sessions
+
+`SignedSessions` issues and verifies ES256 bearer tokens with an application
+P-256 key pair. Without a revocation source, logout reports expiry-only.
+`PersistentTokenRevocations.create` supplies shared scoped revocation through
+the selected storage factory and group; pass the resulting store as the
+strategy's `revocation`. The store prepares its indexed record family by
+default. Its explicit `purgeExpired` method removes records only after their
+full inclusive acceptance deadline, including configured clock skew. The
+application closes the strategy, store, and factory separately. See the
+[signed session reference](REFERENCE.md) for exact retention and maintenance
+behavior.
 
 For a real gateway, construct `UnaryGateway` with exactly one admission mode:
 `sessions`, or deliberate `publicAccess: true`. It requires a finite request
@@ -82,11 +153,25 @@ for direct native authentication and managed forwarding configuration.
 
 ## Browser and OIDC extensions
 
-The package does not provide HTTP routes, browser pages, users, permissions,
-TLS, or a production session database. An application can compose
-`OidcFlow` with Google, GitHub, or another verified provider, but it must own
-the start, callback, exchange, identity mapping, and session issuance routes.
+`OidcFlow` is a component flow: the application provides its start, callback,
+exchange, identity mapping, and session issuance routes. The optional
+`BetterAuthIntegration` below exposes exact native authentication routes.
+Neither component supplies browser pages, users, permissions, TLS, or a
+production session database. An application can compose `OidcFlow` with
+Google, GitHub, or another verified provider.
 Keep provider access, refresh, and ID tokens server-side.
+
+`OidcFlow.start()` is asynchronous: await it before redirecting the browser.
+The default transaction and application-grant store is process-local. To share
+one login flow across processes, create `PersistentOidcFlowStore` with a
+`StorageFactory`, `StorageGroup`, and stable `flowId`, then pass it in
+`OidcFlowOptions.store`. The factory prepares both record families by default;
+`createMissingStructures: false` skips preparation. Close the flow, then its
+injected store and factory when the application shuts down. Call
+`purgeExpired(cutoff)` explicitly for expired records; no timer runs it.
+
+The application must send the authorization URL returned by `OidcFlow.start()`
+to the browser and supply the actual callback parameters.
 
 For browser-facing hosting, install the server browser entry point and use
 `BrowserServer` and `DurableSubscriptionBindings` from
@@ -94,10 +179,93 @@ For browser-facing hosting, install the server browser entry point and use
 finite request limits, authorization and trusted-context collaborators, and
 durable authenticated bindings when applicable.
 
+## Selected Better Auth persistence
+
+Install the exact optional `better-auth` peer when using
+`@spine-event-engine/auth/better-auth`. The selected store persists native
+Session and Verification records, and optionally provisioned User and Account
+records, through Spine storage. Its factory prepares only selected structures
+by default; an explicit `createMissingStructures: false` skips physical checks
+and DDL at creation and later operations. For durable persistence, the application
+supplies an existing database and a provider-valid storage group. This example
+uses process-local memory; use a durable storage provider to preserve records
+across restarts. The following configuration-only example initializes and
+closes the integration; it does not start a browser listener.
+
+```ts
+import {
+  BetterAuthIntegration,
+  PersistentBetterAuthStore,
+} from "@spine-event-engine/auth/better-auth";
+import { Time } from "@spine-event-engine/core/time";
+import { InMemoryStorageFactory, StorageGroup } from "@spine-event-engine/storage";
+
+const factory = new InMemoryStorageFactory();
+try {
+  const store = await PersistentBetterAuthStore.create({
+    storageFactory: factory,
+    group: new StorageGroup("orders_better_auth"),
+    models: ["user", "account", "session", "verification"],
+  });
+  try {
+    const secret = process.env.BETTER_AUTH_SECRET;
+    if (secret === undefined) throw new Error("BETTER_AUTH_SECRET is required.");
+    const auth = await BetterAuthIntegration.create({
+      store,
+      routePolicy: { maxRequestBytes: 8_192, timeoutMs: 5_000 },
+      options: {
+        baseURL: "https://app.example.test",
+        basePath: "/auth",
+        secret,
+        trustedOrigins: ["https://app.example.test"],
+        emailAndPassword: { enabled: true, disableSignUp: true },
+        account: { accountLinking: { enabled: false } },
+        session: { cookieCache: { enabled: false } },
+      },
+      onPrincipal: async (user) => ({ id: user.id }),
+    });
+    try {
+      await store.purgeExpired(Time.currentTime());
+    } finally {
+      await auth.close();
+    }
+  } finally {
+    await store.close();
+  }
+} finally {
+  await factory.close();
+}
+```
+
+Provision complete Users and prelinked Accounts before accepting password
+or selected OIDC traffic. OIDC provider discovery and native initialization
+finish before `create()` returns; a pending provider has no factory timeout or
+caller cancellation, and the route deadline begins only after route admission.
+When an ID token has no email and userinfo is available, the OIDC callback reads
+userinfo. Better Auth compares its provider subject with the verified ID-token
+subject before accepting the profile, then resolves the prelinked Account to an
+application User ID. Without available userinfo, that callback cannot supply a profile.
+Each admitted callback uses a separate JWKS resolver, which may increase key
+requests to the provider. The integration exposes exact browser routes,
+verified session reads, and credential metadata. For a listener, pass `auth.routes` as
+`BrowserServerOptions.authRoutes`, `auth.sessions` as `sessions`, and
+`auth.credentials` as `credentials`, alongside the host's origin, clock,
+authorization, and context collaborators. The host applies the selected route
+bounds. See [browser hosting](https://github.com/SpineEventEngine/spine-ts/blob/master/packages/server/REFERENCE.md#browser-hosting) for the
+maintained host contract and required options.
+See the [auth reference](REFERENCE.md#selected-better-auth-records) for the
+provisioning and query profile.
+
+An external verifier must validate application proof before returning a stable
+User ID. For OIDC, start authorization before redirecting the browser, retain
+the state cookie for the callback, and configure account linking and cleanup
+explicitly.
+
 ## Limits and next steps
 
-`OpaqueSessions` is not shared or durable. Signed-session revocation and OIDC
-identity provisioning are application responsibilities. A gateway protects
+Memory-selected `OpaqueSessions` is process-local; select durable shared storage
+for sessions that must survive process restart. Signed-session revocation and
+OIDC identity provisioning are application responsibilities. A gateway protects
 only traffic that operators route through it; do not expose a backend route
 around that boundary.
 

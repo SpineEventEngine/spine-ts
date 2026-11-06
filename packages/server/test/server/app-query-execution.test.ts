@@ -43,6 +43,8 @@ import {
 import { Server, type ServerQueryExecutionContext } from "../../src/server/server.js";
 import { BrowserServer, type StandaloneBrowserServerOptions } from "../../src/browser/index.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import { TestTenantIndex } from "../tenant-index-fixture.js";
 import { ProcessManager, Projection } from "../../src/entity/entity.js";
 import { Repository } from "../../src/repository/repository.js";
 import { EntityHandlers } from "../../src/handler/handler-metadata.js";
@@ -218,6 +220,7 @@ void rejectUnpairedRequestAtCompileTime;
 
 beforeEach(async () => {
   await resetServerEnvironmentForTest();
+  ServerEnvironment.when(EnvironmentType.Local).use({ tenantIndex: new TestTenantIndex() });
   await ServerEnvironment.instance().completeSetup();
 });
 

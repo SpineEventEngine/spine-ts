@@ -26,6 +26,7 @@ import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/deliv
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import type { EntityInbox, EntityInboxTarget } from "../repository/repository.js";
+import { withoutDeliveryCommitFence } from "../repository/commit-fence.js";
 import {
   type DeliveryHandoff,
   type DeliveryEndpoint,
@@ -138,12 +139,14 @@ export class LocalEntityInbox implements EntityInbox {
    * Dispatches a durable inbox row through its Entity Inbox target.
    * @param message Contains the persisted inbox row to replay.
    * @param deliveryTenantId Identifies the tenant that owns the row when present.
-   * @returns A promise that resolves after the inbox row is replayed.
+   * @returns Completion after handler processing and follow-up registration.
    */
-  replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
-    return this.#replay(message, deliveryTenantId, true, this.#expectedShard(message)).then(
-      () => undefined,
-    );
+  async replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
+    const followUp = await this.#replay(message, deliveryTenantId, this.#expectedShard(message));
+    if (followUp !== undefined)
+      withoutDeliveryCommitFence(() => {
+        this.#chainFollowUp(message, deliveryTenantId, followUp);
+      });
   }
 
   /**
@@ -405,12 +408,7 @@ export class LocalEntityInbox implements EntityInbox {
     onSetFollowUp: (followUp: (() => Promise<void>) | undefined) => void,
   ): Promise<void> {
     onSetFollowUp(
-      await this.#replay(
-        message,
-        deliveryTenantId,
-        false,
-        expectedShard ?? this.#expectedShard(message),
-      ),
+      await this.#replay(message, deliveryTenantId, expectedShard ?? this.#expectedShard(message)),
     );
   }
 
@@ -511,7 +509,6 @@ export class LocalEntityInbox implements EntityInbox {
   async #replay(
     message: InboxMessage,
     deliveryTenantId?: TenantId,
-    runFollowUp = true,
     expectedShard = this.#expectedShard(message),
   ): Promise<(() => Promise<void>) | undefined> {
     receptionObservation.markManaged();
@@ -533,9 +530,7 @@ export class LocalEntityInbox implements EntityInbox {
       throw new Error("Entity Inbox replay stored shard does not match the routed target.");
     }
     const followUp = await target.replay(message, deliveryTenantId);
-    const callback = typeof followUp === "function" ? followUp : undefined;
-    if (callback !== undefined && runFollowUp) await callback();
-    return callback;
+    return typeof followUp === "function" ? followUp : undefined;
   }
 
   #expectedShard(message: InboxMessage): ShardIndex {

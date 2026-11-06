@@ -21,16 +21,28 @@ extensions. It includes command/event envelopes and contexts, actor/tenant/user
 identities, validation messages, time/network/UI support types, and options
 such as `type_url_prefix`, `entity`, `column`, and `set_once`.
 
+The root exports `Tenant`, `TenantSchema`, and `tenantFile` for
+`spine.server.tenant.Tenant`. The message contains a complete `TenantId` and
+the first registration `Timestamp`. `PersistentTenantIndex` in the server
+package uses this record as its tenant directory entry. The message alone
+does not register a tenant, provision storage, or grant access.
+
 The package also exports `@spine-event-engine/proto/client`,
 `@spine-event-engine/proto/auth`, `@spine-event-engine/proto/deployment`,
 `@spine-event-engine/proto/delivery`, and
 `@spine-event-engine/proto/delivery-server` for the corresponding generated
 contracts. The client facet includes `SubscriptionRecord`; the auth facet
-includes `GatewayAuthenticatedSubscription`; and the deployment facet includes
+includes `GatewayAuthenticatedSubscription`, `AuthenticatedPrincipal`,
+`PrincipalAttributes`, `OpaqueSessionRecord`, `OidcLoginTransaction`,
+`OidcLoginGrant`, and `TokenRevocation`; and the deployment facet includes
 the application-node discovery records. `@spine-event-engine/proto/generated/*.js`
 is supported for low-level generated schema subpaths. `./proto/*`,
 `spine-proto-manifest.json`, and the model metadata files are package assets
 used by model generation.
+
+`TokenRevocation` records the scoped issuer, audience, token ID and full
+inclusive last-acceptance `Timestamp`. The auth store uses its ID for exact
+lookup and an indexed exact deadline for explicit maintenance.
 
 `@spine-event-engine/proto/codegen` exports `registerProtoModule` and
 `registeredProtoModules` for generated module initialization. Importing a
@@ -46,6 +58,15 @@ Proto sources maintained by Spine TS must not use the Proto `optional` keyword. 
 documented declarations are separated by blank lines, and a multi-paragraph
 `//` comment ends with a blank `//` line before its declaration. Frozen copied
 JVM sources retain their upstream formatting and syntax.
+
+The curated auth subpath also exports `BetterAuthUserRecord`,
+`BetterAuthAccountRecord`, `BetterAuthSessionRecord`, and
+`BetterAuthVerificationRecord`, with their generated schemas. These four
+domain-specific records are selected by the optional Better Auth persistence
+store. User and Account definitions are provisioned; Session and Verification
+records are native runtime transitions. Account persistence includes the
+optional password hash and excludes unused provider tokens, token deadlines,
+and scope.
 
 ## Model modules
 

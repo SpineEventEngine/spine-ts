@@ -333,6 +333,37 @@ describe("custom OIDC provider", () => {
     },
   );
 
+  it("form-encodes Basic credentials and sends the exact callback URI once", async () => {
+    const secret = "s: e/%?";
+    const callbackUri = "https://app.example/callback?fixed=one%20two";
+    let posts = 0;
+    let observed: RequestInit | undefined;
+    const provider = oidcProvider(
+      (_url, init) => {
+        posts += 1;
+        observed = init;
+        return Promise.resolve(new Response("{}", { headers: jsonHeaders() }));
+      },
+      { clientAuthentication: "client_secret_basic", clientSecret: secret },
+    );
+    await expect(
+      provider.provider.exchangeAuthorizationCode({
+        ...exchangeInput(),
+        callbackUri,
+      }),
+    ).resolves.toBeUndefined();
+    expect(posts).toBe(1);
+    const authorization = new Headers(observed?.headers).get("authorization");
+    expect(authorization).toMatch(/^Basic /u);
+    if (authorization === null) throw new Error("Expected Basic authentication.");
+    const [client, password] = Buffer.from(authorization.slice(6), "base64").toString().split(":");
+    if (client === undefined || password === undefined)
+      throw new Error("Expected two Basic credentials.");
+    expect(decodeURIComponent(client.replaceAll("+", " "))).toBe("chat-web");
+    expect(decodeURIComponent(password.replaceAll("+", " "))).toBe(secret);
+    expect((observed?.body as URLSearchParams).get("redirect_uri")).toBe(callbackUri);
+  });
+
   it.each([
     ["non-HTTPS issuer", { issuer: "http://issuer.example" }],
     ["credentialed endpoint", { tokenEndpoint: "https://user@issuer.example/token" }],

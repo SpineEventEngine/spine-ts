@@ -12,10 +12,21 @@
  * the License.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { OidcLoginTransactionSchema } from "@spine-event-engine/proto/auth";
 
-import { OidcFlow, type ExternalIdentity, type OidcFlowCallbackInput } from "../../src/index.js";
+import {
+  MemoryOpaqueSessionStore,
+  OidcFlow,
+  OpaqueSessions,
+  type ExternalIdentity,
+  type OidcFlowCallbackInput,
+} from "../../src/index.js";
+import { MemoryOidcFlowStore } from "../../src/oidc/flow-store.js";
+import { OidcFlowKeys } from "../../src/oidc/records.js";
 
 function clock(start = 1_000) {
   let value = start;
@@ -54,7 +65,376 @@ function stateOf(authorizationUrl: string) {
 }
 
 describe("OidcFlow start", () => {
-  it("creates an exact authorization-code URL with unique random security parameters", () => {
+  it("reports a default memory-store close failure and keeps close settled", async () => {
+    const failure = new Error("memory close failed");
+    const close = vi.spyOn(MemoryOidcFlowStore.prototype, "close").mockRejectedValueOnce(failure);
+    try {
+      const oidc = flow();
+      await expect(oidc.close()).rejects.toBe(failure);
+      await expect(oidc.close()).rejects.toBe(failure);
+    } finally {
+      close.mockRestore();
+    }
+  });
+
+  it("rejects memory-only capacity settings with an injected flow store", async () => {
+    const store = new MemoryOidcFlowStore(
+      "configured",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    expect(() => flow({ store, maxTransactions: 1 })).toThrow("Memory-only");
+    expect(() => flow({ store, maxGrants: 1 })).toThrow("Memory-only");
+    await store.close();
+  });
+
+  it("rejects an injected store without a usable flow identity", () => {
+    const store = new MemoryOidcFlowStore(
+      "configured",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    Object.defineProperty(store, "flowId", { value: " " });
+    expect(() => flow({ store })).toThrow("flow identity");
+  });
+
+  it("rejects a pre-aborted request with its exact reason and leaves the flow usable", async () => {
+    const oidc = flow({ randomBytes: random(1, 2, 3) });
+    const controller = new AbortController();
+    const reason = new Error("request cancelled");
+    controller.abort(reason);
+    await expect(
+      oidc.start(
+        { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing },
+        controller.signal,
+      ),
+    ).rejects.toBe(reason);
+    expect(
+      (await oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing })).kind,
+    ).toBe("started");
+    await oidc.close();
+  });
+
+  it("does not return a URL if the trusted clock fails during start", async () => {
+    let reads = 0;
+    const oidc = flow({
+      clock: { now: () => (++reads === 1 ? 1_000 : Number.NaN) },
+      randomBytes: random(1, 2, 3),
+    });
+    await expect(
+      oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
+    ).resolves.toEqual({ kind: "rejected", reason: "closed" });
+    expect(reads).toBe(2);
+    await oidc.close();
+  });
+
+  it("replaces duplicate reserved authorization parameters and retains static provider query", async () => {
+    const oidc = flow({
+      authorizationEndpoint: [
+        "https://issuer.example/authorize?prompt=login&state=old&state=older",
+        "&nonce=old&client_id=bad&redirect_uri=https%3A%2F%2Fwrong.example",
+        "&response_type=token&scope=bad&code_challenge=bad&code_challenge_method=plain",
+      ].join(""),
+      randomBytes: random(1, 2, 3),
+    });
+    const started = await oidc.start({
+      browserCodeChallenge: "a".repeat(43),
+      postLoginRedirect: landing,
+    });
+    if (started.kind !== "started") throw new Error("expected OIDC start");
+    const query = new URL(started.authorizationUrl).searchParams;
+    expect(query.get("prompt")).toBe("login");
+    for (const key of [
+      "state",
+      "nonce",
+      "client_id",
+      "redirect_uri",
+      "response_type",
+      "scope",
+      "code_challenge",
+      "code_challenge_method",
+    ])
+      expect(query.getAll(key)).toHaveLength(1);
+    expect(query.get("response_type")).toBe("code");
+    expect(query.get("redirect_uri")).toBe(callbackUri);
+    expect(query.get("state")).not.toBe("old");
+  });
+
+  it("waits for transaction persistence before exposing an authorization URL", async () => {
+    const store = new MemoryOidcFlowStore(
+      "employee-login",
+      () => create(TimestampSchema, { seconds: 2n }),
+      1_000,
+      1_000,
+    );
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => (release = resolve));
+    const insert = store.insertTransaction.bind(store);
+    store.insertTransaction = async (record) => {
+      await pending;
+      return insert(record);
+    };
+    const oidc = flow({ store, randomBytes: random(1, 2, 3) });
+    let settled = false;
+    const starting = oidc.start({
+      browserCodeChallenge: "a".repeat(43),
+      postLoginRedirect: landing,
+    });
+    void starting.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release();
+    expect((await starting).kind).toBe("started");
+    await store.close();
+  });
+
+  it("surfaces a known failed transaction insert without returning a browser URL", async () => {
+    const store = new MemoryOidcFlowStore(
+      "failed-start",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    store.insertTransaction = () => Promise.reject(new Error("transaction write failed"));
+    const oidc = flow({ store, randomBytes: random(1, 2, 3) });
+    await expect(
+      oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
+    ).rejects.toThrow("transaction write failed");
+    await oidc.close();
+    await store.close();
+  });
+
+  it("retries a confirmed absent-slot collision before returning a persisted URL", async () => {
+    const store = new MemoryOidcFlowStore(
+      "collision-start",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const insert = store.insertTransaction.bind(store);
+    let attempts = 0;
+    store.insertTransaction = (record) => {
+      attempts += 1;
+      return attempts === 1 ? Promise.resolve(false) : insert(record);
+    };
+    const oidc = flow({ store, randomBytes: random(1, 2, 3, 4, 5, 6) });
+    const started = await oidc.start({
+      browserCodeChallenge: "a".repeat(43),
+      postLoginRedirect: landing,
+    });
+    expect(started.kind).toBe("started");
+    expect(attempts).toBe(2);
+    if (started.kind !== "started") throw new Error("expected start");
+    const state = stateOf(started.authorizationUrl);
+    expect(await store.readTransaction(OidcFlowKeys.digest(store.flowId, state))).toBeDefined();
+    await oidc.close();
+    await store.close();
+  });
+
+  it("drains and conditionally removes a confirmed late insert after close", async () => {
+    const store = new MemoryOidcFlowStore(
+      "closing-start",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const insert = store.insertTransaction.bind(store);
+    let release!: () => void;
+    let entered!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let digest = "";
+    store.insertTransaction = async (record) => {
+      digest = record.lookupDigest;
+      entered();
+      await pending;
+      return insert(record);
+    };
+    const oidc = flow({ store, randomBytes: random(1, 2, 3) });
+    const started = oidc.start({
+      browserCodeChallenge: "a".repeat(43),
+      postLoginRedirect: landing,
+    });
+    await waiting;
+    let closed = false;
+    const closing = oidc.close().then(() => {
+      closed = true;
+    });
+    expect(closed).toBe(false);
+    release();
+    await expect(started).resolves.toEqual({ kind: "rejected", reason: "closed" });
+    await closing;
+    expect(await store.readTransaction(digest)).toBeUndefined();
+    await store.close();
+  });
+
+  it("conditionally removes a confirmed insert after request abort", async () => {
+    const store = new MemoryOidcFlowStore(
+      "aborting-start",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const insert = store.insertTransaction.bind(store);
+    let release!: () => void;
+    let entered!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let digest = "";
+    store.insertTransaction = async (record) => {
+      digest = record.lookupDigest;
+      entered();
+      await pending;
+      return insert(record);
+    };
+    const oidc = flow({ store, randomBytes: random(1, 2, 3) });
+    const controller = new AbortController();
+    const reason = new Error("request cancelled");
+    const starting = oidc.start(
+      { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing },
+      controller.signal,
+    );
+    await waiting;
+    controller.abort(reason);
+    release();
+    await expect(starting).rejects.toBe(reason);
+    expect(await store.readTransaction(digest)).toBeUndefined();
+    await oidc.close();
+    await store.close();
+  });
+
+  it("preserves cancellation and a failed confirmed-write compensation", async () => {
+    const store = new MemoryOidcFlowStore(
+      "failed-compensation",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const insert = store.insertTransaction.bind(store);
+    const controller = new AbortController();
+    const reason = new Error("request cancelled");
+    const failure = new Error("conditional removal failed");
+    let digest = "";
+    store.insertTransaction = async (record) => {
+      digest = record.lookupDigest;
+      const inserted = await insert(record);
+      controller.abort(reason);
+      return inserted;
+    };
+    store.consumeTransaction = () => Promise.reject(failure);
+    const oidc = flow({ store, randomBytes: random(1, 2, 3) });
+    const starting = oidc.start(
+      { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing },
+      controller.signal,
+    );
+    await expect(starting).rejects.toMatchObject({ errors: [reason, failure] });
+    expect(await store.readTransaction(digest)).toBeDefined();
+    await oidc.close();
+    await store.close();
+  });
+
+  it("preserves a concurrent replacement when confirmed-insert compensation finds no match", async () => {
+    const store = new MemoryOidcFlowStore(
+      "replacement-start",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const insert = store.insertTransaction.bind(store);
+    const consume = store.consumeTransaction.bind(store);
+    const controller = new AbortController();
+    const reason = new Error("request cancelled");
+    let replacementDigest = "";
+    store.insertTransaction = async (record) => {
+      replacementDigest = record.lookupDigest;
+      const inserted = await insert(record);
+      expect(await consume(record)).toBe(true);
+      expect(
+        await insert(create(OidcLoginTransactionSchema, { ...record, nonce: "replacement" })),
+      ).toBe(true);
+      controller.abort(reason);
+      return inserted;
+    };
+    const oidc = flow({ store, randomBytes: random(1, 2, 3) });
+    await expect(
+      oidc.start(
+        { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing },
+        controller.signal,
+      ),
+    ).rejects.toBe(reason);
+    expect((await store.readTransaction(replacementDigest))?.nonce).toBe("replacement");
+    await oidc.close();
+    await store.close();
+  });
+
+  it("retains close and conditional-removal failures after a confirmed insert", async () => {
+    const store = new MemoryOidcFlowStore(
+      "closing-compensation",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const insert = store.insertTransaction.bind(store);
+    const failure = new Error("conditional removal failed");
+    const oidc = flow({ store, randomBytes: random(1, 2, 3) });
+    store.insertTransaction = async (record) => {
+      const inserted = await insert(record);
+      void oidc.close();
+      return inserted;
+    };
+    store.consumeTransaction = () => Promise.reject(failure);
+    await expect(
+      oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
+    ).rejects.toMatchObject({
+      errors: [expect.objectContaining({ message: "OIDC flow closed." }), failure],
+    });
+    await oidc.close();
+    await store.close();
+  });
+
+  it("does not blindly remove an insert whose storage outcome is unknown", async () => {
+    const store = new MemoryOidcFlowStore(
+      "ambiguous-start",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const insert = store.insertTransaction.bind(store);
+    const controller = new AbortController();
+    const reason = new Error("request cancelled");
+    const failure = new Error("storage outcome unknown");
+    let digest = "";
+    store.insertTransaction = async (record) => {
+      digest = record.lookupDigest;
+      await insert(record);
+      controller.abort(reason);
+      throw failure;
+    };
+    const oidc = flow({ store, randomBytes: random(1, 2, 3) });
+    await expect(
+      oidc.start(
+        { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing },
+        controller.signal,
+      ),
+    ).rejects.toBe(failure);
+    expect(await store.readTransaction(digest)).toBeDefined();
+    await oidc.close();
+    await store.close();
+  });
+
+  it("creates an exact authorization-code URL with unique random security parameters", async () => {
     const time = clock();
     const generated = [
       new Uint8Array(32).fill(1),
@@ -70,7 +450,7 @@ describe("OidcFlow start", () => {
       },
     });
 
-    const started = oidc.start({
+    const started = await oidc.start({
       browserCodeChallenge: "a".repeat(43),
       postLoginRedirect: landing,
     });
@@ -95,7 +475,7 @@ describe("OidcFlow start", () => {
     expect(generated).toHaveLength(0);
   });
 
-  it("rejects invalid construction and start input without retaining a transaction", () => {
+  it("rejects invalid construction and start input without retaining a transaction", async () => {
     expect(() => flow({ authorizationEndpoint: "http://issuer.example/authorize" })).toThrow();
     expect(() => flow({ callbackUri: "https://user@application.example/callback" })).toThrow();
     expect(() => flow({ scopes: ["openid", "openid"] })).toThrow();
@@ -103,12 +483,14 @@ describe("OidcFlow start", () => {
     expect(() => flow({ allowedPostLoginRedirects: [] })).toThrow();
 
     const oidc = flow({ randomBytes: random(1, 2, 3) });
-    expect(oidc.start({ browserCodeChallenge: "invalid", postLoginRedirect: landing })).toEqual({
+    expect(
+      await oidc.start({ browserCodeChallenge: "invalid", postLoginRedirect: landing }),
+    ).toEqual({
       kind: "rejected",
       reason: "invalid-input",
     });
     expect(
-      oidc.start({
+      await oidc.start({
         browserCodeChallenge: "a".repeat(43),
         postLoginRedirect: "https://app.example/other",
       }),
@@ -130,12 +512,12 @@ describe("OidcFlow start", () => {
       },
       postLoginRedirect: landing,
     },
-  ])("rejects hostile start input without escaping %#", (input) => {
+  ])("rejects hostile start input without escaping %#", async (input) => {
     const oidc = flow({ randomBytes: random(1, 2, 3) });
 
-    expect(oidc.start(input as never)).toEqual({ kind: "rejected", reason: "invalid-input" });
+    expect(await oidc.start(input as never)).toEqual({ kind: "rejected", reason: "invalid-input" });
     expect(
-      oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
+      await oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
     ).toMatchObject({ kind: "started" });
   });
 
@@ -164,7 +546,7 @@ describe("OidcFlow start", () => {
     expect(() => flow(options)).toThrow();
   });
 
-  it("bounds live transactions, expires them before capacity, and zeroes random buffers", () => {
+  it("bounds live transactions, expires them before capacity, and zeroes random buffers", async () => {
     const time = clock();
     const values = [1, 2, 3, 1, 4, 5, 6, 7, 8];
     const buffers: Uint8Array[] = [];
@@ -181,14 +563,17 @@ describe("OidcFlow start", () => {
     });
     const input = { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing };
 
-    expect(oidc.start(input)).toMatchObject({ kind: "started" });
-    expect(oidc.start(input)).toEqual({ kind: "rejected", reason: "capacity-exceeded" });
+    expect(await oidc.start(input)).toMatchObject({ kind: "started" });
+    expect(await oidc.start(input)).toEqual({ kind: "rejected", reason: "capacity-exceeded" });
     time.advance(10);
-    expect(oidc.start(input)).toMatchObject({ kind: "started" });
+    expect(
+      await oidc.purgeExpired(create(TimestampSchema, { seconds: 1n, nanos: 10_000_000 })),
+    ).toEqual({ transactions: 1, grants: 0 });
+    expect(await oidc.start(input)).toMatchObject({ kind: "started" });
     expect(buffers.every((bytes) => bytes.every((byte) => byte === 0))).toBe(true);
   });
 
-  it("retries colliding state material before committing a transaction", () => {
+  it("retries colliding state material before committing a transaction", async () => {
     const oidc = flow({
       randomBytes: random(1, 2, 3, 1, 4, 5, 6, 7, 8),
       maxTransactions: 2,
@@ -196,15 +581,15 @@ describe("OidcFlow start", () => {
     });
     const input = { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing };
 
-    expect(oidc.start(input)).toMatchObject({ kind: "started" });
-    expect(oidc.start(input)).toMatchObject({ kind: "started" });
+    expect(await oidc.start(input)).toMatchObject({ kind: "started" });
+    expect(await oidc.start(input)).toMatchObject({ kind: "started" });
   });
 
-  it("keeps state, nonce, and provider PKCE challenge distinct across live starts", () => {
+  it("keeps state, nonce, and provider PKCE challenge distinct across live starts", async () => {
     const oidc = flow({ randomBytes: random(1, 2, 3, 4, 5, 6), maxTransactions: 2 });
     const input = { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing };
-    const first = oidc.start(input);
-    const second = oidc.start(input);
+    const first = await oidc.start(input);
+    const second = await oidc.start(input);
     if (first.kind !== "started" || second.kind !== "started") throw new Error("expected starts");
     const a = new URL(first.authorizationUrl).searchParams;
     const b = new URL(second.authorizationUrl).searchParams;
@@ -213,15 +598,15 @@ describe("OidcFlow start", () => {
     expect(a.get("code_challenge")).not.toBe(b.get("code_challenge"));
   });
 
-  it("retries repeated active nonce or provider verifier material before committing", () => {
+  it("retries repeated active nonce or provider verifier material before committing", async () => {
     const oidc = flow({
       randomBytes: random(1, 2, 3, 4, 2, 3, 5, 6, 7),
       maxTransactions: 2,
       collisionAttempts: 2,
     });
     const input = { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing };
-    const first = oidc.start(input);
-    const second = oidc.start(input);
+    const first = await oidc.start(input);
+    const second = await oidc.start(input);
     expect(first.kind).toBe("started");
     expect(second.kind).toBe("started");
     if (first.kind !== "started" || second.kind !== "started") return;
@@ -233,11 +618,11 @@ describe("OidcFlow start", () => {
   it.each([
     ["nonce", [1, 2, 3, 4, 2, 5, 6, 7, 8]],
     ["verifier", [1, 2, 3, 4, 5, 3, 6, 7, 8]],
-  ] as const)("retries active %s reuse with fresh successful material", (_kind, values) => {
+  ] as const)("retries active %s reuse with fresh successful material", async (_kind, values) => {
     const oidc = flow({ randomBytes: random(...values), maxTransactions: 2, collisionAttempts: 2 });
     const input = { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing };
-    const first = oidc.start(input);
-    const second = oidc.start(input);
+    const first = await oidc.start(input);
+    const second = await oidc.start(input);
     if (first.kind !== "started" || second.kind !== "started") throw new Error("expected starts");
     const firstUrl = new URL(first.authorizationUrl).searchParams;
     const secondUrl = new URL(second.authorizationUrl).searchParams;
@@ -245,21 +630,21 @@ describe("OidcFlow start", () => {
     else expect(firstUrl.get("code_challenge")).not.toBe(secondUrl.get("code_challenge"));
   });
 
-  it("fails safely when entropy cannot create a valid unique transaction and after terminal close", () => {
+  it("fails safely when entropy cannot create a valid unique transaction and after terminal close", async () => {
     const short = new Uint8Array(31).fill(9);
     const oidc = flow({ randomBytes: () => short, collisionAttempts: 2 });
     const input = { browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing };
-    expect(oidc.start(input)).toEqual({ kind: "rejected", reason: "entropy-exhausted" });
+    expect(await oidc.start(input)).toEqual({ kind: "rejected", reason: "entropy-exhausted" });
     expect(short).toEqual(new Uint8Array(31));
-    oidc.close();
-    oidc.close();
-    expect(oidc.start(input)).toEqual({ kind: "rejected", reason: "closed" });
+    void oidc.close();
+    void oidc.close();
+    expect(await oidc.start(input)).toEqual({ kind: "rejected", reason: "closed" });
   });
 
   it.each([
     { name: "nonce", badAt: 2 },
     { name: "verifier", badAt: 3 },
-  ])("rejects wrong-length $name random material", ({ badAt }) => {
+  ])("rejects wrong-length $name random material", async ({ badAt }) => {
     let calls = 0;
     const oidc = flow({
       collisionAttempts: 1,
@@ -269,48 +654,51 @@ describe("OidcFlow start", () => {
       },
     });
     expect(
-      oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
+      await oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
     ).toEqual({ kind: "rejected", reason: "entropy-exhausted" });
   });
 
-  it("rejects an authorization URL beyond its finite configured bound", () => {
+  it("rejects an authorization URL beyond its finite configured bound", async () => {
     const oidc = flow({ randomBytes: random(1, 2, 3), maxAuthorizationUrlLength: 1 });
     expect(
-      oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
+      await oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
     ).toEqual({ kind: "rejected", reason: "invalid-input" });
   });
 
   it.each(["valid", "invalid", "throw"] as const)(
     "lets terminal close win re-entrant %s clock and random callbacks",
-    (outcome) => {
+    async (outcome) => {
       const closeThen = () => {
-        oidc.close();
+        void oidc.close();
         if (outcome === "throw") throw new Error("entropy");
         return outcome === "valid" ? 1_000 : Number.NaN;
       };
       const oidc = flow({ clock: { now: closeThen }, randomBytes: random(1, 2, 3) });
       expect(
-        oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
+        await oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
       ).toEqual({ kind: "rejected", reason: "closed" });
 
       const randomClosing = flow({
         randomBytes: () => {
-          randomClosing.close();
+          void randomClosing.close();
           if (outcome === "throw") throw new Error("entropy");
           return new Uint8Array(outcome === "valid" ? 32 : 31);
         },
       });
       expect(
-        randomClosing.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
+        await randomClosing.start({
+          browserCodeChallenge: "a".repeat(43),
+          postLoginRedirect: landing,
+        }),
       ).toEqual({ kind: "rejected", reason: "closed" });
     },
   );
 });
 
 describe("OidcFlow callback", () => {
-  function startedFlow(options: Record<string, unknown> = {}) {
+  async function startedFlow(options: Record<string, unknown> = {}) {
     const oidc = flow({ randomBytes: random(1, 2, 3, 4), ...options });
-    const started = oidc.start({
+    const started = await oidc.start({
       browserCodeChallenge: "a".repeat(43),
       postLoginRedirect: landing,
     });
@@ -319,6 +707,403 @@ describe("OidcFlow callback", () => {
     if (state === null) throw new Error("expected state");
     return { oidc, state };
   }
+
+  it("rejects a transaction whose persisted provider binding changed before callback", async () => {
+    const store = new MemoryOidcFlowStore(
+      "bound-callback",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    let providerCalls = 0;
+    const { oidc, state } = await startedFlow({
+      store,
+      provider: {
+        issuer: "https://issuer.example",
+        exchangeAuthorizationCode: () => {
+          providerCalls += 1;
+          return Promise.resolve(undefined);
+        },
+      },
+    });
+    const digest = OidcFlowKeys.digest(store.flowId, state);
+    const original = await store.readTransaction(digest);
+    if (original === undefined) throw new Error("expected transaction");
+    expect(await store.consumeTransaction(original)).toBe(true);
+    const changed = create(OidcLoginTransactionSchema, { ...original, clientId: "different-app" });
+    expect(await store.insertTransaction(changed)).toBe(true);
+    await expect(oidc.callback({ state, code: "code" })).resolves.toEqual({
+      kind: "rejected",
+      reason: "issuer-mismatch",
+    });
+    expect(providerCalls).toBe(0);
+    expect(await store.readTransaction(digest)).toEqual(changed);
+    await oidc.close();
+    await store.close();
+  });
+
+  it("reports a confirmed grant-slot collision after consuming the validated transaction", async () => {
+    const store = new MemoryOidcFlowStore(
+      "grant-collision",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    store.insertGrant = () => Promise.resolve(false);
+    const { oidc, state } = await startedFlow({
+      store,
+      provider: {
+        issuer: "https://issuer.example",
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({ issuer: "https://issuer.example", subject: "person" }),
+      },
+      identityMapping: {
+        resolve: (externalIdentity: ExternalIdentity) =>
+          Promise.resolve({ externalIdentity, principal: { id: "person" } }),
+      },
+    });
+    await expect(oidc.callback({ state, code: "code" })).resolves.toEqual({
+      kind: "rejected",
+      reason: "entropy-exhausted",
+    });
+    expect(await store.readTransaction(OidcFlowKeys.digest(store.flowId, state))).toBeUndefined();
+    await oidc.close();
+    await store.close();
+  });
+
+  it.each(["expiry", "close"] as const)(
+    "does not consume a transaction after delayed read reaches %s",
+    async (outcome) => {
+      const time = clock();
+      const store = new MemoryOidcFlowStore(
+        "delayed-callback",
+        () => create(TimestampSchema, { seconds: 2n }),
+        10,
+        10,
+      );
+      const read = store.readTransaction.bind(store);
+      const consume = store.consumeTransaction.bind(store);
+      let release!: () => void;
+      let entered!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let consumes = 0;
+      let providerCalls = 0;
+      const started = await startedFlow({
+        store,
+        clock: time,
+        transactionTtlMilliseconds: 10,
+        provider: {
+          issuer: "https://issuer.example",
+          exchangeAuthorizationCode: () => {
+            providerCalls += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+      });
+      store.readTransaction = async (digest) => {
+        entered();
+        await pending;
+        return read(digest);
+      };
+      store.consumeTransaction = (record) => {
+        consumes += 1;
+        return consume(record);
+      };
+      const callback = started.oidc.callback({ state: started.state, code: "code" });
+      await waiting;
+      const closing = outcome === "close" ? started.oidc.close() : undefined;
+      if (outcome === "expiry") time.advance(10);
+      release();
+      await expect(callback).resolves.toEqual({
+        kind: "rejected",
+        reason: outcome === "close" ? "closed" : "expired",
+      });
+      await closing;
+      expect(consumes).toBe(0);
+      expect(providerCalls).toBe(0);
+      await store.close();
+    },
+  );
+
+  it.each(["expiry", "clock-failure"] as const)(
+    "does not exchange a provider code after consumption reaches %s",
+    async (outcome) => {
+      const time = clock();
+      let clockFailed = false;
+      const store = new MemoryOidcFlowStore(
+        "consumed-expiry",
+        () => create(TimestampSchema, { seconds: 2n }),
+        10,
+        10,
+      );
+      const consume = store.consumeTransaction.bind(store);
+      let entered!: () => void;
+      let release!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let providerCalls = 0;
+      const started = await startedFlow({
+        store,
+        clock: { now: () => (clockFailed ? Number.NaN : time.now()) },
+        transactionTtlMilliseconds: 10,
+        provider: {
+          issuer: "https://issuer.example",
+          exchangeAuthorizationCode: () => {
+            providerCalls += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+      });
+      store.consumeTransaction = async (record) => {
+        entered();
+        await pending;
+        return consume(record);
+      };
+      const callback = started.oidc.callback({ state: started.state, code: "code" });
+      await waiting;
+      if (outcome === "expiry") time.advance(10);
+      else clockFailed = true;
+      release();
+      await expect(callback).resolves.toEqual({
+        kind: "rejected",
+        reason: outcome === "expiry" ? "expired" : "closed",
+      });
+      expect(providerCalls).toBe(0);
+      expect(
+        await store.readTransaction(OidcFlowKeys.digest(store.flowId, started.state)),
+      ).toBeUndefined();
+      await started.oidc.close();
+      await store.close();
+    },
+  );
+
+  it.each(["read", "consume"] as const)(
+    "aborts a delayed transaction %s without provider exchange",
+    async (stage) => {
+      const store = new MemoryOidcFlowStore(
+        "aborting-callback",
+        () => create(TimestampSchema, { seconds: 2n }),
+        10,
+        10,
+      );
+      const read = store.readTransaction.bind(store);
+      const consume = store.consumeTransaction.bind(store);
+      let entered!: () => void;
+      let release!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let providerCalls = 0;
+      const started = await startedFlow({
+        store,
+        provider: {
+          issuer: "https://issuer.example",
+          exchangeAuthorizationCode: () => {
+            providerCalls += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+      });
+      if (stage === "read")
+        store.readTransaction = async (digest) => {
+          entered();
+          await pending;
+          return read(digest);
+        };
+      else
+        store.consumeTransaction = async (record) => {
+          entered();
+          await pending;
+          return consume(record);
+        };
+      const controller = new AbortController();
+      const reason = new Error("request cancelled");
+      const callback = started.oidc.callback(
+        { state: started.state, code: "code" },
+        controller.signal,
+      );
+      await waiting;
+      controller.abort(reason);
+      release();
+      await expect(callback).rejects.toBe(reason);
+      expect(providerCalls).toBe(0);
+      const digest = OidcFlowKeys.digest(store.flowId, started.state);
+      if (stage === "read") expect(await read(digest)).toBeDefined();
+      else expect(await read(digest)).toBeUndefined();
+      await started.oidc.close();
+      await store.close();
+    },
+  );
+
+  it.each(["read", "consume"] as const)(
+    "surfaces a failed transaction %s before provider exchange",
+    async (stage) => {
+      const store = new MemoryOidcFlowStore(
+        "failing-callback",
+        () => create(TimestampSchema, { seconds: 2n }),
+        10,
+        10,
+      );
+      let exchanged = 0;
+      const started = await startedFlow({
+        store,
+        provider: {
+          issuer: "https://issuer.example",
+          exchangeAuthorizationCode: () => {
+            exchanged += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+      });
+      if (stage === "read") store.readTransaction = () => Promise.reject(new Error("read failed"));
+      else store.consumeTransaction = () => Promise.reject(new Error("consume failed"));
+      await expect(
+        started.oidc.callback({ state: started.state, code: "provider-code" }),
+      ).rejects.toThrow(`${stage} failed`);
+      expect(exchanged).toBe(0);
+      await started.oidc.close();
+      await store.close();
+    },
+  );
+
+  it("closes over a late confirmed grant insert and removes that grant", async () => {
+    const store = new MemoryOidcFlowStore(
+      "closing-grant",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const insert = store.insertGrant.bind(store);
+    let release!: () => void;
+    let entered!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let digest = "";
+    store.insertGrant = async (record) => {
+      digest = record.lookupDigest;
+      entered();
+      await pending;
+      return insert(record);
+    };
+    const started = await startedFlow({
+      store,
+      provider: {
+        issuer: "https://issuer.example",
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({ issuer: "https://issuer.example", subject: "person" }),
+      },
+      identityMapping: {
+        resolve: (externalIdentity: unknown) =>
+          Promise.resolve({ externalIdentity, principal: { id: "person" } }),
+      },
+    });
+    const callback = started.oidc.callback({ state: started.state, code: "code" });
+    await waiting;
+    const closing = started.oidc.close();
+    release();
+    await expect(callback).resolves.toEqual({ kind: "rejected", reason: "closed" });
+    await closing;
+    expect(await store.readGrant(digest)).toBeUndefined();
+    await store.close();
+  });
+
+  it("conditionally removes a confirmed grant insert after request abort", async () => {
+    const store = new MemoryOidcFlowStore(
+      "aborting-grant",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const insert = store.insertGrant.bind(store);
+    let entered!: () => void;
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let digest = "";
+    store.insertGrant = async (record) => {
+      digest = record.lookupDigest;
+      entered();
+      await pending;
+      return insert(record);
+    };
+    const started = await startedFlow({
+      store,
+      provider: {
+        issuer: "https://issuer.example",
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({ issuer: "https://issuer.example", subject: "person" }),
+      },
+      identityMapping: {
+        resolve: (externalIdentity: unknown) =>
+          Promise.resolve({ externalIdentity, principal: { id: "person" } }),
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error("request cancelled");
+    const callback = started.oidc.callback(
+      { state: started.state, code: "code" },
+      controller.signal,
+    );
+    await waiting;
+    controller.abort(reason);
+    release();
+    await expect(callback).rejects.toBe(reason);
+    expect(await store.readGrant(digest)).toBeUndefined();
+    await started.oidc.close();
+    await store.close();
+  });
+
+  it("surfaces a failed grant insert after consuming the transaction", async () => {
+    const store = new MemoryOidcFlowStore(
+      "failed-grant",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const failure = new Error("grant write failed");
+    store.insertGrant = () => Promise.reject(failure);
+    const started = await startedFlow({
+      store,
+      provider: {
+        issuer: "https://issuer.example",
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({ issuer: "https://issuer.example", subject: "person" }),
+      },
+      identityMapping: {
+        resolve: (externalIdentity: unknown) =>
+          Promise.resolve({ externalIdentity, principal: { id: "person" } }),
+      },
+    });
+    await expect(started.oidc.callback({ state: started.state, code: "code" })).rejects.toBe(
+      failure,
+    );
+    await expect(started.oidc.callback({ state: started.state, code: "code" })).resolves.toEqual({
+      kind: "rejected",
+      reason: "not-found",
+    });
+    await started.oidc.close();
+    await store.close();
+  });
 
   it.each([[{ state: "bad", code: "code" }]])(
     "rejects malformed callback facts before provider work %#",
@@ -332,7 +1117,7 @@ describe("OidcFlow callback", () => {
   );
 
   it("rejects hostile callback input without escaping and keeps a consumed state burned", async () => {
-    const prototypeHostile = startedFlow();
+    const prototypeHostile = await startedFlow();
     await expect(
       prototypeHostile.oidc.callback(
         new Proxy(
@@ -349,7 +1134,7 @@ describe("OidcFlow callback", () => {
       prototypeHostile.oidc.callback({ state: prototypeHostile.state, error: "denied" }),
     ).resolves.toEqual({ kind: "rejected", reason: "provider-error" });
 
-    const getterHostile = startedFlow();
+    const getterHostile = await startedFlow();
     await expect(
       getterHostile.oidc.callback({
         state: getterHostile.state,
@@ -360,14 +1145,14 @@ describe("OidcFlow callback", () => {
     ).resolves.toEqual({ kind: "rejected", reason: "invalid-input" });
     await expect(
       getterHostile.oidc.callback({ state: getterHostile.state, code: "code" }),
-    ).resolves.toEqual({ kind: "rejected", reason: "not-found" });
+    ).resolves.toEqual({ kind: "rejected", reason: "verification-failed" });
   });
 
   it("consumes state before provider work, then creates a one-time bounded grant", async () => {
     let providerCalls = 0;
     let mappingIdentity: unknown;
     const time = clock();
-    const { oidc, state } = startedFlow({
+    const { oidc, state } = await startedFlow({
       clock: time,
       provider: {
         issuer: "https://issuer.example",
@@ -477,14 +1262,14 @@ describe("OidcFlow callback", () => {
   ] as const)(
     "reaches callback %s outcome with a live state",
     async (_name, facts, options, reason) => {
-      const started = startedFlow(options);
+      const started = await startedFlow(options);
       await expect(
         started.oidc.callback({ state: started.state, ...facts } as never),
       ).resolves.toEqual({ kind: "rejected", reason });
     },
   );
 
-  it("burns state before rejecting provider errors, malformed callbacks, issuer mix-ups, and expiry", async () => {
+  it("consumes provider errors while preserving state after malformed or mismatched callbacks", async () => {
     let providerCalls = 0;
     const provider = {
       issuer: "https://issuer.example",
@@ -493,7 +1278,7 @@ describe("OidcFlow callback", () => {
         return { issuer: "https://issuer.example", subject: "subject" };
       },
     };
-    const error = startedFlow({ provider });
+    const error = await startedFlow({ provider });
     expect(await error.oidc.callback({ state: error.state, error: "access_denied" })).toEqual({
       kind: "rejected",
       reason: "provider-error",
@@ -503,7 +1288,7 @@ describe("OidcFlow callback", () => {
       reason: "not-found",
     });
 
-    const malformed = startedFlow({ provider });
+    const malformed = await startedFlow({ provider });
     expect(
       await malformed.oidc.callback({
         state: malformed.state,
@@ -516,10 +1301,10 @@ describe("OidcFlow callback", () => {
     });
     expect(await malformed.oidc.callback({ state: malformed.state, code: "code" })).toEqual({
       kind: "rejected",
-      reason: "not-found",
+      reason: "mapping-failed",
     });
 
-    const mixed = startedFlow({ provider });
+    const mixed = await startedFlow({ provider });
     expect(
       await mixed.oidc.callback({
         state: mixed.state,
@@ -529,21 +1314,21 @@ describe("OidcFlow callback", () => {
     ).toEqual({ kind: "rejected", reason: "issuer-mismatch" });
     expect(await mixed.oidc.callback({ state: mixed.state, code: "code" })).toEqual({
       kind: "rejected",
-      reason: "not-found",
+      reason: "mapping-failed",
     });
 
     const time = clock();
-    const expired = startedFlow({ clock: time, provider, transactionTtlMilliseconds: 1 });
+    const expired = await startedFlow({ clock: time, provider, transactionTtlMilliseconds: 1 });
     time.advance(1);
     expect(await expired.oidc.callback({ state: expired.state, code: "code" })).toEqual({
       kind: "rejected",
       reason: "expired",
     });
-    expect(providerCalls).toBe(0);
+    expect(providerCalls).toBe(2);
   });
 
   it("rejects unverified or unbounded identity and mapping failures without a grant", async () => {
-    const rejected = startedFlow({
+    const rejected = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () => Promise.resolve(undefined),
@@ -554,7 +1339,7 @@ describe("OidcFlow callback", () => {
       reason: "verification-failed",
     });
 
-    const wrongIssuer = startedFlow({
+    const wrongIssuer = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () =>
@@ -572,7 +1357,7 @@ describe("OidcFlow callback", () => {
     const manyClaims = Object.fromEntries(
       Array.from({ length: 33 }, (_, index) => [`claim-${String(index)}`, "x"]),
     );
-    const oversized = startedFlow({
+    const oversized = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () =>
@@ -588,7 +1373,7 @@ describe("OidcFlow callback", () => {
       reason: "verification-failed",
     });
 
-    const mapping = startedFlow({
+    const mapping = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () =>
@@ -606,7 +1391,7 @@ describe("OidcFlow callback", () => {
   });
 
   it("aborts deadline-bound provider work and lets close win an in-flight callback", async () => {
-    const deadline = startedFlow({
+    const deadline = await startedFlow({
       operationTimeoutMilliseconds: 1,
       provider: {
         issuer: "https://issuer.example",
@@ -627,12 +1412,17 @@ describe("OidcFlow callback", () => {
       reason: "verification-failed",
     });
 
-    let release: (() => void) | undefined;
-    const closing = startedFlow({
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const closing = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () =>
           new Promise((resolve) => {
+            entered();
             release = () => {
               resolve({ issuer: "https://issuer.example", subject: "subject" });
             };
@@ -640,14 +1430,16 @@ describe("OidcFlow callback", () => {
       },
     });
     const pending = closing.oidc.callback({ state: closing.state, code: "code" });
-    await Promise.resolve();
-    closing.oidc.close();
-    release?.();
+    await waiting;
+    const drained = closing.oidc.close();
+    release();
     await expect(pending).resolves.toEqual({ kind: "rejected", reason: "closed" });
+    await drained;
   });
 
   it("bounds mapping work with the configured deadline", async () => {
-    const bounded = startedFlow({
+    let release!: () => void;
+    const bounded = await startedFlow({
       operationTimeoutMilliseconds: 1,
       provider: {
         issuer: "https://issuer.example",
@@ -659,8 +1451,8 @@ describe("OidcFlow callback", () => {
       },
       identityMapping: {
         resolve: () =>
-          new Promise<void>(() => {
-            void 0;
+          new Promise<void>((resolve) => {
+            release = resolve;
           }),
       },
     });
@@ -668,6 +1460,8 @@ describe("OidcFlow callback", () => {
       kind: "rejected",
       reason: "mapping-failed",
     });
+    release();
+    await bounded.oidc.close();
   });
 
   it("returns closed when a callback clock closes during lookup", async () => {
@@ -675,12 +1469,12 @@ describe("OidcFlow callback", () => {
     const time = {
       now: () => {
         calls += 1;
-        if (calls > 2) oidc.close();
+        if (calls > 2) void oidc.close();
         return 1_000;
       },
     };
     const oidc = flow({ clock: time, randomBytes: random(1, 2, 3) });
-    const started = oidc.start({
+    const started = await oidc.start({
       browserCodeChallenge: "a".repeat(43),
       postLoginRedirect: landing,
     });
@@ -707,7 +1501,7 @@ describe("OidcFlow callback", () => {
         },
       ),
     ]) {
-      const hostile = startedFlow({
+      const hostile = await startedFlow({
         provider: {
           issuer: "https://issuer.example",
           exchangeAuthorizationCode: () =>
@@ -731,7 +1525,7 @@ describe("OidcFlow callback", () => {
       value: "literal-claim",
       enumerable: true,
     });
-    const preserved = startedFlow({
+    const preserved = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () =>
@@ -755,7 +1549,7 @@ describe("OidcFlow callback", () => {
   });
 
   it("rejects hostile mapping output after consuming state", async () => {
-    const hostile = startedFlow({
+    const hostile = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () =>
@@ -795,7 +1589,7 @@ describe("OidcFlow callback", () => {
     { externalIdentity: null, principal: { id: "principal" } },
     { externalIdentity: { issuer: "https://issuer.example", subject: "subject" }, principal: null },
   ])("rejects malformed mapping boundary %#", async (output) => {
-    const malformed = startedFlow({
+    const malformed = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () =>
@@ -934,7 +1728,7 @@ describe("OidcFlow callback", () => {
       },
     },
   ])("rejects mapped identity with $name", async ({ output, providerClaims }) => {
-    const malformed = startedFlow({
+    const malformed = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () =>
@@ -979,7 +1773,7 @@ describe("OidcFlow callback", () => {
         return principal;
       },
     };
-    const stable = startedFlow({
+    const stable = await startedFlow({
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: () =>
@@ -996,7 +1790,7 @@ describe("OidcFlow callback", () => {
     expect(reads).toEqual({ external: 1, principal: 1, issuer: 1, subject: 1, id: 1 });
   });
 
-  it("reclaims an expired grant before admitting the next bounded callback", async () => {
+  it("explicitly purges an expired grant before admitting the next bounded callback", async () => {
     const time = clock();
     const oidc = flow({
       clock: time,
@@ -1019,21 +1813,24 @@ describe("OidcFlow callback", () => {
           }),
       },
     });
-    const start = () => {
-      const started = oidc.start({
+    const start = async () => {
+      const started = await oidc.start({
         browserCodeChallenge: "a".repeat(43),
         postLoginRedirect: landing,
       });
       if (started.kind !== "started") throw new Error("expected start");
       return stateOf(started.authorizationUrl);
     };
-    expect((await oidc.callback({ state: start(), code: "one" })).kind).toBe("granted");
-    await expect(oidc.callback({ state: start(), code: "two" })).resolves.toEqual({
+    expect((await oidc.callback({ state: await start(), code: "one" })).kind).toBe("granted");
+    await expect(oidc.callback({ state: await start(), code: "two" })).resolves.toEqual({
       kind: "rejected",
       reason: "capacity-exceeded",
     });
     time.advance(10);
-    expect((await oidc.callback({ state: start(), code: "three" })).kind).toBe("granted");
+    expect(
+      await oidc.purgeExpired(create(TimestampSchema, { seconds: 1n, nanos: 10_000_000 })),
+    ).toEqual({ transactions: 0, grants: 1 });
+    expect((await oidc.callback({ state: await start(), code: "three" })).kind).toBe("granted");
   });
 
   it("exhausts colliding grant IDs without retaining another grant", async () => {
@@ -1066,17 +1863,17 @@ describe("OidcFlow callback", () => {
           }),
       },
     });
-    const start = () => {
-      const started = oidc.start({
+    const start = async () => {
+      const started = await oidc.start({
         browserCodeChallenge: challenge,
         postLoginRedirect: landing,
       });
       if (started.kind !== "started") throw new Error("expected start");
       return stateOf(started.authorizationUrl);
     };
-    const first = await oidc.callback({ state: start(), code: "one" });
+    const first = await oidc.callback({ state: await start(), code: "one" });
     if (first.kind !== "granted") throw new Error("expected grant");
-    await expect(oidc.callback({ state: start(), code: "two" })).resolves.toEqual({
+    await expect(oidc.callback({ state: await start(), code: "two" })).resolves.toEqual({
       kind: "rejected",
       reason: "entropy-exhausted",
     });
@@ -1113,7 +1910,10 @@ describe("OidcFlow exchange", () => {
       },
       ...options,
     });
-    const started = oidc.start({ browserCodeChallenge: challenge, postLoginRedirect: landing });
+    const started = await oidc.start({
+      browserCodeChallenge: challenge,
+      postLoginRedirect: landing,
+    });
     if (started.kind !== "started") throw new Error("expected start");
     const callback = await oidc.callback({
       state: stateOf(started.authorizationUrl),
@@ -1123,7 +1923,468 @@ describe("OidcFlow exchange", () => {
     return { oidc, grant: callback.grant };
   }
 
-  it("burns a grant before browser PKCE verification and issues an application session once", async () => {
+  it("rejects an invalid pre-aborted exchange before store or issuer work", async () => {
+    const store = new MemoryOidcFlowStore(
+      "pre-aborted-exchange",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    let reads = 0;
+    let issues = 0;
+    const granted = await grantedFlow({
+      store,
+      sessionIssuer: {
+        issue: () => {
+          issues += 1;
+          return Promise.resolve(undefined);
+        },
+      },
+    });
+    const read = store.readGrant.bind(store);
+    store.readGrant = (digest) => {
+      reads += 1;
+      return read(digest);
+    };
+    const controller = new AbortController();
+    const reason = new Error("host stopped");
+    controller.abort(reason);
+    await expect(
+      granted.oidc.exchange({ grant: "", browserCodeVerifier: "invalid" }, controller.signal),
+    ).rejects.toBe(reason);
+    expect(reads).toBe(0);
+    expect(issues).toBe(0);
+    expect(await read(OidcFlowKeys.digest(store.flowId, granted.grant))).toBeDefined();
+    await granted.oidc.close();
+    await store.close();
+  });
+
+  it.each(["expiry", "clock-failure"] as const)(
+    "does not issue a session after grant consumption reaches %s",
+    async (outcome) => {
+      const time = clock();
+      let clockFailed = false;
+      const store = new MemoryOidcFlowStore(
+        "consumed-grant-expiry",
+        () => create(TimestampSchema, { seconds: 2n }),
+        10,
+        10,
+      );
+      const consume = store.consumeGrant.bind(store);
+      let entered!: () => void;
+      let release!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let issues = 0;
+      const granted = await grantedFlow({
+        store,
+        clock: { now: () => (clockFailed ? Number.NaN : time.now()) },
+        grantTtlMilliseconds: 10,
+        sessionIssuer: {
+          issue: () => {
+            issues += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+      });
+      store.consumeGrant = async (record) => {
+        entered();
+        await pending;
+        return consume(record);
+      };
+      const exchange = granted.oidc.exchange({
+        grant: granted.grant,
+        browserCodeVerifier: verifier,
+      });
+      await waiting;
+      if (outcome === "expiry") time.advance(10);
+      else clockFailed = true;
+      release();
+      await expect(exchange).resolves.toEqual({ kind: "rejected" });
+      expect(issues).toBe(0);
+      expect(
+        await store.readGrant(OidcFlowKeys.digest(store.flowId, granted.grant)),
+      ).toBeUndefined();
+      await granted.oidc.close();
+      await store.close();
+    },
+  );
+
+  it.each(["read", "consume"] as const)(
+    "surfaces a failed grant %s before session issuance",
+    async (stage) => {
+      const store = new MemoryOidcFlowStore(
+        "failed-exchange",
+        () => create(TimestampSchema, { seconds: 2n }),
+        10,
+        10,
+      );
+      let issues = 0;
+      const granted = await grantedFlow({
+        store,
+        sessionIssuer: {
+          issue: () => {
+            issues += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+      });
+      if (stage === "read") store.readGrant = () => Promise.reject(new Error("grant read failed"));
+      else store.consumeGrant = () => Promise.reject(new Error("grant consume failed"));
+      await expect(
+        granted.oidc.exchange({ grant: granted.grant, browserCodeVerifier: verifier }),
+      ).rejects.toThrow(`grant ${stage} failed`);
+      expect(issues).toBe(0);
+      await granted.oidc.close();
+      await store.close();
+    },
+  );
+
+  it("propagates an issuer failure while exchange is pending", async () => {
+    const failure = new Error("durable issuer failed");
+    const granted = await grantedFlow({ sessionIssuer: { issue: () => Promise.reject(failure) } });
+    await expect(
+      granted.oidc.exchange({ grant: granted.grant, browserCodeVerifier: verifier }),
+    ).rejects.toBe(failure);
+    await granted.oidc.close();
+  });
+
+  it("treats an undefined issuer rejection as failure while its signal is live", async () => {
+    const granted = await grantedFlow({
+      // The undefined rejection is the exact contract boundary under test.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      sessionIssuer: { issue: () => Promise.reject(undefined) },
+    });
+    let rejected = false;
+    try {
+      await granted.oidc.exchange({ grant: granted.grant, browserCodeVerifier: verifier });
+    } catch (reason) {
+      rejected = true;
+      expect(reason).toBeUndefined();
+    }
+    expect(rejected).toBe(true);
+    await granted.oidc.close();
+  });
+
+  it("treats an issuer rejection with its exact aborted reason as ordinary cancellation", async () => {
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const granted = await grantedFlow({
+      sessionIssuer: {
+        issue: (_principal: unknown, signal: AbortSignal) =>
+          new Promise((_resolve, reject) => {
+            entered();
+            signal.addEventListener(
+              "abort",
+              () => {
+                // A custom issuer may reject with the exact abort reason.
+                // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+                reject(signal.reason);
+              },
+              { once: true },
+            );
+          }),
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error("request stopped");
+    const exchange = granted.oidc.exchange(
+      { grant: granted.grant, browserCodeVerifier: verifier },
+      controller.signal,
+    );
+    await waiting;
+    controller.abort(reason);
+    await expect(exchange).rejects.toBe(reason);
+    await granted.oidc.close();
+  });
+
+  it("keeps close pending for a timed-out issuer and reports its late rejection", async () => {
+    let rejectIssue!: (reason: unknown) => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const granted = await grantedFlow({
+      operationTimeoutMilliseconds: 5,
+      sessionIssuer: {
+        issue: () => {
+          entered();
+          return new Promise((_, reject) => {
+            rejectIssue = reject;
+          });
+        },
+      },
+    });
+    const exchange = granted.oidc.exchange({ grant: granted.grant, browserCodeVerifier: verifier });
+    await waiting;
+    await expect(exchange).resolves.toEqual({ kind: "rejected" });
+    let closed = false;
+    const closing = granted.oidc.close().then(() => {
+      closed = true;
+    });
+    await Promise.resolve();
+    const closedEarly = closed;
+    const late = new Error("late durable issuer failure");
+    rejectIssue(late);
+    expect(closedEarly).toBe(false);
+    await expect(closing).rejects.toBe(late);
+  });
+
+  it("retains a distinct issuer failure when rejection and host abort occur in one turn", async () => {
+    let rejectIssue!: (reason: unknown) => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const granted = await grantedFlow({
+      sessionIssuer: {
+        issue: () => {
+          entered();
+          return new Promise((_, reject) => {
+            rejectIssue = reject;
+          });
+        },
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error("host request ended");
+    const failure = new Error("durable issuer failed");
+    const exchange = granted.oidc.exchange(
+      { grant: granted.grant, browserCodeVerifier: verifier },
+      controller.signal,
+    );
+    await waiting;
+    rejectIssue(failure);
+    await Promise.resolve();
+    await Promise.resolve();
+    controller.abort(reason);
+    await expect(exchange).rejects.toBe(reason);
+    await expect(granted.oidc.close()).rejects.toBe(failure);
+  });
+
+  it("waits for real opaque issuance compensation and reports its late failure at close", async () => {
+    const store = new MemoryOpaqueSessionStore();
+    const insert = store.insert.bind(store);
+    const failure = new Error("session compensation failed");
+    let entered!: () => void;
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    store.insert = async (record) => {
+      entered();
+      await pending;
+      return insert(record);
+    };
+    store.remove = () => Promise.reject(failure);
+    const sessions = await OpaqueSessions.create({
+      scope: "oidc-cancellation-test",
+      store,
+      password: "OIDC cancellation test password is at least 32 characters",
+      clock: { now: () => Date.now() },
+      ttlMilliseconds: 60_000,
+    });
+    const granted = await grantedFlow({
+      sessionIssuer: {
+        issue: async (principal: { id: string }, signal: AbortSignal) => {
+          const result = await sessions.issue(principal, signal);
+          return result.kind === "created"
+            ? { credential: result.credential, session: result.session }
+            : undefined;
+        },
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error("host request cancelled");
+    const exchange = granted.oidc.exchange(
+      { grant: granted.grant, browserCodeVerifier: verifier },
+      controller.signal,
+    );
+    await waiting;
+    controller.abort(reason);
+    await expect(exchange).rejects.toBe(reason);
+    let closed = false;
+    const closing = granted.oidc.close().then(() => {
+      closed = true;
+    });
+    await Promise.resolve();
+    expect(closed).toBe(false);
+    release();
+    await expect(closing).rejects.toMatchObject({ errors: [reason, failure] });
+    await expect(granted.oidc.close()).rejects.toMatchObject({ errors: [reason, failure] });
+    await sessions.close();
+    await store.close();
+  });
+
+  it.each(["expiry", "close"] as const)(
+    "does not consume a grant after delayed read reaches %s",
+    async (outcome) => {
+      const time = clock();
+      const store = new MemoryOidcFlowStore(
+        "delayed-exchange",
+        () => create(TimestampSchema, { seconds: 2n }),
+        10,
+        10,
+      );
+      const read = store.readGrant.bind(store);
+      const consume = store.consumeGrant.bind(store);
+      let release!: () => void;
+      let entered!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let consumes = 0;
+      let issues = 0;
+      const granted = await grantedFlow({
+        store,
+        clock: time,
+        grantTtlMilliseconds: 10,
+        sessionIssuer: {
+          issue: () => {
+            issues += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+      });
+      store.readGrant = async (digest) => {
+        entered();
+        await pending;
+        return read(digest);
+      };
+      store.consumeGrant = (record) => {
+        consumes += 1;
+        return consume(record);
+      };
+      const exchange = granted.oidc.exchange({
+        grant: granted.grant,
+        browserCodeVerifier: verifier,
+      });
+      await waiting;
+      const closing = outcome === "close" ? granted.oidc.close() : undefined;
+      if (outcome === "expiry") time.advance(10);
+      release();
+      await expect(exchange).resolves.toEqual({ kind: "rejected" });
+      await closing;
+      expect(consumes).toBe(0);
+      expect(issues).toBe(0);
+      await store.close();
+    },
+  );
+
+  it.each(["read", "consume"] as const)(
+    "aborts a delayed grant %s without session issuance",
+    async (stage) => {
+      const store = new MemoryOidcFlowStore(
+        "aborting-exchange",
+        () => create(TimestampSchema, { seconds: 2n }),
+        10,
+        10,
+      );
+      const read = store.readGrant.bind(store);
+      const consume = store.consumeGrant.bind(store);
+      let entered!: () => void;
+      let release!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let issues = 0;
+      const granted = await grantedFlow({
+        store,
+        sessionIssuer: {
+          issue: () => {
+            issues += 1;
+            return Promise.resolve(undefined);
+          },
+        },
+      });
+      if (stage === "read")
+        store.readGrant = async (digest) => {
+          entered();
+          await pending;
+          return read(digest);
+        };
+      else
+        store.consumeGrant = async (record) => {
+          entered();
+          await pending;
+          return consume(record);
+        };
+      const controller = new AbortController();
+      const reason = new Error("request cancelled");
+      const exchange = granted.oidc.exchange(
+        { grant: granted.grant, browserCodeVerifier: verifier },
+        controller.signal,
+      );
+      await waiting;
+      controller.abort(reason);
+      release();
+      await expect(exchange).rejects.toBe(reason);
+      expect(issues).toBe(0);
+      const digest = OidcFlowKeys.digest(store.flowId, granted.grant);
+      if (stage === "read") expect(await read(digest)).toBeDefined();
+      else expect(await read(digest)).toBeUndefined();
+      await granted.oidc.close();
+      await store.close();
+    },
+  );
+
+  it("drains a late grant consume without issuing a session after close", async () => {
+    const store = new MemoryOidcFlowStore(
+      "closing-exchange",
+      () => create(TimestampSchema, { seconds: 2n }),
+      10,
+      10,
+    );
+    const consume = store.consumeGrant.bind(store);
+    let release!: () => void;
+    let entered!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let issues = 0;
+    const granted = await grantedFlow({
+      store,
+      sessionIssuer: {
+        issue: () => {
+          issues += 1;
+          return Promise.resolve(undefined);
+        },
+      },
+    });
+    store.consumeGrant = async (record) => {
+      entered();
+      await pending;
+      return consume(record);
+    };
+    const exchange = granted.oidc.exchange({ grant: granted.grant, browserCodeVerifier: verifier });
+    await waiting;
+    const closing = granted.oidc.close();
+    release();
+    await expect(exchange).resolves.toEqual({ kind: "rejected" });
+    await closing;
+    expect(issues).toBe(0);
+    await store.close();
+  });
+
+  it("validates browser PKCE before consuming a grant and issues a session once", async () => {
     let issued = 0;
     const { oidc, grant } = await grantedFlow({
       sessionIssuer: {
@@ -1171,7 +2432,10 @@ describe("OidcFlow exchange", () => {
       },
     });
     const grant = async () => {
-      const started = oidc.start({ browserCodeChallenge: challenge, postLoginRedirect: landing });
+      const started = await oidc.start({
+        browserCodeChallenge: challenge,
+        postLoginRedirect: landing,
+      });
       if (started.kind !== "started") throw new Error("expected start");
       const callback = await oidc.callback({
         state: stateOf(started.authorizationUrl),
@@ -1259,10 +2523,10 @@ describe("OidcFlow exchange", () => {
         grant: getterHostile.grant,
         browserCodeVerifier: verifier,
       }),
-    ).resolves.toEqual({ kind: "rejected" });
+    ).resolves.toMatchObject({ kind: "issued" });
   });
 
-  it("burns grants before malformed or incorrect PKCE proof and session failures", async () => {
+  it("preserves grants after wrong proof and burns them before session issuance", async () => {
     let issued = 0;
     const wrong = await grantedFlow({
       sessionIssuer: {
@@ -1282,7 +2546,7 @@ describe("OidcFlow exchange", () => {
     ).toEqual({
       kind: "rejected",
     });
-    expect(issued).toBe(0);
+    expect(issued).toBe(1);
 
     const failing = await grantedFlow({
       sessionIssuer: {
@@ -1302,22 +2566,25 @@ describe("OidcFlow exchange", () => {
     ).toEqual({
       kind: "rejected",
     });
-    expect(issued).toBe(1);
+    expect(issued).toBe(2);
   });
 
   it("bounds session issuer work with the configured deadline", async () => {
+    let release!: () => void;
     const bounded = await grantedFlow({
       operationTimeoutMilliseconds: 1,
       sessionIssuer: {
         issue: () =>
-          new Promise<void>(() => {
-            void 0;
+          new Promise<void>((resolve) => {
+            release = resolve;
           }),
       },
     });
     await expect(
       bounded.oidc.exchange({ grant: bounded.grant, browserCodeVerifier: verifier }),
     ).resolves.toEqual({ kind: "rejected" });
+    release();
+    await bounded.oidc.close();
   });
 
   it("expires grants before exchange and makes close win a pending session issuance", async () => {
@@ -1338,18 +2605,26 @@ describe("OidcFlow exchange", () => {
       kind: "rejected",
     });
 
+    let releaseIssue!: () => void;
+    let issueEntered!: () => void;
+    const issueWaiting = new Promise<void>((resolve) => {
+      issueEntered = resolve;
+    });
     const closing = await grantedFlow({
       sessionIssuer: {
         issue: () =>
-          new Promise<void>(() => {
-            void 0;
+          new Promise<void>((resolve) => {
+            releaseIssue = resolve;
+            issueEntered();
           }),
       },
     });
     const pending = closing.oidc.exchange({ grant: closing.grant, browserCodeVerifier: verifier });
-    await Promise.resolve();
-    closing.oidc.close();
+    await issueWaiting;
+    const drained = closing.oidc.close();
     await expect(pending).resolves.toEqual({ kind: "rejected" });
+    releaseIssue();
+    await drained;
   });
 
   it("rejects malformed issuer sessions without throwing", async () => {
@@ -1363,7 +2638,7 @@ describe("OidcFlow exchange", () => {
     ).resolves.toEqual({ kind: "rejected" });
   });
 
-  it("rejects throwing session getters and proxies without escaping", async () => {
+  it("surfaces an issuer rejection caused by a throwing thenable getter", async () => {
     const hostile = await grantedFlow({
       sessionIssuer: {
         issue: () =>
@@ -1381,7 +2656,7 @@ describe("OidcFlow exchange", () => {
     });
     await expect(
       hostile.oidc.exchange({ grant: hostile.grant, browserCodeVerifier: verifier }),
-    ).resolves.toEqual({ kind: "rejected" });
+    ).rejects.toThrow("getter");
   });
 
   it("rejects negative timestamp nanos and token-like external claims", async () => {
@@ -1397,7 +2672,7 @@ describe("OidcFlow exchange", () => {
           }),
       },
     });
-    const tokenStarted = tokenOidc.start({
+    const tokenStarted = await tokenOidc.start({
       browserCodeChallenge: challenge,
       postLoginRedirect: landing,
     });

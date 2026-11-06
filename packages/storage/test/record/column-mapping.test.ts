@@ -53,6 +53,16 @@ describe("ColumnMapping", () => {
       "null",
     );
   });
+
+  it("rejects fixed-byte values of a different width before provider mapping", () => {
+    const mapping: Mapping = {
+      of: () => () => "mapped",
+      ofNull: () => () => "null",
+    };
+    const type = ColumnTypes.fixedBytes(12);
+    expect(() => ColumnMappings.value(mapping, type, new Uint8Array(11))).toThrow();
+    expect(ColumnMappings.value(mapping, type, new Uint8Array(12))).toBe("mapped");
+  });
 });
 
 function mapValue(columnType: RecordColumnType): (value: unknown) => string {

@@ -43,12 +43,247 @@ import {
 } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
-import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
+import { MysqlRecordStorage, MysqlTableInitializer } from "../src/mysql/record-storage.js";
 import { MysqlTableResolver } from "../src/mysql/table-resolver.js";
 import { resolvedMysqlTableSpec } from "../src/mysql/table-spec.js";
 import { MysqlStorageSchemaError } from "../src/mysql/errors.js";
 
 describe("MysqlRecordStorage", () => {
+  it("rejects a wider native fixed-byte column", async () => {
+    const table = resolvedMysqlTableSpec({
+      tableName: "records",
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string",
+      declaredColumns: [
+        new RecordColumn("token", ColumnTypes.fixedBytes(12), () => new Uint8Array(12)),
+      ],
+    });
+    const columns = [
+      ...canonicalColumns().slice(0, 2),
+      {
+        column_name: "token",
+        column_type: "varbinary(16)",
+        is_nullable: "YES",
+        column_default: null,
+        extra: "",
+      },
+    ];
+    const connection = schemaConnection([], { columns, primary: primaryKey() });
+
+    await expect(
+      new MysqlTableInitializer({ tableName: "records" }, table).prepare(
+        connection as never,
+        "check",
+      ),
+    ).rejects.toThrow(/incompatible token type/i);
+  });
+
+  it("rejects a missing declared lookup index in check mode", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const base = readyConnection(calls);
+    const connection = {
+      ...base,
+      query: (sql: string, values?: readonly unknown[]) =>
+        sql.includes("information_schema.statistics") && values?.length === 2
+          ? Promise.resolve([[], []] as never)
+          : base.query(sql, values),
+    };
+    const table = resolvedMysqlTableSpec({
+      tableName: "records",
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string",
+      declaredColumns: [],
+      declaredIndexes: [{ name: "lookup", columns: ["id"] }],
+    });
+    await expect(
+      new MysqlTableInitializer({ tableName: "records" }, table).prepare(
+        connection as never,
+        "check",
+      ),
+    ).rejects.toThrow(/index.*missing|missing.*index/i);
+    expect(calls.some(({ sql }) => sql.startsWith("CREATE"))).toBe(false);
+  });
+
+  it.each([
+    ["accepts the compatible winner", "ID", false],
+    ["rejects an incompatible winner", "bytes", true],
+  ])("re-inspects a duplicate-name lookup race and %s", async (_name, column, rejects) => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const base = readyConnection(calls);
+    const table = resolvedMysqlTableSpec({
+      tableName: "records",
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string",
+      declaredColumns: [],
+      declaredIndexes: [{ name: "lookup", columns: ["id"] }],
+    });
+    const index = table.indexes?.[0]?.name;
+    if (index === undefined) throw new Error("Expected MySQL lookup index.");
+    let catalogReads = 0;
+    const connection = {
+      ...base,
+      query: (sql: string, values?: readonly unknown[]) => {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        if (sql.startsWith("CREATE INDEX"))
+          return Promise.reject(
+            Object.assign(new Error("competing index"), { code: "ER_DUP_KEYNAME" }),
+          );
+        if (sql.includes("information_schema.statistics") && values?.length === 2) {
+          catalogReads++;
+          return Promise.resolve([
+            catalogReads === 1
+              ? []
+              : [
+                  {
+                    index_name: index,
+                    column_name: column,
+                    seq_in_index: 1,
+                    non_unique: 1,
+                    sub_part: null,
+                    collation: "A",
+                    index_type: "BTREE",
+                  },
+                ],
+            [],
+          ] as never);
+        }
+        return base.query(sql, values);
+      },
+    };
+    const prepare = new MysqlTableInitializer({ tableName: "records" }, table).prepare(
+      connection as never,
+      "create",
+    );
+    if (rejects) await expect(prepare).rejects.toThrow(/index is incompatible/i);
+    else await expect(prepare).resolves.toBeUndefined();
+    expect(catalogReads).toBe(2);
+    expect(calls.filter(({ sql }) => sql.startsWith("CREATE INDEX"))).toHaveLength(1);
+  });
+
+  it("propagates a non-duplicate lookup creation error without a catalog recheck", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const base = readyConnection(calls);
+    const table = resolvedMysqlTableSpec({
+      tableName: "records",
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string",
+      declaredColumns: [],
+      declaredIndexes: [{ name: "lookup", columns: ["id"] }],
+    });
+    const denied = Object.assign(new Error("index DDL denied"), {
+      code: "ER_DBACCESS_DENIED_ERROR",
+    });
+    let catalogReads = 0;
+    const connection = {
+      ...base,
+      query: (sql: string, values?: readonly unknown[]) => {
+        calls.push(values === undefined ? { sql } : { sql, values });
+        if (sql.startsWith("CREATE INDEX")) return Promise.reject(denied);
+        if (sql.includes("information_schema.statistics") && values?.length === 2) {
+          catalogReads++;
+          return Promise.resolve([[], []] as never);
+        }
+        return base.query(sql, values);
+      },
+    };
+
+    await expect(
+      new MysqlTableInitializer({ tableName: "records" }, table).prepare(
+        connection as never,
+        "create",
+      ),
+    ).rejects.toBe(denied);
+    expect(catalogReads).toBe(1);
+    expect(calls.filter(({ sql }) => sql.startsWith("CREATE INDEX"))).toHaveLength(1);
+  });
+
+  it("checks a manually supplied legacy table specification without index metadata", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const resolved = resolvedMysqlTableSpec({
+      tableName: "records",
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string",
+      declaredColumns: [],
+    });
+    const manual = { ...resolved };
+    delete manual.indexes;
+    await expect(
+      new MysqlTableInitializer({ tableName: "records" }, manual).prepare(
+        readyConnection(calls) as never,
+        "check",
+      ),
+    ).resolves.toBeUndefined();
+    expect(
+      calls.some(
+        ({ sql, values }) => sql.includes("information_schema.statistics") && values?.length === 2,
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    ["wrong column", { column_name: "bytes" }],
+    ["unique", { non_unique: 0 }],
+    ["prefix", { sub_part: 4 }],
+    ["descending", { collation: "D" }],
+    ["hash method", { index_type: "HASH" }],
+    ["invisible", { is_visible: "NO" }],
+    ["ignored", { ignored: "YES" }],
+    ["expression", { expression: "lower(ID)" }],
+  ])("rejects a %s lookup index", async (_name, change) => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const base = readyConnection(calls);
+    const table = resolvedMysqlTableSpec({
+      tableName: "records",
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string",
+      declaredColumns: [],
+      declaredIndexes: [{ name: "lookup", columns: ["id"] }],
+    });
+    const index = table.indexes?.[0]?.name;
+    if (index === undefined) throw new Error("Expected MySQL lookup index.");
+    const connection = {
+      ...base,
+      query: (sql: string, values?: readonly unknown[]) => {
+        if (sql.includes("table_name='STATISTICS'"))
+          return Promise.resolve([
+            ["IS_VISIBLE", "IGNORED", "EXPRESSION"].map((column_name) => ({ column_name })),
+            [],
+          ] as never);
+        if (sql.includes("information_schema.statistics") && values?.length === 2)
+          return Promise.resolve([
+            [
+              {
+                index_name: index,
+                column_name: "ID",
+                seq_in_index: 1,
+                non_unique: 1,
+                sub_part: null,
+                collation: "A",
+                index_type: "BTREE",
+                is_visible: "YES",
+                ignored: "NO",
+                expression: null,
+                ...change,
+              },
+            ],
+            [],
+          ] as never);
+        return base.query(sql, values);
+      },
+    };
+    await expect(
+      new MysqlTableInitializer({ tableName: "records" }, table).prepare(
+        connection as never,
+        "check",
+      ),
+    ).rejects.toThrow(/index is incompatible/i);
+  });
   it("binds each legacy scalar-list member and makes an empty list match no rows", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const storage = schemaStorage(

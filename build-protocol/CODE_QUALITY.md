@@ -188,7 +188,7 @@ documentation in the authored Proto source.
 Authored example Proto follows these rules. Its
 package is `spine.examples.<domain>` and its type URL prefix is
 `type.spine.examples.<domain>`, where `<domain>` is exactly `messageboard`, `projects`,
-`orders`, `todo`, or `releasenotes`. Authored example paths, packages, and imports contain no
+`orders`, `fieldnotes`, `todo`, or `releasenotes`. Authored example paths, packages, and imports contain no
 `v1` component. Manifest-declared frozen copied Proto sources remain exempt and
 unchanged. `check-owned-proto-style` covers tracked authored framework, example,
 and package test-fixture Proto sources. It mechanically checks source layout

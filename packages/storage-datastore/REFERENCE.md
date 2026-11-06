@@ -64,6 +64,19 @@ The callback and creator must share application-managed readiness: after a
 successful `check`, later ordinary use must not auto-create the checked
 structures. A `create` callback verifies its result. Each callback cleans up
 resources it partially acquires if preparation fails.
+
+Native record preparation validates local `RecordSpec.indexes` shapes limited
+to the storage ID and one declared single-valued property (optionally followed
+by the ID). It does not deploy Datastore indexes or prove cloud index readiness.
+Fixed byte columns retain exact-width stored and query validation. A supported
+equality-plus-ID page pushes equality, ascending key order, continuation, and
+requested limit to Datastore without the local scan overflow sentinel.
+
+`createRecordStorage(..., undefined, { prepareOnAccess: false })` rejects when
+record resolution selects a custom creator, even if that creator has an explicit
+preparation callback. Only native Datastore record handles support skipped
+access preparation.
+
 The built-in Entity provider writes its record families independently; custom
 record creators do not join a combined Entity transaction.
 Custom Entity bundles return a `Promise<void>` from `close()` and provide synchronous

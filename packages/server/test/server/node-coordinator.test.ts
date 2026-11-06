@@ -13,9 +13,17 @@
  */
 
 import * as http2 from "node:http2";
+import { generateKeyPairSync } from "node:crypto";
 import type { AddressInfo } from "node:net";
 
-import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
+import {
+  clone,
+  create,
+  fromBinary,
+  toBinary,
+  type Message,
+  type MessageShape,
+} from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
@@ -23,9 +31,11 @@ import {
   DynamicSubscriptionCreator,
   DynamicUnaryForwarder,
   NativeSubscriptionCreator,
+  SignedSessions,
   type DynamicUnaryClient,
 } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
+import { BackendMembershipKernel } from "@spine-event-engine/deployment/spi/backend-membership";
 import { AnyPacker, TypeUrls } from "@spine-event-engine/core";
 import { ReaderForwarding } from "@spine-event-engine/core/spi/reader-forwarding";
 import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/spi/subscription-lifecycle";
@@ -54,6 +64,7 @@ import {
   EventUpdatesSchema,
   SubscriptionIdSchema,
   SubscriptionSchema,
+  type Subscription,
   SubscriptionService,
   SubscriptionValidationError,
   SubscriptionUpdateSchema,
@@ -114,7 +125,9 @@ describe("NodeCoordinator", () => {
     const coordinator = await NodeCoordinator.open({
       members: new TestReadyMembers([replica.member]),
       port: 0,
-      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      readerAdmission: {
+        direct: { authenticate: () => ({ reader: { principal: { id: "reader-a" } } }) },
+      },
       forwardingProof: { issue: () => "coordinator-signed" },
     });
     closeables.push(() => coordinator.close());
@@ -135,7 +148,9 @@ describe("NodeCoordinator", () => {
     const coordinator = await NodeCoordinator.open({
       members: new TestReadyMembers([replica.member]),
       port: 0,
-      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      readerAdmission: {
+        direct: { authenticate: () => ({ reader: { principal: { id: "reader-a" } } }) },
+      },
     });
     closeables.push(() => coordinator.close());
     const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
@@ -163,7 +178,7 @@ describe("NodeCoordinator", () => {
     const coordinator = await NodeCoordinator.open({
       members: new TestReadyMembers([replica.member]),
       port: 0,
-      readerAdmission: { direct: { authenticate: () => ({}) } },
+      readerAdmission: { direct: { authenticate: () => ({ reader: {} }) } },
     });
     closeables.push(() => coordinator.close());
     const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
@@ -196,7 +211,9 @@ describe("NodeCoordinator", () => {
     const coordinator = await NodeCoordinator.open({
       members: new TestReadyMembers([replica.member]),
       port: 0,
-      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      readerAdmission: {
+        direct: { authenticate: () => ({ reader: { principal: { id: "reader-a" } } }) },
+      },
       forwardingProof: { issue: () => "coordinator-signed" },
     });
     closeables.push(() => coordinator.close());
@@ -222,11 +239,13 @@ describe("NodeCoordinator", () => {
       readerAdmission: {
         direct: {
           authenticate: ({ headers }) => ({
-            principal: {
-              id:
-                ("get" in headers && typeof headers.get === "function"
-                  ? headers.get("x-reader")
-                  : (headers as Readonly<Record<string, string>>)["x-reader"]) ?? "anonymous",
+            reader: {
+              principal: {
+                id:
+                  ("get" in headers && typeof headers.get === "function"
+                    ? headers.get("x-reader")
+                    : (headers as Readonly<Record<string, string>>)["x-reader"]) ?? "anonymous",
+              },
             },
           }),
         },
@@ -334,7 +353,9 @@ describe("NodeCoordinator", () => {
     const coordinator = await NodeCoordinator.open({
       members: new TestReadyMembers([replica.member]),
       port: 0,
-      readerAdmission: { direct: { authenticate: () => ({ principal: { id: "reader-a" } }) } },
+      readerAdmission: {
+        direct: { authenticate: () => ({ reader: { principal: { id: "reader-a" } } }) },
+      },
       forwardingProof: { issue: () => "coordinator-signed" },
     });
     closeables.push(() => coordinator.close());
@@ -978,6 +999,440 @@ describe("NodeCoordinator", () => {
     await coordinator.close();
   });
 
+  it("stops managed child output and cancels its definition on reader invalidation", async () => {
+    const replica = await backend("reader-invalidated", { holdActivation: true });
+    closeables.push(replica.close);
+    const invalidation = new AbortController();
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: {},
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    const updates = client.activate(subscription)[Symbol.asyncIterator]();
+    await expect(updates.next()).resolves.toMatchObject({
+      value: { response: { status: { status: { case: "ok" } } } },
+    });
+    const pending = updates.next();
+    await expect.poll(() => replica.activations()).toBe(1);
+    invalidation.abort();
+    await expect(pending).resolves.toMatchObject({ done: true });
+    await expect.poll(() => replica.activationAborts()).toBe(1);
+    await expect.poll(() => replica.cancellations()).toBe(1);
+  });
+
+  it("does not dispatch a managed read when its session ends while proof is pending", async () => {
+    let reads = 0;
+    const replica = await backend("proof-read-abort", {
+      read: () => {
+        reads++;
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const entered = deferred<undefined>();
+    const release = deferred<string>();
+    const invalidation = new AbortController();
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader-a" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+      forwardingProof: {
+        issue: () => {
+          entered.resolve(undefined);
+          return release.promise;
+        },
+      },
+    });
+    closeables.push(() => coordinator.close());
+    const pending = createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    ).read(coordinatorQuery());
+    await entered.promise;
+    invalidation.abort();
+    release.resolve("proof");
+    await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+    expect(reads).toBe(0);
+  });
+
+  it("does not create a managed child after its reader ends during proof", async () => {
+    const replica = await backend("proof-subscribe-abort");
+    closeables.push(replica.close);
+    const entered = deferred<undefined>();
+    const release = deferred<string>();
+    const invalidation = new AbortController();
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader-a" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+      forwardingProof: {
+        issue: () => {
+          entered.resolve(undefined);
+          return release.promise;
+        },
+      },
+    });
+    closeables.push(() => coordinator.close());
+    const pending = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    ).subscribe(coordinatorTopic());
+    await entered.promise;
+    invalidation.abort();
+    release.resolve("proof");
+    await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+    expect(replica.subscriptions()).toBe(0);
+  });
+
+  it.each([0, 1])(
+    "cancels a managed Subscribe invalidated at scheduling with %i cleanup failure",
+    async (cancelFailures) => {
+      const replica = await backend(`final-subscribe-abort-${cancelFailures.toString()}`, {
+        cancelFailures,
+      });
+      closeables.push(replica.close);
+      const invalidation = new AbortController();
+      const coordinator = await NodeCoordinator.open({
+        members: new TestReadyMembers([replica.member]),
+        port: 0,
+        readerAdmission: {
+          direct: {
+            authenticate: () => ({
+              reader: { principal: { id: "reader-a" } },
+              invalidated: invalidation.signal,
+            }),
+          },
+        },
+        forwardingProof: { issue: () => "proof" },
+      });
+      closeables.push(() => coordinator.close());
+      const original = globalThis.setTimeout;
+      const schedule = vi
+        .spyOn(globalThis, "setTimeout")
+        .mockImplementation((callback, delay, ...args) => {
+          if (delay === SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS && replica.subscriptions() === 1)
+            invalidation.abort();
+          return original(callback, delay, ...args);
+        });
+      try {
+        await expect(
+          createClient(
+            SubscriptionService,
+            createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+          ).subscribe(coordinatorTopic()),
+        ).rejects.toMatchObject({
+          code: cancelFailures === 0 ? Code.Canceled : Code.Internal,
+        });
+        expect(replica.subscriptions()).toBe(1);
+        await expect.poll(() => replica.cancellations()).toBe(1);
+        await coordinator.close();
+        expect(replica.cancellations()).toBe(cancelFailures === 0 ? 1 : 2);
+      } finally {
+        schedule.mockRestore();
+      }
+    },
+  );
+
+  it("surfaces child cleanup failure when invalidation interrupts partial creation", async () => {
+    const verified: string[] = [];
+    const verifyReader = async (method: string, bytes: Uint8Array, context: HandlerContext) => {
+      const reader = await ReaderForwarding.open(
+        context.requestHeader,
+        "spine.client.SubscriptionService",
+        method,
+        bytes,
+        { verify: (_bytes, proof) => proof === "proof" },
+        context,
+        4_194_304,
+      );
+      verified.push(`${method}:${reader.principal?.id ?? "missing"}`);
+    };
+    const first = await backend("partial-cleanup-first", { cancelFailures: 1, verifyReader });
+    const second = await backend("partial-cleanup-second", { cancelFailures: 1, verifyReader });
+    closeables.push(first.close, second.close);
+    const entered = deferred<undefined>();
+    const release = deferred<string>();
+    const invalidation = new AbortController();
+    let currentInvalidation = invalidation.signal;
+    let logical: Subscription | undefined;
+    // The delegate must retain the kernel instance's private state.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const originalSubscribe = BackendMembershipKernel.prototype.subscribe;
+    const capture = vi
+      .spyOn(BackendMembershipKernel.prototype, "subscribe")
+      .mockImplementation(function (
+        this: BackendMembershipKernel<unknown, unknown, unknown, unknown>,
+        definition,
+        signal,
+        maxChildBytes,
+      ) {
+        logical = fromBinary(SubscriptionSchema, definition);
+        return originalSubscribe.call(this, definition, signal, maxChildBytes);
+      });
+    closeables.push(() => {
+      capture.mockRestore();
+      return Promise.resolve();
+    });
+    let proofs = 0;
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([
+        { ...first.member, slot: 0 },
+        { ...second.member, slot: 1 },
+      ]),
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader-a" } },
+            invalidated: currentInvalidation,
+          }),
+        },
+      },
+      forwardingProof: {
+        issue: () => {
+          if (++proofs === 1 || proofs > 2) return "proof";
+          entered.resolve(undefined);
+          return release.promise;
+        },
+      },
+    });
+    closeables.push(() => coordinator.close());
+    const pending = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    ).subscribe(coordinatorTopic());
+    await entered.promise;
+    await expect.poll(() => first.subscriptions() + second.subscriptions()).toBe(1);
+    invalidation.abort();
+    release.resolve("proof");
+    await expect(pending).rejects.toMatchObject({ code: Code.Internal });
+    expect(first.cancellations() + second.cancellations()).toBeGreaterThan(0);
+    currentInvalidation = new AbortController().signal;
+    expect(logical).toBeDefined();
+    await expect(
+      createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      ).cancel(logical ?? create(SubscriptionSchema)),
+    ).resolves.toBeDefined();
+    expect(verified.filter((value) => value === "Cancel:reader-a")).toHaveLength(2);
+  });
+
+  it("does not activate a child after reader invalidation during proof", async () => {
+    const replica = await backend("proof-activate-abort");
+    closeables.push(replica.close);
+    const members = new TestReadyMembers([replica.member]);
+    const entered = deferred<undefined>();
+    const release = deferred<string>();
+    const invalidation = new AbortController();
+    let proofs = 0;
+    const coordinator = await NodeCoordinator.open({
+      members,
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader-a" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+      forwardingProof: {
+        issue: () => {
+          if (++proofs === 1) return "proof";
+          entered.resolve(undefined);
+          return release.promise;
+        },
+      },
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    const updates = client.activate(subscription)[Symbol.asyncIterator]();
+    const pending = updates.next();
+    await entered.promise;
+    invalidation.abort();
+    release.resolve("proof");
+    await pending.catch(() => undefined);
+    expect(replica.activations()).toBe(0);
+    expect(members.childActivations()).toBe(0);
+  });
+
+  it("does not cancel a managed child after reader invalidation during proof", async () => {
+    const replica = await backend("proof-cancel-abort");
+    closeables.push(replica.close);
+    const entered = deferred<undefined>();
+    const release = deferred<string>();
+    const invalidation = new AbortController();
+    let proofs = 0;
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: () => ({
+            reader: { principal: { id: "reader-a" } },
+            invalidated: invalidation.signal,
+          }),
+        },
+      },
+      forwardingProof: {
+        issue: () => {
+          if (++proofs === 1) return "proof";
+          entered.resolve(undefined);
+          return release.promise;
+        },
+      },
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(coordinatorTopic());
+    const pending = client.cancel(subscription);
+    await entered.promise;
+    invalidation.abort();
+    release.resolve("proof");
+    await expect(pending).rejects.toMatchObject({ code: Code.Internal });
+    expect(replica.cancellations()).toBe(0);
+  });
+
+  it("stops actual managed child output after same-instance signed logout", async () => {
+    const replica = await backend("signed-logout", { holdActivation: true });
+    closeables.push(replica.close);
+    const key = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const revoked = new Set<string>();
+    const sessions = new SignedSessions({
+      issuer: "native-test",
+      audience: "native-client",
+      activeKey: { kid: "key", privateKey: key.privateKey },
+      revocation: {
+        kind: "supported",
+        isRevoked: (jti) => Promise.resolve(revoked.has(jti)),
+        revoke: (jti) => {
+          revoked.add(jti);
+          return Promise.resolve();
+        },
+      },
+    });
+    const issued = await sessions.issue({ id: "reader/a" });
+    if (issued.kind !== "issued") throw new Error("expected signed credential");
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      forwardingProof: { issue: () => "signed-reader" },
+      readerAdmission: {
+        direct: {
+          authenticate: async (request) => {
+            const authorization =
+              request.headers instanceof Headers ? request.headers.get("authorization") : undefined;
+            if (authorization !== `Bearer ${issued.credential.value}`) return undefined;
+            const session = await sessions.resolve(issued.credential, request.signal);
+            if (session?.invalidated === undefined) return undefined;
+            return { reader: { principal: session.principal }, invalidated: session.invalidated };
+          },
+        },
+      },
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const headers = { authorization: `Bearer ${issued.credential.value}` };
+    const subscription = await client.subscribe(coordinatorTopic(), { headers });
+    const updates = client.activate(subscription, { headers })[Symbol.asyncIterator]();
+    await expect(updates.next()).resolves.toMatchObject({
+      value: { response: { status: { status: { case: "ok" } } } },
+    });
+    const pending = updates.next();
+    await expect.poll(() => replica.activations()).toBe(1);
+    expect(await sessions.logout(issued.credential)).toEqual({ kind: "revoked" });
+    await expect(pending).resolves.toMatchObject({ done: true });
+    await expect.poll(() => replica.activationAborts()).toBe(1);
+    await expect.poll(() => replica.cancellations()).toBe(1);
+    await sessions.close();
+  });
+
+  it("aborts pending native authentication on host close before child dispatch", async () => {
+    let reads = 0;
+    const replica = await backend("pending-auth-close", {
+      read: () => {
+        reads++;
+        return create(QueryResponseSchema);
+      },
+    });
+    closeables.push(replica.close);
+    const entered = deferred<undefined>();
+    let stopped = false;
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: async ({ signal }) => {
+            entered.resolve(undefined);
+            await new Promise<void>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  stopped = true;
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+            return undefined;
+          },
+        },
+      },
+    });
+    const client = createClient(
+      QueryService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const pending = client.read(coordinatorQuery()).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await entered.promise;
+    await coordinator.close();
+    await expect(pending).resolves.toBeInstanceOf(Error);
+    expect(stopped).toBe(true);
+    expect(reads).toBe(0);
+  });
+
   it("rejects cancellation without a Coordinator subscription ID", async () => {
     const coordinator = await NodeCoordinator.open({
       members: new TestReadyMembers([]),
@@ -1034,9 +1489,18 @@ describe("NodeCoordinator", () => {
   it("cancels an active public iterator from a second client", async () => {
     const replica = await backend("cancel-second-client", { holdActivation: true });
     closeables.push(replica.close);
+    let activation: AbortSignal | undefined;
     const coordinator = await NodeCoordinator.open({
       members: new TestReadyMembers([replica.member]),
       port: 0,
+      readerAdmission: {
+        direct: {
+          authenticate: ({ method, signal }) => {
+            if (method === "Activate") activation = signal;
+            return { reader: {} };
+          },
+        },
+      },
     });
     closeables.push(() => coordinator.close());
     const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
@@ -1054,6 +1518,7 @@ describe("NodeCoordinator", () => {
 
     await createClient(SubscriptionService, transport).cancel(subscription);
     await expect(pending).resolves.toMatchObject({ done: true });
+    await expect.poll(() => activation?.aborted).toBe(true);
     await expect.poll(() => replica.activationAborts()).toBe(1);
   });
 

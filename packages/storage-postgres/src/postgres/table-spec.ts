@@ -14,12 +14,30 @@
 
 import { ScalarType, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import type { RecordColumn, RecordColumnType } from "@spine-event-engine/storage";
+import { createHash } from "node:crypto";
+import type { RecordColumn, RecordColumnType, RecordIndex } from "@spine-event-engine/storage";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 import { PostgresDataTypes, type PostgresDdlType } from "./data-type.js";
 import type { PostgresColumnSpec, PostgresTableSpec } from "./storage-factory.js";
 import { PostgresIdColumn } from "./id-column.js";
+
+/**
+ * Specifies the source and physical identity used to resolve a PostgreSQL record table.
+ *
+ * @typeParam I Record identifier type.
+ * @typeParam R Stored Protobuf record type.
+ */
+interface PostgresTableInput<I, R extends Message> {
+  readonly schema: string;
+  readonly tableName: string;
+  readonly sourceType: GenMessage<Message>;
+  readonly recordType: GenMessage<R>;
+  readonly idType: I extends Message ? GenMessage<I> : string;
+  readonly groupName?: string;
+  readonly declaredColumns: readonly RecordColumn<R>[];
+  readonly declaredIndexes?: readonly RecordIndex[];
+}
 
 /**
  * Resolves PostgreSQL-native declared-column and record-family table layouts.
@@ -52,15 +70,9 @@ export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
    * @param input Resolved schema, table, types, group, and declared columns.
    * @returns Complete PostgreSQL table specification.
    */
-  resolvedPostgresTableSpec<I, R extends Message>(input: {
-    readonly schema: string;
-    readonly tableName: string;
-    readonly sourceType: GenMessage<Message>;
-    readonly recordType: GenMessage<R>;
-    readonly idType: I extends Message ? GenMessage<I> : string;
-    readonly groupName?: string;
-    readonly declaredColumns: readonly RecordColumn<R>[];
-  }): PostgresTableSpec<I, R> {
+  resolvedPostgresTableSpec<I, R extends Message>(
+    input: PostgresTableInput<I, R>,
+  ): PostgresTableSpec<I, R> {
     return {
       schema: input.schema,
       tableName: input.tableName,
@@ -84,6 +96,13 @@ export const PostgresTableSpecs: PostgresTableSpecifications = Object.freeze({
         ),
       ],
       primaryKey: ["ID"],
+      indexes: (input.declaredIndexes ?? []).map((index) => ({
+        name: `ix_${createHash("sha256")
+          .update(JSON.stringify([input.schema, input.tableName, index.name]))
+          .digest("hex")
+          .slice(0, 32)}`,
+        columns: index.columns.map((column) => (column === "id" ? "ID" : column)),
+      })),
     };
   },
 });
@@ -116,6 +135,7 @@ interface PostgresTableSpecifications {
     readonly idType: I extends Message ? GenMessage<I> : string;
     readonly groupName?: string;
     readonly declaredColumns: readonly RecordColumn<R>[];
+    readonly declaredIndexes?: readonly RecordIndex[];
   }): PostgresTableSpec<I, R>;
 }
 
@@ -165,6 +185,9 @@ const PostgresColumnTypes = Object.freeze({
     return {
       name: column.name,
       postgresType: PostgresTableSpecs.postgresColumnType(column.type),
+      ...(column.type.kind === "scalar" && column.type.byteLength !== undefined
+        ? { byteLength: column.type.byteLength }
+        : {}),
       nullable: !currentEntity || !["archived", "deleted", "version"].includes(column.name),
       ...(currentEntity && ["archived", "deleted"].includes(column.name)
         ? { defaultSql: "false" }

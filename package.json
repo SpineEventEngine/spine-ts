@@ -1,6 +1,6 @@
 {
   "name": "spine-ts",
-  "version": "2.0.0-snapshot.26",
+  "version": "2.0.0-snapshot.27",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",
@@ -29,7 +29,7 @@
     "test:envoy": "node --test interop/envoy/render.test.mjs interop/envoy/validate.test.mjs",
     "docs:api": "pnpm proto:generate && pnpm docs:api:generated",
     "docs:api:generated": "typedoc --options typedoc.json",
-    "docs:api:check": "node scripts/check-api-docs.mjs",
+    "docs:api:check": "node --max-old-space-size=6144 scripts/check-api-docs.mjs",
     "docs:audience:check": "node scripts/check-doc-audience.mjs",
     "docs:snippets:check": "pnpm typecheck:build && pnpm docs:snippets:check:generated",
     "docs:snippets:check:generated": "node docs/check-typescript-snippets.mjs",

@@ -487,8 +487,10 @@ describe("multi-package Message Board", () => {
 
   it("uses native authentication for restricted Events, Entity reads, and App Queries", async () => {
     const authenticate = vi.fn(() => ({
-      principal: { id: "fixture-reader" },
-      authorityFacts: { canReadRestricted: true },
+      reader: {
+        principal: { id: "fixture-reader" },
+        authorityFacts: { canReadRestricted: true },
+      },
     }));
     const application = await new ComposedBoardApplication({ direct: { authenticate } }).create();
     const running = await application.server.start();

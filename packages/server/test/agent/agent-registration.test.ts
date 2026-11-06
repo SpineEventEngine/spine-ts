@@ -56,7 +56,7 @@ import type {
 import { afterEach, describe, expect, it } from "vitest";
 import { Agent } from "../../src/entity/entity.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
-import { TenantIndexes } from "../../src/context/tenant-index.js";
+import { TestTenantIndex, requireTenantDirectory } from "../tenant-index-fixture.js";
 import { Repository } from "../../src/repository/repository.js";
 import { repositoryAccess } from "../../src/repository/repository.js";
 import { ReadSideFilter, type ReadSideContext } from "../../src/stand/read-side-filter.js";
@@ -291,7 +291,10 @@ async function collectHistoryIds<T>(
 
 async function configureStorage(factory: StorageFactory): Promise<void> {
   await ServerEnvironmentLifecycle.resetForTest();
-  ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    storageFactory: factory,
+    tenantIndex: new TestTenantIndex(),
+  });
   await ServerEnvironment.instance().completeSetup();
 }
 
@@ -438,8 +441,8 @@ describe("Agent registration readiness", () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared-history" });
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-A" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-B" } });
-    await context.tenantIndex.keep(tenantA);
-    await context.tenantIndex.keep(tenantB);
+    await requireTenantDirectory(context.tenantIndex).keep(tenantA);
+    await requireTenantDirectory(context.tenantIndex).keep(tenantB);
     const before = factory.historyOpens;
     try {
       const reader = configured.agentHistory(id, { tenantId: tenantA });
@@ -498,7 +501,7 @@ describe("Agent registration readiness", () => {
   it("cancels empty Agent history before or during tenant admission without opening storage", async () => {
     const factory = new CountingAgentHistoryFactory();
     await configureStorage(factory);
-    const base = TenantIndexes.fromFactory(factory);
+    const base = new TestTenantIndex();
     let entered!: () => void;
     let release!: () => void;
     const admissionEntered = new Promise<void>((resolve) => {
@@ -531,7 +534,7 @@ describe("Agent registration readiness", () => {
     const tenantId = create(TenantIdSchema, { kind: { case: "value", value: "tenant-A" } });
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-canceled-history" });
     const conversation = create(ConversationIdSchema, { value: "T-canceled-conversation" });
-    await context.tenantIndex.keep(tenantId);
+    await requireTenantDirectory(context.tenantIndex).keep(tenantId);
     try {
       const canceled = new AbortController();
       canceled.abort();
@@ -600,7 +603,7 @@ describe("Agent registration readiness", () => {
     }
     const factory = new InMemoryStorageFactory();
     await configureStorage(factory);
-    const baseIndex = TenantIndexes.fromFactory(factory);
+    const baseIndex = new TestTenantIndex();
     let pauseAdmission = false;
     let entered!: () => void;
     let release!: () => void;
@@ -637,8 +640,8 @@ describe("Agent registration readiness", () => {
     const id = create(SupportReplyAgentIdSchema, { ticketNumber: "T-shared" });
     const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-A" } });
     const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-B" } });
-    await context.tenantIndex.keep(tenantA);
-    await context.tenantIndex.keep(tenantB);
+    await requireTenantDirectory(context.tenantIndex).keep(tenantA);
+    await requireTenantDirectory(context.tenantIndex).keep(tenantB);
     const actorContext = create(ActorContextSchema);
     const signal = new AbortController().signal;
     const scope = {

@@ -33,12 +33,18 @@ export {
 export { ThirdPartyContext } from "./integration/third-party-context.js";
 export type {
   TenantIndex,
+  TenantIndexSetting,
   TenantIndexCursor,
   TenantIndexPage,
   TenantIndexRead,
   TenantIndexSignal,
 } from "./context/tenant-index.js";
+export { SINGLE_TENANT } from "./context/tenant-index.js";
 export { TenantUnknownError } from "./context/tenant-unknown-error.js";
+export {
+  PersistentTenantIndex,
+  type PersistentTenantIndexOptions,
+} from "./context/persistent-tenant-index.js";
 
 export {
   Stand,
@@ -67,6 +73,10 @@ export {
 } from "./stand/subscription-registry.js";
 
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
+export type {
+  DirectReaderAuthenticator,
+  ReaderAdmissionResult,
+} from "./services/trusted-reader-ingress.js";
 export {
   Server,
   type ListenerLifecycle,

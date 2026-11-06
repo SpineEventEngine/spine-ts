@@ -537,7 +537,7 @@ function scanProto(file, source) {
 export function scanExampleProtoContract(file, source) {
   const failures = [];
   const example =
-    /(?:^|\/)examples\/(message-board|projects|orders|support|todo|release-notes)(?:\/|$)/.exec(
+    /(?:^|\/)examples\/(message-board|projects|orders|fieldnotes|support|todo|release-notes)(?:\/|$)/.exec(
       file,
     )?.[1];
   const domain = example?.replaceAll("-", "");

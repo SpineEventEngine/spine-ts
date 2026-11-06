@@ -5,7 +5,8 @@ This reference is for coding agents working with the Spine TS storage contract.
 ## Public entry point
 
 Import public types from `@spine-event-engine/storage`. The entry point exports
-`StorageFactory`, `RecordStorage`, `RecordSpec`, `RecordSpecOptions`, `RecordColumn`, `RecordQuery`,
+`StorageFactory`, `RecordStorage`, `RecordStorageOptions`, `RecordSpec`, `RecordSpecOptions`,
+`RecordColumn`, `RecordIndex`, `RecordQuery`,
 `StorageGroup`, `ColumnTypes`, `ColumnMappings`, the exported
 column-mapping contracts, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, event-store types, normalized query policy/evaluator
@@ -121,7 +122,7 @@ retained private handles.
 
 ## Record storage
 
-`StorageFactory.createRecordStorage(context, spec, group?)` returns an
+`StorageFactory.createRecordStorage(context, spec, group?, options?)` returns an
 independently closeable `RecordStorage`. A single-tenant context forbids a
 tenant ID. A multitenant context requires a complete generated `TenantId`.
 The Bounded Context name is diagnostic only. A `RecordSpec` fixes the
@@ -129,10 +130,29 @@ source type, stored record type, identity extractor, ID schema or primitive ID
 kind, and materialized columns. `sourceType` defaults to `recordType`; Entity
 record specifications use the entity state type as their source type.
 `RecordSpecOptions` is the public constructor-input contract for those fields.
+Its optional `indexes` declare immutable, non-unique ascending lookup indexes
+over ordered materialized columns; `id` selects the storage slot ID. Explicit
+or automatic preparation of indexed specifications requires a provider that
+attests physical index checks. A handle with `prepareOnAccess: false` skips
+that preparation path; provider-local declaration validation still applies.
+`ColumnTypes.fixedBytes(width)` declares an exact-width byte column, validated
+on stored and queried values. The common query evaluator compares its bytes
+in unsigned order.
 For generated application records, Proto `(column)` declarations determine the
 materialized fields. A field without that declaration remains only in the
 authoritative serialized record; providers do not infer columns from every
 field in the message.
+
+`RecordStorageOptions.prepareOnAccess` is optional and defaults to `true`.
+Pass `{ prepareOnAccess: false }` as the fourth argument when an application
+has already prepared the physical family and wants data access without schema
+creation or compatibility probes. The choice is fixed per handle, so another
+handle on the same factory can still prepare the same family. Data operations
+still use the provider connection and report missing structures normally.
+Custom factories must implement the protected `onCreateUnprepared` hook to
+support this choice; otherwise they reject it. The provider-only
+`StoragePreparations` create/check operations remain available regardless of
+the handle setting. Business storage retains its existing preparation path.
 
 `StorageGroup` is an optional external physical-family identity. It is not part
 of `RecordSpec`: use it only when records with an otherwise compatible layout

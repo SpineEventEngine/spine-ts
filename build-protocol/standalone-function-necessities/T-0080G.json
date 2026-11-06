@@ -115,5 +115,41 @@
     "name": "useSubscriptionLifecycle",
     "disposition": "necessity",
     "reason": "React framework boundary: useSubscriptionLifecycle must remain an exported hook so React can derive lifecycle state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/auth/src/better-auth/native-adapter.ts",
+    "kind": "function-declaration",
+    "identity": "nativeAdapter()#1",
+    "name": "nativeAdapter",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: nativeAdapter supplies the pinned Better Auth createAdapterFactory callback without exposing that dependency from the optional public subpath."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/auth/src/better-auth/persistent-store.ts",
+    "kind": "function-declaration",
+    "identity": "nativeFactoryFor()#1",
+    "name": "nativeFactoryFor",
+    "disposition": "necessity",
+    "reason": "TypeScript integration boundary: nativeFactoryFor retrieves the private native factory associated with a prepared store for the later application integration."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/auth/src/better-auth/persistent-store.ts",
+    "kind": "function-declaration",
+    "identity": "nativeSelectionFor()#1",
+    "name": "nativeSelectionFor",
+    "disposition": "necessity",
+    "reason": "TypeScript private-factory boundary: nativeSelectionFor retrieves the existing store association without a public store accessor or a separate mutable registry."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/auth/src/better-auth/generic-oauth.ts",
+    "kind": "function-declaration",
+    "identity": "genericOAuth()#1",
+    "name": "genericOAuth",
+    "disposition": "necessity",
+    "reason": "TypeScript native-plugin boundary: genericOAuth is the public forwarding function preserving the native factory call shape and local declared provider options."
   }
 ]

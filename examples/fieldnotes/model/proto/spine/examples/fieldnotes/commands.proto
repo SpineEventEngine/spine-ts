@@ -1,0 +1,96 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+syntax = "proto3";
+
+package spine.examples.fieldnotes;
+
+import "spine/examples/fieldnotes/types.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.fieldnotes";
+
+// Requests a new private place with one initial Markdown note.
+message AddPlace {
+  // Selects a fresh random identifier.
+  PlaceId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Supplies the display name.
+  string name = 2 [(required) = true];
+
+  // Supplies the geographic location.
+  Coordinates coordinates = 3;
+
+  // Supplies the initial Markdown, including an empty value.
+  string markdown = 4;
+}
+
+// Requests a new display name at the last observed revision.
+message RenamePlace {
+  // Selects the place to rename.
+  PlaceId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Supplies the new name.
+  string name = 2 [(required) = true];
+
+  // Identifies the last observed accepted change.
+  int32 expected_revision = 3;
+}
+
+// Requests a new geographic location at the last observed revision.
+message MovePlace {
+  // Selects the place to move.
+  PlaceId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Supplies the new location.
+  Coordinates coordinates = 2;
+
+  // Identifies the last observed accepted change.
+  int32 expected_revision = 3;
+}
+
+// Replaces the single Markdown note at the last observed revision.
+message EditPlaceNote {
+  // Selects the place whose note changes.
+  PlaceId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Supplies Markdown, including an empty value.
+  string markdown = 2;
+
+  // Identifies the last observed accepted change.
+  int32 expected_revision = 3;
+}
+
+// Requests removal of a place at the last observed revision.
+message DeletePlace {
+  // Selects the place to delete.
+  PlaceId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+
+  // Identifies the last observed accepted change.
+  int32 expected_revision = 2;
+}

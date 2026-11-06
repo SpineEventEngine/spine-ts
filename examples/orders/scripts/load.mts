@@ -1,26 +1,32 @@
 import process from "node:process";
 
-import { runDatastoreOrdersLoad, datastoreOrdersLoadLevels } from "../src/load-runner.js";
-import { startDatastoreOrdersServer } from "../src/index.js";
+import { runOrdersLoad, ordersLoadLevels } from "../src/load-runner.js";
+import { configureOrdersEnvironment, ordersTenants, startOrdersServer } from "../src/index.js";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
-const requestedUsers = Number.parseInt(process.env.SPINE_DATASTORE_ORDERS_LOAD_USERS ?? "10", 10);
-if (!datastoreOrdersLoadLevels.includes(requestedUsers as 10 | 100 | 1000))
-  throw new Error("SPINE_DATASTORE_ORDERS_LOAD_USERS must be one of 10, 100, or 1000.");
+const requestedUsers = Number.parseInt(process.env.SPINE_ORDERS_LOAD_USERS ?? "10", 10);
+if (!ordersLoadLevels.includes(requestedUsers as 10 | 100 | 1000))
+  throw new Error("SPINE_ORDERS_LOAD_USERS must be one of 10, 100, or 1000.");
 
-const server = await startDatastoreOrdersServer(new InMemoryStorageFactory(), {
-  host: "127.0.0.1",
-  port: 0,
+const setup = await configureOrdersEnvironment({
+  storageFactory: new InMemoryStorageFactory(),
+  tenants: [ordersTenants.northwind, ordersTenants.contoso],
 });
 try {
-  console.log(
-    JSON.stringify(
-      await runDatastoreOrdersLoad({
-        baseUrl: server.baseUrl,
-        users: requestedUsers as 10 | 100 | 1000,
-      }),
-    ),
-  );
+  const server = await startOrdersServer({ host: "127.0.0.1", port: 0 });
+  try {
+    console.log(
+      JSON.stringify(
+        await runOrdersLoad({
+          baseUrl: server.baseUrl,
+          users: requestedUsers as 10 | 100 | 1000,
+          tenants: [ordersTenants.northwind, ordersTenants.contoso],
+        }),
+      ),
+    );
+  } finally {
+    await server.close();
+  }
 } finally {
-  await server.close();
+  await setup.close();
 }

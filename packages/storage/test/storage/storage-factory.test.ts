@@ -22,7 +22,7 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   InMemoryStorageFactory,
@@ -34,10 +34,85 @@ import {
   StorageFactory,
 } from "../../src/index.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
-import { StoragePreparations } from "../../src/internal/storage-preparation.js";
+import {
+  StoragePreparations,
+  type StoragePreparation,
+} from "../../src/internal/storage-preparation.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 
 describe("StorageFactory", () => {
+  it("retains prototype preparation methods and their provider receiver", async () => {
+    class ClassPreparation implements StoragePreparation {
+      readonly calls: string[] = [];
+
+      prepareRecord(): Promise<void> {
+        this.calls.push("record");
+        return Promise.resolve();
+      }
+
+      prepareEntity(): Promise<void> {
+        this.calls.push("entity");
+        return Promise.resolve();
+      }
+
+      prepareAgentHistory(): Promise<void> {
+        this.calls.push("history");
+        return Promise.resolve();
+      }
+
+      prepareAgentCommit(): Promise<void> {
+        this.calls.push("commit");
+        return Promise.resolve();
+      }
+    }
+    const factory = new InMemoryStorageFactory();
+    const provider = new ClassPreparation();
+    StoragePreparations.register(factory, provider);
+    const facade = StoragePreparations.for(factory);
+    await facade.prepareRecord(
+      { name: "Events", multitenant: false },
+      createEventSpec(),
+      undefined,
+      "check",
+    );
+    await Reflect.apply(facade.prepareEntity.bind(facade), facade, []);
+    await Reflect.apply(facade.prepareAgentHistory.bind(facade), facade, []);
+    await Reflect.apply(facade.prepareAgentCommit.bind(facade), facade, []);
+    expect(provider.calls).toEqual(["record", "entity", "history", "commit"]);
+  });
+
+  it("rejects indexed preparation before invoking a provider without explicit attestation", async () => {
+    const factory = new InMemoryStorageFactory();
+    const prior = StoragePreparations.for(factory);
+    const prepareRecord = vi.fn();
+    const noIndexCapability = { ...prior };
+    delete noIndexCapability.supportsRecordIndexes;
+    StoragePreparations.register(factory, {
+      ...noIndexCapability,
+      prepareRecord: () =>
+        Promise.resolve().then(() => {
+          prepareRecord();
+        }),
+    });
+    const context = { name: "Events", multitenant: false } as const;
+    const indexed = new RecordSpec({
+      recordType: EventSchema,
+      idSchema: EventIdSchema,
+      extractId: (event) => event.id ?? create(EventIdSchema),
+      indexes: [{ name: "by_id", columns: ["id"] }],
+    });
+    await expect(
+      StoragePreparations.for(factory).prepareRecord(context, indexed, undefined, "create"),
+    ).rejects.toThrow(/support.*index|unsupported/i);
+    expect(prepareRecord).not.toHaveBeenCalled();
+    await StoragePreparations.for(factory).prepareRecord(
+      context,
+      createEventSpec(),
+      undefined,
+      "check",
+    );
+    expect(prepareRecord).toHaveBeenCalledOnce();
+  });
   it("checks memory connection without admitting a tenant or creating storage", async () => {
     const factory = new InMemoryStorageFactory();
     const context = {
@@ -153,6 +228,44 @@ describe("StorageFactory", () => {
     );
 
     expect(storage.recordSpec).toBe(spec);
+  });
+
+  it("rejects skipped preparation from a custom factory without a skip implementation", () => {
+    class CustomFactory extends StorageFactory {
+      protected onCreateRecordStorage<
+        I,
+        R extends Message,
+      >(): import("../../src/record/record-storage.js").RecordStorage<I, R> {
+        throw new Error("Default creation only.");
+      }
+    }
+    const factory = new CustomFactory();
+    expect(() =>
+      factory.createRecordStorage(
+        { name: "Tasks", multitenant: false },
+        createEventSpec(),
+        undefined,
+        { prepareOnAccess: false },
+      ),
+    ).toThrow(/does not support.*without preparation/u);
+  });
+
+  it("keeps a skipped memory handle independent from a default handle", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "Tasks", multitenant: false } as const;
+    const spec = createEventSpec();
+    const skipped = factory.createRecordStorage(context, spec, undefined, {
+      prepareOnAccess: false,
+    });
+    const prepared = factory.createRecordStorage(context, spec);
+
+    await prepared.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
+    await expect(skipped.read(create(EventIdSchema, { value: "event-1" }))).resolves.toMatchObject({
+      id: { value: "event-1" },
+    });
+    skipped.close();
+    await prepared.write(createEvent("event-2", "type.spine.io/tasks.TaskCreated"));
+    await expect(prepared.read(create(EventIdSchema, { value: "event-2" }))).resolves.toBeDefined();
   });
 
   it("creates separate storage objects over one factory backing store", async () => {

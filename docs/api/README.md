@@ -24,6 +24,7 @@ registration.
 - Connecting a client: [Node](../../packages/client-node/README.md) or
   [browser](../../packages/client-web/README.md)
 - Choosing storage: [`@spine-event-engine/storage`](../../packages/storage/README.md)
+- Selecting Better Auth records: [`@spine-event-engine/auth/better-auth`](../../packages/auth/README.md#selected-better-auth-persistence)
 - Package-level limits: each package's `REFERENCE.md`
 
 Use one detailed source for each subject rather than treating this page as a
@@ -273,13 +274,14 @@ the context repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
-built-in system-pairing metadata and use the live `TenantIndex` selected by
-`ServerEnvironment`, or the builder's `withTenantIndex()` override. Both
-`environment.tenantIndex` and `context.tenantIndex` return that exact object.
-Single-tenant contexts do not register a synthetic directory member. A default
-provider catalog exposes explicit memory registrations, configured SQL tenants,
-or Datastore native namespaces; a custom factory without a catalog gets a
-transient in-memory index. No generic `TenantId` record is persisted. The full
+built-in system-pairing metadata. An omitted `tenantIndex` setting selects
+`SINGLE_TENANT` without constructing a directory or consulting a provider catalog.
+Multitenant Bounded Contexts require an application-supplied environment index before
+assembly. `withTenantIndex()` may select another directory for that Bounded Context,
+but it cannot enable multitenancy in a `SINGLE_TENANT` environment. Both public getters return
+`TenantIndexSetting`; callers narrow against the marker before directory methods.
+A single-tenant Bounded Context returns the marker even inside an indexed environment.
+Provider catalogs remain separate provider APIs. The full
 system-context runtime,
 command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
 broader JVM production runtime remain outside this public surface.
@@ -659,6 +661,16 @@ tenancy, and publishes through the private broker. `close()` releases that
 context and its broker resources.
 `DurableSubscriptionBindings` and `DurableSubscriptionBindingsOptions` configure
 the gateway storage registry used by production browser access.
+`BrowserCredentialAdmission` declares raw-header and cookie names consumed by
+one browser reader or auth route; `BrowserCredentialReader` reads admitted raw
+request facts before application service handling. Connect stops waiting and
+does not forward a late result after request cancellation or deadline expiry;
+the reader receives no abort signal to stop its underlying work.
+`DirectReaderAuthenticator` receives a host operation signal and returns
+`ReaderAdmissionResult` with detached reader facts and optional local
+invalidation. The operation spans unary work or the full native Activate
+stream. Standard monitored `SessionResolver` results signal local logout,
+captured expiry, and strategy close; one-shot resolution retains no monitor.
 `isDurableSubscriptionBindings` lets hosting code check that a supplied
 `SubscriptionBindings` implementation declares this durable capability.
 `@spine-event-engine/testing` exports exactly `BlackBox`, `BlackBoxOptions`,
@@ -1106,13 +1118,18 @@ validator, service, transport, or handler invocation.
 
 Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 `StorageGroup`,
-`RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
-`RecordContinuation`, `RecordContinuationValue`, `RecordFilter`,
+`RecordStorage`, `RecordStorageOptions`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
+`RecordContinuation`, `RecordContinuationValue`, `RecordFilter`, `RecordIndex`,
 `RecordOrder`, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, `InMemoryRecordStorage`, `EventStore`,
 `OnEventAccepted`, `EntityStateHistoryStorage`, and `EntityEventStorage`.
 `StorageFactory` defines one mandatory adapter seam,
-`createRecordStorage(context, spec, group?)`.
+`createRecordStorage(context, spec, group?, options?)`. A handle prepares its
+record family on access by default. Pass `{ prepareOnAccess: false }` in
+`RecordStorageOptions` when the application prepares that family explicitly;
+the choice stays with that handle, and missing structures cause ordinary data
+operation failures. Custom factories reject the option until they implement
+the protected `onCreateUnprepared` hook.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, stable continuations after sorted row keys,
 non-negative offsets, positive limits, and complete cloned

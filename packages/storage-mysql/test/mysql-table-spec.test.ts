@@ -180,6 +180,24 @@ describe("MysqlTableResolver", () => {
     expect(table.primaryKey).toEqual(["ID"]);
   });
 
+  it("resolves fixed bytes and table-scoped ordered lookup indexes", () => {
+    const declaration = {
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string" as const,
+      declaredColumns: [
+        new RecordColumn("lookup", ColumnTypes.fixedBytes(12), () => new Uint8Array(12)),
+      ],
+      declaredIndexes: [{ name: "expiry", columns: ["lookup", "id"] }],
+    };
+    const first = resolvedMysqlTableSpec({ tableName: "first", ...declaration });
+    const second = resolvedMysqlTableSpec({ tableName: "second", ...declaration });
+    expect(first.columns.find(({ name }) => name === "lookup")?.mysqlType).toBe("VARBINARY(12)");
+    expect(typeof first.indexes?.[0]?.name).toBe("string");
+    expect(first.indexes?.[0]?.columns).toEqual(["lookup", "ID"]);
+    expect(first.indexes?.[0]?.name).not.toBe(second.indexes?.[0]?.name);
+  });
+
   it("gives only Entity attributes their JVM defaults", () => {
     const table = resolvedMysqlTableSpec({
       tableName: "message_view",

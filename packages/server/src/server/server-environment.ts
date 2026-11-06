@@ -30,7 +30,7 @@ import type { Delivery as PublicDelivery, DeliveryStrategy } from "../delivery/d
 import { emitServerInfo, emitServerWarning } from "./server-log.js";
 import { managedDeliveryGate } from "./managed-delivery-gate.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
-import { TenantIndexes, type TenantIndex } from "../context/tenant-index.js";
+import { SINGLE_TENANT, type TenantIndexSetting } from "../context/tenant-index.js";
 import { TenantUnknownError } from "../context/tenant-unknown-error.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
@@ -92,9 +92,9 @@ export interface ServerEnvironmentSettings {
   readonly subscriptionQueueCapacity?: number;
 
   /**
-   * Live default membership index for Bounded Contexts.
+   * Tenant mode for this environment; omission selects SINGLE_TENANT without a directory.
    */
-  readonly tenantIndex?: TenantIndex;
+  readonly tenantIndex?: TenantIndexSetting;
 
   /**
    * Default AI registry for Bounded Contexts without a local override.
@@ -186,9 +186,10 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly subscriptionQueueCapacity: number;
 
   /**
-   * Live default tenant membership index.
+   * Captured tenant mode. SINGLE_TENANT means no directory and is selected by omission;
+   * otherwise this is the supplied directory. Narrow against the marker before index methods.
    */
-  readonly tenantIndex: TenantIndex;
+  readonly tenantIndex: TenantIndexSetting;
 
   /**
    * Default AI registry selected for Bounded Context assembly, when configured.
@@ -272,7 +273,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.nodeId = crypto.randomUUID();
     this.storageFactory = settings.storageFactory;
     this.subscriptionQueueCapacity = settings.subscriptionQueueCapacity;
-    this.tenantIndex = settings.tenantIndex ?? TenantIndexes.fromFactory(settings.storageFactory);
+    this.tenantIndex = settings.tenantIndex ?? SINGLE_TENANT;
     this.ai = settings.ai;
     this.integrationChannelFactory = settings.integrationChannelFactory;
     this.typeRegistry = settings.typeRegistry;
@@ -438,7 +439,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       for (const context of contexts) {
         serverEnvironmentAccess.requireAvailable(this);
         if (!context.isMultitenant) continue;
-        const present = await context.tenantIndex.contains(boundary.tenantId);
+        const index = context.tenantIndex;
+        if (index === SINGLE_TENANT) continue;
+        const present = await index.contains(boundary.tenantId);
         serverEnvironmentAccess.requireAvailable(this);
         if (!present) continue;
         const ids = selected.get(context) ?? [];
@@ -767,7 +770,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly subscriptionQueueCapacity: number;
-  readonly tenantIndex: TenantIndex | undefined;
+  readonly tenantIndex: TenantIndexSetting | undefined;
   readonly ai: AiRegistry | undefined;
   readonly integrationChannelFactory: TransportFactory;
   readonly typeRegistry: TypeRegistryLookup;

@@ -25,6 +25,7 @@ import {
   PostgresStorageSchemaError,
   PostgresTransactionErrors,
 } from "./errors.js";
+import { PostgresRecordIndexes } from "./record-indexes.js";
 
 /**
  * Prepares one PostgreSQL record-family table.
@@ -79,12 +80,22 @@ export class PostgresTableInitializer {
     try {
       if (mode === "check") {
         await this.verify(client);
+        for (const index of this.table.indexes ?? [])
+          await PostgresRecordIndexes.ensure(
+            client,
+            this.schema,
+            this.table.tableName,
+            index,
+            mode,
+          );
         return;
       }
       await client.query("BEGIN");
       await this.lock(client);
       await client.query(this.customCreate?.() ?? this.create());
       await this.verify(client);
+      for (const index of this.table.indexes ?? [])
+        await PostgresRecordIndexes.ensure(client, this.schema, this.table.tableName, index, mode);
       await client.query("COMMIT");
     } catch (error) {
       if (mode === "create")

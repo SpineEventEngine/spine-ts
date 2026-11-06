@@ -17,12 +17,58 @@ import type {
   Clock,
   ContextResolver,
   OpaqueSessionCookies,
+  RequestCredential,
   SessionResolver,
   SubscriptionBindings,
 } from "@spine-event-engine/auth";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type { ReaderProofIssuer } from "@spine-event-engine/core/spi/reader-forwarding";
 import type { NodeDiscovery } from "@spine-event-engine/deployment";
+
+/**
+ * Declares duplicate-sensitive names consumed by one fixed browser integration.
+ */
+export interface BrowserCredentialAdmission {
+  // prettier-ignore
+
+  /**
+   * HTTP CSRF field names, compared without case.
+   */
+  readonly csrfHeaderNames: readonly string[];
+
+  /**
+   * Cookie names that independently select a primary credential.
+   */
+  readonly credentialCookieNames: readonly string[];
+
+  /**
+   * Supporting CSRF or protocol-state cookie names.
+   */
+  readonly stateCookieNames: readonly string[];
+}
+
+/**
+ * Reads an admitted request without consuming its RPC body.
+ */
+export interface BrowserCredentialReader {
+  // prettier-ignore
+
+  /**
+   * Fixed names from the same configuration used for extraction.
+   */
+  readonly admission: BrowserCredentialAdmission;
+
+  /**
+   * Reads a credential, absence or terminal rejection; errors mean unavailable.
+   * @param request Immutable raw headers, HTTP method and request-local parsed URL.
+   * @returns Credential, undefined absence, or a terminal rejected result.
+   */
+  read(request: {
+    readonly headers: Readonly<Record<string, string | readonly string[] | undefined>>;
+    readonly method: string;
+    readonly url: URL;
+  }): Promise<RequestCredential | undefined | { readonly kind: "rejected" }>;
+}
 
 /**
  * Selects exactly one admission mode and binding ownership for a browser host.
@@ -176,6 +222,11 @@ export interface BrowserServerCollaborators {
    * Strict opaque-cookie extraction alongside exact bearer credentials.
    */
   readonly cookies?: OpaqueSessionCookies;
+
+  /**
+   * Replaceable browser credential reader; cannot be combined with legacy cookies.
+   */
+  readonly credentials?: BrowserCredentialReader;
 }
 
 /**
@@ -241,7 +292,7 @@ export interface BrowserAuthRoute {
   readonly origins: readonly string[];
 
   /**
-   * Permits an origin-less OAuth callback only when explicitly enabled.
+   * Permits origin-less callback navigation when the trusted route validates protocol state.
    */
   readonly allowMissingOrigin?: boolean;
 
@@ -254,6 +305,11 @@ export interface BrowserAuthRoute {
    * Positive callback deadline in milliseconds.
    */
   readonly timeoutMs: number;
+
+  /**
+   * Fixed duplicate-sensitive names consumed by this route's auth engine.
+   */
+  readonly admission: BrowserCredentialAdmission;
 
   /**
    * Invokes the bounded callback only after origin and body admission.

@@ -33,9 +33,11 @@ import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
+import { commitFenced } from "../../src/repository/commit-fence.js";
 import { tenant } from "../tenant-fixture.js";
 import { CreateTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_commands_pb.js";
 import {
@@ -764,6 +766,120 @@ describe("LocalEntityInbox", () => {
     ).resolves.toEqual([]);
   });
 
+  it("acknowledges a recovered command before its same-shard event recipient completes", async () => {
+    const delivery = new Delivery({
+      context: { name: "RecoveredFollowUp", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalEntityInbox("RecoveredFollowUp");
+    const shard = ShardIndex.single();
+    const commandTypeUrl = "type.example.dev/Tasks.Aggregate";
+    const eventTypeUrl = "type.example.dev/Tasks.Projection";
+    const recipientEntered = Promise.withResolvers<undefined>();
+    const recipientReleased = Promise.withResolvers<undefined>();
+    const sourceReleased = Promise.withResolvers<undefined>();
+    const publicationAttempted = Promise.withResolvers<undefined>();
+    const seen: string[] = [];
+    let publicationCommits = 0;
+    let recipientCommits = 0;
+    const validate = vi.spyOn(ShardedWorkRegistry.prototype, "validateOwnership");
+    inbox.register({
+      targetTypeUrl: commandTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      async replay(message) {
+        seen.push(message.signalId);
+        await commitFenced({}, () => ({ status: "committed" }));
+        return async () => {
+          await sourceReleased.promise;
+          const priorValidations = validate.mock.calls.length;
+          try {
+            await commitFenced({}, () => {
+              publicationCommits += 1;
+              return { status: "committed" };
+            });
+          } finally {
+            publicationAttempted.resolve(undefined);
+          }
+          expect(validate.mock.calls.length).toBe(priorValidations);
+          await inbox.receive(delivery, {
+            inboxId: { targetId: typedTarget("recipient"), targetTypeUrl: eventTypeUrl },
+            signalId: "event-from-recovered-command",
+            signal: eventSignal(),
+            label: "REACT_UPON_EVENT",
+            status: "TO_DELIVER",
+          });
+        };
+      },
+    });
+    inbox.register({
+      targetTypeUrl: eventTypeUrl,
+      labels: ["REACT_UPON_EVENT"],
+      async replay(message) {
+        seen.push(message.signalId);
+        const priorValidations = validate.mock.calls.length;
+        await commitFenced({}, () => {
+          recipientCommits += 1;
+          return { status: "committed" };
+        });
+        expect(validate.mock.calls.length).toBeGreaterThan(priorValidations);
+        recipientEntered.resolve(undefined);
+        await recipientReleased.promise;
+      },
+    });
+    const source = await delivery.inbox.receive({
+      ...processInput(commandTypeUrl, "recovered"),
+      shard,
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
+      version: 1n,
+      keepUntil: new Date("2100-01-01T00:00:00.000Z"),
+    });
+
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      onMessage: (message) => inbox.replay(message),
+    }).run();
+    void loop.then(sourceReleased.resolve, sourceReleased.reject);
+    const followUpsDone = loop.then(() => inbox.whenFollowUpsIdle());
+    let idle: Promise<void> | undefined;
+    let followUpSettled = false;
+    try {
+      await Promise.race([
+        publicationAttempted.promise,
+        followUpsDone.then(() => {
+          throw new Error("Recovered publication completed without an attempt.");
+        }),
+      ]);
+      expect(publicationCommits).toBe(1);
+      await Promise.race([
+        recipientEntered.promise,
+        followUpsDone.then(() => {
+          throw new Error("Recovered publication completed without recipient delivery.");
+        }),
+      ]);
+      idle = inbox.whenFollowUpsIdle().then(() => {
+        followUpSettled = true;
+      });
+      expect(seen).toEqual(["signal-recovered", "event-from-recovered-command"]);
+      expect(recipientCommits).toBe(1);
+      await expect(delivery.inbox.readMessage(source.message.id)).resolves.toMatchObject({
+        signalId: "signal-recovered",
+        status: "DELIVERED",
+      });
+      await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject(
+        [{ signalId: "event-from-recovered-command" }],
+      );
+      expect(followUpSettled).toBe(false);
+    } finally {
+      recipientReleased.resolve(undefined);
+      await Promise.allSettled([loop, followUpsDone, idle ?? inbox.whenFollowUpsIdle()]);
+      validate.mockRestore();
+    }
+    expect(followUpSettled).toBe(true);
+    await delivery.whenIdle();
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+  });
+
   it("delivers a handled command without the optional keepUntil field", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -1336,6 +1452,64 @@ describe("LocalEntityInbox", () => {
     });
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+  });
+
+  it("publishes a recovered direct-backlog command to a same-shard recipient", async () => {
+    const delivery = new Delivery({
+      context: { name: "DirectBacklogFollowUp", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const readiness = new DeliveryReadiness();
+    const inbox = new LocalEntityInbox("DirectBacklogFollowUp", readiness);
+    readiness.configureDirect((message) => inbox.replay(message));
+    const sourceTypeUrl = "type.example.dev/Tasks.BacklogAggregate";
+    const triggerTypeUrl = "type.example.dev/Tasks.TriggerAggregate";
+    const recipientTypeUrl = "type.example.dev/Tasks.BacklogProjection";
+    const seen: string[] = [];
+    inbox.register({
+      targetTypeUrl: sourceTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay() {
+        return Promise.resolve(() =>
+          inbox
+            .receive(delivery, {
+              inboxId: { targetId: typedTarget("recipient"), targetTypeUrl: recipientTypeUrl },
+              signalId: "backlog-event",
+              signal: eventSignal(),
+              label: "REACT_UPON_EVENT",
+              status: "TO_DELIVER",
+            })
+            .then(() => undefined),
+        );
+      },
+    });
+    inbox.register({
+      targetTypeUrl: triggerTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.resolve(undefined),
+    });
+    inbox.register({
+      targetTypeUrl: recipientTypeUrl,
+      labels: ["REACT_UPON_EVENT"],
+      replay(message) {
+        seen.push(message.signalId);
+        return Promise.resolve(undefined);
+      },
+    });
+    await delivery.inbox.receive({
+      ...processInput(sourceTypeUrl, "backlog"),
+      shard: ShardIndex.single(),
+      whenReceived: timestampFromDate(new Date("2026-07-08T09:00:00.000Z")),
+      version: 1n,
+    });
+
+    await inbox.receive(delivery, processInput(triggerTypeUrl, "trigger"));
+    await inbox.whenFollowUpsIdle();
+    await delivery.whenIdle();
+    expect(seen).toEqual(["backlog-event"]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([]);
   });
 
   it("propagates an Error reception failure and retains the pending row", async () => {

@@ -45,10 +45,11 @@ import {
   Repository,
   Server,
   ServerEnvironment,
+  PersistentTenantIndex,
   type BoundedContext as BuiltContext,
 } from "@spine-event-engine/server";
 import { ServerTests } from "@spine-event-engine/server/testing";
-import type { StorageFactory } from "@spine-event-engine/storage";
+import { StorageGroup, type StorageFactory } from "@spine-event-engine/storage";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import { afterEach, expect, it, onTestFinished } from "vitest";
 
@@ -187,6 +188,7 @@ it
     const created: Pool[] = [];
     let factory: StorageFactory | undefined;
     let environment: ServerEnvironment | undefined;
+    let tenantIndex: PersistentTenantIndex | undefined;
     let context: BuiltContext | undefined;
     let running: Awaited<ReturnType<Server["start"]>> | undefined;
     let iterator: AsyncIterator<SubscriptionUpdate> | undefined;
@@ -207,6 +209,7 @@ it
         },
         () => running?.close(),
         () => context?.close(),
+        () => tenantIndex?.close(),
         () => environment?.close() ?? factory?.close(),
         ...pools.map((pool) => async () => {
           if (!created.includes(pool)) return;
@@ -235,11 +238,18 @@ it
         ])
         .setStringifierRegistry(stringifiers)
         .build();
-      ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory: factory });
+      tenantIndex = await PersistentTenantIndex.create({
+        storageFactory: factory,
+        group: new StorageGroup(`tenants_${randomUUID().replaceAll("-", "")}`),
+      });
+      await tenantIndex.keep(tenantA);
+      await tenantIndex.keep(tenantB);
+      ServerEnvironment.when(EnvironmentType.Local).use({
+        storageFactory: factory,
+        tenantIndex,
+      });
       environment = ServerEnvironment.instance();
       await environment.completeSetup();
-      await environment.tenantIndex.keep(tenantA);
-      await environment.tenantIndex.keep(tenantB);
       const name = `NativeSubscription_${randomUUID().replaceAll("-", "")}`;
       context = await projectWorkflow(name, () => undefined, {
         multitenant: true,
@@ -262,6 +272,7 @@ it
         context: create(ActorContextSchema, {
           tenantId: tenantA,
           actor: create(UserIdSchema, { value: "native-subscriber" }),
+          timestamp: create(TimestampSchema, { seconds: 1n }),
         }),
       });
       const accepted = await subscriptionClient.subscribe(topic);
@@ -321,11 +332,13 @@ it
       const sharedTables = tables[0];
       if (sharedTables === undefined) throw new Error("Shared PostgreSQL tables are required.");
       const sharedSubscriptionTables = sharedTables.rows.filter((row) =>
-        row.tablename.includes("subscription"),
+        row.tablename.endsWith("_subscriptionrecord"),
       );
       expect(sharedSubscriptionTables).toHaveLength(1);
       for (const tenantTables of tables.slice(1)) {
-        expect(tenantTables.rows.some((row) => row.tablename.includes("subscription"))).toBe(false);
+        expect(tenantTables.rows.some((row) => row.tablename.endsWith("_subscriptionrecord"))).toBe(
+          false,
+        );
         expect(tenantTables.rows.length).toBeGreaterThan(0);
       }
       const subscriptionTable = sharedSubscriptionTables[0];

@@ -116,8 +116,8 @@ export interface PostgresRecordLifecycle {
  */
 export interface PostgresRecordExecutor<I, R extends Message> {
   /**
-   * Prepares the backing table before acquiring an operation client.
-   * @returns A promise that resolves when the table is compatible.
+   * Binds the destination and prepares the table when this handle enables preparation on access.
+   * @returns Completion after binding and any preparation required by this handle.
    */
   prepare(): Promise<void>;
 
@@ -235,6 +235,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
    * @param onClose Removes this handle from the factory's live set.
    * @param create Optionally supplies custom create-table SQL.
    * @param stringifiers Converts message IDs and columns reversibly.
+   * @param prepareOnAccess Whether data access prepares the physical table.
    */
   constructor(
     context: StorageContext,
@@ -245,6 +246,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
     private readonly onClose: () => void,
     private readonly create?: (table: PostgresTableSpec<I, R>) => string,
     stringifiers: StringifierRegistry = defaultStringifierRegistry,
+    private readonly prepareOnAccess = true,
   ) {
     super(context, spec);
     this.#idColumn = new PostgresIdColumn(spec.idType, stringifiers);
@@ -252,7 +254,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Returns the bound layout after preparation.
+   * Returns the bound layout after destination resolution.
    *
    * @returns The resolved physical layout.
    */
@@ -271,27 +273,27 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Prepares this table before a record operation.
+   * Binds this table before a record operation and applies this handle's preparation policy.
    *
-   * @returns A promise that resolves after compatible initialization.
+   * @returns Completion after binding and any preparation required by this handle.
    */
   prepare(): Promise<void> {
     return this.admit(() => this.prepareInternal());
   }
 
   /**
-   * Prepares an already admitted operation, including after the factory fence.
+   * Binds an already admitted operation and applies this handle's preparation policy.
    *
-   * @returns Completion after table preparation.
+   * @returns Completion after binding and any required table preparation.
    */
   private prepareInternal(): Promise<void> {
     return this.lifecycle.track(Promise.resolve().then(() => this.prepareBound()));
   }
 
   /**
-   * Binds the destination and prepares its physical table.
+   * Binds the destination and prepares its physical table when enabled for this handle.
    *
-   * @returns Completion after physical table preparation.
+   * @returns Completion after binding and any required table preparation.
    */
   private async prepareBound(): Promise<void> {
     this.#binding ??= this.bind().catch((error: unknown) => {
@@ -299,6 +301,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       throw error;
     });
     await this.#binding;
+    if (!this.prepareOnAccess) return;
     const create = this.create;
     await this.lifecycle.prepare(
       this.table as never,
@@ -678,7 +681,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Executes work with one prepared and automatically released client.
+   * Executes work with one automatically released client after applying this handle's policy.
    *
    * @typeParam T The value returned by the client work.
    * @param work Performs the client work.
@@ -689,7 +692,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Executes one prepared record operation on a released client.
+   * Executes one record operation on a released client after applying this handle's policy.
    *
    * @typeParam T The operation result.
    * @param work Performs the client operation.
@@ -723,7 +726,7 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   }
 
   /**
-   * Executes one prepared Agent transaction on a released client.
+   * Executes one Agent transaction on a released client after applying this handle's policy.
    *
    * @typeParam T The transaction result.
    * @param work Performs work on the transaction client.
@@ -1108,7 +1111,9 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
       const column = this.column(filter.column === "id" ? "ID" : filter.column);
       const accepted = RecordQuery.acceptedValues(filter);
       const alternatives = accepted.map(
-        (value) => `${column} IS NOT DISTINCT FROM ${bind.add(this.value(filter.column, value))}`,
+        (value) =>
+          `${column} ${this.equalityOperator(filter.column, value)} ` +
+          bind.add(this.value(filter.column, value)),
       );
       clauses.push(
         accepted.length === 0
@@ -1210,13 +1215,34 @@ export class PostgresRecordStorage<I, R extends Message> extends RecordStorage<I
   private predicate(predicate: NormalizedQueryPredicate<I>, bind: Binds): string {
     if (predicate.kind === "ids")
       return `"ID" IN (${predicate.ids.map((id) => bind.add(this.id(id))).join(", ")})`;
-    if (predicate.kind === "comparison")
+    if (predicate.kind === "comparison") {
+      const comparisonOperator =
+        predicate.operator === "equal"
+          ? this.equalityOperator(predicate.column, predicate.value)
+          : operator(predicate.operator);
       return (
-        `${this.column(predicate.column)} ${operator(predicate.operator)} ` +
+        `${this.column(predicate.column)} ${comparisonOperator} ` +
         bind.add(this.value(predicate.column, predicate.value))
       );
+    }
     const joiner = predicate.kind === "all" ? " AND " : " OR ";
     return `(${predicate.predicates.map((child) => this.predicate(child, bind)).join(joiner)})`;
+  }
+
+  /**
+   * Returns indexable equality only for present fixed-byte column values.
+   * @param name Declared comparison column.
+   * @param value Compared logical value.
+   * @returns Equality SQL preserving null semantics otherwise.
+   */
+  private equalityOperator(name: string, value: unknown): string {
+    const type = this.recordSpec.columns.find((column) => column.name === name)?.type;
+    return type?.kind === "scalar" &&
+      type.scalar === ScalarType.BYTES &&
+      type.byteLength !== undefined &&
+      value instanceof Uint8Array
+      ? "="
+      : "IS NOT DISTINCT FROM";
   }
 
   /**

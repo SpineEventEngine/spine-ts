@@ -1,11 +1,16 @@
 {
   "formatVersion": 2,
   "packageName": "@spine-event-engine/proto",
-  "packageVersion": "2.0.0-snapshot.26",
+  "packageVersion": "2.0.0-snapshot.27",
   "protoFiles": [
     "grpc/health/v1/health.proto",
+    "spine/auth/authenticated_principal.proto",
     "spine/auth/authenticated_subscription.proto",
     "spine/auth/authentication_service.proto",
+    "spine/auth/better_auth_record.proto",
+    "spine/auth/oidc_flow.proto",
+    "spine/auth/opaque_session.proto",
+    "spine/auth/token_revocation.proto",
     "spine/base/error.proto",
     "spine/base/field_path.proto",
     "spine/client/app_query.proto",
@@ -49,6 +54,7 @@
     "spine/server/entity/state_key.proto",
     "spine/server/integration/broker.proto",
     "spine/server/server_environment.proto",
+    "spine/server/tenant/tenant.proto",
     "spine/server/transport/transport.proto",
     "spine/string/template_string.proto",
     "spine/system/server/entity_log_events.proto",
@@ -64,8 +70,13 @@
   ],
   "generatedExports": {
     "grpc/health/v1/health.proto": "generated/grpc/health/v1/health_pb.js",
+    "spine/auth/authenticated_principal.proto": "generated/spine/auth/authenticated_principal_pb.js",
     "spine/auth/authenticated_subscription.proto": "generated/spine/auth/authenticated_subscription_pb.js",
     "spine/auth/authentication_service.proto": "generated/spine/auth/authentication_service_pb.js",
+    "spine/auth/better_auth_record.proto": "generated/spine/auth/better_auth_record_pb.js",
+    "spine/auth/oidc_flow.proto": "generated/spine/auth/oidc_flow_pb.js",
+    "spine/auth/opaque_session.proto": "generated/spine/auth/opaque_session_pb.js",
+    "spine/auth/token_revocation.proto": "generated/spine/auth/token_revocation_pb.js",
     "spine/base/error.proto": "generated/spine/base/error_pb.js",
     "spine/base/field_path.proto": "generated/spine/base/field_path_pb.js",
     "spine/client/app_query.proto": "generated/spine/client/app_query_pb.js",
@@ -109,6 +120,7 @@
     "spine/server/entity/state_key.proto": "generated/spine/server/entity/state_key_pb.js",
     "spine/server/integration/broker.proto": "generated/spine/server/integration/broker_pb.js",
     "spine/server/server_environment.proto": "generated/spine/server/server_environment_pb.js",
+    "spine/server/tenant/tenant.proto": "generated/spine/server/tenant/tenant_pb.js",
     "spine/server/transport/transport.proto": "generated/spine/server/transport/transport_pb.js",
     "spine/string/template_string.proto": "generated/spine/string/template_string_pb.js",
     "spine/system/server/entity_log_events.proto": "generated/spine/system/server/entity_log_events_pb.js",
@@ -124,5 +136,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "59d5f830-a0dd-4178-b856-1265feff8e7e"
+  "generationId": "913bf4bb-d5ce-43f4-9507-ead712ec0b18"
 }

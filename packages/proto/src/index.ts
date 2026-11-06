@@ -76,6 +76,11 @@ import {
 } from "../generated/spine/core/tenant_id_pb.js";
 import type { TenantId } from "../generated/spine/core/tenant_id_pb.js";
 import {
+  TenantSchema as generatedTenantSchema,
+  file_spine_server_tenant_tenant as tenantSource,
+} from "../generated/spine/server/tenant/tenant_pb.js";
+import type { Tenant } from "../generated/spine/server/tenant/tenant_pb.js";
+import {
   UserIdSchema as generatedUserIdSchema,
   file_spine_core_user_id as userIdSource,
 } from "../generated/spine/core/user_id_pb.js";
@@ -197,6 +202,7 @@ export type {
   Origin,
   RejectionEventContext,
   TemplateString,
+  Tenant,
   TenantId,
   UserId,
   ValidationError,
@@ -270,6 +276,11 @@ export const file_spine_core_event: GenFile = eventSource;
  * File descriptor for `spine/core/tenant_id.proto`.
  */
 export const tenantIdFile: GenFile = tenantIdSource;
+
+/**
+ * File descriptor for `spine/server/tenant/tenant.proto`.
+ */
+export const tenantFile: GenFile = tenantSource;
 
 /**
  * File descriptor for `spine/core/user_id.proto`.
@@ -499,6 +510,11 @@ export const RejectionEventContextSchema: GenMessage<RejectionEventContext> =
  * Schema for `spine.core.TenantId`.
  */
 export const TenantIdSchema: GenMessage<TenantId> = generatedTenantIdSchema;
+
+/**
+ * Schema for a durable `spine.server.tenant.Tenant` registration.
+ */
+export const TenantSchema: GenMessage<Tenant> = generatedTenantSchema;
 
 /**
  * Schema for `spine.core.UserId`.

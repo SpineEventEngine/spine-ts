@@ -85,6 +85,25 @@ await context.close();
 Continue with the [server introduction](../packages/server/README.md) for
 application assembly and lifecycle.
 
+### Choose tenant membership before building
+
+A single-tenant Bounded Context uses `SINGLE_TENANT`. Omitting the environment
+setting selects it; an application can also set it explicitly. Neither form
+constructs a tenant directory or looks up membership. A multitenant Bounded
+Context requires a live `TenantIndex` in the environment or a local
+`withTenantIndex(index)` override. Register a complete `TenantId` with
+`keep()` before tenant-scoped work. An unknown tenant is rejected before
+business storage preparation.
+
+For cross-process membership, inject a durable `StorageFactory` and the same
+`StorageGroup` into `PersistentTenantIndex.create()` in each process. The
+provider's database must already exist; index creation prepares only the
+selected record family by default. `createMissingStructures: false` skips
+creation and checks both at construction and later operations. Application
+code closes the index and factory separately. The
+[server reference](../packages/server/REFERENCE.md) describes exact tenant
+admission and preparation semantics.
+
 ## 3. Describe the model in Proto
 
 Proto is the shared language between your server and clients. Define identifiers,

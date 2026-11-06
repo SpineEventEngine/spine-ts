@@ -211,6 +211,7 @@ const MemoryDefinitions = {
       spec.recordType.typeName,
       typeof id === "string" ? ["primitive", id] : ["message", id.typeName],
       this.columns(spec.columns),
+      spec.indexes.map(({ name, columns }) => [name, columns]),
     ]);
   },
 
@@ -231,7 +232,7 @@ const MemoryDefinitions = {
             type: [
               type.kind,
               type.kind === "scalar"
-                ? [type.scalar, type.longAsString]
+                ? [type.scalar, type.longAsString, type.byteLength ?? null]
                 : type.kind === "enum"
                   ? type.enum.typeName
                   : type.message.typeName,
