@@ -1,5 +1,9 @@
 # Spine TS Project Completion Plan
 
+Current example revision: [Orders and Fieldnotes](tasks/tenant-auth-storage/EXAMPLES.md).
+Implement both demonstrations in PR #22 and retain only required API adaptation
+in Message Board. Fresh independent reviews and final verification remain.
+
 Current human-authorized implementation: [Persistent tenant and authentication storage](tasks/tenant-auth-storage/TASK.md).
 The accepted specification is [PROPOSAL.md](tasks/tenant-auth-storage/PROPOSAL.md).
 Implement in `feature/tenant-auth-storage` from official master `c3efab85c`,

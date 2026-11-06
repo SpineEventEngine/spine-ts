@@ -1,5 +1,11 @@
 # Tenant and authentication storage
 
+## Current example revision
+
+[EXAMPLES.md](EXAMPLES.md) records the human-approved Orders and Fieldnotes
+implementation and Message Board baseline restoration on this same PR branch.
+It supersedes earlier Message Board demonstration requirements.
+
 ## Implementation specification
 
 [PROPOSAL.md](PROPOSAL.md) is the controlling specification for this task. Use it during implementation and review. Earlier chat drafts and experimental proposals are superseded where they differ. The human authorized production implementation on 2026-11-04. Implementation proceeds in feature/tenant-auth-storage from official master c3efab85c11abb95d351557053bace49a3310c54. Preserve the existing approved business-storage lifecycle.
