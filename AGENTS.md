@@ -194,17 +194,28 @@ Keep narrow TSDoc and behavior claims current in each runtime slice. Defer broad
 documentation and all-example execution until the affected runtime interfaces
 stabilize, unless a concrete changed interface requires earlier expansion.
 
-# GitHub Changes Require Explicit Permission
+## GitHub Pull Request and Issue Changes Require Explicit Approval
 
-NEVER EDIT PR or ISSUE descriptions, never CREATE PRs or ISSUES on GitHub — both unless the user explicitly asks.
+Explicit human approval is required ONLY for changes to GitHub pull requests
+and issues. This includes creating, editing, closing, reopening, or merging
+them, and changing their comments, reviews, labels, assignees, or other metadata.
+Read-only inspection of pull requests and issues is allowed without approval.
 
-Requests to analyze, implement, prepare text, or produce copy-pasteable Markdown
-do not authorize publishing or changing anything on GitHub. Return requested
-PR descriptions in the chat as copy-pasteable Markdown unless the user explicitly
-asks to publish or update them on GitHub. This rule covers PRs, issues, comments,
-reviews, repository settings, workflow actions, and remote Git changes.
-Read-only inspection remains allowed. This rule overrides any automatic-push or
-automatic-publication instruction when explicit authorization is absent.
+Requests to analyze or implement work, prepare text, or produce copy-pasteable
+Markdown do not authorize changes to those pull requests or issues. Return
+requested PR or issue text in the chat unless the human explicitly asks to
+publish it on GitHub.
+
+This approval requirement does NOT apply to Git commits, branches, worktrees,
+fetches, or pushes. Perform those actions according to the Official Repository
+Workflow and build protocol without requesting additional approval when that
+workflow already authorizes them. Push every feature-branch commit to `origin`
+immediately, including checkpoint and review-correction commits.
+
+This section does not impose approval requirements on repository settings or
+workflow actions. Those actions remain governed by the task authorization and
+other applicable instructions. Existing safeguards for protected `master`,
+published history, and remote branch or tag deletion remain in force.
 
 ## No Migrations
 

@@ -206,35 +206,38 @@ import { Time } from "@spine-event-engine/core/time";
 import { InMemoryStorageFactory, StorageGroup } from "@spine-event-engine/storage";
 
 const factory = new InMemoryStorageFactory();
-const store = await PersistentBetterAuthStore.create({
-  storageFactory: factory,
-  group: new StorageGroup("orders_better_auth"),
-  models: ["user", "account", "session", "verification"],
-});
 try {
-  const secret = process.env.BETTER_AUTH_SECRET;
-  if (secret === undefined) throw new Error("BETTER_AUTH_SECRET is required.");
-  const auth = await BetterAuthIntegration.create({
-    store,
-    routePolicy: { maxRequestBytes: 8_192, timeoutMs: 5_000 },
-    options: {
-      baseURL: "https://app.example.test",
-      basePath: "/auth",
-      secret,
-      trustedOrigins: ["https://app.example.test"],
-      emailAndPassword: { enabled: true, disableSignUp: true },
-      account: { accountLinking: { enabled: false } },
-      session: { cookieCache: { enabled: false } },
-    },
-    onPrincipal: async (user) => ({ id: user.id }),
+  const store = await PersistentBetterAuthStore.create({
+    storageFactory: factory,
+    group: new StorageGroup("orders_better_auth"),
+    models: ["user", "account", "session", "verification"],
   });
   try {
-    await store.purgeExpired(Time.currentTime());
+    const secret = process.env.BETTER_AUTH_SECRET;
+    if (secret === undefined) throw new Error("BETTER_AUTH_SECRET is required.");
+    const auth = await BetterAuthIntegration.create({
+      store,
+      routePolicy: { maxRequestBytes: 8_192, timeoutMs: 5_000 },
+      options: {
+        baseURL: "https://app.example.test",
+        basePath: "/auth",
+        secret,
+        trustedOrigins: ["https://app.example.test"],
+        emailAndPassword: { enabled: true, disableSignUp: true },
+        account: { accountLinking: { enabled: false } },
+        session: { cookieCache: { enabled: false } },
+      },
+      onPrincipal: async (user) => ({ id: user.id }),
+    });
+    try {
+      await store.purgeExpired(Time.currentTime());
+    } finally {
+      await auth.close();
+    }
   } finally {
-    await auth.close();
+    await store.close();
   }
 } finally {
-  await store.close();
   await factory.close();
 }
 ```
@@ -243,6 +246,10 @@ Provision complete Users and prelinked Accounts before accepting password
 or selected OIDC traffic. OIDC provider discovery and native initialization
 finish before `create()` returns; a pending provider has no factory timeout or
 caller cancellation, and the route deadline begins only after route admission.
+When an ID token has no email and userinfo is available, the OIDC callback reads
+userinfo. Better Auth compares its provider subject with the verified ID-token
+subject before accepting the profile, then resolves the prelinked Account to an
+application User ID. Without available userinfo, that callback cannot supply a profile.
 Each admitted callback uses a separate JWKS resolver, which may increase key
 requests to the provider. The integration exposes exact browser routes,
 verified session reads, and credential metadata. For a listener, pass `auth.routes` as

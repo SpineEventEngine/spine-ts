@@ -977,7 +977,8 @@ class AuthRouteScope {
         if (next.done) break;
         size += next.value.byteLength;
         if (size > limit) {
-          await this.#responseReader.cancel().catch(() => undefined);
+          await this.wait(this.#responseReader.cancel().catch(() => undefined));
+          this.#requireActive();
           this.response.statusCode = 413;
           this.response.end();
           return;

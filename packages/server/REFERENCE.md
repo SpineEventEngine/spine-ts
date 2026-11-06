@@ -230,8 +230,7 @@ finite keyset traversal with an abort signal and a continuation accepted only
 by that index instance. `all()` traverses the complete current directory, so
 its result can be large. Traversal does not promise a snapshot while other
 writers register tenants. Registration does not provision tenant databases or
-authorize users. The current environment default remains unchanged in this
-slice; explicit single-tenant selection is introduced separately.
+authorize users. The environment defaults to the explicit `SINGLE_TENANT` marker.
 
 Multitenant receiving contexts check current index membership before Command,
 Event, query, direct repository/history, and subscription work. Inbox persistence

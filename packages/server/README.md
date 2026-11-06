@@ -241,7 +241,10 @@ For a multitenant receiving Bounded Context, supply an application tenant direct
 register each accepted tenant through its `keep(tenantId)` method before sending
 tenant-scoped work. The optional environment setting defaults to `SINGLE_TENANT`;
 that mode creates no directory or provider catalog. A multitenant Bounded Context
-requires an environment directory, and `withTenantIndex()` can select another one.
+requires an environment directory before assembly, even when `withTenantIndex()`
+selects another directory for that Bounded Context. In one environment, a
+single-tenant Identity Bounded Context still uses `SINGLE_TENANT` while a
+multitenant Orders Bounded Context uses the configured directory.
 Both public `tenantIndex` getters return `TenantIndexSetting`, so narrow against
 `SINGLE_TENANT` before calling directory methods. A single-tenant Bounded Context always
 returns the marker, even when its environment has a directory for other Bounded Contexts.

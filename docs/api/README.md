@@ -276,8 +276,9 @@ the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
 built-in system-pairing metadata. An omitted `tenantIndex` setting selects
 `SINGLE_TENANT` without constructing a directory or consulting a provider catalog.
-Multitenant Bounded Contexts require an application-supplied environment index and may
-select another through `withTenantIndex()`. Both public getters return
+Multitenant Bounded Contexts require an application-supplied environment index before
+assembly. `withTenantIndex()` may select another directory for that Bounded Context,
+but it cannot enable multitenancy in a `SINGLE_TENANT` environment. Both public getters return
 `TenantIndexSetting`; callers narrow against the marker before directory methods.
 A single-tenant Bounded Context returns the marker even inside an indexed environment.
 Provider catalogs remain separate provider APIs. The full

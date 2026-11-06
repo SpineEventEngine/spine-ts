@@ -429,7 +429,9 @@ export class OidcNetwork {
   }
 
   /**
-   * Returns verified ID-token claims or reads the captured userinfo endpoint.
+   * Returns ID-token claims or reads the captured userinfo endpoint when email
+   * is absent. Better Auth compares the returned userinfo subject with the
+   * verified ID-token subject before accepting the profile.
    *
    * @param metadata Captured optional userinfo endpoint.
    * @param tokens Native tokens after mandatory ID-token verification.

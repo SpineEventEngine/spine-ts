@@ -270,6 +270,12 @@ Verification records plus either selected User records or a complete external
 User-by-ID source. An empty provider list adds no OIDC record requirement.
 `routePolicy.timeoutMs` applies only to admitted browser requests. Native
 state-cookie, PKCE, nonce, issuer, audience and ID-token checks remain active.
+If the ID token has no email, the callback reads userinfo when the endpoint and
+access token are available; otherwise it returns no profile. A userinfo response
+must have a nonempty `sub`. Better Auth 1.7.16 compares that raw provider subject with the
+verified ID-token `sub` before accepting the profile. A prelinked Account maps
+the accepted provider subject to an application User ID; the two IDs need not
+match.
 The integration uses one key resolver per callback, so simultaneous callbacks
 do not share a pending JWKS fetch; this can increase provider key traffic.
 Only one callback can consume a native state after its signed cookie is checked.

@@ -2607,6 +2607,140 @@ describe("Server", () => {
     }
   });
 
+  it("finishes an oversized auth response when stream cancellation stalls past the deadline", async () => {
+    let releaseCancel!: () => void;
+    let cancelStarted!: () => void;
+    let cancellationSettled = false;
+    let pendingAtAbort: boolean | undefined;
+    const cancellation = new Promise<void>((resolve) => (releaseCancel = resolve));
+    void cancellation.then(() => (cancellationSettled = true));
+    const started = new Promise<void>((resolve) => (cancelStarted = resolve));
+    let calls = 0;
+    const server = await openCombined(new Server(), {
+      writeMaxBytes: 8,
+      maxActiveAuthRequests: 1,
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/stalled-cancel",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 20,
+          admission: emptyBrowserAdmission,
+          onRequest: (_request, signal) => {
+            calls += 1;
+            if (calls > 1) return new Response("ok");
+            signal.addEventListener(
+              "abort",
+              () => {
+                pendingAtAbort = !cancellationSettled;
+              },
+              { once: true },
+            );
+            return new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(new Uint8Array(9));
+                },
+                cancel() {
+                  cancelStarted();
+                  return cancellation;
+                },
+              }),
+            );
+          },
+        },
+      ],
+    });
+    let fallback: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const first = fetch(`${server.baseUrl}/auth/stalled-cancel`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      await started;
+      fallback = setTimeout(releaseCancel, 150);
+      const response = await first;
+      expect(response.status).toBe(504);
+      expect(pendingAtAbort).toBe(true);
+      await expect(response.text()).resolves.toBe("");
+      const next = await fetch(`${server.baseUrl}/auth/stalled-cancel`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      expect(next.status).toBe(200);
+      await expect(next.text()).resolves.toBe("ok");
+      releaseCancel();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(calls).toBe(2);
+    } finally {
+      if (fallback !== undefined) clearTimeout(fallback);
+      releaseCancel();
+      await server.close();
+    }
+  });
+
+  it("releases auth admission when a client disconnects during oversized response cancellation", async () => {
+    let cancelStarted!: () => void;
+    let releaseCancel!: () => void;
+    let reportAbort!: () => void;
+    const started = new Promise<void>((resolve) => (cancelStarted = resolve));
+    const aborted = new Promise<void>((resolve) => (reportAbort = resolve));
+    const cancellation = new Promise<void>((resolve) => (releaseCancel = resolve));
+    let calls = 0;
+    const server = await openCombined(new Server(), {
+      writeMaxBytes: 8,
+      maxActiveAuthRequests: 1,
+      port: 0,
+      ...browserGateway(),
+      authRoutes: [
+        {
+          method: "GET",
+          path: "/auth/disconnect-cancel",
+          origins: ["http://127.0.0.1:5173"],
+          maxRequestBytes: 16,
+          timeoutMs: 1000,
+          admission: emptyBrowserAdmission,
+          onRequest: (_request, signal) => {
+            calls += 1;
+            if (calls > 1) return new Response("ok");
+            signal.addEventListener("abort", reportAbort, { once: true });
+            return new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(new Uint8Array(9));
+                },
+                cancel() {
+                  cancelStarted();
+                  return cancellation;
+                },
+              }),
+            );
+          },
+        },
+      ],
+    });
+    try {
+      const request = http.request(`${server.baseUrl}/auth/disconnect-cancel`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      request.on("error", () => undefined);
+      request.end();
+      await started;
+      request.destroy();
+      await aborted;
+      const next = await fetch(`${server.baseUrl}/auth/disconnect-cancel`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      expect(next.status).toBe(200);
+      await expect(next.text()).resolves.toBe("ok");
+      expect(calls).toBe(2);
+    } finally {
+      releaseCancel();
+      await server.close();
+    }
+  });
+
   it("applies the auth deadline while response transfer is pending", async () => {
     let cancel!: () => void;
     const cancelled = new Promise<void>((resolve) => (cancel = resolve));

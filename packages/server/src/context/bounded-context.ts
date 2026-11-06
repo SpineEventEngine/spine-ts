@@ -2652,8 +2652,9 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets a live directory for this multitenant Bounded Context.
-   * A real environment directory is still required at build time.
+   * Sets a directory that overrides the environment index for this multitenant Bounded Context.
+   * The environment must already have a real index at build time; an override
+   * cannot enable multitenancy in a SINGLE_TENANT environment.
    *
    * @param tenantIndex Application membership index.
    * @returns This builder.
