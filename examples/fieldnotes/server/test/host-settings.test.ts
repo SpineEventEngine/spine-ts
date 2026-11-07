@@ -53,4 +53,13 @@ describe("Fieldnotes host settings", () => {
       new FieldnotesHostSettings().parse({ ...complete(), FIELDNOTES_CSRF_SECRET_BASE64: "short" }),
     ).toThrow();
   });
+
+  it("requires a concrete proxy-facing gateway port for the process launch", () => {
+    const parser = new FieldnotesHostSettings();
+    expect(parser.gatewayPort({ FIELDNOTES_GATEWAY_PORT: "4311" })).toBe(4311);
+    for (const value of [undefined, "", "0", "65536", "not-a-port"])
+      expect(() => parser.gatewayPort({ FIELDNOTES_GATEWAY_PORT: value })).toThrow(
+        "FIELDNOTES_GATEWAY_PORT",
+      );
+  });
 });

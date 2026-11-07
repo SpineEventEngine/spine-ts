@@ -42,6 +42,8 @@ onlyBuiltDependencies:
 allowBuilds:
   "@ax-llm/ax": false
   "@bufbuild/buf": true
+  # Fieldnotes supplies Firebase configuration explicitly at runtime.
+  "@firebase/util": false
   "@mobrowser/sdk-darwin-arm64": true
   "@mobrowser/sdk-darwin-x64": true
   esbuild: false

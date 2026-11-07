@@ -58,9 +58,113 @@ export interface FieldnotesSettings {
 }
 
 /**
+ * Trusted provider configuration selected for one host launch.
+ */
+export type FieldnotesAuthentication =
+  | {
+      /**
+       * Selects direct Google OIDC authorization.
+       */
+      readonly mode: "google";
+
+      /**
+       * Google web application OAuth client identifier.
+       */
+      readonly clientId: string;
+
+      /**
+       * Google web application OAuth client secret.
+       */
+      readonly clientSecret: string;
+    }
+  | {
+      /**
+       * Selects Google sign-in through Firebase Authentication.
+       */
+      readonly mode: "firebase";
+
+      /**
+       * Exact Firebase project accepted by Admin verification.
+       */
+      readonly projectId: string;
+
+      /**
+       * Explicit maximum age of a Firebase Google login.
+       */
+      readonly recentLoginMilliseconds: number;
+    };
+
+/**
+ * Parses the provider selected for a durable Fieldnotes launch.
+ */
+export class FieldnotesAuthenticationSettings {
+  /**
+   * Validates exact provider settings and excludes emulator credentials in production.
+   *
+   * @param environment Deployment environment values.
+   * @param production Whether this launch uses production identity verification.
+   * @returns One explicit provider configuration.
+   */
+  parse(
+    environment: Readonly<Record<string, string | undefined>>,
+    production: boolean,
+  ): FieldnotesAuthentication {
+    if (production && environment.FIREBASE_AUTH_EMULATOR_HOST !== undefined)
+      throw new Error("FIREBASE_AUTH_EMULATOR_HOST is forbidden in production.");
+    const mode = this.required(environment, "FIELDNOTES_AUTH_MODE");
+    if (mode === "google")
+      return {
+        mode,
+        clientId: this.required(environment, "FIELDNOTES_GOOGLE_CLIENT_ID"),
+        clientSecret: this.required(environment, "FIELDNOTES_GOOGLE_CLIENT_SECRET"),
+      };
+    if (mode === "firebase") {
+      const recent = Number(this.required(environment, "FIELDNOTES_FIREBASE_RECENT_LOGIN_MS"));
+      if (!Number.isSafeInteger(recent) || recent <= 0)
+        throw new Error("FIELDNOTES_FIREBASE_RECENT_LOGIN_MS must be a positive safe integer.");
+      return {
+        mode,
+        projectId: this.required(environment, "FIELDNOTES_FIREBASE_PROJECT_ID"),
+        recentLoginMilliseconds: recent,
+      };
+    }
+    throw new Error("FIELDNOTES_AUTH_MODE must be google or firebase.");
+  }
+
+  /**
+   * Returns an exact nonempty deployment setting.
+   *
+   * @param environment Deployment environment values.
+   * @param name Required variable name.
+   * @returns Nonempty setting.
+   */
+  private required(
+    environment: Readonly<Record<string, string | undefined>>,
+    name: string,
+  ): string {
+    const value = environment[name];
+    if (value === undefined || value.length === 0)
+      throw new Error(`Missing required configuration: ${name}.`);
+    return value;
+  }
+}
+
+/**
  * Parses deployment settings without adding Fieldnotes-specific fallback budgets.
  */
 export class FieldnotesHostSettings {
+  /**
+   * Parses the required concrete listener port used by the Next-facing proxy.
+   *
+   * @param environment Deployment environment values.
+   * @returns Port from 1 through 65535.
+   */
+  gatewayPort(environment: Readonly<Record<string, string | undefined>>): number {
+    const port = this.positive(environment, "FIELDNOTES_GATEWAY_PORT");
+    if (port > 65_535) throw new Error("FIELDNOTES_GATEWAY_PORT must be at most 65535.");
+    return port;
+  }
+
   /**
    * Parses all required durable placement, origin, secret, and policy inputs.
    *
