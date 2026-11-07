@@ -122,6 +122,80 @@ describe("datastore-orders load runner", () => {
     expect(result.commandAcknowledgementLatency).toEqual({ p50Ms: 0, p95Ms: 0, p99Ms: 0 });
   }, 10_000);
 
+  it("retains acknowledged command counts when every subsequent query fails", async () => {
+    const server = await startProtocolOutcomeServer("query-rejected");
+    try {
+      const result = await runOrdersLoad({
+        baseUrl: server.baseUrl,
+        users: 10,
+        tenants: [ordersTenants.northwind, ordersTenants.contoso],
+      });
+      expect(result).toMatchObject({
+        failedUsers: 10,
+        commandAcknowledgements: 10,
+        queryVisibilities: 0,
+        subscriptionDeliveries: 0,
+        perTenant: {
+          northwind: {
+            users: 5,
+            failedUsers: 5,
+            commandAcknowledgements: 5,
+            queryVisibilities: 0,
+            subscriptionDeliveries: 0,
+          },
+          contoso: {
+            users: 5,
+            failedUsers: 5,
+            commandAcknowledgements: 5,
+            queryVisibilities: 0,
+            subscriptionDeliveries: 0,
+          },
+        },
+      });
+      expect(result.commandAcknowledgementLatency.p50Ms).toBeGreaterThan(0);
+      expect(result.queryVisibilityLatency.p50Ms).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("retains command and query counts when the subscription ends before an update", async () => {
+    const server = await startProtocolOutcomeServer("ended-after-activation");
+    try {
+      const result = await runOrdersLoad({
+        baseUrl: server.baseUrl,
+        users: 10,
+        tenants: [ordersTenants.northwind, ordersTenants.contoso],
+      });
+      expect(result).toMatchObject({
+        failedUsers: 10,
+        commandAcknowledgements: 10,
+        queryVisibilities: 10,
+        subscriptionDeliveries: 0,
+        perTenant: {
+          northwind: {
+            users: 5,
+            failedUsers: 5,
+            commandAcknowledgements: 5,
+            queryVisibilities: 5,
+            subscriptionDeliveries: 0,
+          },
+          contoso: {
+            users: 5,
+            failedUsers: 5,
+            commandAcknowledgements: 5,
+            queryVisibilities: 5,
+            subscriptionDeliveries: 0,
+          },
+        },
+      });
+      expect(result.queryVisibilityLatency.p50Ms).toBeGreaterThan(0);
+      expect(result.subscriptionDeliveryLatency.p50Ms).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("reports zero throughput when the real gRPC load completes within one clock tick", async () => {
     const { configureOrdersEnvironment, startOrdersServer } = await import("../dist/src/index.js");
     const setup = await configureOrdersEnvironment({
@@ -148,10 +222,10 @@ describe("datastore-orders load runner", () => {
   }, 30_000);
 
   it("classifies unsuccessful protocol outcomes as failed users", async () => {
-    for (const outcome of [
-      "missing-acknowledgement",
-      "ended-subscription",
-      "uncorrelated-update",
+    for (const [outcome, commandAcknowledgements, queryVisibilities] of [
+      ["missing-acknowledgement", 0, 0],
+      ["ended-subscription", 0, 0],
+      ["uncorrelated-update", 10, 10],
     ] as const) {
       const server = await startProtocolOutcomeServer(outcome);
       try {
@@ -164,8 +238,8 @@ describe("datastore-orders load runner", () => {
         expect(result).toMatchObject({
           users: 10,
           failedUsers: 10,
-          commandAcknowledgements: 0,
-          queryVisibilities: 0,
+          commandAcknowledgements,
+          queryVisibilities,
           subscriptionDeliveries: 0,
         });
       } finally {
@@ -188,11 +262,13 @@ describe("datastore-orders load runner", () => {
 type ProtocolOutcome =
   | "missing-acknowledgement"
   | "ended-subscription"
+  | "ended-after-activation"
   | "uncorrelated-update"
   | "stalled-subscription"
   | "stalled-command"
   | "stalled-query"
-  | "stalled-activation";
+  | "stalled-activation"
+  | "query-rejected";
 
 const stalledRpcTimeoutMs = 500;
 
@@ -276,7 +352,9 @@ function queryHandlers(outcome: ProtocolOutcome, onStart: () => void, onAbort: (
     read: (query: Query, context: HandlerContext) =>
       outcome === "stalled-query"
         ? stalled(context, onStart, onAbort)
-        : Promise.resolve(queryResponse(query)),
+        : outcome === "query-rejected"
+          ? Promise.reject(new Error("query unavailable"))
+          : Promise.resolve(queryResponse(query)),
   };
 }
 
@@ -299,6 +377,7 @@ function subscriptionHandlers(outcome: ProtocolOutcome, onStart: () => void, onA
         subscription,
         response: create(ResponseSchema, { status: okStatus() }),
       });
+      if (outcome === "ended-after-activation") return;
       yield create(SubscriptionUpdateSchema, outcome === "uncorrelated-update" ? {} : undefined);
     },
     cancel: () => Promise.resolve(create(ResponseSchema, { status: okStatus() })),

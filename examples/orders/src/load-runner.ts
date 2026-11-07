@@ -44,7 +44,7 @@ import { LatencyDistribution, type LatencyPercentiles } from "./internal/latency
 export type { LatencyPercentiles } from "./internal/latency-distribution.js";
 
 /**
- * Supported independent-user levels for the local datastore-orders scenario.
+ * Supported independent-user levels for an Orders load scenario.
  */
 export const ordersLoadLevels = [10, 100, 1000] as const;
 
@@ -54,7 +54,7 @@ export const ordersLoadLevels = [10, 100, 1000] as const;
 export type OrdersLoadLevel = (typeof ordersLoadLevels)[number];
 
 /**
- * Configures a datastore-orders load run.
+ * Configures an Orders load run.
  */
 export interface OrdersLoadOptions {
   // prettier-ignore
@@ -69,7 +69,9 @@ export interface OrdersLoadOptions {
    */
   readonly users: OrdersLoadLevel;
 
-  /** Tenants across which users are distributed. */
+  /**
+   * Distributes users across these configured tenants.
+   */
   readonly tenants: readonly TenantId[];
 
   /**
@@ -79,7 +81,7 @@ export interface OrdersLoadOptions {
 }
 
 /**
- * Summarizes a completed datastore-orders load run.
+ * Summarizes a completed Orders load run.
  */
 export interface OrdersLoadResult {
   // prettier-ignore
@@ -89,7 +91,9 @@ export interface OrdersLoadResult {
    */
   readonly users: number;
 
-  /** Outcomes grouped by selected tenant value. */
+  /**
+   * Groups outcomes by selected tenant value.
+   */
   readonly perTenant: Readonly<Record<string, OrdersTenantLoadResult>>;
 
   /**
@@ -138,21 +142,33 @@ export interface OrdersLoadResult {
   readonly failureMessages: Readonly<Record<string, number>>;
 }
 
-/** Counts completed user flows for one selected tenant. */
+/**
+ * Counts selected users, failed flows, and independently completed phases for one tenant.
+ */
 export interface OrdersTenantLoadResult {
-  /** Number of selected users. */
+  /**
+   * Counts selected users.
+   */
   readonly users: number;
 
-  /** Number of rejected user flows. */
+  /**
+   * Counts rejected user flows.
+   */
   readonly failedUsers: number;
 
-  /** Number of acknowledged CreateOrder commands. */
+  /**
+   * Counts acknowledged CreateOrder commands.
+   */
   readonly commandAcknowledgements: number;
 
-  /** Number of visible OrderSummary queries. */
+  /**
+   * Counts visible OrderSummary queries.
+   */
   readonly queryVisibilities: number;
 
-  /** Number of delivered OrderSummary updates. */
+  /**
+   * Counts delivered OrderSummary subscription updates.
+   */
   readonly subscriptionDeliveries: number;
 }
 
@@ -180,12 +196,23 @@ interface UserResult {
 }
 
 /**
- * Runs datastore order users in bounded waves over shared HTTP/2 sessions.
+ * Retains each completed user milestone even when a later phase rejects.
+ */
+interface UserProgress {
+  readonly commandAcknowledgementMs?: number;
+  readonly queryVisibilityMs?: number;
+  readonly subscriptionDeliveryMs?: number;
+}
+
+/**
+ * Runs Orders users in bounded waves over shared HTTP/2 sessions.
  */
 class OrdersLoadRun {
   private readonly timeoutMs: number;
 
   private readonly sessions: Http2SessionManager[];
+
+  private readonly progress: UserProgress[] = [];
 
   /**
    * Creates shared sessions and resolves the per-user visibility limit.
@@ -243,13 +270,9 @@ class OrdersLoadRun {
     const tenantId = this.options.tenants[index % this.options.tenants.length];
     if (tenantId === undefined) throw new Error("Orders load requires a configured tenant.");
     if (session === undefined) throw new Error("Load runner did not allocate an HTTP/2 session.");
-    return new OrdersUserRun(
-      this.options.baseUrl,
-      index,
-      this.timeoutMs,
-      session,
-      tenantId,
-    ).execute();
+    const user = new OrdersUserRun(this.options.baseUrl, index, this.timeoutMs, session, tenantId);
+    this.progress[index] = user.progress;
+    return user.execute();
   }
 
   /**
@@ -270,24 +293,39 @@ class OrdersLoadRun {
       users: this.options.users,
       perTenant: this.perTenant(settled),
       failedUsers: settled.length - results.length,
-      commandAcknowledgements: results.length,
-      queryVisibilities: results.length,
-      subscriptionDeliveries: results.length,
+      commandAcknowledgements: this.phaseValues("commandAcknowledgementMs").length,
+      queryVisibilities: this.phaseValues("queryVisibilityMs").length,
+      subscriptionDeliveries: this.phaseValues("subscriptionDeliveryMs").length,
       commandAcknowledgementLatency: LatencyDistribution.from(
-        results.map((result) => result.commandAcknowledgementMs),
+        this.phaseValues("commandAcknowledgementMs"),
       ).percentiles(),
       queryVisibilityLatency: LatencyDistribution.from(
-        results.map((result) => result.queryVisibilityMs),
+        this.phaseValues("queryVisibilityMs"),
       ).percentiles(),
       subscriptionDeliveryLatency: LatencyDistribution.from(
-        results.map((result) => result.subscriptionDeliveryMs),
+        this.phaseValues("subscriptionDeliveryMs"),
       ).percentiles(),
       throughputPerSecond: elapsedMs === 0 ? 0 : (results.length * 1_000) / elapsedMs,
       failureMessages: this.classifyFailures(settled),
     };
   }
 
-  /** Counts outcomes for each selected tenant. */
+  /**
+   * Reads completed latencies for one independently reported phase.
+   *
+   * @param phase The completed milestone to summarize.
+   * @returns Latencies from users who reached that milestone.
+   */
+  private phaseValues(phase: keyof UserProgress): number[] {
+    return this.progress.flatMap((user) => (user[phase] === undefined ? [] : [user[phase]]));
+  }
+
+  /**
+   * Groups outcomes for each selected tenant.
+   *
+   * @param settled User outcomes in submission order.
+   * @returns Counts grouped by the configured tenant values.
+   */
   private perTenant(
     settled: readonly PromiseSettledResult<UserResult>[],
   ): OrdersLoadResult["perTenant"] {
@@ -305,12 +343,17 @@ class OrdersLoadRun {
         subscriptionDeliveries: 0,
       };
       const success = settled[index]?.status === "fulfilled" ? 1 : 0;
+      const progress = this.progress[index];
       counts[tenant] = {
         users: current.users + 1,
         failedUsers: current.failedUsers + (1 - success),
-        commandAcknowledgements: current.commandAcknowledgements + success,
-        queryVisibilities: current.queryVisibilities + success,
-        subscriptionDeliveries: current.subscriptionDeliveries + success,
+        commandAcknowledgements:
+          current.commandAcknowledgements +
+          (progress?.commandAcknowledgementMs === undefined ? 0 : 1),
+        queryVisibilities:
+          current.queryVisibilities + (progress?.queryVisibilityMs === undefined ? 0 : 1),
+        subscriptionDeliveries:
+          current.subscriptionDeliveries + (progress?.subscriptionDeliveryMs === undefined ? 0 : 1),
       };
     }
     return counts;
@@ -348,6 +391,15 @@ interface SubscriptionRead {
  * Executes one correlated order command, query, and subscription flow.
  */
 class OrdersUserRun {
+  /**
+   * Records each milestone as soon as it completes.
+   */
+  readonly progress: {
+    commandAcknowledgementMs?: number;
+    queryVisibilityMs?: number;
+    subscriptionDeliveryMs?: number;
+  } = {};
+
   private readonly id: string;
 
   private readonly actorContext;
@@ -367,6 +419,7 @@ class OrdersUserRun {
    * @param index Zero-based user position in the load run.
    * @param timeoutMs Maximum wait for each visibility operation.
    * @param session Shared HTTP/2 session used by this user.
+   * @param tenantId Complete tenant identity carried by this user's signals.
    */
   constructor(
     baseUrl: string,
@@ -400,8 +453,11 @@ class OrdersUserRun {
       read = await this.startSubscription();
       const submittedAt = performance.now();
       const commandAcknowledgementMs = await this.postCommand(submittedAt);
+      this.progress.commandAcknowledgementMs = commandAcknowledgementMs;
       const queryVisibilityMs = await this.waitForVisibility(submittedAt);
+      this.progress.queryVisibilityMs = queryVisibilityMs;
       const subscriptionDeliveryMs = await this.readSubscription(read.firstUpdate);
+      this.progress.subscriptionDeliveryMs = subscriptionDeliveryMs;
       return { commandAcknowledgementMs, queryVisibilityMs, subscriptionDeliveryMs };
     } finally {
       await this.cleanup(read?.iterator);
