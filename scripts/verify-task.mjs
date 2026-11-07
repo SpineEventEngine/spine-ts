@@ -93,6 +93,7 @@ export function taskGateCommands(classification) {
     ...(classification.proto ? ["proto:check-fixtures", "proto:generate"] : []),
     "typecheck:build:generated",
     "typecheck:tooling",
+    ...(classification.proto ? ["web:build"] : []),
     "eslint",
     "lint:cleanup",
     "lint:tsdoc",

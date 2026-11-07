@@ -2750,7 +2750,13 @@ function readStructureLedger(repoRoot, directory, rule) {
         required.some((key) => typeof value?.[key] !== "string") ||
         value.rule !== rule ||
         !/^(packages|examples)\//.test(value.file) ||
-        value.file.includes("..") ||
+        value.file
+          .split("/")
+          .some(
+            (segment) =>
+              segment.includes("..") &&
+              !/^(?:\[\.\.\.[A-Za-z][\w]*\]|\[\[\.\.\.[A-Za-z][\w]*\]\])$/.test(segment),
+          ) ||
         value.file.includes("\\") ||
         structurePartition(value.file) !== filename.slice(0, -5)
       )

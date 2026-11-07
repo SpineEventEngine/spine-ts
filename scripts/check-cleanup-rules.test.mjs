@@ -378,6 +378,58 @@ describe("check-cleanup-rules", () => {
     expect(runChecker(repoRoot).status).toBe(0);
   });
 
+  it("accepts complete Next catch-all segments but rejects embedded dots and traversal", () => {
+    const repoRoot = createFixture();
+    const path = "examples/fieldnotes/web/src/app/auth/[...path]/route.ts";
+    mkdirSync(join(repoRoot, "examples/fieldnotes/web/src/app/auth/[...path]"), {
+      recursive: true,
+    });
+    writeFileSync(join(repoRoot, path), "export function POST(): void {}\n");
+    const entry = {
+      rule: "standalone-function",
+      file: path,
+      kind: "function-declaration",
+      identity: "POST()#1",
+      name: "POST",
+      disposition: "necessity",
+      reason: "TypeScript Next framework boundary requires POST as the exact route entry point.",
+    };
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "fieldnotes", [entry]);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "Next route fixture"], repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+    const optional = "examples/fieldnotes/web/src/app/auth/[[...path]]/route.ts";
+    mkdirSync(join(repoRoot, "examples/fieldnotes/web/src/app/auth/[[...path]]"), {
+      recursive: true,
+    });
+    writeFileSync(join(repoRoot, optional), "export function GET(): void {}\n");
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "fieldnotes", [
+      entry,
+      {
+        ...entry,
+        file: optional,
+        identity: "GET()#1",
+        name: "GET",
+        reason: "TypeScript Next framework boundary requires GET as the exact route entry point.",
+      },
+    ]);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "optional route fixture"], repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "fieldnotes", [
+      { ...entry, file: "examples/fieldnotes/web/src/foo[...path]bar.ts" },
+    ]);
+    expect(runChecker(repoRoot).stderr).toContain(
+      "Malformed or broadened standalone-function entry",
+    );
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "fieldnotes", [
+      { ...entry, file: "examples/fieldnotes/web/src/../escape.ts" },
+    ]);
+    expect(runChecker(repoRoot).stderr).toContain(
+      "Malformed or broadened standalone-function entry",
+    );
+  });
+
   it("rejects stale duplicate broadened and owned-behavior structure ledger entries", () => {
     const repoRoot = createFixture();
     writeFileSync(

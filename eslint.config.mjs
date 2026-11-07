@@ -2,7 +2,11 @@ import js from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 
-const typedFiles = ["**/*.ts", "examples/release-notes/{src,test}/**/*.tsx"];
+const typedFiles = [
+  "**/*.ts",
+  "examples/release-notes/{src,test}/**/*.tsx",
+  "examples/fieldnotes/web/{src,test}/**/*.tsx",
+];
 
 export default tseslint.config(
   {
@@ -20,6 +24,10 @@ export default tseslint.config(
       "examples/release-notes/.studio-build/**",
       "examples/release-notes/out/**",
       "examples/release-notes/build/**",
+      "examples/fieldnotes/web/.next/**",
+      "examples/fieldnotes/web/next-env.d.ts",
+      "examples/fieldnotes/web/test-results/**",
+      "examples/fieldnotes/web/public/maplibre-gl-worker.mjs",
       "eslint.config.mjs",
       "vitest.config.ts",
     ],
@@ -47,6 +55,18 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         project: "./packages/ai-vercel-ax/tsconfig.tooling.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: [
+      "examples/fieldnotes/web/{src,test}/**/*.{ts,tsx}",
+      "examples/fieldnotes/web/next.config.ts",
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: "./examples/fieldnotes/web/tsconfig.tooling.json",
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -81,6 +101,19 @@ export default tseslint.config(
         fetch: "readonly",
         process: "readonly",
         URL: "readonly",
+      },
+    },
+  },
+  {
+    files: ["examples/fieldnotes/{server/test,web/scripts,deploy/test}/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        fetch: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
       },
     },
   },

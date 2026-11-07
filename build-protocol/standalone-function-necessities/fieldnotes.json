@@ -16,5 +16,212 @@
     "name": "fieldnotesReadFilters",
     "disposition": "necessity",
     "reason": "TypeScript fieldnotesReadFilters is necessary as the public assembly entry point that supplies exactly the PlaceView, five Event, and four rejection filters to the native Server."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/app/auth/[...path]/route.ts",
+    "kind": "function-declaration",
+    "identity": "POST()#1",
+    "name": "POST",
+    "disposition": "necessity",
+    "reason": "TypeScript Next App Router requires POST as the named entry point for the fixed same-origin authentication route."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/app/auth/[...path]/route.ts",
+    "kind": "function-declaration",
+    "identity": "GET()#1",
+    "name": "GET",
+    "disposition": "necessity",
+    "reason": "TypeScript Next App Router requires GET as the named entry point for direct Google callback navigation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/app/spine/[...path]/route.ts",
+    "kind": "function-declaration",
+    "identity": "POST()#1",
+    "name": "POST",
+    "disposition": "necessity",
+    "reason": "TypeScript Next App Router requires POST as the named entry point for admitted Connect RPC streams."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/app/auth/complete/page.tsx",
+    "kind": "function-declaration",
+    "identity": "CompletePage()#1",
+    "name": "CompletePage",
+    "disposition": "necessity",
+    "reason": "TypeScript React and Next require CompletePage as the component entry point for browser-only grant completion."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/app/layout.tsx",
+    "kind": "function-declaration",
+    "identity": "RootLayout()#1",
+    "name": "RootLayout",
+    "disposition": "necessity",
+    "reason": "TypeScript Next App Router requires RootLayout as the root document component entry point."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/app/page.tsx",
+    "kind": "function-declaration",
+    "identity": "Page()#1",
+    "name": "Page",
+    "disposition": "necessity",
+    "reason": "TypeScript Next App Router requires Page as the route component passing public identity settings to the browser."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/fieldnotes-shell.tsx",
+    "kind": "function-declaration",
+    "identity": "FieldnotesShell()#1",
+    "name": "FieldnotesShell",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires FieldnotesShell as the browser component binding identity state to interactive controls."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/safe-markdown.tsx",
+    "kind": "function-declaration",
+    "identity": "SafeMarkdown()#1",
+    "name": "SafeMarkdown",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires SafeMarkdown as the rendered component boundary for sanitized private Markdown."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/ui/button.tsx",
+    "kind": "function-declaration",
+    "identity": "Button()#1",
+    "name": "Button",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires Button as the shadcn-derived interactive component boundary with accessible native attributes."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/ui/input.tsx",
+    "kind": "function-declaration",
+    "identity": "Input()#1",
+    "name": "Input",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires Input as the shadcn-derived field component boundary with native input attributes."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/ui/cn.ts",
+    "kind": "function-declaration",
+    "identity": "cn()#1",
+    "name": "cn",
+    "disposition": "necessity",
+    "reason": "TypeScript shadcn component source requires cn as its named class-composition function shared by Button and Input."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/mobile-panels.tsx",
+    "kind": "function-declaration",
+    "identity": "MobilePanels()#1",
+    "name": "MobilePanels",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires MobilePanels as responsive mobile Sheet controls for the private place list and selected details."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/place-map.tsx",
+    "kind": "function-declaration",
+    "identity": "PlaceMap()#1",
+    "name": "PlaceMap",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires PlaceMap as the MapLibre canvas with selectable markers and coordinate fallback."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/place-panels.tsx",
+    "kind": "function-declaration",
+    "identity": "SavedPlacesList()#1",
+    "name": "SavedPlacesList",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires SavedPlacesList as the accessible filtered collection of saved Place summaries."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/place-panels.tsx",
+    "kind": "function-declaration",
+    "identity": "PlaceDetails()#1",
+    "name": "PlaceDetails",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires PlaceDetails as the selected Place details and explicit editing actions."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/place-panels.tsx",
+    "kind": "function-declaration",
+    "identity": "CoordinateFields()#1",
+    "name": "CoordinateFields",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires CoordinateFields as reusable latitude and longitude fields for add and move forms."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/place-panels.tsx",
+    "kind": "function-declaration",
+    "identity": "PlaceEditor()#1",
+    "name": "PlaceEditor",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires PlaceEditor as the single-note draft form and conflict reapply action."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/place-workspace.tsx",
+    "kind": "function-declaration",
+    "identity": "PlaceWorkspace()#1",
+    "name": "PlaceWorkspace",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires PlaceWorkspace as the authenticated collection controller with responsive map and editor."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/ui/sheet.tsx",
+    "kind": "function-declaration",
+    "identity": "Sheet()#1",
+    "name": "Sheet",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires Sheet as the Radix dialog root for mobile panels."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/ui/sheet.tsx",
+    "kind": "function-declaration",
+    "identity": "SheetTrigger()#1",
+    "name": "SheetTrigger",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires SheetTrigger as the Radix dialog trigger for mobile panels."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/ui/sheet.tsx",
+    "kind": "function-declaration",
+    "identity": "SheetContent()#1",
+    "name": "SheetContent",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires SheetContent as the Radix dialog content with close control and focus management."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/ui/sheet.tsx",
+    "kind": "function-declaration",
+    "identity": "SheetTitle()#1",
+    "name": "SheetTitle",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires SheetTitle as the Radix dialog title for accessible mobile panels."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/web/src/ui/sheet.tsx",
+    "kind": "function-declaration",
+    "identity": "SheetDescription()#1",
+    "name": "SheetDescription",
+    "disposition": "necessity",
+    "reason": "TypeScript React requires SheetDescription as the Radix dialog description for accessible mobile panels."
   }
 ]
