@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
-import { selectFormatFiles, trackedFiles } from "./format-files.mjs";
+import { selectFormatFiles, formatCandidateFiles } from "./format-files.mjs";
 
 describe("format-files", () => {
-  it("selects only tracked-format paths and skips generated output", () => {
+  it("selects formatter-supported paths and skips generated output", () => {
     expect(
       selectFormatFiles([
         "package.json",
@@ -34,32 +34,50 @@ describe("format-files", () => {
     ]);
   });
 
-  it("skips deleted paths, retains broken symlinks, and surfaces status failures", () => {
+  it("includes nonignored new files, skips deleted and ignored paths, and surfaces failures", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-format-files-"));
     try {
       execFileSync("git", ["init"], { cwd: repoRoot });
       execFileSync("git", ["config", "user.email", "tests@spine.io"], { cwd: repoRoot });
       execFileSync("git", ["config", "user.name", "Spine Tests"], { cwd: repoRoot });
       mkdirSync(join(repoRoot, "scripts"));
+      mkdirSync(join(repoRoot, "examples", "todo", "generated"), { recursive: true });
+      writeFileSync(join(repoRoot, ".gitignore"), "scripts/ignored.mjs\n");
       writeFileSync(join(repoRoot, "scripts/kept.mjs"), "export const kept = true;\n");
       writeFileSync(join(repoRoot, "scripts/deleted.mjs"), "export const deleted = true;\n");
       symlinkSync("missing.mjs", join(repoRoot, "scripts/linked.mjs"));
       execFileSync("git", ["add", "."], { cwd: repoRoot });
       execFileSync("git", ["commit", "-m", "fixture"], { cwd: repoRoot });
       rmSync(join(repoRoot, "scripts/deleted.mjs"));
+      writeFileSync(join(repoRoot, "scripts/new.mjs"), "export const newFile=true;\n");
+      writeFileSync(join(repoRoot, "scripts/ignored.mjs"), "export const ignored=true;\n");
+      writeFileSync(
+        join(repoRoot, "examples/todo/generated/state.ts"),
+        "export const generated=true;\n",
+      );
 
-      const tracked = trackedFiles(repoRoot);
-      expect(tracked).toContain("scripts/kept.mjs");
-      expect(tracked).toContain("scripts/linked.mjs");
-      expect(tracked).not.toContain("scripts/deleted.mjs");
-      expect(selectFormatFiles(tracked)).toContain("scripts/linked.mjs");
+      const candidates = formatCandidateFiles(repoRoot);
+      expect(candidates).toContain("scripts/kept.mjs");
+      expect(candidates).toContain("scripts/linked.mjs");
+      expect(candidates).toContain("scripts/new.mjs");
+      expect(candidates).not.toContain("scripts/deleted.mjs");
+      expect(candidates).not.toContain("scripts/ignored.mjs");
+      expect(selectFormatFiles(candidates)).toContain("scripts/linked.mjs");
+      expect(selectFormatFiles(candidates)).toContain("scripts/new.mjs");
+      expect(selectFormatFiles(candidates)).not.toContain("examples/todo/generated/state.ts");
 
       const failure = Object.assign(new Error("status denied"), { code: "EACCES" });
       expect(() =>
-        trackedFiles(repoRoot, () => {
+        formatCandidateFiles(repoRoot, () => {
           throw failure;
         }),
       ).toThrow(failure);
+      const outsideGit = mkdtempSync(join(tmpdir(), "spine-format-nongit-"));
+      try {
+        expect(() => formatCandidateFiles(outsideGit)).toThrow(/Formatter file listing failed/);
+      } finally {
+        rmSync(outsideGit, { recursive: true, force: true });
+      }
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

@@ -52,28 +52,32 @@ export function selectFormatFiles(paths) {
 }
 
 /**
- * Lists tracked formatter inputs that remain present in a checkout.
+ * Lists tracked and nonignored untracked formatter inputs present in a checkout.
  *
- * @param root Checkout in which tracked paths are enumerated.
+ * @param root Checkout in which candidate paths are enumerated.
  * @param status Filesystem status lookup used to exclude paths deleted from the checkout.
- * @returns Existing Git-tracked paths; throws when the Git process cannot complete successfully.
+ * @returns Existing candidate paths; throws when the Git process cannot complete successfully.
  */
-export function trackedFiles(root = repoRoot, status = lstatIfPresent) {
-  const result = spawnSync("git", ["ls-files", "-z"], {
-    cwd: root,
-    encoding: "utf8",
-  });
+export function formatCandidateFiles(root = repoRoot, status = lstatIfPresent) {
+  const result = spawnSync(
+    "git",
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+    {
+      cwd: root,
+      encoding: "utf8",
+    },
+  );
 
   if (result.error !== undefined) {
-    throw new Error(`Failed to list tracked files: ${result.error.message}`);
+    throw new Error(`Failed to list formatter files: ${result.error.message}`);
   }
 
   if (result.signal !== null) {
-    throw new Error(`Tracked file listing terminated by signal ${result.signal}.`);
+    throw new Error(`Formatter file listing terminated by signal ${result.signal}.`);
   }
 
   if (result.status !== 0) {
-    throw new Error(`Tracked file listing failed:\n${result.stderr}${result.stdout}`);
+    throw new Error(`Formatter file listing failed:\n${result.stderr}${result.stdout}`);
   }
 
   return result.stdout
@@ -83,7 +87,7 @@ export function trackedFiles(root = repoRoot, status = lstatIfPresent) {
 
 function runPrettier(mode, files) {
   if (files.length === 0) {
-    console.log("No tracked files matched the formatting set.");
+    console.log("No files matched the formatting set.");
     return 0;
   }
 
@@ -118,7 +122,9 @@ const isMain =
 
 if (isMain) {
   try {
-    process.exit(runPrettier(parseMode(process.argv.slice(2)), selectFormatFiles(trackedFiles())));
+    process.exit(
+      runPrettier(parseMode(process.argv.slice(2)), selectFormatFiles(formatCandidateFiles())),
+    );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
