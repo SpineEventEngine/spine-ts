@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["next", "geojson", "node", "vitest"],
+    "incremental": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "next.config.ts"
+  ],
+  "exclude": ["node_modules"]
+}
