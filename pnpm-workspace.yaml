@@ -51,5 +51,6 @@ allowBuilds:
   esbuild: false
   protobufjs: false
 patchedDependencies:
+  "@uiw/react-md-editor@4.2.3": patches/@uiw__react-md-editor@4.2.3.patch
   minimatch@11.0.1: patches/minimatch@11.0.1.patch
   typedoc@0.28.19: patches/typedoc@0.28.19.patch
