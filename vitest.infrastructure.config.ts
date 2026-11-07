@@ -15,8 +15,12 @@
 import { defineConfig } from "vitest/config";
 
 import { infrastructureTestFiles } from "./scripts/test-inventory.mjs";
+import { typescriptVitestPlugin } from "./scripts/vitest-typescript.mjs";
 
 export default defineConfig({
+  oxc: false,
+  esbuild: false,
+  plugins: [typescriptVitestPlugin()],
   test: {
     include: [...infrastructureTestFiles],
   },

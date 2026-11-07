@@ -117,6 +117,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
+      '@spine-event-engine/auth':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/auth
       '@spine-event-engine/core':
         specifier: 2.0.0-snapshot.27
         version: link:../../../packages/core
@@ -129,13 +132,37 @@ importers:
       '@spine-event-engine/server':
         specifier: 2.0.0-snapshot.27
         version: link:../../../packages/server
+      '@spine-event-engine/storage':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/storage
+      '@spine-event-engine/storage-postgres':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/storage-postgres
+      jose:
+        specifier: 6.2.15
+        version: 6.2.15
     devDependencies:
+      '@connectrpc/connect':
+        specifier: 2.1.2
+        version: 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/connect-node':
+        specifier: 2.1.2
+        version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@spine-event-engine/client-web':
+        specifier: 2.0.0-snapshot.27
+        version: link:../../../packages/client-web
       '@spine-event-engine/proto-tools':
         specifier: 2.0.0-snapshot.27
         version: link:../../../packages/proto-tools
       '@spine-event-engine/testing':
         specifier: 2.0.0-snapshot.27
         version: link:../../../packages/testing
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
+      pg:
+        specifier: 8.23.0
+        version: 8.23.0
 
   examples/message-board/app:
     dependencies:

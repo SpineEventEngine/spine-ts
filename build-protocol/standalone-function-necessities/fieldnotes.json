@@ -7,5 +7,14 @@
     "name": "createFieldnotesContext",
     "disposition": "necessity",
     "reason": "TypeScript public composition boundary: createFieldnotesContext assembles the single-tenant domain for the host and isolated tests."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/fieldnotes/server/src/fieldnotes-read-filters.ts",
+    "kind": "function-declaration",
+    "identity": "fieldnotesReadFilters()#1",
+    "name": "fieldnotesReadFilters",
+    "disposition": "necessity",
+    "reason": "TypeScript fieldnotesReadFilters is necessary as the public assembly entry point that supplies exactly the PlaceView, five Event, and four rejection filters to the native Server."
   }
 ]
