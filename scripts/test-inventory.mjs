@@ -19,6 +19,7 @@
  * through `vitest.infrastructure.config.ts` after checking their own setup.
  */
 export const infrastructureTestFiles = Object.freeze([
+  "examples/fieldnotes/server/test/firebase-emulator.test.ts",
   "examples/fieldnotes/server/test/postgres-live.test.ts",
   "examples/orders/test/postgres-live.test.ts",
   "examples/orders/test/datastore-live.test.ts",

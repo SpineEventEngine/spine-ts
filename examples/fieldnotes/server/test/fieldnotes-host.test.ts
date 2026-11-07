@@ -36,10 +36,12 @@ import {
   PlaceIdSchema,
 } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
 import { ServerTests } from "@spine-event-engine/server/testing";
+import { EnvironmentType } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FieldnotesHost } from "../src/fieldnotes-host.js";
 import type { FieldnotesSettings } from "../src/host-settings.js";
+import { EnvironmentTests } from "../../../../packages/server/dist/server/environment.js";
 
 const settings = (): FieldnotesSettings => ({
   postgresUrl: "postgres://localhost/fieldnotes",
@@ -64,6 +66,75 @@ describe("Fieldnotes host private Connect boundary", () => {
     );
     expect(closed).toHaveBeenCalled();
     expect(factory.isOpen()).toBe(false);
+  });
+
+  it("closes storage when selected Google flow setup fails before listeners start", async () => {
+    const factory = new InMemoryStorageFactory();
+    const closed = vi.spyOn(factory, "close");
+    await expect(
+      FieldnotesHost.open(settings(), {
+        storageFactory: factory,
+        authentication: { mode: "google", clientId: "client-id", clientSecret: "client-secret" },
+        googleProvider: {
+          authorizationEndpoint: "invalid-url",
+          recommendedScopes: ["openid"],
+          provider: {
+            issuer: "https://issuer.test",
+            exchangeAuthorizationCode: () => Promise.resolve(undefined),
+          },
+        },
+      }),
+    ).rejects.toThrow();
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(factory.isOpen()).toBe(false);
+  });
+
+  it("rejects production test injection, missing provider launch and emulator configuration", async () => {
+    EnvironmentTests.use(EnvironmentType.Production);
+    const selected = settings();
+    await expect(
+      FieldnotesHost.open(selected, { storageFactory: new InMemoryStorageFactory() }),
+    ).rejects.toThrow("forbids test provider and storage injection");
+    await expect(FieldnotesHost.open(selected)).rejects.toThrow(
+      "requires provider mode and gateway port",
+    );
+    const prior = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+    process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
+    try {
+      await expect(
+        FieldnotesHost.open(selected, {
+          authentication: {
+            mode: "firebase",
+            projectId: "demo-fieldnotes",
+            recentLoginMilliseconds: 300_000,
+          },
+          gatewayPort: 4311,
+        }),
+      ).rejects.toThrow("Firebase Auth Emulator is forbidden in production");
+    } finally {
+      if (prior === undefined) delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
+      else process.env.FIREBASE_AUTH_EMULATOR_HOST = prior;
+    }
+  });
+
+  it("reports a final storage close failure after stopping session admission", async () => {
+    const factory = new InMemoryStorageFactory();
+    const host = await FieldnotesHost.open(settings(), { storageFactory: factory });
+    const close = factory.close.bind(factory);
+    const failing = vi.spyOn(factory, "close").mockImplementation(async () => {
+      await close();
+      throw new Error("storage close failed");
+    });
+    try {
+      await expect(host.close()).rejects.toThrow("Fieldnotes host close failed");
+      expect(factory.isOpen()).toBe(false);
+      expect(await host.sessions.issue({ id: "after-close" })).toMatchObject({
+        kind: "rejected",
+        reason: "closed",
+      });
+    } finally {
+      failing.mockRestore();
+    }
   });
 
   it("rejects direct native reads without a verified forwarding proof", async () => {

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
@@ -345,6 +345,111 @@ it("retains one private Place and its opaque app session across a PostgreSQL hos
       }
     },
     [() => second?.close(), () => first?.close(), () => ServerTests.resetEnvironment()],
+  );
+});
+
+it("retains a direct OIDC transaction and one-use grant across fresh PostgreSQL hosts", async () => {
+  const schema = `fieldnotes_${randomUUID().replaceAll("-", "")}`;
+  const admin = new Pool({ connectionString: url });
+  const origin = "https://localhost:3000";
+  const issuer = "https://issuer.example";
+  const settings: FieldnotesSettings = {
+    postgresUrl: url,
+    publicOrigin: origin,
+    sessionPassword: randomBytes(32).toString("base64url"),
+    csrfSecret: randomBytes(32),
+    readerProofSecret: randomBytes(32),
+    sessionTtlMilliseconds: 3_600_000,
+    authRouteTimeoutMs: 10_000,
+    authRouteMaxBytes: 65_536,
+  };
+  const provider = {
+    authorizationEndpoint: `${issuer}/authorize`,
+    recommendedScopes: ["openid"],
+    provider: {
+      issuer,
+      exchangeAuthorizationCode: () => Promise.resolve({ issuer, subject: "restart-user" }),
+    },
+  };
+  const options = async () => {
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(TypeRegistry.from(fieldnotesProtoModule));
+    return {
+      storageFactory: await buildPagingStorageFactory(schema, stringifiers),
+      authentication: { mode: "google" as const, clientId: "client-id", clientSecret: "secret" },
+      googleProvider: provider,
+    };
+  };
+  const post = (host: FieldnotesHost, path: string, body: unknown) =>
+    fetch(`${host.gateway.baseUrl}${path}`, {
+      method: "POST",
+      headers: { origin, "content-type": "application/json", "x-fieldnotes-auth": "1" },
+      body: JSON.stringify(body),
+    });
+  let host: FieldnotesHost | undefined;
+  await withFieldnotesTestSchema(
+    admin,
+    schema,
+    async () => {
+      const verifier = "v".repeat(43);
+      const challenge = createHash("sha256").update(verifier, "ascii").digest("base64url");
+      host = await FieldnotesHost.open(settings, await options());
+      const started = await post(host, "/auth/google/start", { codeChallenge: challenge });
+      expect(started.status).toBe(200);
+      const start: unknown = await started.json();
+      if (
+        typeof start !== "object" ||
+        start === null ||
+        !("authorizationUrl" in start) ||
+        typeof start.authorizationUrl !== "string"
+      )
+        throw new Error("OIDC authorization URL is missing.");
+      const state = new URL(start.authorizationUrl).searchParams.get("state");
+      if (!state) throw new Error("OIDC start state is missing.");
+      await host.close();
+      host = undefined;
+      await ServerTests.resetEnvironment();
+      host = await FieldnotesHost.open(settings, await options());
+      const callback = await fetch(
+        `${host.gateway.baseUrl}/auth/google/callback?state=${encodeURIComponent(state)}&code=code&iss=${encodeURIComponent(issuer)}`,
+        { redirect: "manual" },
+      );
+      expect(callback.status).toBe(303);
+      const location = callback.headers.get("location");
+      if (!location) throw new Error("OIDC completion location is missing.");
+      const grant = new URL(location).hash.slice("#grant=".length);
+      expect(grant).toBeTruthy();
+      await host.close();
+      host = undefined;
+      await ServerTests.resetEnvironment();
+      host = await FieldnotesHost.open(settings, await options());
+      const issued = await post(host, "/auth/google/exchange", { grant, codeVerifier: verifier });
+      expect(issued.status).toBe(200);
+      expect(issued.headers.getSetCookie()).toHaveLength(2);
+      expect(
+        (await post(host, "/auth/google/exchange", { grant, codeVerifier: verifier })).status,
+      ).toBe(401);
+      const cookies = issued.headers.getSetCookie();
+      const credential = cookies[0]?.split(";", 1)[0]?.split("=", 2)[1];
+      const csrf = cookies[1]?.split(";", 1)[0]?.split("=", 2)[1];
+      if (!credential || !csrf) throw new Error("OIDC exchange cookies are missing.");
+      const session = await fetch(`${host.gateway.baseUrl}/auth/session`, {
+        method: "POST",
+        headers: {
+          origin,
+          "content-type": "application/json",
+          "x-fieldnotes-auth": "1",
+          cookie: `__Host-spine-session=${credential}; __Host-spine-csrf=${csrf}`,
+          "x-spine-csrf": csrf,
+        },
+        body: "{}",
+      });
+      expect(session.status).toBe(200);
+      expect(await session.json()).toMatchObject({
+        principal: { id: JSON.stringify(["google-oidc", issuer, "restart-user"]) },
+      });
+    },
+    [() => host?.close(), () => ServerTests.resetEnvironment()],
   );
 });
 

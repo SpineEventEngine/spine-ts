@@ -24,6 +24,10 @@ import ordinaryConfig from "../vitest.config.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const expectedInfrastructureFiles = [
+  "examples/fieldnotes/server/test/firebase-emulator.test.ts",
+  "examples/fieldnotes/server/test/postgres-live.test.ts",
+  "examples/orders/test/postgres-live.test.ts",
+  "examples/orders/test/datastore-live.test.ts",
   "packages/auth/test/sessions/persistent-opaque-providers.test.ts",
   "packages/auth/test/sessions/persistent-opaque-preparation.test.ts",
   "packages/storage-datastore/test/datastore-cloud.test.ts",

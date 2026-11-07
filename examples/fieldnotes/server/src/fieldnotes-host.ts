@@ -13,20 +13,27 @@
  */
 
 import { randomUUID } from "node:crypto";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   OpaqueSessionCookies,
   OpaqueSessions,
   PersistentOpaqueSessionStore,
+  type ConfiguredOidcProvider,
 } from "@spine-event-engine/auth";
 import { StringifierRegistry, Time, TypeRegistry } from "@spine-event-engine/core";
 import { fieldnotesProtoModule } from "@spine-event-engine/example-fieldnotes-model";
 import {
   Environment,
+  EnvironmentType,
   Server,
   ServerEnvironment,
   type RunningServer,
 } from "@spine-event-engine/server";
-import { BrowserServer, DurableSubscriptionBindings } from "@spine-event-engine/server/browser";
+import {
+  BrowserServer,
+  DurableSubscriptionBindings,
+  type BrowserAuthRoute,
+} from "@spine-event-engine/server/browser";
 import { StorageGroup, type StorageFactory } from "@spine-event-engine/storage";
 import { PostgresStorageFactory } from "@spine-event-engine/storage-postgres";
 import {
@@ -37,17 +44,44 @@ import {
 import { createFieldnotesContext } from "./place-domain.js";
 import { fieldnotesReadFilters } from "./fieldnotes-read-filters.js";
 import { FieldnotesReaderProof } from "./reader-proof.js";
-import type { FieldnotesSettings } from "./host-settings.js";
+import { FieldnotesAuthRoutes, type FieldnotesAuthSource } from "./auth-routes.js";
+import { FieldnotesDirectOidc } from "./direct-oidc.js";
+import {
+  FieldnotesFirebaseAdmin,
+  FieldnotesFirebaseIdentity,
+  type FieldnotesFirebaseVerifier,
+} from "./firebase-auth.js";
+import type { FieldnotesAuthentication, FieldnotesSettings } from "./host-settings.js";
 import "../generated/spine-bootstrap.js";
 
 /**
- * Selects an explicit storage factory only for isolated host tests.
+ * Selects authentication and listener settings for deployment, with guarded test collaborators.
  */
 export interface FieldnotesHostOptions {
   /**
    * Storage used instead of the default PostgreSQL deployment factory.
    */
   readonly storageFactory?: StorageFactory;
+
+  /**
+   * Explicit provider selected for this authenticated launch.
+   */
+  readonly authentication?: FieldnotesAuthentication;
+
+  /**
+   * Trusted provider substitute used only by isolated local tests.
+   */
+  readonly googleProvider?: ConfiguredOidcProvider;
+
+  /**
+   * Admin verifier substitute used only by isolated local tests.
+   */
+  readonly firebaseVerifier?: FieldnotesFirebaseVerifier;
+
+  /**
+   * Public proxy-facing gateway port; zero is accepted only for local tests.
+   */
+  readonly gatewayPort?: number;
 }
 
 /**
@@ -71,6 +105,12 @@ export class FieldnotesHost {
   #cookies: OpaqueSessionCookies | undefined;
 
   #gateway: RunningServer | undefined;
+
+  #direct: FieldnotesDirectOidc | undefined;
+
+  #firebaseAdmin: FieldnotesFirebaseAdmin | undefined;
+
+  #authRoutes: FieldnotesAuthRoutes | undefined;
 
   /**
    * Returns the shared app-session strategy used by gateway and auth routes.
@@ -112,6 +152,21 @@ export class FieldnotesHost {
   }
 
   /**
+   * Removes expired app sessions and Google flow records at an explicit trusted cutoff.
+   *
+   * @param cutoff Current-or-earlier Protobuf time chosen by the caller.
+   * @returns Removed records from each configured store.
+   */
+  async purgeExpired(cutoff: Timestamp): Promise<{
+    sessions: number;
+    google?: { transactions: number; grants: number };
+  }> {
+    const sessions = await this.sessions.purgeExpired(cutoff);
+    const google = await this.#direct?.purgeExpired(cutoff);
+    return google === undefined ? { sessions } : { sessions, google };
+  }
+
+  /**
    * Records the factory until the explicit host lifecycle closes it.
    *
    * @param factory Selected single-tenant storage provider.
@@ -124,17 +179,27 @@ export class FieldnotesHost {
    * Starts one host with PostgreSQL by default and explicit test storage when supplied.
    *
    * @param settings Required deployment and session policy.
-   * @param options Explicit isolated-test storage selection.
+   * @param options Required deployment authentication and port, plus guarded test collaborators.
    * @returns Running authenticated Fieldnotes host.
    */
   static async open(
     settings: FieldnotesSettings,
     options: FieldnotesHostOptions = {},
   ): Promise<FieldnotesHost> {
+    const production = Environment.instance().type === EnvironmentType.Production;
+    if (
+      production &&
+      (options.storageFactory || options.googleProvider || options.firebaseVerifier)
+    )
+      throw new Error("Fieldnotes production forbids test provider and storage injection.");
+    if (production && (options.authentication === undefined || options.gatewayPort === undefined))
+      throw new Error("Fieldnotes production requires provider mode and gateway port.");
+    if (production && process.env.FIREBASE_AUTH_EMULATOR_HOST !== undefined)
+      throw new Error("Firebase Auth Emulator is forbidden in production.");
     const factory = options.storageFactory ?? (await this.postgres(settings.postgresUrl));
     const host = new FieldnotesHost(factory);
     try {
-      await host.start(settings);
+      await host.start(settings, options);
       return host;
     } catch (error) {
       try {
@@ -165,9 +230,10 @@ export class FieldnotesHost {
    * Acquires persistent admission, domain, native listener and browser listener in order.
    *
    * @param settings Required deployment settings.
+   * @param options Selected identity provider and local test collaborators.
    * @returns Completion after all listeners start.
    */
-  private async start(settings: FieldnotesSettings): Promise<void> {
+  private async start(settings: FieldnotesSettings, options: FieldnotesHostOptions): Promise<void> {
     const registry = TypeRegistry.from(fieldnotesProtoModule);
     ServerEnvironment.when(Environment.instance().type).use({
       storageFactory: this.#factory,
@@ -175,11 +241,34 @@ export class FieldnotesHost {
     });
     this.#environment = ServerEnvironment.instance();
     await this.#environment.completeSetup();
+    await this.openSessions(settings);
+    const clock = new FieldnotesClock();
+    const source = await this.authentication(settings, options);
+    this.#authRoutes =
+      source === undefined
+        ? undefined
+        : new FieldnotesAuthRoutes(settings, this.sessions, this.cookies, source);
+    const routes = this.#authRoutes?.routes() ?? [];
+    await this.openListeners(
+      registry,
+      clock,
+      settings.publicOrigin,
+      routes,
+      options.gatewayPort ?? 0,
+    );
+  }
+
+  /**
+   * Opens durable sessions and browser credential protection before provider work.
+   *
+   * @param settings Stable session, origin and secret configuration.
+   * @returns Completion after session admission is ready.
+   */
+  private async openSessions(settings: FieldnotesSettings): Promise<void> {
     this.#sessionStore = await PersistentOpaqueSessionStore.create({
       storageFactory: this.#factory,
       group: new StorageGroup("fieldnotes-sessions"),
     });
-    const clock = new FieldnotesClock();
     this.#sessions = await OpaqueSessions.create({
       store: this.#sessionStore,
       scope: "fieldnotes",
@@ -193,7 +282,45 @@ export class FieldnotesHost {
       persistent: true,
     });
     this.#proof = new FieldnotesReaderProof(settings.readerProofSecret);
-    await this.openListeners(registry, clock, settings.publicOrigin);
+  }
+
+  /**
+   * Opens the selected provider using the same persistent factory and sessions.
+   *
+   * @param settings Public origin and session policy.
+   * @param options Explicit provider and test collaborators.
+   * @returns Selected identity source or no routes for isolated host tests.
+   */
+  private async authentication(
+    settings: FieldnotesSettings,
+    options: FieldnotesHostOptions,
+  ): Promise<FieldnotesAuthSource | undefined> {
+    const selected = options.authentication;
+    if (selected === undefined) return undefined;
+    if (selected.mode === "google") {
+      this.#direct = await FieldnotesDirectOidc.open(
+        selected,
+        settings.publicOrigin,
+        this.#factory,
+        this.sessions,
+        options.googleProvider,
+      );
+      return { mode: "google", direct: this.#direct };
+    }
+    this.#firebaseAdmin =
+      options.firebaseVerifier === undefined
+        ? await FieldnotesFirebaseAdmin.open(selected.projectId)
+        : undefined;
+    const verifier = options.firebaseVerifier ?? this.#firebaseAdmin?.verifier;
+    if (verifier === undefined) throw new Error("Firebase verifier is unavailable.");
+    return {
+      mode: "firebase",
+      firebase: new FieldnotesFirebaseIdentity(
+        selected.projectId,
+        selected.recentLoginMilliseconds,
+        verifier,
+      ),
+    };
   }
 
   /**
@@ -202,12 +329,16 @@ export class FieldnotesHost {
    * @param registry Generated domain schema lookup.
    * @param clock Trusted gateway clock.
    * @param publicOrigin Exact browser origin.
+   * @param authRoutes Selected auth routes.
+   * @param gatewayPort Explicit proxy-facing port.
    * @returns Completion after the gateway starts.
    */
   private async openListeners(
     registry: TypeRegistry,
     clock: FieldnotesClock,
     publicOrigin: string,
+    authRoutes: readonly BrowserAuthRoute[],
+    gatewayPort: number,
   ): Promise<void> {
     const context = await createFieldnotesContext();
     const proof = this.#proof;
@@ -225,7 +356,7 @@ export class FieldnotesHost {
       readSideFilters: fieldnotesReadFilters(),
       services: { readerAdmission: { forwarded: proof } },
     }).start();
-    await this.openGateway(registry, clock, publicOrigin, proof);
+    await this.openGateway(registry, clock, publicOrigin, proof, authRoutes, gatewayPort);
   }
 
   /**
@@ -235,6 +366,8 @@ export class FieldnotesHost {
    * @param clock Trusted gateway clock.
    * @param publicOrigin Exact browser origin.
    * @param proof Shared native reader proof adapter.
+   * @param authRoutes Selected auth routes.
+   * @param gatewayPort Explicit proxy-facing port.
    * @returns Completion after browser admission starts.
    */
   private async openGateway(
@@ -242,6 +375,8 @@ export class FieldnotesHost {
     clock: FieldnotesClock,
     publicOrigin: string,
     proof: FieldnotesReaderProof,
+    authRoutes: readonly BrowserAuthRoute[],
+    gatewayPort: number,
   ): Promise<void> {
     const policy = new FieldnotesAccess();
     const native = this.#native;
@@ -250,11 +385,12 @@ export class FieldnotesHost {
     if (bindings === undefined) throw new Error("Subscription bindings are unavailable.");
     this.#gateway = await BrowserServer.open(native, {
       host: "127.0.0.1",
-      port: 0,
+      port: gatewayPort,
       origins: [publicOrigin],
       registry,
       sessions: this.sessions,
       cookies: this.cookies,
+      authRoutes,
       bindings,
       forwardingProof: proof,
       authorize: policy.authorize.bind(policy),
@@ -272,8 +408,11 @@ export class FieldnotesHost {
     const failures: unknown[] = [];
     for (const release of [
       () => this.#gateway?.close(),
+      () => this.#authRoutes?.close(),
       () => this.#native?.close(),
       () => this.#bindings?.close(),
+      () => this.#direct?.close(),
+      () => this.#firebaseAdmin?.close(),
       () => this.#sessions?.close(),
       () => this.#sessionStore?.close(),
       () => this.#cookies?.close(),
