@@ -35,7 +35,7 @@ it("keeps matching order IDs in separate Datastore emulator tenant namespaces", 
     ordersTenants,
   } = await import("../dist/src/index.js");
   const factory = createOrdersDatastoreFactory({ projectId });
-  const tenants = [ordersTenants.northwind, ordersTenants.contoso];
+  const tenants = [ordersTenants.northwind, ordersTenants.contoso] as const;
   const setup = await configureOrdersEnvironment({
     storageFactory: factory,
     tenants,

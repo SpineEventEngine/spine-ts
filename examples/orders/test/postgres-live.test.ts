@@ -20,11 +20,14 @@ import { ServerTests } from "@spine-event-engine/server/testing";
 import { expect, it, onTestFinished } from "vitest";
 
 const run = promisify(execFile);
-const sharedUrl = process.env.ORDERS_SHARED_DATABASE_URL;
-const northwindUrl = process.env.ORDERS_NORTHWIND_DATABASE_URL;
-const contosoUrl = process.env.ORDERS_CONTOSO_DATABASE_URL;
-if (!sharedUrl || !northwindUrl || !contosoUrl)
-  throw new Error("Three Orders PostgreSQL database URLs are required for live tests.");
+const { sharedUrl, northwindUrl, contosoUrl } = (() => {
+  const sharedUrl = process.env.ORDERS_SHARED_DATABASE_URL;
+  const northwindUrl = process.env.ORDERS_NORTHWIND_DATABASE_URL;
+  const contosoUrl = process.env.ORDERS_CONTOSO_DATABASE_URL;
+  if (!sharedUrl || !northwindUrl || !contosoUrl)
+    throw new Error("Three Orders PostgreSQL database URLs are required for live tests.");
+  return { sharedUrl, northwindUrl, contosoUrl };
+})();
 
 it("reads both tenant records and membership in a fresh process before reseeding", async () => {
   const id = `restart-${randomUUID()}`;
@@ -133,7 +136,9 @@ function registerChildCleanup(child: ChildProcess, release: boolean) {
     })();
     return cleanup;
   };
-  onTestFinished(stop);
+  onTestFinished(async () => {
+    await stop();
+  });
   return { closed, stop };
 }
 
