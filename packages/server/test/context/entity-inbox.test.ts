@@ -839,7 +839,9 @@ describe("LocalEntityInbox", () => {
       shard,
       onMessage: (message) => inbox.replay(message),
     }).run();
-    void loop.then(sourceReleased.resolve, sourceReleased.reject);
+    void loop.then(() => {
+      sourceReleased.resolve(undefined);
+    }, sourceReleased.reject);
     const followUpsDone = loop.then(() => inbox.whenFollowUpsIdle());
     let idle: Promise<void> | undefined;
     let followUpSettled = false;
