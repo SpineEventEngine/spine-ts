@@ -50,6 +50,7 @@ import {
   PlaceIdSchema,
 } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/types_pb.js";
 import {
+  PlaceAlreadyExistsSchema,
   PlaceRevisionConflictSchema,
   PlaceUnavailableSchema,
 } from "@spine-event-engine/example-fieldnotes-model/generated/spine/examples/fieldnotes/rejections_pb.js";
@@ -224,6 +225,55 @@ describe("Fieldnotes Place domain", () => {
       expect(await context.stand().read(PlaceSchema, first)).toEqual(before);
     } finally {
       await context.close();
+    }
+  });
+
+  it("uses unavailable refusal for a removed ID and already-exists for an active duplicate", async () => {
+    const context = await createFieldnotesContext();
+    const box = await BlackBox.from(context);
+    const author = box.onBehalfOf("author");
+    const id = create(PlaceIdSchema, { value: "creation-refusals" });
+    const topic = (schema: typeof PlaceUnavailableSchema | typeof PlaceAlreadyExistsSchema) =>
+      create(TopicSchema, {
+        id: create(TopicIdSchema, { value: `topic-${schema.typeName}` }),
+        target: create(TargetSchema, {
+          type: TypeUrls.derive(schema),
+          criterion: { case: "includeAll", value: true },
+        }),
+        context: metadata.actorContext({ actor: create(UserIdSchema, { value: "author" }) }),
+      });
+    const unavailable = await author.createSubscription(topic(PlaceUnavailableSchema), {
+      kind: "event",
+    });
+    const alreadyExists = await author.createSubscription(topic(PlaceAlreadyExistsSchema), {
+      kind: "event",
+    });
+    await unavailable.activate();
+    await alreadyExists.activate();
+    const command = create(AddPlaceSchema, {
+      id,
+      name: "Original",
+      coordinates: create(CoordinatesSchema, { latitude: 1, longitude: 2 }),
+    });
+    try {
+      await author.post(AddPlaceSchema, command);
+      const activeRefusal = alreadyExists.updates[Symbol.asyncIterator]().next();
+      await author.post(AddPlaceSchema, command);
+      const active = eventFromDelivery(await activeRefusal);
+      expect(
+        active?.message && AnyPacker.tryUnpack(active.message, PlaceAlreadyExistsSchema),
+      ).toMatchObject({ requester: { value: "author" } });
+      await author.post(DeletePlaceSchema, create(DeletePlaceSchema, { id, expectedRevision: 1 }));
+      const removedRefusal = unavailable.updates[Symbol.asyncIterator]().next();
+      await author.post(AddPlaceSchema, command);
+      const removed = eventFromDelivery(await removedRefusal);
+      expect(
+        removed?.message && AnyPacker.tryUnpack(removed.message, PlaceUnavailableSchema),
+      ).toMatchObject({ requester: { value: "author" } });
+    } finally {
+      await unavailable.cancel();
+      await alreadyExists.cancel();
+      await box.close();
     }
   });
 

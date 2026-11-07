@@ -78,7 +78,8 @@ export class PlaceAggregate extends Aggregate<PlaceId, typeof PlaceSchema> {
   @Throws(PlaceUnavailable, PlaceAlreadyExists, InvalidPlaceCoordinates)
   addPlace(command: AddPlace, context: CommandContext): PlaceAdded {
     const requester = this.admittedActor(context);
-    if (this.version.number !== 0 || this.state.removed) {
+    if (this.state.removed) throw PlaceUnavailable.create({ requester });
+    if (this.version.number !== 0) {
       if (this.state.author?.value === requester.value)
         throw PlaceAlreadyExists.create({ requester });
       throw PlaceUnavailable.create({ requester });
