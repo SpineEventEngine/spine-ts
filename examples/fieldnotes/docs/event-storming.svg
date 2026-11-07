@@ -2,7 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="3200" height="2890" viewBox="0 0 3200 2890" role="img" aria-labelledby="title description">
 <title id="title">Fieldnotes — private places, one note per place</title>
 <desc id="description">Fieldnotes event-storming board. One Fieldnotes bounded context, five command groups handled by Place, resulting domain events, typed business rejections and one projection. A separate gray integration band shows direct Google or Firebase sign-in and application-session logout; these are not Place domain events.</desc>
-<metadata id="model">{&quot;status&quot;: &quot;approved design, implementation in progress&quot;, &quot;boundedContexts&quot;: [&quot;Fieldnotes&quot;], &quot;aggregate&quot;: &quot;Place&quot;, &quot;invariant&quot;: &quot;Exactly one Markdown note per saved place&quot;, &quot;flows&quot;: [{&quot;n&quot;: &quot;01&quot;, &quot;title&quot;: &quot;SAVE A NEW PLACE&quot;, &quot;cmd&quot;: [&quot;Add&quot;, &quot;place&quot;], &quot;command&quot;: &quot;AddPlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;added&quot;], &quot;event&quot;: &quot;PlaceAdded&quot;, &quot;reject&quot;: [&quot;Place already&quot;, &quot;exists&quot;], &quot;rejection&quot;: &quot;PlaceAlreadyExists&quot;, &quot;foot&quot;: &quot;One save records the pin, name and initial note together.&quot;}, {&quot;n&quot;: &quot;02&quot;, &quot;title&quot;: &quot;RENAME A PLACE&quot;, &quot;cmd&quot;: [&quot;Rename&quot;, &quot;place&quot;], &quot;command&quot;: &quot;RenamePlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;renamed&quot;], &quot;event&quot;: &quot;PlaceRenamed&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Changes the name shown beside the pin; keeps the same note.&quot;}, {&quot;n&quot;: &quot;03&quot;, &quot;title&quot;: &quot;MOVE A PIN&quot;, &quot;cmd&quot;: [&quot;Move&quot;, &quot;place&quot;], &quot;command&quot;: &quot;MovePlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;moved&quot;], &quot;event&quot;: &quot;PlaceMoved&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Updates coordinates on the same place; the note moves with it.&quot;}, {&quot;n&quot;: &quot;04&quot;, &quot;title&quot;: &quot;EDIT THE NOTE&quot;, &quot;cmd&quot;: [&quot;Edit place&quot;, &quot;note&quot;], &quot;command&quot;: &quot;EditPlaceNote&quot;, &quot;evt&quot;: [&quot;Place note&quot;, &quot;edited&quot;], &quot;event&quot;: &quot;PlaceNoteEdited&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Replaces the one Markdown body. Never adds a second note.&quot;}, {&quot;n&quot;: &quot;05&quot;, &quot;title&quot;: &quot;DELETE A PLACE&quot;, &quot;cmd&quot;: [&quot;Delete&quot;, &quot;place&quot;], &quot;command&quot;: &quot;DeletePlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;deleted&quot;], &quot;event&quot;: &quot;PlaceDeleted&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Removes the place and its note from visible results together.&quot;}], &quot;projections&quot;: [&quot;PlaceView&quot;], &quot;technicalIntegrations&quot;: [&quot;Google OIDC&quot;, &quot;Firebase Auth&quot;, &quot;Spine opaque sessions&quot;]}</metadata>
+<metadata id="model">{&quot;status&quot;: &quot;approved design, implementation in progress&quot;, &quot;boundedContexts&quot;: [&quot;Fieldnotes&quot;], &quot;aggregate&quot;: &quot;Place&quot;, &quot;invariant&quot;: &quot;Exactly one Markdown note per saved place&quot;, &quot;flows&quot;: [{&quot;n&quot;: &quot;01&quot;, &quot;title&quot;: &quot;PLACE CREATION&quot;, &quot;cmd&quot;: [&quot;Add&quot;, &quot;place&quot;], &quot;command&quot;: &quot;AddPlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;added&quot;], &quot;event&quot;: &quot;PlaceAdded&quot;, &quot;reject&quot;: [&quot;Place already&quot;, &quot;exists&quot;], &quot;rejection&quot;: &quot;PlaceAlreadyExists&quot;, &quot;foot&quot;: &quot;One save records the pin, name and initial note together.&quot;}, {&quot;n&quot;: &quot;02&quot;, &quot;title&quot;: &quot;PLACE NAME&quot;, &quot;cmd&quot;: [&quot;Rename&quot;, &quot;place&quot;], &quot;command&quot;: &quot;RenamePlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;renamed&quot;], &quot;event&quot;: &quot;PlaceRenamed&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Changes the name shown beside the pin; keeps the same note.&quot;}, {&quot;n&quot;: &quot;03&quot;, &quot;title&quot;: &quot;PIN POSITION&quot;, &quot;cmd&quot;: [&quot;Move&quot;, &quot;place&quot;], &quot;command&quot;: &quot;MovePlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;moved&quot;], &quot;event&quot;: &quot;PlaceMoved&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Updates coordinates on the same place; the note moves with it.&quot;}, {&quot;n&quot;: &quot;04&quot;, &quot;title&quot;: &quot;NOTE CONTENT&quot;, &quot;cmd&quot;: [&quot;Edit place&quot;, &quot;note&quot;], &quot;command&quot;: &quot;EditPlaceNote&quot;, &quot;evt&quot;: [&quot;Place note&quot;, &quot;edited&quot;], &quot;event&quot;: &quot;PlaceNoteEdited&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Replaces the one Markdown body. Never adds a second note.&quot;}, {&quot;n&quot;: &quot;05&quot;, &quot;title&quot;: &quot;PLACE DELETION&quot;, &quot;cmd&quot;: [&quot;Delete&quot;, &quot;place&quot;], &quot;command&quot;: &quot;DeletePlace&quot;, &quot;evt&quot;: [&quot;Place&quot;, &quot;deleted&quot;], &quot;event&quot;: &quot;PlaceDeleted&quot;, &quot;reject&quot;: [&quot;Place changed&quot;, &quot;since last edit&quot;], &quot;rejection&quot;: &quot;PlaceRevisionConflict&quot;, &quot;foot&quot;: &quot;Removes the place and its note from visible results together.&quot;}], &quot;projections&quot;: [&quot;PlaceView&quot;], &quot;technicalIntegrations&quot;: [&quot;Google OIDC&quot;, &quot;Firebase Auth&quot;, &quot;Spine opaque sessions&quot;]}</metadata>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#758394"/></marker></defs>
 <g font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
 <rect x="0" y="0" width="3200" height="2890" rx="4" fill="#FFFFFF" stroke="none" stroke-width="2"/>
@@ -59,7 +59,7 @@
 <tspan x="75" dy="0">Repeated yellow cards show the same Aggregate type; each saved Place is a separate consistency boundary.</tspan>
 </text>
 <text x="80" y="525" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
-<tspan x="80" dy="0">01  SAVE A NEW PLACE</tspan>
+<tspan x="80" dy="0">01  PLACE CREATION</tspan>
 </text>
 <rect x="273" y="554" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
 <rect x="270" y="550" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
@@ -126,7 +126,7 @@
 <tspan x="88" dy="0">One save records the pin, name and initial note together.</tspan>
 </text>
 <text x="1630" y="525" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
-<tspan x="1630" dy="0">02  RENAME A PLACE</tspan>
+<tspan x="1630" dy="0">02  PLACE NAME</tspan>
 </text>
 <rect x="1823" y="554" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
 <rect x="1820" y="550" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
@@ -193,7 +193,7 @@
 <tspan x="1638" dy="0">Changes the name shown beside the pin; keeps the same note.</tspan>
 </text>
 <text x="80" y="1055" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
-<tspan x="80" dy="0">03  MOVE A PIN</tspan>
+<tspan x="80" dy="0">03  PIN POSITION</tspan>
 </text>
 <rect x="273" y="1084" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
 <rect x="270" y="1080" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
@@ -260,7 +260,7 @@
 <tspan x="88" dy="0">Updates coordinates on the same place; the note moves with it.</tspan>
 </text>
 <text x="1630" y="1055" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
-<tspan x="1630" dy="0">04  EDIT THE NOTE</tspan>
+<tspan x="1630" dy="0">04  NOTE CONTENT</tspan>
 </text>
 <rect x="1823" y="1084" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
 <rect x="1820" y="1080" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
@@ -327,7 +327,7 @@
 <tspan x="1638" dy="0">Replaces the one Markdown body. Never adds a second note.</tspan>
 </text>
 <text x="80" y="1585" font-size="22" fill="#526273" font-weight="650" text-anchor="start">
-<tspan x="80" dy="0">05  DELETE A PLACE</tspan>
+<tspan x="80" dy="0">05  PLACE DELETION</tspan>
 </text>
 <rect x="273" y="1614" width="585" height="75" rx="4" fill="#00000009" stroke="none" stroke-width="2"/>
 <rect x="270" y="1610" width="585" height="75" rx="3" fill="#FFF5A4" stroke="none" stroke-width="2"/>
@@ -408,15 +408,15 @@
 <tspan x="1658" dy="32">Each Event carries complete details for its saved revision.</tspan>
 <tspan x="1658" dy="32">Read/Preview, search, pan, zoom and selection emit no domain event.</tspan>
 <tspan x="1658" dy="32">Red notes are typed business refusals, not network/login errors.</tspan>
-<tspan x="1658" dy="32">Invalid coordinates receive InvalidPlaceCoordinates before update.</tspan>
-<tspan x="1658" dy="32">Unknown, deleted or another person’s ID receives the same</tspan>
-<tspan x="1658" dy="32">PlaceUnavailable response, including conflicting AddPlace input.</tspan>
-<tspan x="1658" dy="32">PlaceAlreadyExists is disclosed only for an accessible Place.</tspan>
+<tspan x="1658" dy="32">Coordinate validation can return InvalidPlaceCoordinates.</tspan>
+<tspan x="1658" dy="32">Changes/deletion of unknown, removed or foreign IDs: PlaceUnavailable.</tspan>
+<tspan x="1658" dy="32">AddPlace saves a new Place; foreign/removed IDs give PlaceUnavailable.</tspan>
+<tspan x="1658" dy="32">An accessible existing ID gives PlaceAlreadyExists for AddPlace.</tspan>
 <tspan x="1658" dy="32">A stale edit keeps the draft visible so the author can reconcile it.</tspan>
 </text>
 <rect x="40" y="2160" width="3120" height="520" rx="12" fill="#F5F7F9" stroke="#9BA8B7" stroke-width="2" stroke-dasharray="10 8"/>
 <text x="75" y="2211" font-size="26" fill="#44566B" font-weight="650" text-anchor="start">
-<tspan x="75" dy="0">AUTHENTICATION &amp; ACCESS  /  TECHNICAL INTEGRATION — OUTSIDE THE BUSINESS CONTEXT</tspan>
+<tspan x="75" dy="0">AUTHENTICATION &amp; ACCESS  /  TECHNICAL INTEGRATION — OUTSIDE THE FIELDNOTES BOUNDED CONTEXT</tspan>
 </text>
 <text x="75" y="2250" font-size="23" fill="#526273" font-weight="400" text-anchor="start">
 <tspan x="75" dy="0">Two launch options, one interface. Gray steps are authentication operations, not Place Commands or Events.</tspan>
