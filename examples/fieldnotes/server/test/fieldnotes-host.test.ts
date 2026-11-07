@@ -351,7 +351,10 @@ describe("Fieldnotes host private Connect boundary", () => {
     const collect = (async () => {
       for await (const delivery of subscription.updates) {
         if (delivery.kind !== "update" || delivery.update.update.case !== "entityUpdates") continue;
-        for (const entry of delivery.update.update.value.update) seen.push(entry.kind.case);
+        for (const entry of delivery.update.update.value.update) {
+          if (entry.kind.case === undefined) throw new Error("Entity update has no kind.");
+          seen.push(entry.kind.case);
+        }
       }
     })();
     try {
@@ -429,11 +432,13 @@ describe("Fieldnotes host private Connect boundary", () => {
     const collect = async (stream: typeof streamA, seen: typeof seenA) => {
       for await (const delivery of stream.updates) {
         if (delivery.kind !== "update" || delivery.update.update.case !== "entityUpdates") continue;
-        for (const entry of delivery.update.update.value.update)
+        for (const entry of delivery.update.update.value.update) {
+          if (entry.kind.case === undefined) throw new Error("Entity update has no kind.");
           seen.push({
             id: AnyPacker.tryUnpack(entry.id, PlaceIdSchema)?.value,
             kind: entry.kind.case,
           });
+        }
       }
     };
     const collectingA = collect(streamA, seenA);
