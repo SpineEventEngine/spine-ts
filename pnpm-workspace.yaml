@@ -9,6 +9,8 @@ packageExtensions:
     dependencies:
       "@mobrowser/cli": 2.18.0
 overrides:
+  # Firebase bundles Firestore with a grpc-js range that excludes its security fixes.
+  "@firebase/firestore>@grpc/grpc-js": 1.14.5
   # Patched releases; minimatch's legacy callable/default consumers are bridged by the pinned package patch.
   minimatch: 11.0.1
   glob: 14.0.2
