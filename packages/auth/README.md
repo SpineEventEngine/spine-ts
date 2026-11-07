@@ -263,6 +263,13 @@ explicitly.
 
 ## Limits and next steps
 
+The [Fieldnotes application](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/fieldnotes/README.md)
+connects a Next.js map interface to a single-tenant Bounded Context. Its two launch
+options demonstrate direct Google OIDC and Google sign-in through Firebase Auth.
+Both use persistent opaque application sessions stored through the PostgreSQL
+storage factory. The application guide follows sign-in through authenticated
+Commands, private queries and subscriptions, and logout.
+
 Memory-selected `OpaqueSessions` is process-local; select durable shared storage
 for sessions that must survive process restart. Signed-session revocation and
 OIDC identity provisioning are application responsibilities. A gateway protects

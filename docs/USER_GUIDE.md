@@ -725,14 +725,15 @@ for the common packaging and discovery contract.
 
 Use the examples to choose the next narrow learning step:
 
-| Example                                                                      | Best next question                                                       |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [Message Board](../examples/message-board/README.md)                         | How do a browser, Aggregate, and Projection work together?               |
-| [Distributed Message Board](../examples/distributed-message-board/README.md) | How do two equal nodes, delivery, and one Gateway run locally?           |
-| [To-Do](../examples/todo/README.md)                                          | What is the smallest server-side command/query application?              |
-| [Orders](../examples/orders/README.md)                                       | How do provider-oriented records and durable storage fit an application? |
-| [Projects](../examples/projects/README.md)                                   | How do queries and data-oriented views shape a larger model?             |
-| [Support](../examples/support/README.md)                                     | How does an Agent turn ticket facts into an auditable draft for review?  |
+| Example                                                                      | Best next question                                                                           |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [Message Board](../examples/message-board/README.md)                         | How do a browser, Aggregate, and Projection work together?                                   |
+| [Distributed Message Board](../examples/distributed-message-board/README.md) | How do two equal nodes, delivery, and one Gateway run locally?                               |
+| [To-Do](../examples/todo/README.md)                                          | What is the smallest server-side command/query application?                                  |
+| [Orders](../examples/orders/README.md)                                       | How do registered tenants use isolated memory, PostgreSQL, or Datastore storage?             |
+| [Fieldnotes](../examples/fieldnotes/README.md)                               | How do Google or Firebase sign-in, persistent sessions, and private map notes work together? |
+| [Projects](../examples/projects/README.md)                                   | How do queries and data-oriented views shape a larger model?                                 |
+| [Support](../examples/support/README.md)                                     | How does an Agent turn ticket facts into an auditable draft for review?                      |
 
 Keep the loop small: model one command and event, implement one visible
 behavior, test it, observe it, and only then add another boundary. The detailed

@@ -7546,3 +7546,24 @@ protocol, additional Projection, raw application storage reads, or custom
 subscription lifecycle would add unnecessary implementation surface. Local JVM
 query processing likewise uses filters and ResponseFormat without a wire
 cursor. Detailed source analysis is retained outside Git with task evidence.
+
+## Fieldnotes browser transport (2026-11-07)
+
+Fieldnotes uses an HTTP/2 HTTPS ingress in front of Next.js for both local
+development and deployment. Next forwards permitted same-origin application
+routes to the long-lived loopback host. The included Caddy configuration uses
+externally supplied certificates and explicit listener/upstream addresses.
+
+The browser's live collection and Command-outcome subscriptions can occupy all
+HTTP/1.1 connections to an origin, preventing a Command or logout request from
+reaching the host. Selecting only the rejection types a Command can emit reduces
+unnecessary streams but cannot solve this across multiple tabs. HTTP/2 ingress
+addresses the transport limitation without changing the framework subscription
+protocol or introducing a single-tab restriction.
+
+Preserve unknown-length streaming responses and cancellation through Caddy and
+Next. Leave Caddy's `flush_interval` unset; its negative mode changes backend
+cancellation behavior. The supplied runtime log filter omits request URI and
+headers because disabling access logs alone does not remove callback credentials
+from upstream-failure logs. Browser acceptance includes negotiated HTTP/2 and
+closing an active tab without logout, separately from session revocation.

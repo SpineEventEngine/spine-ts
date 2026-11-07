@@ -116,6 +116,8 @@ Start with these packages:
 - [End-user guide](docs/USER_GUIDE.md)
 - [Storage layouts, database preparation, and tenancy](docs/STORAGE_LAYOUT.md)
 - [Message Board example](examples/message-board/README.md)
+- [Orders: tenant isolation with memory, PostgreSQL, or Datastore](examples/orders/README.md)
+- [Fieldnotes: private map notes with Google or Firebase sign-in](examples/fieldnotes/README.md)
 - [Support reply Agent example](examples/support/README.md)
 - [Release Notes Studio example](examples/release-notes/README.md)
 - [Deploy on GKE](packages/deployment-gke/README.md)

@@ -252,6 +252,15 @@ the selected record family separately before data access. Close the index after 
 finishes; it leaves the supplied storage factory open.
 Unknown tenants fail before reads or handlers run; input never registers them.
 
+The [Orders application](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/orders/README.md)
+demonstrates this setup with memory, PostgreSQL, and Datastore. Its PostgreSQL
+launch uses separate shared, Northwind, and Contoso databases, validates persisted
+membership against configured routing, and prepares supported structures before
+opening the listener. Orders focuses on tenant storage and has no sign-in UI.
+The [Fieldnotes application](https://github.com/SpineEventEngine/spine-ts/blob/master/examples/fieldnotes/README.md)
+demonstrates browser authentication and private data in a single-tenant Bounded
+Context without a tenant index.
+
 Use `EntityQuery.all(...)` when every predicate must match and
 `EntityQuery.either(...)` when any branch may match.
 

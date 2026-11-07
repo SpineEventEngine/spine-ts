@@ -69,7 +69,8 @@ State the distinction between provider revocation and an already issued app
 session. Application expiry is explicit configuration, not an invented hidden
 limit. Logout revokes this app session, clears cookies/SDK state and stops local
 protected streams best effort. No distributed-logout claim. One long-lived Spine
-host behind a same-origin Next-facing proxy; private downstream services cannot
+host behind a same-origin Next-facing proxy; HTTP/2 browser ingress multiplexes
+long-lived subscriptions and Command requests, including multiple tabs; private downstream services cannot
 be bypassed by a browser. Configure authenticated reader forwarding explicitly.
 Author authorization covers commands, reads, updates and outcomes, including
 inaccessible-ID collision/replay cases. Entity subscriptions must use the
@@ -113,7 +114,12 @@ Preserve PR #22 description sections unrelated to examples. Replace the Message
 Board example section with detailed Orders and Fieldnotes sections: feature by
 feature, working public-API code, process placement, configuration and README
 links. Deliver the full copy-pasteable Markdown in chat; do not edit GitHub PRs or
-Issues. Current PR text is captured outside Git before editing.
+Issues. Current PR text is captured outside Git before editing. Final chat delivery has
+four separate copy-pasteable Markdown fragments: the full updated PR description,
+a point-by-point Orders application story, a point-by-point Fieldnotes application
+story, and a detailed account of implementation issues and their resolutions.
+The three new texts include code examples and diagrams. Fresh documentation
+review covers these deliverables. CI must pass for the exact final pushed commit.
 
 ## Acceptance and workflow
 
@@ -132,18 +138,23 @@ Keep detailed execution/review reports outside Git. Commit coherent semantic
 slices and push each commit immediately. Reuse the existing version-only commit
 if it still satisfies branch publication rules; do not make a gratuitous bump.
 
-## Remaining sequence
-
-1. Implement Fieldnotes persistent authenticated host, both login adapters,
-   Next.js interface, browser acceptance and documentation.
-2. Complete example navigation and the feature-by-feature PR description.
-3. Run fresh independent implementation/documentation reviews, corrections and
-   final security/release checks; close all participating agents.
-4. Push final changes and deliver the full preserved/revised PR description in
-   chat, with Orders and Fieldnotes README links and the revised SVG.
+## Delivery gates
 
 The Message Board restoration, always-multitenant Orders provider launches,
-restart acceptance and documentation, and the Fieldnotes domain are implemented.
+restart behavior, and Fieldnotes domain, persistent host, browser interface,
+and documentation are implemented. Independent API, reliability,
+maintainability, documentation, and final security reviews are complete.
+Accepted findings were corrected and verified. Browser acceptance covers
+both sign-in modes with PostgreSQL, all five place operations, stale-revision
+conflicts, Markdown privacy, responsive panels, and cancellation through
+HTTP/2 ingress and Next.
+
+Final delivery requires the release profile, prepared-package consumer checks,
+required pushes, and green CI for the exact final commit. Current execution
+evidence is retained outside Git; the GitHub checks identify the verified
+remote commit. Deliver the full preserved/revised PR description, both
+application stories, detailed issues report, and revised SVG in chat.
+
 Orders passed independent API, reliability, style and documentation review;
 accepted findings were corrected. Recovered publication uses the existing
 tracked follow-up queue, preserving source acknowledgement and shutdown tracking.
