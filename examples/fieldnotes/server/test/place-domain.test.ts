@@ -1,4 +1,19 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
 import { clone, create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { AnyPacker, SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   CommandSchema,
@@ -563,6 +578,134 @@ describe("Fieldnotes Place domain", () => {
       });
     } finally {
       await deletedFirst.close();
+    }
+  });
+
+  it("preserves the first complete Event's author and creation time against newer inconsistent Events", async () => {
+    const context = await createFieldnotesContext();
+    const id = create(PlaceIdSchema, { value: "immutable-place" });
+    const author = create(UserIdSchema, { value: "original-author" });
+    const createdAt = metadata.timestamp();
+    const changedAt = create(TimestampSchema, { seconds: createdAt.seconds + 1n });
+    const coordinates = create(CoordinatesSchema, { latitude: 38.7, longitude: -9.1 });
+    const post = (event: ReturnType<typeof create<typeof PlaceRenamedSchema>>) =>
+      context.eventBus().post(
+        SignalEnvelopes.event({
+          context: create(EventContextSchema, {
+            timestamp: metadata.timestamp(),
+            producerId: AnyPacker.pack(PlaceIdSchema, id),
+          }),
+          schema: PlaceRenamedSchema,
+          message: event,
+        }),
+      );
+    try {
+      const first = create(PlaceRenamedSchema, {
+        id,
+        name: "First complete result",
+        coordinates,
+        author,
+        markdown: "initial",
+        revision: 2,
+        occurredAt: createdAt,
+        createdAt,
+      });
+      await post(first);
+      const accepted = await context.stand().read(PlaceViewSchema, id);
+      expect(accepted).toMatchObject({
+        name: "First complete result",
+        revision: 2,
+        author: { value: "original-author" },
+        createdAt,
+      });
+      await post(
+        create(PlaceRenamedSchema, {
+          ...first,
+          name: "Foreign author",
+          revision: 3,
+          author: create(UserIdSchema, { value: "other-author" }),
+        }),
+      );
+      expect(await context.stand().read(PlaceViewSchema, id)).toEqual(accepted);
+      await post(
+        create(PlaceRenamedSchema, {
+          ...first,
+          name: "Changed creation",
+          revision: 4,
+          createdAt: changedAt,
+        }),
+      );
+      expect(await context.stand().read(PlaceViewSchema, id)).toEqual(accepted);
+      await post(
+        create(PlaceRenamedSchema, {
+          ...first,
+          name: "Legitimate newer result",
+          revision: 5,
+          occurredAt: changedAt,
+        }),
+      );
+      expect(await context.stand().read(PlaceViewSchema, id)).toMatchObject({
+        name: "Legitimate newer result",
+        revision: 5,
+        author: { value: "original-author" },
+        createdAt,
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("ignores incomplete first active Events so lower complete results can establish the view", async () => {
+    const context = await createFieldnotesContext();
+    const author = create(UserIdSchema, { value: "author" });
+    const createdAt = metadata.timestamp();
+    const coordinates = create(CoordinatesSchema, { latitude: 10, longitude: 11 });
+    try {
+      for (const missing of ["coordinates", "occurredAt"] as const) {
+        const id = create(PlaceIdSchema, { value: `missing-${missing}` });
+        const complete = create(PlaceRenamedSchema, {
+          id,
+          name: "Complete result",
+          coordinates,
+          author,
+          markdown: "note",
+          revision: 4,
+          occurredAt: createdAt,
+          createdAt,
+        });
+        const post = (message: typeof complete) =>
+          context.eventBus().post(
+            SignalEnvelopes.event({
+              context: create(EventContextSchema, {
+                timestamp: metadata.timestamp(),
+                producerId: AnyPacker.pack(PlaceIdSchema, id),
+              }),
+              schema: PlaceRenamedSchema,
+              message,
+            }),
+          );
+        await post(
+          create(PlaceRenamedSchema, {
+            ...complete,
+            revision: 9,
+            [missing]: undefined,
+          }),
+        );
+        expect(await context.stand().read(PlaceViewSchema, id)).toBeUndefined();
+        await post(complete);
+        expect(await context.stand().read(PlaceViewSchema, id)).toMatchObject({
+          id,
+          name: "Complete result",
+          coordinates,
+          author,
+          revision: 4,
+          createdAt,
+          updatedAt: createdAt,
+          removed: false,
+        });
+      }
+    } finally {
+      await context.close();
     }
   });
 });

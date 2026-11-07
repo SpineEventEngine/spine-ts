@@ -1,4 +1,19 @@
-import { clone, create } from "@bufbuild/protobuf";
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+import { clone, create, equals } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Time } from "@spine-event-engine/core";
 import { UserIdSchema, type CommandContext, type UserId } from "@spine-event-engine/proto";
 import {
@@ -343,6 +358,7 @@ export class PlaceViewProjection extends Projection<PlaceId, typeof PlaceViewSch
     removed: boolean,
   ): void {
     if (this.state.removed || event.revision <= this.state.revision) return;
+    if (!this.completeResult(event, removed)) return;
     this.update((draft) =>
       Object.assign(
         draft,
@@ -359,6 +375,35 @@ export class PlaceViewProjection extends Projection<PlaceId, typeof PlaceViewSch
         }),
       ),
     );
+  }
+
+  /**
+   * Checks complete result facts and preserves the first accepted immutable values.
+   *
+   * @param event Complete state proposed by one domain Event.
+   * @param removed Whether deletion intentionally clears coordinates.
+   * @returns Whether this result can replace the current read model.
+   */
+  private completeResult(
+    event: PlaceAdded | PlaceRenamed | PlaceMoved | PlaceNoteEdited | PlaceDeleted,
+    removed: boolean,
+  ): boolean {
+    if (
+      event.author === undefined ||
+      event.createdAt === undefined ||
+      event.occurredAt === undefined ||
+      (!removed && event.coordinates === undefined)
+    )
+      return false;
+    if (
+      this.state.revision > 0 &&
+      (this.state.author === undefined ||
+        this.state.createdAt === undefined ||
+        !equals(UserIdSchema, this.state.author, event.author) ||
+        !equals(TimestampSchema, this.state.createdAt, event.createdAt))
+    )
+      return false;
+    return true;
   }
 }
 
