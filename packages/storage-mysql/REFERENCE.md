@@ -144,9 +144,9 @@ oversized ID sets or composite predicate bind work reject before a connection is
 acquired.
 
 For a limited non-exhaustive plan ordered by an unrestricted `BLOB` byte column, MySQL may sort
-only a configured byte prefix. The adapter therefore fetches through the existing candidate
+only a configured byte prefix. The adapter therefore fetches through the existing record-evaluation
 budget plus one before applying full unsigned byte order and the requested result limit in the
-shared evaluator. If the candidate set exceeds that budget, the existing candidate-limit error
+shared evaluator. If the set of matching records exceeds that budget, the existing record-evaluation budget error
 is returned instead of an inaccurate prefix. Fixed-width `VARBINARY` columns and exhaustive reads
 retain their prior planning behavior.
 

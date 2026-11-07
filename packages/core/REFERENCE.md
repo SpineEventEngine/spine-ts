@@ -118,8 +118,8 @@ lexicographic byte order, with shorter equal prefixes first. `bool`, enum, and o
 columns retain equality-only comparisons. Generated and explicit query builders accept
 `Uint8Array` byte operands and detach them when building reusable queries.
 
-`QUERY_SERVICE_MAX_RESULTS` exports the current native QueryService per-request result and
-candidate capacity from the core package root. It is not a total collection limit; provider
+`QUERY_SERVICE_MAX_RESULTS` exports the current native QueryService per-request capacity for returned and
+evaluated records from the core package root. It is not a total collection limit; provider
 constraints may further restrict a particular query plan.
 
 ## Subscription lifecycle SPI

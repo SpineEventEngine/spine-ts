@@ -134,7 +134,7 @@ will never arrive. Do not reclaim these IDs merely because a scan omits them.
 Large-collection proof uses PostgreSQL BYTEA ordering, including accent and
 BMP/supplementary Unicode boundaries. Do not substitute JavaScript string
 comparisons or claim equivalent large-query behavior for every storage provider.
-MySQL variable-BLOB sorts may raise the existing candidate-budget error when
+MySQL variable-BLOB sorts may raise the existing record-evaluation budget error when
 an exact limited prefix cannot be established within that budget.
 
 ## Persistence

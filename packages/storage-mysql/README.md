@@ -227,8 +227,8 @@ authoritative `bytes` payload. The adapter does not create an index for
 `board`; add application indexes for production query patterns.
 
 An unrestricted `BLOB` byte column can have a MySQL sort-prefix limit. For a bounded normalized
-query ordered by that column, Spine fetches through its existing candidate budget and applies
-full byte ordering after decoding. An oversized candidate set returns the normal budget error;
+query ordered by that column, Spine fetches through its existing record-evaluation budget and applies
+full byte ordering after decoding. An oversized set of matching records returns the normal budget error;
 fixed-width `VARBINARY` ordering keeps its usual limited SQL query.
 
 ## 🧪 Verify with a disposable database

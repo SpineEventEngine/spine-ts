@@ -123,7 +123,7 @@ Aggregate state, and `OrderSummary` is a query/subscription read model.
 existing `10`, `100`, or `1000` user levels. Users are assigned round robin to
 supplied tenant identities. Each user gets fresh order, command, query, and
 subscription IDs. The selected tenant is carried through all three gRPC
-services. The result includes per-tenant and aggregate milestone counts,
+services. The result includes per-tenant and aggregate counts for acknowledgement, query visibility, and subscription delivery,
 latency percentiles, throughput, and classified failures. The existing client
 bounds remain at sixteen shared HTTP/2 sessions and waves of ten users, with
 the existing visibility deadline and abort behavior.

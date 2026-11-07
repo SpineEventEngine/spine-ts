@@ -930,7 +930,7 @@ Native QueryService accepts `BytesValue` equality and range operands for annotat
 columns and permits ascending or descending byte ordering. The shared evaluator uses unsigned
 lexicographic comparison, including shorter equal prefixes first. This TypeScript query capability
 does not assert JVM JDBC byte-range compatibility. `QUERY_SERVICE_MAX_RESULTS` from core is the
-current 1,000-result and candidate capacity for one native read, not a collection-size limit.
+current capacity of 1,000 returned and evaluated records for one native read, not a collection-size limit.
 
 `ServerOptions.appQueries` selects concrete generated `AppQueryHandler<Q, R>`
 instances by exact constructor metadata before listening. Duplicate Q routes
