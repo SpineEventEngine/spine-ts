@@ -267,6 +267,9 @@ describe("package metadata", () => {
     expect(typeof rootPackage.version).toBe("string");
     expect(workspacePackages.map((workspacePackage) => workspacePackage.path)).toEqual([
       "examples/distributed-message-board",
+      "examples/fieldnotes/model",
+      "examples/fieldnotes/server",
+      "examples/fieldnotes/web",
       "examples/message-board/app",
       "examples/message-board/command-handlers",
       "examples/message-board/composed-app",
