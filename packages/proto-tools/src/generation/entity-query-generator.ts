@@ -392,12 +392,7 @@ class EntityQueryGeneratorRuntime {
         `Entity column "${field.localName}" must be singular and outside a oneof.`,
       );
     }
-    if (
-      field.fieldKind === "enum" ||
-      field.scalar === ScalarType.BOOL ||
-      field.scalar === ScalarType.BYTES
-    )
-      return "equality";
+    if (field.fieldKind === "enum" || field.scalar === ScalarType.BOOL) return "equality";
     if (field.fieldKind === "message") {
       return field.message.typeName === "google.protobuf.Timestamp" ||
         field.message.typeName === "spine.core.Version"

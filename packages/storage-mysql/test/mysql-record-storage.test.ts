@@ -426,6 +426,61 @@ describe("MysqlRecordStorage", () => {
     expect(query?.values).toEqual(["b", "two", "z", 3]);
   });
 
+  it("keeps the candidate budget ahead of a limited variable-byte sort", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [
+        new RecordColumn("raw", ColumnTypes.scalar<Uint8Array>(ScalarType.BYTES), (record) =>
+          new TextEncoder().encode(record.value),
+        ),
+      ],
+    });
+    const storage = new MysqlRecordStorage(
+      { name: "records", multitenant: false },
+      spec,
+      new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
+      lifecycle(readyConnection(calls, { columns: ["ID", "bytes", "raw"] })),
+      () => undefined,
+    );
+
+    await storage.queryPlan({
+      order: [{ column: "raw", direction: "asc" }],
+      limit: 1,
+      candidateLimit: 2,
+    });
+    const query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).toContain("ORDER BY `raw` ASC, ID ASC LIMIT ?");
+    expect(query?.values).toEqual([3]);
+  });
+
+  it("keeps fixed-width byte sorting limited and exhaustive byte sorting unchanged", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [new RecordColumn("raw", ColumnTypes.fixedBytes(12), () => new Uint8Array(12))],
+    });
+    const storage = new MysqlRecordStorage(
+      { name: "records", multitenant: false },
+      spec,
+      new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
+      lifecycle(readyConnection(calls, { columns: ["ID", "bytes", "raw"] })),
+      () => undefined,
+    );
+    const order = [{ column: "raw", direction: "asc" }] as const;
+    await storage.queryPlan({ order, limit: 1, candidateLimit: 2 });
+    expect(calls.find((call) => call.sql.startsWith("SELECT ID, bytes"))?.values).toEqual([1]);
+    calls.length = 0;
+    await storage.queryPlan({ exhaustive: true, order, limit: 1 });
+    expect(calls.find((call) => call.sql.startsWith("SELECT ID, bytes"))?.sql).not.toContain(
+      "LIMIT",
+    );
+  });
+
   it("runs exhaustive plans without a provider limit and scans for oversized ID sets", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const storage = schemaStorage(

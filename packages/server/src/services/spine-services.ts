@@ -2337,11 +2337,7 @@ function createReadPlan(
       field.message.typeName === "spine.core.Version"
     );
   }
-  return (
-    field.fieldKind === "scalar" &&
-    field.scalar !== ScalarType.BOOL &&
-    field.scalar !== ScalarType.BYTES
-  );
+  return field.fieldKind === "scalar" && field.scalar !== ScalarType.BOOL;
 }
 
 /**

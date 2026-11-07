@@ -13,7 +13,7 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { BytesValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { UInt32ValueSchema } from "@bufbuild/protobuf/wkt";
 import { ActorContextSchema, UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
 import {
@@ -43,7 +43,7 @@ const columns = EntityColumn.register(
     owner: { field: ProjectOverviewStateSchema.field.owner, comparison: "equality" as const },
     fingerprint: {
       field: ProjectOverviewStateSchema.field.fingerprint,
-      comparison: "equality" as const,
+      comparison: "ordering" as const,
     },
     active: { field: ProjectOverviewStateSchema.field.active, comparison: "equality" as const },
     sequence: { field: ProjectOverviewStateSchema.field.sequence, comparison: "ordering" as const },
@@ -380,12 +380,17 @@ describe("EntityQuery", () => {
   });
 
   it("supports every frozen comparison operator with typed values", () => {
+    const bytes = new Uint8Array([1, 2]);
     const predicates = [
       EntityQuery.eq(columns.title, "A"),
       EntityQuery.gt(columns.priority, 1),
       EntityQuery.lt(columns.priority, 4),
       EntityQuery.ge(columns.priority, 2),
       EntityQuery.le(columns.priority, 3),
+      EntityQuery.gt(columns.fingerprint, bytes),
+      EntityQuery.lt(columns.fingerprint, bytes),
+      EntityQuery.ge(columns.fingerprint, bytes),
+      EntityQuery.le(columns.fingerprint, bytes),
     ];
 
     expect(predicates.map((predicate) => predicate.operator)).toEqual([
@@ -394,7 +399,39 @@ describe("EntityQuery", () => {
       "lessThan",
       "greaterOrEqual",
       "lessOrEqual",
+      "greaterThan",
+      "lessThan",
+      "greaterOrEqual",
+      "lessOrEqual",
     ]);
+  });
+
+  it("packs a detached byte range operand with byte-column ordering", () => {
+    const bytes = new Uint8Array([1, 2]);
+    const query = EntityQuery.describe({
+      schema: ProjectOverviewStateSchema,
+      columns,
+      idField: "id",
+    })
+      .where(EntityQuery.gt(columns.fingerprint, bytes))
+      .orderBy(columns.fingerprint)
+      .limit(1)
+      .build();
+    bytes[0] = 9;
+    expect(query.buildPlan()).toMatchObject({
+      predicate: {
+        kind: "comparison",
+        column: "fingerprint",
+        operator: "greaterThan",
+        value: new Uint8Array([1, 2]),
+      },
+    });
+    const wire = query.build();
+    expect(wire.format?.orderBy[0]?.column).toBe("fingerprint");
+    if (wire.target?.criterion.case !== "filters") throw new Error("Missing byte range target.");
+    const packed = wire.target.criterion.value.filter[0]?.filter[0]?.value;
+    if (packed === undefined) throw new Error("Missing byte range operand.");
+    expect(AnyPacker.unpack(packed, BytesValueSchema).value).toEqual(new Uint8Array([1, 2]));
   });
 
   it("compile-covers the documented ID and complete comparison-helper surface", () => {

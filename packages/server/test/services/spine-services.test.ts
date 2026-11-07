@@ -982,12 +982,27 @@ describe("SpineServices", () => {
         sequence: 7n,
       }),
     );
-    await context
-      .stand()
-      .update(
-        CoreProjectOverviewStateSchema,
-        create(CoreProjectOverviewStateSchema, { id: "typed-other", title: "Other review" }),
-      );
+    await context.stand().update(
+      CoreProjectOverviewStateSchema,
+      create(CoreProjectOverviewStateSchema, {
+        id: "typed-2",
+        title: "Closed review",
+        status: ProjectStatus.CLOSED,
+        dueAt: create(TimestampSchema, { seconds: 98n }),
+        owner: create(ProjectLeadSchema, { value: "reviewer-b" }),
+        fingerprint: new Uint8Array([1, 3]),
+        active: false,
+        sequence: 8n,
+      }),
+    );
+    await context.stand().update(
+      CoreProjectOverviewStateSchema,
+      create(CoreProjectOverviewStateSchema, {
+        id: "typed-other",
+        title: "Other review",
+        fingerprint: new Uint8Array([1, 0]),
+      }),
+    );
     const server = await startServices(context);
     try {
       const client = createClient(QueryService, createGrpcTransport({ baseUrl: server.baseUrl }));
@@ -1037,9 +1052,57 @@ describe("SpineServices", () => {
         AnyPacker.unpack(dated.message[0]?.state ?? packMissing(), CoreProjectOverviewStateSchema)
           .id,
       ).toBe("typed-1");
-      for (const [column, packed] of checks.filter(
-        ([name]) => name === "fingerprint" || name === "active",
-      )) {
+      for (const [operator, bound, expected] of [
+        [Filter_Operator.GREATER_THAN, 2, ["typed-2"]],
+        [Filter_Operator.LESS_THAN, 3, ["typed-1", "typed-other"]],
+        [Filter_Operator.GREATER_OR_EQUAL, 3, ["typed-2"]],
+        [Filter_Operator.LESS_OR_EQUAL, 2, ["typed-1", "typed-other"]],
+      ] as const) {
+        const query = createColumnFilterQuery(
+          "fingerprint",
+          AnyPacker.pack(
+            BytesValueSchema,
+            create(BytesValueSchema, { value: new Uint8Array([1, bound]) }),
+          ),
+          { operator },
+        );
+        if (query.target === undefined) throw new Error("Expected byte range target.");
+        query.target.type = TypeUrls.derive(CoreProjectOverviewStateSchema);
+        const ranged = await client.read(query);
+        expect(
+          ranged.message.map(
+            (item) =>
+              AnyPacker.unpack(item.state ?? packMissing(), CoreProjectOverviewStateSchema).id,
+          ),
+        ).toEqual(expected);
+      }
+      for (const [direction, expected] of [
+        [OrderBy_Direction.ASCENDING, ["typed-1", "typed-2"]],
+        [OrderBy_Direction.DESCENDING, ["typed-2", "typed-1"]],
+      ] as const) {
+        const query = createColumnFilterQuery(
+          "fingerprint",
+          AnyPacker.pack(
+            BytesValueSchema,
+            create(BytesValueSchema, { value: new Uint8Array([1, 0]) }),
+          ),
+          { operator: Filter_Operator.GREATER_THAN },
+        );
+        if (query.target === undefined) throw new Error("Expected byte order target.");
+        query.target.type = TypeUrls.derive(CoreProjectOverviewStateSchema);
+        query.format = create(ResponseFormatSchema, {
+          orderBy: [create(OrderBySchema, { column: "fingerprint", direction })],
+          limit: 2,
+        });
+        const ordered = await client.read(query);
+        expect(
+          ordered.message.map(
+            (item) =>
+              AnyPacker.unpack(item.state ?? packMissing(), CoreProjectOverviewStateSchema).id,
+          ),
+        ).toEqual(expected);
+      }
+      for (const [column, packed] of checks.filter(([name]) => name === "active")) {
         const unsupported = createColumnFilterQuery(column, packed, {
           operator: Filter_Operator.GREATER_THAN,
         });

@@ -1026,10 +1026,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
         `MySQL normalized query exceeds the ${String(maximumNormalizedPlanBinds)}-parameter bind budget.`,
       );
     }
-    const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
-    const limit = plan.exhaustive
-      ? plan.limit
-      : Math.min(plan.limit ?? Number.MAX_SAFE_INTEGER, candidateLimit + 1);
+    const limit = this.planResultBound(plan);
     const exactLimit =
       !plan.exhaustive ||
       (!scanAll && safePredicate === plan.predicate && this.exhaustiveOrderMatches(plan));
@@ -1043,6 +1040,27 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
         limitClause,
       values,
     };
+  }
+
+  /**
+   * Calculates the SQL bound before full byte ordering by the shared evaluator.
+   *
+   * @param plan Validated normalized query plan.
+   * @returns Exact or candidate-budget SQL bound.
+   */
+  private planResultBound(plan: NormalizedQueryPlan<I>): number | undefined {
+    if (plan.exhaustive) return plan.limit;
+    const variableBytesOrder = (plan.order ?? []).some(({ column }) => {
+      const type = this.recordSpec.columns.find((candidate) => candidate.name === column)?.type;
+      return (
+        type?.kind === "scalar" && type.scalar === ScalarType.BYTES && type.byteLength === undefined
+      );
+    });
+    const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
+    return Math.min(
+      variableBytesOrder ? Number.MAX_SAFE_INTEGER : (plan.limit ?? Number.MAX_SAFE_INTEGER),
+      candidateLimit + 1,
+    );
   }
 
   /**

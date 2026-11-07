@@ -46,13 +46,21 @@ const definition = GeneratedEntityColumns.define(ProjectOverviewStateSchema, {
   owner: { field: ProjectOverviewStateSchema.field.owner, comparison: "equality" as const },
   fingerprint: {
     field: ProjectOverviewStateSchema.field.fingerprint,
-    comparison: "equality" as const,
+    comparison: "ordering" as const,
   },
   active: { field: ProjectOverviewStateSchema.field.active, comparison: "equality" as const },
   sequence: { field: ProjectOverviewStateSchema.field.sequence, comparison: "ordering" as const },
 });
 
 describe("EntityColumn", () => {
+  it("classifies byte columns for unsigned ordered comparisons", () => {
+    expect(classifyEntityField(ProjectOverviewStateSchema.field.fingerprint)).toMatchObject({
+      supported: true,
+      valueKind: "bytes",
+      comparison: "ordering",
+    });
+  });
+
   it("prevents descriptor mutation before and after registration", () => {
     const field = definition.entries.title.field;
     const originalLocalName = field.localName;
@@ -156,7 +164,11 @@ describe("EntityColumn", () => {
       messageType: "spine_ts.client.test.ProjectLead",
       comparison: "equality",
     });
-    expect(columns.fingerprint.valueKind).toBe("bytes");
+    expect(columns.fingerprint).toMatchObject({
+      valueKind: "bytes",
+      comparison: "ordering",
+      operators: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+    });
     expect(columns.active.valueKind).toBe("boolean");
     expect(columns.sequence.valueKind).toBe("bigint");
     expect(columns.version).toMatchObject({
@@ -237,6 +249,9 @@ describe("EntityColumn", () => {
     expectTypeOf<
       EntityColumnOperator<typeof columns.status>
     >().toEqualTypeOf<EntityEqualityOperator>();
+    expectTypeOf<
+      EntityColumnOperator<typeof columns.fingerprint>
+    >().toEqualTypeOf<EntityOrderingOperator>();
     expectTypeOf<
       EntityColumnOperator<typeof columns.version>
     >().toEqualTypeOf<EntityOrderingOperator>();

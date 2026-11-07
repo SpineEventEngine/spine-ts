@@ -105,7 +105,7 @@ describe("@spine-event-engine/client-node built exports", () => {
       status: { field: ProjectOverviewStateSchema.field.status, comparison: "equality" },
       dueAt: { field: ProjectOverviewStateSchema.field.dueAt, comparison: "ordering" },
       owner: { field: ProjectOverviewStateSchema.field.owner, comparison: "equality" },
-      fingerprint: { field: ProjectOverviewStateSchema.field.fingerprint, comparison: "equality" },
+      fingerprint: { field: ProjectOverviewStateSchema.field.fingerprint, comparison: "ordering" },
       active: { field: ProjectOverviewStateSchema.field.active, comparison: "equality" },
       sequence: { field: ProjectOverviewStateSchema.field.sequence, comparison: "ordering" },
     });

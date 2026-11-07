@@ -52,6 +52,7 @@ import { eventStoreRecordSpec, EventStoreGroups } from "@spine-event-engine/stor
 import {
   ColumnTypes,
   EventStore,
+  QueryCandidateLimitError,
   StorageGroup,
   type StorageContext,
 } from "@spine-event-engine/storage";
@@ -270,6 +271,42 @@ live("MySQL-family record layout", () => {
     } finally {
       records.close();
       await pool.end();
+    }
+  });
+
+  it("evaluates complete long BLOB keys or rejects the existing candidate budget", async () => {
+    const context = {
+      name: `mysql_blob_order_${randomUUID().replaceAll("-", "")}`,
+      multitenant: false,
+    } as const;
+    const group = new StorageGroup(context.name);
+    const raw = (record: StringValue) => {
+      const bytes = new Uint8Array(4_097).fill(0x70);
+      bytes[4_096] = record.value.endsWith("high") ? 3 : record.value.endsWith("middle") ? 2 : 1;
+      return bytes;
+    };
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [new RecordColumn("raw", ColumnTypes.scalar<Uint8Array>(ScalarType.BYTES), raw)],
+    });
+    const records = factory.createRecordStorage(context, spec, group);
+    const plan = {
+      order: [{ column: "raw", direction: "asc" }] as const,
+      limit: 1,
+      candidateLimit: 2,
+    };
+    try {
+      await records.writeAll([
+        create(StringValueSchema, { value: "a-high" }),
+        create(StringValueSchema, { value: "z-low" }),
+      ]);
+      expect((await records.queryPlan(plan)).map((record) => record.value)).toEqual(["z-low"]);
+      await records.write(create(StringValueSchema, { value: "m-middle" }));
+      await expect(records.queryPlan(plan)).rejects.toBeInstanceOf(QueryCandidateLimitError);
+    } finally {
+      records.close();
     }
   });
 

@@ -143,6 +143,13 @@ MySQL accepts at most 1,000 bound parameters including its provider limit;
 oversized ID sets or composite predicate bind work reject before a connection is
 acquired.
 
+For a limited non-exhaustive plan ordered by an unrestricted `BLOB` byte column, MySQL may sort
+only a configured byte prefix. The adapter therefore fetches through the existing candidate
+budget plus one before applying full unsigned byte order and the requested result limit in the
+shared evaluator. If the candidate set exceeds that budget, the existing candidate-limit error
+is returned instead of an inaccurate prefix. Fixed-width `VARBINARY` columns and exhaustive reads
+retain their prior planning behavior.
+
 ## Entity history seam
 
 The provider/framework Entity handle returns current records plus immutable

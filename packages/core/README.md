@@ -202,6 +202,9 @@ AND; `either(...)` accepts synchronous condition-only callbacks for OR branches.
 ordering, limits, and `build()` to the outer query. `byId(...)` uses the first state field.
 `limit()` requires `orderBy()` and accepts a positive integer.
 Ordered columns also expose `isGreaterThan`, `isAtLeast`, `isLessThan`, and `isAtMost`.
+Scalar `bytes` columns use unsigned lexicographic ordering; when one value is a prefix of another,
+the shorter value sorts first. The generated range methods accept `Uint8Array`, and built queries
+retain detached byte values.
 Every build captures a detached value;
 the client or Process Manager supplies actor and tenant context when it executes the query.
 `EntityQuery` remains available for callers using the existing schema-and-columns builder.

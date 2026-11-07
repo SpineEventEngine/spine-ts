@@ -113,6 +113,10 @@ Generated field methods that conflict with `build`, `either`, `byId`, `orderBy`,
 `limit`, `create`, `constructor`, or JavaScript object methods receive a `Column` suffix; a
 numeric suffix resolves a further collision. Nested query exports join message names with `_`.
 The first declared state field supplies the ID type even when its name is not `id`.
+Scalar `bytes` columns accept equality, all four range comparisons, and ordering using unsigned
+lexicographic byte order, with shorter equal prefixes first. `bool`, enum, and ordinary message
+columns retain equality-only comparisons. Generated and explicit query builders accept
+`Uint8Array` byte operands and detach them when building reusable queries.
 
 `QUERY_SERVICE_MAX_RESULTS` exports the current native QueryService per-request result and
 candidate capacity from the core package root. It is not a total collection limit; provider
